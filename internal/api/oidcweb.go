@@ -26,10 +26,22 @@ import (
 var oidcScopes = []string{"openid", "profile"}
 
 // randToken returns 16 random bytes as hex, for the CSRF state value.
-func randToken() string {
+func randToken() (string, error) {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// safeNext returns next only if it is a safe same-origin path (single leading
+// slash, not a "//" scheme-relative URL, no backslash); otherwise "/". Guards
+// the ?next parameter against open redirects.
+func safeNext(next string) string {
+	if next == "" || next[0] != '/' || strings.HasPrefix(next, "//") || strings.Contains(next, "\\") {
+		return "/"
+	}
+	return next
 }
 
 // callbackURL is the web redirect URI, derived from the configured public URL.
@@ -62,12 +74,14 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 		webErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	next := r.URL.Query().Get("next")
-	if !strings.HasPrefix(next, "/") { // only same-origin absolute paths
-		next = "/"
-	}
+	next := safeNext(r.URL.Query().Get("next"))
 
-	state := randToken()
+	state, err := randToken()
+	if err != nil {
+		s.log.Error("generate login state", "err", err)
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	verifier := oauth2.GenerateVerifier()
 	now := s.st.Now()
 
@@ -126,6 +140,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, err := s.oidc.Verify(r.Context(), rawID)
 	if err != nil {
+		s.log.Error("oidc id token verify", "err", err)
 		webErr(w, http.StatusUnauthorized, "invalid id token")
 		return
 	}
@@ -140,7 +155,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, errActorKindConflict) {
-		webErr(w, http.StatusConflict, "your username conflicts with an existing non-human actor")
+		webErr(w, http.StatusConflict, "actor id conflicts with an existing non-human actor")
 		return
 	}
 	if err != nil {
@@ -160,9 +175,5 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	// Clear the transient oauth-state cookie.
 	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
 
-	next := st.Next
-	if !strings.HasPrefix(next, "/") {
-		next = "/"
-	}
-	http.Redirect(w, r, next, http.StatusFound)
+	http.Redirect(w, r, safeNext(st.Next), http.StatusFound)
 }

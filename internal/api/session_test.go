@@ -68,3 +68,21 @@ func TestOAuthStateRejectsExpired(t *testing.T) {
 		t.Fatal("verifyOAuthState accepted an expired cookie")
 	}
 }
+
+func TestSafeNext(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"/", "/"},
+		{"/tasks/WT-1", "/tasks/WT-1"},
+		{"", "/"},
+		{"foo", "/"},
+		{"//evil.com", "/"},
+		{"/\\evil.com", "/"},
+		{"///evil.com", "/"},
+		{"http://evil.com", "/"},
+	}
+	for _, c := range cases {
+		if got := safeNext(c.in); got != c.want {
+			t.Errorf("safeNext(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

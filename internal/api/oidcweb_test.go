@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // gated GETs must redirect to /auth/login when OIDC is enabled and no session
@@ -121,6 +122,56 @@ func TestAuthCallbackMissingState(t *testing.T) {
 	rr := doReq(t, h, "GET", "/auth/callback?code=x&state=y", "", nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// A callback whose state query value differs from the state in the oauth-state
+// cookie is a CSRF signal: 400, no session set.
+func TestAuthCallbackStateMismatch(t *testing.T) {
+	_, h, _ := newOIDCServer(t)
+
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	oauthCookie := cookieValue(login, "wt_oauth")
+
+	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state=not-the-cookie-state", nil)
+	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for state mismatch", rr.Code)
+	}
+	if hasCookie(rr, "wt_session") {
+		t.Fatal("wt_session set despite state mismatch")
+	}
+}
+
+// An oauth-state cookie older than oauthStateMaxAge is rejected: 400, no
+// session set. The clock is advanced via the store between login and callback.
+func TestAuthCallbackExpiredState(t *testing.T) {
+	st, h, _ := newOIDCServer(t)
+
+	base := time.Unix(1_700_000_000, 0)
+	st.SetNowFunc(func() time.Time { return base })
+
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	oauthCookie := cookieValue(login, "wt_oauth")
+	loc, _ := url.Parse(login.Header().Get("Location"))
+	state := loc.Query().Get("state")
+
+	// Advance past oauthStateMaxAge (10m) so the state cookie is expired.
+	st.SetNowFunc(func() time.Time { return base.Add(11 * time.Minute) })
+
+	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for expired state", rr.Code)
+	}
+	if hasCookie(rr, "wt_session") {
+		t.Fatal("wt_session set despite expired state")
 	}
 }
 
