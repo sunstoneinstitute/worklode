@@ -401,6 +401,10 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		webErr(w, http.StatusForbidden, "the work-tracker user role is required")
 		return
 	}
+	if errors.Is(err, errActorKindConflict) {
+		webErr(w, http.StatusConflict, "your username conflicts with an existing non-human actor")
+		return
+	}
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
