@@ -18,7 +18,7 @@ planning through review, build, deployment, and runtime.
 | Scope | Org-wide (all Sunstone repos) from day one |
 | Language | Go (single binary, several subcommands) |
 | Storage | SQLite, single writer; litestream for replication/backup |
-| Migrations | golang-migrate, embedded migration files, applied on startup and via `wt migrate` |
+| Migrations | golang-migrate, SQL files in `deploy/base/migrations/`, applied explicitly via `wt migrate --migrations-path` (compose service / k8s initContainer) — not embedded, not applied on `serve` startup |
 | Data model | Append-only event log + typed current-state tables, updated in the same transaction |
 | Source of truth | The tracker. GitHub issues are an *inbox*: triage promotes them into tasks. No bidirectional sync. |
 | GitHub ingest | One org-installed GitHub App delivering webhooks (issues, PRs, reviews, CI, releases, deployment status) |
@@ -41,7 +41,7 @@ itself stays small.
 One Go module, one binary `wt`, subcommands:
 
 - `wt serve` — HTTP API, webhook receivers, read-only web UI.
-- `wt migrate` — apply golang-migrate migrations (also applied automatically on `serve` startup).
+- `wt migrate --db <path> --migrations-path <dir>` — apply golang-migrate migrations from a directory of `*.up.sql`/`*.down.sql` files. Not applied automatically on `serve` startup; run this first (compose `migrate` service / k8s initContainer).
 - `wt watch` — cluster watcher; posts runtime events to the server API. `--kubeconfig` for local use, in-cluster config when deployed.
 - `wt <noun> <verb>` — CLI client commands (see CLI section). Config from `~/.config/wt/config.toml` (server URL, token) overridable by `WT_SERVER` / `WT_TOKEN`.
 
