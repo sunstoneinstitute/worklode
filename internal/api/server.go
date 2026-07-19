@@ -79,7 +79,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		if cfg.SessionSecret == "" {
 			return nil, fmt.Errorf("WT_SESSION_SECRET is required when OIDC is enabled")
 		}
-		v, err := oidc.New(context.Background(), cfg.OIDCIssuer, cfg.OIDCClientID)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		v, err := oidc.New(ctx, cfg.OIDCIssuer, cfg.OIDCClientID)
 		if err != nil {
 			return nil, fmt.Errorf("configure oidc: %w", err)
 		}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
+	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
 // ssoTokenTTL is the lifetime of a wt_ token minted from an SSO login. No
@@ -24,6 +25,11 @@ const ssoTokenTTL = 30 * 24 * time.Hour
 // the required "user" client role.
 var errNoUserRole = errors.New("missing user role")
 
+// errActorKindConflict is returned by provisionActor when preferred_username
+// collides with an existing non-human actor (e.g. the bootstrap admin service
+// actor). Provisioning would otherwise overwrite that actor via the upsert.
+var errActorKindConflict = errors.New("actor id is reserved by a non-human actor")
+
 // provisionActor enforces the "user" role and upserts the human actor from the
 // verified claims, syncing the admin flag from the "admin" role. It returns the
 // provisioned actor id (the preferred_username). Shared by the token-exchange
@@ -31,6 +37,16 @@ var errNoUserRole = errors.New("missing user role")
 func (s *server) provisionActor(ctx context.Context, c *oidc.Claims) (string, error) {
 	if !c.HasRole("user") {
 		return "", errNoUserRole
+	}
+	// Refuse to clobber a non-human actor (notably the bootstrap admin) whose id
+	// collides with this preferred_username. The store is single-writer, so a
+	// pre-existing conflicting row is always visible here.
+	existing, err := s.st.GetActor(ctx, c.PreferredUsername)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", err
+	}
+	if existing != nil && existing.Kind != "human" {
+		return "", errActorKindConflict
 	}
 	if err := s.st.UpsertHumanActor(ctx, c.PreferredUsername, c.Name, c.HasRole("admin")); err != nil {
 		return "", err
@@ -87,6 +103,10 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 	actorID, err := s.provisionActor(r.Context(), claims)
 	if errors.Is(err, errNoUserRole) {
 		writeErr(w, http.StatusForbidden, "the work-tracker user role is required")
+		return
+	}
+	if errors.Is(err, errActorKindConflict) {
+		writeErr(w, http.StatusConflict, "actor id conflicts with an existing non-human actor")
 		return
 	}
 	if err != nil {

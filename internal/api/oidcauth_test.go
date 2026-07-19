@@ -119,6 +119,41 @@ func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
 	}
 }
 
+func TestOIDCTokenExchangeRejectsMissingIDToken(t *testing.T) {
+	_, h, _ := newOIDCServer(t)
+	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{})
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestOIDCTokenExchangeActorKindConflict(t *testing.T) {
+	st, h, iss := newOIDCServer(t)
+	ctx := context.Background()
+
+	// Pre-create a non-human actor whose id collides with the login username.
+	if err := st.CreateActor(ctx, "admin", "service", "bootstrap admin", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	raw := iss.SignToken(t, map[string]any{
+		"preferred_username": "admin", "name": "Impostor", "groups": []string{"user"},
+	})
+	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{"id_token": raw})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+
+	// The pre-existing actor must be untouched.
+	a, err := st.GetActor(ctx, "admin")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if a.Kind != "service" || !a.Admin || a.DisplayName != "bootstrap admin" {
+		t.Fatalf("pre-existing actor was modified: %+v", a)
+	}
+}
+
 func TestOIDCTokenExchangeRejectsExpired(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
 	raw := iss.SignToken(t, map[string]any{
