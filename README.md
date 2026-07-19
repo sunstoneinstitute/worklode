@@ -28,6 +28,12 @@ On native Linux Docker (not Docker Desktop) the container runs as uid 65532,
 so run `sudo chown 65532:65532 data` (or use a named volume) before first
 start.
 
+Install the `wt` CLI:
+
+```bash
+go install ./cmd/wt    # or: go build -o ~/bin/wt ./cmd/wt
+```
+
 Point the CLI at it, either via `~/.config/wt/config.toml`:
 
 ```toml
@@ -55,6 +61,15 @@ Managing projects, actors, and tokens requires an admin actor; the
 bootstrap actor is admin, and `wt actor add --admin` creates more.
 
 The read-only web UI is at http://localhost:8080/.
+
+## Network exposure
+
+The compose file publishes port 8080 on loopback only
+(`"127.0.0.1:8080:8080"`). Keep it that way on shared hosts: the web board
+and `/metrics` are unauthenticated (bearer tokens cover `/api/v1` only), so
+anyone who can reach the port can read every task. To serve other machines,
+change the mapping to `"8080:8080"` (or a specific interface) and put a
+TLS-terminating reverse proxy or firewall in front.
 
 ## GitHub App setup
 

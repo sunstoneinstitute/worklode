@@ -2,7 +2,11 @@ services:
   tracker:
     build: .
     ports:
-      - "8080:8080"
+      # Loopback-only by default: the web board and /metrics have no auth
+      # (bearer tokens cover /api/v1 only). Change to "8080:8080" — or put a
+      # TLS-terminating reverse proxy in front — to expose it; see README
+      # "Network exposure".
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/data
     environment:
