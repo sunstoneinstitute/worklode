@@ -7,6 +7,13 @@ name: Promote to hzprod
 # hzprod has no cluster yet, so nothing consumes last-deploy/hzprod until
 # one is provisioned and Flux is wired to watch it — this workflow just
 # keeps the branch and image ready for when that happens.
+#
+# Do not dispatch this yet: promote-images@v1 calls compute-version@v1 by a
+# floating tag internally (not a pinned SHA this repo controls), and v1's
+# compute-version doesn't support version-file: VERSION until
+# sunstoneinstitute/actions#10 merges and v1 slides onto it. Dispatching
+# before then fails at the "Promote image to hzprod" step with
+# "Unsupported file type: VERSION".
 
 on:
   workflow_dispatch:

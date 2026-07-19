@@ -27,7 +27,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: sunstoneinstitute/actions/validate-kustomize@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
+      # Pinned ahead of v1: this SHA is the tip of sunstoneinstitute/actions#10
+      # (not yet merged), which adds flat-overlay support to validate-kustomize.
+      # Without it, this step silently validates zero overlays against this
+      # repo's flat deploy/overlays/<env>/kustomization.yaml layout — it would
+      # report success having checked nothing. Re-pin to the v1 tag once
+      # actions#10 merges and v1 slides onto (or past) this commit.
+      - uses: sunstoneinstitute/actions/validate-kustomize@4f97779cd1a9eea7212759632166d0b7dbc24a39 # actions#10 branch tip, pre-v1
         with:
           overlay-base: deploy/overlays
           environments: hzdev hzprod
