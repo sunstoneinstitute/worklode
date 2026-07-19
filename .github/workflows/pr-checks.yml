@@ -1,0 +1,33 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    uses: ./.github/workflows/_lint.yml
+
+  test:
+    uses: ./.github/workflows/_test.yml
+
+  build-image:
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      push: false
+
+  validate-kustomize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: sunstoneinstitute/actions/validate-kustomize@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
+        with:
+          overlay-base: deploy/overlays
+          environments: hzdev hzprod

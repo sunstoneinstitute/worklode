@@ -1,0 +1,47 @@
+name: Deploy to hzdev
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: deploy-hzdev
+  cancel-in-progress: false
+
+jobs:
+  build-image:
+    uses: ./.github/workflows/_build-image.yml
+
+  deploy:
+    needs: build-image
+    runs-on: ubuntu-latest
+    environment: hzdev
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Update deploy branch
+        uses: sunstoneinstitute/actions/update-deploy-branch@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
+        with:
+          env: hzdev
+          images: work-tracker
+          registry: ghcr.io/sunstoneinstitute
+          tag: ${{ needs.build-image.outputs.image-tag }}
+          overlay-path: deploy/overlays/hzdev/kustomization.yaml
+
+      - name: Output summary
+        run: |
+          {
+            echo "### Deployment Summary"
+            echo ""
+            echo "**Environment:** hzdev"
+            echo "**Image tag:** \`${{ needs.build-image.outputs.image-tag }}\`"
+            echo "**Deploy branch:** \`last-deploy/hzdev\`"
+          } >> "$GITHUB_STEP_SUMMARY"
