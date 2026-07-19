@@ -222,6 +222,36 @@ func TestRenewRelease(t *testing.T) {
 	}
 }
 
+// TestLeaseEventTypesPastTense pins the recorded event types for the lease
+// lifecycle: past tense ("lease.claimed"), matching every other event type.
+func TestLeaseEventTypesPastTense(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	if _, err := s.Claim(ctx, task.ID, "stig", "sess", 0); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if _, err := s.Renew(ctx, task.ID, "stig", 0); err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if err := s.Release(ctx, task.ID, "stig"); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	for _, typ := range []string{"lease.claimed", "lease.renewed", "lease.released"} {
+		var n int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM events WHERE source = 'cli' AND type = ?`, typ,
+		).Scan(&n); err != nil {
+			t.Fatalf("count %s events: %v", typ, err)
+		}
+		if n != 1 {
+			t.Errorf("%s events: got %d, want 1", typ, n)
+		}
+	}
+}
+
 func TestSweeper(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()

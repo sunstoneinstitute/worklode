@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -89,11 +90,23 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
+// bootstrapTokenRe is the required shape of a bootstrap token: the same
+// "wt_" + 40 lowercase hex form CreateToken mints. Anything else (e.g. a
+// missing prefix) would be hashed differently by tokenHashOf and silently
+// fail every later request with 401.
+var bootstrapTokenRe = regexp.MustCompile(`^wt_[0-9a-f]{40}$`)
+
 // BootstrapAdmin creates the initial "admin" service actor (admin = true)
-// with the given plaintext token — but only if the actors table is empty. On a store that
-// already has actors it is a no-op, so serve can call it unconditionally at
-// startup with the WT_BOOTSTRAP_TOKEN env value.
+// with the given plaintext token — but only if the actors table is empty. On
+// a store that already has actors it is a no-op, so serve can call it
+// unconditionally at startup with the WT_BOOTSTRAP_TOKEN env value. A token
+// not matching bootstrapTokenRe is an error even on the no-op path: fail at
+// startup, not with silent 401s later.
 func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error {
+	if !bootstrapTokenRe.MatchString(plaintextToken) {
+		return fmt.Errorf("bootstrap token must match %s (e.g. wt_$(openssl rand -hex 20)): %w",
+			bootstrapTokenRe, ErrInvalidInput)
+	}
 	return s.Tx(ctx, func(tx *sql.Tx) error {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM actors`).Scan(&n); err != nil {

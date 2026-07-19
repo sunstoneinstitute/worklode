@@ -156,6 +156,28 @@ func TestBootstrapAdmin(t *testing.T) {
 	}
 }
 
+func TestBootstrapAdminRejectsMalformedToken(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	for name, tok := range map[string]string{
+		"empty":         "",
+		"no prefix":     strings.Repeat("ab", 20),
+		"too short":     "wt_abcdef",
+		"not hex":       "wt_" + strings.Repeat("zz", 20),
+		"uppercase hex": "wt_" + strings.Repeat("AB", 20),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := st.BootstrapAdmin(ctx, tok); !errors.Is(err, store.ErrInvalidInput) {
+				t.Fatalf("BootstrapAdmin(%q) err = %v, want ErrInvalidInput", tok, err)
+			}
+		})
+	}
+	// Nothing was created by the rejected attempts.
+	if _, err := st.GetActor(ctx, "admin"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("admin actor after rejected bootstraps: err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()

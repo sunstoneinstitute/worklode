@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	// bootstrapToken carries the documented "wt_" prefix (README): the auth
-	// layer treats a non-wt_ credential as a token hash, not a plaintext.
-	bootstrapToken = "wt_e2e-bootstrap-token"
+	// bootstrapToken has the required "wt_" + 40 hex shape: BootstrapAdmin
+	// rejects anything else at startup, and the auth layer treats a non-wt_
+	// credential as a token hash, not a plaintext.
+	bootstrapToken = "wt_00e2e00e2e00e2e00e2e00e2e00e2e00e2e00e2e"
 	githubSecret   = "e2e-github-secret"
 	fluxSecret     = "e2e-flux-secret"
 

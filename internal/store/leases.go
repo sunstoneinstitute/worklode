@@ -108,7 +108,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, sessionID string, tt
 	}
 
 	var lease *Lease
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.claim", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.claimed", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			now := s.nowFn().UTC().Truncate(time.Second)
 
@@ -200,7 +200,7 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 	}
 
 	var lease *Lease
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.renew", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.renewed", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
 			if err != nil {
@@ -239,7 +239,7 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 		return err
 	}
 
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.release", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.released", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
 			if err != nil {
