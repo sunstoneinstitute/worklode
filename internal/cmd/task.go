@@ -18,6 +18,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskAddCmd(),
 		newTaskListCmd(),
 		newTaskShowCmd(),
+		newTaskReadyCmd(),
+		newTaskReopenCmd(),
 		newTaskClaimCmd(),
 		newTaskRenewCmd(),
 		newTaskReleaseCmd(),
@@ -63,7 +65,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
-	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until moved to ready)")
+	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `wt task ready`)")
 	cmd.MarkFlagRequired("project")
 	cmd.MarkFlagRequired("title")
 	return cmd
@@ -119,6 +121,56 @@ func newTaskShowCmd() *cobra.Command {
 				return nil
 			}
 			cli.TaskDetailRender(cmd.OutOrStdout(), t)
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskReadyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ready <id>",
+		Short: "Publish a draft task (draft -> ready)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReadyTask(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskReopenCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reopen <id>",
+		Short: "Reopen a task under review (in_review -> in_progress, e.g. changes requested)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReopenTask(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
 			return nil
 		},
 	}

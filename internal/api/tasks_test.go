@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
@@ -212,9 +213,88 @@ func TestPatchTask(t *testing.T) {
 		t.Fatalf("unknown task status = %d, want 404", rr.Code)
 	}
 	// Unknown field.
-	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"state": "done"})
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"kind": "bug"})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field status = %d, want 400", rr.Code)
+	}
+}
+
+func TestPatchTaskState(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Draft task", "priority": "medium", "kind": "feature", "draft": true,
+	})
+
+	// draft -> ready.
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"state": "ready"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("ready patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["state"]; got != "ready" {
+		t.Fatalf("state after ready patch = %v, want ready", got)
+	}
+
+	// ready -> ready is not a legal transition (task is no longer draft).
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"state": "ready"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("ready->ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// in_review -> in_progress (reviewer requested changes).
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	moveToReview(t, st, "WT-1")
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"state": "in_progress"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["state"]; got != "in_progress" {
+		t.Fatalf("state after reopen patch = %v, want in_progress", got)
+	}
+
+	// States with dedicated endpoints are rejected with guidance.
+	for _, state := range []string{"done", "abandoned", "draft"} {
+		rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{"state": state})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("state=%s status = %d, want 422; body %s", state, rr.Code, rr.Body.String())
+		}
+		if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "claim, release, done, or abandon") {
+			t.Fatalf("state=%s error = %q, want guidance to the dedicated endpoints", state, msg)
+		}
+	}
+}
+
+func TestPatchTaskStateCombinesWithFields(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Draft", "priority": "low", "kind": "chore", "draft": true,
+	})
+
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{
+		"state": "ready", "title": "Published title", "priority": "high",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("combined patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["state"] != "ready" || got["title"] != "Published title" || got["priority"] != "high" {
+		t.Fatalf("after combined patch: %v", got)
+	}
+
+	// An illegal transition rolls back the whole patch, field updates included.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WT-1", token, map[string]any{
+		"state": "ready", "title": "Should not stick",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("illegal combined patch status = %d, want 422", rr.Code)
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WT-1", token, nil)
+	if got := decodeMap(t, rr); got["title"] != "Published title" {
+		t.Fatalf("title after rolled-back patch = %v, want Published title", got["title"])
 	}
 }
 

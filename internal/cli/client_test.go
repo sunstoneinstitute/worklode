@@ -258,6 +258,47 @@ func TestClientTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestClientReadyAndReopen(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Drafted", Priority: "medium", Kind: "feature", Draft: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if created.State != "draft" {
+		t.Fatalf("created state = %q, want draft", created.State)
+	}
+
+	readied, _, err := c.ReadyTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("ReadyTask: %v", err)
+	}
+	if readied.State != "ready" {
+		t.Fatalf("ReadyTask state = %q, want ready", readied.State)
+	}
+	// Publishing again is an illegal transition.
+	if _, _, err := c.ReadyTask(ctx, created.ID); err == nil {
+		t.Fatalf("second ReadyTask succeeded, want error")
+	}
+
+	if _, _, err := c.ClaimTask(ctx, created.ID, "sess", 0); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
+	moveToReview(t, st, created.ID)
+	reopened, _, err := c.ReopenTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("ReopenTask: %v", err)
+	}
+	if reopened.State != "in_progress" {
+		t.Fatalf("ReopenTask state = %q, want in_progress", reopened.State)
+	}
+}
+
 func TestClientBlockUnblock(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()

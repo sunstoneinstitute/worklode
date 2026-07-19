@@ -363,6 +363,31 @@ func (c *Client) AbandonTask(ctx context.Context, id string) (Task, []byte, erro
 	return c.taskAction(ctx, id, "abandon")
 }
 
+// ReadyTask calls PATCH /api/v1/tasks/{id} with state "ready": publish a
+// draft task so it becomes claimable.
+func (c *Client) ReadyTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.patchTaskState(ctx, id, "ready")
+}
+
+// ReopenTask calls PATCH /api/v1/tasks/{id} with state "in_progress": move a
+// task under review back to in_progress after a review requested changes.
+func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.patchTaskState(ctx, id, "in_progress")
+}
+
+func (c *Client) patchTaskState(ctx context.Context, id, state string) (Task, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id),
+		map[string]string{"state": state})
+	if err != nil {
+		return Task{}, nil, err
+	}
+	var t Task
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+	}
+	return t, raw, nil
+}
+
 func (c *Client) taskAction(ctx context.Context, id, action string) (Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/"+action, nil)
 	if err != nil {

@@ -216,9 +216,22 @@ type patchTaskRequest struct {
 	Title    *string `json:"title"`
 	Body     *string `json:"body"`
 	Priority *string `json:"priority"`
+	State    *string `json:"state"`
+}
+
+// patchStateFrom maps the states PATCH may move a task into to the required
+// current state. Only lease-free transitions are allowed here: "ready"
+// publishes a draft, "in_progress" reopens a task whose review requested
+// changes. Every other transition has a dedicated endpoint (claim, release,
+// done, abandon) that also manages the task's lease.
+var patchStateFrom = map[string]string{
+	"ready":       "draft",
+	"in_progress": "in_review",
 }
 
 // patchTask handles PATCH /api/v1/tasks/{id}: updates only the sent fields.
+// An optional "state" field requests a state transition in the same event;
+// see patchStateFrom for the two transitions PATCH may perform.
 func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req patchTaskRequest
@@ -226,13 +239,23 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	if req.Title == nil && req.Body == nil && req.Priority == nil {
+	if req.Title == nil && req.Body == nil && req.Priority == nil && req.State == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
 		return
+	}
+	var stateFrom string
+	if req.State != nil {
+		var ok bool
+		stateFrom, ok = patchStateFrom[*req.State]
+		if !ok {
+			writeErr(w, http.StatusUnprocessableEntity,
+				`state must be "ready" (from draft) or "in_progress" (from in_review); use the claim, release, done, or abandon endpoints for other transitions`)
+			return
+		}
 	}
 
 	extID, err := randomExternalID()
@@ -259,6 +282,14 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 				}
 				if err := store.LogChange(tx, "task", id, eventID,
 					map[string]string{"field": field, "new": *val}); err != nil {
+					return err
+				}
+			}
+			if req.State != nil {
+				// Transition reads the current state inside the tx and fails
+				// with ErrBadTransition (422) unless it equals stateFrom. It
+				// also writes the state_log row.
+				if err := store.Transition(tx, s.st.Now(), id, stateFrom, *req.State, eventID); err != nil {
 					return err
 				}
 			}
