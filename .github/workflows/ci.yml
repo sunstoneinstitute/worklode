@@ -62,5 +62,14 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      # Layer cache includes the `go mod download` and build stages, so the
+      # docker build reuses Go modules instead of re-downloading them.
+      # Same policy as the test job: only main writes the cache; PRs read it.
       - name: docker build (no push)
-        run: docker build -t work-tracker:ci .
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          tags: work-tracker:ci
+          push: false
+          cache-from: type=gha,scope=docker
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=docker' || '' }}
