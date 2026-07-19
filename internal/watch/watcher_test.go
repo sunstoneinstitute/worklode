@@ -266,6 +266,39 @@ func TestFailedReportRetries(t *testing.T) {
 	}
 }
 
+func TestSeenSetPrunedOnPodDelete(t *testing.T) {
+	client := fake.NewClientset()
+	rep := &fakeReporter{}
+	startWatcher(t, client, rep)
+
+	pod := crashLoopPod("ns1", "app-6d4b9c7f9-x2m4p", replicaSetOwner("app-6d4b9c7f9"), 5)
+	if _, err := client.CoreV1().Pods("ns1").Create(context.Background(), pod, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create pod: %v", err)
+	}
+	eventually(t, 5*time.Second, func() bool { return len(rep.reports()) >= 1 }, "first report")
+
+	if err := client.CoreV1().Pods("ns1").Delete(context.Background(), pod.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("delete pod: %v", err)
+	}
+	// Re-create the pod with the same UID and state: the delete must have
+	// pruned its seen entries, so the identical dedupe key reports again.
+	pod = crashLoopPod("ns1", "app-6d4b9c7f9-x2m4p", replicaSetOwner("app-6d4b9c7f9"), 5)
+	if _, err := client.CoreV1().Pods("ns1").Create(context.Background(), pod, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("re-create pod: %v", err)
+	}
+
+	eventually(t, 5*time.Second, func() bool { return len(rep.reports()) >= 2 },
+		"report after prune")
+	got := rep.reports()
+	if len(got) != 2 {
+		t.Fatalf("reports = %d, want 2: %+v", len(got), got)
+	}
+	if got[0].DedupeKey != got[1].DedupeKey {
+		t.Errorf("dedupe keys differ: %q vs %q, want identical (proves pruning, not escalation)",
+			got[0].DedupeKey, got[1].DedupeKey)
+	}
+}
+
 func TestWorkloadFromStatefulSetOwner(t *testing.T) {
 	client := fake.NewClientset()
 	rep := &fakeReporter{}

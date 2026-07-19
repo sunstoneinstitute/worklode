@@ -102,6 +102,12 @@ func (h *HTTPReporter) Report(ctx context.Context, r Report) error {
 
 // Watcher watches pods in all namespaces and reports crash loops and OOM
 // kills. Create with New, then call Run.
+//
+// Reports are posted synchronously from the informer callbacks, so one slow
+// or unreachable server call (up to the HTTP timeout, 10s) delays the
+// following deliveries. Accepted v1 trade-off: the informer's queue absorbs
+// the backlog during incident storms, and the server's idempotency makes
+// restarts and redeliveries safe.
 type Watcher struct {
 	client  kubernetes.Interface
 	cluster string
@@ -137,6 +143,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj any) { w.handlePod(ctx, obj) },
 		UpdateFunc: func(_, obj any) { w.handlePod(ctx, obj) },
+		DeleteFunc: w.handlePodDelete,
 	})
 	if err != nil {
 		return fmt.Errorf("add pod event handler: %w", err)
@@ -179,6 +186,28 @@ func (w *Watcher) handlePod(ctx context.Context, obj any) {
 		w.log.Info("reported runtime event",
 			"kind", r.Kind, "workload", r.Workload, "dedupe_key", r.DedupeKey)
 	}
+}
+
+// handlePodDelete prunes the deleted pod's dedupe keys from the seen-set so
+// a long-running watcher does not grow it without bound (keys embed the pod
+// UID, so a deleted pod's entries can never match again). Prefix iteration
+// over the whole map is fine at this scale.
+func (w *Watcher) handlePodDelete(obj any) {
+	if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		obj = d.Obj
+	}
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return
+	}
+	prefix := fmt.Sprintf("%s/%s/", w.cluster, pod.UID)
+	w.mu.Lock()
+	for k := range w.seen {
+		if strings.HasPrefix(k, prefix) {
+			delete(w.seen, k)
+		}
+	}
+	w.mu.Unlock()
 }
 
 // detect returns the reports warranted by pod's current container statuses.
