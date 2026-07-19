@@ -145,6 +145,51 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 		map[string]string{"field": "state", "old": from, "new": to})
 }
 
+// validPriorities is the tasks.priority CHECK constraint, mirrored in Go so
+// callers get a clean error instead of a raw constraint violation.
+var validPriorities = map[string]bool{
+	"critical": true, "high": true, "medium": true, "low": true,
+}
+
+// UpdateTaskFields updates the non-nil fields of a task inside the given
+// transaction and bumps updated_at. Returns ErrNotFound if the task does not
+// exist. A nil field is left unchanged; all-nil is a no-op (existence is
+// still checked).
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority *string) error {
+	if priority != nil && !validPriorities[*priority] {
+		return fmt.Errorf("unknown priority %q", *priority)
+	}
+	var sets []string
+	var args []any
+	if title != nil {
+		sets = append(sets, `title = ?`)
+		args = append(args, *title)
+	}
+	if body != nil {
+		sets = append(sets, `body = ?`)
+		args = append(args, *body)
+	}
+	if priority != nil {
+		sets = append(sets, `priority = ?`)
+		args = append(args, *priority)
+	}
+	sets = append(sets, `updated_at = ?`)
+	args = append(args, now.UTC().Format(time.RFC3339), id)
+
+	res, err := tx.Exec(`UPDATE tasks SET `+strings.Join(sets, `, `)+` WHERE id = ?`, args...)
+	if err != nil {
+		return fmt.Errorf("update task %s: %w", id, err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update task %s rows affected: %w", id, err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("task %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 // taskColumns is the SELECT list scanTask expects, in order.
 const taskColumns = `id, project_id, title, body, priority, kind, state, created_by, created_at, updated_at`
 

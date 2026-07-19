@@ -51,6 +51,13 @@ func (s *Store) SetNowFunc(f func() time.Time) {
 	s.nowFn = f
 }
 
+// Now returns the store's current time. It respects SetNowFunc, so callers
+// that need a timestamp for tx-scoped store functions (e.g. CreateTask) stay
+// consistent with the store's own clock in tests.
+func (s *Store) Now() time.Time {
+	return s.nowFn()
+}
+
 // Migrate applies all pending embedded migrations. A database that is already
 // up to date is not an error.
 func (s *Store) Migrate() error {

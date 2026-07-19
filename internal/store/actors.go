@@ -86,6 +86,35 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
+// BootstrapAdmin creates the initial "admin" service actor with the given
+// plaintext token — but only if the actors table is empty. On a store that
+// already has actors it is a no-op, so serve can call it unconditionally at
+// startup with the WT_BOOTSTRAP_TOKEN env value.
+func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error {
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM actors`).Scan(&n); err != nil {
+			return fmt.Errorf("count actors: %w", err)
+		}
+		if n > 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO actors (id, kind, display_name) VALUES ('admin', 'service', 'bootstrap admin')`,
+		); err != nil {
+			return fmt.Errorf("insert bootstrap admin: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO tokens (token_hash, actor_id, description, created_at)
+			 VALUES (?, 'admin', 'bootstrap token', ?)`,
+			sha256Hex(plaintextToken), s.nowFn().Format(time.RFC3339),
+		); err != nil {
+			return fmt.Errorf("insert bootstrap token: %w", err)
+		}
+		return nil
+	})
+}
+
 // RevokeToken revokes a token, identified by either its plaintext ("wt_"
 // prefix) or its stored hex hash.
 func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
