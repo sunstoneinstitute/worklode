@@ -13,11 +13,13 @@ import (
 )
 
 // Actor is a human, an autonomous agent, or a service account that can act
-// against the store (create tasks, claim leases, etc.).
+// against the store (create tasks, claim leases, etc.). Admin actors may
+// additionally manage projects, actors, and tokens.
 type Actor struct {
 	ID          string
 	Kind        string
 	DisplayName string
+	Admin       bool
 }
 
 // tokenPrefix marks plaintext bearer tokens so they are visually
@@ -30,11 +32,12 @@ func sha256Hex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// CreateActor registers a new actor.
-func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string) error {
+// CreateActor registers a new actor. admin grants it the right to manage
+// projects, actors, and tokens.
+func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, admin bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name) VALUES (?, ?, ?)`,
-		id, kind, displayName,
+		`INSERT INTO actors (id, kind, display_name, admin) VALUES (?, ?, ?, ?)`,
+		id, kind, displayName, admin,
 	)
 	if err != nil {
 		return fmt.Errorf("insert actor %s: %w", id, err)
@@ -47,8 +50,8 @@ func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 	var a Actor
 	var displayName sql.NullString
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, display_name FROM actors WHERE id = ?`, id)
-	if err := row.Scan(&a.ID, &a.Kind, &displayName); err != nil {
+		`SELECT id, kind, display_name, admin FROM actors WHERE id = ?`, id)
+	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -86,8 +89,8 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
-// BootstrapAdmin creates the initial "admin" service actor with the given
-// plaintext token — but only if the actors table is empty. On a store that
+// BootstrapAdmin creates the initial "admin" service actor (admin = true)
+// with the given plaintext token — but only if the actors table is empty. On a store that
 // already has actors it is a no-op, so serve can call it unconditionally at
 // startup with the WT_BOOTSTRAP_TOKEN env value.
 func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error {
@@ -100,7 +103,7 @@ func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error
 			return nil
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO actors (id, kind, display_name) VALUES ('admin', 'service', 'bootstrap admin')`,
+			`INSERT INTO actors (id, kind, display_name, admin) VALUES ('admin', 'service', 'bootstrap admin', 1)`,
 		); err != nil {
 			return fmt.Errorf("insert bootstrap admin: %w", err)
 		}

@@ -15,7 +15,7 @@ import (
 func secondActor(t *testing.T, st *store.Store, id string) string {
 	t.Helper()
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, id, "agent", id); err != nil {
+	if err := st.CreateActor(ctx, id, "agent", id, false); err != nil {
 		t.Fatalf("create actor %s: %v", id, err)
 	}
 	token, err := st.CreateToken(ctx, id, "test token", nil)

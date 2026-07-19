@@ -16,12 +16,13 @@ import (
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
-// newTestServer opens a store in a temp dir, creates actor "alice" with a
-// token, and starts a real HTTP server (httptest.NewServer, a live listener
-// — not httptest.NewRecorder — since cli.Client makes real net/http calls).
-// Returns the store (for out-of-band setup like seeding an inbox issue), a
-// Client pointed at the server and authenticated as alice, and the server's
-// base URL (for tests that need a second client with a different token).
+// newTestServer opens a store in a temp dir, creates admin actor "alice"
+// with a token, and starts a real HTTP server (httptest.NewServer, a live
+// listener — not httptest.NewRecorder — since cli.Client makes real net/http
+// calls). Returns the store (for out-of-band setup like seeding an inbox
+// issue), a Client pointed at the server and authenticated as alice, and the
+// server's base URL (for tests that need a second client with a different
+// token).
 func newTestServer(t *testing.T) (*store.Store, *cli.Client, string) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
@@ -31,7 +32,7 @@ func newTestServer(t *testing.T) (*store.Store, *cli.Client, string) {
 	t.Cleanup(func() { st.Close() })
 
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
 	token, err := st.CreateToken(ctx, "alice", "test token", nil)

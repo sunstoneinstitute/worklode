@@ -14,7 +14,7 @@ func TestCreateAndGetActor(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice Example"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice Example", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 
@@ -42,7 +42,7 @@ func TestCreateTokenRoundTrip(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	plaintext, err := s.CreateToken(ctx, "alice", "laptop", nil)
@@ -114,7 +114,7 @@ func TestAuthenticateRevoked(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	plaintext, err := s.CreateToken(ctx, "alice", "laptop", nil)
@@ -139,7 +139,7 @@ func TestAuthenticateExpired(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	s.SetNowFunc(func() time.Time { return base })
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	expiresAt := base.Add(1 * time.Hour)
@@ -169,7 +169,7 @@ func TestCreateTokenNoExpiry(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	s.SetNowFunc(func() time.Time { return base })
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	plaintext, err := s.CreateToken(ctx, "alice", "laptop", nil)
@@ -189,7 +189,7 @@ func TestRevokeTokenByHash(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	plaintext, err := s.CreateToken(ctx, "alice", "laptop", nil)

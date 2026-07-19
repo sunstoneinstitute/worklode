@@ -20,6 +20,7 @@ func newActorCmd() *cobra.Command {
 
 func newActorAddCmd() *cobra.Command {
 	var kind, name string
+	var admin bool
 	cmd := &cobra.Command{
 		Use:   "add <id>",
 		Short: "Create an actor",
@@ -30,7 +31,7 @@ func newActorAddCmd() *cobra.Command {
 				return err
 			}
 			a, raw, err := c.CreateActor(cmd.Context(), cli.CreateActorInput{
-				ID: args[0], Kind: kind, DisplayName: name,
+				ID: args[0], Kind: kind, DisplayName: name, Admin: admin,
 			})
 			if err != nil {
 				return err
@@ -45,6 +46,7 @@ func newActorAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "actor kind: human, agent, or service (required)")
 	cmd.Flags().StringVar(&name, "name", "", "display name")
+	cmd.Flags().BoolVar(&admin, "admin", false, "grant admin rights (manage projects, actors, and tokens)")
 	cmd.MarkFlagRequired("kind")
 	return cmd
 }

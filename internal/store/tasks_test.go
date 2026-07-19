@@ -29,7 +29,7 @@ func openTaskStore(t *testing.T) *Store {
 	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if err := s.CreateActor(ctx, "stig", "human", "Stig"); err != nil {
+	if err := s.CreateActor(ctx, "stig", "human", "Stig", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
 	return s

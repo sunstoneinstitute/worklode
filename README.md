@@ -51,6 +51,9 @@ wt task add --project sunstone-web --title "Fix the footer link"
 wt task claim <task-id>
 ```
 
+Managing projects, actors, and tokens requires an admin actor; the
+bootstrap actor is admin, and `wt actor add --admin` creates more.
+
 The read-only web UI is at http://localhost:8080/.
 
 ## GitHub App setup

@@ -134,6 +134,93 @@ func TestCreateActorAndTokenLifecycle(t *testing.T) {
 	}
 }
 
+// TestAdminGatedEndpoints verifies the management endpoints reject non-admin
+// tokens with 403 (any bearer token could previously mint an admin token —
+// privilege escalation) while admin tokens pass, and that non-gated
+// endpoints stay open to non-admins.
+func TestAdminGatedEndpoints(t *testing.T) {
+	st, h, adminToken := newTestServer(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
+		t.Fatalf("create non-admin actor: %v", err)
+	}
+	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
+	if err != nil {
+		t.Fatalf("create worker token: %v", err)
+	}
+
+	gated := []struct {
+		method, path string
+		body         map[string]any
+	}{
+		{"POST", "/api/v1/projects", map[string]any{"id": "p2", "name": "P2"}},
+		{"POST", "/api/v1/projects/p2/repos", map[string]any{"repo": "acme/other"}},
+		{"POST", "/api/v1/actors", map[string]any{"id": "eve", "kind": "agent"}},
+		{"POST", "/api/v1/actors/worker/tokens", map[string]any{}},
+		{"DELETE", "/api/v1/tokens", map[string]any{"token": workerToken}},
+	}
+	for _, ep := range gated {
+		t.Run(ep.method+" "+ep.path, func(t *testing.T) {
+			rr := doReq(t, h, ep.method, ep.path, workerToken, ep.body)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("non-admin status = %d, want 403; body %s", rr.Code, rr.Body.String())
+			}
+			if got := decodeMap(t, rr)["error"]; got != "admin required" {
+				t.Fatalf("error = %v, want admin required", got)
+			}
+		})
+	}
+
+	// The same calls succeed with the admin token (in gated order: project
+	// first so the repo add has a target).
+	for _, ep := range gated {
+		rr := doReq(t, h, ep.method, ep.path, adminToken, ep.body)
+		if rr.Code >= 400 {
+			t.Fatalf("admin %s %s status = %d, body %s", ep.method, ep.path, rr.Code, rr.Body.String())
+		}
+	}
+
+	// Non-admin tokens keep read access and task/inbox/board endpoints.
+	// (workerToken was revoked above by the admin DELETE — mint a new one.)
+	workerToken2, err := st.CreateToken(ctx, "worker", "worker token 2", nil)
+	if err != nil {
+		t.Fatalf("create second worker token: %v", err)
+	}
+	for _, ep := range []struct{ method, path string }{
+		{"GET", "/api/v1/projects"},
+		{"GET", "/api/v1/tasks"},
+		{"GET", "/api/v1/inbox"},
+		{"GET", "/api/v1/board"},
+	} {
+		rr := doReq(t, h, ep.method, ep.path, workerToken2, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("non-admin %s %s status = %d, want 200; body %s", ep.method, ep.path, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+// TestCreateActorAdminFlag checks the admin flag round-trips through POST
+// /api/v1/actors into the store.
+func TestCreateActorAdminFlag(t *testing.T) {
+	st, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/actors", token, map[string]any{
+		"id": "root", "kind": "human", "display_name": "Root", "admin": true,
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create admin actor status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["admin"]; got != true {
+		t.Fatalf("response admin = %v, want true", got)
+	}
+	a, err := st.GetActor(context.Background(), "root")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if !a.Admin {
+		t.Fatalf("stored actor admin = false, want true")
+	}
+}
+
 func TestInboxListPromoteDismiss(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

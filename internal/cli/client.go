@@ -543,13 +543,16 @@ type Actor struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	DisplayName string `json:"display_name"`
+	Admin       bool   `json:"admin"`
 }
 
-// CreateActorInput is the request body for CreateActor.
+// CreateActorInput is the request body for CreateActor. Admin grants the
+// actor the right to manage projects, actors, and tokens.
 type CreateActorInput struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	DisplayName string `json:"display_name"`
+	Admin       bool   `json:"admin"`
 }
 
 // CreateActor calls POST /api/v1/actors.

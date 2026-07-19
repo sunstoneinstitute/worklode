@@ -28,12 +28,12 @@ func newTestStore(t *testing.T) *store.Store {
 }
 
 // newTestServer returns a store, a server handler, and a valid bearer token
-// for actor "alice".
+// for admin actor "alice".
 func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 	t.Helper()
 	st := newTestStore(t)
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
 	token, err := st.CreateToken(ctx, "alice", "test token", nil)
@@ -138,8 +138,8 @@ func TestBootstrapAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authenticate bootstrap token: %v", err)
 	}
-	if a.ID != "admin" || a.Kind != "service" {
-		t.Fatalf("actor = %+v, want id=admin kind=service", a)
+	if a.ID != "admin" || a.Kind != "service" || !a.Admin {
+		t.Fatalf("actor = %+v, want id=admin kind=service admin=true", a)
 	}
 
 	// Second call must no-op: actors table is no longer empty.
@@ -159,7 +159,7 @@ func TestBootstrapAdmin(t *testing.T) {
 func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice"); err != nil {
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
 	tok := "wt_" + strings.Repeat("ef", 20)

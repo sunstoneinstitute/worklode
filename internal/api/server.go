@@ -110,13 +110,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))
 
-	mux.Handle("POST /api/v1/projects", s.auth(s.createProject))
+	// Project, actor, and token management is admin-only: any bearer token
+	// may otherwise mint further tokens (verified privilege escalation).
+	mux.Handle("POST /api/v1/projects", s.auth(requireAdmin(s.createProject)))
 	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
-	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(s.addRepo))
+	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
 
-	mux.Handle("POST /api/v1/actors", s.auth(s.createActor))
-	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(s.createToken))
-	mux.Handle("DELETE /api/v1/tokens", s.auth(s.revokeToken))
+	mux.Handle("POST /api/v1/actors", s.auth(requireAdmin(s.createActor)))
+	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(requireAdmin(s.createToken)))
+	mux.Handle("DELETE /api/v1/tokens", s.auth(requireAdmin(s.revokeToken)))
 
 	// The repo half of an inbox item contains a slash ("owner/name"), so
 	// promote/dismiss take it as a body field instead of a path segment.
@@ -212,6 +214,18 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 func actorFrom(r *http.Request) *store.Actor {
 	a, _ := r.Context().Value(actorKey{}).(*store.Actor)
 	return a
+}
+
+// requireAdmin wraps a handler that must only be reachable by admin actors.
+// It runs inside s.auth, which put the actor into the request context.
+func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if a := actorFrom(r); a == nil || !a.Admin {
+			writeErr(w, http.StatusForbidden, "admin required")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

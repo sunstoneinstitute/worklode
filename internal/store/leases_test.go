@@ -141,7 +141,7 @@ func TestClaimUnknownTaskOrActor(t *testing.T) {
 func TestRenewRelease(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
-	if err := s.CreateActor(ctx, "bob", "agent", "Bob"); err != nil {
+	if err := s.CreateActor(ctx, "bob", "agent", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
 	}
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())

@@ -122,12 +122,14 @@ type actorJSON struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	DisplayName string `json:"display_name"`
+	Admin       bool   `json:"admin"`
 }
 
 type createActorRequest struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	DisplayName string `json:"display_name"`
+	Admin       bool   `json:"admin"`
 }
 
 // createActor handles POST /api/v1/actors.
@@ -145,11 +147,13 @@ func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be human, agent, or service")
 		return
 	}
-	if err := s.st.CreateActor(r.Context(), req.ID, req.Kind, req.DisplayName); err != nil {
+	if err := s.st.CreateActor(r.Context(), req.ID, req.Kind, req.DisplayName, req.Admin); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, actorJSON{ID: req.ID, Kind: req.Kind, DisplayName: req.DisplayName})
+	writeJSON(w, http.StatusCreated, actorJSON{
+		ID: req.ID, Kind: req.Kind, DisplayName: req.DisplayName, Admin: req.Admin,
+	})
 }
 
 type createTokenRequest struct {

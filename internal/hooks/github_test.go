@@ -79,7 +79,7 @@ func (e *env) seedTask(t *testing.T) string {
 func (e *env) claimTask(t *testing.T, taskID string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := e.st.CreateActor(ctx, "agent", "agent", "Agent"); err != nil {
+	if err := e.st.CreateActor(ctx, "agent", "agent", "Agent", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
 	if _, err := e.st.Claim(ctx, taskID, "agent", "", 0); err != nil {
