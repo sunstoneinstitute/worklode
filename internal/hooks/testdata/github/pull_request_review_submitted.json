@@ -1,0 +1,10 @@
+{
+  "action": "submitted",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "pull_request": {"number": 42},
+  "review": {
+    "user": {"login": "bob"},
+    "state": "APPROVED",
+    "submitted_at": "2026-07-19T11:00:00Z"
+  }
+}

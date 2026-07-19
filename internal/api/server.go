@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/sunstoneinstitute/work-tracker/internal/hooks"
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
@@ -70,6 +71,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
+	// handler itself rejects all requests with 503 when its secret is empty.
+	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log))
 
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
