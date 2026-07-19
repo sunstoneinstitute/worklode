@@ -108,6 +108,24 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 	return nil
 }
 
+// IssueTitle returns the title of an inbox issue inside the given
+// transaction. Returns ErrNotFound if no such issue exists. Used by the
+// promote handler to default a task's title to the issue's when the caller
+// does not supply one.
+func IssueTitle(tx *sql.Tx, repo string, number int64) (string, error) {
+	var title sql.NullString
+	err := tx.QueryRow(
+		`SELECT title FROM issues WHERE repo = ? AND number = ?`, repo, number,
+	).Scan(&title)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("get issue %s#%d title: %w", repo, number, err)
+	}
+	return title.String, nil
+}
+
 func scanIssue(row rowScanner) (*Issue, error) {
 	var is Issue
 	var title, state, taskID, appliesToVersions, url sql.NullString

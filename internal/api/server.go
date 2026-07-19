@@ -91,6 +91,22 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))
 
+	mux.Handle("POST /api/v1/projects", s.auth(s.createProject))
+	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
+	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(s.addRepo))
+
+	mux.Handle("POST /api/v1/actors", s.auth(s.createActor))
+	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(s.createToken))
+	mux.Handle("DELETE /api/v1/tokens", s.auth(s.revokeToken))
+
+	// The repo half of an inbox item contains a slash ("owner/name"), so
+	// promote/dismiss take it as a body field instead of a path segment.
+	mux.Handle("GET /api/v1/inbox", s.auth(s.listInbox))
+	mux.Handle("POST /api/v1/inbox/promote", s.auth(s.promoteInbox))
+	mux.Handle("POST /api/v1/inbox/dismiss", s.auth(s.dismissInbox))
+
+	mux.Handle("GET /api/v1/board", s.auth(s.board))
+
 	return s.logging(s.metrics(mux)), nil
 }
 

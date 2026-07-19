@@ -77,6 +77,15 @@ func decodeMap(t *testing.T, rr *httptest.ResponseRecorder) map[string]any {
 	return m
 }
 
+// decodeInto decodes a response body into a caller-supplied typed struct,
+// for tests that want field access without map[string]any assertions.
+func decodeInto(t *testing.T, rr *httptest.ResponseRecorder, v any) {
+	t.Helper()
+	if err := json.Unmarshal(rr.Body.Bytes(), v); err != nil {
+		t.Fatalf("decode body %q: %v", rr.Body.String(), err)
+	}
+}
+
 func TestHealthzNoAuth(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	rr := doReq(t, h, "GET", "/healthz", "", nil)

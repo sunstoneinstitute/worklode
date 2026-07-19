@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -138,9 +139,12 @@ type taskDetailJSON struct {
 		Out []edgeOut `json:"out"`
 		In  []edgeIn  `json:"in"`
 	} `json:"edges"`
+	Lease *leaseJSON `json:"lease,omitempty"`
 }
 
-// getTask handles GET /api/v1/tasks/{id}.
+// getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
+// the task has an active lease, so a CLI `show` can display the holder
+// without a second request.
 func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := s.st.GetTask(r.Context(), id)
@@ -167,6 +171,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	resp.Edges.In = make([]edgeIn, 0, len(in))
 	for _, e := range in {
 		resp.Edges.In = append(resp.Edges.In, edgeIn{From: e.FromTask, Type: e.Type})
+	}
+	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
+		l := toLeaseJSON(lease)
+		resp.Lease = &l
+	} else if !errors.Is(err, store.ErrNotFound) {
+		s.mapStoreErr(w, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
