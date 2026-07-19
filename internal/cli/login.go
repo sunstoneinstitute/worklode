@@ -81,9 +81,16 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
-	srv := &http.Server{Handler: callbackHandler(state, codeCh, errCh)}
+	srv := &http.Server{
+		Handler:           callbackHandler(state, codeCh, errCh),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	go srv.Serve(ln)
-	defer srv.Shutdown(context.Background())
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 
 	if err := opts.OpenBrowser(authURL); err != nil {
 		return nil, fmt.Errorf("open browser: %w", err)
@@ -131,7 +138,7 @@ func fetchOIDCConfig(ctx context.Context, client *http.Client, server string) (o
 		return oidcDiscovery{}, errors.New("this work-tracker server does not have SSO enabled")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return oidcDiscovery{}, fmt.Errorf("fetch oidc config: server returned %d", resp.StatusCode)
+		return oidcDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch oidc config"}
 	}
 	var d oidcDiscovery
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
@@ -185,7 +192,11 @@ func exchangeWTToken(ctx context.Context, client *http.Client, server, idToken s
 func listenLocal(ports []int) (net.Listener, int, error) {
 	var lastErr error
 	for _, p := range ports {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+		// Bind to localhost (not the 127.0.0.1 literal) so the listener answers
+		// on whatever localhost resolves to for the browser — including ::1 on
+		// IPv6-first hosts — and to match Keycloak's registered
+		// http://localhost:<port> redirect URIs.
+		ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", p))
 		if err == nil {
 			return ln, ln.Addr().(*net.TCPAddr).Port, nil
 		}
@@ -197,6 +208,11 @@ func listenLocal(ports []int) (net.Listener, int, error) {
 // callbackHandler serves the localhost redirect. It validates state, forwards
 // the code on codeCh (or an error on errCh), and shows a close-the-tab page.
 // Requests without a code or error (e.g. /favicon.ico) are 404'd silently.
+//
+// Both channel sends are non-blocking: the buffer depth of 1 guarantees the
+// first legitimate hit lands, and extra concurrent hits (browser prefetch, a
+// port scanner, a double-click) are dropped rather than blocking a handler
+// goroutine on a full channel — which would otherwise wedge srv.Shutdown.
 func callbackHandler(state string, codeCh chan<- string, errCh chan<- error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -206,17 +222,26 @@ func callbackHandler(state string, codeCh chan<- string, errCh chan<- error) htt
 		}
 		if e := q.Get("error"); e != "" {
 			http.Error(w, "authorization error: "+e, http.StatusBadRequest)
-			errCh <- fmt.Errorf("authorization error: %s", e)
+			select {
+			case errCh <- fmt.Errorf("authorization error: %s", e):
+			default:
+			}
 			return
 		}
 		if q.Get("state") != state {
 			http.Error(w, "state mismatch", http.StatusBadRequest)
-			errCh <- errors.New("state mismatch on callback")
+			select {
+			case errCh <- errors.New("state mismatch on callback"):
+			default:
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintln(w, "<!doctype html><title>wt login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
-		codeCh <- q.Get("code")
+		select {
+		case codeCh <- q.Get("code"):
+		default:
+		}
 	})
 }
 
