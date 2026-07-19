@@ -1,0 +1,11 @@
+{
+  "involvedObject": {"kind": "HelmRelease", "namespace": "flux-system", "name": "demo-helm"},
+  "severity": "info",
+  "timestamp": "2026-07-19T10:10:00Z",
+  "message": "Helm upgrade succeeded",
+  "reason": "ReconciliationSucceeded",
+  "metadata": {
+    "revision": "sha1:def4560000000000000000000000000000000000",
+    "cluster": "prod-1"
+  }
+}

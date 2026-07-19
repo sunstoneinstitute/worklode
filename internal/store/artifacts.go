@@ -120,6 +120,25 @@ func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifac
 	return out, nil
 }
 
+// ArtifactIDBySourceSHA looks up an artifact by source_sha inside the given
+// transaction, for callers (e.g. the Flux webhook) that must resolve an
+// artifact atomically with the rest of their apply. Returns nil if no
+// artifact matches. Several artifacts can share a source_sha (built from the
+// same commit by different jobs); the newest one (highest id) wins.
+func ArtifactIDBySourceSHA(tx *sql.Tx, sha string) (*int64, error) {
+	var id int64
+	err := tx.QueryRow(
+		`SELECT id FROM artifacts WHERE source_sha = ? ORDER BY id DESC LIMIT 1`, sha,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("artifact id by source sha %s: %w", sha, err)
+	}
+	return &id, nil
+}
+
 // splitImage splits an image reference "registry/name:tag" into
 // (name-without-tag, tag). ok is false if there is no ":" tag separator
 // after the last "/" (so a registry port, e.g. "host:5000/name", is not
@@ -207,6 +226,25 @@ func UpsertDeployment(tx *sql.Tx, now time.Time, d Deployment) error {
 		return fmt.Errorf("upsert deployment %s/%s/%s: %w", d.Environment, d.TargetKind, d.TargetName, err)
 	}
 	return nil
+}
+
+// DeploymentStatus returns the current status of a deployment inside the
+// given transaction ("" if none exists yet). Use it when a state transition
+// (e.g. detecting a Flux recovery) must read the prior status atomically
+// with the upsert that follows.
+func DeploymentStatus(tx *sql.Tx, environment, targetKind, targetName string) (string, error) {
+	var status string
+	err := tx.QueryRow(
+		`SELECT status FROM deployments WHERE environment = ? AND target_kind = ? AND target_name = ?`,
+		environment, targetKind, targetName,
+	).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("deployment status %s/%s/%s: %w", environment, targetKind, targetName, err)
+	}
+	return status, nil
 }
 
 func scanDeployment(row rowScanner) (*Deployment, error) {

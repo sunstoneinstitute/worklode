@@ -1,0 +1,11 @@
+{
+  "involvedObject": {"kind": "Kustomization", "namespace": "flux-system", "name": "demo"},
+  "severity": "error",
+  "timestamp": "2026-07-19T10:05:00Z",
+  "message": "Health check failed after 5m0s",
+  "reason": "HealthCheckFailed",
+  "metadata": {
+    "revision": "main@sha1:abc1230000000000000000000000000000000000",
+    "cluster": "prod-1"
+  }
+}

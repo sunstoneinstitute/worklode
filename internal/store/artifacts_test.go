@@ -296,6 +296,92 @@ func TestListDeploymentsFilter(t *testing.T) {
 	}
 }
 
+// artifactIDBySourceSHA drives ArtifactIDBySourceSHA inside its own
+// RecordEvent transaction, since it is tx-scoped.
+func artifactIDBySourceSHA(t *testing.T, s *Store, sha string) *int64 {
+	t.Helper()
+	var got *int64
+	_, _, err := s.RecordEvent(t.Context(), "flux", nextExt(t), "lookup", nil,
+		func(tx *sql.Tx, _ int64) error {
+			var err error
+			got, err = ArtifactIDBySourceSHA(tx, sha)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("ArtifactIDBySourceSHA: %v", err)
+	}
+	return got
+}
+
+func TestArtifactIDBySourceSHANoneFound(t *testing.T) {
+	s := openArtifactsStore(t)
+	got := artifactIDBySourceSHA(t, s, "nonexistent")
+	if got != nil {
+		t.Fatalf("ArtifactIDBySourceSHA nonexistent: got %v, want nil", got)
+	}
+}
+
+func TestArtifactIDBySourceSHANewestWins(t *testing.T) {
+	s := openArtifactsStore(t)
+	a1 := defaultArtifact()
+	id1, err := createArtifact(t, s, a1)
+	if err != nil {
+		t.Fatalf("createArtifact a1: %v", err)
+	}
+	a2 := defaultArtifact()
+	a2.Version = "v2.0.0"
+	id2, err := createArtifact(t, s, a2)
+	if err != nil {
+		t.Fatalf("createArtifact a2: %v", err)
+	}
+	if id2 <= id1 {
+		t.Fatalf("test setup: expected id2 > id1, got id1=%d id2=%d", id1, id2)
+	}
+
+	got := artifactIDBySourceSHA(t, s, a1.SourceSHA)
+	if got == nil || *got != id2 {
+		t.Fatalf("ArtifactIDBySourceSHA: got %v, want newest id %d", got, id2)
+	}
+}
+
+// deploymentStatus drives DeploymentStatus inside its own RecordEvent
+// transaction, since it is tx-scoped.
+func deploymentStatus(t *testing.T, s *Store, environment, targetKind, targetName string) string {
+	t.Helper()
+	var got string
+	_, _, err := s.RecordEvent(t.Context(), "flux", nextExt(t), "lookup", nil,
+		func(tx *sql.Tx, _ int64) error {
+			var err error
+			got, err = DeploymentStatus(tx, environment, targetKind, targetName)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("DeploymentStatus: %v", err)
+	}
+	return got
+}
+
+func TestDeploymentStatusNoneFound(t *testing.T) {
+	s := openArtifactsStore(t)
+	got := deploymentStatus(t, s, "prod", "flux_kustomization", "demo/demo")
+	if got != "" {
+		t.Fatalf("DeploymentStatus nonexistent: got %q, want empty", got)
+	}
+}
+
+func TestDeploymentStatusFound(t *testing.T) {
+	s := openArtifactsStore(t)
+	d := defaultDeployment()
+	d.Status = "failed"
+	if err := upsertDeployment(t, s, artifactsTestNow, d); err != nil {
+		t.Fatalf("upsertDeployment: %v", err)
+	}
+	got := deploymentStatus(t, s, d.Environment, d.TargetKind, d.TargetName)
+	if got != "failed" {
+		t.Fatalf("DeploymentStatus: got %q, want failed", got)
+	}
+}
+
 func TestArtifactsBySourceSHAKindOrder(t *testing.T) {
 	s := openArtifactsStore(t)
 	a := defaultArtifact()

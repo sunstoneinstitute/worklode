@@ -25,8 +25,7 @@ import (
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env
-// map are consumed by the webhook endpoints (Tasks 10/11); they are accepted
-// here so serve.go's env plumbing is complete from the start.
+// map are consumed by the /hooks/github and /hooks/flux endpoints.
 type Config struct {
 	BootstrapToken      string            // WT_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
 	GitHubWebhookSecret string            // WT_GITHUB_WEBHOOK_SECRET
@@ -75,6 +74,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
 	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log))
+	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log))
 
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
