@@ -1,0 +1,552 @@
+package store
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// extSeq feeds unique external ids so every RecordEvent call in the tests is
+// a distinct event (idempotency never kicks in by accident).
+var extSeq atomic.Int64
+
+func nextExt(t *testing.T) string {
+	t.Helper()
+	return fmt.Sprintf("%s-%d", t.Name(), extSeq.Add(1))
+}
+
+// openTaskStore opens a test store with the fixtures task tests need: a
+// project ("horndb") and an actor ("stig").
+func openTaskStore(t *testing.T) *Store {
+	t.Helper()
+	s := openTestStore(t)
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	if err := s.CreateActor(ctx, "stig", "human", "Stig"); err != nil {
+		t.Fatalf("CreateActor: %v", err)
+	}
+	return s
+}
+
+var taskTestNow = time.Date(2026, 7, 19, 10, 0, 0, 0, time.UTC)
+
+func defaultTaskInput() TaskInput {
+	return TaskInput{
+		ProjectID: "horndb",
+		Title:     "a task",
+		Body:      "body",
+		Priority:  "medium",
+		Kind:      "feature",
+		CreatedBy: "stig",
+	}
+}
+
+// createTask drives CreateTask through RecordEvent, the way production code
+// will use it.
+func createTask(t *testing.T, s *Store, now time.Time, in TaskInput) *Task {
+	t.Helper()
+	var task *Task
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			task, err = CreateTask(tx, now, in)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	return task
+}
+
+// transition drives Transition through RecordEvent and returns its error.
+func transition(t *testing.T, s *Store, now time.Time, taskID, from, to string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return Transition(tx, now, taskID, from, to, eventID)
+		})
+	return err
+}
+
+// walkTo moves a task (created in "ready") to the given state via legal
+// transitions only.
+func walkTo(t *testing.T, s *Store, taskID, state string) {
+	t.Helper()
+	paths := map[string][]string{
+		"ready":       {},
+		"in_progress": {"in_progress"},
+		"in_review":   {"in_progress", "in_review"},
+		"done":        {"in_progress", "in_review", "done"},
+	}
+	steps, ok := paths[state]
+	if !ok {
+		t.Fatalf("walkTo: no path to state %q", state)
+	}
+	cur := "ready"
+	for _, next := range steps {
+		if err := transition(t, s, taskTestNow, taskID, cur, next); err != nil {
+			t.Fatalf("walkTo %s: transition %s -> %s: %v", state, cur, next, err)
+		}
+		cur = next
+	}
+}
+
+func addEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.add", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, fromTask, toTask, typ)
+		})
+	return err
+}
+
+func removeEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.remove", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return RemoveEdge(tx, fromTask, toTask, typ)
+		})
+	return err
+}
+
+func isBlocked(t *testing.T, s *Store, taskID string) bool {
+	t.Helper()
+	var blocked bool
+	err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		var err error
+		blocked, err = IsBlocked(tx, taskID)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("IsBlocked(%s): %v", taskID, err)
+	}
+	return blocked
+}
+
+func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	if t1.ID != "WT-1" {
+		t.Fatalf("first task id: got %q, want WT-1", t1.ID)
+	}
+	if t1.State != "ready" {
+		t.Fatalf("first task state: got %q, want ready", t1.State)
+	}
+
+	in2 := defaultTaskInput()
+	in2.Draft = true
+	t2 := createTask(t, s, taskTestNow, in2)
+	if t2.ID != "WT-2" {
+		t.Fatalf("second task id: got %q, want WT-2", t2.ID)
+	}
+	if t2.State != "draft" {
+		t.Fatalf("draft task state: got %q, want draft", t2.State)
+	}
+
+	// Round-trip through GetTask matches what CreateTask returned.
+	got, err := s.GetTask(t.Context(), "WT-1")
+	if err != nil {
+		t.Fatalf("GetTask WT-1: %v", err)
+	}
+	if !reflect.DeepEqual(got, t1) {
+		t.Fatalf("GetTask: got %+v, want %+v", got, t1)
+	}
+	if got.ProjectID != "horndb" || got.Title != "a task" || got.Body != "body" ||
+		got.Priority != "medium" || got.Kind != "feature" || got.CreatedBy != "stig" {
+		t.Fatalf("GetTask fields: got %+v", got)
+	}
+	if !got.CreatedAt.Equal(taskTestNow) || !got.UpdatedAt.Equal(taskTestNow) {
+		t.Fatalf("GetTask timestamps: got created=%v updated=%v, want %v", got.CreatedAt, got.UpdatedAt, taskTestNow)
+	}
+}
+
+func TestTransitionLegal(t *testing.T) {
+	s := openTaskStore(t)
+
+	cases := []struct{ from, to string }{
+		{"draft", "ready"},
+		{"ready", "in_progress"},
+		{"in_progress", "in_review"},
+		{"in_progress", "ready"},
+		{"in_review", "done"},
+		{"in_review", "in_progress"},
+		{"draft", "abandoned"},
+		{"ready", "abandoned"},
+		{"in_progress", "abandoned"},
+		{"in_review", "abandoned"},
+	}
+	for _, c := range cases {
+		in := defaultTaskInput()
+		in.Draft = c.from == "draft"
+		task := createTask(t, s, taskTestNow, in)
+		if !in.Draft {
+			walkTo(t, s, task.ID, c.from)
+		}
+		if err := transition(t, s, taskTestNow, task.ID, c.from, c.to); err != nil {
+			t.Fatalf("transition %s -> %s: %v", c.from, c.to, err)
+		}
+		got, err := s.GetTask(t.Context(), task.ID)
+		if err != nil {
+			t.Fatalf("GetTask %s: %v", task.ID, err)
+		}
+		if got.State != c.to {
+			t.Fatalf("after %s -> %s: state is %q", c.from, c.to, got.State)
+		}
+	}
+}
+
+func TestTransitionIllegal(t *testing.T) {
+	s := openTaskStore(t)
+
+	cases := []struct{ from, to string }{
+		{"ready", "done"},
+		{"done", "ready"},
+		{"draft", "in_progress"},
+		{"done", "abandoned"},
+	}
+	for _, c := range cases {
+		in := defaultTaskInput()
+		in.Draft = c.from == "draft"
+		task := createTask(t, s, taskTestNow, in)
+		if !in.Draft {
+			walkTo(t, s, task.ID, c.from)
+		}
+		err := transition(t, s, taskTestNow, task.ID, c.from, c.to)
+		if !errors.Is(err, ErrBadTransition) {
+			t.Fatalf("transition %s -> %s: want ErrBadTransition, got %v", c.from, c.to, err)
+		}
+	}
+}
+
+func TestTransitionWrongCurrentState(t *testing.T) {
+	s := openTaskStore(t)
+
+	task := createTask(t, s, taskTestNow, defaultTaskInput()) // state: ready
+	err := transition(t, s, taskTestNow, task.ID, "in_progress", "in_review")
+	if !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("transition with wrong from: want ErrBadTransition, got %v", err)
+	}
+	// The task is untouched.
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != "ready" {
+		t.Fatalf("state after failed transition: got %q, want ready", got.State)
+	}
+}
+
+func TestTransitionUnknownTask(t *testing.T) {
+	s := openTaskStore(t)
+
+	err := transition(t, s, taskTestNow, "WT-999", "ready", "in_progress")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("transition unknown task: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
+	s := openTaskStore(t)
+
+	created := taskTestNow
+	moved := taskTestNow.Add(5 * time.Minute)
+
+	task := createTask(t, s, created, defaultTaskInput())
+
+	var eventID int64
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
+		func(tx *sql.Tx, evID int64) error {
+			eventID = evID
+			return Transition(tx, moved, task.ID, "ready", "in_progress", evID)
+		})
+	if err != nil {
+		t.Fatalf("transition: %v", err)
+	}
+
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if !got.CreatedAt.Equal(created) {
+		t.Fatalf("CreatedAt: got %v, want %v", got.CreatedAt, created)
+	}
+	if !got.UpdatedAt.Equal(moved) {
+		t.Fatalf("UpdatedAt: got %v, want %v (bumped)", got.UpdatedAt, moved)
+	}
+
+	var kind, entityID, changeJSON string
+	var loggedEventID int64
+	row := s.db.QueryRow(
+		`SELECT entity_kind, entity_id, change, event_id FROM state_log WHERE entity_id = ?`, task.ID)
+	if err := row.Scan(&kind, &entityID, &changeJSON, &loggedEventID); err != nil {
+		t.Fatalf("read state_log: %v", err)
+	}
+	if kind != "task" || entityID != task.ID || loggedEventID != eventID {
+		t.Fatalf("state_log row: kind=%q entity=%q event_id=%d, want task/%s/%d",
+			kind, entityID, loggedEventID, task.ID, eventID)
+	}
+	var change map[string]string
+	if err := json.Unmarshal([]byte(changeJSON), &change); err != nil {
+		t.Fatalf("unmarshal change %q: %v", changeJSON, err)
+	}
+	want := map[string]string{"field": "state", "old": "ready", "new": "in_progress"}
+	if !reflect.DeepEqual(change, want) {
+		t.Fatalf("state_log change: got %v, want %v", change, want)
+	}
+}
+
+func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput()) // WT-1
+	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // WT-2
+
+	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge blocks: %v", err)
+	}
+
+	// Blocked while the blocker is ready.
+	ids, err := s.BlockedTaskIDs(ctx)
+	if err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	}
+	if !ids[blocked.ID] || ids[blocker.ID] {
+		t.Fatalf("BlockedTaskIDs with blocker ready: got %v, want only %s", ids, blocked.ID)
+	}
+	if !isBlocked(t, s, blocked.ID) {
+		t.Fatalf("IsBlocked(%s): want true while blocker ready", blocked.ID)
+	}
+
+	// Still blocked while the blocker is in_progress.
+	walkTo(t, s, blocker.ID, "in_progress")
+	ids, err = s.BlockedTaskIDs(ctx)
+	if err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	}
+	if !ids[blocked.ID] {
+		t.Fatalf("BlockedTaskIDs with blocker in_progress: %s missing from %v", blocked.ID, ids)
+	}
+
+	// Unblocked once the blocker reaches done (legal walk: in_review then done).
+	if err := transition(t, s, taskTestNow, blocker.ID, "in_progress", "in_review"); err != nil {
+		t.Fatalf("transition to in_review: %v", err)
+	}
+	if err := transition(t, s, taskTestNow, blocker.ID, "in_review", "done"); err != nil {
+		t.Fatalf("transition to done: %v", err)
+	}
+	ids, err = s.BlockedTaskIDs(ctx)
+	if err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	}
+	if ids[blocked.ID] {
+		t.Fatalf("BlockedTaskIDs with blocker done: %s should be unblocked, got %v", blocked.ID, ids)
+	}
+	if isBlocked(t, s, blocked.ID) {
+		t.Fatalf("IsBlocked(%s): want false after blocker done", blocked.ID)
+	}
+}
+
+func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
+	s := openTaskStore(t)
+
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
+	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge: %v", err)
+	}
+	if err := transition(t, s, taskTestNow, blocker.ID, "ready", "abandoned"); err != nil {
+		t.Fatalf("abandon blocker: %v", err)
+	}
+	if isBlocked(t, s, blocked.ID) {
+		t.Fatalf("IsBlocked: abandoned blocker must not block")
+	}
+}
+
+func TestChildOfCycleRejected(t *testing.T) {
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t3 := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, t1.ID, t2.ID, "child_of"); err != nil {
+		t.Fatalf("AddEdge %s child_of %s: %v", t1.ID, t2.ID, err)
+	}
+	err := addEdge(t, s, t2.ID, t1.ID, "child_of")
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("direct cycle: want error mentioning cycle, got %v", err)
+	}
+
+	// Transitive cycle: t2 child_of t3 makes the chain t1 -> t2 -> t3;
+	// t3 child_of t1 would close the loop.
+	if err := addEdge(t, s, t2.ID, t3.ID, "child_of"); err != nil {
+		t.Fatalf("AddEdge %s child_of %s: %v", t2.ID, t3.ID, err)
+	}
+	err = addEdge(t, s, t3.ID, t1.ID, "child_of")
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("transitive cycle: want error mentioning cycle, got %v", err)
+	}
+}
+
+func TestAddEdgeSelfRejected(t *testing.T) {
+	s := openTaskStore(t)
+
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+	for _, typ := range []string{"child_of", "blocks"} {
+		if err := addEdge(t, s, task.ID, task.ID, typ); err == nil {
+			t.Fatalf("self-edge %s: want error, got nil", typ)
+		}
+	}
+}
+
+func TestAddEdgeUnknownTask(t *testing.T) {
+	s := openTaskStore(t)
+
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, task.ID, "WT-999", "blocks"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AddEdge to unknown task: want ErrNotFound, got %v", err)
+	}
+	if err := addEdge(t, s, "WT-999", task.ID, "blocks"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AddEdge from unknown task: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestRemoveEdgeAndListEdges(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge: %v", err)
+	}
+
+	out, in, err := s.ListEdges(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("ListEdges %s: %v", t1.ID, err)
+	}
+	wantOut := []Edge{{FromTask: t1.ID, ToTask: t2.ID, Type: "blocks"}}
+	if !reflect.DeepEqual(out, wantOut) || len(in) != 0 {
+		t.Fatalf("ListEdges %s: out=%v in=%v, want out=%v in=[]", t1.ID, out, in, wantOut)
+	}
+	out, in, err = s.ListEdges(ctx, t2.ID)
+	if err != nil {
+		t.Fatalf("ListEdges %s: %v", t2.ID, err)
+	}
+	if len(out) != 0 || !reflect.DeepEqual(in, wantOut) {
+		t.Fatalf("ListEdges %s: out=%v in=%v, want out=[] in=%v", t2.ID, out, in, wantOut)
+	}
+
+	if err := removeEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+		t.Fatalf("RemoveEdge: %v", err)
+	}
+	out, in, err = s.ListEdges(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("ListEdges after remove: %v", err)
+	}
+	if len(out) != 0 || len(in) != 0 {
+		t.Fatalf("ListEdges after remove: out=%v in=%v, want both empty", out, in)
+	}
+
+	if err := removeEdge(t, s, t1.ID, t2.ID, "blocks"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RemoveEdge absent: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestListTasksFiltersAndOrdering(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "other", "Other"); err != nil {
+		t.Fatalf("CreateProject other: %v", err)
+	}
+
+	mk := func(project, priority string) *Task {
+		in := defaultTaskInput()
+		in.ProjectID = project
+		in.Priority = priority
+		return createTask(t, s, taskTestNow, in)
+	}
+	tLow := mk("horndb", "low")          // WT-1
+	tCrit := mk("horndb", "critical")    // WT-2
+	tMed := mk("horndb", "medium")       // WT-3
+	tHigh := mk("horndb", "high")        // WT-4
+	tCrit2 := mk("horndb", "critical")   // WT-5
+	tOther := mk("other", "high")        // WT-6
+	walkTo(t, s, tMed.ID, "in_progress") // WT-3 -> in_progress
+
+	idsOf := func(tasks []Task) []string {
+		var ids []string
+		for _, task := range tasks {
+			ids = append(ids, task.ID)
+		}
+		return ids
+	}
+
+	// No filter: priority order (critical first), then id within a priority.
+	all, err := s.ListTasks(ctx, TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks all: %v", err)
+	}
+	wantAll := []string{tCrit.ID, tCrit2.ID, tHigh.ID, tOther.ID, tMed.ID, tLow.ID}
+	if got := idsOf(all); !reflect.DeepEqual(got, wantAll) {
+		t.Fatalf("ListTasks order: got %v, want %v", got, wantAll)
+	}
+
+	// Project filter.
+	horn, err := s.ListTasks(ctx, TaskFilter{Project: "horndb"})
+	if err != nil {
+		t.Fatalf("ListTasks project: %v", err)
+	}
+	wantHorn := []string{tCrit.ID, tCrit2.ID, tHigh.ID, tMed.ID, tLow.ID}
+	if got := idsOf(horn); !reflect.DeepEqual(got, wantHorn) {
+		t.Fatalf("ListTasks project=horndb: got %v, want %v", got, wantHorn)
+	}
+
+	// States filter.
+	inProg, err := s.ListTasks(ctx, TaskFilter{States: []string{"in_progress"}})
+	if err != nil {
+		t.Fatalf("ListTasks states: %v", err)
+	}
+	if got := idsOf(inProg); !reflect.DeepEqual(got, []string{tMed.ID}) {
+		t.Fatalf("ListTasks states=[in_progress]: got %v, want [%s]", got, tMed.ID)
+	}
+
+	// Priority filter.
+	crit, err := s.ListTasks(ctx, TaskFilter{Priority: "critical"})
+	if err != nil {
+		t.Fatalf("ListTasks priority: %v", err)
+	}
+	if got := idsOf(crit); !reflect.DeepEqual(got, []string{tCrit.ID, tCrit2.ID}) {
+		t.Fatalf("ListTasks priority=critical: got %v, want [%s %s]", got, tCrit.ID, tCrit2.ID)
+	}
+
+	// Combined filters.
+	combo, err := s.ListTasks(ctx, TaskFilter{Project: "other", States: []string{"ready", "draft"}, Priority: "high"})
+	if err != nil {
+		t.Fatalf("ListTasks combined: %v", err)
+	}
+	if got := idsOf(combo); !reflect.DeepEqual(got, []string{tOther.ID}) {
+		t.Fatalf("ListTasks combined: got %v, want [%s]", got, tOther.ID)
+	}
+}
+
+func TestGetTaskNotFound(t *testing.T) {
+	s := openTaskStore(t)
+
+	_, err := s.GetTask(t.Context(), "WT-999")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetTask unknown: want ErrNotFound, got %v", err)
+	}
+}
