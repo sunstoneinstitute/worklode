@@ -77,6 +77,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.Handle("PATCH /api/v1/tasks/{id}", s.auth(s.patchTask))
 	mux.Handle("POST /api/v1/tasks/{id}/edges", s.auth(s.addEdge))
 	mux.Handle("DELETE /api/v1/tasks/{id}/edges", s.auth(s.removeEdge))
+	mux.Handle("POST /api/v1/tasks/{id}/claim", s.auth(s.claimTask))
+	mux.Handle("POST /api/v1/tasks/{id}/renew", s.auth(s.renewLease))
+	mux.Handle("POST /api/v1/tasks/{id}/release", s.auth(s.releaseLease))
+	mux.Handle("POST /api/v1/tasks/{id}/done", s.auth(s.doneTask))
+	mux.Handle("POST /api/v1/tasks/{id}/abandon", s.auth(s.abandonTask))
+	mux.Handle("GET /api/v1/tasks/{id}/timeline", s.auth(s.taskTimeline))
 
 	return s.logging(s.metrics(mux)), nil
 }

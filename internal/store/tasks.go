@@ -145,6 +145,21 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 		map[string]string{"field": "state", "old": from, "new": to})
 }
 
+// TaskState returns the current state of a task inside the given transaction
+// (ErrNotFound if the task does not exist). Use it when the from-state of a
+// Transition must be read atomically with the transition itself.
+func TaskState(tx *sql.Tx, taskID string) (string, error) {
+	var state string
+	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = ?`, taskID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("get task %s state: %w", taskID, err)
+	}
+	return state, nil
+}
+
 // validPriorities is the tasks.priority CHECK constraint, mirrored in Go so
 // callers get a clean error instead of a raw constraint violation.
 var validPriorities = map[string]bool{

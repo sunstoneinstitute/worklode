@@ -233,6 +233,31 @@ func scanDeployment(row rowScanner) (*Deployment, error) {
 // deploymentColumns is the SELECT list scanDeployment expects, in order.
 const deploymentColumns = `id, artifact_id, environment, target_kind, target_name, status, first_seen, last_update`
 
+// DeploymentsForArtifact returns the deployments currently referencing
+// artifactID, ordered by last_update then id.
+func (s *Store) DeploymentsForArtifact(ctx context.Context, artifactID int64) ([]Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentColumns+` FROM deployments WHERE artifact_id = ? ORDER BY last_update, id`,
+		artifactID)
+	if err != nil {
+		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
+	}
+	defer rows.Close()
+
+	var out []Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan deployment: %w", err)
+		}
+		out = append(out, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
+	}
+	return out, nil
+}
+
 // ListDeployments returns deployments, optionally filtered by environment
 // ("" means all), ordered by environment, target_kind, target_name.
 func (s *Store) ListDeployments(ctx context.Context, environment string) ([]Deployment, error) {

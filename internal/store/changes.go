@@ -244,6 +244,85 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 	return out, nil
 }
 
+// CIRunsForSHA returns the CI runs recorded for (repo, headSHA), oldest
+// first.
+func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, head_sha, workflow, status, conclusion, url, started_at, completed_at
+		 FROM ci_runs WHERE repo = ? AND head_sha = ? ORDER BY started_at, id`,
+		repo, headSHA)
+	if err != nil {
+		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
+	}
+	defer rows.Close()
+
+	var out []CIRun
+	for rows.Next() {
+		var r CIRun
+		var status, conclusion, url, startedAt, completedAt sql.NullString
+		if err := rows.Scan(&r.Repo, &r.HeadSHA, &r.Workflow, &status, &conclusion,
+			&url, &startedAt, &completedAt); err != nil {
+			return nil, fmt.Errorf("scan ci run: %w", err)
+		}
+		r.Status = status.String
+		r.URL = url.String
+		if conclusion.Valid {
+			r.Conclusion = &conclusion.String
+		}
+		if startedAt.Valid {
+			t, err := time.Parse(time.RFC3339, startedAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse ci run started_at: %w", err)
+			}
+			r.StartedAt = t
+		}
+		if completedAt.Valid {
+			t, err := time.Parse(time.RFC3339, completedAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse ci run completed_at: %w", err)
+			}
+			r.CompletedAt = &t
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
+	}
+	return out, nil
+}
+
+// ReviewsForPR returns the reviews submitted on (repo, prNumber), oldest
+// first.
+func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) ([]Review, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, pr_number, reviewer, state, submitted_at
+		 FROM reviews WHERE repo = ? AND pr_number = ? ORDER BY submitted_at, id`,
+		repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
+	}
+	defer rows.Close()
+
+	var out []Review
+	for rows.Next() {
+		var rv Review
+		var submittedAt string
+		if err := rows.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &submittedAt); err != nil {
+			return nil, fmt.Errorf("scan review: %w", err)
+		}
+		t, err := time.Parse(time.RFC3339, submittedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse review submitted_at: %w", err)
+		}
+		rv.SubmittedAt = t
+		out = append(out, rv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
+	}
+	return out, nil
+}
+
 // UpsertCIRun inserts or, on redelivery, updates a CI run row. The natural
 // key is (repo, head_sha, workflow, started_at).
 func UpsertCIRun(tx *sql.Tx, r CIRun) error {

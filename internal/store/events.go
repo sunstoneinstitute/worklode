@@ -86,6 +86,45 @@ func (s *Store) RecordEvent(
 	return id, inserted, nil
 }
 
+// StateLogEntry is one recorded field-level change to an entity, as written
+// by LogChange. Change is the raw JSON of the change object.
+type StateLogEntry struct {
+	ID      int64
+	Change  string
+	EventID int64
+	At      time.Time
+}
+
+// StateLogForEntity returns the state_log entries for one entity, oldest
+// first (ties broken by insertion order).
+func (s *Store) StateLogForEntity(ctx context.Context, entityKind, entityID string) ([]StateLogEntry, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, change, event_id, at FROM state_log
+		 WHERE entity_kind = ? AND entity_id = ? ORDER BY at, id`,
+		entityKind, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("state log for %s %s: %w", entityKind, entityID, err)
+	}
+	defer rows.Close()
+
+	var out []StateLogEntry
+	for rows.Next() {
+		var e StateLogEntry
+		var at string
+		if err := rows.Scan(&e.ID, &e.Change, &e.EventID, &at); err != nil {
+			return nil, fmt.Errorf("scan state log entry: %w", err)
+		}
+		if e.At, err = time.Parse(time.RFC3339, at); err != nil {
+			return nil, fmt.Errorf("parse state log %d at: %w", e.ID, err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("state log for %s %s: %w", entityKind, entityID, err)
+	}
+	return out, nil
+}
+
 // LogChange appends a row to state_log recording one field-level change to
 // an entity, attributed to eventID. It must be called from inside an
 // ingest transaction (e.g. from a RecordEvent apply callback) so the log

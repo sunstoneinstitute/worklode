@@ -88,6 +88,31 @@ func scanRuntimeEvent(row rowScanner) (*RuntimeEvent, error) {
 	return &re, nil
 }
 
+// RuntimeEventsForArtifact returns the runtime events referencing
+// artifactID, oldest first.
+func (s *Store) RuntimeEventsForArtifact(ctx context.Context, artifactID int64) ([]RuntimeEvent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+runtimeEventColumns+` FROM runtime_events WHERE artifact_id = ? ORDER BY occurred_at, id`,
+		artifactID)
+	if err != nil {
+		return nil, fmt.Errorf("runtime events for artifact %d: %w", artifactID, err)
+	}
+	defer rows.Close()
+
+	var out []RuntimeEvent
+	for rows.Next() {
+		re, err := scanRuntimeEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan runtime event: %w", err)
+		}
+		out = append(out, *re)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("runtime events for artifact %d: %w", artifactID, err)
+	}
+	return out, nil
+}
+
 // ListRuntimeEvents returns runtime events, newest first, optionally
 // filtered by cluster ("" means all clusters). limit <= 0 means
 // defaultRuntimeEventLimit.
