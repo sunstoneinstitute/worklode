@@ -46,12 +46,15 @@ func newServeCmd() *cobra.Command {
 			}
 			defer st.Close()
 
-			handler := api.NewServer(st, api.Config{
+			handler, err := api.NewServer(st, api.Config{
 				BootstrapToken:      os.Getenv("WT_BOOTSTRAP_TOKEN"),
 				GitHubWebhookSecret: os.Getenv("WT_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("WT_FLUX_WEBHOOK_SECRET"),
 				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("WT_CLUSTER_ENV_MAP")),
 			})
+			if err != nil {
+				return err
+			}
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

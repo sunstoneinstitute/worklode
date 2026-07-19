@@ -230,6 +230,12 @@ func TestEdges(t *testing.T) {
 		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
+	// Adding the same edge again conflicts.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-1/edges", token, map[string]any{"to": "WT-2", "type": "blocks"})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("duplicate edge status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+
 	// Blocked task shows blocked:true and the incoming edge.
 	rr = doReq(t, h, "GET", "/api/v1/tasks/WT-2", token, nil)
 	got := decodeMap(t, rr)

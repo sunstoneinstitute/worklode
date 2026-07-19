@@ -40,7 +40,11 @@ func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	return st, api.NewServer(st, api.Config{}), token
+	h, err := api.NewServer(st, api.Config{})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return st, h, token
 }
 
 // doReq performs a request against the handler. A non-nil body is JSON-encoded.

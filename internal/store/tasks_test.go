@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -383,8 +382,8 @@ func TestChildOfCycleRejected(t *testing.T) {
 		t.Fatalf("AddEdge %s child_of %s: %v", t1.ID, t2.ID, err)
 	}
 	err := addEdge(t, s, t2.ID, t1.ID, "child_of")
-	if err == nil || !strings.Contains(err.Error(), "cycle") {
-		t.Fatalf("direct cycle: want error mentioning cycle, got %v", err)
+	if !errors.Is(err, ErrCycle) {
+		t.Fatalf("direct cycle: want ErrCycle, got %v", err)
 	}
 
 	// Transitive cycle: t2 child_of t3 makes the chain t1 -> t2 -> t3;
@@ -393,8 +392,22 @@ func TestChildOfCycleRejected(t *testing.T) {
 		t.Fatalf("AddEdge %s child_of %s: %v", t2.ID, t3.ID, err)
 	}
 	err = addEdge(t, s, t3.ID, t1.ID, "child_of")
-	if err == nil || !strings.Contains(err.Error(), "cycle") {
-		t.Fatalf("transitive cycle: want error mentioning cycle, got %v", err)
+	if !errors.Is(err, ErrCycle) {
+		t.Fatalf("transitive cycle: want ErrCycle, got %v", err)
+	}
+}
+
+func TestAddEdgeDuplicateRejected(t *testing.T) {
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge: %v", err)
+	}
+	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("duplicate edge: want ErrEdgeExists, got %v", err)
 	}
 }
 
@@ -403,8 +416,8 @@ func TestAddEdgeSelfRejected(t *testing.T) {
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, typ := range []string{"child_of", "blocks"} {
-		if err := addEdge(t, s, task.ID, task.ID, typ); err == nil {
-			t.Fatalf("self-edge %s: want error, got nil", typ)
+		if err := addEdge(t, s, task.ID, task.ID, typ); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("self-edge %s: want ErrInvalidInput, got %v", typ, err)
 		}
 	}
 }

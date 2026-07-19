@@ -14,4 +14,10 @@ var (
 	ErrBlocked = errors.New("task is blocked")
 	// ErrRepoTaken means the repo is already mapped to another project.
 	ErrRepoTaken = errors.New("repo already mapped to a project")
+	// ErrCycle means the edge would make the child_of hierarchy cyclic.
+	ErrCycle = errors.New("edge would create a cycle")
+	// ErrEdgeExists means the exact edge (from, to, type) already exists.
+	ErrEdgeExists = errors.New("edge already exists")
+	// ErrInvalidInput means a field value failed validation.
+	ErrInvalidInput = errors.New("invalid input")
 )

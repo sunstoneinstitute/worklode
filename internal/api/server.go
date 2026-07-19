@@ -43,13 +43,14 @@ type server struct {
 }
 
 // NewServer builds the wt HTTP handler. If cfg.BootstrapToken is set and the
-// actors table is empty, it creates the initial admin actor (idempotent).
-func NewServer(st *store.Store, cfg Config) http.Handler {
+// actors table is empty, it creates the initial admin actor (idempotent). A
+// bootstrap failure is fatal: the server must not start half-configured.
+func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	s := &server{st: st, cfg: cfg, log: slog.Default()}
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
-			s.log.Error("bootstrap admin", "err", err)
+			return nil, fmt.Errorf("bootstrap admin: %w", err)
 		}
 	}
 
@@ -77,7 +78,7 @@ func NewServer(st *store.Store, cfg Config) http.Handler {
 	mux.Handle("POST /api/v1/tasks/{id}/edges", s.auth(s.addEdge))
 	mux.Handle("DELETE /api/v1/tasks/{id}/edges", s.auth(s.removeEdge))
 
-	return s.logging(s.metrics(mux))
+	return s.logging(s.metrics(mux)), nil
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -188,17 +189,21 @@ func readJSON(r *http.Request, v any) error {
 }
 
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
-// ErrBadTransition → 422, ErrLeased/ErrBlocked/ErrRepoTaken → 409, anything
-// else → 500 with a generic body (the detail is logged, not leaked).
+// ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
+// ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists → 409, anything else → 500
+// with a generic body (the detail is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
-	case errors.Is(err, store.ErrBadTransition):
+	case errors.Is(err, store.ErrBadTransition),
+		errors.Is(err, store.ErrCycle),
+		errors.Is(err, store.ErrInvalidInput):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, store.ErrLeased),
 		errors.Is(err, store.ErrBlocked),
-		errors.Is(err, store.ErrRepoTaken):
+		errors.Is(err, store.ErrRepoTaken),
+		errors.Is(err, store.ErrEdgeExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)

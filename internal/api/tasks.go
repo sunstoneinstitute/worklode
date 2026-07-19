@@ -3,7 +3,6 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -323,16 +322,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 			return store.AddEdge(tx, s.st.Now(), from, to, req.Type)
 		})
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			s.mapStoreErr(w, err)
-		case strings.Contains(err.Error(), "cycle"):
-			writeErr(w, http.StatusUnprocessableEntity, "edge would create a cycle")
-		case strings.Contains(err.Error(), "UNIQUE constraint failed"):
-			writeErr(w, http.StatusConflict, "edge already exists")
-		default:
-			s.mapStoreErr(w, err)
-		}
+		s.mapStoreErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"from": from, "to": to, "type": req.Type})

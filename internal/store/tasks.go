@@ -157,7 +157,7 @@ var validPriorities = map[string]bool{
 // still checked).
 func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority *string) error {
 	if priority != nil && !validPriorities[*priority] {
-		return fmt.Errorf("unknown priority %q", *priority)
+		return fmt.Errorf("unknown priority %q: %w", *priority, ErrInvalidInput)
 	}
 	var sets []string
 	var args []any
@@ -288,10 +288,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 // A missing endpoint returns ErrNotFound.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 	if typ != "child_of" && typ != "blocks" {
-		return fmt.Errorf("unknown edge type %q", typ)
+		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
 	}
 	if fromTask == toTask {
-		return fmt.Errorf("self-edge %s %s %s not allowed", fromTask, typ, toTask)
+		return fmt.Errorf("self-edge %s %s %s not allowed: %w", fromTask, typ, toTask, ErrInvalidInput)
 	}
 	for _, id := range []string{fromTask, toTask} {
 		var one int
@@ -309,7 +309,7 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 			return err
 		}
 		if reaches {
-			return fmt.Errorf("edge %s child_of %s would create a cycle", fromTask, toTask)
+			return fmt.Errorf("edge %s child_of %s: %w", fromTask, toTask, ErrCycle)
 		}
 	}
 	_, err := tx.Exec(
@@ -317,6 +317,9 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 		fromTask, toTask, typ, now.UTC().Format(time.RFC3339),
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return fmt.Errorf("edge %s %s %s: %w", fromTask, typ, toTask, ErrEdgeExists)
+		}
 		return fmt.Errorf("insert edge %s %s %s: %w", fromTask, typ, toTask, err)
 	}
 	return nil
