@@ -162,6 +162,22 @@ func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 	}
 }
 
+func TestOversizedBody413(t *testing.T) {
+	_, h, token := newTestServer(t)
+	// A syntactically valid JSON body just over the 1 MiB cap.
+	body := []byte(`{"title":"` + strings.Repeat("a", 1<<20) + `"}`)
+	req := httptest.NewRequest("POST", "/api/v1/tasks", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rr.Code)
+	}
+	if got := decodeMap(t, rr)["error"]; got != "request body too large" {
+		t.Fatalf("error = %v, want request body too large", got)
+	}
+}
+
 func TestMetricsEndpoint(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	// Generate at least one recorded request first.

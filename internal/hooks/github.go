@@ -21,6 +21,10 @@ import (
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
+// maxGitHubBody caps webhook request bodies at 5 MiB (GitHub's own delivery
+// payload limit is well under this); larger bodies get 413.
+const maxGitHubBody = 5 << 20
+
 type githubHandler struct {
 	st     *store.Store
 	secret string
@@ -81,10 +85,16 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The signature covers the exact request bytes: read the raw body first,
-	// verify, and only then parse.
+	// The signature covers the exact request bytes: read the raw body first
+	// (capped at maxGitHubBody), verify, and only then parse.
+	r.Body = http.MaxBytesReader(w, r.Body, maxGitHubBody)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, "read body")
 		return
 	}

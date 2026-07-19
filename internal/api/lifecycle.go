@@ -65,8 +65,8 @@ func SlugifyTitle(title string) string {
 // readOptionalJSON is readJSON, but an empty request body leaves v at its
 // zero value instead of failing — the lifecycle endpoints have all-optional
 // bodies.
-func readOptionalJSON(r *http.Request, v any) error {
-	if err := readJSON(r, v); err != nil && !errors.Is(err, io.EOF) {
+func readOptionalJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	if err := readJSON(w, r, v); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil
@@ -83,8 +83,8 @@ type claimRequest struct {
 func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req claimRequest
-	if err := readOptionalJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readOptionalJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	actor := actorFrom(r)
@@ -128,8 +128,8 @@ type renewRequest struct {
 func (s *server) renewLease(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req renewRequest
-	if err := readOptionalJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readOptionalJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	actor := actorFrom(r)

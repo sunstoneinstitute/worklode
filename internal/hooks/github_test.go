@@ -450,6 +450,18 @@ func TestUnknownEventRecorded(t *testing.T) {
 	}
 }
 
+func TestOversizedBody413(t *testing.T) {
+	e := newEnv(t)
+	body := bytes.Repeat([]byte("a"), 5<<20+1)
+	rr := deliverBody(t, e.h, "issues", "d-big", body)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rr.Code)
+	}
+	if n := e.eventCount(t); n != 0 {
+		t.Fatalf("events recorded for oversized body = %d, want 0", n)
+	}
+}
+
 // TestMountedOnServer proves server.go routes POST /hooks/github to the
 // handler without bearer auth (the HMAC is the auth).
 func TestMountedOnServer(t *testing.T) {

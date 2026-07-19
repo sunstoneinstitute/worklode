@@ -189,14 +189,31 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
 }
 
-// readJSON decodes the request body into v, rejecting unknown fields.
-func readJSON(r *http.Request, v any) error {
+// maxAPIBody caps /api/v1 request bodies at 1 MiB; larger bodies get 413.
+const maxAPIBody = 1 << 20
+
+// readJSON decodes the request body into v, rejecting unknown fields and
+// capping the body at maxAPIBody. Write its error with writeBodyErr so an
+// over-limit body maps to 413.
+func readJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxAPIBody)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return fmt.Errorf("invalid JSON body: %w", err)
 	}
 	return nil
+}
+
+// writeBodyErr writes the response for a readJSON error: 413 for an
+// over-limit body, 400 for anything else.
+func writeBodyErr(w http.ResponseWriter, err error) {
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) {
+		writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	writeErr(w, http.StatusBadRequest, err.Error())
 }
 
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,

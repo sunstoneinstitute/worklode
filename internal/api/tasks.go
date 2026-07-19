@@ -63,8 +63,8 @@ type createTaskRequest struct {
 // createTask handles POST /api/v1/tasks.
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	var req createTaskRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	if strings.TrimSpace(req.Title) == "" {
@@ -211,8 +211,8 @@ type patchTaskRequest struct {
 func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req patchTaskRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil {
@@ -298,8 +298,8 @@ func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to st
 func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req edgeRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	from, to, ok := resolveEdge(w, id, req)
@@ -332,8 +332,8 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req edgeRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	from, to, ok := resolveEdge(w, id, req)
