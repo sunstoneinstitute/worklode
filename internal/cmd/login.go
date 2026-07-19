@@ -1,0 +1,56 @@
+package cmd
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+)
+
+func newLoginCmd() *cobra.Command {
+	var server string
+	cmd := &cobra.Command{
+		Use:   "login",
+		Short: "Authenticate via SSO and store a work-tracker token",
+		Long: "Log in through the org Keycloak (auth-code + PKCE, browser + localhost\n" +
+			"callback) and store the resulting 30-day token in ~/.config/wt/config.toml.\n" +
+			"Re-run after it expires — there are no refresh tokens.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := cli.LoadConfig()
+			if err != nil {
+				return err
+			}
+			if server != "" {
+				cfg.ServerURL = server
+			}
+			if cfg.ServerURL == "" {
+				return errors.New(`server URL not set: pass --server, set WT_SERVER, or add server = "https://..." to ~/.config/wt/config.toml`)
+			}
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			res, err := cli.RunLogin(ctx, cli.LoginOptions{Server: cfg.ServerURL})
+			if err != nil {
+				return err
+			}
+			if err := cli.SaveConfig(cli.Config{ServerURL: cfg.ServerURL, Token: res.Token}); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "logged in as %s (token expires %s)\n", res.ActorID, res.ExpiresAt)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WT_SERVER / config file)")
+	return cmd
+}
+
+func init() {
+	rootCmd.AddCommand(newLoginCmd())
+}
