@@ -472,6 +472,27 @@ func TestLoadConfigMissingFile(t *testing.T) {
 	}
 }
 
+func TestSaveConfigRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_SERVER", "")
+	t.Setenv("WT_TOKEN", "")
+
+	want := cli.Config{ServerURL: "https://wt.example.com", Token: "wt_" + strings.Repeat("ab", 20)}
+	if err := cli.SaveConfig(want); err != nil {
+		t.Fatalf("SaveConfig: %v", err)
+	}
+
+	// LoadConfig reads it back (env overrides cleared above so only the file matters).
+	got, err := cli.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got.ServerURL != want.ServerURL || got.Token != want.Token {
+		t.Fatalf("round-trip = %+v, want %+v", got, want)
+	}
+}
+
 func TestLoadConfigMalformed(t *testing.T) {
 	for name, content := range map[string]string{
 		"missing equals": "not a key value pair\n",

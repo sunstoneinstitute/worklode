@@ -1,0 +1,20 @@
+{
+  "enabledPlugins": {
+    "golang-migrate@sunstone-plugins": true,
+    "sunstone-dev@sunstone-plugins": true,
+    "sunstone-devops@sunstone-plugins": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.go) gofmt -w \"$f\";; esac; } 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

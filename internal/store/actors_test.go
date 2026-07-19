@@ -207,3 +207,38 @@ func TestRevokeTokenByHash(t *testing.T) {
 		t.Fatalf("Authenticate after revoke by hash: want ErrNotFound, got %v", err)
 	}
 }
+
+func TestUpsertHumanActor(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	// Insert.
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	a, err := s.GetActor(ctx, "alice")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if a.Kind != "human" || a.DisplayName != "Alice Example" || a.Admin {
+		t.Fatalf("after insert: %+v", a)
+	}
+
+	// Re-login promotes to admin and updates the display name.
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", true); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	a, _ = s.GetActor(ctx, "alice")
+	if !a.Admin || a.DisplayName != "Alice E." || a.Kind != "human" {
+		t.Fatalf("after promote: %+v", a)
+	}
+
+	// Re-login demotes back to non-admin (demotion takes effect at next login).
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", false); err != nil {
+		t.Fatalf("third upsert: %v", err)
+	}
+	a, _ = s.GetActor(ctx, "alice")
+	if a.Admin {
+		t.Fatalf("after demote still admin: %+v", a)
+	}
+}

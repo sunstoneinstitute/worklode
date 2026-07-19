@@ -4,12 +4,16 @@
 FROM golang:1.25 AS build
 WORKDIR /src
 
-# Cache module downloads separately from source changes.
+# Cache mounts persist module downloads and build cache across runs;
+# in CI they are synced to actions/cache via buildkit-cache-dance.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /wt ./cmd/wt
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /wt ./cmd/wt
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /wt /wt

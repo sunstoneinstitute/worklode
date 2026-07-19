@@ -101,6 +101,27 @@ func parseConfig(data string) (Config, error) {
 	return cfg, nil
 }
 
+// SaveConfig writes cfg to ~/.config/wt/config.toml in the same minimal format
+// LoadConfig reads, creating the directory (0700) and file (0600) if needed. It
+// rewrites the whole file with just the server and token keys — the only two
+// keys the format defines — so any hand-added comments are not preserved.
+func SaveConfig(cfg Config) error {
+	path, err := configPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "server = %q\n", cfg.ServerURL)
+	fmt.Fprintf(&b, "token = %q\n", cfg.Token)
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
 // ClientError is returned for any non-2xx response from the server. Its
 // message is the server's "error" field when the body decodes as JSON with
 // one, or the raw body otherwise.

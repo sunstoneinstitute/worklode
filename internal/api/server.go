@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/work-tracker/internal/hooks"
+	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
@@ -32,12 +34,25 @@ type Config struct {
 	GitHubWebhookSecret string            // WT_GITHUB_WEBHOOK_SECRET
 	FluxWebhookSecret   string            // WT_FLUX_WEBHOOK_SECRET
 	ClusterEnvMap       map[string]string // WT_CLUSTER_ENV_MAP: cluster name -> environment
+
+	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
+	// set; unset behaves exactly as before. SessionSecret is required when OIDC
+	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
+	// external base URL used to build the web callback redirect URI.
+	OIDCIssuer    string // WT_OIDC_ISSUER
+	OIDCClientID  string // WT_OIDC_CLIENT_ID
+	PublicURL     string // WT_PUBLIC_URL
+	SessionSecret string // WT_SESSION_SECRET
 }
 
 type server struct {
 	st  *store.Store
 	cfg Config
 	log *slog.Logger
+
+	// oidc is nil unless OIDC is configured (issuer + client id set). All SSO
+	// routes 404 when it is nil.
+	oidc *oidc.Verifier
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
@@ -59,6 +74,25 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		tmplBoard:   parseWebTemplates("board.html"),
 		tmplTask:    parseWebTemplates("task.html"),
 		tmplProject: parseWebTemplates("project.html"),
+	}
+
+	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
+		if cfg.SessionSecret == "" {
+			return nil, fmt.Errorf("WT_SESSION_SECRET is required when OIDC is enabled")
+		}
+		if cfg.PublicURL == "" {
+			return nil, fmt.Errorf("WT_PUBLIC_URL is required when OIDC is enabled")
+		}
+		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return nil, fmt.Errorf("WT_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wt.example.com)")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		v, err := oidc.New(ctx, cfg.OIDCIssuer, cfg.OIDCClientID)
+		if err != nil {
+			return nil, fmt.Errorf("configure oidc: %w", err)
+		}
+		s.oidc = v
 	}
 
 	if cfg.BootstrapToken != "" {
@@ -84,16 +118,26 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	// Read-only web UI. No bearer auth, unlike /api/v1/* below — the bind
-	// address is the access control for this in v1 (see web.go).
-	mux.HandleFunc("GET /{$}", s.boardPage)
-	mux.HandleFunc("GET /tasks/{id}", s.taskPage)
-	mux.HandleFunc("GET /projects/{id}", s.projectPage)
+	// Read-only web UI. When OIDC is enabled these require a valid session
+	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
+	// unconfigured webAuth is a passthrough and the UI stays open as in v1.
+	// /healthz and /metrics (above) always stay open.
+	mux.HandleFunc("GET /{$}", s.webAuth(s.boardPage))
+	mux.HandleFunc("GET /tasks/{id}", s.webAuth(s.taskPage))
+	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.projectPage))
+	mux.HandleFunc("GET /auth/login", s.authLogin)
+	mux.HandleFunc("GET /auth/callback", s.authCallback)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
 	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log))
 	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log))
+
+	// SSO token exchange + config discovery for the CLI login flow. Registered
+	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
+	// Both 404 when OIDC is unconfigured (s.oidc == nil).
+	mux.HandleFunc("GET /auth/oidc/config", s.oidcConfig)
+	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
 
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
