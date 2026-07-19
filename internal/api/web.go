@@ -1,7 +1,8 @@
 // web.go implements the read-only web UI: GET /, GET /tasks/{id}, and
-// GET /projects/{id}. These routes carry NO authentication — in v1 the bind
-// address is the only access control (see the routing comment in
-// server.go). They render server-side HTML with html/template (which
+// GET /projects/{id}. When OIDC is configured these routes are gated by
+// s.webAuth (see oidcweb.go), which requires a valid session cookie; when
+// OIDC is unconfigured they stay open and the bind address is the only
+// access control. They render server-side HTML with html/template (which
 // auto-escapes all interpolated values) and reuse the same assembly
 // functions as the JSON API (assembleBoard, assembleTimeline) so the board
 // and timeline logic lives in exactly one place.
