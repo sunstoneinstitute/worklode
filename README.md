@@ -139,6 +139,22 @@ Set `WT_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
 `WT_CLUSTER_ENV_MAP="prod-cluster=prod,staging-cluster=staging"`. A cluster
 missing from the map falls back to the `dev` environment.
 
+## SSO (optional)
+
+Human login via the org Keycloak is off unless both `WT_OIDC_ISSUER` and
+`WT_OIDC_CLIENT_ID` are set; unset behaves as before (tokens minted only by an
+admin or the bootstrap token). When enabled:
+
+| Var | Meaning |
+|---|---|
+| `WT_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
+| `WT_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WT_PUBLIC_URL` | external base URL, for the web login callback |
+| `WT_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
+
+Users then run `wt login` to obtain a 30-day `wt_` token from their SSO
+identity. Agent/service tokens are unchanged.
+
 ## Cluster watcher
 
 `wt watch` runs a pod informer against one cluster and reports crash loops

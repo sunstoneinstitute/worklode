@@ -51,6 +51,10 @@ func newServeCmd() *cobra.Command {
 				GitHubWebhookSecret: os.Getenv("WT_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("WT_FLUX_WEBHOOK_SECRET"),
 				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("WT_CLUSTER_ENV_MAP")),
+				OIDCIssuer:          os.Getenv("WT_OIDC_ISSUER"),
+				OIDCClientID:        os.Getenv("WT_OIDC_CLIENT_ID"),
+				PublicURL:           os.Getenv("WT_PUBLIC_URL"),
+				SessionSecret:       os.Getenv("WT_SESSION_SECRET"),
 			})
 			if err != nil {
 				return err
