@@ -9,6 +9,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -21,7 +22,8 @@ var migrationsFS embed.FS
 
 // Store wraps the single-writer SQLite database.
 type Store struct {
-	db *sql.DB
+	db    *sql.DB
+	nowFn func() time.Time
 }
 
 // Open opens (creating if necessary) the SQLite database at path and applies
@@ -34,12 +36,19 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db}
+	s := &Store{db: db, nowFn: func() time.Time { return time.Now().UTC() }}
 	if err := s.Migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return s, nil
+}
+
+// SetNowFunc overrides the clock used for timestamps written by the store
+// (e.g. events.received_at, lease expiry). Intended for tests that need to
+// control time deterministically.
+func (s *Store) SetNowFunc(f func() time.Time) {
+	s.nowFn = f
 }
 
 // Migrate applies all pending embedded migrations. A database that is already
