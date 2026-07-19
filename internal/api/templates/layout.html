@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+{{if .AutoRefresh}}<meta http-equiv="refresh" content="30">{{end}}
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 3rem;
+    line-height: 1.4;
+  }
+  header { margin-bottom: 1.5rem; }
+  header a { text-decoration: none; font-weight: 600; font-size: 1.1rem; }
+  h1, h2, h3 { line-height: 1.2; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.5rem; }
+  th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #8884; vertical-align: top; }
+  th { font-weight: 600; border-bottom: 2px solid #8886; }
+  section { margin-bottom: 2rem; }
+  .muted { opacity: 0.65; }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #8886;
+  }
+  .state-ready { background: #cce0f5; }
+  .state-in_progress { background: #ffe6a8; }
+  .state-in_review { background: #e0d4f7; }
+  .state-blocked { background: #f7cccc; }
+  .state-done { background: #cdeecd; }
+  .state-abandoned { background: #dddddd; }
+  .state-draft { background: #eeeeee; }
+  pre { white-space: pre-wrap; word-wrap: break-word; background: #8881; padding: 0.75rem; border-radius: 0.4rem; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<header><a href="/">work-tracker</a></header>
+<main>{{block "content" .}}{{end}}</main>
+</body>
+</html>

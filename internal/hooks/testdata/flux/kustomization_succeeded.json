@@ -1,0 +1,11 @@
+{
+  "involvedObject": {"kind": "Kustomization", "namespace": "flux-system", "name": "demo"},
+  "severity": "info",
+  "timestamp": "2026-07-19T10:00:00Z",
+  "message": "Applied revision: main@sha1:abc1230000000000000000000000000000000000",
+  "reason": "ReconciliationSucceeded",
+  "metadata": {
+    "revision": "main@sha1:abc1230000000000000000000000000000000000",
+    "cluster": "prod-1"
+  }
+}

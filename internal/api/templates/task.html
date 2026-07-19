@@ -1,0 +1,35 @@
+{{define "content"}}
+<h1>{{.Task.ID}}: {{.Task.Title}}</h1>
+<p>
+  {{if .Blocked}}<span class="badge state-blocked">blocked</span>
+  {{else}}<span class="badge state-{{.Task.State}}">{{.Task.State}}</span>{{end}}
+  &nbsp;{{.Task.Priority}} / {{.Task.Kind}}
+  &nbsp;project: <a href="/projects/{{.Task.ProjectID}}">{{.Task.ProjectID}}</a>
+</p>
+<p class="muted">Created {{fmtTime .Task.CreatedAt}} by {{.Task.CreatedBy}} &mdash; updated {{fmtTime .Task.UpdatedAt}}</p>
+
+{{if .Holder}}
+<p><strong>Held by:</strong> {{.Holder.ActorID}} (expires {{fmtTime .Holder.ExpiresAt}})</p>
+{{end}}
+
+<h2>Body</h2>
+<pre>{{.Task.Body}}</pre>
+
+<h2>Edges</h2>
+<ul>
+  <li>Blocks: {{if .Blocks}}{{range .Blocks}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
+  <li>Blocked by: {{if .BlockedBy}}{{range .BlockedBy}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
+  <li>Parent: {{if .Parent}}<a href="/tasks/{{.Parent}}">{{.Parent}}</a>{{else}}<span class="muted">none</span>{{end}}</li>
+  <li>Children: {{if .Children}}{{range .Children}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
+</ul>
+
+<h2>Timeline</h2>
+{{if .Timeline}}
+<table>
+  <tr><th>When</th><th>Type</th><th>Summary</th></tr>
+  {{range .Timeline}}
+  <tr><td>{{fmtTime .At}}</td><td>{{.Label}}</td><td>{{.Summary}}</td></tr>
+  {{end}}
+</table>
+{{else}}<p class="muted">No timeline entries yet.</p>{{end}}
+{{end}}

@@ -1,0 +1,9 @@
+{
+  "action": "published",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "release": {
+    "tag_name": "v1.2.3",
+    "target_commitish": "abc1230000000000000000000000000000000000",
+    "published_at": "2026-07-19T12:00:00Z"
+  }
+}

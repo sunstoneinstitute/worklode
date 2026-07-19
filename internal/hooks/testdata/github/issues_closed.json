@@ -1,0 +1,10 @@
+{
+  "action": "closed",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "issue": {
+    "number": 7,
+    "title": "Crash on load (fixed)",
+    "state": "closed",
+    "html_url": "https://github.com/sunstoneinstitute/demo/issues/7"
+  }
+}

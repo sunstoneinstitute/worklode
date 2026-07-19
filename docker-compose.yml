@@ -1,0 +1,37 @@
+services:
+  tracker:
+    build: .
+    ports:
+      # Loopback-only by default: the web board and /metrics have no auth
+      # (bearer tokens cover /api/v1 only). Change to "8080:8080" — or put a
+      # TLS-terminating reverse proxy in front — to expose it; see README
+      # "Network exposure".
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # ${VAR:-} passes the var through when set on the host, empty otherwise.
+      # WT_BOOTSTRAP_TOKEN must be set on first run to create the admin actor;
+      # see README "Quickstart".
+      WT_BOOTSTRAP_TOKEN: ${WT_BOOTSTRAP_TOKEN:-}
+      WT_GITHUB_WEBHOOK_SECRET: ${WT_GITHUB_WEBHOOK_SECRET:-}
+      WT_FLUX_WEBHOOK_SECRET: ${WT_FLUX_WEBHOOK_SECRET:-}
+      WT_CLUSTER_ENV_MAP: ${WT_CLUSTER_ENV_MAP:-}
+    restart: unless-stopped
+    # No healthcheck: the image is distroless (no shell, no curl/wget), so
+    # there is no in-container binary to run an HTTP probe with. Check
+    # liveness from the host instead: curl http://localhost:8080/healthz.
+
+  # Continuous SQLite replication to S3-compatible object storage. Enable
+  # with: docker compose --profile backup up -d
+  litestream:
+    profiles: [backup]
+    image: litestream/litestream:0.3
+    command: ["replicate"]
+    volumes:
+      - ./data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    environment:
+      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:-}
+      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:-}
+    restart: unless-stopped

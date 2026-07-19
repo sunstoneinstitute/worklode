@@ -1,0 +1,19 @@
+# litestream config template — continuous replication of the tracker's
+# SQLite database to S3-compatible object storage. Used by the "backup"
+# compose profile (see docker-compose.yml).
+#
+# The replica type is "s3", but any S3-compatible provider works by pointing
+# "endpoint" at it — this is written against Hetzner Object Storage, not AWS.
+# Set these before starting the litestream service:
+#
+#   LITESTREAM_BUCKET            e.g. sunstone-wt-backups
+#   LITESTREAM_ENDPOINT          e.g. https://fsn1.your-objectstorage.com
+#   LITESTREAM_ACCESS_KEY_ID     passed as an env var to the container, not read here
+#   LITESTREAM_SECRET_ACCESS_KEY passed as an env var to the container, not read here
+dbs:
+  - path: /data/wt.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: wt
+        endpoint: ${LITESTREAM_ENDPOINT}
