@@ -7,6 +7,7 @@
 //   - GET /auth/callback redeems the code, verifies the ID token, provisions
 //     the actor (shared provisionActor), sets the session cookie, and 302s to
 //     the originally requested page.
+//
 // No server-side session state; cookies expire (no logout endpoint).
 package api
 
