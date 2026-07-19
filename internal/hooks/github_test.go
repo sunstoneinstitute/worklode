@@ -39,6 +39,9 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
+	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
 	t.Cleanup(func() { st.Close() })
 
 	ctx := context.Background()

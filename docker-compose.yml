@@ -1,6 +1,16 @@
 services:
+  migrate:
+    build: .
+    command: ["migrate", "--db", "/data/wt.db", "--migrations-path", "/migrations"]
+    volumes:
+      - ./data:/data
+      - ./deploy/base/migrations:/migrations:ro
+
   tracker:
     build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       # Loopback-only by default: the web board and /metrics have no auth
       # (bearer tokens cover /api/v1 only). Change to "8080:8080" — or put a

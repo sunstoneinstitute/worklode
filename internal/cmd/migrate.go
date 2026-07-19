@@ -7,7 +7,7 @@ import (
 )
 
 func newMigrateCmd() *cobra.Command {
-	var dbPath string
+	var dbPath, migrationsPath string
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply database migrations",
@@ -17,12 +17,17 @@ func newMigrateCmd() *cobra.Command {
 				return err
 			}
 			defer s.Close()
+			if err := s.Migrate(migrationsPath); err != nil {
+				return err
+			}
 			cmd.Println("migrations applied")
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&dbPath, "db", "", "path to the SQLite database file")
 	cmd.MarkFlagRequired("db")
+	cmd.Flags().StringVar(&migrationsPath, "migrations-path", "", "path to the directory containing *.up.sql/*.down.sql migration files")
+	cmd.MarkFlagRequired("migrations-path")
 	return cmd
 }
 

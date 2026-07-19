@@ -25,12 +25,15 @@ var wantTables = []string{
 	"state_log",
 }
 
-func TestOpenAppliesMigrations(t *testing.T) {
+func TestMigrateAppliesMigrations(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "wt.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	defer s.Close()
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
 
 	rows, err := s.db.Query(`SELECT name FROM sqlite_master WHERE type = 'table'`)
 	if err != nil {
@@ -64,6 +67,9 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Open: %v", err)
 	}
+	if err := s1.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("first Migrate: %v", err)
+	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -73,4 +79,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		t.Fatalf("second Open: %v", err)
 	}
 	defer s2.Close()
+	if err := s2.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("second Migrate: %v", err)
+	}
 }
