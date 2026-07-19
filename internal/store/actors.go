@@ -46,6 +46,22 @@ func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, a
 	return nil
 }
 
+// UpsertHumanActor inserts a human actor, or on repeat login updates its
+// display name and admin flag. Admin is re-synced on every login, so a Keycloak
+// demotion takes effect the next time the user logs in. Kind is set to 'human'
+// on insert and left unchanged on update.
+func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO actors (id, kind, display_name, admin) VALUES (?, 'human', ?, ?)
+		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin`,
+		id, displayName, admin,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert human actor %s: %w", id, err)
+	}
+	return nil
+}
+
 // GetActor looks up an actor by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 	var a Actor
