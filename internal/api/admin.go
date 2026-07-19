@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -408,59 +409,70 @@ func toRuntimeEventJSON(re *store.RuntimeEvent) runtimeEventJSON {
 	}
 }
 
+// boardResponse is the JSON shape of GET /api/v1/board, and the data the web
+// board pages (GET / and GET /projects/{id}) render.
+type boardResponse struct {
+	Projects       []boardProjectJSON `json:"projects"`
+	RecentFailures []runtimeEventJSON `json:"recent_failures"`
+}
+
 // board handles GET /api/v1/board?project=: a read-only summary of each
 // project's tasks bucketed by state, for the CLI's `wt board` command.
+func (s *server) board(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.assembleBoard(r.Context(), r.URL.Query().Get("project"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// assembleBoard builds the board for one project (projectFilter set) or
+// every project (projectFilter ""): each project's tasks bucketed by state
+// (in_progress with lease holder, in_review, ready, blocked) plus, when
+// projectFilter is "", the last 10 runtime events store-wide.
 //
-// board is assembled in the handler from existing store readers (ListTasks,
+// It is assembled here from existing store readers (ListTasks,
 // BlockedTaskIDs, ActiveLease) rather than a dedicated Store.Board method —
-// there is no additional query complexity to hide behind a store API, and
-// the handler is the only caller.
+// there is no additional query complexity to hide behind a store API. Shared
+// by the JSON /api/v1/board handler and the GET / and GET /projects/{id} web
+// pages, so the bucket logic lives in exactly one place.
 //
 // recent_failures is simplified from the full deployments->artifacts join
 // described in the design to the last 10 runtime events store-wide, and is
-// only included when no project filter is given (it is not project-scoped).
-func (s *server) board(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	projectFilter := r.URL.Query().Get("project")
-
+// only included when no project filter is given (it is not project-scoped):
+// RecentFailures is left nil (serializes as JSON null, decoded as a nil
+// slice by callers) when a project filter narrows the response, and set to a
+// non-nil (possibly empty) slice otherwise — that is how a CLI or other
+// caller tells "board scoped to one project" from "board with no recent
+// failures" apart.
+func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boardResponse, error) {
 	var projects []store.Project
 	if projectFilter != "" {
 		p, err := s.st.GetProject(ctx, projectFilter)
 		if err != nil {
-			s.mapStoreErr(w, err)
-			return
+			return nil, err
 		}
 		projects = []store.Project{*p}
 	} else {
 		ps, err := s.st.ListProjects(ctx)
 		if err != nil {
-			s.mapStoreErr(w, err)
-			return
+			return nil, err
 		}
 		projects = ps
 	}
 
 	blocked, err := s.st.BlockedTaskIDs(ctx)
 	if err != nil {
-		s.mapStoreErr(w, err)
-		return
+		return nil, err
 	}
 
-	// RecentFailures is left nil (serializes as JSON null, decoded as a nil
-	// slice by callers) when a project filter narrows the response, and set
-	// to a non-nil (possibly empty) slice otherwise — that is how a CLI or
-	// other caller tells "board scoped to one project" from "board with no
-	// recent failures" apart.
-	resp := struct {
-		Projects       []boardProjectJSON `json:"projects"`
-		RecentFailures []runtimeEventJSON `json:"recent_failures"`
-	}{Projects: make([]boardProjectJSON, 0, len(projects))}
+	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
 
 	for _, p := range projects {
 		tasks, err := s.st.ListTasks(ctx, store.TaskFilter{Project: p.ID})
 		if err != nil {
-			s.mapStoreErr(w, err)
-			return
+			return nil, err
 		}
 		bp := boardProjectJSON{
 			ID: p.ID, Name: p.Name,
@@ -479,8 +491,7 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 				if err == nil {
 					bt.Holder = &holderJSON{ActorID: lease.ActorID, ExpiresAt: lease.ExpiresAt}
 				} else if !errors.Is(err, store.ErrNotFound) {
-					s.mapStoreErr(w, err)
-					return
+					return nil, err
 				}
 				bp.InProgress = append(bp.InProgress, bt)
 			case t.State == "in_review":
@@ -497,8 +508,7 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 	if projectFilter == "" {
 		events, err := s.st.ListRuntimeEvents(ctx, "", 10)
 		if err != nil {
-			s.mapStoreErr(w, err)
-			return
+			return nil, err
 		}
 		resp.RecentFailures = make([]runtimeEventJSON, 0, len(events))
 		for i := range events {
@@ -506,5 +516,5 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	return resp, nil
 }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -40,13 +41,25 @@ type server struct {
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
+
+	// Web UI templates, parsed once at startup (template.Must panics on a
+	// parse error, so a broken template fails fast at boot, not on first
+	// request). One *template.Template per page — see parseWebTemplates.
+	tmplBoard   *template.Template
+	tmplTask    *template.Template
+	tmplProject *template.Template
 }
 
 // NewServer builds the wt HTTP handler. If cfg.BootstrapToken is set and the
 // actors table is empty, it creates the initial admin actor (idempotent). A
 // bootstrap failure is fatal: the server must not start half-configured.
 func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
-	s := &server{st: st, cfg: cfg, log: slog.Default()}
+	s := &server{
+		st: st, cfg: cfg, log: slog.Default(),
+		tmplBoard:   parseWebTemplates("board.html"),
+		tmplTask:    parseWebTemplates("task.html"),
+		tmplProject: parseWebTemplates("project.html"),
+	}
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
@@ -70,6 +83,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	// Read-only web UI. No bearer auth, unlike /api/v1/* below — the bind
+	// address is the access control for this in v1 (see web.go).
+	mux.HandleFunc("GET /{$}", s.boardPage)
+	mux.HandleFunc("GET /tasks/{id}", s.taskPage)
+	mux.HandleFunc("GET /projects/{id}", s.projectPage)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.

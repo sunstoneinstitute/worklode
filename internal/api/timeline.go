@@ -23,59 +23,11 @@ type timelineEntry struct {
 // runs and reviews on those PRs, artifacts built from the PRs' merge SHAs,
 // and deployments and runtime events referencing those artifacts.
 func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-
-	t, err := s.st.GetTask(ctx, id)
+	t, entries, err := s.assembleTimeline(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-
-	var entries []timelineEntry
-	appendEntries := func(more []timelineEntry, err error) bool {
-		if err != nil {
-			s.mapStoreErr(w, err)
-			return false
-		}
-		entries = append(entries, more...)
-		return true
-	}
-
-	if !appendEntries(s.stateEntries(ctx, id)) {
-		return
-	}
-	prs, err := s.st.PRsForTask(ctx, id)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	if !appendEntries(prEntries(prs), nil) {
-		return
-	}
-	if !appendEntries(s.ciEntries(ctx, prs)) {
-		return
-	}
-	if !appendEntries(s.reviewEntries(ctx, prs)) {
-		return
-	}
-	artifacts, err := s.mergedArtifacts(ctx, prs)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	if !appendEntries(artifactEntries(artifacts), nil) {
-		return
-	}
-	if !appendEntries(s.deploymentEntries(ctx, artifacts)) {
-		return
-	}
-	if !appendEntries(s.runtimeEntries(ctx, artifacts)) {
-		return
-	}
-
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
-
 	timeline := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		timeline = append(timeline, e.obj)
@@ -84,6 +36,65 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 		"task":     toTaskJSON(t),
 		"timeline": timeline,
 	})
+}
+
+// assembleTimeline returns a task and its full timeline — state changes,
+// linked PRs, CI runs and reviews on those PRs, artifacts built from the
+// PRs' merge SHAs, and deployments and runtime events referencing those
+// artifacts — ascending by time. Shared by the JSON
+// /api/v1/tasks/{id}/timeline handler and the GET /tasks/{id} web page.
+func (s *server) assembleTimeline(ctx context.Context, id string) (*store.Task, []timelineEntry, error) {
+	t, err := s.st.GetTask(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var entries []timelineEntry
+
+	se, err := s.stateEntries(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, se...)
+
+	prs, err := s.st.PRsForTask(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, prEntries(prs)...)
+
+	ce, err := s.ciEntries(ctx, prs)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, ce...)
+
+	rve, err := s.reviewEntries(ctx, prs)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, rve...)
+
+	artifacts, err := s.mergedArtifacts(ctx, prs)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, artifactEntries(artifacts)...)
+
+	de, err := s.deploymentEntries(ctx, artifacts)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, de...)
+
+	rte, err := s.runtimeEntries(ctx, artifacts)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, rte...)
+
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	return t, entries, nil
 }
 
 func (s *server) stateEntries(ctx context.Context, taskID string) ([]timelineEntry, error) {

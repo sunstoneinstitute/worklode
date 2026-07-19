@@ -1,0 +1,68 @@
+{{define "content"}}
+<h1>Board</h1>
+<p class="muted">Inbox: {{.InboxCount}} new issue{{if ne .InboxCount 1}}s{{end}}</p>
+
+{{range .Board.Projects}}
+<section>
+  <h2><a href="/projects/{{.ID}}">{{.Name}}</a></h2>
+
+  <h3>In progress</h3>
+  {{if .InProgress}}
+  <table>
+    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th></tr>
+    {{range .InProgress}}
+    <tr>
+      <td><span class="badge state-in_progress">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td>
+      <td>{{.Title}}</td>
+      <td>{{.Priority}}</td>
+      <td>{{if .Holder}}{{.Holder.ActorID}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+      <td>{{if .Holder}}{{fmtTime .Holder.ExpiresAt}}{{end}}</td>
+    </tr>
+    {{end}}
+  </table>
+  {{else}}<p class="muted">None</p>{{end}}
+
+  <h3>In review</h3>
+  {{if .InReview}}
+  <table>
+    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    {{range .InReview}}
+    <tr><td><span class="badge state-in_review">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    {{end}}
+  </table>
+  {{else}}<p class="muted">None</p>{{end}}
+
+  <h3>Ready</h3>
+  {{if .Ready}}
+  <table>
+    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    {{range .Ready}}
+    <tr><td><span class="badge state-ready">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    {{end}}
+  </table>
+  {{else}}<p class="muted">None</p>{{end}}
+
+  <h3>Blocked</h3>
+  {{if .Blocked}}
+  <table>
+    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    {{range .Blocked}}
+    <tr><td><span class="badge state-blocked">blocked</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    {{end}}
+  </table>
+  {{else}}<p class="muted">None</p>{{end}}
+</section>
+{{end}}
+
+{{if .Board.RecentFailures}}
+<section>
+  <h2>Recent failures</h2>
+  <table>
+    <tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
+    {{range .Board.RecentFailures}}
+    <tr><td>{{fmtTime .OccurredAt}}</td><td>{{.Cluster}}</td><td>{{.Kind}}</td><td>{{.Workload}}</td><td>{{.Message}}</td></tr>
+    {{end}}
+  </table>
+</section>
+{{end}}
+{{end}}
