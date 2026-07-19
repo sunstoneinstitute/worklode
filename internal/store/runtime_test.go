@@ -202,6 +202,32 @@ func TestListRuntimeEventsClusterFilterAndOrder(t *testing.T) {
 	}
 }
 
+func TestListRuntimeEventsNullColumns(t *testing.T) {
+	s := openRuntimeStore(t)
+
+	// workload/image/message are nullable TEXT; a row with NULLs (e.g. a
+	// flux_failure with no pod context) must still scan.
+	if _, err := s.db.Exec(
+		`INSERT INTO runtime_events (cluster, kind, workload, image, artifact_id, message, occurred_at)
+		 VALUES ('prod-cluster', 'flux_failure', NULL, NULL, NULL, NULL, ?)`,
+		runtimeTestNow.Format(time.RFC3339),
+	); err != nil {
+		t.Fatalf("insert NULL-column runtime event: %v", err)
+	}
+
+	list, err := s.ListRuntimeEvents(t.Context(), "", 0)
+	if err != nil {
+		t.Fatalf("ListRuntimeEvents with NULL columns: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListRuntimeEvents: got %d, want 1", len(list))
+	}
+	got := list[0]
+	if got.Workload != "" || got.Image != "" || got.Message != "" || got.ArtifactID != nil {
+		t.Fatalf("NULL columns should scan to zero values: got %+v", got)
+	}
+}
+
 func TestListRuntimeEventsDefaultLimit(t *testing.T) {
 	s := openRuntimeStore(t)
 	for i := 0; i < 55; i++ {

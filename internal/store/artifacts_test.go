@@ -224,6 +224,48 @@ func TestUpsertDeploymentInsertAndUpdate(t *testing.T) {
 	}
 }
 
+func TestUpsertDeploymentNilArtifactIDPreservesLink(t *testing.T) {
+	s := openArtifactsStore(t)
+
+	artifactID, err := createArtifact(t, s, defaultArtifact())
+	if err != nil {
+		t.Fatalf("createArtifact: %v", err)
+	}
+	d := defaultDeployment()
+	d.ArtifactID = &artifactID
+	if err := upsertDeployment(t, s, artifactsTestNow, d); err != nil {
+		t.Fatalf("first UpsertDeployment: %v", err)
+	}
+
+	// Status-only redelivery (image not resolved → nil ArtifactID) must not
+	// sever the previously resolved artifact link.
+	later := artifactsTestNow.Add(5 * time.Minute)
+	d2 := defaultDeployment()
+	d2.Status = "failed"
+	d2.ArtifactID = nil
+	if err := upsertDeployment(t, s, later, d2); err != nil {
+		t.Fatalf("second UpsertDeployment: %v", err)
+	}
+
+	list, err := s.ListDeployments(t.Context(), "")
+	if err != nil {
+		t.Fatalf("ListDeployments: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListDeployments: got %d, want 1", len(list))
+	}
+	got := list[0]
+	if got.Status != "failed" {
+		t.Fatalf("status after nil-artifact update: got %q, want failed", got.Status)
+	}
+	if got.ArtifactID == nil || *got.ArtifactID != artifactID {
+		t.Fatalf("artifact_id after nil-artifact update: got %v, want preserved %d", got.ArtifactID, artifactID)
+	}
+	if !got.LastUpdate.Equal(later) {
+		t.Fatalf("last_update after nil-artifact update: got %v, want %v", got.LastUpdate, later)
+	}
+}
+
 func TestListDeploymentsFilter(t *testing.T) {
 	s := openArtifactsStore(t)
 	dProd := defaultDeployment()

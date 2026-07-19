@@ -67,15 +67,16 @@ const runtimeEventColumns = `id, cluster, kind, workload, image, artifact_id, me
 
 func scanRuntimeEvent(row rowScanner) (*RuntimeEvent, error) {
 	var re RuntimeEvent
-	var workload, image, message, occurredAt string
+	var workload, image, message sql.NullString
+	var occurredAt string
 	var artifactID sql.NullInt64
 	if err := row.Scan(&re.ID, &re.Cluster, &re.Kind, &workload, &image,
 		&artifactID, &message, &occurredAt); err != nil {
 		return nil, err
 	}
-	re.Workload = workload
-	re.Image = image
-	re.Message = message
+	re.Workload = workload.String
+	re.Image = image.String
+	re.Message = message.String
 	if artifactID.Valid {
 		re.ArtifactID = &artifactID.Int64
 	}

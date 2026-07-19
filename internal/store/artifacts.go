@@ -185,7 +185,9 @@ func findArtifactByImageTx(tx *sql.Tx, image string) (*Artifact, error) {
 // UpsertDeployment inserts a new deployment (first_seen = last_update =
 // now), or on redelivery (same environment, target_kind, target_name)
 // updates status and artifact_id and advances last_update, keeping the
-// original first_seen.
+// original first_seen. A nil ArtifactID on update keeps the previously
+// linked artifact — a status-only event where the image wasn't resolved
+// must not sever the link.
 func UpsertDeployment(tx *sql.Tx, now time.Time, d Deployment) error {
 	var artifactID sql.NullInt64
 	if d.ArtifactID != nil {
@@ -197,7 +199,7 @@ func UpsertDeployment(tx *sql.Tx, now time.Time, d Deployment) error {
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (environment, target_kind, target_name) DO UPDATE SET
 		   status = excluded.status,
-		   artifact_id = excluded.artifact_id,
+		   artifact_id = COALESCE(excluded.artifact_id, deployments.artifact_id),
 		   last_update = excluded.last_update`,
 		artifactID, d.Environment, d.TargetKind, d.TargetName, d.Status, nowStr, nowStr,
 	)
