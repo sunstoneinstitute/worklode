@@ -24,6 +24,10 @@ export WT_BOOTSTRAP_TOKEN=wt_$(openssl rand -hex 20)
 docker compose up -d
 ```
 
+On native Linux Docker (not Docker Desktop) the container runs as uid 65532,
+so run `sudo chown 65532:65532 data` (or use a named volume) before first
+start.
+
 Point the CLI at it, either via `~/.config/wt/config.toml`:
 
 ```toml
