@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,11 +64,19 @@ func NewIssuer(t *testing.T) *Issuer {
 		if claims == nil {
 			claims = map[string]any{}
 		}
+		// This handler runs on the httptest server goroutine, not the test
+		// goroutine, so it must not call t.Fatalf via SignToken. Use the
+		// error-returning signToken and surface failures as a 500 instead.
+		idToken, err := iss.signToken(claims)
+		if err != nil {
+			http.Error(w, "sign token: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, map[string]any{
 			"access_token": "fake-access-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
-			"id_token":     iss.SignToken(t, claims),
+			"id_token":     idToken,
 		})
 	})
 
@@ -84,6 +93,17 @@ func (i *Issuer) URL() string { return i.Server.URL }
 // for an expiry test, a different aud for a wrong-audience test).
 func (i *Issuer) SignToken(t *testing.T, claims map[string]any) string {
 	t.Helper()
+	s, err := i.signToken(claims)
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return s
+}
+
+// signToken is the error-returning form of SignToken. It carries the signing
+// logic so it can be called from non-test goroutines (e.g. the /token HTTP
+// handler), where t.Fatalf is forbidden.
+func (i *Issuer) signToken(claims map[string]any) (string, error) {
 	now := time.Now()
 	full := map[string]any{
 		"iss": i.Server.URL,
@@ -100,21 +120,21 @@ func (i *Issuer) SignToken(t *testing.T, claims map[string]any) string {
 		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", keyID),
 	)
 	if err != nil {
-		t.Fatalf("new signer: %v", err)
+		return "", fmt.Errorf("new signer: %w", err)
 	}
 	payload, err := json.Marshal(full)
 	if err != nil {
-		t.Fatalf("marshal claims: %v", err)
+		return "", fmt.Errorf("marshal claims: %w", err)
 	}
 	obj, err := signer.Sign(payload)
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		return "", fmt.Errorf("sign: %w", err)
 	}
 	s, err := obj.CompactSerialize()
 	if err != nil {
-		t.Fatalf("serialize: %v", err)
+		return "", fmt.Errorf("serialize: %w", err)
 	}
-	return s
+	return s, nil
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

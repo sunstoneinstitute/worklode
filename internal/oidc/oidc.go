@@ -78,7 +78,9 @@ func (v *Verifier) Verify(ctx context.Context, rawIDToken string) (*Claims, erro
 
 // OAuth2Config builds the oauth2 config for an auth-code + PKCE flow with the
 // given redirect URL and scopes. Shared by the web and CLI login flows. The
-// client is public, so ClientSecret is left empty and PKCE is required.
+// client is public, so ClientSecret is left empty; the config itself does not
+// enforce PKCE — callers must supply it via oauth2.S256ChallengeOption at
+// AuthCodeURL and oauth2.VerifierOption at Exchange.
 func (v *Verifier) OAuth2Config(redirectURL string, scopes []string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:    v.clientID,
