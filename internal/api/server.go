@@ -111,11 +111,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
-	// Read-only web UI. No bearer auth, unlike /api/v1/* below — the bind
-	// address is the access control for this in v1 (see web.go).
-	mux.HandleFunc("GET /{$}", s.boardPage)
-	mux.HandleFunc("GET /tasks/{id}", s.taskPage)
-	mux.HandleFunc("GET /projects/{id}", s.projectPage)
+	// Read-only web UI. When OIDC is enabled these require a valid session
+	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
+	// unconfigured webAuth is a passthrough and the UI stays open as in v1.
+	// /healthz and /metrics (above) always stay open.
+	mux.HandleFunc("GET /{$}", s.webAuth(s.boardPage))
+	mux.HandleFunc("GET /tasks/{id}", s.webAuth(s.taskPage))
+	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.projectPage))
+	mux.HandleFunc("GET /auth/login", s.authLogin)
+	mux.HandleFunc("GET /auth/callback", s.authCallback)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
