@@ -155,6 +155,9 @@ admin or the bootstrap token). When enabled:
 Users then run `wt login` to obtain a 30-day `wt_` token from their SSO
 identity. Agent/service tokens are unchanged.
 
+The web session cookie is `Secure`, so web login requires the server to be
+reached over HTTPS (or `localhost`); the `wt login` CLI flow is unaffected.
+
 ## Cluster watcher
 
 `wt watch` runs a pod informer against one cluster and reports crash loops

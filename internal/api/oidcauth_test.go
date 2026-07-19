@@ -28,6 +28,28 @@ func newOIDCServer(t *testing.T) (*store.Store, http.Handler, *oidctest.Issuer) 
 	return st, h, iss
 }
 
+// TestNewServerRequiresPublicURLWhenOIDC verifies NewServer fails fast when
+// OIDC is enabled but PublicURL is missing or not an absolute http(s) URL —
+// otherwise callbackURL() silently builds a relative redirect URI that
+// Keycloak rejects, making the web UI unloggable while the CLI flow keeps
+// working.
+func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
+	st := newTestStore(t)
+	iss := oidctest.NewIssuer(t)
+
+	for _, publicURL := range []string{"", "/auth"} {
+		_, err := api.NewServer(st, api.Config{
+			OIDCIssuer:    iss.URL(),
+			OIDCClientID:  iss.ClientID,
+			PublicURL:     publicURL,
+			SessionSecret: "test-session-secret",
+		})
+		if err == nil {
+			t.Fatalf("PublicURL %q: expected error, got nil", publicURL)
+		}
+	}
+}
+
 func TestOIDCConfig(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
 	rr := doReq(t, h, "GET", "/auth/oidc/config", "", nil)

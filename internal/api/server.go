@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -78,6 +79,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
 			return nil, fmt.Errorf("WT_SESSION_SECRET is required when OIDC is enabled")
+		}
+		if cfg.PublicURL == "" {
+			return nil, fmt.Errorf("WT_PUBLIC_URL is required when OIDC is enabled")
+		}
+		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return nil, fmt.Errorf("WT_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wt.example.com)")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
