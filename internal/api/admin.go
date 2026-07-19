@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -471,8 +472,15 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 			bt := boardTaskJSON{taskJSON: toTaskJSON(t)}
 			switch {
 			case t.State == "in_progress":
-				if lease, err := s.st.ActiveLease(ctx, t.ID); err == nil {
+				// No active lease (e.g. it expired but the sweeper hasn't
+				// moved the task back to ready yet) just means no holder;
+				// any other error is a real failure.
+				lease, err := s.st.ActiveLease(ctx, t.ID)
+				if err == nil {
 					bt.Holder = &holderJSON{ActorID: lease.ActorID, ExpiresAt: lease.ExpiresAt}
+				} else if !errors.Is(err, store.ErrNotFound) {
+					s.mapStoreErr(w, err)
+					return
 				}
 				bp.InProgress = append(bp.InProgress, bt)
 			case t.State == "in_review":

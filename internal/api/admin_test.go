@@ -311,6 +311,59 @@ func TestBoard(t *testing.T) {
 	}
 }
 
+// TestBoardInProgressWithoutLease covers the board's lease-lookup error
+// handling: an in_progress task with no active lease (in_review ->
+// in_progress via the review flow, no claim) must render with no holder, not
+// fail. The other half of that handling — a real DB error surfacing as 500
+// via mapStoreErr — is impractical to force through the public API and is
+// covered by code-path match with getTask.
+func TestBoardInProgressWithoutLease(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Reopened", "priority": "high", "kind": "bug"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	moveToReview(t, st, "WT-1")
+	// Review sends it back to in_progress; the original lease was not renewed.
+	_, _, err := st.RecordEvent(context.Background(), "github", "reopen-WT-1", "task.reopened", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := st.Now()
+			if err := store.CloseActiveLease(tx, now, "WT-1"); err != nil {
+				return err
+			}
+			return store.Transition(tx, now, "WT-1", "in_review", "in_progress", eventID)
+		})
+	if err != nil {
+		t.Fatalf("move WT-1 back to in_progress without lease: %v", err)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/board?project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("board status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Projects []struct {
+			InProgress []struct {
+				ID     string `json:"id"`
+				Holder *struct {
+					ActorID string `json:"actor_id"`
+				} `json:"holder"`
+			} `json:"in_progress"`
+		} `json:"projects"`
+	}
+	decodeInto(t, rr, &body)
+	if len(body.Projects) != 1 || len(body.Projects[0].InProgress) != 1 {
+		t.Fatalf("board = %+v", body.Projects)
+	}
+	ip := body.Projects[0].InProgress[0]
+	if ip.ID != "WT-1" || ip.Holder != nil {
+		t.Fatalf("in_progress = %+v, want WT-1 with no holder", ip)
+	}
+}
+
 func TestBoardUnknownProject(t *testing.T) {
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/board?project=nosuch", token, nil)
