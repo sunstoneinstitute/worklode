@@ -89,6 +89,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.Handle("POST /api/v1/tasks/{id}/abandon", s.auth(s.abandonTask))
 	mux.Handle("GET /api/v1/tasks/{id}/timeline", s.auth(s.taskTimeline))
 
+	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))
+
 	return s.logging(s.metrics(mux)), nil
 }
 
