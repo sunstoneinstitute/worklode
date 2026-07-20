@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
 )
 
 func TestCLICodeStoreMintRedeem(t *testing.T) {
@@ -75,5 +77,40 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 	u, _ := url.Parse(loc)
 	if actor, ok := s.cliCodes.redeem(u.Query().Get("code"), "clistate"); !ok || actor != "github:42" {
 		t.Fatalf("minted code did not redeem: %q,%v", actor, ok)
+	}
+}
+
+func TestCLILoginValidatesLoopback(t *testing.T) {
+	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+
+	bad := []string{"", "https://evil.com/", "http://evil.com/", "http://localhost/", "ftp://localhost:1/"}
+	for _, ru := range bad {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/auth/cli/login?state=x&redirect_uri="+url.QueryEscape(ru), nil)
+		s.cliLogin(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("redirect_uri %q: status %d; want 400", ru, rr.Code)
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/cli/login?state=x&redirect_uri="+url.QueryEscape("http://localhost:5555/"), nil)
+	s.cliLogin(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("good redirect_uri: status %d; want 302", rr.Code)
+	}
+	// Intent cookie is set, and we are redirected into the web login (single
+	// provider -> /auth/github/login).
+	var hasIntent bool
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == cliCookieName && c.Value != "" {
+			hasIntent = true
+		}
+	}
+	if !hasIntent {
+		t.Fatal("intent cookie not set")
+	}
+	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/github/login") {
+		t.Fatalf("redirect = %q; want /auth/github/login", loc)
 	}
 }

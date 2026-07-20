@@ -199,6 +199,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/oidc/config", s.oidcConfig)
 	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
 
+	// Provider-neutral, server-mediated CLI login (see cliauth.go).
+	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
+
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
 	mux.Handle("GET /api/v1/tasks/{id}", s.auth(s.getTask))
