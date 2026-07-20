@@ -165,17 +165,5 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    signSession(s.cfg.SessionSecret, username, s.st.Now().Add(sessionLifetime)),
-		Path:     "/",
-		MaxAge:   int(sessionLifetime.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	// Clear the transient oauth-state cookie.
-	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
-
-	http.Redirect(w, r, safeNext(st.Next), http.StatusFound)
+	s.finishLogin(w, r, username, st.Next)
 }

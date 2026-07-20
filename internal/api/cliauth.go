@@ -9,6 +9,8 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -64,4 +66,60 @@ func (s *cliCodeStore) redeem(code, state string) (string, bool) {
 	}
 	delete(s.codes, code)
 	return c.actorID, true
+}
+
+// now returns the store clock, or wall-clock when there is no store (tests that
+// build a bare *server to exercise a handler directly).
+func (s *server) now() time.Time {
+	if s.st != nil {
+		return s.st.Now()
+	}
+	// Handler-level white-box tests build a bare *server (no store) but inject a
+	// fake clock into cliCodes; honour it so intent-expiry checks stay consistent
+	// with the minted codes. In production st.Now and cliCodes.now are the same
+	// clock, so this is a no-op there.
+	if s.cliCodes != nil {
+		return s.cliCodes.now()
+	}
+	return time.Now()
+}
+
+// finishLogin ends a successful web login for actorID. When the CLI-intent
+// cookie is present (a server-mediated `wt login`), it mints a one-time code
+// and redirects to the loopback redirect_uri instead of establishing a browser
+// session. Otherwise it delegates to finishLoginWeb.
+func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
+	if c, err := r.Cookie(cliCookieName); err == nil {
+		if ci, ok := verifyCLIIntent(s.cfg.SessionSecret, c.Value, s.now()); ok {
+			code, err := s.cliCodes.mint(actorID, ci.State)
+			if err != nil {
+				s.log.Error("mint cli code", "err", err)
+				webErr(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			// Clear both transient cookies.
+			http.SetCookie(w, &http.Cookie{Name: cliCookieName, Path: "/auth/", MaxAge: -1})
+			http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
+			u := ci.Redirect + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(ci.State)
+			http.Redirect(w, r, u, http.StatusFound)
+			return
+		}
+	}
+	s.finishLoginWeb(w, r, actorID, next)
+}
+
+// finishLoginWeb sets the browser session cookie and redirects to next. This is
+// the original tail shared by both web callbacks.
+func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID, next string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    signSession(s.cfg.SessionSecret, actorID, s.st.Now().Add(sessionLifetime)),
+		Path:     "/",
+		MaxAge:   int(sessionLifetime.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
+	http.Redirect(w, r, safeNext(next), http.StatusFound)
 }

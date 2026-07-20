@@ -174,17 +174,7 @@ func (s *server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    signSession(s.cfg.SessionSecret, actorID, s.st.Now().Add(sessionLifetime)),
-		Path:     "/",
-		MaxAge:   int(sessionLifetime.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
-	http.Redirect(w, r, safeNext(stt.Next), http.StatusFound)
+	s.finishLogin(w, r, actorID, safeNext(stt.Next))
 }
 
 // storeGitHubToken seals the token pair and upserts it for actorID.

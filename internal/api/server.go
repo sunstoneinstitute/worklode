@@ -72,6 +72,9 @@ type server struct {
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
 
+	// cliCodes holds pending one-time codes for the server-mediated CLI login.
+	cliCodes *cliCodeStore
+
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
@@ -103,6 +106,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		tmplTask:    parseWebTemplates("task.html"),
 		tmplProject: parseWebTemplates("project.html"),
 	}
+	s.cliCodes = newCLICodeStore(st.Now)
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
