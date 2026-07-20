@@ -55,6 +55,11 @@ func newServeCmd() *cobra.Command {
 				OIDCClientID:        os.Getenv("WT_OIDC_CLIENT_ID"),
 				PublicURL:           os.Getenv("WT_PUBLIC_URL"),
 				SessionSecret:       os.Getenv("WT_SESSION_SECRET"),
+				GitHubClientID:      os.Getenv("WT_GITHUB_APP_CLIENT_ID"),
+				GitHubClientSecret:  os.Getenv("WT_GITHUB_APP_CLIENT_SECRET"),
+				GitHubOrg:           os.Getenv("WT_GITHUB_ORG"),
+				GitHubAdminTeam:     os.Getenv("WT_GITHUB_ADMIN_TEAM"),
+				TokenEncKey:         os.Getenv("WT_TOKEN_ENC_KEY"),
 			})
 			if err != nil {
 				return err

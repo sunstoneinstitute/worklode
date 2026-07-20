@@ -22,9 +22,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
 	"github.com/sunstoneinstitute/work-tracker/internal/hooks"
 	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env
@@ -43,6 +45,15 @@ type Config struct {
 	OIDCClientID  string // WT_OIDC_CLIENT_ID
 	PublicURL     string // WT_PUBLIC_URL
 	SessionSecret string // WT_SESSION_SECRET
+
+	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
+	// are both set; independent of the OIDC feature. PublicURL and
+	// SessionSecret (above) are shared and required when this is enabled.
+	GitHubClientID     string // WT_GITHUB_APP_CLIENT_ID
+	GitHubClientSecret string // WT_GITHUB_APP_CLIENT_SECRET
+	GitHubOrg          string // WT_GITHUB_ORG
+	GitHubAdminTeam    string // WT_GITHUB_ADMIN_TEAM
+	TokenEncKey        string // WT_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 }
 
 type server struct {
@@ -53,6 +64,11 @@ type server struct {
 	// oidc is nil unless OIDC is configured (issuer + client id set). All SSO
 	// routes 404 when it is nil.
 	oidc *oidc.Verifier
+
+	// gh and tokenCipher are nil unless GitHub App auth is configured. All
+	// /auth/github/* routes 404 when gh is nil.
+	gh          *githubauth.Client
+	tokenCipher *tokencrypt.Cipher
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
@@ -95,6 +111,28 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		s.oidc = v
 	}
 
+	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
+		if cfg.SessionSecret == "" {
+			return nil, fmt.Errorf("WT_SESSION_SECRET is required when GitHub auth is enabled")
+		}
+		if cfg.PublicURL == "" {
+			return nil, fmt.Errorf("WT_PUBLIC_URL is required when GitHub auth is enabled")
+		}
+		if cfg.GitHubOrg == "" {
+			return nil, fmt.Errorf("WT_GITHUB_ORG is required when GitHub auth is enabled")
+		}
+		key, err := hex.DecodeString(cfg.TokenEncKey)
+		if err != nil || len(key) != 32 {
+			return nil, fmt.Errorf("WT_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+		}
+		tc, err := tokencrypt.New(key)
+		if err != nil {
+			return nil, fmt.Errorf("configure token cipher: %w", err)
+		}
+		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubOrg, cfg.GitHubAdminTeam)
+		s.tokenCipher = tc
+	}
+
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
 			return nil, fmt.Errorf("bootstrap admin: %w", err)
@@ -127,6 +165,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.projectPage))
 	mux.HandleFunc("GET /auth/login", s.authLogin)
 	mux.HandleFunc("GET /auth/callback", s.authCallback)
+	mux.HandleFunc("GET /auth/github/login", s.githubLogin)
+	mux.HandleFunc("GET /auth/github/callback", s.githubCallback)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
