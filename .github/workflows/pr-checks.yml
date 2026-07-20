@@ -6,6 +6,9 @@ on:
 
 permissions:
   contents: read
+  # _build-image.yml declares packages: write; a called reusable workflow may
+  # not request more than the caller grants, or GitHub fails the run at startup.
+  packages: write
 
 concurrency:
   group: ci-pr-${{ github.event.pull_request.number }}
