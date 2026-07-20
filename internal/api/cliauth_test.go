@@ -46,9 +46,16 @@ func TestCLICodeStoreWrongStateAndExpiry(t *testing.T) {
 	if _, ok := s.redeem(code, "wrong"); ok {
 		t.Fatal("wrong state should not redeem")
 	}
-	// Still unused after a failed state check; now let it expire.
+	// The wrong-state attempt must NOT have consumed the code: a correct redeem
+	// still succeeds.
+	if actor, ok := s.redeem(code, "right"); !ok || actor != "a" {
+		t.Fatalf("code should survive a wrong-state attempt: got %q,%v", actor, ok)
+	}
+
+	// Expiry: a fresh code no longer redeems once the clock passes its TTL.
+	code2, _ := s.mint("a", "right")
 	now = now.Add(cliCodeTTL + time.Second)
-	if _, ok := s.redeem(code, "right"); ok {
+	if _, ok := s.redeem(code2, "right"); ok {
 		t.Fatal("expired code should not redeem")
 	}
 }
@@ -88,7 +95,11 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 func TestCLILoginValidatesLoopback(t *testing.T) {
 	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
-	bad := []string{"", "https://evil.com/", "http://evil.com/", "http://localhost/", "ftp://localhost:1/"}
+	bad := []string{
+		"", "https://evil.com/", "http://evil.com/", "http://localhost/", "ftp://localhost:1/",
+		"http://localhost.evil.com:5555/",          // subdomain confusion
+		"http://evil.com@localhost.evil.com:5555/", // userinfo-host confusion
+	}
 	for _, ru := range bad {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/auth/cli/login?state=x&redirect_uri="+url.QueryEscape(ru), nil)
@@ -161,8 +172,8 @@ func TestCLITokenHappyPath(t *testing.T) {
 		strings.NewReader(`{"code":"`+code+`","state":"clistate"}`))
 	rr := httptest.NewRecorder()
 	s.cliToken(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s; want 200", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s; want 201", rr.Code, rr.Body.String())
 	}
 	var m map[string]string
 	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {

@@ -174,7 +174,7 @@ func (s *server) githubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.finishLogin(w, r, actorID, safeNext(stt.Next))
+	s.finishLogin(w, r, actorID, stt.Next)
 }
 
 // storeGitHubToken seals the token pair and upserts it for actorID.
