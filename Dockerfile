@@ -1,7 +1,7 @@
 # Multi-stage build: compile the static wt binary, then ship it on a minimal,
 # non-root distroless base with no shell and no package manager.
 
-FROM golang:1.25 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 
 # Cache mounts persist module downloads and build cache across runs;
