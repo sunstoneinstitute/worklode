@@ -123,3 +123,47 @@ func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID,
 	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
 	http.Redirect(w, r, safeNext(next), http.StatusFound)
 }
+
+// isLoopbackRedirect reports whether raw is a syntactically valid http URL whose
+// host is a loopback address with an explicit non-zero port. This blocks code
+// exfiltration to a remote redirect target.
+func isLoopbackRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" {
+		return false
+	}
+	host := u.Hostname()
+	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return false
+	}
+	if p := u.Port(); p == "" || p == "0" {
+		return false
+	}
+	return true
+}
+
+// cliLogin handles GET /auth/cli/login: validate the loopback redirect target,
+// stamp it into a signed cookie, and redirect into the normal web login.
+func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil && s.gh == nil {
+		writeErr(w, http.StatusNotFound, "no interactive login configured")
+		return
+	}
+	q := r.URL.Query()
+	redirect := q.Get("redirect_uri")
+	state := q.Get("state")
+	if state == "" || !isLoopbackRedirect(redirect) {
+		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     cliCookieName,
+		Value:    signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
+		Path:     "/auth/",
+		MaxAge:   int(oauthStateMaxAge.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
+}
