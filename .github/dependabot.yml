@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions-updates:
+        applies-to: version-updates
+        dependency-type: production
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    open-pull-requests-limit: 5
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    open-pull-requests-limit: 5
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"

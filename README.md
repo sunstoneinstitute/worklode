@@ -195,9 +195,13 @@ Requires Go 1.25. Run the test suite with:
 go test ./...
 ```
 
-Migrations live under `internal/store/migrations/` and use
-[golang-migrate](https://github.com/golang-migrate/migrate), embedded into
-the binary and applied automatically on `wt serve`/`wt migrate` startup.
+Migrations live under `deploy/base/migrations/` and use
+[golang-migrate](https://github.com/golang-migrate/migrate). They are no
+longer embedded in the binary or applied automatically — `wt serve` expects
+the schema to already exist. Apply them explicitly with
+`wt migrate --db <path> --migrations-path deploy/base/migrations` (the
+`docker-compose.yml` `migrate` service does this before `tracker` starts;
+in Kubernetes an initContainer does the same from a ConfigMap).
 Never edit a migration that has already shipped — add a new pair instead:
 
 ```

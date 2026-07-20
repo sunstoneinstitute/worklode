@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: work-tracker-config
+  namespace: work-tracker
+data:
+  WT_CLUSTER_ENV_MAP: ""

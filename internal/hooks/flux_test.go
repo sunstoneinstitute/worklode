@@ -41,6 +41,9 @@ func newFluxEnv(t *testing.T) *fluxEnv {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
+	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
 	t.Cleanup(func() { st.Close() })
 
 	return &fluxEnv{
@@ -462,6 +465,9 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 		st, err := store.Open(dbPath)
 		if err != nil {
 			t.Fatalf("open store: %v", err)
+		}
+		if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+			t.Fatalf("migrate store: %v", err)
 		}
 		t.Cleanup(func() { st.Close() })
 		h := hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil)

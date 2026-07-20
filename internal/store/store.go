@@ -6,19 +6,17 @@ package store
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/golang-migrate/migrate/v4/source"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "modernc.org/sqlite"
 )
-
-//go:embed migrations/*.sql
-var migrationsFS embed.FS
 
 // Store wraps the single-writer SQLite database.
 type Store struct {
@@ -26,8 +24,9 @@ type Store struct {
 	nowFn func() time.Time
 }
 
-// Open opens (creating if necessary) the SQLite database at path and applies
-// any pending migrations.
+// Open opens (creating if necessary) the SQLite database at path. Callers
+// are responsible for applying migrations (see Migrate) before relying on
+// the schema being present — Open no longer does this implicitly.
 func Open(path string) (*Store, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", path)
 	db, err := sql.Open("sqlite", dsn)
@@ -36,12 +35,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db, nowFn: func() time.Time { return time.Now().UTC() }}
-	if err := s.Migrate(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return s, nil
+	return &Store{db: db, nowFn: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 // SetNowFunc overrides the clock used for timestamps written by the store
@@ -58,18 +52,22 @@ func (s *Store) Now() time.Time {
 	return s.nowFn()
 }
 
-// Migrate applies all pending embedded migrations. A database that is already
-// up to date is not an error.
-func (s *Store) Migrate() error {
-	src, err := iofs.New(migrationsFS, "migrations")
+// Migrate applies all pending migrations found as *.up.sql/*.down.sql files
+// in migrationsPath. A database that is already up to date is not an error.
+func (s *Store) Migrate(migrationsPath string) error {
+	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
-		return fmt.Errorf("load embedded migrations: %w", err)
+		return fmt.Errorf("resolve migrations path %s: %w", migrationsPath, err)
+	}
+	src, err := source.Open("file://" + absPath)
+	if err != nil {
+		return fmt.Errorf("load migrations from %s: %w", absPath, err)
 	}
 	drv, err := migratesqlite.WithInstance(s.db, &migratesqlite.Config{})
 	if err != nil {
 		return fmt.Errorf("init migrate driver: %w", err)
 	}
-	m, err := migrate.NewWithInstance("iofs", src, "sqlite", drv)
+	m, err := migrate.NewWithInstance("file", src, "sqlite", drv)
 	if err != nil {
 		return fmt.Errorf("init migrate: %w", err)
 	}

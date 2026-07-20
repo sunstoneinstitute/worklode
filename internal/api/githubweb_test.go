@@ -19,13 +19,17 @@ import (
 	"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"
 )
 
-// newGitHubTestStore opens a fresh migrated store in a temp dir. store.Open runs
-// migrations internally, so no separate Migrate() call is needed.
+// newGitHubTestStore opens a fresh migrated store in a temp dir. Migrations are
+// decoupled from the binary, so Open does not apply them — call Migrate with the
+// test migrations dir, as the rest of the store tests do.
 func newGitHubTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
+	}
+	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
 	return st

@@ -129,6 +129,9 @@ func TestFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
+	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
 	defer st.Close()
 	handler, err := api.NewServer(st, api.Config{
 		BootstrapToken:      bootstrapToken,

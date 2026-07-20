@@ -1,0 +1,20 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: work-tracker
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+configMapGenerator:
+  - name: work-tracker-migrations
+    files:
+      - migrations/0001_init.up.sql
+      - migrations/0001_init.down.sql
+      - migrations/0002_actor_admin.up.sql
+      - migrations/0002_actor_admin.down.sql
+      - migrations/0003_github_user_tokens.up.sql
+      - migrations/0003_github_user_tokens.down.sql

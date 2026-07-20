@@ -1,0 +1,43 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # _build-image.yml declares packages: write; a called reusable workflow may
+  # not request more than the caller grants, or GitHub fails the run at startup.
+  packages: write
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    uses: ./.github/workflows/_lint.yml
+
+  test:
+    uses: ./.github/workflows/_test.yml
+
+  build-image:
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      push: false
+
+  validate-kustomize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # Pinned ahead of v1: this SHA is the tip of sunstoneinstitute/actions#10
+      # (not yet merged), which adds flat-overlay support to validate-kustomize.
+      # Without it, this step silently validates zero overlays against this
+      # repo's flat deploy/overlays/<env>/kustomization.yaml layout — it would
+      # report success having checked nothing. Re-pin to the v1 tag once
+      # actions#10 merges and v1 slides onto (or past) this commit.
+      - uses: sunstoneinstitute/actions/validate-kustomize@4f97779cd1a9eea7212759632166d0b7dbc24a39 # actions#10 branch tip, pre-v1
+        with:
+          overlay-base: deploy/overlays
+          environments: hzdev hzprod

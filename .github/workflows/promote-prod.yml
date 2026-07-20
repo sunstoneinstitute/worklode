@@ -1,0 +1,71 @@
+name: Promote to prod
+
+# Promotes the dev (hzdev cluster) image to prod (hzprod cluster) without
+# rebuilding. Uses crane to copy the byte-identical image within the same
+# ghcr.io/sunstoneinstitute namespace, tagged with a computed semver version.
+#
+# hzprod has no cluster yet, so nothing consumes last-deploy/prod until
+# one is provisioned and Flux is wired to watch it — this workflow just
+# keeps the branch and image ready for when that happens.
+#
+# Do not dispatch this yet: promote-images@v1 calls compute-version@v1 by a
+# floating tag internally (not a pinned SHA this repo controls), and v1's
+# compute-version doesn't support version-file: VERSION until
+# sunstoneinstitute/actions#10 merges and v1 slides onto it. Dispatching
+# before then fails at the "Promote image to hzprod" step with
+# "Unsupported file type: VERSION".
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: promote-prod
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/sunstoneinstitute
+  APP: work-tracker
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote image to hzprod
+        id: promote
+        uses: sunstoneinstitute/actions/promote-images@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
+        with:
+          from-env: dev
+          to-env: prod
+          images: work-tracker
+          from-registry: ${{ env.REGISTRY }}
+          to-registry: ${{ env.REGISTRY }}
+          version-file: VERSION
+          overlay-path: deploy/overlays/hzprod/kustomization.yaml
+
+      - name: Output summary
+        run: |
+          {
+            echo "### Production Promotion Summary"
+            echo ""
+            echo "**dev tag promoted:** \`${{ steps.promote.outputs.from-tag }}\`"
+            echo "**prod version:** \`${{ steps.promote.outputs.to-tag }}\`"
+            echo "**Deploy branch updated:** \`last-deploy/prod\`"
+          } >> "$GITHUB_STEP_SUMMARY"
