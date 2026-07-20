@@ -171,3 +171,122 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 		t.Fatalf("decrypted payload missing access token: %s", raw)
 	}
 }
+
+// newGitHubCallbackServer builds a server wired to a fake GitHub whose
+// org-membership response is governed by member. When member is false the
+// /user/memberships/orgs/<org> endpoint 404s (non-member).
+func newGitHubCallbackServer(t *testing.T, member bool) *server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login/oauth/access_token":
+			w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+			w.Write([]byte("access_token=gho_x&token_type=bearer"))
+		case "/user":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "login": "octocat", "name": "The Octocat"})
+		case "/user/memberships/orgs/sunstoneinstitute":
+			if !member {
+				http.NotFound(w, r)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"state": "active"})
+		case "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	tc, err := tokencrypt.New([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	s := &server{
+		st:          newGitHubTestStore(t),
+		log:         slog.Default(),
+		cfg:         Config{PublicURL: "https://wt.test", SessionSecret: "sekret"},
+		tokenCipher: tc,
+	}
+	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
+	s.gh.APIBase = srv.URL
+	s.gh.Endpoint = oauth2.Endpoint{
+		AuthURL:  srv.URL + "/login/oauth/authorize",
+		TokenURL: srv.URL + "/login/oauth/access_token",
+	}
+	return s
+}
+
+func TestGitHubCallbackStateMismatch(t *testing.T) {
+	s := newGitHubCallbackServer(t, true)
+	cookie := signOAuthState(s.cfg.SessionSecret, oauthState{
+		State: "xyz", Next: "/", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/auth/github/callback?state=nomatch&code=abc", nil)
+	req.AddCookie(&http.Cookie{Name: oauthCookieName, Value: cookie})
+	s.githubCallback(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d, want 400", rr.Code)
+	}
+}
+
+func TestGitHubCallbackMissingCookie(t *testing.T) {
+	s := newGitHubCallbackServer(t, true)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/auth/github/callback?state=xyz&code=abc", nil)
+	s.githubCallback(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("code=%d, want 400", rr.Code)
+	}
+}
+
+func TestGitHubCallbackNonMemberForbidden(t *testing.T) {
+	s := newGitHubCallbackServer(t, false)
+	const state = "xyz"
+	cookie := signOAuthState(s.cfg.SessionSecret, oauthState{
+		State: state, Next: "/", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/auth/github/callback?state="+state+"&code=abc", nil)
+	req.AddCookie(&http.Cookie{Name: oauthCookieName, Value: cookie})
+	s.githubCallback(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("code=%d, want 403, body=%s", rr.Code, rr.Body.String())
+	}
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == sessionCookieName && c.Value != "" {
+			t.Fatal("no session cookie expected for a non-member")
+		}
+	}
+}
+
+func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
+	st := newGitHubTestStore(t)
+	_, err := NewServer(st, Config{
+		GitHubClientID:     "cid",
+		GitHubClientSecret: "secret",
+		SessionSecret:      "sekret",
+		GitHubOrg:          "sunstoneinstitute",
+		PublicURL:          "not-a-url",
+		TokenEncKey:        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	})
+	if err == nil {
+		t.Fatal("expected error for malformed PublicURL")
+	}
+}
+
+func TestNewServerRejectsBadTokenEncKey(t *testing.T) {
+	st := newGitHubTestStore(t)
+	_, err := NewServer(st, Config{
+		GitHubClientID:     "cid",
+		GitHubClientSecret: "secret",
+		SessionSecret:      "sekret",
+		GitHubOrg:          "sunstoneinstitute",
+		PublicURL:          "https://wt.test",
+		TokenEncKey:        "abcd",
+	})
+	if err == nil {
+		t.Fatal("expected error for bad-length TokenEncKey")
+	}
+}

@@ -52,8 +52,10 @@ type Config struct {
 	GitHubClientID     string // WT_GITHUB_APP_CLIENT_ID
 	GitHubClientSecret string // WT_GITHUB_APP_CLIENT_SECRET
 	GitHubOrg          string // WT_GITHUB_ORG
-	GitHubAdminTeam    string // WT_GITHUB_ADMIN_TEAM
-	TokenEncKey        string // WT_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	// GitHubAdminTeam (WT_GITHUB_ADMIN_TEAM) is optional; when empty no user is
+	// granted admin via GitHub (the team-membership check simply 404s).
+	GitHubAdminTeam string
+	TokenEncKey     string // WT_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 }
 
 type server struct {
@@ -81,6 +83,16 @@ type server struct {
 	tmplProject *template.Template
 }
 
+// validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
+// so the derived web callback redirect URIs are well-formed.
+func validatePublicURL(publicURL string) error {
+	u, err := url.Parse(publicURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("WT_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wt.example.com)")
+	}
+	return nil
+}
+
 // NewServer builds the wt HTTP handler. If cfg.BootstrapToken is set and the
 // actors table is empty, it creates the initial admin actor (idempotent). A
 // bootstrap failure is fatal: the server must not start half-configured.
@@ -99,8 +111,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		if cfg.PublicURL == "" {
 			return nil, fmt.Errorf("WT_PUBLIC_URL is required when OIDC is enabled")
 		}
-		if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return nil, fmt.Errorf("WT_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wt.example.com)")
+		if err := validatePublicURL(cfg.PublicURL); err != nil {
+			return nil, err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -117,6 +129,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		}
 		if cfg.PublicURL == "" {
 			return nil, fmt.Errorf("WT_PUBLIC_URL is required when GitHub auth is enabled")
+		}
+		if err := validatePublicURL(cfg.PublicURL); err != nil {
+			return nil, err
 		}
 		if cfg.GitHubOrg == "" {
 			return nil, fmt.Errorf("WT_GITHUB_ORG is required when GitHub auth is enabled")
