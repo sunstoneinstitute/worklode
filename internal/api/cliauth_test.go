@@ -1,14 +1,19 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
+	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
 func TestCLICodeStoreMintRedeem(t *testing.T) {
@@ -112,5 +117,58 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 	}
 	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/github/login") {
 		t.Fatalf("redirect = %q; want /auth/github/login", loc)
+	}
+}
+
+// newStoreT opens a migrated store for white-box tests (package api can import
+// store the same way the black-box harness does).
+func newStoreT(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+func TestCLITokenRejectsUnknownCode(t *testing.T) {
+	st := newStoreT(t)
+	s := &server{st: st, log: slog.Default(), cliCodes: newCLICodeStore(st.Now)}
+	req := httptest.NewRequest(http.MethodPost, "/auth/cli/token", strings.NewReader(`{"code":"nope","state":"s"}`))
+	rr := httptest.NewRecorder()
+	s.cliToken(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d; want 400", rr.Code)
+	}
+}
+
+func TestCLITokenHappyPath(t *testing.T) {
+	st := newStoreT(t)
+	if err := st.CreateActor(context.Background(), "github:7", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	s := &server{st: st, log: slog.Default(), cliCodes: newCLICodeStore(st.Now)}
+	code, err := s.cliCodes.mint("github:7", "clistate")
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/cli/token",
+		strings.NewReader(`{"code":"`+code+`","state":"clistate"}`))
+	rr := httptest.NewRecorder()
+	s.cliToken(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	var m map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(m["token"]) < 10 || m["actor_id"] != "github:7" {
+		t.Fatalf("bad token response: %v", m)
 	}
 }
