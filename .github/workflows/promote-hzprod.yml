@@ -33,7 +33,7 @@ env:
 jobs:
   promote:
     runs-on: ubuntu-latest
-    environment: hzprod
+    environment: prod
     timeout-minutes: 15
     steps:
       - name: Checkout code

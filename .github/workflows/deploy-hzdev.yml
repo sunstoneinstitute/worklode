@@ -19,7 +19,7 @@ jobs:
   deploy:
     needs: build-image
     runs-on: ubuntu-latest
-    environment: hzdev
+    environment: dev
     timeout-minutes: 10
     steps:
       - name: Checkout code
