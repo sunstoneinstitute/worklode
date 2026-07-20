@@ -6,12 +6,14 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -70,13 +72,22 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	}()
 
 	redirectURL := fmt.Sprintf("http://localhost:%d/", port)
-	authURL := disc.AuthorizeURL + "?redirect_uri=" + url.QueryEscape(redirectURL) + "&state=" + url.QueryEscape(state)
+	authURL, err := buildAuthURL(disc.AuthorizeURL, redirectURL, state)
+	if err != nil {
+		return nil, err
+	}
 	if len(disc.Providers) > 0 {
 		fmt.Printf("Opening browser to sign in (%s)…\n", strings.Join(disc.Providers, ", "))
 	}
 	if err := opts.OpenBrowser(authURL); err != nil {
 		return nil, fmt.Errorf("open browser: %w", err)
 	}
+
+	// Bound the wait so an unattended `wt login` whose callback never arrives
+	// fails cleanly instead of blocking forever. Derived from the passed ctx so
+	// Ctrl-C still cancels immediately.
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 
 	var code string
 	select {
@@ -118,10 +129,27 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 	return d, nil
 }
 
-// exchangeCLIToken posts the one-time code to the server's token endpoint.
+// buildAuthURL adds the loopback redirect_uri and CSRF state to the server's
+// authorize URL. It parses the base so an authorize_url that already carries a
+// query is preserved rather than clobbered.
+func buildAuthURL(authorizeURL, redirectURL, state string) (string, error) {
+	u, err := url.Parse(authorizeURL)
+	if err != nil {
+		return "", fmt.Errorf("parse authorize_url: %w", err)
+	}
+	q := u.Query()
+	q.Set("redirect_uri", redirectURL)
+	q.Set("state", state)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// exchangeCLIToken posts the one-time code to the server's token endpoint. The
+// token exchange is the most failure-prone step (expired/reused code, state
+// mismatch), so a non-2xx surfaces the server's own error message.
 func exchangeCLIToken(ctx context.Context, client *http.Client, tokenURL, code, state string) (*LoginResult, error) {
 	body, _ := json.Marshal(map[string]string{"code": code, "state": state})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -131,15 +159,21 @@ func exchangeCLIToken(ctx context.Context, client *http.Client, tokenURL, code, 
 		return nil, fmt.Errorf("exchange code: %w", err)
 	}
 	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, &ClientError{Status: resp.StatusCode, Msg: "exchange code"}
+		msg := strings.TrimSpace(string(data))
+		var e map[string]string
+		if json.Unmarshal(data, &e) == nil && e["error"] != "" {
+			msg = e["error"]
+		}
+		return nil, &ClientError{Status: resp.StatusCode, Msg: msg}
 	}
 	var r struct {
 		Token     string `json:"token"`
 		ActorID   string `json:"actor_id"`
 		ExpiresAt string `json:"expires_at"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, fmt.Errorf("decode token response: %w", err)
 	}
 	return &LoginResult{Token: r.Token, ActorID: r.ActorID, ExpiresAt: r.ExpiresAt}, nil
