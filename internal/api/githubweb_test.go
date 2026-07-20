@@ -14,6 +14,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
+	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 	"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"
 )
@@ -258,6 +259,31 @@ func TestGitHubCallbackNonMemberForbidden(t *testing.T) {
 		if c.Name == sessionCookieName && c.Value != "" {
 			t.Fatal("no session cookie expected for a non-member")
 		}
+	}
+}
+
+func TestLoginTarget(t *testing.T) {
+	both := &server{oidc: &oidc.Verifier{}, gh: &githubauth.Client{}}
+	if got := both.loginTarget("/x"); !strings.HasPrefix(got, "/auth/choose") {
+		t.Fatalf("both: %s", got)
+	}
+	ghOnly := &server{gh: &githubauth.Client{}}
+	if got := ghOnly.loginTarget("/x"); !strings.HasPrefix(got, "/auth/github/login") {
+		t.Fatalf("gh only: %s", got)
+	}
+	kcOnly := &server{oidc: &oidc.Verifier{}}
+	if got := kcOnly.loginTarget("/x"); !strings.HasPrefix(got, "/auth/login") {
+		t.Fatalf("kc only: %s", got)
+	}
+}
+
+func TestAuthChooseRendersBothLinks(t *testing.T) {
+	s := &server{oidc: &oidc.Verifier{}, gh: &githubauth.Client{}}
+	rr := httptest.NewRecorder()
+	s.authChoose(rr, httptest.NewRequest("GET", "/auth/choose?next=/board", nil))
+	body := rr.Body.String()
+	if !strings.Contains(body, "/auth/github/login") || !strings.Contains(body, "/auth/login") {
+		t.Fatalf("chooser missing a provider link: %s", body)
 	}
 }
 

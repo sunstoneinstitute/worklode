@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,32 @@ import (
 // /auth/callback so both providers coexist.
 func (s *server) githubCallbackURL() string {
 	return strings.TrimRight(s.cfg.PublicURL, "/") + "/auth/github/callback"
+}
+
+// loginTarget returns where webAuth sends unauthenticated users, given which
+// providers are configured. With both, it points at the chooser page.
+func (s *server) loginTarget(next string) string {
+	q := "?next=" + url.QueryEscape(next)
+	switch {
+	case s.oidc != nil && s.gh != nil:
+		return "/auth/choose" + q
+	case s.gh != nil:
+		return "/auth/github/login" + q
+	default:
+		return "/auth/login" + q
+	}
+}
+
+// authChoose renders a minimal provider chooser when both Keycloak and GitHub
+// are enabled. next is passed through to whichever provider the user picks.
+func (s *server) authChoose(w http.ResponseWriter, r *http.Request) {
+	next := safeNext(r.URL.Query().Get("next"))
+	q := "?next=" + url.QueryEscape(next)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>Sign in</title>`+
+		`<h1>Sign in to work-tracker</h1>`+
+		`<p><a href="/auth/github/login%s">Sign in with GitHub</a></p>`+
+		`<p><a href="/auth/login%s">Sign in with Keycloak</a></p>`, q, q)
 }
 
 // provisionGitHubActor enforces the org-derived user role and upserts the

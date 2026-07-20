@@ -1,7 +1,9 @@
 // oidcweb.go gates the read-only web UI behind Keycloak when OIDC is enabled:
-//   - webAuth wraps each web page and 302s to /auth/login when the session
-//     cookie is absent/invalid. It is a passthrough when OIDC is unconfigured
-//     (the UI stays open, as in v1).
+//   - webAuth wraps each web page and, when unauthenticated, 302s to
+//     loginTarget (see githubweb.go), which picks /auth/login, the GitHub
+//     chooser, or /auth/github/login depending on which providers are
+//     configured. It is a passthrough only when neither provider is
+//     configured (the UI stays open, as in v1).
 //   - GET /auth/login starts an auth-code + PKCE flow: it sets a signed
 //     oauth-state cookie and redirects to Keycloak's authorize URL.
 //   - GET /auth/callback redeems the code, verifies the ID token, provisions
@@ -16,7 +18,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"golang.org/x/oauth2"
@@ -50,12 +51,12 @@ func (s *server) callbackURL() string {
 	return strings.TrimRight(s.cfg.PublicURL, "/") + "/auth/callback"
 }
 
-// webAuth wraps a web page handler with session-cookie enforcement. When OIDC
-// is disabled it is a passthrough. Unauthenticated requests 302 to /auth/login
-// with the current path preserved in ?next.
+// webAuth wraps a web page handler with session-cookie enforcement. It is a
+// passthrough only when both OIDC and GitHub are disabled. Unauthenticated
+// requests 302 to loginTarget with the current path preserved in ?next.
 func (s *server) webAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.oidc == nil {
+		if s.oidc == nil && s.gh == nil {
 			next(w, r)
 			return
 		}
@@ -65,7 +66,7 @@ func (s *server) webAuth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-		http.Redirect(w, r, "/auth/login?next="+url.QueryEscape(r.URL.Path), http.StatusFound)
+		http.Redirect(w, r, s.loginTarget(r.URL.Path), http.StatusFound)
 	}
 }
 

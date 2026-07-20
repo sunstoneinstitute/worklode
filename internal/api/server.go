@@ -182,6 +182,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/callback", s.authCallback)
 	mux.HandleFunc("GET /auth/github/login", s.githubLogin)
 	mux.HandleFunc("GET /auth/github/callback", s.githubCallback)
+	mux.HandleFunc("GET /auth/choose", s.authChoose)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
