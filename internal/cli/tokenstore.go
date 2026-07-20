@@ -9,6 +9,9 @@ import "github.com/zalando/go-keyring"
 // keychainService is the keychain "service" all wt tokens live under.
 const keychainService = "work-tracker"
 
+// ErrTokenNotFound is returned by Get/Delete when no token exists for a server.
+var ErrTokenNotFound = keyring.ErrNotFound
+
 // TokenStore reads and writes the bearer token for a given server URL.
 type TokenStore interface {
 	Get(server string) (string, error)
