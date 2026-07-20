@@ -72,6 +72,9 @@ type server struct {
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
 
+	// cliCodes holds pending one-time codes for the server-mediated CLI login.
+	cliCodes *cliCodeStore
+
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
@@ -103,6 +106,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 		tmplTask:    parseWebTemplates("task.html"),
 		tmplProject: parseWebTemplates("project.html"),
 	}
+	s.cliCodes = newCLICodeStore(st.Now)
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
@@ -194,6 +198,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	// Both 404 when OIDC is unconfigured (s.oidc == nil).
 	mux.HandleFunc("GET /auth/oidc/config", s.oidcConfig)
 	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
+
+	// Provider-neutral, server-mediated CLI login (see cliauth.go).
+	mux.HandleFunc("GET /.well-known/wt-login", s.wellKnownLogin)
+	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
+	mux.HandleFunc("POST /auth/cli/token", s.cliToken)
 
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))

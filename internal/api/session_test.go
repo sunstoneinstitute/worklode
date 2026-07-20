@@ -86,3 +86,23 @@ func TestSafeNext(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIIntentRoundTrip(t *testing.T) {
+	now := time.Unix(2000, 0)
+	secret := "s3cr3t"
+	want := cliIntent{Redirect: "http://localhost:54321/", State: "abc", Exp: now.Add(cliCodeTTL).Unix()}
+	val := signCLIIntent(secret, want)
+
+	got, ok := verifyCLIIntent(secret, val, now)
+	if !ok || got.Redirect != want.Redirect || got.State != want.State {
+		t.Fatalf("verify = %+v,%v; want %+v", got, ok, want)
+	}
+	// Tampered value fails.
+	if _, ok := verifyCLIIntent(secret, val+"x", now); ok {
+		t.Fatal("tampered intent should not verify")
+	}
+	// Expired fails.
+	if _, ok := verifyCLIIntent(secret, val, now.Add(2*cliCodeTTL)); ok {
+		t.Fatal("expired intent should not verify")
+	}
+}

@@ -22,6 +22,7 @@ import (
 const (
 	sessionCookieName = "wt_session"
 	oauthCookieName   = "wt_oauth"
+	cliCookieName     = "wt_cli"
 	sessionLifetime   = 12 * time.Hour
 	oauthStateMaxAge  = 10 * time.Minute
 )
@@ -117,4 +118,34 @@ func verifyOAuthState(secret, value string, now time.Time) (oauthState, bool) {
 		return oauthState{}, false
 	}
 	return st, true
+}
+
+// cliIntent is the payload of the short-lived cookie set at /auth/cli/login. It
+// carries the loopback redirect target and CSRF state across the web-login
+// redirect chain, so finishLogin knows to hand a one-time code back to the CLI
+// rather than set a browser session.
+type cliIntent struct {
+	Redirect string `json:"r"`
+	State    string `json:"s"`
+	Exp      int64  `json:"e"`
+}
+
+func signCLIIntent(secret string, ci cliIntent) string {
+	payload, _ := json.Marshal(ci)
+	return signPayload(secret, payload)
+}
+
+func verifyCLIIntent(secret, value string, now time.Time) (cliIntent, bool) {
+	payload, ok := verifyPayload(secret, value)
+	if !ok {
+		return cliIntent{}, false
+	}
+	var ci cliIntent
+	if err := json.Unmarshal(payload, &ci); err != nil {
+		return cliIntent{}, false
+	}
+	if now.Unix() >= ci.Exp {
+		return cliIntent{}, false
+	}
+	return ci, true
 }
