@@ -63,8 +63,11 @@ type Token struct {
 	Expiry       time.Time
 }
 
-// Exchange redeems an authorization code for a user-to-server token.
+// Exchange redeems an authorization code for a user-to-server token. It routes
+// the token-endpoint request through httpClient (with its timeout) so a hung
+// GitHub token endpoint cannot block the login callback indefinitely.
 func (c *Client) Exchange(ctx context.Context, redirectURL, code string) (*Token, error) {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	tok, err := c.oauthConfig(redirectURL).Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("github code exchange: %w", err)

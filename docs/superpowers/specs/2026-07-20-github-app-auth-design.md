@@ -78,7 +78,11 @@ New GitHub-specific routes are added; the existing `/auth/login` and
 `/auth/callback` Keycloak routes are untouched. The login page offers both
 options ("Sign in with Keycloak" / "Sign in with GitHub").
 
-1. `GET /auth/github/login` redirects to GitHub's authorize endpoint (state + PKCE).
+1. `GET /auth/github/login` redirects to GitHub's authorize endpoint with a
+   signed-state CSRF token. No PKCE: this is a confidential client (the App
+   client secret stays server-side and the code exchange is server-to-server),
+   and GitHub's App user-authorization web flow does not honor PKCE — the signed
+   state is the CSRF protection.
 2. `GET /auth/github/callback` exchanges the code for a **user-to-server access
    token** (+ refresh token).
 3. Fetch identity: `GET /user` → numeric `id`, `login`, name.
