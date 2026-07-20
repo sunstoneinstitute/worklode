@@ -42,7 +42,7 @@ jobs:
           fetch-depth: 0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -50,7 +50,7 @@ jobs:
 
       - name: Promote image to hzprod
         id: promote
-        uses: sunstoneinstitute/actions/promote-images@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
+        uses: sunstoneinstitute/actions/promote-images@c6ecfa19244e61ccb8b318521eebffacdccb3ce4 # v1
         with:
           from-env: dev
           to-env: prod
