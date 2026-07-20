@@ -1,4 +1,4 @@
-name: Deploy to hzdev
+name: Deploy to dev
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: deploy-hzdev
+  group: deploy-dev
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
       - name: Update deploy branch
         uses: sunstoneinstitute/actions/update-deploy-branch@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
         with:
-          env: hzdev
+          env: dev
           images: work-tracker
           registry: ghcr.io/sunstoneinstitute
           tag: ${{ needs.build-image.outputs.image-tag }}
@@ -41,7 +41,7 @@ jobs:
           {
             echo "### Deployment Summary"
             echo ""
-            echo "**Environment:** hzdev"
+            echo "**Environment:** dev (hzdev cluster)"
             echo "**Image tag:** \`${{ needs.build-image.outputs.image-tag }}\`"
-            echo "**Deploy branch:** \`last-deploy/hzdev\`"
+            echo "**Deploy branch:** \`last-deploy/dev\`"
           } >> "$GITHUB_STEP_SUMMARY"

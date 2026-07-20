@@ -1,10 +1,10 @@
-name: Promote to hzprod
+name: Promote to prod
 
-# Promotes the hzdev image to hzprod without rebuilding. Uses crane to copy
-# the byte-identical image within the same ghcr.io/sunstoneinstitute
-# namespace, tagged with a computed semver version.
+# Promotes the dev (hzdev cluster) image to prod (hzprod cluster) without
+# rebuilding. Uses crane to copy the byte-identical image within the same
+# ghcr.io/sunstoneinstitute namespace, tagged with a computed semver version.
 #
-# hzprod has no cluster yet, so nothing consumes last-deploy/hzprod until
+# hzprod has no cluster yet, so nothing consumes last-deploy/prod until
 # one is provisioned and Flux is wired to watch it — this workflow just
 # keeps the branch and image ready for when that happens.
 #
@@ -23,7 +23,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: promote-hzprod
+  group: promote-prod
   cancel-in-progress: false
 
 env:
@@ -52,8 +52,8 @@ jobs:
         id: promote
         uses: sunstoneinstitute/actions/promote-images@a3e86ec36df392ef4364a00266d0e54e713bef40 # v1
         with:
-          from-env: hzdev
-          to-env: hzprod
+          from-env: dev
+          to-env: prod
           images: work-tracker
           from-registry: ${{ env.REGISTRY }}
           to-registry: ${{ env.REGISTRY }}
@@ -65,7 +65,7 @@ jobs:
           {
             echo "### Production Promotion Summary"
             echo ""
-            echo "**hzdev tag promoted:** \`${{ steps.promote.outputs.from-tag }}\`"
-            echo "**hzprod version:** \`${{ steps.promote.outputs.to-tag }}\`"
-            echo "**Deploy branch updated:** \`last-deploy/hzprod\`"
+            echo "**dev tag promoted:** \`${{ steps.promote.outputs.from-tag }}\`"
+            echo "**prod version:** \`${{ steps.promote.outputs.to-tag }}\`"
+            echo "**Deploy branch updated:** \`last-deploy/prod\`"
           } >> "$GITHUB_STEP_SUMMARY"
