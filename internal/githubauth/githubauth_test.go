@@ -101,11 +101,33 @@ func TestRolesMemberNotAdmin(t *testing.T) {
 	}
 }
 
-func TestRolesNonMember(t *testing.T) {
-	srv := fakeGitHub(t, membershipHandler(t, "", "404", ""))
+func TestRolesNonMemberSkipsTeamCall(t *testing.T) {
+	var teamCalled bool
+	srv := fakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/teams/") {
+			teamCalled = true
+			t.Errorf("team membership should not be queried for a non-member")
+		}
+		http.NotFound(w, r)
+	})
 	c := newTestClient(srv.URL)
-	roles, _ := c.Roles(context.Background(), "tok", "octocat")
+	roles, err := c.Roles(context.Background(), "tok", "octocat")
+	if err != nil {
+		t.Fatalf("roles: %v", err)
+	}
+	if roles.User || teamCalled {
+		t.Fatalf("want no roles and no team call, got roles=%+v teamCalled=%v", roles, teamCalled)
+	}
+}
+
+func TestRolesOrgMembershipPending(t *testing.T) {
+	srv := fakeGitHub(t, membershipHandler(t, "pending", "404", ""))
+	c := newTestClient(srv.URL)
+	roles, err := c.Roles(context.Background(), "tok", "octocat")
+	if err != nil {
+		t.Fatalf("roles: %v", err)
+	}
 	if roles.User {
-		t.Fatalf("non-member must not have user role, got %+v", roles)
+		t.Fatalf("pending org membership must not grant user, got %+v", roles)
 	}
 }

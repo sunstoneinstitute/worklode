@@ -79,16 +79,20 @@ type Identity struct {
 	Name  string `json:"name"`
 }
 
+// httpClient carries an explicit timeout so a hung GitHub API call cannot block
+// the login callback forever, matching the codebase convention.
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
 // get performs an authenticated GET and decodes JSON into out. It returns the
 // HTTP status so callers can distinguish 404 (not a member) from real errors.
 func (c *Client) get(ctx context.Context, token, path string, out any) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.APIBase+path, nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("build github request for %s: %w", path, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("github GET %s: %w", path, err)
 	}
