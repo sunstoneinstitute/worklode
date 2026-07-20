@@ -15,8 +15,9 @@ read-only web UI. See `docs/spec.md` for the full design.
 ## Quickstart
 
 Start the server with Docker Compose. `WT_BOOTSTRAP_TOKEN` creates the
-initial admin actor the first time the database is empty — pick any
-non-guessable string:
+initial admin actor the first time the database is empty. It must match
+`^wt_[0-9a-f]{40}$` — the exact form `wt_$(openssl rand -hex 20)` mints.
+A bare `openssl rand -hex 20` (no `wt_` prefix) fails validation at startup:
 
 ```bash
 mkdir -p data
