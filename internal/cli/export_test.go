@@ -24,3 +24,11 @@ func ReadRawConfigForTest() (string, error) {
 	b, err := os.ReadFile(path)
 	return string(b), err
 }
+
+// SwapTokenStoreForTest replaces the package-level token store and returns a
+// function that restores the original (pass to t.Cleanup).
+func SwapTokenStoreForTest(ts TokenStore) func() {
+	prev := tokenStore
+	tokenStore = ts
+	return func() { tokenStore = prev }
+}

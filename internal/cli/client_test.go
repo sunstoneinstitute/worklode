@@ -579,12 +579,66 @@ func TestSaveConfigWritesKeychainAndStripsLegacyToken(t *testing.T) {
 	}
 }
 
+// failingTokenStore is a TokenStore whose Set always errors, for the
+// keychain-write-failure path.
+type failingTokenStore struct{ err error }
+
+func (f failingTokenStore) Get(string) (string, error) { return "", f.err }
+func (f failingTokenStore) Set(string, string) error   { return f.err }
+func (f failingTokenStore) Delete(string) error        { return f.err }
+
+func TestSaveConfigKeychainWriteFailureLeavesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WT_SERVER", "")
+
+	sentinel := errors.New("keychain unavailable")
+	restore := cli.SwapTokenStoreForTest(failingTokenStore{err: sentinel})
+	t.Cleanup(restore)
+
+	err := cli.SaveConfig(cli.Config{ServerURL: "https://wt.example.com", Token: "wt_new"})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("SaveConfig err = %v; want the keychain error", err)
+	}
+	// No config file must have been written when the keychain write failed.
+	if _, err := cli.ReadRawConfigForTest(); !os.IsNotExist(err) {
+		t.Fatalf("config file exists after keychain failure (err = %v); want none", err)
+	}
+}
+
+func TestLoadConfigServerOverrideDropsLegacyFileToken(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_TOKEN", "")
+
+	// Legacy cleartext file: server + token both point at the file server.
+	if err := cli.WriteRawConfigForTest("server = \"https://file.example.com\"\ntoken = \"wt_filetoken\"\n"); err != nil {
+		t.Fatalf("seed legacy: %v", err)
+	}
+	// WT_SERVER overrides to a different server with no keychain entry.
+	t.Setenv("WT_SERVER", "https://other.example.com")
+
+	cfg, err := cli.LoadConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ServerURL != "https://other.example.com" {
+		t.Fatalf("server = %q; want the override", cfg.ServerURL)
+	}
+	if cfg.Token != "" {
+		t.Fatalf("token = %q; the file's legacy token must not leak onto the overridden server", cfg.Token)
+	}
+}
+
 func TestLoadConfigMalformed(t *testing.T) {
 	for name, content := range map[string]string{
 		"missing equals": "not a key value pair\n",
 		"unknown key":    "bogus = \"value\"\n",
 	} {
 		t.Run(name, func(t *testing.T) {
+			keyring.MockInit()
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
 			t.Setenv("WT_SERVER", "")

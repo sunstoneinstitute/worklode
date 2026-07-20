@@ -73,6 +73,12 @@ func LoadConfig() (Config, error) {
 
 	// Server + explicit env token first.
 	if v := os.Getenv("WT_SERVER"); v != "" {
+		// A legacy cleartext token in the file belongs to the file's server; if
+		// WT_SERVER points elsewhere, it must not leak onto the new server. Only
+		// a keychain hit (or WT_TOKEN) may supply a token for the override.
+		if v != cfg.ServerURL {
+			cfg.Token = ""
+		}
 		cfg.ServerURL = v
 	}
 	if v := os.Getenv("WT_TOKEN"); v != "" {

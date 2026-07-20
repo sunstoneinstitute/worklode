@@ -3,9 +3,11 @@ package cli_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +59,38 @@ func TestRunLoginServerMediated(t *testing.T) {
 	}
 	if res.Token != "wt_minted" || res.ActorID != "github:7" {
 		t.Fatalf("result = %+v; want wt_minted/github:7", res)
+	}
+}
+
+func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"authorize_url": "http://" + r.Host + "/auth/cli/login",
+			"token_url":     "http://" + r.Host + "/auth/cli/token",
+		})
+	})
+	mux.HandleFunc("/auth/cli/token", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"invalid or expired code"}`, http.StatusBadRequest)
+	})
+	wt := httptest.NewServer(mux)
+	defer wt.Close()
+
+	openBrowser := func(authURL string) error {
+		u, _ := url.Parse(authURL)
+		q := u.Query()
+		cb := q.Get("redirect_uri") + "?code=STALE&state=" + url.QueryEscape(q.Get("state"))
+		go http.Get(cb)
+		return nil
+	}
+
+	_, err := cli.RunLogin(context.Background(), cli.LoginOptions{Server: wt.URL, OpenBrowser: openBrowser})
+	if err == nil || !strings.Contains(err.Error(), "invalid or expired code") {
+		t.Fatalf("err = %v; want it to carry the server's error message", err)
+	}
+	var ce *cli.ClientError
+	if !errors.As(err, &ce) || ce.Status != http.StatusBadRequest {
+		t.Fatalf("err = %v (%T); want *cli.ClientError with status 400", err, err)
 	}
 }
 
