@@ -200,6 +200,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
+	mux.HandleFunc("GET /.well-known/wt-login", s.wellKnownLogin)
 	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
 	mux.HandleFunc("POST /auth/cli/token", s.cliToken)
 

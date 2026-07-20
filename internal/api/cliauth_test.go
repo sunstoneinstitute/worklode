@@ -172,3 +172,34 @@ func TestCLITokenHappyPath(t *testing.T) {
 		t.Fatalf("bad token response: %v", m)
 	}
 }
+
+func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
+	s := &server{} // no oidc, no gh
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	rr := httptest.NewRecorder()
+	s.wellKnownLogin(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d; want 404", rr.Code)
+	}
+}
+
+func TestWellKnownLoginReportsProviders(t *testing.T) {
+	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wt.example.com"}}
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	rr := httptest.NewRecorder()
+	s.wellKnownLogin(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200", rr.Code)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if m["authorize_url"] != "https://wt.example.com/auth/cli/login" || m["token_url"] != "https://wt.example.com/auth/cli/token" {
+		t.Fatalf("urls wrong: %v", m)
+	}
+	provs, _ := m["providers"].([]any)
+	if len(provs) != 1 || provs[0] != "github" {
+		t.Fatalf("providers = %v; want [github]", m["providers"])
+	}
+}
