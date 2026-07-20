@@ -9,6 +9,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"sync"
@@ -166,4 +167,36 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
+}
+
+type cliTokenRequest struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+// cliToken handles POST /auth/cli/token: redeem a one-time code (proof the
+// browser login completed) for a 30-day wt_ token.
+func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
+	var req cliTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	actorID, ok := s.cliCodes.redeem(req.Code, req.State)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid or expired code")
+		return
+	}
+	exp := s.now().Add(ssoTokenTTL)
+	token, err := s.st.CreateToken(r.Context(), actorID, "wt login", &exp)
+	if err != nil {
+		s.log.Error("mint cli token", "err", err)
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"token":      token,
+		"actor_id":   actorID,
+		"expires_at": exp.UTC().Format(time.RFC3339),
+	})
 }

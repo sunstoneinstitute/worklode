@@ -201,6 +201,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
 	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
+	mux.HandleFunc("POST /auth/cli/token", s.cliToken)
 
 	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
 	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
