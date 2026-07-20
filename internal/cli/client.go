@@ -20,18 +20,24 @@ import (
 //
 // It is loaded from ~/.config/wt/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
-// assignment per line, blank lines and lines starting with '#' ignored.
-// Recognized keys are "server" and "token", e.g.:
+// assignment per line, blank lines and lines starting with '#' ignored. The
+// only recognized key is "server", e.g.:
 //
 //	server = "https://wt.example.com"
-//	token = "wt_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 //
-// The environment variables WT_SERVER and WT_TOKEN, when set, override the
-// file.
+// The token lives in the OS keychain, not the file. A legacy "token" key is
+// still accepted on read (as a deprecated fallback) so older config files keep
+// working until the next SaveConfig migrates the token into the keychain.
+//
+// The environment variables WT_SERVER and WT_TOKEN, when set, override both the
+// file and the keychain.
 type Config struct {
 	ServerURL string
 	Token     string
 }
+
+// tokenStore is the keychain the client reads/writes tokens through.
+var tokenStore TokenStore = NewKeychainTokenStore()
 
 // configPath returns ~/.config/wt/config.toml.
 func configPath() (string, error) {
@@ -65,11 +71,20 @@ func LoadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("read %s: %w", path, err)
 	}
 
+	// Server + explicit env token first.
 	if v := os.Getenv("WT_SERVER"); v != "" {
 		cfg.ServerURL = v
 	}
 	if v := os.Getenv("WT_TOKEN"); v != "" {
 		cfg.Token = v
+		return cfg, nil
+	}
+	// Keychain wins over any legacy cleartext token in the file. The legacy
+	// cfg.Token from the file remains the fallback when the keychain has nothing.
+	if cfg.ServerURL != "" {
+		if tok, err := tokenStore.Get(cfg.ServerURL); err == nil && tok != "" {
+			cfg.Token = tok
+		}
 	}
 	return cfg, nil
 }
@@ -101,11 +116,22 @@ func parseConfig(data string) (Config, error) {
 	return cfg, nil
 }
 
-// SaveConfig writes cfg to ~/.config/wt/config.toml in the same minimal format
-// LoadConfig reads, creating the directory (0700) and file (0600) if needed. It
-// rewrites the whole file with just the server and token keys — the only two
-// keys the format defines — so any hand-added comments are not preserved.
+// SaveConfig stores the token in the OS keychain and writes only the server URL
+// to ~/.config/wt/config.toml. Any legacy cleartext token in the file is
+// dropped. Returns an error (without writing the file) if the keychain write
+// fails, so the token is never silently left only in cleartext.
 func SaveConfig(cfg Config) error {
+	if cfg.Token != "" {
+		if err := tokenStore.Set(cfg.ServerURL, cfg.Token); err != nil {
+			return fmt.Errorf("store token in keychain (set WT_TOKEN to use a token without the keychain): %w", err)
+		}
+	}
+	return SaveServerOnly(cfg.ServerURL)
+}
+
+// SaveServerOnly writes just the server key to config.toml (0600), creating the
+// directory (0700) as needed. It never writes the token.
+func SaveServerOnly(server string) error {
 	path, err := configPath()
 	if err != nil {
 		return err
@@ -114,8 +140,7 @@ func SaveConfig(cfg Config) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "server = %q\n", cfg.ServerURL)
-	fmt.Fprintf(&b, "token = %q\n", cfg.Token)
+	fmt.Fprintf(&b, "server = %q\n", server)
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
