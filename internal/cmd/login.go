@@ -16,10 +16,10 @@ func newLoginCmd() *cobra.Command {
 	var server string
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate via SSO and store a work-tracker token",
-		Long: "Log in through the org Keycloak (auth-code + PKCE, browser + localhost\n" +
-			"callback) and store the resulting 30-day token in ~/.config/wt/config.toml.\n" +
-			"Re-run after it expires — there are no refresh tokens.",
+		Short: "Authenticate to work-tracker and store a token",
+		Long: "Open a browser to sign in with whatever identity provider the server\n" +
+			"is configured for (Keycloak, GitHub, or a choice of both), then store the\n" +
+			"resulting 30-day token in the OS keychain. Re-run after it expires.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := cli.LoadConfig()
