@@ -58,3 +58,54 @@ func TestFetchIdentity(t *testing.T) {
 		t.Fatalf("bad identity: %+v", id)
 	}
 }
+
+func membershipHandler(t *testing.T, orgState, teamStatus string, teamState string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/user/memberships/orgs/sunstoneinstitute":
+			if orgState == "" {
+				http.NotFound(w, r)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"state": orgState})
+		case r.URL.Path == "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+			if teamStatus == "404" {
+				http.NotFound(w, r)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"state": teamState})
+		default:
+			http.NotFound(w, r)
+		}
+	}
+}
+
+func TestRolesMember(t *testing.T) {
+	srv := fakeGitHub(t, membershipHandler(t, "active", "200", "active"))
+	c := newTestClient(srv.URL)
+	roles, err := c.Roles(context.Background(), "tok", "octocat")
+	if err != nil {
+		t.Fatalf("roles: %v", err)
+	}
+	if !roles.User || !roles.Admin {
+		t.Fatalf("want user+admin, got %+v", roles)
+	}
+}
+
+func TestRolesMemberNotAdmin(t *testing.T) {
+	srv := fakeGitHub(t, membershipHandler(t, "active", "404", ""))
+	c := newTestClient(srv.URL)
+	roles, _ := c.Roles(context.Background(), "tok", "octocat")
+	if !roles.User || roles.Admin {
+		t.Fatalf("want user, not admin, got %+v", roles)
+	}
+}
+
+func TestRolesNonMember(t *testing.T) {
+	srv := fakeGitHub(t, membershipHandler(t, "", "404", ""))
+	c := newTestClient(srv.URL)
+	roles, _ := c.Roles(context.Background(), "tok", "octocat")
+	if roles.User {
+		t.Fatalf("non-member must not have user role, got %+v", roles)
+	}
+}

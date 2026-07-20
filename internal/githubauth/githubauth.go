@@ -113,3 +113,49 @@ func (c *Client) FetchIdentity(ctx context.Context, token string) (*Identity, er
 	}
 	return &id, nil
 }
+
+// Roles is the authorization derived from GitHub membership.
+type Roles struct {
+	User  bool // active member of Org
+	Admin bool // active member of AdminTeam
+}
+
+type membershipResp struct {
+	State string `json:"state"`
+}
+
+// activeMembership returns true when the endpoint returns 200 with state
+// "active". A 404 means "not a member" and yields false, nil.
+func (c *Client) activeMembership(ctx context.Context, token, path string) (bool, error) {
+	var m membershipResp
+	code, err := c.get(ctx, token, path, &m)
+	if err != nil {
+		return false, err
+	}
+	switch code {
+	case http.StatusOK:
+		return m.State == "active", nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, fmt.Errorf("github GET %s: status %d", path, code)
+	}
+}
+
+// Roles evaluates org membership (→ User) and admin-team membership (→ Admin)
+// for login, using the user-to-server token.
+func (c *Client) Roles(ctx context.Context, token, login string) (Roles, error) {
+	user, err := c.activeMembership(ctx, token, "/user/memberships/orgs/"+c.Org)
+	if err != nil {
+		return Roles{}, err
+	}
+	if !user {
+		return Roles{}, nil
+	}
+	admin, err := c.activeMembership(ctx, token,
+		fmt.Sprintf("/orgs/%s/teams/%s/memberships/%s", c.Org, c.AdminTeam, login))
+	if err != nil {
+		return Roles{}, err
+	}
+	return Roles{User: true, Admin: admin}, nil
+}
