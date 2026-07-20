@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/go-keyring"
+
 	"github.com/sunstoneinstitute/work-tracker/internal/api"
 	"github.com/sunstoneinstitute/work-tracker/internal/cli"
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
@@ -426,6 +428,7 @@ func TestClientErrorRendering(t *testing.T) {
 }
 
 func TestLoadConfigFileAndEnvOverride(t *testing.T) {
+	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("WT_SERVER", "")
@@ -461,6 +464,7 @@ func TestLoadConfigFileAndEnvOverride(t *testing.T) {
 }
 
 func TestLoadConfigMissingFile(t *testing.T) {
+	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("WT_SERVER", "https://env-only.example.com")
@@ -476,6 +480,7 @@ func TestLoadConfigMissingFile(t *testing.T) {
 }
 
 func TestSaveConfigRoundTrip(t *testing.T) {
+	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("WT_SERVER", "")
@@ -486,13 +491,91 @@ func TestSaveConfigRoundTrip(t *testing.T) {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	// LoadConfig reads it back (env overrides cleared above so only the file matters).
+	// The file holds only the server; the token no longer touches disk.
+	raw, err := cli.ReadRawConfigForTest()
+	if err != nil {
+		t.Fatalf("read raw config: %v", err)
+	}
+	if strings.Contains(raw, "token") {
+		t.Fatalf("config.toml still has a token line:\n%s", raw)
+	}
+	// The token round-trips through the (mock) keychain.
+	if got, _ := cli.NewKeychainTokenStore().Get(want.ServerURL); got != want.Token {
+		t.Fatalf("keychain token = %q; want %q", got, want.Token)
+	}
+
+	// LoadConfig reconstructs the full config from file + keychain.
 	got, err := cli.LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	if got.ServerURL != want.ServerURL || got.Token != want.Token {
 		t.Fatalf("round-trip = %+v, want %+v", got, want)
+	}
+}
+
+func TestLoadConfigResolvesTokenFromKeychain(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WT_SERVER", "")
+
+	// config.toml has only server.
+	if err := cli.SaveServerOnly("https://wt.example.com"); err != nil {
+		t.Fatalf("save server: %v", err)
+	}
+	if err := cli.NewKeychainTokenStore().Set("https://wt.example.com", "wt_kc"); err != nil {
+		t.Fatalf("seed keychain: %v", err)
+	}
+	cfg, err := cli.LoadConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Token != "wt_kc" {
+		t.Fatalf("token = %q; want wt_kc", cfg.Token)
+	}
+}
+
+func TestEnvTokenBeatsKeychain(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_SERVER", "https://wt.example.com")
+	t.Setenv("WT_TOKEN", "wt_env")
+	_ = cli.NewKeychainTokenStore().Set("https://wt.example.com", "wt_kc")
+
+	cfg, err := cli.LoadConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Token != "wt_env" {
+		t.Fatalf("token = %q; want wt_env (env overrides keychain)", cfg.Token)
+	}
+}
+
+func TestSaveConfigWritesKeychainAndStripsLegacyToken(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WT_SERVER", "")
+
+	// Simulate a legacy cleartext config.toml with a token line.
+	if err := cli.WriteRawConfigForTest("server = \"https://wt.example.com\"\ntoken = \"wt_old\"\n"); err != nil {
+		t.Fatalf("seed legacy: %v", err)
+	}
+	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wt.example.com", Token: "wt_new"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	// Keychain now holds the new token.
+	if got, _ := cli.NewKeychainTokenStore().Get("https://wt.example.com"); got != "wt_new" {
+		t.Fatalf("keychain token = %q; want wt_new", got)
+	}
+	// File no longer contains a token line.
+	raw, _ := cli.ReadRawConfigForTest()
+	if strings.Contains(raw, "token") {
+		t.Fatalf("config.toml still has a token line:\n%s", raw)
 	}
 }
 
