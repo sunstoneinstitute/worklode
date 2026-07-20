@@ -9,7 +9,6 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -102,8 +101,16 @@ func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, ne
 			// Clear both transient cookies.
 			http.SetCookie(w, &http.Cookie{Name: cliCookieName, Path: "/auth/", MaxAge: -1})
 			http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
-			u := ci.Redirect + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(ci.State)
-			http.Redirect(w, r, u, http.StatusFound)
+			// Build the loopback URL with net/url so an eventual path or query in
+			// redirect_uri is preserved rather than corrupted by concatenation.
+			u, err := url.Parse(ci.Redirect)
+			if err != nil {
+				s.log.Error("parse cli redirect", "err", err)
+				webErr(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			u.RawQuery = url.Values{"code": {code}, "state": {ci.State}}.Encode()
+			http.Redirect(w, r, u.String(), http.StatusFound)
 			return
 		}
 	}
@@ -179,8 +186,8 @@ type cliTokenRequest struct {
 // browser login completed) for a 30-day wt_ token.
 func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	var req cliTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid request body")
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	actorID, ok := s.cliCodes.redeem(req.Code, req.State)
@@ -195,7 +202,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusCreated, map[string]string{
 		"token":      token,
 		"actor_id":   actorID,
 		"expires_at": exp.UTC().Format(time.RFC3339),
