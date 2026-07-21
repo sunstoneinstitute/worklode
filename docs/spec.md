@@ -73,7 +73,7 @@ not built in v1.
 
 ## Ingestion
 
-- **GitHub** (`POST /hooks/github`): HMAC-verified App webhooks. Handlers: issues → inbox; pull_request → `pull_requests` + task correlation; pull_request_review → `reviews`; workflow_run / check_suite → `ci_runs`; release / registry_package → `artifacts`. Task auto-transitions: PR opened → `in_review`; PR merged → stays `in_review` until `wt task done` or deployment-verified (v1: merged PR moves task to `done` unless the task's project opts into deploy-gating; opt-in flag on project).
+- **GitHub** (`POST /hooks/github`): HMAC-verified App webhooks. Handlers: issues → inbox; pull_request → `pull_requests` + task correlation; pull_request_review → `reviews`; workflow_run / check_suite → `ci_runs`; release / registry_package → `artifacts`. Task auto-transitions: PR opened → `in_review`; PR merged → stays `in_review` until `wl task done` or deployment-verified (v1: merged PR moves task to `done` unless the task's project opts into deploy-gating; opt-in flag on project).
 - **Flux** (`POST /hooks/flux`): HMAC-verified notification-controller alerts. Kustomization/HelmRelease reconcile events → `deployments` status; failures also recorded as `runtime_events` (`flux_failure`).
 - **Watcher** (`wl watch`): watches pods across namespaces; on CrashLoopBackOff / OOMKilled, resolves the owning workload's image, posts to `POST /api/v1/runtime-events` with bearer token.
 - Idempotency: every webhook delivery id / watcher event key is unique per source in `events`; replays are no-ops.
