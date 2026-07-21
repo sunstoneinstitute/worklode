@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: work-tracker-data
-  namespace: work-tracker
+  name: worklode-data
+  namespace: worklode
 spec:
   accessModes:
     - ReadWriteOnce

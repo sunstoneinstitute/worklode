@@ -2,15 +2,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: work-tracker
-  namespace: work-tracker
+  name: worklode
+  namespace: worklode
   labels:
-    app: work-tracker
+    app: worklode
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: work-tracker
+      app: worklode
   strategy:
     # SQLite on a ReadWriteOnce volume has one writer. Recreate avoids two
     # pods racing for the same volume/file lock during a rollout.
@@ -18,7 +18,7 @@ spec:
   template:
     metadata:
       labels:
-        app: work-tracker
+        app: worklode
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
@@ -33,8 +33,8 @@ spec:
         - name: ghcr-pull-secret
       initContainers:
         - name: migrate
-          image: ghcr.io/sunstoneinstitute/work-tracker:latest
-          command: ["/wl", "migrate", "--db", "/data/wl.db", "--migrations-path", "/migrations"]
+          image: ghcr.io/sunstoneinstitute/worklode:latest
+          command: ["/wt", "migrate", "--db", "/data/wt.db", "--migrations-path", "/migrations"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -55,8 +55,8 @@ spec:
               mountPath: /migrations
               readOnly: true
       containers:
-        - name: work-tracker
-          image: ghcr.io/sunstoneinstitute/work-tracker:latest
+        - name: worklode
+          image: ghcr.io/sunstoneinstitute/worklode:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -69,9 +69,9 @@ spec:
               containerPort: 8080
           envFrom:
             - configMapRef:
-                name: work-tracker-config
+                name: worklode-config
             - secretRef:
-                name: work-tracker-secrets
+                name: worklode-secrets
           resources:
             requests:
               memory: "128Mi"
@@ -101,7 +101,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: work-tracker-data
+            claimName: worklode-data
         - name: migrations
           configMap:
-            name: work-tracker-migrations
+            name: worklode-migrations

@@ -1,43 +1,42 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: work-tracker
+namespace: worklode
 resources:
   - ../../base
-  - externalsecret-work-tracker-secrets.yaml
+  - externalsecret-worklode-secrets.yaml
 patches:
   - patch: |-
       apiVersion: v1
       kind: Namespace
       metadata:
-        name: work-tracker
+        name: worklode
         labels:
           sunstone.institute/ghcr-pull: "true"
   - target:
       kind: ConfigMap
-      name: work-tracker-config
+      name: worklode-config
     patch: |-
       - op: replace
         path: /data/WL_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
       - op: add
-        path: /data/WL_PUBLIC_URL
-        value: "https://work-tracker.hzdev.sunstoneinstitute.ai"
+        path: /data/WT_PUBLIC_URL
+        value: "https://worklode.hzdev.sunstoneinstitute.ai"
       - op: add
         path: /data/WL_GITHUB_ORG
         value: "sunstoneinstitute"
   - target:
       kind: Ingress
-      name: work-tracker-ingress
+      name: worklode-ingress
     patch: |-
       - op: replace
         path: /spec/tls/0/hosts
         value:
-          - work-tracker.hzdev.sunstoneinstitute.ai
+          - worklode.hzdev.sunstoneinstitute.ai
       - op: replace
         path: /spec/rules/0/host
-        value: work-tracker.hzdev.sunstoneinstitute.ai
+        value: worklode.hzdev.sunstoneinstitute.ai
 images:
-  - name: ghcr.io/sunstoneinstitute/work-tracker
-    newTag: 73921ad
-    newName: ghcr.io/sunstoneinstitute/work-tracker
+  - name: ghcr.io/sunstoneinstitute/worklode
+    newTag: latest
