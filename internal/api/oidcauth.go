@@ -1,4 +1,4 @@
-// oidcauth.go implements the unauthenticated SSO endpoints that mint wt_
+// oidcauth.go implements the unauthenticated SSO endpoints that mint wl_
 // tokens from a Keycloak identity: GET /auth/oidc/config (so the CLI can
 // discover the issuer/client without its own config) and POST /auth/oidc/token
 // (validate an ID token, auto-provision the human actor, mint a 30-day token).
@@ -17,8 +17,8 @@ import (
 	"github.com/sunstoneinstitute/work-tracker/internal/store"
 )
 
-// ssoTokenTTL is the lifetime of a wt_ token minted from an SSO login. No
-// refresh tokens — re-run `wt login` after expiry.
+// ssoTokenTTL is the lifetime of a wl_ token minted from an SSO login. No
+// refresh tokens — re-run `wl login` after expiry.
 const ssoTokenTTL = 30 * 24 * time.Hour
 
 // errNoUserRole is returned by provisionActor when the ID token's groups lack
@@ -72,7 +72,7 @@ type oidcTokenRequest struct {
 }
 
 // oidcTokenExchange handles POST /auth/oidc/token: verify a Keycloak ID token
-// and mint a wt_ token for the corresponding human actor. 404 when OIDC is
+// and mint a wl_ token for the corresponding human actor. 404 when OIDC is
 // unconfigured; 401 for an invalid/expired/wrong-audience or malformed token;
 // 403 when the "user" role is absent.
 func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {

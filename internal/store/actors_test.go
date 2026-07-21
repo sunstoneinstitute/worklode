@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var tokenPattern = regexp.MustCompile(`^wt_[0-9a-f]{40}$`)
+var tokenPattern = regexp.MustCompile(`^wl_[0-9a-f]{40}$`)
 
 func TestCreateAndGetActor(t *testing.T) {
 	s := openTestStore(t)
@@ -70,7 +70,7 @@ func TestCreateTokenRoundTrip(t *testing.T) {
 		if hash == plaintext {
 			t.Fatalf("token_hash stores the plaintext token verbatim")
 		}
-		if strings.Contains(hash, "wt_") {
+		if strings.Contains(hash, "wl_") {
 			t.Fatalf("token_hash %q looks like it contains the plaintext prefix", hash)
 		}
 	}
@@ -104,7 +104,7 @@ func TestAuthenticateUnknownToken(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	_, err := s.Authenticate(ctx, "wt_"+strings.Repeat("0", 40))
+	_, err := s.Authenticate(ctx, "wl_"+strings.Repeat("0", 40))
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Authenticate: want ErrNotFound, got %v", err)
 	}

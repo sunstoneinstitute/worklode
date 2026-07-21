@@ -1,6 +1,6 @@
 // cliauth.go implements the server-mediated CLI login flow: a discovery
 // endpoint, a login-start endpoint that stamps a loopback redirect target into
-// a signed cookie, and a token endpoint that redeems a one-time code for a wt_
+// a signed cookie, and a token endpoint that redeems a one-time code for a wl_
 // token. The one-time code is minted in finishLogin (shared by both web
 // callbacks) once the actor is provisioned. See
 // docs/plans/2026-07-20-provider-neutral-cli-login-design.md.
@@ -183,7 +183,7 @@ type cliTokenRequest struct {
 }
 
 // cliToken handles POST /auth/cli/token: redeem a one-time code (proof the
-// browser login completed) for a 30-day wt_ token.
+// browser login completed) for a 30-day wl_ token.
 func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	var req cliTokenRequest
 	if err := readJSON(w, r, &req); err != nil {
@@ -196,7 +196,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	exp := s.now().Add(ssoTokenTTL)
-	token, err := s.st.CreateToken(r.Context(), actorID, "wt login", &exp)
+	token, err := s.st.CreateToken(r.Context(), actorID, "wl login", &exp)
 	if err != nil {
 		s.log.Error("mint cli token", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
@@ -209,7 +209,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// wellKnownLogin handles GET /.well-known/wt-login: tells the CLI where to start
+// wellKnownLogin handles GET /.well-known/wl-login: tells the CLI where to start
 // the login and which providers are available. 404 when the server has no
 // interactive provider configured.
 func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {

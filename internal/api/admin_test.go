@@ -104,8 +104,8 @@ func TestCreateActorAndTokenLifecycle(t *testing.T) {
 		t.Fatalf("create token status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	tok, _ := decodeMap(t, rr)["token"].(string)
-	if !strings.HasPrefix(tok, "wt_") {
-		t.Fatalf("token = %q, want wt_ prefix", tok)
+	if !strings.HasPrefix(tok, "wl_") {
+		t.Fatalf("token = %q, want wl_ prefix", tok)
 	}
 
 	rr = doReq(t, h, "POST", "/api/v1/actors/nosuch/tokens", token, map[string]any{})
