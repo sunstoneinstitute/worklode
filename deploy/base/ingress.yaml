@@ -2,8 +2,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: work-tracker-ingress
-  namespace: work-tracker
+  name: worklode-ingress
+  namespace: worklode
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -12,16 +12,16 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - work-tracker.example.com
-      secretName: work-tracker-tls
+        - worklode.example.com
+      secretName: worklode-tls
   rules:
-    - host: work-tracker.example.com
+    - host: worklode.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: work-tracker
+                name: worklode
                 port:
                   number: 80

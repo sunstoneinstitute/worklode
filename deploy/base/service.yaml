@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: work-tracker
-  namespace: work-tracker
+  name: worklode
+  namespace: worklode
 spec:
   selector:
-    app: work-tracker
+    app: worklode
   ports:
     - name: http
       port: 80
