@@ -1,4 +1,4 @@
-// Package api implements the wt HTTP server: bearer-token auth, JSON task
+// Package api implements the wl HTTP server: bearer-token auth, JSON task
 // endpoints, and Prometheus metrics. Handlers stay thin — parse/validate,
 // call store functions through RecordEvent, map errors, respond.
 package api
@@ -32,30 +32,30 @@ import (
 // Config carries server configuration. The webhook secrets and cluster/env
 // map are consumed by the /hooks/github and /hooks/flux endpoints.
 type Config struct {
-	BootstrapToken      string            // WT_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret string            // WT_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret   string            // WT_FLUX_WEBHOOK_SECRET
-	ClusterEnvMap       map[string]string // WT_CLUSTER_ENV_MAP: cluster name -> environment
+	BootstrapToken      string            // WL_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
+	GitHubWebhookSecret string            // WL_GITHUB_WEBHOOK_SECRET
+	FluxWebhookSecret   string            // WL_FLUX_WEBHOOK_SECRET
+	ClusterEnvMap       map[string]string // WL_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
 	// external base URL used to build the web callback redirect URI.
-	OIDCIssuer    string // WT_OIDC_ISSUER
-	OIDCClientID  string // WT_OIDC_CLIENT_ID
-	PublicURL     string // WT_PUBLIC_URL
-	SessionSecret string // WT_SESSION_SECRET
+	OIDCIssuer    string // WL_OIDC_ISSUER
+	OIDCClientID  string // WL_OIDC_CLIENT_ID
+	PublicURL     string // WL_PUBLIC_URL
+	SessionSecret string // WL_SESSION_SECRET
 
 	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
 	// are both set; independent of the OIDC feature. PublicURL and
 	// SessionSecret (above) are shared and required when this is enabled.
-	GitHubClientID     string // WT_GITHUB_APP_CLIENT_ID
-	GitHubClientSecret string // WT_GITHUB_APP_CLIENT_SECRET
-	GitHubOrg          string // WT_GITHUB_ORG
-	// GitHubAdminTeam (WT_GITHUB_ADMIN_TEAM) is optional; when empty no user is
+	GitHubClientID     string // WL_GITHUB_APP_CLIENT_ID
+	GitHubClientSecret string // WL_GITHUB_APP_CLIENT_SECRET
+	GitHubOrg          string // WL_GITHUB_ORG
+	// GitHubAdminTeam (WL_GITHUB_ADMIN_TEAM) is optional; when empty no user is
 	// granted admin via GitHub (the team-membership check simply 404s).
 	GitHubAdminTeam string
-	TokenEncKey     string // WT_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	TokenEncKey     string // WL_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 }
 
 type server struct {
@@ -91,12 +91,12 @@ type server struct {
 func validatePublicURL(publicURL string) error {
 	u, err := url.Parse(publicURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("WT_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wt.example.com)")
+		return fmt.Errorf("WL_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wl.example.com)")
 	}
 	return nil
 }
 
-// NewServer builds the wt HTTP handler. If cfg.BootstrapToken is set and the
+// NewServer builds the wl HTTP handler. If cfg.BootstrapToken is set and the
 // actors table is empty, it creates the initial admin actor (idempotent). A
 // bootstrap failure is fatal: the server must not start half-configured.
 func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
@@ -110,10 +110,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WT_SESSION_SECRET is required when OIDC is enabled")
+			return nil, fmt.Errorf("WL_SESSION_SECRET is required when OIDC is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("WT_PUBLIC_URL is required when OIDC is enabled")
+			return nil, fmt.Errorf("WL_PUBLIC_URL is required when OIDC is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
 			return nil, err
@@ -129,20 +129,20 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WT_SESSION_SECRET is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_SESSION_SECRET is required when GitHub auth is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("WT_PUBLIC_URL is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_PUBLIC_URL is required when GitHub auth is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
 			return nil, err
 		}
 		if cfg.GitHubOrg == "" {
-			return nil, fmt.Errorf("WT_GITHUB_ORG is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_GITHUB_ORG is required when GitHub auth is enabled")
 		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
 		if err != nil || len(key) != 32 {
-			return nil, fmt.Errorf("WT_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+			return nil, fmt.Errorf("WL_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
 		}
 		tc, err := tokencrypt.New(key)
 		if err != nil {
@@ -161,11 +161,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector())
 	s.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "wt_http_requests_total",
+		Name: "http_requests_total",
 		Help: "HTTP requests served, by method, route pattern, and status code.",
 	}, []string{"method", "route", "code"})
 	s.durations = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "wt_http_request_duration_seconds",
+		Name:    "http_request_duration_seconds",
 		Help:    "HTTP request duration, by method and route pattern.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "route"})

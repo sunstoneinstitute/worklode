@@ -36,7 +36,7 @@ type fluxEnv struct {
 
 func newFluxEnv(t *testing.T) *fluxEnv {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "wt.db")
+	dbPath := filepath.Join(t.TempDir(), "wl.db")
 	st, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -461,7 +461,7 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 	})
 
 	t.Run("unmapped cluster defaults to dev", func(t *testing.T) {
-		dbPath := filepath.Join(t.TempDir(), "wt.db")
+		dbPath := filepath.Join(t.TempDir(), "wl.db")
 		st, err := store.Open(dbPath)
 		if err != nil {
 			t.Fatalf("open store: %v", err)

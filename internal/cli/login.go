@@ -114,7 +114,7 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wlLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WT_TOKEN")
+		return wlLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}

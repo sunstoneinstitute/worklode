@@ -19,7 +19,7 @@ import (
 // newTestStore opens a fresh store in a temp dir.
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -222,10 +222,10 @@ func TestMetricsEndpoint(t *testing.T) {
 		t.Fatalf("metrics status = %d, want 200", rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "wt_http_requests_total") {
-		t.Fatalf("metrics body missing wt_http_requests_total:\n%s", body)
+	if !strings.Contains(body, "http_requests_total") {
+		t.Fatalf("metrics body missing http_requests_total:\n%s", body)
 	}
-	if !strings.Contains(body, "wt_http_request_duration_seconds") {
-		t.Fatalf("metrics body missing wt_http_request_duration_seconds")
+	if !strings.Contains(body, "http_request_duration_seconds") {
+		t.Fatalf("metrics body missing http_request_duration_seconds")
 	}
 }

@@ -1,4 +1,4 @@
-// Package cli implements the wt command-line client: configuration, the HTTP
+// Package cli implements the wl command-line client: configuration, the HTTP
 // client for the work-tracker API, and table rendering for its commands.
 package cli
 
@@ -18,18 +18,18 @@ import (
 
 // Config holds the client's server URL and bearer token.
 //
-// It is loaded from ~/.config/wt/config.toml, a minimal hand-rolled format
+// It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
 // only recognized key is "server", e.g.:
 //
-//	server = "https://wt.example.com"
+//	server = "https://wl.example.com"
 //
 // The token lives in the OS keychain, not the file. A legacy "token" key is
 // still accepted on read (as a deprecated fallback) so older config files keep
 // working until the next SaveConfig migrates the token into the keychain.
 //
-// The environment variables WT_SERVER and WT_TOKEN, when set, override both the
+// The environment variables WL_SERVER and WL_TOKEN, when set, override both the
 // file and the keychain.
 type Config struct {
 	ServerURL string
@@ -39,17 +39,17 @@ type Config struct {
 // tokenStore is the keychain the client reads/writes tokens through.
 var tokenStore TokenStore = NewKeychainTokenStore()
 
-// configPath returns ~/.config/wt/config.toml.
+// configPath returns ~/.config/worklode/config.toml.
 func configPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("find home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "wt", "config.toml"), nil
+	return filepath.Join(home, ".config", "worklode", "config.toml"), nil
 }
 
 // LoadConfig reads the config file (a missing file is not an error — its
-// fields are just left empty) and applies the WT_SERVER/WT_TOKEN environment
+// fields are just left empty) and applies the WL_SERVER/WL_TOKEN environment
 // overrides on top.
 func LoadConfig() (Config, error) {
 	var cfg Config
@@ -72,16 +72,16 @@ func LoadConfig() (Config, error) {
 	}
 
 	// Server + explicit env token first.
-	if v := os.Getenv("WT_SERVER"); v != "" {
+	if v := os.Getenv("WL_SERVER"); v != "" {
 		// A legacy cleartext token in the file belongs to the file's server; if
-		// WT_SERVER points elsewhere, it must not leak onto the new server. Only
-		// a keychain hit (or WT_TOKEN) may supply a token for the override.
+		// WL_SERVER points elsewhere, it must not leak onto the new server. Only
+		// a keychain hit (or WL_TOKEN) may supply a token for the override.
 		if v != cfg.ServerURL {
 			cfg.Token = ""
 		}
 		cfg.ServerURL = v
 	}
-	if v := os.Getenv("WT_TOKEN"); v != "" {
+	if v := os.Getenv("WL_TOKEN"); v != "" {
 		cfg.Token = v
 		return cfg, nil
 	}
@@ -123,13 +123,13 @@ func parseConfig(data string) (Config, error) {
 }
 
 // SaveConfig stores the token in the OS keychain and writes only the server URL
-// to ~/.config/wt/config.toml. Any legacy cleartext token in the file is
+// to ~/.config/worklode/config.toml. Any legacy cleartext token in the file is
 // dropped. Returns an error (without writing the file) if the keychain write
 // fails, so the token is never silently left only in cleartext.
 func SaveConfig(cfg Config) error {
 	if cfg.Token != "" {
 		if err := tokenStore.Set(cfg.ServerURL, cfg.Token); err != nil {
-			return fmt.Errorf("store token in keychain (set WT_TOKEN to use a token without the keychain): %w", err)
+			return fmt.Errorf("store token in keychain (set WL_TOKEN to use a token without the keychain): %w", err)
 		}
 	}
 	return SaveServerOnly(cfg.ServerURL)

@@ -26,7 +26,7 @@ var wantTables = []string{
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "wt.db"))
+	s, err := Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestMigrateAppliesMigrations(t *testing.T) {
 }
 
 func TestMigrateIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wt.db")
+	path := filepath.Join(t.TempDir(), "wl.db")
 
 	s1, err := Open(path)
 	if err != nil {

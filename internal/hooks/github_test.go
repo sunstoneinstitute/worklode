@@ -34,7 +34,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "wt.db")
+	dbPath := filepath.Join(t.TempDir(), "wl.db")
 	st, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
