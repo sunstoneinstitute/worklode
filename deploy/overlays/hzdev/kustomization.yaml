@@ -18,13 +18,13 @@ patches:
       name: work-tracker-config
     patch: |-
       - op: replace
-        path: /data/WT_CLUSTER_ENV_MAP
+        path: /data/WL_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
       - op: add
-        path: /data/WT_PUBLIC_URL
+        path: /data/WL_PUBLIC_URL
         value: "https://work-tracker.hzdev.sunstoneinstitute.ai"
       - op: add
-        path: /data/WT_GITHUB_ORG
+        path: /data/WL_GITHUB_ORG
         value: "sunstoneinstitute"
   - target:
       kind: Ingress

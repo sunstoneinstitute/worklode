@@ -13,7 +13,7 @@ import (
 // entry is not an error.
 func runLogout(server string) error {
 	if server == "" {
-		return errors.New(`server URL not set: pass --server or set WT_SERVER`)
+		return errors.New(`server URL not set: pass --server or set WL_SERVER`)
 	}
 	err := cli.NewKeychainTokenStore().Delete(server)
 	if err != nil && !errors.Is(err, cli.ErrTokenNotFound) {
@@ -43,7 +43,7 @@ func newLogoutCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WT_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 

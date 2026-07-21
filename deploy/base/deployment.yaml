@@ -34,7 +34,7 @@ spec:
       initContainers:
         - name: migrate
           image: ghcr.io/sunstoneinstitute/work-tracker:latest
-          command: ["/wt", "migrate", "--db", "/data/wt.db", "--migrations-path", "/migrations"]
+          command: ["/wl", "migrate", "--db", "/data/wl.db", "--migrations-path", "/migrations"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -6,14 +6,14 @@
 # "endpoint" at it — this is written against Hetzner Object Storage, not AWS.
 # Set these before starting the litestream service:
 #
-#   LITESTREAM_BUCKET            e.g. sunstone-wt-backups
+#   LITESTREAM_BUCKET            e.g. sunstone-wl-backups
 #   LITESTREAM_ENDPOINT          e.g. https://fsn1.your-objectstorage.com
 #   LITESTREAM_ACCESS_KEY_ID     passed as an env var to the container, not read here
 #   LITESTREAM_SECRET_ACCESS_KEY passed as an env var to the container, not read here
 dbs:
-  - path: /data/wt.db
+  - path: /data/wl.db
     replicas:
       - type: s3
         bucket: ${LITESTREAM_BUCKET}
-        path: wt
+        path: wl
         endpoint: ${LITESTREAM_ENDPOINT}

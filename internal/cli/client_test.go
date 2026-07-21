@@ -27,7 +27,7 @@ import (
 // token).
 func newTestServer(t *testing.T) (*store.Store, *cli.Client, string) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -431,10 +431,10 @@ func TestLoadConfigFileAndEnvOverride(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "")
-	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
 
-	cfgDir := filepath.Join(dir, ".config", "wt")
+	cfgDir := filepath.Join(dir, ".config", "worklode")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
@@ -452,8 +452,8 @@ func TestLoadConfigFileAndEnvOverride(t *testing.T) {
 		t.Fatalf("LoadConfig (file only) = %+v", cfg)
 	}
 
-	t.Setenv("WT_SERVER", "https://env.example.com")
-	t.Setenv("WT_TOKEN", "wl_envtoken")
+	t.Setenv("WL_SERVER", "https://env.example.com")
+	t.Setenv("WL_TOKEN", "wl_envtoken")
 	cfg, err = cli.LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig (env override): %v", err)
@@ -467,8 +467,8 @@ func TestLoadConfigMissingFile(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "https://env-only.example.com")
-	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WL_SERVER", "https://env-only.example.com")
+	t.Setenv("WL_TOKEN", "")
 
 	cfg, err := cli.LoadConfig()
 	if err != nil {
@@ -483,10 +483,10 @@ func TestSaveConfigRoundTrip(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "")
-	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
 
-	want := cli.Config{ServerURL: "https://wt.example.com", Token: "wl_" + strings.Repeat("ab", 20)}
+	want := cli.Config{ServerURL: "https://wl.example.com", Token: "wl_" + strings.Repeat("ab", 20)}
 	if err := cli.SaveConfig(want); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
@@ -518,14 +518,14 @@ func TestLoadConfigResolvesTokenFromKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
 
 	// config.toml has only server.
-	if err := cli.SaveServerOnly("https://wt.example.com"); err != nil {
+	if err := cli.SaveServerOnly("https://wl.example.com"); err != nil {
 		t.Fatalf("save server: %v", err)
 	}
-	if err := cli.NewKeychainTokenStore().Set("https://wt.example.com", "wl_kc"); err != nil {
+	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_kc"); err != nil {
 		t.Fatalf("seed keychain: %v", err)
 	}
 	cfg, err := cli.LoadConfig()
@@ -541,9 +541,9 @@ func TestEnvTokenBeatsKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "https://wt.example.com")
-	t.Setenv("WT_TOKEN", "wl_env")
-	_ = cli.NewKeychainTokenStore().Set("https://wt.example.com", "wl_kc")
+	t.Setenv("WL_SERVER", "https://wl.example.com")
+	t.Setenv("WL_TOKEN", "wl_env")
+	_ = cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_kc")
 
 	cfg, err := cli.LoadConfig()
 	if err != nil {
@@ -558,18 +558,18 @@ func TestSaveConfigWritesKeychainAndStripsLegacyToken(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
 
 	// Simulate a legacy cleartext config.toml with a token line.
-	if err := cli.WriteRawConfigForTest("server = \"https://wt.example.com\"\ntoken = \"wl_old\"\n"); err != nil {
+	if err := cli.WriteRawConfigForTest("server = \"https://wl.example.com\"\ntoken = \"wl_old\"\n"); err != nil {
 		t.Fatalf("seed legacy: %v", err)
 	}
-	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wt.example.com", Token: "wl_new"}); err != nil {
+	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wl.example.com", Token: "wl_new"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Keychain now holds the new token.
-	if got, _ := cli.NewKeychainTokenStore().Get("https://wt.example.com"); got != "wl_new" {
+	if got, _ := cli.NewKeychainTokenStore().Get("https://wl.example.com"); got != "wl_new" {
 		t.Fatalf("keychain token = %q; want wl_new", got)
 	}
 	// File no longer contains a token line.
@@ -590,14 +590,14 @@ func (f failingTokenStore) Delete(string) error        { return f.err }
 func TestSaveConfigKeychainWriteFailureLeavesNoFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
 
 	sentinel := errors.New("keychain unavailable")
 	restore := cli.SwapTokenStoreForTest(failingTokenStore{err: sentinel})
 	t.Cleanup(restore)
 
-	err := cli.SaveConfig(cli.Config{ServerURL: "https://wt.example.com", Token: "wl_new"})
+	err := cli.SaveConfig(cli.Config{ServerURL: "https://wl.example.com", Token: "wl_new"})
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("SaveConfig err = %v; want the keychain error", err)
 	}
@@ -611,14 +611,14 @@ func TestLoadConfigServerOverrideDropsLegacyFileToken(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WL_TOKEN", "")
 
 	// Legacy cleartext file: server + token both point at the file server.
 	if err := cli.WriteRawConfigForTest("server = \"https://file.example.com\"\ntoken = \"wl_filetoken\"\n"); err != nil {
 		t.Fatalf("seed legacy: %v", err)
 	}
-	// WT_SERVER overrides to a different server with no keychain entry.
-	t.Setenv("WT_SERVER", "https://other.example.com")
+	// WL_SERVER overrides to a different server with no keychain entry.
+	t.Setenv("WL_SERVER", "https://other.example.com")
 
 	cfg, err := cli.LoadConfig()
 	if err != nil {
@@ -641,9 +641,9 @@ func TestLoadConfigMalformed(t *testing.T) {
 			keyring.MockInit()
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
-			t.Setenv("WT_SERVER", "")
-			t.Setenv("WT_TOKEN", "")
-			cfgDir := filepath.Join(dir, ".config", "wt")
+			t.Setenv("WL_SERVER", "")
+			t.Setenv("WL_TOKEN", "")
+			cfgDir := filepath.Join(dir, ".config", "worklode")
 			if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 				t.Fatalf("mkdir config dir: %v", err)
 			}

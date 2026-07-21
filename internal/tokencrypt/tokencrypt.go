@@ -1,5 +1,5 @@
 // Package tokencrypt seals and opens small secrets (GitHub user tokens) with
-// AES-256-GCM under a single 32-byte key supplied via WT_TOKEN_ENC_KEY. The
+// AES-256-GCM under a single 32-byte key supplied via WL_TOKEN_ENC_KEY. The
 // nonce is random per Seal and prepended to the ciphertext.
 package tokencrypt
 

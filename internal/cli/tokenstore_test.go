@@ -12,7 +12,7 @@ func TestKeychainTokenStore(t *testing.T) {
 	keyring.MockInit() // in-memory backend; no real keychain touched
 
 	ts := cli.NewKeychainTokenStore()
-	const server = "https://wt.example.com"
+	const server = "https://wl.example.com"
 
 	if _, err := ts.Get(server); err == nil {
 		t.Fatal("expected miss before set")

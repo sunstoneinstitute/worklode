@@ -125,7 +125,7 @@ func TestFullChain(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Real stack: store on a temp dir, full server, real HTTP listener.
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

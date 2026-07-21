@@ -5,23 +5,23 @@
 work-tracker is Sunstone Institute's org-wide work tracker: one authoritative
 view of planned and in-progress work across all repos, replacing a
 hand-maintained `TASKS.md` + GitHub issue sync. It ships as a single Go
-binary, `wt`, backed by a SQLite database, with an append-only event log
+binary, `wl`, backed by a SQLite database, with an append-only event log
 giving full provenance for every state change. Work arrives from three
 sources — a GitHub App (issues, PRs, reviews, CI, releases), a Flux
 notification-controller webhook (deployments), and a Kubernetes pod watcher
-(crash loops, OOM kills) — and is read back through the `wt` CLI or a
+(crash loops, OOM kills) — and is read back through the `wl` CLI or a
 read-only web UI. See `docs/spec.md` for the full design.
 
 ## Quickstart
 
-Start the server with Docker Compose. `WT_BOOTSTRAP_TOKEN` creates the
+Start the server with Docker Compose. `WL_BOOTSTRAP_TOKEN` creates the
 initial admin actor the first time the database is empty. It must match
-`^wt_[0-9a-f]{40}$` — the exact form `wt_$(openssl rand -hex 20)` mints.
-A bare `openssl rand -hex 20` (no `wt_` prefix) fails validation at startup:
+`^wl_[0-9a-f]{40}$` — the exact form `wl_$(openssl rand -hex 20)` mints.
+A bare `openssl rand -hex 20` (no `wl_` prefix) fails validation at startup:
 
 ```bash
 mkdir -p data
-export WT_BOOTSTRAP_TOKEN=wt_$(openssl rand -hex 20)
+export WL_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)
 docker compose up -d
 ```
 
@@ -29,37 +29,37 @@ On native Linux Docker (not Docker Desktop) the container runs as uid 65532,
 so run `sudo chown 65532:65532 data` (or use a named volume) before first
 start.
 
-Install the `wt` CLI:
+Install the `wl` CLI:
 
 ```bash
-go install ./cmd/wt    # or: go build -o ~/bin/wt ./cmd/wt
+go install ./cmd/wl    # or: go build -o ~/bin/wl ./cmd/wl
 ```
 
-Point the CLI at it, either via `~/.config/wt/config.toml`:
+Point the CLI at it, either via `~/.config/worklode/config.toml`:
 
 ```toml
 server = "http://localhost:8080"
-token = "wt_..."   # the WT_BOOTSTRAP_TOKEN value
+token = "wl_..."   # the WL_BOOTSTRAP_TOKEN value
 ```
 
 or via environment variables:
 
 ```bash
-export WT_SERVER=http://localhost:8080
-export WT_TOKEN=$WT_BOOTSTRAP_TOKEN
+export WL_SERVER=http://localhost:8080
+export WL_TOKEN=$WL_BOOTSTRAP_TOKEN
 ```
 
 Then create a project, map a repo to it, add a task, and claim it:
 
 ```bash
-wt project add sunstone-web --name "Sunstone Web"
-wt project add-repo sunstone-web sunstoneinstitute/sunstone-web
-wt task add --project sunstone-web --title "Fix the footer link"
-wt task claim <task-id>
+wl project add sunstone-web --name "Sunstone Web"
+wl project add-repo sunstone-web sunstoneinstitute/sunstone-web
+wl task add --project sunstone-web --title "Fix the footer link"
+wl task claim <task-id>
 ```
 
 Managing projects, actors, and tokens requires an admin actor; the
-bootstrap actor is admin, and `wt actor add --admin` creates more.
+bootstrap actor is admin, and `wl actor add --admin` creates more.
 
 The read-only web UI is at http://localhost:8080/.
 
@@ -78,7 +78,7 @@ Create a GitHub App on the `sunstoneinstitute` org and install it org-wide
 (all repos). Configure:
 
 - **Webhook URL**: `https://<host>/hooks/github`
-- **Webhook secret**: a random string, set as `WT_GITHUB_WEBHOOK_SECRET` on
+- **Webhook secret**: a random string, set as `WL_GITHUB_WEBHOOK_SECRET` on
   the server
 - **Subscribe to events**: Issues, Pull requests, Pull request reviews,
   Workflow runs, Releases
@@ -117,7 +117,7 @@ metadata:
   name: work-tracker-hmac
   namespace: flux-system
 stringData:
-  hmac-key: <same value as WT_FLUX_WEBHOOK_SECRET>
+  hmac-key: <same value as WL_FLUX_WEBHOOK_SECRET>
 ---
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Alert
@@ -135,53 +135,53 @@ spec:
       name: "*"
 ```
 
-Set `WT_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
-`WT_CLUSTER_ENV_MAP` to map cluster names to environments, e.g.
-`WT_CLUSTER_ENV_MAP="prod-cluster=prod,staging-cluster=staging"`. A cluster
+Set `WL_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
+`WL_CLUSTER_ENV_MAP` to map cluster names to environments, e.g.
+`WL_CLUSTER_ENV_MAP="prod-cluster=prod,staging-cluster=staging"`. A cluster
 missing from the map falls back to the `dev` environment.
 
 ## SSO (optional)
 
-Human login via the org Keycloak is off unless both `WT_OIDC_ISSUER` and
-`WT_OIDC_CLIENT_ID` are set; unset behaves as before (tokens minted only by an
+Human login via the org Keycloak is off unless both `WL_OIDC_ISSUER` and
+`WL_OIDC_CLIENT_ID` are set; unset behaves as before (tokens minted only by an
 admin or the bootstrap token). When enabled:
 
 | Var | Meaning |
 |---|---|
-| `WT_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WT_OIDC_CLIENT_ID` | e.g. `work-tracker` |
-| `WT_PUBLIC_URL` | external base URL, for the web login callback |
-| `WT_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
+| `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
+| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_PUBLIC_URL` | external base URL, for the web login callback |
+| `WL_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
 
-Users then run `wt login` to obtain a 30-day `wt_` token from their SSO
+Users then run `wl login` to obtain a 30-day `wl_` token from their SSO
 identity. Agent/service tokens are unchanged.
 
 The web session cookie is `Secure`, so web login requires the server to be
-reached over HTTPS (or `localhost`); the `wt login` CLI flow is unaffected.
+reached over HTTPS (or `localhost`); the `wl login` CLI flow is unaffected.
 
 ## Cluster watcher
 
-`wt watch` runs a pod informer against one cluster and reports crash loops
+`wl watch` runs a pod informer against one cluster and reports crash loops
 and OOM kills to the server:
 
 ```bash
-wt watch --kubeconfig ~/.kube/config --cluster dev \
-  --server http://localhost:8080 --token $WT_TOKEN
+wl watch --kubeconfig ~/.kube/config --cluster dev \
+  --server http://localhost:8080 --token $WL_TOKEN
 ```
 
-`--server`/`--token` default to the `WT_SERVER`/`WT_TOKEN` environment
+`--server`/`--token` default to the `WL_SERVER`/`WL_TOKEN` environment
 variables, same as the CLI client. Omit `--kubeconfig` when running in-cluster
 (it falls back to the in-cluster config).
 
 ## Backups
 
 The `backup` Compose profile runs [litestream](https://litestream.io) to
-continuously replicate `data/wt.db` to S3-compatible object storage (Hetzner
+continuously replicate `data/wl.db` to S3-compatible object storage (Hetzner
 Object Storage, or any other S3-compatible provider — see the comments in
 `litestream.yml`):
 
 ```bash
-export LITESTREAM_BUCKET=sunstone-wt-backups
+export LITESTREAM_BUCKET=sunstone-wl-backups
 export LITESTREAM_ENDPOINT=https://fsn1.your-objectstorage.com
 export LITESTREAM_ACCESS_KEY_ID=...
 export LITESTREAM_SECRET_ACCESS_KEY=...
@@ -198,9 +198,9 @@ go test ./...
 
 Migrations live under `deploy/base/migrations/` and use
 [golang-migrate](https://github.com/golang-migrate/migrate). They are no
-longer embedded in the binary or applied automatically — `wt serve` expects
+longer embedded in the binary or applied automatically — `wl serve` expects
 the schema to already exist. Apply them explicitly with
-`wt migrate --db <path> --migrations-path deploy/base/migrations` (the
+`wl migrate --db <path> --migrations-path deploy/base/migrations` (the
 `docker-compose.yml` `migrate` service does this before `tracker` starts;
 in Kubernetes an initContainer does the same from a ConfigMap).
 Never edit a migration that has already shipped — add a new pair instead:

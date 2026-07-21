@@ -53,8 +53,8 @@ func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 	if u.Query().Get("state") == "" {
 		t.Fatalf("missing state in %q", loc)
 	}
-	if !hasCookie(rr, "wt_oauth") {
-		t.Fatal("no wt_oauth cookie set")
+	if !hasCookie(rr, "wl_oauth") {
+		t.Fatal("no wl_oauth cookie set")
 	}
 }
 
@@ -71,7 +71,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 
 	// Step 1: hit /auth/login to obtain the oauth-state cookie and the state param.
 	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
-	oauthCookie := cookieValue(login, "wt_oauth")
+	oauthCookie := cookieValue(login, "wl_oauth")
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
@@ -79,7 +79,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	// carrying the oauth-state cookie. The callback exchanges the code at the
 	// issuer's /token endpoint (which returns iss.TokenClaims as the id_token).
 	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
-	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	req.AddCookie(&http.Cookie{Name: "wl_oauth", Value: oauthCookie})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -89,14 +89,14 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	if got := rr.Header().Get("Location"); got != "/tasks/WL-1" {
 		t.Fatalf("callback Location = %q, want /tasks/WL-1", got)
 	}
-	if !hasCookie(rr, "wt_session") {
-		t.Fatal("no wt_session cookie set after callback")
+	if !hasCookie(rr, "wl_session") {
+		t.Fatal("no wl_session cookie set after callback")
 	}
 
 	// Step 3: the session cookie now lets a gated page through.
-	session := cookieValue(rr, "wt_session")
+	session := cookieValue(rr, "wl_session")
 	req2 := httptest.NewRequest("GET", "/", nil)
-	req2.AddCookie(&http.Cookie{Name: "wt_session", Value: session})
+	req2.AddCookie(&http.Cookie{Name: "wl_session", Value: session})
 	rr2 := httptest.NewRecorder()
 	h.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusOK {
@@ -108,7 +108,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 func TestWebTamperedSessionRedirects(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
 	req := httptest.NewRequest("GET", "/", nil)
-	req.AddCookie(&http.Cookie{Name: "wt_session", Value: "garbage.garbage"})
+	req.AddCookie(&http.Cookie{Name: "wl_session", Value: "garbage.garbage"})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusFound {
@@ -131,18 +131,18 @@ func TestAuthCallbackStateMismatch(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
 
 	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
-	oauthCookie := cookieValue(login, "wt_oauth")
+	oauthCookie := cookieValue(login, "wl_oauth")
 
 	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state=not-the-cookie-state", nil)
-	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	req.AddCookie(&http.Cookie{Name: "wl_oauth", Value: oauthCookie})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for state mismatch", rr.Code)
 	}
-	if hasCookie(rr, "wt_session") {
-		t.Fatal("wt_session set despite state mismatch")
+	if hasCookie(rr, "wl_session") {
+		t.Fatal("wl_session set despite state mismatch")
 	}
 }
 
@@ -155,7 +155,7 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 	st.SetNowFunc(func() time.Time { return base })
 
 	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
-	oauthCookie := cookieValue(login, "wt_oauth")
+	oauthCookie := cookieValue(login, "wl_oauth")
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
@@ -163,15 +163,15 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 	st.SetNowFunc(func() time.Time { return base.Add(11 * time.Minute) })
 
 	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
-	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	req.AddCookie(&http.Cookie{Name: "wl_oauth", Value: oauthCookie})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for expired state", rr.Code)
 	}
-	if hasCookie(rr, "wt_session") {
-		t.Fatal("wt_session set despite expired state")
+	if hasCookie(rr, "wl_session") {
+		t.Fatal("wl_session set despite expired state")
 	}
 }
 
