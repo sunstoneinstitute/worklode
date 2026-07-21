@@ -1,9 +1,9 @@
-# Lodespar v1 — architecture & spec map (umbrella)
+# Worklode v1 — architecture & spec map (umbrella)
 
 **Date:** 2026-07-21 · **Status:** spec · **Source:** graduated from the approved design
 record `../2026-07-21-work-tracker-platform-graph-design.md` (D1–D15; full rationale there).
 
-**Lodespar** (product; CLI `lode`) is Sunstone's platform work +
+**Worklode** (product; CLI `lode`) is Sunstone's platform work +
 architecture system — the successor scope of "work-tracker."
 
 **Thesis: development work as ambition reconciliation.** Intent is *asserted*; reality is
@@ -17,7 +17,7 @@ Visual model: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d
 ## Architecture in one screen
 
 **Two stores, authority split — no fact has two owners:**
-- **Execution backbone** — Lodespar · **Postgres**. Task state, leases (worktree-bound), provenance
+- **Execution backbone** — Worklode · **Postgres**. Task state, leases (worktree-bound), provenance
   events, and the `blocks`/`child_of` edges that gate the pickup loop. `claim` is a single ACID
   transaction. *("**Backbone**" = the load-bearing central store the rest of the system hangs off —
   the anatomical metaphor; used throughout the specs for this store.)*
@@ -38,7 +38,7 @@ observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are re
 ## v1 / v2 scope
 
 **v1:** Component-grained graph; DesignDoc (ADR/Spec/Plan) with `dct:hasPart` decomposition;
-Task/Issue/PR/Artifact/Deployment/Environment projected from what Lodespar already ingests;
+Task/Issue/PR/Artifact/Deployment/Environment projected from what Worklode already ingests;
 Deliverable as declared definition-of-done; `concern`/`focus`/atomic `claim --next`; drift +
 ready-frontier queries; the worktree-bound plugin.
 
@@ -58,14 +58,14 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **02 — Prioritization & pickup** | `concern` enum; `project.focus`; ranking; atomic `claim --next`; `--strict-focus`; `needs-decomposition` sizing. | 01 |
 | **03 — Knowledge graph** | `ls:` vocabulary (rdf-registry PR); IRI scheme; entity model (incl. Deliverable/Milestone); backbone→graph projection. | 01 |
 | **04 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 03 |
-| **05 — Lodespar plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-lodespar, authoring-design-as-graph, architectural-review). | 01, 02 |
+| **05 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 01, 02 |
 | **06 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
 
 ---
 
 ## Shared conventions (binding on all sub-specs)
 
-- **Naming:** product = Lodespar; CLI = `lode` (D13).
+- **Naming:** product = Worklode; CLI = `lode` (D13).
 - **Vocabulary (D4):** standards-first — `dct:requires`/`hasPart`/`replaces`, `foaf:Agent`,
   `prov:*`, `doap:Project`, SKOS for status/enums. **Mint `ls:` sparingly** — the full minted set
   is defined in **spec 03**. **No gtio.** The `ls:` ontology ships as a PR to **rdf-registry**.
@@ -96,7 +96,7 @@ D13 naming → 00 · D14 plugin → 05 · D15 task sizing → 02/05.
   expire (`dct:valid`). Spec 04's 4.1 violation query subtracts un-expired deviations
   (`observed − asserted − acknowledged`). Crit-reviewed and provenanced like any asserted edge —
   not a backbone allowlist.
-- **[03] RDF namespace → `ls:` / `/rdf/ls/`** (Lodespar), not `wt:`.
+- **[03] RDF namespace → `ls:` / `/rdf/ls/`** (Worklode), not `wt:`.
 - **[03] RDF-1.2 publishing → resolved.** rdf-registry now publishes 1.2 alongside 1.1 (1.1 as
   `/rdf/ls/ontology.ttl`, 1.2 as `/rdf/ls/ontology.1-2.ttl`), so partial-supersession triple-term
   annotations ship natively — no interim workaround, no rdf-registry #14 dependency.

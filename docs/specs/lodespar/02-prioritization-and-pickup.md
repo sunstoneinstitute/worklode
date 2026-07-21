@@ -6,7 +6,7 @@
 
 ## Purpose & scope
 
-This spec defines **what Lodespar picks next and why** — the task properties that carry
+This spec defines **what Worklode picks next and why** — the task properties that carry
 priority signal (`concern`, `priority`), the per-project steering knob (`project.focus`), the
 **ranking function** that orders ready work, the atomic **`lode task claim --next`** command
 surface, the **`--strict-focus`** modifier, and the **`needs-decomposition`** sizing gate that
@@ -186,7 +186,7 @@ limit.
   **never** select it. It is not "ready work an agent can drift to"; it is **not claimable at all**
   until split.
 - Such a task **routes to decomposition first**: produce a Spec/Plan that splits it into child
-  tasks (via `child_of`, spec 01/03). **Decomposing a big task is itself a Lodespar task** — a
+  tasks (via `child_of`, spec 01/03). **Decomposing a big task is itself a Worklode task** — a
   normal, claimable one with its own `concern`/`priority`.
 - **The "too big" call is agentic, made at review (crit)** — not a static pre-filter. A reviewer
   (human or agent) sets the label when the task's **projected context** (brief + governing

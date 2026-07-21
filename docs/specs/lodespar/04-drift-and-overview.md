@@ -84,7 +84,7 @@ All derivers share a contract:
 ### 2. `component lives-in repo` — filesystem + component-boundary manifest
 
 - **Input:** repo filesystem + a **per-repo component-boundary manifest** (new authoring burden
-  accepted in D5), e.g. `.lodespar/components.yaml`, mapping path globs → Component IRIs. Needed
+  accepted in D5), e.g. `.worklode/components.yaml`, mapping path globs → Component IRIs. Needed
   because one repo can hold many components (e.g. **research-stack**); a repo with a single
   component gets a trivial whole-repo manifest (or a default).
 - **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer, D4) to
@@ -95,7 +95,7 @@ All derivers share a contract:
 
 **Manifest sketch:**
 ```yaml
-# .lodespar/components.yaml
+# .worklode/components.yaml
 repo: <doap:Project IRI or short name>
 components:
   - iri: <component IRI>          # minted per 03 scheme
@@ -117,7 +117,7 @@ components:
 - **Output graph:** `observed/pr-affects`.
 - Feeds unimplemented/drifted-spec queries (a Task that touched a component the Spec governs).
 
-### 4. deploy / runtime — existing Lodespar hooks
+### 4. deploy / runtime — existing Worklode hooks
 
 - **Input:** the already-ingested relational tables behind `internal/hooks/flux.go`
   (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). D6: most of
@@ -248,7 +248,7 @@ DAG whose edges are `dct:requires` (KG) **+** `blocks` (backbone):
   `t` unblocks when done). Drives the `blocking-fan-out` term of the D9 sort key.
 
 **Where it runs.** The DAG spans both stores (`blocks` on the backbone, `dct:requires` in the
-KG), so Lodespar computes it by joining: pull both edge sets, topologically sort, then a single
+KG), so Worklode computes it by joining: pull both edge sets, topologically sort, then a single
 longest-path + transitive-closure pass. Not expressed as pure SPARQL (longest-path counting is
 awkward in SPARQL); the query path only supplies the `dct:requires` edges. It is a **query,
 not a stored property** — recomputed on each overview read (and thus never stale), never cached as
@@ -279,7 +279,7 @@ Everything is a read; nothing here mutates the graph. All commands honor D14 det
 | `lode frontier` / `lode ready [--project <p>]` | 4.5, pre-sorted by the ordering contract |
 | `lode critical-path [--task <t>]` | critical path, `depth`, `fanout`; flags cycles |
 
-**Read-only web views.** Lodespar serves a small read-only dashboard backed by the SPARQL endpoint
+**Read-only web views.** Worklode serves a small read-only dashboard backed by the SPARQL endpoint
 (Oxigraph, per 06): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
 status** view (drifted/unimplemented/accepted), a **critical-path** view, and the **ready
 frontier**. Read-only by construction — the only ways to change the graph are authoring design

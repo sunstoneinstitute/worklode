@@ -1,10 +1,10 @@
-# Spec 06 — Data-platform requirements for the Lodespar KG
+# Spec 06 — Data-platform requirements for the Worklode KG
 
 **Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `00-umbrella-architecture.md`
 
-Lodespar's **knowledge graph** (the asserted architecture graph + the projected work graph)
+Worklode's **knowledge graph** (the asserted architecture graph + the projected work graph)
 lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**
-(tasks, leases, events) stays in Lodespar's own Postgres — so the data-platform only has to host
+(tasks, leases, events) stays in Worklode's own Postgres — so the data-platform only has to host
 the *knowledge* half. This spec is the minimum the data-platform must ship for that.
 
 ## Context (verified against data-platform `graph-server`)
@@ -21,16 +21,16 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
    **Oxigraph, which is not deployed**, and there is no outbox→Oxigraph materializer. Overview
    and every drift query need graph-pattern querying.
    → **Recommended: deploy Oxigraph + the outbox materializer** (a real SPARQL endpoint). The
-   GSP-`GET`-per-graph-and-query-in-Lodespar fallback cannot do graph patterns at scale.
-3. **A stable, documented IRI scheme** for Lodespar entities, aligned with rdf-registry ADR-0006
-   (branch-free term IRIs; `/id/…` for instances). Lodespar mints IRIs for `Component`,
+   GSP-`GET`-per-graph-and-query-in-Worklode fallback cannot do graph patterns at scale.
+3. **A stable, documented IRI scheme** for Worklode entities, aligned with rdf-registry ADR-0006
+   (branch-free term IRIs; `/id/…` for instances). Worklode mints IRIs for `Component`,
    `DesignDoc`, `Task`; the host/namespace grammar must be fixed and agreed. (Canonical scheme is
-   authored in Lodespar **spec 03**; this item is the data-platform-side commitment to host it.)
-   **Base = `https://lodespar.io/ns/`** (decided): the `ls:` ontology stays in rdf-registry but its
-   pipeline **publishes under the `lodespar.io/ns/` base**, not `sunstone.institute/rdf/`. This needs
+   authored in Worklode **spec 03**; this item is the data-platform-side commitment to host it.)
+   **Base = `https://worklode.io/ns/`** (decided): the `ls:` ontology stays in rdf-registry but its
+   pipeline **publishes under the `worklode.io/ns/` base**, not `sunstone.institute/rdf/`. This needs
    a **base-URL override** for the `ls` ontology in rdf-registry (ADR-0006's implicit "repo path =
    host path" mapping doesn't hold for a foreign domain) — a required rdf-registry change.
-4. **External-service write auth confirmed.** Lodespar's projector is a Go service authenticating
+4. **External-service write auth confirmed.** Worklode's projector is a Go service authenticating
    via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs. The atomic
    per-branch write exists; verify the client-credentials path works end-to-end for an external caller.
 5. **A writable, fixed branch** for the work graph (project = property, not branch — sibling
@@ -39,21 +39,21 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
 
 ## Should-have (soon; not v1 blockers)
 
-6. **`If-Match` / ETag CAS on GSP writes** (their spec's v1.1). With a *single* Lodespar projector
+6. **`If-Match` / ETag CAS on GSP writes** (their spec's v1.1). With a *single* Worklode projector
    plus the per-branch lock, lost-update risk is already contained, so this is non-blocking — but
    wanted before any second writer touches the work graph.
 7. **Per-branch / per-namespace write ACLs** (their first future-enforcement candidate). Lets
-   Lodespar's writes be access-scoped from other data-platform writers. Fine to defer for v1.
+   Worklode's writes be access-scoped from other data-platform writers. Fine to defer for v1.
 
-## Explicitly NOT required from the data-platform (Lodespar owns these)
+## Explicitly NOT required from the data-platform (Worklode owns these)
 
-- The **lease/claim/job primitive** (`graph.job` + `SKIP LOCKED`) — stays on the Lodespar backbone.
+- The **lease/claim/job primitive** (`graph.job` + `SKIP LOCKED`) — stays on the Worklode backbone.
 - **Branch merge/diff** — design-review branches can defer merge to CI-side conflict detection.
 - **Markdown-as-asset** — design content stays as files in the designs repo; only RDF *descriptors*
   (IRI, status, `governs`/`requires` edges) live in `graph-server`.
 
 ## Acceptance
 
-Lodespar's projector can, against prod `graph-server`: authenticate, `PUT` a Lodespar named graph
+Worklode's projector can, against prod `graph-server`: authenticate, `PUT` a Worklode named graph
 to the fixed branch under the agreed IRI scheme, and read it back via a SPARQL query that answers
 a drift question (e.g. "components with no governing DesignDoc").
