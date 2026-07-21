@@ -6,7 +6,7 @@
 
 ## Purpose & scope
 
-Defines the *knowledge* half of Lodespar: the `ls:` RDF vocabulary, the entity model across
+Defines the *knowledge* half of Worklode: the `ls:` RDF vocabulary, the entity model across
 the three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, and the
 backbone→graph projection. This is the model that spec 04 queries for drift and overview.
 
@@ -18,8 +18,8 @@ so triple-term annotations ship natively. Must conform to ADR-0006 (IRI scheme),
 edge annotation), ADR-0007 (filenames = purpose).
 
 **Hosting (decided).** The `ls:` ontology **stays in rdf-registry** (reusing its validated pipeline:
-SHACL gate + the RDF-1.2 round-trip), but the published IRI base is **`https://lodespar.io/ns/`**,
-not `sunstone.institute/rdf/`. rdf-registry's pipeline emits the `lodespar.io/ns/` base for the
+SHACL gate + the RDF-1.2 round-trip), but the published IRI base is **`https://worklode.io/ns/`**,
+not `sunstone.institute/rdf/`. rdf-registry's pipeline emits the `worklode.io/ns/` base for the
 `rdf/ls/` sources. This breaks ADR-0006's implicit "repo path = host path" mapping (`rdf/ls/` ↔
 `sunstone.institute/rdf/ls/`); rdf-registry owns closing that wrinkle (a base-URL override for the
 `ls` ontology) — tracked in spec 06.
@@ -42,9 +42,9 @@ supply-chain term — a TRAP; software `ls:Component` is minted fresh.
 so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 
 ```turtle
-@prefix ls:      <https://lodespar.io/ns/ontology#> .
-@prefix lsc:     <https://lodespar.io/ns/concept/> .
-@prefix lsid:    <https://lodespar.io/ns/id/> .
+@prefix ls:      <https://worklode.io/ns/ontology#> .
+@prefix lsc:     <https://worklode.io/ns/concept/> .
+@prefix lsid:    <https://worklode.io/ns/id/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix foaf:    <http://xmlns.com/foaf/0.1/> .
 @prefix prov:    <http://www.w3.org/ns/prov#> .
@@ -257,11 +257,11 @@ time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec
 
 ```turtle
 # Decomposition (D4): Spec ⊃ Plan ⊃ Task
-lsid:doc/spec-lodespar-03 dct:hasPart lsid:doc/plan-03-projection .
+lsid:doc/spec-worklode-03 dct:hasPart lsid:doc/plan-03-projection .
 lsid:doc/plan-03-projection dct:hasPart lsid:task/01H8XZ... .
 
 # Dependency
-lsid:doc/spec-lodespar-04 dct:requires lsid:doc/spec-lodespar-03 .
+lsid:doc/spec-worklode-04 dct:requires lsid:doc/spec-worklode-03 .
 ```
 
 Task-level `child_of` / `blocks` edges are **backbone-authoritative** (spec 01); they surface in
@@ -305,7 +305,7 @@ re-derived live via SPARQL property paths — never baked into `dist/`.
 ## Entity model by layer (D6)
 
 Three layers, joined vertically at **Deliverable**. `[v2]` = deferred. "Projected" = the node
-already exists relationally in the Lodespar backbone / ingest and is mirrored into the graph, not
+already exists relationally in the Worklode backbone / ingest and is mirrored into the graph, not
 authored there (see Projection).
 
 ### Layer 1 — Intent (asserted; authored graph-side, crit-reviewed)
@@ -344,7 +344,7 @@ Execution edges: `ls:implements` (→ DesignDoc/Deliverable/Component), `ls:affe
 | Environment (`dev`, `prod`) | v1 | |
 | Cluster, Namespace, Flux* | **v2** | live deploy view via Flux notifications |
 
-Most of layers 2–3 **already exist relationally** in Lodespar's ingest → these are a
+Most of layers 2–3 **already exist relationally** in Worklode's ingest → these are a
 projection, not a new build. v1 keeps runtime nodes minimal (declared targets); observed
 confirmation of Deliverables by probing artifacts/deployments is **v2** (D7).
 
@@ -357,17 +357,17 @@ vertical join point where a Spec's ambition meets a running system. In v1 it is 
 only** — its acceptance criteria are asserted, not auto-confirmed.
 
 ```turtle
-lsid:deliverable/lodespar-graph-live
+lsid:deliverable/worklode-graph-live
     a ls:Deliverable ;
-    dct:title "Lodespar KG live in prod" ;
+    dct:title "Worklode KG live in prod" ;
     dct:description "graph-server image pushed as ghcr.io/…:vX and service live in prod" ;
     # declared targets — plain references to the runtime IRIs (may not yet exist):
     dct:relation lsid:artifact/ghcr.io/sunstoneinstitute/graph-server/v1 ,
                      lsid:environment/prod .
 
 # A Spec scopes the deliverable; a Task realises it:
-lsid:doc/spec-lodespar-06 dct:hasPart lsid:deliverable/lodespar-graph-live .
-lsid:task/01H8XZ...       ls:implements    lsid:deliverable/lodespar-graph-live .
+lsid:doc/spec-worklode-06 dct:hasPart lsid:deliverable/worklode-graph-live .
+lsid:task/01H8XZ...       ls:implements    lsid:deliverable/worklode-graph-live .
 ```
 
 Acceptance criteria are `dct:description` (human-readable) plus declared `dct:relation`
@@ -382,7 +382,7 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 04).
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
 commitment** that spec 06 references (item 3) and that the data-platform must host.
 
-**Base:** `https://lodespar.io/ns/`
+**Base:** `https://worklode.io/ns/`
 
 | Purpose | Namespace | Prefix |
 |---|---|---|
@@ -397,9 +397,9 @@ carrying a git branch or version:
 |---|---|---|
 | Component | `id/component/<slug>` (manifest slug; default = repo coords) | `…/id/component/github.com/sunstoneinstitute/work-tracker` |
 | — multi-component repo | `id/component/<repo-coords>/<sub>` | `…/id/component/github.com/sunstoneinstitute/research-stack/pfas` |
-| DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-lodespar-03` |
+| DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-worklode-03` |
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
-| Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/lodespar-graph-live` |
+| Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
 | Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/work-tracker/42` |
 | Artifact | `id/artifact/<registry>/<repo>/<tag-or-digest>` | `…/id/artifact/ghcr.io/sunstoneinstitute/graph-server/v1` |
 | Deployment / Environment | `id/deployment/<…>` , `id/environment/<name>` | `…/id/environment/prod` |

@@ -1,4 +1,4 @@
-# Lodespar spec 01 — Execution backbone
+# Worklode spec 01 — Execution backbone
 
 **Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `00-umbrella-architecture.md`
 (shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
@@ -8,7 +8,7 @@
 
 ## Purpose & scope
 
-The execution backbone is the ACID core Lodespar's pickup loop turns on: task state,
+The execution backbone is the ACID core Worklode's pickup loop turns on: task state,
 worktree-bound leases, the append-only event log, and the two edge types
 (`blocks`, `child_of`) that gate what is claimable. It runs on **Postgres** (D2), with
 the lease bound to **git-worktree identity** (D8/D11/D14).
@@ -27,7 +27,7 @@ the two gating edges with cycle detection.
 → **spec 02 (Prioritization & pickup)**. RDF vocabulary, IRI scheme, backbone→graph
 projection → **spec 03 (Knowledge graph)**. Observed-layer derivers and drift queries
 → **spec 04 (Drift & overview)**. Hooks, slash commands, worktree naming/creation,
-auto-resume → **spec 05 (Lodespar plugin)**. The observed/projection tables in the same
+auto-resume → **spec 05 (Worklode plugin)**. The observed/projection tables in the same
 database (`issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`,
 `runtime_events`) have their **semantics** owned by 03/04; this spec only guarantees
 they exist in the Postgres schema.

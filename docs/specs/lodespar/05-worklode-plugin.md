@@ -1,11 +1,11 @@
-# Spec 05 — Lodespar plugin (Claude Code integration)
+# Spec 05 — Worklode plugin (Claude Code integration)
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source:** D13, D14, D15 ·
 **Depends on:** 01 (execution backbone, worktree-bound leases), 02 (`claim --next`, `concern`/`focus`)
 
 ## Purpose & scope
 
-The Claude Code integration for Lodespar: how an agent (or human in an agent session) picks up
+The Claude Code integration for Worklode: how an agent (or human in an agent session) picks up
 work, holds it, and puts it down — with coordination pushed entirely into deterministic machinery
 so the model only spends tokens on judgment. Covers the worktree-bound lease lifecycle, the compiled
 hook binaries, `lode task brief`, the slash commands, the judgment skills, and the optional worker
@@ -35,13 +35,13 @@ deterministically, a hook does.
 
 ## CLI naming (D13)
 
-Product = **Lodespar**. CLI = **`lode`**. Slash commands and skills use the `lode-` prefix.
+Product = **Worklode**. CLI = **`lode`**. Slash commands and skills use the `lode-` prefix.
 
 ## Worktree-bound lease lifecycle
 
-**The worktree is the unit of Lodespar work. The lease binds to the git worktree, not the session.**
-This is the core mechanic and the reason Lodespar is strictly opt-in: a plain Claude Code session,
-in a normal checkout, never touches Lodespar. You enter Lodespar mode *only* by claiming, which spins
+**The worktree is the unit of Worklode work. The lease binds to the git worktree, not the session.**
+This is the core mechanic and the reason Worklode is strictly opt-in: a plain Claude Code session,
+in a normal checkout, never touches Worklode. You enter Worklode mode *only* by claiming, which spins
 up a worktree.
 
 **Deterministic naming.** A claimed task's worktree is named `wt/<id>-<slug>` — derived from the task
@@ -63,26 +63,26 @@ Lifecycle:
 4. **Release** — `ExitWorktree` / worktree removal → **auto-release**. Removing the worktree is the
    canonical "I'm done holding this" signal; `/lode-done` and `/lode-block` also release explicitly.
 
-**Guard invariant:** *no bound worktree ⇒ no Lodespar behavior.* Everything keys off the deterministic
+**Guard invariant:** *no bound worktree ⇒ no Worklode behavior.* Everything keys off the deterministic
 worktree name and the backbone's worktree→lease binding.
 
 ## Hooks
 
-Every hook is a **NOP outside a Lodespar worktree** (uniform guard: parse cwd for a `wt/<id>-<slug>`
-worktree with a backbone-bound lease; absent ⇒ `exit 0` immediately). Lodespar is invisible to ordinary
+Every hook is a **NOP outside a Worklode worktree** (uniform guard: parse cwd for a `wt/<id>-<slug>`
+worktree with a backbone-bound lease; absent ⇒ `exit 0` immediately). Worklode is invisible to ordinary
 sessions.
 
 | Event | Action | Guard / condition |
 |---|---|---|
-| `EnterWorktree` | **Auto-resume** — re-acquire the bound lease | In a Lodespar worktree **and** no already-running session for it **and** the bound lease has **expired**. (Safe: re-acquiring your own stalled worktree.) |
-| `SessionStart` (in worktree) | **Resume** — inject `lode task brief <id> --json`; re-acquire lease if expired | In a Lodespar worktree. **Resume-only — never a silent claim** (Q14.3). |
+| `EnterWorktree` | **Auto-resume** — re-acquire the bound lease | In a Worklode worktree **and** no already-running session for it **and** the bound lease has **expired**. (Safe: re-acquiring your own stalled worktree.) |
+| `SessionStart` (in worktree) | **Resume** — inject `lode task brief <id> --json`; re-acquire lease if expired | In a Worklode worktree. **Resume-only — never a silent claim** (Q14.3). |
 | `SessionStart` (outside worktree) | **Offer** to resume an abandoned worktree | Cheap compiled scan finds a worktree with a bound, **expired** lease and no running session. Prompt, if any, is Haiku/script-level — never an expensive call. Offer only; never auto-claims. |
-| `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat, D8) | NOP when the session isn't on a Lodespar task. |
-| `ExitWorktree` / `SessionEnd` | **Release** the worktree's lease **if idle** | In a Lodespar worktree with a held lease. |
+| `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat, D8) | NOP when the session isn't on a Worklode task. |
+| `ExitWorktree` / `SessionEnd` | **Release** the worktree's lease **if idle** | In a Worklode worktree with a held lease. |
 
 Notes:
 
-- **Auto-resume vs. offer-to-resume.** *Inside* a Lodespar worktree, entering/starting re-acquires the
+- **Auto-resume vs. offer-to-resume.** *Inside* a Worklode worktree, entering/starting re-acquires the
   bound lease automatically (it's provably yours). *Outside*, the session only gets a cheap *offer* to
   adopt an abandoned worktree — acquisition stays a deliberate act.
 - **Heartbeat, not timer.** Renewal is driven by `PreToolUse` on `git commit` (D8): renew right before
@@ -96,14 +96,14 @@ Notes:
 - **Compiled Go binaries.** Hook executables are compiled Go (fast startup, no interpreter warmup on
   every editor event). They share the `lode` codebase; the hook binary is effectively `lode hook <event>`.
 - **Daisy-chain, don't terminate.** Each hook takes `--next <cmd> [argv…]`; instead of `exit(0)` it
-  `execve`s the next command, passing the hook payload through. This lets Lodespar's hook compose with
+  `execve`s the next command, passing the hook payload through. This lets Worklode's hook compose with
   whatever hooks a repo already has rather than owning the event.
 - **`lode install-git-hooks`** wires the commit-cadence heartbeat for **editor-agnostic** use (plain
   `git`, not just Claude Code). It **must coexist — chain existing hooks, never clobber them** (Q14.2):
   an existing `.git/hooks/pre-commit` is preserved and invoked via the `--next`/`execve` chain.
 - **Sensible default:** if `.pre-commit-config.yaml` exists in the repo root, **always chain
-  `pre-commit`** — Lodespar's heartbeat runs, then `execve`s the `pre-commit` framework so its checks
-  still run. Installer is idempotent (detect an already-installed Lodespar link; re-point, don't
+  `pre-commit`** — Worklode's heartbeat runs, then `execve`s the `pre-commit` framework so its checks
+  still run. Installer is idempotent (detect an already-installed Worklode link; re-point, don't
   duplicate).
 
 ## `lode task brief <id> --json`
@@ -129,7 +129,7 @@ decomposition (D15), not that the agent should go reading the repo.
 
 | Command | Action |
 |---|---|
-| `/lode-next [--project P] [--strict-focus]` | Atomic `claim --next` → create `wt/<id>-<slug>` → bind lease → inject brief. The one way to *enter* Lodespar mode. |
+| `/lode-next [--project P] [--strict-focus]` | Atomic `claim --next` → create `wt/<id>-<slug>` → bind lease → inject brief. The one way to *enter* Worklode mode. |
 | `/lode-resume` | Re-acquire an **expired** lease for an existing worktree (the "came back after the sweeper reclaimed it" case). |
 | `/lode-done` | Mark the task done (Deliverable met) → release lease. Worktree cleanup per finishing-a-branch flow. |
 | `/lode-block <id>` | Record a blocking dependency / mark blocked → release lease so the frontier reflects reality. |
@@ -143,7 +143,7 @@ Renewal has **no** slash command — it's hook-enforced (heartbeat). Commands ar
 
 Skills carry only what needs model judgment; anything deterministic is a hook or CLI call.
 
-- **`working-under-lodespar`** — the done/block/release judgment loop. *When* is a task actually done
+- **`working-under-worklode`** — the done/block/release judgment loop. *When* is a task actually done
   (Deliverable met, not "code written")? *When* to block vs. push through? *When* to release a worktree
   vs. keep it. Explicitly **does not** cover renewal (hook-enforced) — the skill tells the model *not*
   to think about heartbeats.
@@ -151,7 +151,7 @@ Skills carry only what needs model judgment; anything deterministic is a hook or
   some need a **Spec/ADR**, many need neither; do not ceremony-tax small tasks. Get **crit** review;
   assert the **asserted-layer** edges (`ls:governs`, `ls:affects`, `dct:requires`/`hasPart`) into
   the graph (03). Sets `needs-decomposition` when projected context would blow the ~100k budget (D15),
-  routing to decomposition-as-a-Lodespar-task.
+  routing to decomposition-as-a-Worklode-task.
 - **`architectural-review`** — reads the **knowledge graph** (existing ADRs/Specs/Components and their
   edges, 03) to review a new design against the *existing* architecture: pushes back to keep the new
   work aligned, or surfaces when the architecture itself must change. **Modeled on the `grill-with-docs`
@@ -210,16 +210,16 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 1. `/lode-next` in a repo produces a `wt/<id>-<slug>` worktree with a backbone-bound lease and an injected
    brief; the same flow in a plain checkout (no claim) leaves the session completely untouched.
 2. Removing the worktree (or `ExitWorktree`) auto-releases the lease; a `git commit` inside the worktree
-   renews it; neither fires outside a Lodespar worktree.
+   renews it; neither fires outside a Worklode worktree.
 3. A worktree whose lease the sweeper expired is re-acquired by `/lode-resume` (and by `EnterWorktree`
    auto-resume) with no new claim and no collision.
-4. `lode install-git-hooks` in a repo with an existing `pre-commit` hook installs the Lodespar heartbeat
+4. `lode install-git-hooks` in a repo with an existing `pre-commit` hook installs the Worklode heartbeat
    **and** still runs the pre-existing hook (and chains `pre-commit` when `.pre-commit-config.yaml` is
    present); re-running is idempotent.
 5. `lode task brief <id> --json` returns one bounded payload (task + concern/priority + governing
    Spec/Plan excerpt + affected components + definition-of-done + branch) sufficient to start work
    without reading repo files.
 6. Hooks are compiled binaries that daisy-chain via `--next`; a downstream hook still runs after
-   Lodespar's.
-7. The three skills exist and carry judgment only (no renewal logic in `working-under-lodespar`;
+   Worklode's.
+7. The three skills exist and carry judgment only (no renewal logic in `working-under-worklode`;
    `architectural-review` reads the graph, not loose files).
