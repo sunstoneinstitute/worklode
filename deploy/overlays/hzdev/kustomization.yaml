@@ -21,7 +21,7 @@ patches:
         path: /data/WL_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
       - op: add
-        path: /data/WT_PUBLIC_URL
+        path: /data/WL_PUBLIC_URL
         value: "https://worklode.hzdev.sunstoneinstitute.ai"
       - op: add
         path: /data/WL_GITHUB_ORG
