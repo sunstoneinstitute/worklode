@@ -12,24 +12,24 @@ Visual: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d4c
 
 ## Resolved decisions
 
-**D1 — wt is the spine, two stores.** Not one monolith. An *execution* store and a
-*knowledge* store, joined by IRI.
+**D1 — Two stores, not one monolith.** An *execution* store and a *knowledge* store,
+joined by IRI.
 
 **D2/D3 — Authority split (no fact has two owners).**
-- **Execution spine** = wt · **Postgres** (target; migration from today's SQLite — a
-  global single-writer SQLite would itself cap parallel `claim --next` throughput). Task
-  state, leases, provenance events, and the `blocks`/`child_of` edges that gate the pickup
-  loop. Keeps `claim` a single ACID transaction.
-- **Knowledge graph** = data-platform `graph-server` · Postgres RDF quad store.
-  Components, design docs, architectural relationships, drift. Dev-only today.
-- **IRI is the join.** Execution facts flow spine→graph (projection); design facts
-  flow graph→spine as references. The work graph lives on **one branch**; project is a
+- **Execution backbone** = Lodespar · **Postgres**. Task state, leases, provenance events, and
+  the `blocks`/`child_of` edges that gate the pickup loop. Keeps `claim` a single ACID
+  transaction — Postgres lets N claims proceed concurrently, serializing only on contended rows.
+- **Knowledge graph** = data-platform `graph-server` · an RDF quad store with named graphs,
+  versioning/time-travel, and branches (storage backend an implementation detail).
+  Components, design docs, architectural relationships, drift.
+- **IRI is the join.** Execution facts flow backbone→graph (projection); design facts
+  flow graph→backbone as references. The work graph lives on **one branch**; project is a
   *property*, not a branch (graph-server branches are sibling-invisible → project-as-branch
   would hide cross-project edges, the exact thing we need).
 
 **D4 — Component-grained entity model, standards-first vocabulary.**
 - Atomic unit = **Component** (repo/project are coarser groupings). No Capability/Requirement (YAGNI).
-- **`wt:DesignDoc`** with real subclasses `wt:ADR` / `wt:Spec` / `wt:Plan`; `wt:status`
+- **`ls:DesignDoc`** with real subclasses `ls:ADR` / `ls:Spec` / `ls:Plan`; `ls:status`
   domain `DesignDoc` (SKOS scheme: draft→proposed→accepted→superseded→implemented).
 - **Supersession can be partial** — an ADR may be superseded only in specific subsections,
   not wholesale. Model options: addressable DesignDoc *sections* (sub-resources with their
@@ -38,8 +38,8 @@ Visual: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d4c
 - Reuse W3C/community terms: `dcterms:requires` (dependency), `dcterms:hasPart`
   (decomposition), `dcterms:replaces` (supersession), `foaf:Agent`/`prov:*` (owners),
   `doap:Project` (repo layer). **No gtio** (research-scoped, experimental).
-- Mint only: `wt:Component`, `wt:DesignDoc`(+3), `wt:Task`, `wt:governs`, `wt:implements`, `wt:affects`.
-- DesignDocs reviewed via **crit**; the `wt:` vocabulary lands as a PR to **rdf-registry**.
+- Mint only: `ls:Component`, `ls:DesignDoc`(+3), `ls:Task`, `ls:governs`, `ls:implements`, `ls:affects`.
+- DesignDocs reviewed via **crit**; the `ls:` vocabulary lands as a PR to **rdf-registry**.
 
 **D5 — Two-layer graph; drift = the diff.**
 - **Asserted layer** (intent): authored with the design doc, crit-reviewed.
@@ -64,7 +64,7 @@ artifacts/deployments is v2.
 - **Collisions are the throughput cap.** Today `claim` needs an id (list→pick→claim→race→retry),
   so work is hand-kicked to avoid collisions → throughput capped. Prize = safe unattended
   parallel pickup (24/7 agents on a well-spec'd project).
-- Fix = **`wt task claim --next`**: rank + lease in one serialized transaction. No
+- Fix = **`lode task claim --next`**: rank + lease in one serialized transaction. No
   list→pick→claim window = no collision.
 
 ---
@@ -86,7 +86,7 @@ right amount of specificity). A **fixed enum**: `completeness | performance | us
 security | …` (closed set like `priority`; grows only by explicit schema change).
 `project.focus` = an ordered list of concerns.
 
-**D11 — Task-as-bridge confirmed.** Task is execution-owned (Postgres spine) and *projected*
+**D11 — Task-as-bridge confirmed.** Task is execution-owned (Postgres backbone) and *projected*
 into the knowledge graph. Right cardinality.
 
 **D12 — Estimate-free.** No effort estimates in v1 (effort estimation judged unlikely to add
@@ -97,7 +97,7 @@ proxied by unit-weight chain length + blocking fan-out.
 
 ## Minimum data-platform support required (OPEN — to nail in round 2)
 
-Because leases/execution stay on the Postgres spine, `graph-server` only has to host the
+Because leases/execution stay on the Postgres backbone, `graph-server` only has to host the
 *knowledge* graph. Minimum for wt v1:
 
 1. **Prod deployment of graph-server** (dev-only today).
@@ -106,22 +106,22 @@ Because leases/execution stay on the Postgres spine, `graph-server` only has to 
 3. **Stable IRI scheme** for wt entities, aligned with rdf-registry ADR-0006 (branch-free
    term IRIs; `/id/…` for instances).
 
-Explicitly **not** required for v1: lease/job primitive (spine owns it), If-Match CAS
+Explicitly **not** required for v1: lease/job primitive (backbone owns it), If-Match CAS
 (a single projector + branch-lock atomicity suffices), branch merge/diff, per-namespace
 ACL, markdown-as-asset (design content stays as files in the designs repo; only RDF
 descriptors live in graph-server).
 
 ---
 
-## Naming — DECIDED: **Lodestar**
+## Naming — DECIDED: **Lodespar**
 
-**D13 — Product name = Lodestar** (the product formerly "work-tracker"). Guides "what to
-work on next" — the north star this whole design serves. **CLI = `lode`, with `wt` kept as
-an alias** (muscle memory preserved). Repo rename is an optional follow-up, not decided here.
+**D13 — Product name = Lodespar** (the product formerly "work-tracker"). Guides "what to
+work on next" — the north star this whole design serves. **CLI = `lode`.** Repo rename is an
+optional follow-up, not decided here.
 
 Shortlist considered:
 
-- **Lodestar** — guides "what to work on next" (your north star); reconciliation → navigation.
+- **Lodespar** — guides "what to work on next" (your north star); reconciliation → navigation.
 - **Cairn** — a stone waypoint marking the path and progress; Sunstone-stone resonance; humble, apt.
 - **Keystone** — the stone that holds the arch (the whole platform) together.
 - **Gnomon** — the sundial's shadow-caster; tells position by *observing* light — a literal
@@ -131,14 +131,14 @@ Shortlist considered:
 
 ---
 
-## D14 — Claude Code integration: the Lodestar plugin
+## D14 — Claude Code integration: the Lodespar plugin
 
 **Design lens: push coordination into deterministic, token-free machinery; spend model tokens
 only on judgment.** CLI over MCP, hooks over prompts, server-side selection over agent reasoning.
 
-**The worktree is the unit of Lodestar work; the lease binds to the git worktree, not the
-session.** This is what keeps Lodestar strictly *opt-in* — a plain Claude Code session is
-untouched. You enter Lodestar mode only by claiming, which spins up a worktree.
+**The worktree is the unit of Lodespar work; the lease binds to the git worktree, not the
+session.** This is what keeps Lodespar strictly *opt-in* — a plain Claude Code session is
+untouched. You enter Lodespar mode only by claiming, which spins up a worktree.
 - `/lode-next [--project]` → atomic `claim --next` → creates a **deterministically named
   worktree** `wt/<id>-<slug>` (named from the task *after* the lease is held) → binds the lease
   to that worktree → injects the brief.
@@ -147,21 +147,21 @@ untouched. You enter Lodestar mode only by claiming, which spins up a worktree.
 - `/lode-resume` → re-acquire an **expired** lease for a task whose worktree still exists
   (deterministic name makes the lookup trivial) — the "came back after the sweeper reclaimed it" case.
 
-**Hooks (deterministic, ~0 tokens) — every one is a NOP outside a Lodestar worktree:**
+**Hooks (deterministic, ~0 tokens) — every one is a NOP outside a Lodespar worktree:**
 - `EnterWorktree` → **auto-resume** when the worktree has no already-running session, has a bound
   lease, and that lease has **expired**. (Safe: re-acquiring *your own* stalled worktree — distinct
   from auto-*claim*, which stays opt-in.)
-- `SessionStart` → if inside a Lodestar worktree, *resume*: inject `lode task brief`. Never a
+- `SessionStart` → if inside a Lodespar worktree, *resume*: inject `lode task brief`. Never a
   silent claim. **(Q14.3 resolved: resume-only.)** Outside a worktree, cheaply scan for
   **abandoned worktrees** (bound lease, expired, no running session) and *offer* to resume one —
   must stay fast: compiled `lode` scan, and any prompt is Haiku/script-level, never an expensive call.
 - `PreToolUse` on `git commit` → `lode task renew` (commit-cadence heartbeat, D8) — **NOP when
-  the session isn't on a Lodestar task.**
+  the session isn't on a Lodespar task.**
 - `ExitWorktree` / `SessionEnd` → release the worktree's lease if idle.
-- Uniform guard: no bound worktree ⇒ the hook does nothing. Lodestar is invisible to ordinary sessions.
+- Uniform guard: no bound worktree ⇒ the hook does nothing. Lodespar is invisible to ordinary sessions.
 - **Implementation:** hook executables are **compiled Go binaries** (fast startup, no interpreter),
   and **daisy-chain** rather than terminate — a `--next <cmd> [argv…]` option `execve`s the next
-  hook instead of `exit(0)`, so Lodestar composes with hooks a repo already has.
+  hook instead of `exit(0)`, so Lodespar composes with hooks a repo already has.
 
 **CLI, not MCP (Q14.1 resolved: no MCP in v1).** Agents drive `lode --json`: no per-tool schema
 tokens in context, deterministic greppable output.
@@ -178,7 +178,7 @@ definition-of-done + branch. No file spelunking.
 **Slash commands:** `/lode-next`, `/lode-resume`, `/lode-done`, `/lode-block <id>`, `/lode-status`, `/lode-spec`.
 
 **Skills (judgment only):**
-- *Working under Lodestar* — done/block/release judgment (renewal is hook-enforced).
+- *Working under Lodespar* — done/block/release judgment (renewal is hook-enforced).
 - *Authoring design as graph* — graduated to task complexity (D15): write only the design
   artifacts a task actually needs, get crit review, assert asserted-layer edges.
 - *Architectural review* — uses the knowledge graph (existing ADRs/specs/components) to review a
@@ -199,7 +199,7 @@ definition-of-done + branch. No file spelunking.
 - **`needs-decomposition`** — a task label meaning scope is too big to fit the context window's
   **"smart zone"** (the effective-reasoning region, well below the hard limit). Such a task is
   **not claimable by `claim --next`** until split; it routes to decomposition (Spec/Plan → child
-  tasks) first. **Decomposing a big task is itself a Lodestar task.**
+  tasks) first. **Decomposing a big task is itself a Lodespar task.**
 - **The "too big" call is agentic, made during review** (crit), not a static filter — but backed
   by a concrete, **server-side-configurable token budget** (default ~**100k**). The reviewer
   (human or agent) sets `needs-decomposition` when the task's projected context would blow the budget.
