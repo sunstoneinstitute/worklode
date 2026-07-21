@@ -29,9 +29,9 @@ func TestBoardPageOrgBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj1", "title": "Leased task", "priority": "high", "kind": "feature",
 	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
-		t.Fatalf("claim WT-1 status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("claim WL-1 status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -40,7 +40,7 @@ func TestBoardPageOrgBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj1", "title": "Blocked task", "priority": "medium", "kind": "bug",
 	})
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-2/edges", token, map[string]any{"to": "WT-3", "type": "blocks"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-3", "type": "blocks"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add blocking edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -85,7 +85,7 @@ func TestTaskPage(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
 	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -97,7 +97,7 @@ func TestTaskPage(t *testing.T) {
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
-			HeadRef: "wt/WT-1-add-feature", HeadSHA: "headsha1",
+			HeadRef: "wl/WL-1-add-feature", HeadSHA: "headsha1",
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(),
 		}, "")
 		return err
@@ -107,7 +107,7 @@ func TestTaskPage(t *testing.T) {
 		ms := mergeSHA
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
-			HeadRef: "wt/WT-1-add-feature", HeadSHA: "headsha1", MergeSHA: &ms,
+			HeadRef: "wl/WL-1-add-feature", HeadSHA: "headsha1", MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(), MergedAt: &merged,
 		}, "")
 		return err
@@ -120,13 +120,13 @@ func TestTaskPage(t *testing.T) {
 		return err
 	})
 
-	rr = doReq(t, h, "GET", "/tasks/WT-1", "", nil)
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
 	bodyContains(t, body,
-		"WT-1", "Add feature", // id + title
+		"WL-1", "Add feature", // id + title
 		"in_progress",                // state
 		"alice",                      // lease holder
 		"do the thing",               // body
@@ -137,7 +137,7 @@ func TestTaskPage(t *testing.T) {
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
 
-	rr = doReq(t, h, "GET", "/tasks/WT-99", "", nil)
+	rr = doReq(t, h, "GET", "/tasks/WL-99", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown task page status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}

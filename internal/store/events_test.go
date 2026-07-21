@@ -87,7 +87,7 @@ func TestLogChange(t *testing.T) {
 
 	change := map[string]any{"field": "state", "old": "ready", "new": "in_progress"}
 	apply := func(tx *sql.Tx, eventID int64) error {
-		return LogChange(tx, "task", "WT-1", eventID, change)
+		return LogChange(tx, "task", "WL-1", eventID, change)
 	}
 
 	eventID, inserted, err := s.RecordEvent(ctx, "cli", "c1", "transition", nil, apply)
@@ -105,7 +105,7 @@ func TestLogChange(t *testing.T) {
 		t.Fatalf("query state_log: %v", err)
 	}
 
-	if entityKind != "task" || entityID != "WT-1" {
+	if entityKind != "task" || entityID != "WL-1" {
 		t.Fatalf("state_log entity: got (%q, %q)", entityKind, entityID)
 	}
 	if gotEventID != eventID {

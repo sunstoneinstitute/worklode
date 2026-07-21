@@ -27,7 +27,7 @@ func TestTaskTimeline(t *testing.T) {
 	})
 
 	// Claim: ready -> in_progress, writes the state_log entry.
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -45,7 +45,7 @@ func TestTaskTimeline(t *testing.T) {
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
-			HeadRef: "wt/WT-1-add-feature", HeadSHA: headSHA,
+			HeadRef: "wl/WL-1-add-feature", HeadSHA: headSHA,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1),
 		}, "")
 		return err
@@ -80,7 +80,7 @@ func TestTaskTimeline(t *testing.T) {
 		ms := mergeSHA
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
-			HeadRef: "wt/WT-1-add-feature", HeadSHA: headSHA, MergeSHA: &ms,
+			HeadRef: "wl/WL-1-add-feature", HeadSHA: headSHA, MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1), MergedAt: &merged,
 		}, "")
 		return err
@@ -131,15 +131,15 @@ func TestTaskTimeline(t *testing.T) {
 		return err
 	})
 
-	rr = doReq(t, h, "GET", "/api/v1/tasks/WT-1/timeline", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1/timeline", token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("timeline status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
 
 	task, ok := got["task"].(map[string]any)
-	if !ok || task["id"] != "WT-1" {
-		t.Fatalf("task = %v, want WT-1", got["task"])
+	if !ok || task["id"] != "WL-1" {
+		t.Fatalf("task = %v, want WL-1", got["task"])
 	}
 	timeline, ok := got["timeline"].([]any)
 	if !ok {
@@ -226,7 +226,7 @@ func TestTaskTimelineEmpty(t *testing.T) {
 		"project": "proj", "title": "Nothing yet", "priority": "low", "kind": "chore",
 	})
 
-	rr := doReq(t, h, "GET", "/api/v1/tasks/WT-1/timeline", token, nil)
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-1/timeline", token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("timeline status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -236,7 +236,7 @@ func TestTaskTimelineEmpty(t *testing.T) {
 		t.Fatalf("timeline = %v, want []", got["timeline"])
 	}
 
-	rr = doReq(t, h, "GET", "/api/v1/tasks/WT-99/timeline", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-99/timeline", token, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown task timeline status = %d, want 404", rr.Code)
 	}

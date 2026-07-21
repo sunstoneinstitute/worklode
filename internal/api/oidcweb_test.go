@@ -13,7 +13,7 @@ import (
 // cookie is present.
 func TestWebRedirectsWhenNoSession(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
-	for _, path := range []string{"/", "/tasks/WT-1", "/projects/proj"} {
+	for _, path := range []string{"/", "/tasks/WL-1", "/projects/proj"} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusFound {
 			t.Fatalf("GET %s status = %d, want 302", path, rr.Code)
@@ -38,7 +38,7 @@ func TestHealthzOpenWithOIDC(t *testing.T) {
 // authorize endpoint carrying the PKCE challenge.
 func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
-	rr := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	rr := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", rr.Code)
 	}
@@ -70,7 +70,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	}
 
 	// Step 1: hit /auth/login to obtain the oauth-state cookie and the state param.
-	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	oauthCookie := cookieValue(login, "wt_oauth")
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	state := loc.Query().Get("state")
@@ -86,8 +86,8 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	if rr.Code != http.StatusFound {
 		t.Fatalf("callback status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	if got := rr.Header().Get("Location"); got != "/tasks/WT-1" {
-		t.Fatalf("callback Location = %q, want /tasks/WT-1", got)
+	if got := rr.Header().Get("Location"); got != "/tasks/WL-1" {
+		t.Fatalf("callback Location = %q, want /tasks/WL-1", got)
 	}
 	if !hasCookie(rr, "wt_session") {
 		t.Fatal("no wt_session cookie set after callback")
@@ -130,7 +130,7 @@ func TestAuthCallbackMissingState(t *testing.T) {
 func TestAuthCallbackStateMismatch(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
 
-	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	oauthCookie := cookieValue(login, "wt_oauth")
 
 	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state=not-the-cookie-state", nil)
@@ -154,7 +154,7 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	st.SetNowFunc(func() time.Time { return base })
 
-	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	oauthCookie := cookieValue(login, "wt_oauth")
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	state := loc.Query().Get("state")

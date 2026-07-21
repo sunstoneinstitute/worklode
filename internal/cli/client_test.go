@@ -148,7 +148,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if created.ID != "WT-1" || created.State != "ready" {
+	if created.ID != "WL-1" || created.State != "ready" {
 		t.Fatalf("CreateTask result = %+v", created)
 	}
 
@@ -156,11 +156,11 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
-	if len(list.Tasks) != 1 || list.Tasks[0].ID != "WT-1" {
+	if len(list.Tasks) != 1 || list.Tasks[0].ID != "WL-1" {
 		t.Fatalf("ListTasks result = %+v", list.Tasks)
 	}
 
-	detail, _, err := c.GetTask(ctx, "WT-1")
+	detail, _, err := c.GetTask(ctx, "WL-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -168,18 +168,18 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("GetTask before claim = %+v", detail)
 	}
 
-	claim, _, err := c.ClaimTask(ctx, "WT-1", "sess-1", 0)
+	claim, _, err := c.ClaimTask(ctx, "WL-1", "sess-1", 0)
 	if err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
-	if !strings.HasPrefix(claim.Branch, "wt/WT-1-") {
+	if !strings.HasPrefix(claim.Branch, "wl/WL-1-") {
 		t.Fatalf("claim branch = %q", claim.Branch)
 	}
 	if claim.Lease.ActorID != "alice" {
 		t.Fatalf("claim lease = %+v", claim.Lease)
 	}
 
-	detail, _, err = c.GetTask(ctx, "WT-1")
+	detail, _, err = c.GetTask(ctx, "WL-1")
 	if err != nil {
 		t.Fatalf("GetTask after claim: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("GetTask lease after claim = %+v", detail.Lease)
 	}
 
-	renewed, _, err := c.RenewLease(ctx, "WT-1", time.Hour)
+	renewed, _, err := c.RenewLease(ctx, "WL-1", time.Hour)
 	if err != nil {
 		t.Fatalf("RenewLease: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("renewed lease expires_at is zero")
 	}
 
-	timeline, _, err := c.Timeline(ctx, "WT-1")
+	timeline, _, err := c.Timeline(ctx, "WL-1")
 	if err != nil {
 		t.Fatalf("Timeline: %v", err)
 	}
@@ -225,10 +225,10 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("board recent_failures without project filter = nil, want present")
 	}
 
-	if _, err := c.ReleaseLease(ctx, "WT-1"); err != nil {
+	if _, err := c.ReleaseLease(ctx, "WL-1"); err != nil {
 		t.Fatalf("ReleaseLease: %v", err)
 	}
-	detail, _, err = c.GetTask(ctx, "WT-1")
+	detail, _, err = c.GetTask(ctx, "WL-1")
 	if err != nil {
 		t.Fatalf("GetTask after release: %v", err)
 	}
@@ -238,11 +238,11 @@ func TestClientTaskLifecycle(t *testing.T) {
 
 	// Done: claim, move to in_review out of band (no CLI command for the PR
 	// flow that normally does this), then mark done.
-	if _, _, err := c.ClaimTask(ctx, "WT-1", "", 0); err != nil {
+	if _, _, err := c.ClaimTask(ctx, "WL-1", "", 0); err != nil {
 		t.Fatalf("re-claim: %v", err)
 	}
-	moveToReview(t, st, "WT-1")
-	done, _, err := c.DoneTask(ctx, "WT-1")
+	moveToReview(t, st, "WL-1")
+	done, _, err := c.DoneTask(ctx, "WL-1")
 	if err != nil {
 		t.Fatalf("DoneTask: %v", err)
 	}
@@ -404,14 +404,14 @@ func TestClientInboxFlow(t *testing.T) {
 }
 
 func TestClientErrorRendering(t *testing.T) {
-	err := &cli.ClientError{Status: 404, Msg: "task WT-9 not found"}
-	want := "server error (404): task WT-9 not found"
+	err := &cli.ClientError{Status: 404, Msg: "task WL-9 not found"}
+	want := "server error (404): task WL-9 not found"
 	if got := err.Error(); got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 
 	_, c, _ := newTestServer(t)
-	_, _, err2 := c.GetTask(context.Background(), "WT-99")
+	_, _, err2 := c.GetTask(context.Background(), "WL-99")
 	if err2 == nil {
 		t.Fatalf("GetTask unknown id: err = nil, want ClientError")
 	}
