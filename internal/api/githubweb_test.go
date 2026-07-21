@@ -143,7 +143,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 
 	const state = "xyz"
 	cookie := signOAuthState(s.cfg.SessionSecret, oauthState{
-		State: state, Next: "/tasks/WT-1", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
+		State: state, Next: "/tasks/WL-1", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
 	})
 
 	rr := httptest.NewRecorder()

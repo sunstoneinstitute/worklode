@@ -264,8 +264,8 @@ func TestInboxListPromoteDismiss(t *testing.T) {
 	if got["title"] != "Fix the frobnicator" || got["project"] != "proj" || got["priority"] != "high" {
 		t.Fatalf("promoted task = %v", got)
 	}
-	if got["id"] != "WT-1" {
-		t.Fatalf("promoted task id = %v, want WT-1", got["id"])
+	if got["id"] != "WL-1" {
+		t.Fatalf("promoted task id = %v, want WL-1", got["id"])
 	}
 
 	// A second promote of the same issue fails: no longer 'new'.
@@ -316,21 +316,21 @@ func TestBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Claimed", "priority": "medium", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "In review", "priority": "low", "kind": "chore"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/edges", token, map[string]any{"to": "WT-2", "type": "blocks"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add blocking edge status = %d", rr.Code)
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-3/claim", token, map[string]any{"session_id": "s1"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
-		t.Fatalf("claim WT-3 status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("claim WL-3 status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-4/claim", token, map[string]any{"session_id": "s2"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/claim", token, map[string]any{"session_id": "s2"})
 	if rr.Code != http.StatusOK {
-		t.Fatalf("claim WT-4 status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("claim WL-4 status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	moveToReview(t, st, "WT-4")
+	moveToReview(t, st, "WL-4")
 
 	rr = doReq(t, h, "GET", "/api/v1/board?project=proj", token, nil)
 	if rr.Code != http.StatusOK {
@@ -363,19 +363,19 @@ func TestBoard(t *testing.T) {
 		t.Fatalf("projects = %+v", body.Projects)
 	}
 	p := body.Projects[0]
-	if len(p.Ready) != 1 || p.Ready[0].ID != "WT-1" {
+	if len(p.Ready) != 1 || p.Ready[0].ID != "WL-1" {
 		t.Fatalf("ready = %+v", p.Ready)
 	}
-	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WT-2" {
+	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WL-2" {
 		t.Fatalf("blocked = %+v", p.Blocked)
 	}
-	if len(p.InProgress) != 1 || p.InProgress[0].ID != "WT-3" {
+	if len(p.InProgress) != 1 || p.InProgress[0].ID != "WL-3" {
 		t.Fatalf("in_progress = %+v", p.InProgress)
 	}
 	if p.InProgress[0].Holder == nil || p.InProgress[0].Holder.ActorID != "alice" {
 		t.Fatalf("in_progress holder = %+v", p.InProgress[0].Holder)
 	}
-	if len(p.InReview) != 1 || p.InReview[0].ID != "WT-4" {
+	if len(p.InReview) != 1 || p.InReview[0].ID != "WL-4" {
 		t.Fatalf("in_review = %+v", p.InReview)
 	}
 	// project filter set -> recent_failures omitted (nil, not empty array).
@@ -409,22 +409,22 @@ func TestBoardInProgressWithoutLease(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Reopened", "priority": "high", "kind": "bug"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	moveToReview(t, st, "WT-1")
+	moveToReview(t, st, "WL-1")
 	// Review sends it back to in_progress; the original lease was not renewed.
-	_, _, err := st.RecordEvent(context.Background(), "github", "reopen-WT-1", "task.reopened", nil,
+	_, _, err := st.RecordEvent(context.Background(), "github", "reopen-WL-1", "task.reopened", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			now := st.Now()
-			if err := store.CloseActiveLease(tx, now, "WT-1"); err != nil {
+			if err := store.CloseActiveLease(tx, now, "WL-1"); err != nil {
 				return err
 			}
-			return store.Transition(tx, now, "WT-1", "in_review", "in_progress", eventID)
+			return store.Transition(tx, now, "WL-1", "in_review", "in_progress", eventID)
 		})
 	if err != nil {
-		t.Fatalf("move WT-1 back to in_progress without lease: %v", err)
+		t.Fatalf("move WL-1 back to in_progress without lease: %v", err)
 	}
 
 	rr = doReq(t, h, "GET", "/api/v1/board?project=proj", token, nil)
@@ -446,8 +446,8 @@ func TestBoardInProgressWithoutLease(t *testing.T) {
 		t.Fatalf("board = %+v", body.Projects)
 	}
 	ip := body.Projects[0].InProgress[0]
-	if ip.ID != "WT-1" || ip.Holder != nil {
-		t.Fatalf("in_progress = %+v, want WT-1 with no holder", ip)
+	if ip.ID != "WL-1" || ip.Holder != nil {
+		t.Fatalf("in_progress = %+v, want WL-1 with no holder", ip)
 	}
 }
 
@@ -464,17 +464,17 @@ func TestGetTaskIncludesLease(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Leased", "priority": "high", "kind": "feature"})
 
-	rr := doReq(t, h, "GET", "/api/v1/tasks/WT-1", token, nil)
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
 	if got := decodeMap(t, rr)["lease"]; got != nil {
 		t.Fatalf("lease before claim = %v, want absent", got)
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WT-1/claim", token, map[string]any{"session_id": "s1"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/api/v1/tasks/WT-1", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get task status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -483,7 +483,7 @@ func TestGetTaskIncludesLease(t *testing.T) {
 	if !ok {
 		t.Fatalf("lease after claim missing: %v", got)
 	}
-	if lease["actor_id"] != "alice" || lease["task_id"] != "WT-1" {
+	if lease["actor_id"] != "alice" || lease["task_id"] != "WL-1" {
 		t.Fatalf("lease = %v", lease)
 	}
 }

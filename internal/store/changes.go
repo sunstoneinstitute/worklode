@@ -47,13 +47,13 @@ type Review struct {
 }
 
 // refTaskIDPattern matches worktree branch names of the form
-// "wt/WT-<n>" or "wt/WT-<n>-<slug>", capturing the task id.
-var refTaskIDPattern = regexp.MustCompile(`^wt/(WT-[0-9]+)(?:-.*)?$`)
+// "wl/WL-<n>" or "wl/WL-<n>-<slug>", capturing the task id.
+var refTaskIDPattern = regexp.MustCompile(`^wl/(WL-[0-9]+)(?:-.*)?$`)
 
 // TaskIDFromRef extracts a task id from a branch name following the
-// "wt/<task-id>-<slug>" convention (the slug is optional). It returns "" if
-// ref does not match — including when the id part uses a lowercase "wt-"
-// prefix, since task ids are always uppercase "WT-".
+// "wl/<task-id>-<slug>" convention (the slug is optional). It returns "" if
+// ref does not match — including when the id part uses a lowercase "wl-"
+// prefix, since task ids are always uppercase "WL-".
 func TaskIDFromRef(ref string) string {
 	m := refTaskIDPattern.FindStringSubmatch(ref)
 	if m == nil {
@@ -62,11 +62,11 @@ func TaskIDFromRef(ref string) string {
 	return m[1]
 }
 
-// bodyTaskIDPattern matches a "WT-Task: WT-<n>" marker line (after
+// bodyTaskIDPattern matches a "WL-Task: WL-<n>" marker line (after
 // trimming surrounding whitespace), capturing the task id.
-var bodyTaskIDPattern = regexp.MustCompile(`^WT-Task:\s*(WT-[0-9]+)`)
+var bodyTaskIDPattern = regexp.MustCompile(`^WL-Task:\s*(WL-[0-9]+)`)
 
-// TaskIDFromBody scans body line by line for a "WT-Task: <task-id>" marker
+// TaskIDFromBody scans body line by line for a "WL-Task: <task-id>" marker
 // (case-sensitive prefix, after trimming the line's surrounding
 // whitespace) and returns the task id from the first line found. Returns ""
 // if no such line exists.

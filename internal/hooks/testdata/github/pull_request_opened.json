@@ -11,6 +11,6 @@
     "created_at": "2026-07-19T10:00:00Z",
     "merge_commit_sha": null,
     "merged_at": null,
-    "head": {"ref": "wt/WT-1-x", "sha": "abc1230000000000000000000000000000000000"}
+    "head": {"ref": "wl/WL-1-x", "sha": "abc1230000000000000000000000000000000000"}
   }
 }

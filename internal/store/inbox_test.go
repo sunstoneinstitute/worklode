@@ -167,7 +167,7 @@ func TestPromoteIssue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromoteIssue: %v", err)
 	}
-	if task.ID != "WT-1" || task.Title != "fix the broken thing" {
+	if task.ID != "WL-1" || task.Title != "fix the broken thing" {
 		t.Fatalf("created task: got %+v", task)
 	}
 

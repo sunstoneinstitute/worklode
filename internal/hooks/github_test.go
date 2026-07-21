@@ -275,7 +275,7 @@ func TestIssuesOpenedThenClosed(t *testing.T) {
 func TestPROpenedCorrelatesAndMovesToReview(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	taskID := e.seedTask(t) // WT-1
+	taskID := e.seedTask(t) // WL-1
 	e.claimTask(t, taskID)  // in_progress + active lease
 
 	rr := deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
@@ -290,7 +290,7 @@ func TestPROpenedCorrelatesAndMovesToReview(t *testing.T) {
 	if pr.TaskID == nil || *pr.TaskID != taskID {
 		t.Fatalf("PR task id = %v, want %s", pr.TaskID, taskID)
 	}
-	if pr.State != "open" || pr.HeadRef != "wt/WT-1-x" || pr.MergeSHA != nil ||
+	if pr.State != "open" || pr.HeadRef != "wl/WL-1-x" || pr.MergeSHA != nil ||
 		pr.Title != "Fix crash on load" || pr.OpenedAt.IsZero() {
 		t.Fatalf("PR = %+v", pr)
 	}
@@ -306,7 +306,7 @@ func TestPROpenedCorrelatesAndMovesToReview(t *testing.T) {
 func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	taskID := e.seedTask(t) // WT-1 stays in ready
+	taskID := e.seedTask(t) // WL-1 stays in ready
 
 	rr := deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
 	if rr.Code != http.StatusOK || status(t, rr) != "ok" {

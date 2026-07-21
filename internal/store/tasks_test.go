@@ -134,8 +134,8 @@ func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
 	s := openTaskStore(t)
 
 	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
-	if t1.ID != "WT-1" {
-		t.Fatalf("first task id: got %q, want WT-1", t1.ID)
+	if t1.ID != "WL-1" {
+		t.Fatalf("first task id: got %q, want WL-1", t1.ID)
 	}
 	if t1.State != "ready" {
 		t.Fatalf("first task state: got %q, want ready", t1.State)
@@ -144,17 +144,17 @@ func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
 	in2 := defaultTaskInput()
 	in2.Draft = true
 	t2 := createTask(t, s, taskTestNow, in2)
-	if t2.ID != "WT-2" {
-		t.Fatalf("second task id: got %q, want WT-2", t2.ID)
+	if t2.ID != "WL-2" {
+		t.Fatalf("second task id: got %q, want WL-2", t2.ID)
 	}
 	if t2.State != "draft" {
 		t.Fatalf("draft task state: got %q, want draft", t2.State)
 	}
 
 	// Round-trip through GetTask matches what CreateTask returned.
-	got, err := s.GetTask(t.Context(), "WT-1")
+	got, err := s.GetTask(t.Context(), "WL-1")
 	if err != nil {
-		t.Fatalf("GetTask WT-1: %v", err)
+		t.Fatalf("GetTask WL-1: %v", err)
 	}
 	if !reflect.DeepEqual(got, t1) {
 		t.Fatalf("GetTask: got %+v, want %+v", got, t1)
@@ -247,7 +247,7 @@ func TestTransitionWrongCurrentState(t *testing.T) {
 func TestTransitionUnknownTask(t *testing.T) {
 	s := openTaskStore(t)
 
-	err := transition(t, s, taskTestNow, "WT-999", "ready", "in_progress")
+	err := transition(t, s, taskTestNow, "WL-999", "ready", "in_progress")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("transition unknown task: want ErrNotFound, got %v", err)
 	}
@@ -307,8 +307,8 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
 
-	blocker := createTask(t, s, taskTestNow, defaultTaskInput()) // WT-1
-	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // WT-2
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput()) // WL-1
+	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // WL-2
 
 	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
 		t.Fatalf("AddEdge blocks: %v", err)
@@ -426,10 +426,10 @@ func TestAddEdgeUnknownTask(t *testing.T) {
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, task.ID, "WT-999", "blocks"); !errors.Is(err, ErrNotFound) {
+	if err := addEdge(t, s, task.ID, "WL-999", "blocks"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("AddEdge to unknown task: want ErrNotFound, got %v", err)
 	}
-	if err := addEdge(t, s, "WT-999", task.ID, "blocks"); !errors.Is(err, ErrNotFound) {
+	if err := addEdge(t, s, "WL-999", task.ID, "blocks"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("AddEdge from unknown task: want ErrNotFound, got %v", err)
 	}
 }
@@ -491,13 +491,13 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 		in.Priority = priority
 		return createTask(t, s, taskTestNow, in)
 	}
-	tLow := mk("horndb", "low")          // WT-1
-	tCrit := mk("horndb", "critical")    // WT-2
-	tMed := mk("horndb", "medium")       // WT-3
-	tHigh := mk("horndb", "high")        // WT-4
-	tCrit2 := mk("horndb", "critical")   // WT-5
-	tOther := mk("other", "high")        // WT-6
-	walkTo(t, s, tMed.ID, "in_progress") // WT-3 -> in_progress
+	tLow := mk("horndb", "low")          // WL-1
+	tCrit := mk("horndb", "critical")    // WL-2
+	tMed := mk("horndb", "medium")       // WL-3
+	tHigh := mk("horndb", "high")        // WL-4
+	tCrit2 := mk("horndb", "critical")   // WL-5
+	tOther := mk("other", "high")        // WL-6
+	walkTo(t, s, tMed.ID, "in_progress") // WL-3 -> in_progress
 
 	idsOf := func(tasks []Task) []string {
 		var ids []string
@@ -558,7 +558,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 func TestGetTaskNotFound(t *testing.T) {
 	s := openTaskStore(t)
 
-	_, err := s.GetTask(t.Context(), "WT-999")
+	_, err := s.GetTask(t.Context(), "WL-999")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetTask unknown: want ErrNotFound, got %v", err)
 	}

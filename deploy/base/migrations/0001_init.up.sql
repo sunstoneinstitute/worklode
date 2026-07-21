@@ -50,7 +50,7 @@ CREATE TABLE tasks (
     updated_at TEXT NOT NULL
 );
 
--- Single-row counter for the global WT-<n> task id sequence.
+-- Single-row counter for the global WL-<n> task id sequence.
 CREATE TABLE task_seq (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
     next INTEGER NOT NULL
