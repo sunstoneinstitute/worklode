@@ -15,7 +15,7 @@ func TestLogoutClearsKeychain(t *testing.T) {
 	t.Setenv("WL_TOKEN", "")
 	t.Setenv("WL_SERVER", "https://wl.example.com")
 
-	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wt_x"); err != nil {
+	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_x"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if err := runLogout("https://wl.example.com"); err != nil {
