@@ -65,7 +65,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
-	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `wt task ready`)")
+	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `wl task ready`)")
 	cmd.MarkFlagRequired("project")
 	cmd.MarkFlagRequired("title")
 	return cmd
