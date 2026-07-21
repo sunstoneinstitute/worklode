@@ -6,7 +6,7 @@
 
 **Goal:** Gate the read-only web UI behind an OIDC login when SSO is enabled: an auth-code + PKCE redirect flow (`/auth/login`, `/auth/callback`), HMAC-signed session cookies with no server-side state, and middleware that 302s unauthenticated web requests to login. When OIDC is unconfigured the web UI stays open exactly as today.
 
-**Architecture:** Two small self-contained files. `session.go` holds stateless cookie signing/verification (session cookie + a short-lived oauth-transient cookie carrying `state`/PKCE-verifier/`next`). `oidcweb.go` holds `/auth/login` and `/auth/callback` plus a `webAuth` middleware. The three existing web routes (`/`, `/tasks/{id}`, `/projects/{id}`) get wrapped in `webAuth`; `/healthz` and `/metrics` stay open. All cookie state is signed under `WT_SESSION_SECRET` — no server session store.
+**Architecture:** Two small self-contained files. `session.go` holds stateless cookie signing/verification (session cookie + a short-lived oauth-transient cookie carrying `state`/PKCE-verifier/`next`). `oidcweb.go` holds `/auth/login` and `/auth/callback` plus a `webAuth` middleware. The three existing web routes (`/`, `/tasks/{id}`, `/projects/{id}`) get wrapped in `webAuth`; `/healthz` and `/metrics` stay open. All cookie state is signed under `WL_SESSION_SECRET` — no server session store.
 
 **Tech Stack:** Go 1.25 stdlib (`crypto/hmac`, `crypto/sha256`, `encoding/base64`, `net/http`), `golang.org/x/oauth2` (PKCE helpers), `internal/oidc`.
 
@@ -82,13 +82,13 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signOAuthState(secret, oauthState{
-		State: "st", Verifier: "vfy", Next: "/tasks/WT-1", Exp: now.Add(10 * time.Minute).Unix(),
+		State: "st", Verifier: "vfy", Next: "/tasks/WL-1", Exp: now.Add(10 * time.Minute).Unix(),
 	})
 	got, ok := verifyOAuthState(secret, cookie, now)
 	if !ok {
 		t.Fatal("verifyOAuthState = !ok")
 	}
-	if got.State != "st" || got.Verifier != "vfy" || got.Next != "/tasks/WT-1" {
+	if got.State != "st" || got.Verifier != "vfy" || got.Next != "/tasks/WL-1" {
 		t.Fatalf("state = %+v", got)
 	}
 }
@@ -116,7 +116,7 @@ Create `internal/api/session.go`:
 
 ```go
 // session.go implements the web UI's stateless auth cookies, all signed under
-// WT_SESSION_SECRET (there is no server-side session store):
+// WL_SESSION_SECRET (there is no server-side session store):
 //   - the session cookie: {username, expiry}, ~12h, set after a successful
 //     login and checked by webAuth on every gated web request.
 //   - the oauth-state cookie: {state, PKCE verifier, next, expiry}, short-lived,
@@ -136,8 +136,8 @@ import (
 )
 
 const (
-	sessionCookieName = "wt_session"
-	oauthCookieName   = "wt_oauth"
+	sessionCookieName = "wl_session"
+	oauthCookieName   = "wl_oauth"
 	sessionLifetime   = 12 * time.Hour
 	oauthStateMaxAge  = 10 * time.Minute
 )
@@ -518,7 +518,7 @@ import (
 // cookie is present.
 func TestWebRedirectsWhenNoSession(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
-	for _, path := range []string{"/", "/tasks/WT-1", "/projects/proj"} {
+	for _, path := range []string{"/", "/tasks/WL-1", "/projects/proj"} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusFound {
 			t.Fatalf("GET %s status = %d, want 302", path, rr.Code)
@@ -543,7 +543,7 @@ func TestHealthzOpenWithOIDC(t *testing.T) {
 // authorize endpoint carrying the PKCE challenge.
 func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
-	rr := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
+	rr := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", rr.Code)
 	}
@@ -558,8 +558,8 @@ func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 	if u.Query().Get("state") == "" {
 		t.Fatalf("missing state in %q", loc)
 	}
-	if !hasCookie(rr, "wt_oauth") {
-		t.Fatal("no wt_oauth cookie set")
+	if !hasCookie(rr, "wl_oauth") {
+		t.Fatal("no wl_oauth cookie set")
 	}
 }
 
@@ -575,8 +575,8 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	}
 
 	// Step 1: hit /auth/login to obtain the oauth-state cookie and the state param.
-	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WT-1", "", nil)
-	oauthCookie := cookieValue(login, "wt_oauth")
+	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
+	oauthCookie := cookieValue(login, "wl_oauth")
 	loc, _ := url.Parse(login.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
@@ -584,24 +584,24 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	// carrying the oauth-state cookie. The callback exchanges the code at the
 	// issuer's /token endpoint (which returns iss.TokenClaims as the id_token).
 	req := httptest.NewRequest("GET", "/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
-	req.AddCookie(&http.Cookie{Name: "wt_oauth", Value: oauthCookie})
+	req.AddCookie(&http.Cookie{Name: "wl_oauth", Value: oauthCookie})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("callback status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	if got := rr.Header().Get("Location"); got != "/tasks/WT-1" {
-		t.Fatalf("callback Location = %q, want /tasks/WT-1", got)
+	if got := rr.Header().Get("Location"); got != "/tasks/WL-1" {
+		t.Fatalf("callback Location = %q, want /tasks/WL-1", got)
 	}
-	if !hasCookie(rr, "wt_session") {
-		t.Fatal("no wt_session cookie set after callback")
+	if !hasCookie(rr, "wl_session") {
+		t.Fatal("no wl_session cookie set after callback")
 	}
 
 	// Step 3: the session cookie now lets a gated page through.
-	session := cookieValue(rr, "wt_session")
+	session := cookieValue(rr, "wl_session")
 	req2 := httptest.NewRequest("GET", "/", nil)
-	req2.AddCookie(&http.Cookie{Name: "wt_session", Value: session})
+	req2.AddCookie(&http.Cookie{Name: "wl_session", Value: session})
 	rr2 := httptest.NewRecorder()
 	h.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusOK {
@@ -613,7 +613,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 func TestWebTamperedSessionRedirects(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
 	req := httptest.NewRequest("GET", "/", nil)
-	req.AddCookie(&http.Cookie{Name: "wt_session", Value: "garbage.garbage"})
+	req.AddCookie(&http.Cookie{Name: "wl_session", Value: "garbage.garbage"})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusFound {
@@ -680,5 +680,5 @@ Expected: ok / no output, exit 0.
 
 - **Spec coverage:** web routes require a session when OIDC on, else 302 to `/auth/login` (Task 3 + Task 4 `TestWebRedirectsWhenNoSession`); `/healthz`/`/metrics` stay open (Task 4 `TestHealthzOpenWithOIDC`); UI open when OIDC unconfigured (Task 3 Step 3 — existing tests pass unchanged); `GET /auth/login` → 302 to authorize with PKCE + state in a signed cookie (Task 1 + Task 4 `TestAuthLoginRedirectsToIssuer`); `GET /auth/callback` redeems code, verifies, requires `user`, provisions, sets session, 302s to `next` (Task 2 + Task 4 `TestAuthCallbackRoundTrip`); session cookie HMAC-signed `{username, expiry}` ~12h, `HttpOnly`/`Secure`/`SameSite=Lax`, no server state, no logout (Task 1 + Task 2); tampered/expired cookie → redirect (Task 1 + Task 4).
 - **Reuse from Plan 1:** `provisionActor`, `errNoUserRole`, `s.oidc`, `newOIDCServer`, and the `oidctest` issuer (with its `/token` endpoint and `TokenClaims`).
-- **Type consistency:** cookie names `wt_session`/`wt_oauth`, functions `signSession`/`verifySession`/`signOAuthState`/`verifyOAuthState`, and the `oauthState` fields are used identically across `session.go`, `oidcweb.go`, and both test files.
-- **Note on `Secure` cookies in tests:** `httptest` requests are treated as non-TLS, but `ResponseRecorder.Result().Cookies()` still parses `Secure` cookies from the `Set-Cookie` header, so the round-trip test reads them back fine. In production behind `WT_PUBLIC_URL` (https) the `Secure` attribute is honored by browsers.
+- **Type consistency:** cookie names `wl_session`/`wl_oauth`, functions `signSession`/`verifySession`/`signOAuthState`/`verifyOAuthState`, and the `oauthState` fields are used identically across `session.go`, `oidcweb.go`, and both test files.
+- **Note on `Secure` cookies in tests:** `httptest` requests are treated as non-TLS, but `ResponseRecorder.Result().Cookies()` still parses `Secure` cookies from the `Set-Cookie` header, so the round-trip test reads them back fine. In production behind `WL_PUBLIC_URL` (https) the `Secure` attribute is honored by browsers.

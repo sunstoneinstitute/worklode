@@ -23,7 +23,7 @@
 - `internal/api/server.go` (modify) — add OIDC config fields + `oidc` field, build the verifier in `NewServer`, register `/auth/oidc/config` and `/auth/oidc/token`.
 - `internal/api/oidcauth.go` (create) — the two endpoint handlers + the shared `provisionActor` helper (reused by Plan 2's web callback).
 - `internal/api/oidcauth_test.go` (create) — endpoint tests against the fake issuer.
-- `internal/cmd/serve.go` (modify) — pass the four `WT_OIDC_*` / `WT_PUBLIC_URL` / `WT_SESSION_SECRET` env vars into `api.Config`.
+- `internal/cmd/serve.go` (modify) — pass the four `WL_OIDC_*` / `WL_PUBLIC_URL` / `WL_SESSION_SECRET` env vars into `api.Config`.
 - `README.md` (modify) — document the new env vars.
 
 ---
@@ -71,8 +71,8 @@ Create `internal/oidc/oidc.go`:
 ```go
 // Package oidc wraps go-oidc/oauth2 for work-tracker's SSO flows: it verifies
 // Keycloak ID tokens and builds the oauth2 config the web and CLI login flows
-// share. A Verifier is constructed only when WT_OIDC_ISSUER and
-// WT_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
+// share. A Verifier is constructed only when WL_OIDC_ISSUER and
+// WL_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
 package oidc
 
 import (
@@ -517,19 +517,19 @@ In `internal/api/server.go`, extend `Config`:
 
 ```go
 type Config struct {
-	BootstrapToken      string            // WT_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret string            // WT_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret   string            // WT_FLUX_WEBHOOK_SECRET
-	ClusterEnvMap       map[string]string // WT_CLUSTER_ENV_MAP: cluster name -> environment
+	BootstrapToken      string            // WL_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
+	GitHubWebhookSecret string            // WL_GITHUB_WEBHOOK_SECRET
+	FluxWebhookSecret   string            // WL_FLUX_WEBHOOK_SECRET
+	ClusterEnvMap       map[string]string // WL_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
 	// external base URL used to build the web callback redirect URI.
-	OIDCIssuer    string // WT_OIDC_ISSUER
-	OIDCClientID  string // WT_OIDC_CLIENT_ID
-	PublicURL     string // WT_PUBLIC_URL
-	SessionSecret string // WT_SESSION_SECRET
+	OIDCIssuer    string // WL_OIDC_ISSUER
+	OIDCClientID  string // WL_OIDC_CLIENT_ID
+	PublicURL     string // WL_PUBLIC_URL
+	SessionSecret string // WL_SESSION_SECRET
 }
 ```
 
@@ -554,7 +554,7 @@ In `NewServer`, immediately after the `s := &server{...}` literal (before the bo
 ```go
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WT_SESSION_SECRET is required when OIDC is enabled")
+			return nil, fmt.Errorf("WL_SESSION_SECRET is required when OIDC is enabled")
 		}
 		v, err := oidc.New(context.Background(), cfg.OIDCIssuer, cfg.OIDCClientID)
 		if err != nil {
@@ -594,7 +594,7 @@ Expected: FAIL — `s.oidcConfig` / `s.oidcTokenExchange` undefined (added in Ta
 Create `internal/api/oidcauth.go`:
 
 ```go
-// oidcauth.go implements the unauthenticated SSO endpoints that mint wt_
+// oidcauth.go implements the unauthenticated SSO endpoints that mint wl_
 // tokens from a Keycloak identity: GET /auth/oidc/config (so the CLI can
 // discover the issuer/client without its own config) and POST /auth/oidc/token
 // (validate an ID token, auto-provision the human actor, mint a 30-day token).
@@ -612,8 +612,8 @@ import (
 	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
 )
 
-// ssoTokenTTL is the lifetime of a wt_ token minted from an SSO login. No
-// refresh tokens — re-run `wt login` after expiry.
+// ssoTokenTTL is the lifetime of a wl_ token minted from an SSO login. No
+// refresh tokens — re-run `wl login` after expiry.
 const ssoTokenTTL = 30 * 24 * time.Hour
 
 // errNoUserRole is returned by provisionActor when the ID token's groups lack
@@ -652,7 +652,7 @@ type oidcTokenRequest struct {
 }
 
 // oidcTokenExchange handles POST /auth/oidc/token: verify a Keycloak ID token
-// and mint a wt_ token for the corresponding human actor. 404 when OIDC is
+// and mint a wl_ token for the corresponding human actor. 404 when OIDC is
 // unconfigured; 401 for an invalid/expired/wrong-audience or malformed token;
 // 403 when the "user" role is absent.
 func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
@@ -897,14 +897,14 @@ In `internal/cmd/serve.go`, extend the `api.Config` literal in `RunE`:
 
 ```go
 			handler, err := api.NewServer(st, api.Config{
-				BootstrapToken:      os.Getenv("WT_BOOTSTRAP_TOKEN"),
-				GitHubWebhookSecret: os.Getenv("WT_GITHUB_WEBHOOK_SECRET"),
-				FluxWebhookSecret:   os.Getenv("WT_FLUX_WEBHOOK_SECRET"),
-				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("WT_CLUSTER_ENV_MAP")),
-				OIDCIssuer:          os.Getenv("WT_OIDC_ISSUER"),
-				OIDCClientID:        os.Getenv("WT_OIDC_CLIENT_ID"),
-				PublicURL:           os.Getenv("WT_PUBLIC_URL"),
-				SessionSecret:       os.Getenv("WT_SESSION_SECRET"),
+				BootstrapToken:      os.Getenv("WL_BOOTSTRAP_TOKEN"),
+				GitHubWebhookSecret: os.Getenv("WL_GITHUB_WEBHOOK_SECRET"),
+				FluxWebhookSecret:   os.Getenv("WL_FLUX_WEBHOOK_SECRET"),
+				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("WL_CLUSTER_ENV_MAP")),
+				OIDCIssuer:          os.Getenv("WL_OIDC_ISSUER"),
+				OIDCClientID:        os.Getenv("WL_OIDC_CLIENT_ID"),
+				PublicURL:           os.Getenv("WL_PUBLIC_URL"),
+				SessionSecret:       os.Getenv("WL_SESSION_SECRET"),
 			})
 ```
 
@@ -917,7 +917,7 @@ Expected: no output, exit 0.
 
 ```bash
 git add internal/cmd/serve.go
-git commit -m "feat(serve): wire WT_OIDC_* env into server config"
+git commit -m "feat(serve): wire WL_OIDC_* env into server config"
 ```
 
 ---
@@ -934,18 +934,18 @@ Add a short subsection to `README.md` near the existing env/config documentation
 ```markdown
 ### SSO (optional)
 
-Human login via the org Keycloak is off unless both `WT_OIDC_ISSUER` and
-`WT_OIDC_CLIENT_ID` are set; unset behaves as before (tokens minted only by an
+Human login via the org Keycloak is off unless both `WL_OIDC_ISSUER` and
+`WL_OIDC_CLIENT_ID` are set; unset behaves as before (tokens minted only by an
 admin or the bootstrap token). When enabled:
 
 | Var | Meaning |
 |---|---|
-| `WT_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WT_OIDC_CLIENT_ID` | e.g. `work-tracker` |
-| `WT_PUBLIC_URL` | external base URL, for the web login callback |
-| `WT_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
+| `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
+| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_PUBLIC_URL` | external base URL, for the web login callback |
+| `WL_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
 
-Users then run `wt login` to obtain a 30-day `wt_` token from their SSO
+Users then run `wl login` to obtain a 30-day `wl_` token from their SSO
 identity. Agent/service tokens are unchanged.
 ```
 
@@ -975,5 +975,5 @@ Expected: no output, exit 0.
 ## Self-Review Notes
 
 - **Spec coverage:** ID-token verification (go-oidc, iss/aud/exp) — Task 2; `groups`-claim role checks (`user` required, `admin` synced) — Tasks 2 & 7; auto-provision human actor (id=`preferred_username`, name=`name`) — Tasks 5 & 7; token exchange endpoint (401/403/404, 30-day token, description) — Task 7; feature flag (off unless issuer+client set) — Task 6; env vars — Tasks 8 & 9; fake-issuer tests (valid/missing-role/admin-sync/expired/wrong-aud/404) — Task 7.
-- **Deferred to later plans:** web sessions (Plan 2) and `wt login` CLI (Plan 3). The `GET /auth/oidc/config` endpoint added here is consumed by Plan 3; the `provisionActor` helper is reused by Plan 2.
+- **Deferred to later plans:** web sessions (Plan 2) and `wl login` CLI (Plan 3). The `GET /auth/oidc/config` endpoint added here is consumed by Plan 3; the `provisionActor` helper is reused by Plan 2.
 - **Role-string coupling:** `HasRole` matches the exact strings `"user"`/`"admin"` in the `groups` claim, per the design's token-exchange pseudocode. If the deployed `client-roles-as-groups` mapper emits namespaced values (e.g. `work-tracker:user`), align the constants at that point — this is the single config-coupling seam.

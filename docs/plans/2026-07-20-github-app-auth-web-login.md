@@ -31,12 +31,12 @@
 | `internal/api/githubweb.go` | `/auth/github/login` + `/auth/github/callback` handlers, `provisionGitHubActor` | Create |
 | `internal/api/githubweb_test.go` | Handler tests with a fake GitHub | Create |
 | `internal/api/server.go` | Config fields, `server.gh` field, `NewServer` wiring, route registration | Modify |
-| `internal/cmd/serve.go` | Read new `WT_GITHUB_*` / `WT_TOKEN_ENC_KEY` env vars into Config | Modify |
+| `internal/cmd/serve.go` | Read new `WL_GITHUB_*` / `WL_TOKEN_ENC_KEY` env vars into Config | Modify |
 
 Design notes locked here:
-- **Encryption boundary:** the store persists an **opaque ciphertext blob**; the api layer holds `WT_TOKEN_ENC_KEY` and does all encrypt/decrypt via `internal/tokencrypt`. The store never sees plaintext or the key.
+- **Encryption boundary:** the store persists an **opaque ciphertext blob**; the api layer holds `WL_TOKEN_ENC_KEY` and does all encrypt/decrypt via `internal/tokencrypt`. The store never sees plaintext or the key.
 - **Actor id namespacing:** GitHub actors are keyed `github:<numeric-id>` so they cannot collide with Keycloak actors keyed on `preferred_username`.
-- **Provider independence:** GitHub config is gated on `WT_GITHUB_APP_CLIENT_ID` + `WT_GITHUB_APP_CLIENT_SECRET` being set, exactly as OIDC is gated on its two vars. Either, both, or neither provider may be enabled.
+- **Provider independence:** GitHub config is gated on `WL_GITHUB_APP_CLIENT_ID` + `WL_GITHUB_APP_CLIENT_SECRET` being set, exactly as OIDC is gated on its two vars. Either, both, or neither provider may be enabled.
 
 ---
 
@@ -158,7 +158,7 @@ Expected: FAIL — `undefined: New`.
 
 ```go
 // Package tokencrypt seals and opens small secrets (GitHub user tokens) with
-// AES-256-GCM under a single 32-byte key supplied via WT_TOKEN_ENC_KEY. The
+// AES-256-GCM under a single 32-byte key supplied via WL_TOKEN_ENC_KEY. The
 // nonce is random per Seal and prepended to the ciphertext.
 package tokencrypt
 
@@ -247,7 +247,7 @@ import (
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	st, err := Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -406,7 +406,7 @@ func newTestClient(apiBase string) *Client {
 
 func TestAuthCodeURLIncludesState(t *testing.T) {
 	c := newTestClient("https://example.test")
-	u := c.AuthCodeURL("https://wt/auth/github/callback", "xyz")
+	u := c.AuthCodeURL("https://wl/auth/github/callback", "xyz")
 	if !strings.Contains(u, "state=xyz") || !strings.Contains(u, "client_id=cid") {
 		t.Fatalf("bad authorize url: %s", u)
 	}
@@ -723,11 +723,11 @@ In `internal/api/server.go`, extend the `Config` struct (after the OIDC block):
 	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
 	// are both set; independent of the OIDC feature. PublicURL and
 	// SessionSecret (above) are shared and required when this is enabled.
-	GitHubClientID     string // WT_GITHUB_APP_CLIENT_ID
-	GitHubClientSecret string // WT_GITHUB_APP_CLIENT_SECRET
-	GitHubOrg          string // WT_GITHUB_ORG
-	GitHubAdminTeam    string // WT_GITHUB_ADMIN_TEAM
-	TokenEncKey        string // WT_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	GitHubClientID     string // WL_GITHUB_APP_CLIENT_ID
+	GitHubClientSecret string // WL_GITHUB_APP_CLIENT_SECRET
+	GitHubOrg          string // WL_GITHUB_ORG
+	GitHubAdminTeam    string // WL_GITHUB_ADMIN_TEAM
+	TokenEncKey        string // WL_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 ```
 
 - [ ] **Step 2: Add server fields**
@@ -748,17 +748,17 @@ In `internal/api/server.go`, add the imports `"encoding/hex"` (already present),
 ```go
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WT_SESSION_SECRET is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_SESSION_SECRET is required when GitHub auth is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("WT_PUBLIC_URL is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_PUBLIC_URL is required when GitHub auth is enabled")
 		}
 		if cfg.GitHubOrg == "" {
-			return nil, fmt.Errorf("WT_GITHUB_ORG is required when GitHub auth is enabled")
+			return nil, fmt.Errorf("WL_GITHUB_ORG is required when GitHub auth is enabled")
 		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
 		if err != nil || len(key) != 32 {
-			return nil, fmt.Errorf("WT_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+			return nil, fmt.Errorf("WL_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
 		}
 		tc, err := tokencrypt.New(key)
 		if err != nil {
@@ -783,11 +783,11 @@ In `NewServer`, next to the existing `/auth/login` + `/auth/callback` registrati
 In `internal/cmd/serve.go`, extend the `api.Config{...}` literal:
 
 ```go
-				GitHubClientID:     os.Getenv("WT_GITHUB_APP_CLIENT_ID"),
-				GitHubClientSecret: os.Getenv("WT_GITHUB_APP_CLIENT_SECRET"),
-				GitHubOrg:          os.Getenv("WT_GITHUB_ORG"),
-				GitHubAdminTeam:    os.Getenv("WT_GITHUB_ADMIN_TEAM"),
-				TokenEncKey:        os.Getenv("WT_TOKEN_ENC_KEY"),
+				GitHubClientID:     os.Getenv("WL_GITHUB_APP_CLIENT_ID"),
+				GitHubClientSecret: os.Getenv("WL_GITHUB_APP_CLIENT_SECRET"),
+				GitHubOrg:          os.Getenv("WL_GITHUB_ORG"),
+				GitHubAdminTeam:    os.Getenv("WL_GITHUB_ADMIN_TEAM"),
+				TokenEncKey:        os.Getenv("WL_TOKEN_ENC_KEY"),
 ```
 
 - [ ] **Step 6: Verify it compiles (handlers come next; this step must fail to build until Task 7/8 add them)**
@@ -941,7 +941,7 @@ import (
 
 func TestGitHubLoginRedirects(t *testing.T) {
 	st := newAPITestStore(t)
-	s := &server{st: st, cfg: Config{PublicURL: "https://wt.test", SessionSecret: "sekret"}}
+	s := &server{st: st, cfg: Config{PublicURL: "https://wl.test", SessionSecret: "sekret"}}
 	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
 
 	rr := httptest.NewRecorder()
@@ -970,8 +970,8 @@ func TestGitHubLogin404WhenDisabled(t *testing.T) {
 }
 ```
 
-For the full callback, add a test that drives login → fake GitHub token+identity+membership → callback and asserts a `wt_session` cookie and a stored encrypted token. Because the callback calls `s.gh.Exchange`, point `s.gh.Endpoint` and `s.gh.APIBase` at an `httptest` server (as in `githubauth_test`) and set `s.tokenCipher` via `tokencrypt.New(bytes.Repeat([]byte{1},32))`. Assert:
-- `rr.Code == 302` and a `wt_session` cookie is set;
+For the full callback, add a test that drives login → fake GitHub token+identity+membership → callback and asserts a `wl_session` cookie and a stored encrypted token. Because the callback calls `s.gh.Exchange`, point `s.gh.Endpoint` and `s.gh.APIBase` at an `httptest` server (as in `githubauth_test`) and set `s.tokenCipher` via `tokencrypt.New(bytes.Repeat([]byte{1},32))`. Assert:
+- `rr.Code == 302` and a `wl_session` cookie is set;
 - `st.GetGitHubUserToken(ctx, "github:42")` returns non-nil, and `s.tokenCipher.Open(that)` decrypts to JSON containing the access token.
 
 ```go
@@ -1255,8 +1255,8 @@ Expected: no output, no errors.
 
 ## Follow-up plans (out of scope here)
 
-1. **CLI device flow + OS keychain** — `POST /auth/github/device/start` + `/poll`, `wt login --github`, store the wt token via `zalando/go-keyring` with a `0600` file fallback. Spec Section C.
-2. **Deploy + secrets wiring (hzdev)** — add `WT_GITHUB_APP_CLIENT_ID`, `WT_GITHUB_ORG`, `WT_GITHUB_ADMIN_TEAM` to the ConfigMap and `WT_GITHUB_APP_CLIENT_SECRET`, `WT_TOKEN_ENC_KEY` to the ExternalSecret; create the `work-tracker-dev` GitHub App and install it. Spec Sections A, F. (Note: on `main` the deploy/ overlays do not yet exist — they arrive with the CI/deploy branch; sequence this after that lands.)
+1. **CLI device flow + OS keychain** — `POST /auth/github/device/start` + `/poll`, `wl login --github`, store the wl token via `zalando/go-keyring` with a `0600` file fallback. Spec Section C.
+2. **Deploy + secrets wiring (hzdev)** — add `WL_GITHUB_APP_CLIENT_ID`, `WL_GITHUB_ORG`, `WL_GITHUB_ADMIN_TEAM` to the ConfigMap and `WL_GITHUB_APP_CLIENT_SECRET`, `WL_TOKEN_ENC_KEY` to the ExternalSecret; create the `work-tracker-dev` GitHub App and install it. Spec Sections A, F. (Note: on `main` the deploy/ overlays do not yet exist — they arrive with the CI/deploy branch; sequence this after that lands.)
 3. **First outbound "on behalf of user" action + token refresh** — lazy refresh of the stored token before the call (Spec Section E's refresh path), plus the concrete GitHub write. Defines the exact repo permissions to request on the App (Spec Section A).
 
 ---

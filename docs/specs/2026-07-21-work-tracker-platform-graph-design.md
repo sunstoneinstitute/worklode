@@ -98,12 +98,12 @@ proxied by unit-weight chain length + blocking fan-out.
 ## Minimum data-platform support required (OPEN — to nail in round 2)
 
 Because leases/execution stay on the Postgres backbone, `graph-server` only has to host the
-*knowledge* graph. Minimum for wt v1:
+*knowledge* graph. Minimum for wl v1:
 
 1. **Prod deployment of graph-server** (dev-only today).
 2. **A read/query path** for overview + drift — *decision needed*: deploy Oxigraph + the
-   outbox materializer (SPARQL), **or** commit to GSP `GET`-per-graph and query inside wt.
-3. **Stable IRI scheme** for wt entities, aligned with rdf-registry ADR-0006 (branch-free
+   outbox materializer (SPARQL), **or** commit to GSP `GET`-per-graph and query inside wl.
+3. **Stable IRI scheme** for wl entities, aligned with rdf-registry ADR-0006 (branch-free
    term IRIs; `/id/…` for instances).
 
 Explicitly **not** required for v1: lease/job primitive (backbone owns it), If-Match CAS
@@ -140,7 +140,7 @@ only on judgment.** CLI over MCP, hooks over prompts, server-side selection over
 session.** This is what keeps Lodespar strictly *opt-in* — a plain Claude Code session is
 untouched. You enter Lodespar mode only by claiming, which spins up a worktree.
 - `/lode-next [--project]` → atomic `claim --next` → creates a **deterministically named
-  worktree** `wt/<id>-<slug>` (named from the task *after* the lease is held) → binds the lease
+  worktree** `wl/<id>-<slug>` (named from the task *after* the lease is held) → binds the lease
   to that worktree → injects the brief.
 - The lease lives and dies with the worktree: **`ExitWorktree` / worktree removal → auto-release.**
   Sessions come and go; the lease persists while the worktree exists.
