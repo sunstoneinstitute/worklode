@@ -28,8 +28,8 @@ Keycloak-provisioned actors are not mapped to GitHub identities.
 
 - **Web login:** `GET /auth/login` → `GET /auth/callback`, auth-code + PKCE
   against Keycloak (`internal/api/oidcweb.go`, `internal/oidc/oidc.go`).
-- **CLI login:** `wt login` runs an OIDC loopback flow, stores a 30-day
-  work-tracker token in `~/.config/wt/config.toml` **in plaintext**
+- **CLI login:** `wl login` runs an OIDC loopback flow, stores a 30-day
+  work-tracker token in `~/.config/worklode/config.toml` **in plaintext**
   (`internal/cli/login.go`).
 - **Identity:** actor keyed on `preferred_username`; `provisionActor` upserts a
   human actor and syncs the admin flag (`internal/api/oidcauth.go`).
@@ -60,7 +60,7 @@ App configuration:
 - **Callback URL (hzdev):** `https://work-tracker.hzdev.sunstoneinstitute.ai/auth/github/callback`
   (distinct from Keycloak's existing `/auth/callback`, since both providers coexist).
 - **Webhook URL (hzdev):** `https://work-tracker.hzdev.sunstoneinstitute.ai/hooks/github`
-  (unchanged from today; HMAC via `WT_GITHUB_WEBHOOK_SECRET`).
+  (unchanged from today; HMAC via `WL_GITHUB_WEBHOOK_SECRET`).
 - **Permissions:**
   - Organization → **Members: read** (org + team membership for role mapping).
   - Repository → **Pull requests: R/W**, **Issues: R/W**, **Commit statuses: R/W**
@@ -99,11 +99,11 @@ handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 ### C. CLI login (device flow, server-mediated)
 
 A new GitHub device-flow login is added; the existing Keycloak loopback
-`wt login` path stays (e.g. selected via `wt login --github` or a prompt). The
+`wl login` path stays (e.g. selected via `wl login --github` or a prompt). The
 device flow runs **through work-tracker** so the GitHub App client secret and the
 user-to-server token never reach the client:
 
-1. `wt login --github` → `POST /auth/github/device/start`. work-tracker calls
+1. `wl login --github` → `POST /auth/github/device/start`. work-tracker calls
    GitHub's device endpoint and returns `user_code` + `verification_uri` + a
    work-tracker poll handle.
 2. CLI prints the code and URL; user approves in any browser.
@@ -112,7 +112,7 @@ user-to-server token never reach the client:
    pair, and issues a **work-tracker** token to the CLI.
 4. CLI stores **only** the work-tracker token, in the OS keychain via
    `github.com/zalando/go-keyring`, with a `0600` file fallback
-   (`~/.config/wt/config.toml`) when no keychain is available. This replaces the
+   (`~/.config/worklode/config.toml`) when no keychain is available. This replaces the
    current plaintext token storage.
 
 The CLI never holds a GitHub token.
@@ -123,9 +123,9 @@ For **GitHub-authenticated** users (Keycloak users keep their Keycloak-role
 evaluation, unchanged). Evaluated on every GitHub login (web and CLI), matching
 today's role-refresh behavior:
 
-- Member of `WT_GITHUB_ORG` (`sunstoneinstitute`) → `user` role. **Required** —
+- Member of `WL_GITHUB_ORG` (`sunstoneinstitute`) → `user` role. **Required** —
   non-members are denied (same 403 shape as the current missing-`user`-role path).
-- Member of the `WT_GITHUB_ADMIN_TEAM` team (`work-tracker-admins`) → `admin`.
+- Member of the `WL_GITHUB_ADMIN_TEAM` team (`work-tracker-admins`) → `admin`.
 
 Membership is read with the user-to-server token:
 `GET /user/memberships/orgs/{org}` and `GET /orgs/{org}/teams/{team}/memberships/{username}`
@@ -142,7 +142,7 @@ Membership is read with the user-to-server token:
   not yet in production.
 - **Token storage:** the `(access_token, refresh_token, access_expires_at)`
   tuple is stored per actor, **encrypted at rest** with AES-GCM using a key from
-  a new secret `WT_TOKEN_ENC_KEY`. Stored in a dedicated `github_user_tokens`
+  a new secret `WL_TOKEN_ENC_KEY`. Stored in a dedicated `github_user_tokens`
   table keyed by actor id (tokens have their own lifecycle and null-until-first-
   login state, so they do not belong as columns on the actor row). Tokens are
   refreshed lazily before an outbound GitHub call when
@@ -155,18 +155,18 @@ New env vars, **added** to the existing Keycloak/OIDC config (nothing removed):
 
 | Var | Kind | Value / source |
 |---|---|---|
-| `WT_GITHUB_APP_CLIENT_ID` | config | GitHub App client id |
-| `WT_GITHUB_APP_CLIENT_SECRET` | secret | 1Password → ExternalSecret |
-| `WT_GITHUB_ORG` | config | `sunstoneinstitute` |
-| `WT_GITHUB_ADMIN_TEAM` | config | `work-tracker-admins` |
-| `WT_TOKEN_ENC_KEY` | secret | random 32-byte key, 1Password → ExternalSecret |
-| `WT_PUBLIC_URL` | config | `https://work-tracker.hzdev.sunstoneinstitute.ai` (already required) |
+| `WL_GITHUB_APP_CLIENT_ID` | config | GitHub App client id |
+| `WL_GITHUB_APP_CLIENT_SECRET` | secret | 1Password → ExternalSecret |
+| `WL_GITHUB_ORG` | config | `sunstoneinstitute` |
+| `WL_GITHUB_ADMIN_TEAM` | config | `work-tracker-admins` |
+| `WL_TOKEN_ENC_KEY` | secret | random 32-byte key, 1Password → ExternalSecret |
+| `WL_PUBLIC_URL` | config | `https://work-tracker.hzdev.sunstoneinstitute.ai` (already required) |
 
-Nothing removed: `WT_OIDC_ISSUER`, `WT_OIDC_CLIENT_ID`, and the OIDC secret stay.
+Nothing removed: `WL_OIDC_ISSUER`, `WL_OIDC_CLIENT_ID`, and the OIDC secret stay.
 
 Deployment impact: the app-deployment **Keycloak/SSO wiring stays**; the GitHub
 App is added alongside the existing Keycloak client (not a replacement).
-`WT_GITHUB_WEBHOOK_SECRET` is unchanged.
+`WL_GITHUB_WEBHOOK_SECRET` is unchanged.
 
 ## Non-goals
 

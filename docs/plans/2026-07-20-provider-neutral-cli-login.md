@@ -1,10 +1,10 @@
-# Provider-Neutral `wt login` Implementation Plan
+# Provider-Neutral `wl login` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `wt login` provider-neutral: it discovers the server's auth setup, drives whichever web login the server has (Keycloak / GitHub / chooser) via a server-mediated localhost loopback, and stores the resulting 30-day `wt_` token in the OS keychain instead of cleartext.
+**Goal:** Make `wl login` provider-neutral: it discovers the server's auth setup, drives whichever web login the server has (Keycloak / GitHub / chooser) via a server-mediated localhost loopback, and stores the resulting 30-day `wl_` token in the OS keychain instead of cleartext.
 
-**Architecture:** All provider logic stays server-side, reusing the existing web login flows. The CLI opens a browser to a new `/auth/cli/login` endpoint with an ephemeral-port loopback `redirect_uri`; the server runs its normal web flow, mints a short-lived one-time code in `finishLogin`, and 302s it to the loopback; the CLI exchanges the code at `/auth/cli/token` for a `wt_` token. Token is stored via a keychain-backed `tokenStore`.
+**Architecture:** All provider logic stays server-side, reusing the existing web login flows. The CLI opens a browser to a new `/auth/cli/login` endpoint with an ephemeral-port loopback `redirect_uri`; the server runs its normal web flow, mints a short-lived one-time code in `finishLogin`, and 302s it to the loopback; the CLI exchanges the code at `/auth/cli/token` for a `wl_` token. Token is stored via a keychain-backed `tokenStore`.
 
 **Tech Stack:** Go 1.25 stdlib (`net/http`, `net`, `crypto/*`), `github.com/spf13/cobra`, `github.com/zalando/go-keyring` (new), existing `internal/store`, `internal/oidc`, `internal/api` cookie/HMAC helpers.
 
@@ -31,7 +31,7 @@
 - `login.go` (rewrite) — server-mediated `RunLogin`; delete `fetchOIDCConfig`/`exchangeWTToken`; ephemeral-only `listenLocal`.
 - `login_test.go` (rewrite) — drive the new flow with a stub server + injected browser.
 - `cmd/login.go` (modify) — provider-neutral help text (behavior unchanged).
-- `cmd/logout.go` (create) — `wt logout`.
+- `cmd/logout.go` (create) — `wl logout`.
 - `cmd/logout_test.go` (create) — logout clears the keychain entry.
 
 **e2e (`e2e/`):**
@@ -107,7 +107,7 @@ Create `internal/api/cliauth.go`:
 ```go
 // cliauth.go implements the server-mediated CLI login flow: a discovery
 // endpoint, a login-start endpoint that stamps a loopback redirect target into
-// a signed cookie, and a token endpoint that redeems a one-time code for a wt_
+// a signed cookie, and a token endpoint that redeems a one-time code for a wl_
 // token. The one-time code is minted in finishLogin (shared by both web
 // callbacks) once the actor is provisioned. See
 // docs/plans/2026-07-20-provider-neutral-cli-login-design.md.
@@ -233,7 +233,7 @@ Expected: FAIL — `undefined: cliIntent`.
 Add to `internal/api/session.go`. Add `cliCookieName` to the `const` block:
 
 ```go
-	cliCookieName = "wt_cli"
+	cliCookieName = "wl_cli"
 ```
 
 Then append:
@@ -374,7 +374,7 @@ func (s *server) now() time.Time {
 }
 
 // finishLogin ends a successful web login for actorID. When the CLI-intent
-// cookie is present (a server-mediated `wt login`), it mints a one-time code
+// cookie is present (a server-mediated `wl login`), it mints a one-time code
 // and redirects to the loopback redirect_uri instead of establishing a browser
 // session. Otherwise it delegates to finishLoginWeb.
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
@@ -591,7 +591,7 @@ Add to `internal/api/cliauth_test.go`:
 // store the same way the black-box harness does).
 func newStoreT(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -659,7 +659,7 @@ type cliTokenRequest struct {
 }
 
 // cliToken handles POST /auth/cli/token: redeem a one-time code (proof the
-// browser login completed) for a 30-day wt_ token.
+// browser login completed) for a 30-day wl_ token.
 func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	var req cliTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -672,7 +672,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	exp := s.now().Add(ssoTokenTTL)
-	token, err := s.st.CreateToken(r.Context(), actorID, "wt login", &exp)
+	token, err := s.st.CreateToken(r.Context(), actorID, "wl login", &exp)
 	if err != nil {
 		s.log.Error("mint cli token", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
@@ -705,12 +705,12 @@ Expected: PASS.
 
 ```bash
 git add internal/api/cliauth.go internal/api/cliauth_test.go internal/api/server.go
-git commit -m "feat(api): POST /auth/cli/token redeems one-time code for wt_ token"
+git commit -m "feat(api): POST /auth/cli/token redeems one-time code for wl_ token"
 ```
 
 ---
 
-## Task 6: `GET /.well-known/wt-login` discovery
+## Task 6: `GET /.well-known/wl-login` discovery
 
 **Files:**
 - Modify: `internal/api/cliauth.go`
@@ -724,7 +724,7 @@ White-box again — call `s.wellKnownLogin` directly on a hand-built `&server{}`
 ```go
 func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 	s := &server{} // no oidc, no gh
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -733,8 +733,8 @@ func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 }
 
 func TestWellKnownLoginReportsProviders(t *testing.T) {
-	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wt.example.com"}}
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wl.example.com"}}
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusOK {
@@ -744,7 +744,7 @@ func TestWellKnownLoginReportsProviders(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if m["authorize_url"] != "https://wt.example.com/auth/cli/login" || m["token_url"] != "https://wt.example.com/auth/cli/token" {
+	if m["authorize_url"] != "https://wl.example.com/auth/cli/login" || m["token_url"] != "https://wl.example.com/auth/cli/token" {
 		t.Fatalf("urls wrong: %v", m)
 	}
 	provs, _ := m["providers"].([]any)
@@ -766,7 +766,7 @@ Expected: FAIL — `s.wellKnownLogin undefined`.
 Add to `internal/api/cliauth.go`:
 
 ```go
-// wellKnownLogin handles GET /.well-known/wt-login: tells the CLI where to start
+// wellKnownLogin handles GET /.well-known/wl-login: tells the CLI where to start
 // the login and which providers are available. 404 when the server has no
 // interactive provider configured.
 func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
@@ -795,7 +795,7 @@ func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
 In `internal/api/server.go`:
 
 ```go
-	mux.HandleFunc("GET /.well-known/wt-login", s.wellKnownLogin)
+	mux.HandleFunc("GET /.well-known/wl-login", s.wellKnownLogin)
 ```
 
 Note the literal `.well-known` path segment is fine with `http.ServeMux` — register it exactly as shown.
@@ -809,7 +809,7 @@ Expected: PASS (whole api suite).
 
 ```bash
 git add internal/api/cliauth.go internal/api/cliauth_test.go internal/api/server.go
-git commit -m "feat(api): GET /.well-known/wt-login discovery endpoint"
+git commit -m "feat(api): GET /.well-known/wl-login discovery endpoint"
 ```
 
 ---
@@ -848,17 +848,17 @@ func TestKeychainTokenStore(t *testing.T) {
 	keyring.MockInit() // in-memory backend; no real keychain touched
 
 	ts := cli.NewKeychainTokenStore()
-	const server = "https://wt.example.com"
+	const server = "https://wl.example.com"
 
 	if _, err := ts.Get(server); err == nil {
 		t.Fatal("expected miss before set")
 	}
-	if err := ts.Set(server, "wt_abc"); err != nil {
+	if err := ts.Set(server, "wl_abc"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	got, err := ts.Get(server)
-	if err != nil || got != "wt_abc" {
-		t.Fatalf("get = %q,%v; want wt_abc,nil", got, err)
+	if err != nil || got != "wl_abc" {
+		t.Fatalf("get = %q,%v; want wl_abc,nil", got, err)
 	}
 	if err := ts.Delete(server); err != nil {
 		t.Fatalf("delete: %v", err)
@@ -879,7 +879,7 @@ Expected: FAIL — `cli.NewKeychainTokenStore undefined`.
 Create `internal/cli/tokenstore.go`:
 
 ```go
-// tokenstore.go stores the wt_ bearer token in the OS keychain (macOS Keychain,
+// tokenstore.go stores the wl_ bearer token in the OS keychain (macOS Keychain,
 // Linux Secret Service, Windows Credential Manager) instead of cleartext on
 // disk. Tokens are keyed by server URL so one machine can hold tokens for
 // several work-tracker servers.
@@ -887,7 +887,7 @@ package cli
 
 import "github.com/zalando/go-keyring"
 
-// keychainService is the keychain "service" all wt tokens live under.
+// keychainService is the keychain "service" all wl tokens live under.
 const keychainService = "work-tracker"
 
 // TokenStore reads and writes the bearer token for a given server URL.
@@ -931,7 +931,7 @@ git commit -m "feat(cli): keychain-backed TokenStore"
 
 ## Task 8: `LoadConfig`/`SaveConfig` via keychain
 
-Move the token out of `config.toml`: read order `WT_TOKEN` → keychain → legacy
+Move the token out of `config.toml`: read order `WL_TOKEN` → keychain → legacy
 file token; `SaveConfig` writes the token to the keychain and only `server` to
 the file, stripping any legacy cleartext token.
 
@@ -948,22 +948,22 @@ func TestLoadConfigResolvesTokenFromKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
 
 	// config.toml has only server.
-	if err := cli.SaveServerOnly("https://wt.example.com"); err != nil {
+	if err := cli.SaveServerOnly("https://wl.example.com"); err != nil {
 		t.Fatalf("save server: %v", err)
 	}
-	if err := cli.NewKeychainTokenStore().Set("https://wt.example.com", "wt_kc"); err != nil {
+	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_kc"); err != nil {
 		t.Fatalf("seed keychain: %v", err)
 	}
 	cfg, err := cli.LoadConfig()
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Token != "wt_kc" {
-		t.Fatalf("token = %q; want wt_kc", cfg.Token)
+	if cfg.Token != "wl_kc" {
+		t.Fatalf("token = %q; want wl_kc", cfg.Token)
 	}
 }
 
@@ -971,16 +971,16 @@ func TestEnvTokenBeatsKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "https://wt.example.com")
-	t.Setenv("WT_TOKEN", "wt_env")
-	_ = cli.NewKeychainTokenStore().Set("https://wt.example.com", "wt_kc")
+	t.Setenv("WL_SERVER", "https://wl.example.com")
+	t.Setenv("WL_TOKEN", "wl_env")
+	_ = cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_kc")
 
 	cfg, err := cli.LoadConfig()
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Token != "wt_env" {
-		t.Fatalf("token = %q; want wt_env (env overrides keychain)", cfg.Token)
+	if cfg.Token != "wl_env" {
+		t.Fatalf("token = %q; want wl_env (env overrides keychain)", cfg.Token)
 	}
 }
 
@@ -988,19 +988,19 @@ func TestSaveConfigWritesKeychainAndStripsLegacyToken(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
 
 	// Simulate a legacy cleartext config.toml with a token line.
-	if err := cli.WriteRawConfigForTest("server = \"https://wt.example.com\"\ntoken = \"wt_old\"\n"); err != nil {
+	if err := cli.WriteRawConfigForTest("server = \"https://wl.example.com\"\ntoken = \"wl_old\"\n"); err != nil {
 		t.Fatalf("seed legacy: %v", err)
 	}
-	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wt.example.com", Token: "wt_new"}); err != nil {
+	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wl.example.com", Token: "wl_new"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Keychain now holds the new token.
-	if got, _ := cli.NewKeychainTokenStore().Get("https://wt.example.com"); got != "wt_new" {
-		t.Fatalf("keychain token = %q; want wt_new", got)
+	if got, _ := cli.NewKeychainTokenStore().Get("https://wl.example.com"); got != "wl_new" {
+		t.Fatalf("keychain token = %q; want wl_new", got)
 	}
 	// File no longer contains a token line.
 	raw, _ := cli.ReadRawConfigForTest()
@@ -1034,10 +1034,10 @@ var tokenStore TokenStore = NewKeychainTokenStore()
 
 ```go
 	// Server + explicit env token first.
-	if v := os.Getenv("WT_SERVER"); v != "" {
+	if v := os.Getenv("WL_SERVER"); v != "" {
 		cfg.ServerURL = v
 	}
-	if v := os.Getenv("WT_TOKEN"); v != "" {
+	if v := os.Getenv("WL_TOKEN"); v != "" {
 		cfg.Token = v
 		return cfg, nil
 	}
@@ -1056,13 +1056,13 @@ var tokenStore TokenStore = NewKeychainTokenStore()
 
 ```go
 // SaveConfig stores the token in the OS keychain and writes only the server URL
-// to ~/.config/wt/config.toml. Any legacy cleartext token in the file is
+// to ~/.config/worklode/config.toml. Any legacy cleartext token in the file is
 // dropped. Returns an error (without writing the file) if the keychain write
 // fails, so the token is never silently left only in cleartext.
 func SaveConfig(cfg Config) error {
 	if cfg.Token != "" {
 		if err := tokenStore.Set(cfg.ServerURL, cfg.Token); err != nil {
-			return fmt.Errorf("store token in keychain (set WT_TOKEN to use a token without the keychain): %w", err)
+			return fmt.Errorf("store token in keychain (set WL_TOKEN to use a token without the keychain): %w", err)
 		}
 	}
 	return SaveServerOnly(cfg.ServerURL)
@@ -1158,7 +1158,7 @@ import (
 func TestRunLoginServerMediated(t *testing.T) {
 	// Stub work-tracker server: discovery + token exchange.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -1173,7 +1173,7 @@ func TestRunLoginServerMediated(t *testing.T) {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{
-			"token": "wt_minted", "actor_id": "github:7", "expires_at": "2026-08-19T00:00:00Z",
+			"token": "wl_minted", "actor_id": "github:7", "expires_at": "2026-08-19T00:00:00Z",
 		})
 	})
 	wt := httptest.NewServer(mux)
@@ -1198,14 +1198,14 @@ func TestRunLoginServerMediated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLogin: %v", err)
 	}
-	if res.Token != "wt_minted" || res.ActorID != "github:7" {
-		t.Fatalf("result = %+v; want wt_minted/github:7", res)
+	if res.Token != "wl_minted" || res.ActorID != "github:7" {
+		t.Fatalf("result = %+v; want wl_minted/github:7", res)
 	}
 }
 
 func TestRunLoginNoInteractiveLogin(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no interactive login configured", http.StatusNotFound)
 	})
 	wt := httptest.NewServer(mux)
@@ -1221,7 +1221,7 @@ func TestRunLoginNoInteractiveLogin(t *testing.T) {
 
 func TestRunLoginStateMismatch(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -1257,11 +1257,11 @@ Expected: FAIL — old `RunLogin` signature/behavior; compile errors after rewri
 Replace `internal/cli/login.go` with the server-mediated flow. Keep `LoginOptions`/`LoginResult`, `callbackHandler`, `randState`, `openBrowser`. Delete `fetchOIDCConfig`, `exchangeWTToken`, and all `internal/oidc`/`golang.org/x/oauth2` usage. Simplify `listenLocal` to ephemeral-only.
 
 ```go
-// login.go implements `wt login`: a provider-neutral, server-mediated auth flow.
+// login.go implements `wl login`: a provider-neutral, server-mediated auth flow.
 // The CLI discovers the server's login URLs, opens a browser to the server's
 // /auth/cli/login with an ephemeral-port loopback redirect, waits for the
 // server to redirect a one-time code back to the loopback, and exchanges that
-// code for a wt_ token. The CLI speaks no provider protocol.
+// code for a wl_ token. The CLI speaks no provider protocol.
 package cli
 
 import (
@@ -1292,7 +1292,7 @@ type LoginResult struct {
 	Token     string
 }
 
-type wtLoginDiscovery struct {
+type wlLoginDiscovery struct {
 	AuthorizeURL string   `json:"authorize_url"`
 	TokenURL     string   `json:"token_url"`
 	Providers    []string `json:"providers"`
@@ -1351,28 +1351,28 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 
 // fetchLoginConfig gets the discovery document. A 404 means the server has no
 // interactive login configured.
-func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wtLoginDiscovery, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/wt-login", nil)
+func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wlLoginDiscovery, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/wl-login", nil)
 	if err != nil {
-		return wtLoginDiscovery{}, err
+		return wlLoginDiscovery{}, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return wtLoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
+		return wlLoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wtLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WT_TOKEN")
+		return wlLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return wtLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
+		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
 	}
-	var d wtLoginDiscovery
+	var d wlLoginDiscovery
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return wtLoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
+		return wlLoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
 	}
 	if d.AuthorizeURL == "" || d.TokenURL == "" {
-		return wtLoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
+		return wlLoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
 	}
 	return d, nil
 }
@@ -1437,7 +1437,7 @@ git commit -m "feat(cli): server-mediated provider-neutral RunLogin with ephemer
 
 ---
 
-## Task 10: `wt logout` command
+## Task 10: `wl logout` command
 
 **Files:**
 - Create: `internal/cmd/logout.go`
@@ -1462,16 +1462,16 @@ func TestLogoutClearsKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_TOKEN", "")
-	t.Setenv("WT_SERVER", "https://wt.example.com")
+	t.Setenv("WL_TOKEN", "")
+	t.Setenv("WL_SERVER", "https://wl.example.com")
 
-	if err := cli.NewKeychainTokenStore().Set("https://wt.example.com", "wt_x"); err != nil {
+	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_x"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if err := runLogout("https://wt.example.com"); err != nil {
+	if err := runLogout("https://wl.example.com"); err != nil {
 		t.Fatalf("logout: %v", err)
 	}
-	if _, err := cli.NewKeychainTokenStore().Get("https://wt.example.com"); err == nil {
+	if _, err := cli.NewKeychainTokenStore().Get("https://wl.example.com"); err == nil {
 		t.Fatal("token should be gone after logout")
 	}
 }
@@ -1502,7 +1502,7 @@ import (
 // entry is not an error.
 func runLogout(server string) error {
 	if server == "" {
-		return errors.New(`server URL not set: pass --server or set WT_SERVER`)
+		return errors.New(`server URL not set: pass --server or set WL_SERVER`)
 	}
 	err := cli.NewKeychainTokenStore().Delete(server)
 	if err != nil && !errors.Is(err, cli.ErrTokenNotFound) {
@@ -1532,7 +1532,7 @@ func newLogoutCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WT_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 
@@ -1565,12 +1565,12 @@ Expected: PASS.
 
 ```bash
 git add internal/cmd/logout.go internal/cmd/logout_test.go internal/cli/tokenstore.go
-git commit -m "feat(cli): wt logout removes the keychain token"
+git commit -m "feat(cli): wl logout removes the keychain token"
 ```
 
 ---
 
-## Task 11: Provider-neutral `wt login` help text
+## Task 11: Provider-neutral `wl login` help text
 
 **Files:**
 - Modify: `internal/cmd/login.go`
@@ -1597,7 +1597,7 @@ Expected: PASS.
 
 ```bash
 git add internal/cmd/login.go
-git commit -m "docs(cli): provider-neutral wt login help text"
+git commit -m "docs(cli): provider-neutral wl login help text"
 ```
 
 ---
@@ -1607,9 +1607,9 @@ git commit -m "docs(cli): provider-neutral wt login help text"
 **Files:**
 - Create: `e2e/cli_login_test.go` (follow the existing `e2e/` harness conventions — read a sibling test first)
 
-- [ ] **Step 1: Read an existing e2e test** to learn the harness (how it starts a server + runs the `wt` binary). Run: `ls e2e/ && sed -n '1,60p' e2e/<existing_test>.go`.
+- [ ] **Step 1: Read an existing e2e test** to learn the harness (how it starts a server + runs the `wl` binary). Run: `ls e2e/ && sed -n '1,60p' e2e/<existing_test>.go`.
 
-- [ ] **Step 2: Write** a test that: starts a work-tracker server with GitHub auth stubbed (or a fake provider), runs `wt login` with an injected browser driver that completes the loopback, and asserts a subsequent authenticated `wt` call (e.g. `wt board`) succeeds using the keychain token (`keyring.MockInit()` in-process). If the e2e harness runs `wt` as a separate process, the keychain mock will not apply across processes — in that case assert via `WT_TOKEN` captured from the login output instead, or skip e2e and rely on the unit coverage. Decide based on the harness shape.
+- [ ] **Step 2: Write** a test that: starts a work-tracker server with GitHub auth stubbed (or a fake provider), runs `wl login` with an injected browser driver that completes the loopback, and asserts a subsequent authenticated `wl` call (e.g. `wl board`) succeeds using the keychain token (`keyring.MockInit()` in-process). If the e2e harness runs `wl` as a separate process, the keychain mock will not apply across processes — in that case assert via `WL_TOKEN` captured from the login output instead, or skip e2e and rely on the unit coverage. Decide based on the harness shape.
 
 - [ ] **Step 3: Run** `go test ./e2e/ -run CLILogin -v`. Expected: PASS.
 
@@ -1617,7 +1617,7 @@ git commit -m "docs(cli): provider-neutral wt login help text"
 
 ```bash
 git add e2e/cli_login_test.go
-git commit -m "test(e2e): provider-neutral wt login happy path"
+git commit -m "test(e2e): provider-neutral wl login happy path"
 ```
 
 ---
@@ -1628,4 +1628,4 @@ git commit -m "test(e2e): provider-neutral wt login happy path"
 - [ ] `go vet ./...` — clean.
 - [ ] `go test ./...` — all pass.
 - [ ] `gofmt -l internal/ cmd/ e2e/` — no files listed.
-- [ ] Manual smoke (optional, needs a real server): `WT_SERVER=… wt login` opens a browser, completes, and `wt board` works; `wt logout` then makes `wt board` prompt for auth. Confirm no token appears in `~/.config/wt/config.toml`.
+- [ ] Manual smoke (optional, needs a real server): `WL_SERVER=… wl login` opens a browser, completes, and `wl board` works; `wl logout` then makes `wl board` prompt for auth. Confirm no token appears in `~/.config/worklode/config.toml`.

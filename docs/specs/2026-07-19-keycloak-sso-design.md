@@ -15,13 +15,13 @@ the same OAuth2 login. Agent/service token issuance is unchanged.
 
 | Decision | Choice |
 |---|---|
-| Credential model | Unchanged: opaque `wt_` tokens remain the only API credential. SSO is a front door for minting them. |
-| CLI login | `wt login`: auth-code + PKCE against Keycloak with localhost redirect (kubelogin shape). Benefits transparently from macOS Platform SSO when that lands. |
-| Token exchange | New unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wt_` token. |
+| Credential model | Unchanged: opaque `wl_` tokens remain the only API credential. SSO is a front door for minting them. |
+| CLI login | `wl login`: auth-code + PKCE against Keycloak with localhost redirect (kubelogin shape). Benefits transparently from macOS Platform SSO when that lands. |
+| Token exchange | New unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wl_` token. |
 | Web UI gating | Native OIDC sessions in the server (auth-code + PKCE redirect, signed cookie). Not oauth2-proxy — no k8s deployment exists yet, and native works the same in compose and k8s. |
 | Authorization | Keycloak client `work-tracker` with client roles `user` and `admin`, delivered in the `groups` claim (org-standard `client-roles-as-groups` mapper). `user` required to log in; `admin` maps to `Actor.Admin`, re-synced on every login. |
 | Actor provisioning | Auto-provision `human` actors on first login: id = `preferred_username`, display name = `name` claim. |
-| Feature flag | All of this is off unless `WT_OIDC_ISSUER` + `WT_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
+| Feature flag | All of this is off unless `WL_OIDC_ISSUER` + `WL_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
 
 ## Keycloak configuration (admin-cluster repo)
 
@@ -47,10 +47,10 @@ New env (all optional; feature disabled when issuer/client unset):
 
 | Var | Meaning |
 |---|---|
-| `WT_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WT_OIDC_CLIENT_ID` | e.g. `work-tracker` |
-| `WT_PUBLIC_URL` | External base URL, for the web callback redirect URI |
-| `WT_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
+| `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
+| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_PUBLIC_URL` | External base URL, for the web callback redirect URI |
+| `WL_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
 
 ID-token verification uses `github.com/coreos/go-oidc/v3` (JWKS fetch +
 cache; checks signature, `iss`, `aud`, `exp`). Shared by both flows below.
@@ -66,7 +66,7 @@ OIDC is unconfigured.
 2. `groups` must contain `user` → else 403.
 3. Upsert `human` actor; set `Admin` = `groups` contains `admin`
    (re-synced every login, so demotion takes effect at next login).
-4. Mint a `wt_` token via `store.CreateToken`: 30-day expiry, description
+4. Mint a `wl_` token via `store.CreateToken`: 30-day expiry, description
    `sso login for <user> at <RFC3339 timestamp>`. Return `{"token": ...}`
    once. Re-login after expiry; no refresh tokens.
 
@@ -83,19 +83,19 @@ unconfigured the UI stays open as today.
   token, require `user` role, upsert actor (same logic as token exchange),
   set session cookie, 302 to the originally requested page.
 - Session cookie: HMAC-SHA256-signed `{username, expiry}` under
-  `WT_SESSION_SECRET`; ~12 h lifetime; `HttpOnly`, `Secure`,
+  `WL_SESSION_SECRET`; ~12 h lifetime; `HttpOnly`, `Secure`,
   `SameSite=Lax`. No server-side session state. No logout endpoint —
   cookies expire.
 
-## CLI: `wt login`
+## CLI: `wl login`
 
 1. Start a localhost callback listener on port 8000 (fallback 18000).
 2. Open the browser to the Keycloak authorize URL (auth-code + PKCE).
 3. Redeem the code directly against Keycloak's token endpoint for an ID
    token.
 4. `POST /auth/oidc/token` to the work-tracker server (`--server` /
-   `WT_SERVER` / config file, as today).
-5. Write the returned `wt_` token to `~/.config/wt/config.toml` and print
+   `WL_SERVER` / config file, as today).
+5. Write the returned `wl_` token to `~/.config/worklode/config.toml` and print
    the actor id and token expiry.
 
 ## Testing
@@ -110,6 +110,6 @@ unconfigured the UI stays open as today.
 
 ## Out of scope
 
-- Refresh tokens (re-run `wt login`), logout, device flow (not enabled in
+- Refresh tokens (re-run `wl login`), logout, device flow (not enabled in
   this Keycloak), web-UI write actions, per-user authz beyond the existing
   `Admin` bool, and any change to agent/service token issuance.
