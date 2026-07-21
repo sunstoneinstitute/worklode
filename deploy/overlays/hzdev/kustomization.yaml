@@ -39,5 +39,5 @@ patches:
         value: work-tracker.hzdev.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/work-tracker
-    newTag: f124534
+    newTag: 73921ad
     newName: ghcr.io/sunstoneinstitute/work-tracker
