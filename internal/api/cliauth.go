@@ -86,7 +86,7 @@ func (s *server) now() time.Time {
 }
 
 // finishLogin ends a successful web login for actorID. When the CLI-intent
-// cookie is present (a server-mediated `wt login`), it mints a one-time code
+// cookie is present (a server-mediated `wl login`), it mints a one-time code
 // and redirects to the loopback redirect_uri instead of establishing a browser
 // session. Otherwise it delegates to finishLoginWeb.
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
