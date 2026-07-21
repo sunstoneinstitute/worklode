@@ -1,4 +1,4 @@
-# Provider-Neutral `wt login` — Design
+# Provider-Neutral `wl login` — Design
 
 **Status:** Design (approved for planning)
 **Date:** 2026-07-20
@@ -6,21 +6,21 @@
 
 ## Problem
 
-`wt login` today speaks Keycloak OIDC + PKCE **directly from the CLI**: it fetches
+`wl login` today speaks Keycloak OIDC + PKCE **directly from the CLI**: it fetches
 `GET /auth/oidc/config`, runs the auth-code flow against Keycloak itself, and
 exchanges the ID token at `POST /auth/oidc/token`. On a server configured for
-**GitHub** auth (the hzdev deployment) there is no Keycloak, so `wt login` 404s on
+**GitHub** auth (the hzdev deployment) there is no Keycloak, so `wl login` 404s on
 `/auth/oidc/config` and reports "this work-tracker server does not have SSO
 enabled." GitHub auth is web-only — it sets a browser session cookie and never
-mints a `wt_` token — so there is no CLI login path for GitHub-auth servers at
+mints a `wl_` token — so there is no CLI login path for GitHub-auth servers at
 all. The only way to get a CLI token there is an admin minting one by hand.
 
 ## Goal
 
-`wt login` becomes **provider-neutral**: it discovers how to authenticate from the
+`wl login` becomes **provider-neutral**: it discovers how to authenticate from the
 server and kicks off whichever web login the server is configured with (Keycloak,
 GitHub, or a chooser when both are enabled), reusing the browser session the user
-already has, and ends with a `wt_` token stored securely. The CLI speaks **no**
+already has, and ends with a `wl_` token stored securely. The CLI speaks **no**
 provider protocol and never sees a provider token.
 
 ## Architecture: server-mediated loopback
@@ -29,8 +29,8 @@ The provider-specific logic lives entirely in the **server**, reusing the existi
 web login flows. The CLI only opens a URL and waits on a localhost listener.
 
 ```
-wt login
-  1. GET  {server}/.well-known/wt-login       -> { authorize_url, token_url, providers }
+wl login
+  1. GET  {server}/.well-known/wl-login       -> { authorize_url, token_url, providers }
   2. bind loopback listener on an ephemeral port (localhost:0)
   3. open browser: {authorize_url}?redirect_uri=http://localhost:PORT/&state=CLISTATE
         server runs its normal web login (Keycloak / GitHub / chooser),
@@ -50,7 +50,7 @@ bind an **ephemeral port** and is immune to port conflicts.
 
 ### New endpoints
 
-- **`GET /.well-known/wt-login`** — discovery. Returns
+- **`GET /.well-known/wl-login`** — discovery. Returns
   `{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["github"] }`.
   `providers` is informational (lets the CLI print "Signing in with GitHub…").
   Returns **404** when the server has no interactive provider configured
@@ -67,7 +67,7 @@ bind an **ephemeral port** and is immune to port conflicts.
 
 - **`POST /auth/cli/token` `{code, state}`** — validates the one-time code (exists,
   unexpired, unused, `state` matches the value bound at mint time), mints a 30-day
-  `wt_` token via `st.CreateToken(actor, "wt login", exp)`, marks the code used, and
+  `wl_` token via `st.CreateToken(actor, "wl login", exp)`, marks the code used, and
   returns `{ token, actor_id, expires_at }` — the same JSON shape as the existing
   `/auth/oidc/token`. Unauthenticated, like `/auth/oidc/token`: possession of the
   one-time code proves the browser flow completed.
@@ -97,7 +97,7 @@ otherwise touched.
 In-memory `map[string]cliCode` (`{actorID, state, expiresAt, used}`) guarded by a
 mutex. 60-second TTL, single-use, 32 bytes of entropy. In-memory is sufficient
 because the server is single-instance (one PVC + litestream); a restart drops
-pending 60-second codes and the user simply re-runs `wt login`. No DB migration.
+pending 60-second codes and the user simply re-runs `wl login`. No DB migration.
 (If we ever go multi-replica, promote to a table — noted, not built.)
 
 ## CLI changes
@@ -115,29 +115,29 @@ pending 60-second codes and the user simply re-runs `wt login`. No DB migration.
 ## Token storage: OS keychain
 
 Today `SaveConfig` writes `server` **and** `token` into
-`~/.config/wt/config.toml` at 0600 — cleartext on disk. Split secret from
+`~/.config/worklode/config.toml` at 0600 — cleartext on disk. Split secret from
 non-secret:
 
 - **`config.toml` keeps only `server`.** The token never touches disk.
 - **Token lives in the OS keychain**, keyed by server URL (service `work-tracker`,
   account = server URL) so one machine can hold tokens for several servers and
-  `WT_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
+  `WL_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
   Keychain · Linux Secret Service · Windows Credential Manager; no cgo).
 - **`tokenStore` abstraction** in the `cli` package — `Get/Set/Delete(server)` —
   with a keychain implementation and a mock (`keyring.MockInit()`) for tests, since
   CI has no Secret Service.
-- **Token resolution order** in `LoadConfig`: `WT_TOKEN` env → keychain(server) →
+- **Token resolution order** in `LoadConfig`: `WL_TOKEN` env → keychain(server) →
   legacy cleartext `token` in config.toml (read-only fallback so existing installs
   keep working).
-- **`wt login`** writes the token to the keychain, writes only `server` to
+- **`wl login`** writes the token to the keychain, writes only `server` to
   config.toml, and if it finds a legacy cleartext `token` there it strips it and
   prints a one-line note — migrating people off cleartext.
-- **`wt logout`** (new command) deletes the token from the keychain for the current
+- **`wl logout`** (new command) deletes the token from the keychain for the current
   server.
-- **Headless / no keychain:** `wt login` opens a browser, so it runs on a desktop
+- **Headless / no keychain:** `wl login` opens a browser, so it runs on a desktop
   with a keychain. If the keychain write genuinely fails it errors with guidance to
-  use `WT_TOKEN` instead — it never silently falls back to cleartext. Automation
-  (`wt watch` in-cluster) already uses `WT_TOKEN` and is unaffected.
+  use `WL_TOKEN` instead — it never silently falls back to cleartext. Automation
+  (`wl watch` in-cluster) already uses `WL_TOKEN` and is unaffected.
 
 ## Security
 
@@ -154,8 +154,8 @@ non-secret:
   contract preserved at zero cost for a future client (e.g. self-hosted Forgejo).
   Server-mediated login already covers Keycloak-as-a-provider via the web flow; these
   endpoints are an additional direct integration point, not what keeps Keycloak alive.
-- **Add (server):** `/.well-known/wt-login`, `/auth/cli/login`, `/auth/cli/token`.
-- **Add (CLI):** `wt logout`; keychain-backed `tokenStore`.
+- **Add (server):** `/.well-known/wl-login`, `/auth/cli/login`, `/auth/cli/token`.
+- **Add (CLI):** `wl logout`; keychain-backed `tokenStore`.
 - **Remove (CLI):** dead OIDC/PKCE helper code in `login.go`.
 
 ## Testing
@@ -166,8 +166,8 @@ non-secret:
   redirects to the loopback; `/auth/cli/token` valid / expired / reused /
   wrong-state paths; one-time-code store TTL and single-use.
 - **CLI unit** (mirrors `login_test.go`): injected browser driver + `httptest`
-  server implementing `/.well-known/wt-login` and `/auth/cli/token`, driving the
+  server implementing `/.well-known/wl-login` and `/auth/cli/token`, driving the
   loopback callback end to end; ephemeral-port listener; `tokenStore` via
   `keyring.MockInit()`; `LoadConfig` resolution order incl. legacy fallback;
-  `wt logout` deletes the keychain entry.
+  `wl logout` deletes the keychain entry.
 - **e2e** (`e2e/`): happy-path CLI login against a server with GitHub auth stubbed.

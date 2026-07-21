@@ -47,13 +47,13 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signOAuthState(secret, oauthState{
-		State: "st", Verifier: "vfy", Next: "/tasks/WT-1", Exp: now.Add(10 * time.Minute).Unix(),
+		State: "st", Verifier: "vfy", Next: "/tasks/WL-1", Exp: now.Add(10 * time.Minute).Unix(),
 	})
 	got, ok := verifyOAuthState(secret, cookie, now)
 	if !ok {
 		t.Fatal("verifyOAuthState = !ok")
 	}
-	if got.State != "st" || got.Verifier != "vfy" || got.Next != "/tasks/WT-1" {
+	if got.State != "st" || got.Verifier != "vfy" || got.Next != "/tasks/WL-1" {
 		t.Fatalf("state = %+v", got)
 	}
 }
@@ -72,7 +72,7 @@ func TestOAuthStateRejectsExpired(t *testing.T) {
 func TestSafeNext(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/", "/"},
-		{"/tasks/WT-1", "/tasks/WT-1"},
+		{"/tasks/WL-1", "/tasks/WL-1"},
 		{"", "/"},
 		{"foo", "/"},
 		{"//evil.com", "/"},

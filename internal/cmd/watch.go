@@ -43,10 +43,10 @@ each detected CrashLoopBackOff or OOMKilled container to the work-tracker
 runtime-events API. It blocks until interrupted.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if server == "" {
-				return errors.New("--server (or WT_SERVER) is required")
+				return errors.New("--server (or WL_SERVER) is required")
 			}
 			if token == "" {
-				return errors.New("--token (or WT_TOKEN) is required")
+				return errors.New("--token (or WL_TOKEN) is required")
 			}
 
 			cfg, err := kubeRestConfig(kubeconfig)
@@ -70,10 +70,10 @@ runtime-events API. It blocks until interrupted.`,
 		"path to a kubeconfig file (empty: in-cluster config)")
 	cmd.Flags().StringVar(&cluster, "cluster", "",
 		"cluster name reported with every event")
-	cmd.Flags().StringVar(&server, "server", os.Getenv("WT_SERVER"),
-		"work-tracker server URL (default $WT_SERVER)")
-	cmd.Flags().StringVar(&token, "token", os.Getenv("WT_TOKEN"),
-		"bearer token for the server (default $WT_TOKEN)")
+	cmd.Flags().StringVar(&server, "server", os.Getenv("WL_SERVER"),
+		"work-tracker server URL (default $WL_SERVER)")
+	cmd.Flags().StringVar(&token, "token", os.Getenv("WL_TOKEN"),
+		"bearer token for the server (default $WL_TOKEN)")
 	cmd.MarkFlagRequired("cluster")
 	return cmd
 }

@@ -29,10 +29,10 @@ import (
 )
 
 const (
-	// bootstrapToken has the required "wt_" + 40 hex shape: BootstrapAdmin
-	// rejects anything else at startup, and the auth layer treats a non-wt_
+	// bootstrapToken has the required "wl_" + 40 hex shape: BootstrapAdmin
+	// rejects anything else at startup, and the auth layer treats a non-wl_
 	// credential as a token hash, not a plaintext.
-	bootstrapToken = "wt_00e2e00e2e00e2e00e2e00e2e00e2e00e2e00e2e"
+	bootstrapToken = "wl_00e2e00e2e00e2e00e2e00e2e00e2e00e2e00e2e"
 	githubSecret   = "e2e-github-secret"
 	fluxSecret     = "e2e-flux-secret"
 
@@ -125,7 +125,7 @@ func TestFullChain(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Real stack: store on a temp dir, full server, real HTTP listener.
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	wantBranch := "wt/" + task.ID + "-add-login-page"
+	wantBranch := "wl/" + task.ID + "-add-login-page"
 	if claim.Branch != wantBranch {
 		t.Fatalf("claim branch = %q, want %q", claim.Branch, wantBranch)
 	}

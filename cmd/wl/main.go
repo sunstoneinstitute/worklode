@@ -1,4 +1,4 @@
-// Command wt is the Sunstone Institute work tracker CLI.
+// Command wl is the Sunstone Institute work tracker CLI.
 package main
 
 import (

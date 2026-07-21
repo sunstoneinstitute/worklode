@@ -1,8 +1,8 @@
-// login.go implements `wt login`: a provider-neutral, server-mediated auth flow.
+// login.go implements `wl login`: a provider-neutral, server-mediated auth flow.
 // The CLI discovers the server's login URLs, opens a browser to the server's
 // /auth/cli/login with an ephemeral-port loopback redirect, waits for the
 // server to redirect a one-time code back to the loopback, and exchanges that
-// code for a wt_ token. The CLI speaks no provider protocol.
+// code for a wl_ token. The CLI speaks no provider protocol.
 package cli
 
 import (
@@ -35,7 +35,7 @@ type LoginResult struct {
 	Token     string
 }
 
-type wtLoginDiscovery struct {
+type wlLoginDiscovery struct {
 	AuthorizeURL string   `json:"authorize_url"`
 	TokenURL     string   `json:"token_url"`
 	Providers    []string `json:"providers"`
@@ -83,7 +83,7 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		return nil, fmt.Errorf("open browser: %w", err)
 	}
 
-	// Bound the wait so an unattended `wt login` whose callback never arrives
+	// Bound the wait so an unattended `wl login` whose callback never arrives
 	// fails cleanly instead of blocking forever. Derived from the passed ctx so
 	// Ctrl-C still cancels immediately.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -103,28 +103,28 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 
 // fetchLoginConfig gets the discovery document. A 404 means the server has no
 // interactive login configured.
-func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wtLoginDiscovery, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/wt-login", nil)
+func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wlLoginDiscovery, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/wl-login", nil)
 	if err != nil {
-		return wtLoginDiscovery{}, err
+		return wlLoginDiscovery{}, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return wtLoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
+		return wlLoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wtLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WT_TOKEN")
+		return wlLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return wtLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
+		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
 	}
-	var d wtLoginDiscovery
+	var d wlLoginDiscovery
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return wtLoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
+		return wlLoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
 	}
 	if d.AuthorizeURL == "" || d.TokenURL == "" {
-		return wtLoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
+		return wlLoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
 	}
 	return d, nil
 }
@@ -222,7 +222,7 @@ func callbackHandler(state string, codeCh chan<- string, errCh chan<- error) htt
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintln(w, "<!doctype html><title>wt login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
+		fmt.Fprintln(w, "<!doctype html><title>wl login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
 		select {
 		case codeCh <- q.Get("code"):
 		default:

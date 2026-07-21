@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Task is one unit of work, identified by a global WT-<n> id.
+// Task is one unit of work, identified by a global WL-<n> id.
 type Task struct {
 	ID        string
 	ProjectID string
@@ -67,7 +67,7 @@ var legalTransitions = map[[2]string]bool{
 	{"in_review", "abandoned"}:   true,
 }
 
-// CreateTask allocates the next WT-<n> id from task_seq and inserts the task
+// CreateTask allocates the next WL-<n> id from task_seq and inserts the task
 // inside the given transaction. It is meant to be called from a RecordEvent
 // apply callback with the store's clock as now.
 func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
@@ -77,7 +77,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	).Scan(&n); err != nil {
 		return nil, fmt.Errorf("allocate task id: %w", err)
 	}
-	id := fmt.Sprintf("WT-%d", n)
+	id := fmt.Sprintf("WL-%d", n)
 
 	state := "ready"
 	if in.Draft {

@@ -135,7 +135,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 // store the same way the black-box harness does).
 func newStoreT(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestCLITokenHappyPath(t *testing.T) {
 
 func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 	s := &server{} // no oidc, no gh
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -195,8 +195,8 @@ func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 }
 
 func TestWellKnownLoginReportsProviders(t *testing.T) {
-	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wt.example.com"}}
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wt-login", nil)
+	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wl.example.com"}}
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusOK {
@@ -206,7 +206,7 @@ func TestWellKnownLoginReportsProviders(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if m["authorize_url"] != "https://wt.example.com/auth/cli/login" || m["token_url"] != "https://wt.example.com/auth/cli/token" {
+	if m["authorize_url"] != "https://wl.example.com/auth/cli/login" || m["token_url"] != "https://wl.example.com/auth/cli/token" {
 		t.Fatalf("urls wrong: %v", m)
 	}
 	provs, _ := m["providers"].([]any)

@@ -24,7 +24,7 @@ import (
 // test migrations dir, as the rest of the store tests do.
 func newGitHubTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wt.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestProvisionGitHubActorRejectsNonMember(t *testing.T) {
 
 func TestGitHubLoginRedirects(t *testing.T) {
 	st := newGitHubTestStore(t)
-	s := &server{st: st, log: slog.Default(), cfg: Config{PublicURL: "https://wt.test", SessionSecret: "sekret"}}
+	s := &server{st: st, log: slog.Default(), cfg: Config{PublicURL: "https://wl.test", SessionSecret: "sekret"}}
 	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
 
 	rr := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 	s := &server{
 		st:          st,
 		log:         slog.Default(),
-		cfg:         Config{PublicURL: "https://wt.test", SessionSecret: "sekret"},
+		cfg:         Config{PublicURL: "https://wl.test", SessionSecret: "sekret"},
 		tokenCipher: tc,
 	}
 	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
@@ -143,7 +143,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 
 	const state = "xyz"
 	cookie := signOAuthState(s.cfg.SessionSecret, oauthState{
-		State: state, Next: "/tasks/WT-1", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
+		State: state, Next: "/tasks/WL-1", Exp: s.st.Now().Add(oauthStateMaxAge).Unix(),
 	})
 
 	rr := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 		}
 	}
 	if !sessionSet {
-		t.Fatal("expected wt_session cookie to be set")
+		t.Fatal("expected wl_session cookie to be set")
 	}
 
 	ct, err := st.GetGitHubUserToken(context.Background(), "github:42")
@@ -210,7 +210,7 @@ func newGitHubCallbackServer(t *testing.T, member bool) *server {
 	s := &server{
 		st:          newGitHubTestStore(t),
 		log:         slog.Default(),
-		cfg:         Config{PublicURL: "https://wt.test", SessionSecret: "sekret"},
+		cfg:         Config{PublicURL: "https://wl.test", SessionSecret: "sekret"},
 		tokenCipher: tc,
 	}
 	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
@@ -313,7 +313,7 @@ func TestNewServerRejectsBadTokenEncKey(t *testing.T) {
 		GitHubClientSecret: "secret",
 		SessionSecret:      "sekret",
 		GitHubOrg:          "sunstoneinstitute",
-		PublicURL:          "https://wt.test",
+		PublicURL:          "https://wl.test",
 		TokenEncKey:        "abcd",
 	})
 	if err == nil {

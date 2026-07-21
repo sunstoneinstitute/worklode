@@ -32,7 +32,7 @@ func newTestClient(apiBase string) *Client {
 
 func TestAuthCodeURLIncludesState(t *testing.T) {
 	c := newTestClient("https://example.test")
-	u := c.AuthCodeURL("https://wt/auth/github/callback", "xyz")
+	u := c.AuthCodeURL("https://wl/auth/github/callback", "xyz")
 	if !strings.Contains(u, "state=xyz") || !strings.Contains(u, "client_id=cid") {
 		t.Fatalf("bad authorize url: %s", u)
 	}

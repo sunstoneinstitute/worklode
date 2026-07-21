@@ -25,7 +25,7 @@ type Actor struct {
 
 // tokenPrefix marks plaintext bearer tokens so they are visually
 // distinguishable from a raw hex hash (see RevokeToken).
-const tokenPrefix = "wt_"
+const tokenPrefix = "wl_"
 
 // sha256Hex returns the lowercase hex SHA-256 digest of s.
 func sha256Hex(s string) string {
@@ -79,7 +79,7 @@ func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 }
 
 // CreateToken mints a new bearer token for actorID and returns the plaintext
-// exactly once ("wt_" + 40 lowercase hex chars, i.e. 20 random bytes). Only
+// exactly once ("wl_" + 40 lowercase hex chars, i.e. 20 random bytes). Only
 // the SHA-256 hex digest of the plaintext is persisted. A nil expiresAt means
 // the token never expires.
 func (s *Store) CreateToken(ctx context.Context, actorID, description string, expiresAt *time.Time) (string, error) {
@@ -107,20 +107,20 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 }
 
 // bootstrapTokenRe is the required shape of a bootstrap token: the same
-// "wt_" + 40 lowercase hex form CreateToken mints. Anything else (e.g. a
+// "wl_" + 40 lowercase hex form CreateToken mints. Anything else (e.g. a
 // missing prefix) would be hashed differently by tokenHashOf and silently
 // fail every later request with 401.
-var bootstrapTokenRe = regexp.MustCompile(`^wt_[0-9a-f]{40}$`)
+var bootstrapTokenRe = regexp.MustCompile(`^wl_[0-9a-f]{40}$`)
 
 // BootstrapAdmin creates the initial "admin" service actor (admin = true)
 // with the given plaintext token — but only if the actors table is empty. On
 // a store that already has actors it is a no-op, so serve can call it
-// unconditionally at startup with the WT_BOOTSTRAP_TOKEN env value. A token
+// unconditionally at startup with the WL_BOOTSTRAP_TOKEN env value. A token
 // not matching bootstrapTokenRe is an error even on the no-op path: fail at
 // startup, not with silent 401s later.
 func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error {
 	if !bootstrapTokenRe.MatchString(plaintextToken) {
-		return fmt.Errorf("bootstrap token must match %s (e.g. wt_$(openssl rand -hex 20)): %w",
+		return fmt.Errorf("bootstrap token must match %s (e.g. wl_$(openssl rand -hex 20)): %w",
 			bootstrapTokenRe, ErrInvalidInput)
 	}
 	return s.Tx(ctx, func(tx *sql.Tx) error {
@@ -147,7 +147,7 @@ func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error
 	})
 }
 
-// RevokeToken revokes a token, identified by either its plaintext ("wt_"
+// RevokeToken revokes a token, identified by either its plaintext ("wl_"
 // prefix) or its stored hex hash.
 func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 	hash := tokenHashOf(plaintextOrHash)
@@ -201,7 +201,7 @@ func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, err
 	return s.GetActor(ctx, actorID)
 }
 
-// tokenHashOf accepts either a plaintext token (with the "wt_" prefix) or an
+// tokenHashOf accepts either a plaintext token (with the "wl_" prefix) or an
 // already-hashed hex digest, and returns the hex hash to look up in tokens.
 func tokenHashOf(plaintextOrHash string) string {
 	if strings.HasPrefix(plaintextOrHash, tokenPrefix) {

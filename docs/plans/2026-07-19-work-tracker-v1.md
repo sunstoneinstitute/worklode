@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the v1 work-tracker from `docs/spec.md`: a single Go binary (`wt`) serving an org-wide task graph over SQLite with leases, GitHub/flux ingestion, a k8s watcher, a CLI, and a read-only web UI, runnable via docker-compose.
+**Goal:** Build the v1 work-tracker from `docs/spec.md`: a single Go binary (`wl`) serving an org-wide task graph over SQLite with leases, GitHub/flux ingestion, a k8s watcher, a CLI, and a read-only web UI, runnable via docker-compose.
 
 **Architecture:** One Go module, one binary with subcommands (`serve`, `migrate`, `watch`, client commands). The server is the single writer to SQLite and therefore the lock manager. Every ingested fact lands in an append-only `events` table and the same transaction updates typed state tables; state changes reference their causing event. Pipeline position (task → PR → artifact → deployment → runtime) is derived by edge walks, not stored.
 
@@ -22,14 +22,14 @@
 
 **Files:**
 - Create: `go.mod` (module `github.com/sunstoneinstitute/work-tracker`, `go 1.24`)
-- Create: `cmd/wt/main.go`
+- Create: `cmd/wl/main.go`
 - Create: `internal/cmd/root.go`
-- Create: `.gitignore` (`/wt`, `*.db`, `/data/`)
+- Create: `.gitignore` (`/wl`, `*.db`, `/data/`)
 
 - [ ] **Step 1:** `go mod init github.com/sunstoneinstitute/work-tracker`
-- [ ] **Step 2:** `internal/cmd/root.go`: cobra root command `wt` with `Version`, no-op `PersistentPreRun`; `Execute()` func. `cmd/wt/main.go` calls `cmd.Execute()`, exits 1 on error.
-- [ ] **Step 3:** `go build ./... && ./wt --help` — expect usage output. `gofmt -l .` clean.
-- [ ] **Step 4:** Commit `chore: scaffold wt module and root command`.
+- [ ] **Step 2:** `internal/cmd/root.go`: cobra root command `wl` with `Version`, no-op `PersistentPreRun`; `Execute()` func. `cmd/wl/main.go` calls `cmd.Execute()`, exits 1 on error.
+- [ ] **Step 3:** `go build ./... && ./wl --help` — expect usage output. `gofmt -l .` clean.
+- [ ] **Step 4:** Commit `chore: scaffold wl module and root command`.
 
 ### Task 2: Store, migrations, schema
 
@@ -37,9 +37,9 @@
 - Create: `internal/store/store.go`, `internal/store/errors.go`
 - Create: `internal/store/migrations/0001_init.up.sql`, `internal/store/migrations/0001_init.down.sql`
 - Create: `internal/store/store_test.go`
-- Create: `internal/cmd/migrate.go` (`wt migrate --db <path>`)
+- Create: `internal/cmd/migrate.go` (`wl migrate --db <path>`)
 
-- [ ] **Step 1: Failing test** — `TestOpenAppliesMigrations`: `store.Open(filepath.Join(t.TempDir(),"wt.db"))`, then query `sqlite_master` and assert all tables from the spec exist: `events, actors, tokens, projects, project_repos, tasks, task_edges, leases, issues, pull_requests, ci_runs, reviews, artifacts, deployments, runtime_events, state_log`.
+- [ ] **Step 1: Failing test** — `TestOpenAppliesMigrations`: `store.Open(filepath.Join(t.TempDir(),"wl.db"))`, then query `sqlite_master` and assert all tables from the spec exist: `events, actors, tokens, projects, project_repos, tasks, task_edges, leases, issues, pull_requests, ci_runs, reviews, artifacts, deployments, runtime_events, state_log`.
 - [ ] **Step 2:** Run: `go test ./internal/store/ -run TestOpenAppliesMigrations` — FAIL (package missing).
 - [ ] **Step 3: Implement.** `store.go`:
 
@@ -55,8 +55,8 @@ func (s *Store) Close() error
 func (s *Store) Tx(ctx context.Context, fn func(tx *sql.Tx) error) error // BEGIN IMMEDIATE, commit/rollback
 ```
 
-`0001_init.up.sql` creates every table exactly as columned in `docs/spec.md` §Data model. Key constraints: `events` UNIQUE(source, external_id); `tasks.id TEXT PRIMARY KEY` (`WT-<n>`) plus a `task_seq` single-row counter table; `tasks.state` CHECK in ('draft','ready','in_progress','in_review','done','abandoned'); `task_edges` UNIQUE(from_task,to_task,type), type CHECK in ('child_of','blocks'); `leases` with `released_at` nullable and partial unique index `ON leases(task_id) WHERE released_at IS NULL`; `project_repos.repo` UNIQUE (a repo maps to one project); `issues` UNIQUE(repo,number); `pull_requests` UNIQUE(repo,number); `tokens.token_hash` UNIQUE. `state_log(entity_kind, entity_id, change, event_id, at)` with FK to events. All FKs `ON DELETE RESTRICT`.
-- [ ] **Step 4:** Test passes. Also `wt migrate --db /tmp/x.db` runs standalone.
+`0001_init.up.sql` creates every table exactly as columned in `docs/spec.md` §Data model. Key constraints: `events` UNIQUE(source, external_id); `tasks.id TEXT PRIMARY KEY` (`WL-<n>`) plus a `task_seq` single-row counter table; `tasks.state` CHECK in ('draft','ready','in_progress','in_review','done','abandoned'); `task_edges` UNIQUE(from_task,to_task,type), type CHECK in ('child_of','blocks'); `leases` with `released_at` nullable and partial unique index `ON leases(task_id) WHERE released_at IS NULL`; `project_repos.repo` UNIQUE (a repo maps to one project); `issues` UNIQUE(repo,number); `pull_requests` UNIQUE(repo,number); `tokens.token_hash` UNIQUE. `state_log(entity_kind, entity_id, change, event_id, at)` with FK to events. All FKs `ON DELETE RESTRICT`.
+- [ ] **Step 4:** Test passes. Also `wl migrate --db /tmp/x.db` runs standalone.
 - [ ] **Step 5:** Commit `feat(store): sqlite store with embedded golang-migrate schema`.
 
 ### Task 3: Events and the ingest transaction
@@ -88,7 +88,7 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 **Files:**
 - Create: `internal/store/actors.go`, `internal/store/projects.go`, tests alongside.
 
-- [ ] **Step 1: Failing tests** — create actor; `CreateToken` returns plaintext `wt_<40 hex>` once and stores only SHA-256 hash; `Authenticate(plaintext)` returns actor, fails for revoked/expired/unknown. Projects: `CreateProject(id,name)`, `AddRepo(project,"owner/name")`, `ProjectForRepo("owner/name")`; duplicate repo → `ErrRepoTaken`.
+- [ ] **Step 1: Failing tests** — create actor; `CreateToken` returns plaintext `wl_<40 hex>` once and stores only SHA-256 hash; `Authenticate(plaintext)` returns actor, fails for revoked/expired/unknown. Projects: `CreateProject(id,name)`, `AddRepo(project,"owner/name")`, `ProjectForRepo("owner/name")`; duplicate repo → `ErrRepoTaken`.
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3: Implement** (`crypto/rand` token, `crypto/sha256` hash, constant-time compare not needed — lookup by hash).
 - [ ] **Step 4:** PASS.
@@ -99,7 +99,7 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 **Files:**
 - Create: `internal/store/tasks.go`, `internal/store/tasks_test.go`
 
-- [ ] **Step 1: Failing tests** — `CreateTask` allocates sequential `WT-1`, `WT-2`; default state `ready`, `draft` when requested. `Transition(tx, taskID, from→to, eventID)`: legal transitions only (`draft→ready, ready→in_progress, in_progress→in_review, in_progress→ready, in_review→done, in_review→in_progress, any-nonterminal→abandoned`), writes `state_log`, bumps `updated_at`; illegal → `ErrBadTransition`. Edges: `AddEdge(child_of|blocks)`, cycle in `child_of` rejected (walk ancestors), `BlockedTaskIDs()` returns tasks with an open `blocks` edge whose blocker is not `done`/`abandoned`. `ListTasks(Filter{Project, States, Priority})`.
+- [ ] **Step 1: Failing tests** — `CreateTask` allocates sequential `WL-1`, `WL-2`; default state `ready`, `draft` when requested. `Transition(tx, taskID, from→to, eventID)`: legal transitions only (`draft→ready, ready→in_progress, in_progress→in_review, in_progress→ready, in_review→done, in_review→in_progress, any-nonterminal→abandoned`), writes `state_log`, bumps `updated_at`; illegal → `ErrBadTransition`. Edges: `AddEdge(child_of|blocks)`, cycle in `child_of` rejected (walk ancestors), `BlockedTaskIDs()` returns tasks with an open `blocks` edge whose blocker is not `done`/`abandoned`. `ListTasks(Filter{Project, States, Priority})`.
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3: Implement.** All mutating funcs take `*sql.Tx` so API handlers compose them inside `RecordEvent`. CLI-originated mutations use source=`cli` events (external_id = a UUID generated server-side).
 - [ ] **Step 4:** PASS.
@@ -136,7 +136,7 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 **Files:**
 - Create: `internal/store/inbox.go`, `internal/store/changes.go` (PRs/CI/reviews), `internal/store/artifacts.go`, `internal/store/runtime.go`, tests alongside.
 
-- [ ] **Step 1: Failing tests** — upsert semantics for each (webhooks redeliver): `UpsertIssue`, `PromoteIssue(repo, number, taskInput, appliesToVersions)` creates the task + links, `DismissIssue`; `UpsertPR` correlates `task_id` from `head_ref` prefix `wt/<task-id>-` or a `WT-Task: <id>` line in body; `UpsertCIRun`, `UpsertReview`; `CreateArtifact`, `UpsertDeployment(artifact by (kind,name,version))`, `InsertRuntimeEvent` resolving `artifact_id` by image name:tag match.
+- [ ] **Step 1: Failing tests** — upsert semantics for each (webhooks redeliver): `UpsertIssue`, `PromoteIssue(repo, number, taskInput, appliesToVersions)` creates the task + links, `DismissIssue`; `UpsertPR` correlates `task_id` from `head_ref` prefix `wl/<task-id>-` or a `WL-Task: <id>` line in body; `UpsertCIRun`, `UpsertReview`; `CreateArtifact`, `UpsertDeployment(artifact by (kind,name,version))`, `InsertRuntimeEvent` resolving `artifact_id` by image name:tag match.
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3:** Implement (all take `*sql.Tx`; correlation helpers `TaskIDFromRef`, `TaskIDFromBody` in `changes.go` with unit tests).
 - [ ] **Step 4:** PASS.
@@ -146,11 +146,11 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 
 **Files:**
 - Create: `internal/api/server.go` (mux, middleware, JSON helpers), `internal/api/tasks.go`, `internal/api/server_test.go`, `internal/api/tasks_test.go`
-- Create: `internal/cmd/serve.go` (`wt serve --db --listen :8080`, starts sweeper goroutine, graceful shutdown)
+- Create: `internal/cmd/serve.go` (`wl serve --db --listen :8080`, starts sweeper goroutine, graceful shutdown)
 
 - [ ] **Step 1: Failing tests** (httptest against a real temp store): `GET /healthz` 200 no auth; `/api/v1/*` without/with bad token → 401; with token: `POST /api/v1/tasks` (project, title, body, priority, kind, draft) → 201 + task JSON; `GET /api/v1/tasks/{id}`; `GET /api/v1/tasks?project=&state=&priority=` list; `PATCH /api/v1/tasks/{id}` (title/body/priority); `POST /api/v1/tasks/{id}/edges` + `DELETE`. Error mapping: `ErrNotFound`→404, `ErrBadTransition`/validation→422, `ErrLeased`→409.
 - [ ] **Step 2:** FAIL.
-- [ ] **Step 3: Implement.** `NewServer(st *store.Store, cfg Config) http.Handler` using Go 1.22 patterns (`mux.HandleFunc("POST /api/v1/tasks", …)`). Auth middleware: `Authorization: Bearer wt_…` → actor into context. Include `/metrics` (promhttp) with a request-count/duration middleware. Bootstrap: if the DB has zero actors and `WT_BOOTSTRAP_TOKEN` is set, create actor `admin` with that token on startup.
+- [ ] **Step 3: Implement.** `NewServer(st *store.Store, cfg Config) http.Handler` using Go 1.22 patterns (`mux.HandleFunc("POST /api/v1/tasks", …)`). Auth middleware: `Authorization: Bearer wl_…` → actor into context. Include `/metrics` (promhttp) with a request-count/duration middleware. Bootstrap: if the DB has zero actors and `WL_BOOTSTRAP_TOKEN` is set, create actor `admin` with that token on startup.
 - [ ] **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(api): server core, auth, task endpoints, metrics`.
 
@@ -160,7 +160,7 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 - Modify: `internal/api/tasks.go`
 - Create: `internal/api/timeline.go`, tests.
 
-- [ ] **Step 1: Failing tests** — `POST /api/v1/tasks/{id}/claim` (body: session_id, ttl_seconds?) → 200 lease JSON incl. suggested branch `wt/<id>-<slug(title)>`; second claim → 409 with holder info; `renew`, `release`, `done` (in_review→done; also allowed from in_progress via release+auto), `abandon`. `GET /api/v1/tasks/{id}/timeline` → ordered JSON merging: task events/state_log, linked PRs (+ci, reviews), artifacts (via PR merge_sha=source_sha), deployments, runtime_events. Timeline test seeds a full chain and asserts order + linkage.
+- [ ] **Step 1: Failing tests** — `POST /api/v1/tasks/{id}/claim` (body: session_id, ttl_seconds?) → 200 lease JSON incl. suggested branch `wl/<id>-<slug(title)>`; second claim → 409 with holder info; `renew`, `release`, `done` (in_review→done; also allowed from in_progress via release+auto), `abandon`. `GET /api/v1/tasks/{id}/timeline` → ordered JSON merging: task events/state_log, linked PRs (+ci, reviews), artifacts (via PR merge_sha=source_sha), deployments, runtime_events. Timeline test seeds a full chain and asserts order + linkage.
 - [ ] **Step 2:** FAIL. **Step 3:** Implement (timeline is read-only SQL joins; slug: lowercase, non-alnum→`-`, trim, max 40 chars — same helper used by store correlation tests). **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(api): task lifecycle and timeline endpoints`.
 
@@ -172,7 +172,7 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 
 - [ ] **Step 1: Failing tests** — signature: reject missing/bad `X-Hub-Signature-256` (HMAC-SHA256 over raw body, `hmac.Equal`), accept good. Idempotency: same `X-GitHub-Delivery` twice → second is 200 no-op. Handlers (repo `sunstoneinstitute/demo` mapped to a project in test setup; unmapped repo → 200, event recorded, type `github.ignored`):
   - `issues` → `UpsertIssue` (inbox, triage_state `new`)
-  - `pull_request` opened with `head.ref` = `wt/WT-1-x` → PR row correlated; task `in_progress→in_review`. merged → PR `merged`; task→`done` **unless** project `deploy_gated` (project column, default false) — gated tasks stay `in_review`. Active lease on the task is auto-released on merge.
+  - `pull_request` opened with `head.ref` = `wl/WL-1-x` → PR row correlated; task `in_progress→in_review`. merged → PR `merged`; task→`done` **unless** project `deploy_gated` (project column, default false) — gated tasks stay `in_review`. Active lease on the task is auto-released on merge.
   - `pull_request_review` → `UpsertReview`; `workflow_run` → `UpsertCIRun`
   - `release` → `CreateArtifact(kind git_tag, source_sha=target sha)`
 - [ ] **Step 2:** FAIL. **Step 3:** Implement: parse minimal structs (no go-github dep); every delivery = one `RecordEvent(source github, external_id delivery-id, type "<event>.<action>")`. **Step 4:** PASS.
@@ -188,12 +188,12 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(hooks): flux notification-controller ingestion`.
 
-### Task 12: Runtime-events API + `wt watch`
+### Task 12: Runtime-events API + `wl watch`
 
 **Files:**
 - Create: `internal/api/runtime.go` (+test): `POST /api/v1/runtime-events` (bearer; body: cluster, kind, workload, image, message, occurred_at, dedupe_key) → RecordEvent(source `watcher`, external_id dedupe_key).
 - Create: `internal/watch/watcher.go`, `internal/watch/watcher_test.go` (uses `k8s.io/client-go/kubernetes/fake`)
-- Create: `internal/cmd/watch.go` (`wt watch --kubeconfig ~/.kube/config --cluster <name> --server --token`; in-cluster config when `--kubeconfig` empty)
+- Create: `internal/cmd/watch.go` (`wl watch --kubeconfig ~/.kube/config --cluster <name> --server --token`; in-cluster config when `--kubeconfig` empty)
 
 - [ ] **Step 1: Failing tests** — watcher observes pod events (fake clientset): container status `CrashLoopBackOff` (waiting reason, restartCount ≥3) or terminated reason `OOMKilled` → emits exactly one report per (pod-uid, container, reason, restartCount) — dedupe_key = that tuple joined — with the container image and owner workload name (walk ownerRefs one level: ReplicaSet→strip hash suffix for Deployment name). Reports go through a `Reporter` interface; test asserts calls; a real `HTTPReporter` posts to the server.
 - [ ] **Step 2:** FAIL. **Step 3:** Implement with an informer on pods across all namespaces, resync 5m. **Step 4:** PASS (`-race`).
@@ -202,11 +202,11 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 ### Task 13: CLI client
 
 **Files:**
-- Create: `internal/cli/client.go` (config: `~/.config/wt/config.toml` [server_url, token] via `WT_SERVER`/`WT_TOKEN` override; thin JSON HTTP client), `internal/cli/render.go` (tabwriter tables)
+- Create: `internal/cli/client.go` (config: `~/.config/worklode/config.toml` [server_url, token] via `WL_SERVER`/`WL_TOKEN` override; thin JSON HTTP client), `internal/cli/render.go` (tabwriter tables)
 - Create: `internal/cmd/task.go`, `internal/cmd/inbox.go`, `internal/cmd/project.go`, `internal/cmd/admin.go` (actor/token — these two talk to admin API), `internal/cmd/board.go`, `internal/cmd/timeline.go`
 - Create: `internal/cli/client_test.go` (against httptest server from Task 8/9)
 
-- [ ] **Step 1: Failing tests** — client methods for every endpoint used by: `wt task add|list|show|claim|renew|release|done|abandon|block|unblock`, `wt inbox list|promote|dismiss`, `wt project add|list`, `wt board [project]`, `wt timeline <task>`, `wt actor add`, `wt token create|revoke`. Test claim round-trip prints branch name; `--json` flag on every command dumps raw response.
+- [ ] **Step 1: Failing tests** — client methods for every endpoint used by: `wl task add|list|show|claim|renew|release|done|abandon|block|unblock`, `wl inbox list|promote|dismiss`, `wl project add|list`, `wl board [project]`, `wl timeline <task>`, `wl actor add`, `wl token create|revoke`. Test claim round-trip prints branch name; `--json` flag on every command dumps raw response.
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. Server needs `GET /api/v1/board` (grouped in-flight summary: per project — in_progress with lease holder, in_review, blocked, recent failures) — add handler + test. **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(cli): client commands for tasks, inbox, projects, board`.
 
@@ -215,18 +215,18 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 **Files:**
 - Create: `internal/api/web.go`, `internal/api/templates/*.html` (embedded: `layout.html`, `board.html`, `task.html`, `project.html`), `internal/api/web_test.go`
 
-- [ ] **Step 1: Failing tests** — `GET /` (org board), `GET /tasks/WT-1`, `GET /projects/<id>` return 200 HTML containing seeded task titles, lease holder, deployment status; no auth required (read-only; bind-address is the access control for now); unknown id → 404.
+- [ ] **Step 1: Failing tests** — `GET /` (org board), `GET /tasks/WL-1`, `GET /projects/<id>` return 200 HTML containing seeded task titles, lease holder, deployment status; no auth required (read-only; bind-address is the access control for now); unknown id → 404.
 - [ ] **Step 2:** FAIL. **Step 3:** Implement over the same queries as `/api/v1/board` and timeline. Minimal inline CSS, no JS. **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(web): read-only board, task, and project pages`.
 
 ### Task 15: Dockerfile, docker-compose, README
 
 **Files:**
-- Create: `Dockerfile` (multi-stage: `golang:1.24` build `CGO_ENABLED=0` → `gcr.io/distroless/static`; entrypoint `wt`), `docker-compose.yml`, `litestream.yml` (template), `README.md`
+- Create: `Dockerfile` (multi-stage: `golang:1.24` build `CGO_ENABLED=0` → `gcr.io/distroless/static`; entrypoint `wl`), `docker-compose.yml`, `litestream.yml` (template), `README.md`
 
-- [ ] **Step 1:** `docker-compose.yml`: service `tracker` (build ., command `serve --db /data/wt.db --listen :8080`, volume `./data:/data`, port `8080:8080`, env `WT_BOOTSTRAP_TOKEN`, `WT_GITHUB_WEBHOOK_SECRET`, `WT_FLUX_WEBHOOK_SECRET`); optional profile `backup` with `litestream/litestream` replicating `/data/wt.db` (config template, S3 creds via env).
-- [ ] **Step 2:** Verify: `docker compose up -d --build`, then `WT_SERVER=http://localhost:8080 WT_TOKEN=$WT_BOOTSTRAP_TOKEN wt project add horndb … && wt task add … && wt task claim WT-1 && wt board` all succeed; `curl localhost:8080/` shows the board. `docker compose down`.
-- [ ] **Step 3:** `README.md`: what it is (3 sentences), quickstart (compose + bootstrap token + CLI config), webhook setup pointers (GitHub App events list, flux Provider/Alert YAML snippet, `gh webhook forward` for local), `wt watch --kubeconfig` usage, migration policy (golang-migrate, never edit an applied migration).
+- [ ] **Step 1:** `docker-compose.yml`: service `tracker` (build ., command `serve --db /data/wl.db --listen :8080`, volume `./data:/data`, port `8080:8080`, env `WL_BOOTSTRAP_TOKEN`, `WL_GITHUB_WEBHOOK_SECRET`, `WL_FLUX_WEBHOOK_SECRET`); optional profile `backup` with `litestream/litestream` replicating `/data/wl.db` (config template, S3 creds via env).
+- [ ] **Step 2:** Verify: `docker compose up -d --build`, then `WL_SERVER=http://localhost:8080 WL_TOKEN=$WL_BOOTSTRAP_TOKEN wl project add horndb … && wl task add … && wl task claim WL-1 && wl board` all succeed; `curl localhost:8080/` shows the board. `docker compose down`.
+- [ ] **Step 3:** `README.md`: what it is (3 sentences), quickstart (compose + bootstrap token + CLI config), webhook setup pointers (GitHub App events list, flux Provider/Alert YAML snippet, `gh webhook forward` for local), `wl watch --kubeconfig` usage, migration policy (golang-migrate, never edit an applied migration).
 - [ ] **Step 4:** Commit `feat: dockerfile, compose, litestream profile, README`.
 
 ### Task 16: End-to-end smoke test + CI
@@ -243,6 +243,6 @@ Claim = one `RecordEvent` tx: check no active lease (partial unique index is the
 
 ## Self-review notes
 
-- Spec coverage: every spec section maps to a task (data model→2–7, ingestion→10–12, API→8–9/12, CLI→13, web→14, auth→4/8/10/11, local dev→15, testing→6/10/16). Deliberately deferred per spec non-goals: `wt import horndb-tasks` (follow-up plan), k8s deployment manifests, Claude Code skill (lives in claude-plugins repo).
+- Spec coverage: every spec section maps to a task (data model→2–7, ingestion→10–12, API→8–9/12, CLI→13, web→14, auth→4/8/10/11, local dev→15, testing→6/10/16). Deliberately deferred per spec non-goals: `wl import horndb-tasks` (follow-up plan), k8s deployment manifests, Claude Code skill (lives in claude-plugins repo).
 - Type consistency: store mutators take `*sql.Tx` and compose inside `RecordEvent` (Tasks 3–7 define, 8–12 consume). Lease/branch slug helper shared (Tasks 7/9).
 - No placeholder steps: each step names exact behavior, files, and pass/fail commands; full code shown for the non-obvious contracts (RecordEvent, lease API, schema constraints).

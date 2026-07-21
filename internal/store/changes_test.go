@@ -55,7 +55,7 @@ func defaultPR(taskID string) PullRequest {
 		Number:   1,
 		Title:    "fix the thing",
 		State:    "open",
-		HeadRef:  "wt/" + taskID + "-fix-the-thing",
+		HeadRef:  "wl/" + taskID + "-fix-the-thing",
 		HeadSHA:  "abc123",
 		URL:      "https://github.com/sunstoneinstitute/demo/pull/1",
 		OpenedAt: changesTestNow,
@@ -67,15 +67,15 @@ func TestTaskIDFromRef(t *testing.T) {
 		ref  string
 		want string
 	}{
-		{"wt/WT-123-some-slug", "WT-123"},
-		{"wt/WT-1-x", "WT-1"},
-		{"wt/WT-12", "WT-12"},
+		{"wl/WL-123-some-slug", "WL-123"},
+		{"wl/WL-1-x", "WL-1"},
+		{"wl/WL-12", "WL-12"},
 		{"main", ""},
 		{"feature/foo", ""},
-		{"wt/wt-12-x", ""}, // lowercase wt- prefix in the id part: no match
+		{"wl/wl-12-x", ""}, // lowercase wl- prefix in the id part: no match
 		{"", ""},
-		{"wt/-x", ""},
-		{"wt/WT-abc-x", ""}, // no digits after WT-
+		{"wl/-x", ""},
+		{"wl/WL-abc-x", ""}, // no digits after WL-
 	}
 	for _, c := range cases {
 		if got := TaskIDFromRef(c.ref); got != c.want {
@@ -89,14 +89,14 @@ func TestTaskIDFromBody(t *testing.T) {
 		body string
 		want string
 	}{
-		{"WT-Task: WT-42", "WT-42"},
-		{"some text\nWT-Task: WT-7\nmore text", "WT-7"},
+		{"WL-Task: WL-42", "WL-42"},
+		{"some text\nWL-Task: WL-7\nmore text", "WL-7"},
 		{"no marker here", ""},
 		{"", ""},
-		{"wt-task: WT-7", ""},         // case-sensitive prefix
-		{"  WT-Task: WT-7  ", "WT-7"}, // surrounding whitespace on the line is trimmed
-		{"WT-Task: WT-7 trailing text", "WT-7"},
-		{"prefix WT-Task: WT-7", ""}, // marker must start the line, not be embedded mid-line
+		{"wl-task: WL-7", ""},         // case-sensitive prefix
+		{"  WL-Task: WL-7  ", "WL-7"}, // surrounding whitespace on the line is trimmed
+		{"WL-Task: WL-7 trailing text", "WL-7"},
+		{"prefix WL-Task: WL-7", ""}, // marker must start the line, not be embedded mid-line
 	}
 	for _, c := range cases {
 		if got := TaskIDFromBody(c.body); got != c.want {
@@ -133,7 +133,7 @@ func TestUpsertPRCorrelatesViaBody(t *testing.T) {
 
 	pr := defaultPR("ignored")
 	pr.HeadRef = "some-branch"
-	body := "Description.\n\nWT-Task: " + task.ID + "\n"
+	body := "Description.\n\nWL-Task: " + task.ID + "\n"
 	got, err := upsertPR(t, s, pr, body)
 	if err != nil {
 		t.Fatalf("UpsertPR: %v", err)
@@ -160,7 +160,7 @@ func TestUpsertPRNoMatch(t *testing.T) {
 func TestUpsertPRReferencesNonexistentTaskStaysNil(t *testing.T) {
 	s := openChangesStore(t)
 
-	pr := defaultPR("WT-999")
+	pr := defaultPR("WL-999")
 	got, err := upsertPR(t, s, pr, "")
 	if err != nil {
 		t.Fatalf("UpsertPR: %v", err)

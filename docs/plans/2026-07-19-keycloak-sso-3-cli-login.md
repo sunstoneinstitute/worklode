@@ -1,12 +1,12 @@
-# Keycloak SSO — Plan 3: CLI `wt login` Implementation Plan
+# Keycloak SSO — Plan 3: CLI `wl login` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Depends on:** Plan 1 (server core) — this plan calls the `GET /auth/oidc/config` and `POST /auth/oidc/token` endpoints and reuses the `internal/oidc` package and the `oidctest` fake issuer.
 
-**Goal:** Add `wt login`: an auth-code + PKCE flow against Keycloak with a localhost redirect listener, exchanging the resulting ID token at the work-tracker server for a 30-day `wt_` token, which is written to `~/.config/wt/config.toml`.
+**Goal:** Add `wl login`: an auth-code + PKCE flow against Keycloak with a localhost redirect listener, exchanging the resulting ID token at the work-tracker server for a 30-day `wl_` token, which is written to `~/.config/worklode/config.toml`.
 
-**Architecture:** A testable core `cli.RunLogin(ctx, LoginOptions)` does the whole flow: discover issuer/client from the server, run the PKCE auth-code flow via a localhost callback listener (ports 8000 → 18000), redeem the code directly at Keycloak, then POST the ID token to the work-tracker server. Browser-open and the HTTP client are injectable so tests drive the callback without a real browser or Keycloak. A thin `wt login` cobra command resolves the server URL, calls `RunLogin`, persists the token via a new `cli.SaveConfig`, and prints the actor id + expiry.
+**Architecture:** A testable core `cli.RunLogin(ctx, LoginOptions)` does the whole flow: discover issuer/client from the server, run the PKCE auth-code flow via a localhost callback listener (ports 8000 → 18000), redeem the code directly at Keycloak, then POST the ID token to the work-tracker server. Browser-open and the HTTP client are injectable so tests drive the callback without a real browser or Keycloak. A thin `wl login` cobra command resolves the server URL, calls `RunLogin`, persists the token via a new `cli.SaveConfig`, and prints the actor id + expiry.
 
 **Tech Stack:** Go 1.25 stdlib (`net`, `net/http`, `os/exec`), `golang.org/x/oauth2` (PKCE), `internal/oidc`, `github.com/spf13/cobra`.
 
@@ -18,7 +18,7 @@
 - `internal/cli/client_test.go` (modify) — test `SaveConfig` round-trips through `parseConfig`.
 - `internal/cli/login.go` (create) — `LoginOptions`, `LoginResult`, `RunLogin`, plus helpers (`fetchOIDCConfig`, `exchangeWTToken`, `listenLocal`, `callbackHandler`, `openBrowser`, `randState`).
 - `internal/cli/login_test.go` (create) — full flow against a stub work-tracker server + `oidctest` issuer, with an injected browser-open that drives the callback.
-- `internal/cmd/login.go` (create) — the `wt login` command.
+- `internal/cmd/login.go` (create) — the `wl login` command.
 
 ---
 
@@ -36,10 +36,10 @@ Add to `internal/cli/client_test.go` (black-box `package cli_test` — symbols a
 func TestSaveConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WT_SERVER", "")
-	t.Setenv("WT_TOKEN", "")
+	t.Setenv("WL_SERVER", "")
+	t.Setenv("WL_TOKEN", "")
 
-	want := cli.Config{ServerURL: "https://wt.example.com", Token: "wt_" + strings.Repeat("ab", 20)}
+	want := cli.Config{ServerURL: "https://wl.example.com", Token: "wl_" + strings.Repeat("ab", 20)}
 	if err := cli.SaveConfig(want); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
@@ -67,7 +67,7 @@ Expected: FAIL — `SaveConfig` undefined.
 Add to `internal/cli/client.go` (after `parseConfig`):
 
 ```go
-// SaveConfig writes cfg to ~/.config/wt/config.toml in the same minimal format
+// SaveConfig writes cfg to ~/.config/worklode/config.toml in the same minimal format
 // LoadConfig reads, creating the directory (0700) and file (0600) if needed. It
 // rewrites the whole file with just the server and token keys — the only two
 // keys the format defines — so any hand-added comments are not preserved.
@@ -113,9 +113,9 @@ git commit -m "feat(cli): SaveConfig writes config.toml"
 Create `internal/cli/login.go`:
 
 ```go
-// login.go implements `wt login`: an auth-code + PKCE flow against Keycloak
+// login.go implements `wl login`: an auth-code + PKCE flow against Keycloak
 // with a localhost redirect listener, exchanging the resulting ID token at the
-// work-tracker server for a wt_ token. RunLogin is the testable core — the
+// work-tracker server for a wl_ token. RunLogin is the testable core — the
 // browser-open step and the HTTP client are injectable so tests can drive the
 // callback without a real browser or Keycloak.
 package cli
@@ -330,7 +330,7 @@ func callbackHandler(state string, codeCh chan<- string, errCh chan<- error) htt
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintln(w, "<!doctype html><title>wt login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
+		fmt.Fprintln(w, "<!doctype html><title>wl login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
 		codeCh <- q.Get("code")
 	})
 }
@@ -419,7 +419,7 @@ func TestRunLogin(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"token":      "wt_" + strings.Repeat("ab", 20),
+			"token":      "wl_" + strings.Repeat("ab", 20),
 			"actor_id":   "heidi",
 			"expires_at": "2026-08-18T00:00:00Z",
 		})
@@ -456,8 +456,8 @@ func TestRunLogin(t *testing.T) {
 	if res.ActorID != "heidi" {
 		t.Fatalf("actor id = %q, want heidi", res.ActorID)
 	}
-	if !strings.HasPrefix(res.Token, "wt_") {
-		t.Fatalf("token = %q, want wt_ prefix", res.Token)
+	if !strings.HasPrefix(res.Token, "wl_") {
+		t.Fatalf("token = %q, want wl_ prefix", res.Token)
 	}
 	if res.ExpiresAt != "2026-08-18T00:00:00Z" {
 		t.Fatalf("expires_at = %q", res.ExpiresAt)
@@ -498,7 +498,7 @@ git commit -m "test(cli): RunLogin full flow against stub server + fake issuer"
 
 ---
 
-## Task 4: The `wt login` command
+## Task 4: The `wl login` command
 
 **Files:**
 - Create: `internal/cmd/login.go`
@@ -525,7 +525,7 @@ func newLoginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "Authenticate via SSO and store a work-tracker token",
 		Long: "Log in through the org Keycloak (auth-code + PKCE, browser + localhost\n" +
-			"callback) and store the resulting 30-day token in ~/.config/wt/config.toml.\n" +
+			"callback) and store the resulting 30-day token in ~/.config/worklode/config.toml.\n" +
 			"Re-run after it expires — there are no refresh tokens.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -537,7 +537,7 @@ func newLoginCmd() *cobra.Command {
 				cfg.ServerURL = server
 			}
 			if cfg.ServerURL == "" {
-				return errors.New(`server URL not set: pass --server, set WT_SERVER, or add server = "https://..." to ~/.config/wt/config.toml`)
+				return errors.New(`server URL not set: pass --server, set WL_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
 			}
 
 			res, err := cli.RunLogin(cmd.Context(), cli.LoginOptions{Server: cfg.ServerURL})
@@ -551,7 +551,7 @@ func newLoginCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WT_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 
@@ -562,14 +562,14 @@ func init() {
 
 - [ ] **Step 2: Verify it builds and appears in help**
 
-Run: `go build ./... && go run ./cmd/wt login --help`
-Expected: build succeeds; help text for `wt login` prints, listing the `--server` flag.
+Run: `go build ./... && go run ./cmd/wl login --help`
+Expected: build succeeds; help text for `wl login` prints, listing the `--server` flag.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add internal/cmd/login.go
-git commit -m "feat(cli): wt login command"
+git commit -m "feat(cli): wl login command"
 ```
 
 ---
@@ -583,13 +583,13 @@ Expected: ok / no output, exit 0.
 
 - [ ] **Step 2: (Optional) end-to-end sanity against a running server**
 
-If a Keycloak realm and a server with `WT_OIDC_ISSUER`/`WT_OIDC_CLIENT_ID`/`WT_SESSION_SECRET`/`WT_PUBLIC_URL` set are available, run `wt login --server <url>` and confirm a token is written to `~/.config/wt/config.toml` and `wt board` then works. Not required for the plan to be complete (covered by the stubbed test).
+If a Keycloak realm and a server with `WL_OIDC_ISSUER`/`WL_OIDC_CLIENT_ID`/`WL_SESSION_SECRET`/`WL_PUBLIC_URL` set are available, run `wl login --server <url>` and confirm a token is written to `~/.config/worklode/config.toml` and `wl board` then works. Not required for the plan to be complete (covered by the stubbed test).
 
 ---
 
 ## Self-Review Notes
 
-- **Spec coverage:** localhost callback listener on 8000 with 18000 fallback — Task 2 (`listenLocal`); open browser to the Keycloak authorize URL (auth-code + PKCE) — Task 2 (`RunLogin` + `openBrowser`); redeem the code directly at Keycloak's token endpoint — Task 2 (`oauthCfg.Exchange`); POST to `/auth/oidc/token` — Task 2 (`exchangeWTToken`); write the token to `~/.config/wt/config.toml` and print actor id + expiry — Tasks 1 & 4; server URL resolution via `--server`/`WT_SERVER`/config — Task 4; CLI callback tested against a stubbed Keycloak (httptest) — Task 3.
+- **Spec coverage:** localhost callback listener on 8000 with 18000 fallback — Task 2 (`listenLocal`); open browser to the Keycloak authorize URL (auth-code + PKCE) — Task 2 (`RunLogin` + `openBrowser`); redeem the code directly at Keycloak's token endpoint — Task 2 (`oauthCfg.Exchange`); POST to `/auth/oidc/token` — Task 2 (`exchangeWTToken`); write the token to `~/.config/worklode/config.toml` and print actor id + expiry — Tasks 1 & 4; server URL resolution via `--server`/`WL_SERVER`/config — Task 4; CLI callback tested against a stubbed Keycloak (httptest) — Task 3.
 - **Reuse from Plan 1:** the `internal/oidc` package (`oidc.New`, `OAuth2Config`), the `/auth/oidc/config` and `/auth/oidc/token` endpoints, the `oidctest` fake issuer, and the existing `ClientError` type from `client.go`.
 - **Type consistency:** `LoginOptions`/`LoginResult`/`RunLogin`, the `oidcDiscovery` shape, and the token-response fields (`token`/`actor_id`/`expires_at`) match the JSON the Plan 1 endpoints emit.
-- **Out of scope (per design):** no refresh tokens (re-run `wt login`), no device flow, no logout.
+- **Out of scope (per design):** no refresh tokens (re-run `wl login`), no device flow, no logout.

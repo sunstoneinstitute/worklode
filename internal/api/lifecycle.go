@@ -116,7 +116,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lease":  toLeaseJSON(lease),
-		"branch": "wt/" + id + "-" + SlugifyTitle(t.Title),
+		"branch": "wl/" + id + "-" + SlugifyTitle(t.Title),
 	})
 }
 
