@@ -14,7 +14,7 @@
 
 ## Source spec
 
-`docs/superpowers/specs/2026-07-20-github-app-auth-design.md` — Sections A, B, D, E.
+`docs/specs/2026-07-20-github-app-auth-design.md` — Sections A, B, D, E.
 
 ## File Structure
 
