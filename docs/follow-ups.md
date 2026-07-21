@@ -10,11 +10,11 @@ once an instance is running (dogfooding); until then this file is the list.
   flux-revision → artifact → task chain rarely connects.
 - **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
 - **PR closed without merge**: release the lease and surface the task on the
-  board (today it stays `in_review`; `wt task reopen` is the manual path).
-- **`wt import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
+  board (today it stays `in_review`; `wl task reopen` is the manual path).
+- **`wl import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
   (spec §Migration).
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
-  for `wt watch` in-cluster.
+  for `wl watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
   claim → work → report → complete loop.
 - **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s

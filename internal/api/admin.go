@@ -421,7 +421,7 @@ type boardResponse struct {
 }
 
 // board handles GET /api/v1/board?project=: a read-only summary of each
-// project's tasks bucketed by state, for the CLI's `wt board` command.
+// project's tasks bucketed by state, for the CLI's `wl board` command.
 func (s *server) board(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.assembleBoard(r.Context(), r.URL.Query().Get("project"))
 	if err != nil {
