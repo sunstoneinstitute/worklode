@@ -17,7 +17,7 @@ import (
 func TestRunLoginServerMediated(t *testing.T) {
 	// Stub work-tracker server: discovery + token exchange.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -32,7 +32,7 @@ func TestRunLoginServerMediated(t *testing.T) {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{
-			"token": "wt_minted", "actor_id": "github:7", "expires_at": "2026-08-19T00:00:00Z",
+			"token": "wl_minted", "actor_id": "github:7", "expires_at": "2026-08-19T00:00:00Z",
 		})
 	})
 	wt := httptest.NewServer(mux)
@@ -57,14 +57,14 @@ func TestRunLoginServerMediated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLogin: %v", err)
 	}
-	if res.Token != "wt_minted" || res.ActorID != "github:7" {
-		t.Fatalf("result = %+v; want wt_minted/github:7", res)
+	if res.Token != "wl_minted" || res.ActorID != "github:7" {
+		t.Fatalf("result = %+v; want wl_minted/github:7", res)
 	}
 }
 
 func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -96,7 +96,7 @@ func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 
 func TestRunLoginNoInteractiveLogin(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no interactive login configured", http.StatusNotFound)
 	})
 	wt := httptest.NewServer(mux)
@@ -112,7 +112,7 @@ func TestRunLoginNoInteractiveLogin(t *testing.T) {
 
 func TestRunLoginStateMismatch(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wt-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",

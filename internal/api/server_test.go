@@ -104,7 +104,7 @@ func TestAPIRequiresAuth(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	for name, token := range map[string]string{
 		"missing token": "",
-		"bad token":     "wt_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		"bad token":     "wl_deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 	} {
 		t.Run(name, func(t *testing.T) {
 			rr := doReq(t, h, "GET", "/api/v1/tasks", token, nil)
@@ -133,7 +133,7 @@ func TestBootstrapAdmin(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 
-	tok1 := "wt_" + strings.Repeat("ab", 20)
+	tok1 := "wl_" + strings.Repeat("ab", 20)
 	if err := st.BootstrapAdmin(ctx, tok1); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestBootstrapAdmin(t *testing.T) {
 	}
 
 	// Second call must no-op: actors table is no longer empty.
-	tok2 := "wt_" + strings.Repeat("cd", 20)
+	tok2 := "wl_" + strings.Repeat("cd", 20)
 	if err := st.BootstrapAdmin(ctx, tok2); err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
@@ -165,9 +165,9 @@ func TestBootstrapAdminRejectsMalformedToken(t *testing.T) {
 	for name, tok := range map[string]string{
 		"empty":         "",
 		"no prefix":     strings.Repeat("ab", 20),
-		"too short":     "wt_abcdef",
-		"not hex":       "wt_" + strings.Repeat("zz", 20),
-		"uppercase hex": "wt_" + strings.Repeat("AB", 20),
+		"too short":     "wl_abcdef",
+		"not hex":       "wl_" + strings.Repeat("zz", 20),
+		"uppercase hex": "wl_" + strings.Repeat("AB", 20),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := st.BootstrapAdmin(ctx, tok); !errors.Is(err, store.ErrInvalidInput) {
@@ -187,7 +187,7 @@ func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
-	tok := "wt_" + strings.Repeat("ef", 20)
+	tok := "wl_" + strings.Repeat("ef", 20)
 	if err := st.BootstrapAdmin(ctx, tok); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
