@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // timelineEntry pairs an entry's sort key with its wire object. Entries are

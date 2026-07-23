@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.25, `github.com/coreos/go-oidc/v3`, `golang.org/x/oauth2`, `github.com/go-jose/go-jose/v4` (test signing), `modernc.org/sqlite`.
 
-**Prerequisite (out of scope for this plan):** The Keycloak `work-tracker` client, client roles (`user`/`admin`), `client-roles-as-groups` mapper, and groups are configured via GitOps in the admin-cluster repo (`clusters/admin/keycloak-config/rbac.yaml`), per the design doc's "Keycloak configuration" section. This plan is testable end-to-end against the fake issuer without that config.
+**Prerequisite (out of scope for this plan):** The Keycloak `worklode` client, client roles (`user`/`admin`), `client-roles-as-groups` mapper, and groups are configured via GitOps in the admin-cluster repo (`clusters/admin/keycloak-config/rbac.yaml`), per the design doc's "Keycloak configuration" section. This plan is testable end-to-end against the fake issuer without that config.
 
 ---
 
@@ -69,7 +69,7 @@ git commit -m "build: add go-oidc and x/oauth2 for SSO"
 Create `internal/oidc/oidc.go`:
 
 ```go
-// Package oidc wraps go-oidc/oauth2 for work-tracker's SSO flows: it verifies
+// Package oidc wraps go-oidc/oauth2 for worklode's SSO flows: it verifies
 // Keycloak ID tokens and builds the oauth2 config the web and CLI login flows
 // share. A Verifier is constructed only when WL_OIDC_ISSUER and
 // WL_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
@@ -83,7 +83,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Claims are the ID-token claims work-tracker consumes.
+// Claims are the ID-token claims worklode consumes.
 type Claims struct {
 	PreferredUsername string   `json:"preferred_username"`
 	Name              string   `json:"name"`
@@ -91,7 +91,7 @@ type Claims struct {
 }
 
 // HasRole reports whether role is present in the groups claim. Keycloak's
-// client-roles-as-groups mapper delivers the work-tracker client roles
+// client-roles-as-groups mapper delivers the worklode client roles
 // (user, admin) here.
 func (c *Claims) HasRole(role string) bool {
 	for _, g := range c.Groups {
@@ -134,7 +134,7 @@ func (v *Verifier) Issuer() string { return v.issuer }
 func (v *Verifier) ClientID() string { return v.clientID }
 
 // Verify checks the raw ID token's signature, issuer, audience, and expiry,
-// then extracts the claims work-tracker uses.
+// then extracts the claims worklode uses.
 func (v *Verifier) Verify(ctx context.Context, rawIDToken string) (*Claims, error) {
 	tok, err := v.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
@@ -219,7 +219,7 @@ type Issuer struct {
 }
 
 // NewIssuer starts a fake issuer and registers cleanup. ClientID defaults to
-// "work-tracker".
+// "worklode".
 func NewIssuer(t *testing.T) *Issuer {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -228,7 +228,7 @@ func NewIssuer(t *testing.T) *Issuer {
 	}
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
-	iss := &Issuer{Server: srv, ClientID: "work-tracker", key: key}
+	iss := &Issuer{Server: srv, ClientID: "worklode", key: key}
 
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{
@@ -340,8 +340,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc/oidctest"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 )
 
 func newVerifier(t *testing.T, iss *oidctest.Issuer) *oidc.Verifier {
@@ -544,7 +544,7 @@ Add an `oidc` field to `server` (after `log *slog.Logger`):
 Add the import to the block:
 
 ```go
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
 ```
 
 - [ ] **Step 2: Build the verifier in `NewServer`**
@@ -609,7 +609,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
 )
 
 // ssoTokenTTL is the lifetime of a wl_ token minted from an SSO login. No
@@ -682,7 +682,7 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	actorID, err := s.provisionActor(r.Context(), claims)
 	if errors.Is(err, errNoUserRole) {
-		writeErr(w, http.StatusForbidden, "the work-tracker user role is required")
+		writeErr(w, http.StatusForbidden, "the worklode user role is required")
 		return
 	}
 	if err != nil {
@@ -720,9 +720,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc/oidctest"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // newOIDCServer stands up a store + server wired to a fake issuer. It returns
@@ -941,7 +941,7 @@ admin or the bootstrap token). When enabled:
 | Var | Meaning |
 |---|---|
 | `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_OIDC_CLIENT_ID` | e.g. `worklode` |
 | `WL_PUBLIC_URL` | external base URL, for the web login callback |
 | `WL_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
 
@@ -976,4 +976,4 @@ Expected: no output, exit 0.
 
 - **Spec coverage:** ID-token verification (go-oidc, iss/aud/exp) — Task 2; `groups`-claim role checks (`user` required, `admin` synced) — Tasks 2 & 7; auto-provision human actor (id=`preferred_username`, name=`name`) — Tasks 5 & 7; token exchange endpoint (401/403/404, 30-day token, description) — Task 7; feature flag (off unless issuer+client set) — Task 6; env vars — Tasks 8 & 9; fake-issuer tests (valid/missing-role/admin-sync/expired/wrong-aud/404) — Task 7.
 - **Deferred to later plans:** web sessions (Plan 2) and `wl login` CLI (Plan 3). The `GET /auth/oidc/config` endpoint added here is consumed by Plan 3; the `provisionActor` helper is reused by Plan 2.
-- **Role-string coupling:** `HasRole` matches the exact strings `"user"`/`"admin"` in the `groups` claim, per the design's token-exchange pseudocode. If the deployed `client-roles-as-groups` mapper emits namespaced values (e.g. `work-tracker:user`), align the constants at that point — this is the single config-coupling seam.
+- **Role-string coupling:** `HasRole` matches the exact strings `"user"`/`"admin"` in the `groups` claim, per the design's token-exchange pseudocode. If the deployed `client-roles-as-groups` mapper emits namespaced values (e.g. `worklode:user`), align the constants at that point — this is the single config-coupling seam.

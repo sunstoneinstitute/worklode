@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // validActorKinds is the actors.kind CHECK constraint, mirrored in Go so

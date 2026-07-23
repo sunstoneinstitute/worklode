@@ -1,7 +1,7 @@
 # Spec 04 — Drift & overview
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:** D5, D6,
-D12 (design record `../2026-07-21-work-tracker-platform-graph-design.md`).
+D12 (design record `../2026-07-21-worklode-platform-graph-design.md`).
 
 > **Dependency note:** the entity model, `ls:` vocabulary, and IRI scheme this spec queries are
 > owned by **spec 03 — knowledge graph**, which is not yet written. Where a predicate or IRI is

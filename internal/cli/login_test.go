@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func TestRunLoginServerMediated(t *testing.T) {
-	// Stub work-tracker server: discovery + token exchange.
+	// Stub worklode server: discovery + token exchange.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{

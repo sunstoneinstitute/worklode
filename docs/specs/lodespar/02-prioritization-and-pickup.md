@@ -1,7 +1,7 @@
 # Spec 02 — Prioritization & pickup
 
 **Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `00-umbrella-architecture.md`
-**Design record:** `../2026-07-21-work-tracker-platform-graph-design.md` (D8, D9, D10, D12, D15)
+**Design record:** `../2026-07-21-worklode-platform-graph-design.md` (D8, D9, D10, D12, D15)
 **Depends on:** 01 (execution backbone — task state machine, worktree-bound leases, `blocks`/`child_of` edges, the `claim` transaction).
 
 ## Purpose & scope

@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 var rootCmd = &cobra.Command{

@@ -1,4 +1,4 @@
-# GitHub App authentication for work-tracker
+# GitHub App authentication for worklode
 
 **Date:** 2026-07-20
 **Status:** Design — approved shape, pending spec review
@@ -7,19 +7,19 @@
 
 Add a GitHub App as an **additional** identity provider for the web UI and CLI,
 **alongside** the existing Keycloak OIDC (which is left in place, unchanged).
-Beyond login, capture a per-user **user-to-server** token so work-tracker can call
+Beyond login, capture a per-user **user-to-server** token so worklode can call
 the GitHub API attributed as "SunstoneWork on behalf of `<user>`". For
 GitHub-authenticated users, authorization derives from GitHub org and team
 membership.
 
 Scope for this project: **hzdev only**. hzprod is migrated later (no cluster yet).
-No migration of existing users — work-tracker is not yet in production use, so
+No migration of existing users — worklode is not yet in production use, so
 Keycloak-provisioned actors are not mapped to GitHub identities.
 
 ## Motivation
 
 - A GitHub App acting on behalf of the user gives correct attribution when
-  work-tracker interacts with GitHub (comment on PRs/issues, set commit status).
+  worklode interacts with GitHub (comment on PRs/issues, set commit status).
   Keycloak OIDC only proves identity; it cannot act on GitHub.
 - GitHub org/team membership is already the source of truth for who works here,
   removing a layer of Keycloak role plumbing.
@@ -29,7 +29,7 @@ Keycloak-provisioned actors are not mapped to GitHub identities.
 - **Web login:** `GET /auth/login` → `GET /auth/callback`, auth-code + PKCE
   against Keycloak (`internal/api/oidcweb.go`, `internal/oidc/oidc.go`).
 - **CLI login:** `wl login` runs an OIDC loopback flow, stores a 30-day
-  work-tracker token in `~/.config/worklode/config.toml` **in plaintext**
+  worklode token in `~/.config/worklode/config.toml` **in plaintext**
   (`internal/cli/login.go`).
 - **Identity:** actor keyed on `preferred_username`; `provisionActor` upserts a
   human actor and syncs the admin flag (`internal/api/oidcauth.go`).
@@ -48,7 +48,7 @@ specific routes, encrypted token storage, and outbound GitHub calls.
 
 ### A. GitHub App(s) — one per environment
 
-Create `work-tracker-dev` now (`work-tracker-prod` later). One App per env
+Create `worklode-dev` now (`worklode-prod` later). One App per env
 because a GitHub App has a single webhook URL and single set of callback URLs;
 this mirrors the existing Keycloak client-per-env split.
 
@@ -57,9 +57,9 @@ App configuration:
 - **User authorization:** enabled, with **expiring user tokens** on (8h access /
   ~6-month refresh).
 - **Device flow:** enabled (for the CLI).
-- **Callback URL (hzdev):** `https://work-tracker.hzdev.sunstoneinstitute.ai/auth/github/callback`
+- **Callback URL (hzdev):** `https://worklode.hzdev.sunstoneinstitute.ai/auth/github/callback`
   (distinct from Keycloak's existing `/auth/callback`, since both providers coexist).
-- **Webhook URL (hzdev):** `https://work-tracker.hzdev.sunstoneinstitute.ai/hooks/github`
+- **Webhook URL (hzdev):** `https://worklode.hzdev.sunstoneinstitute.ai/hooks/github`
   (unchanged from today; HMAC via `WL_GITHUB_WEBHOOK_SECRET`).
 - **Permissions:**
   - Organization → **Members: read** (org + team membership for role mapping).
@@ -100,17 +100,17 @@ handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 
 A new GitHub device-flow login is added; the existing Keycloak loopback
 `wl login` path stays (e.g. selected via `wl login --github` or a prompt). The
-device flow runs **through work-tracker** so the GitHub App client secret and the
+device flow runs **through worklode** so the GitHub App client secret and the
 user-to-server token never reach the client:
 
-1. `wl login --github` → `POST /auth/github/device/start`. work-tracker calls
+1. `wl login --github` → `POST /auth/github/device/start`. worklode calls
    GitHub's device endpoint and returns `user_code` + `verification_uri` + a
-   work-tracker poll handle.
+   worklode poll handle.
 2. CLI prints the code and URL; user approves in any browser.
-3. CLI polls `POST /auth/github/device/poll`. work-tracker polls GitHub; on
+3. CLI polls `POST /auth/github/device/poll`. worklode polls GitHub; on
    approval it receives the user token, provisions the actor, stores the token
-   pair, and issues a **work-tracker** token to the CLI.
-4. CLI stores **only** the work-tracker token, in the OS keychain via
+   pair, and issues a **worklode** token to the CLI.
+4. CLI stores **only** the worklode token, in the OS keychain via
    `github.com/zalando/go-keyring`, with a `0600` file fallback
    (`~/.config/worklode/config.toml`) when no keychain is available. This replaces the
    current plaintext token storage.
@@ -125,7 +125,7 @@ today's role-refresh behavior:
 
 - Member of `WL_GITHUB_ORG` (`sunstoneinstitute`) → `user` role. **Required** —
   non-members are denied (same 403 shape as the current missing-`user`-role path).
-- Member of the `WL_GITHUB_ADMIN_TEAM` team (`work-tracker-admins`) → `admin`.
+- Member of the `WL_GITHUB_ADMIN_TEAM` team (`worklode-admins`) → `admin`.
 
 Membership is read with the user-to-server token:
 `GET /user/memberships/orgs/{org}` and `GET /orgs/{org}/teams/{team}/memberships/{username}`
@@ -158,9 +158,9 @@ New env vars, **added** to the existing Keycloak/OIDC config (nothing removed):
 | `WL_GITHUB_APP_CLIENT_ID` | config | GitHub App client id |
 | `WL_GITHUB_APP_CLIENT_SECRET` | secret | 1Password → ExternalSecret |
 | `WL_GITHUB_ORG` | config | `sunstoneinstitute` |
-| `WL_GITHUB_ADMIN_TEAM` | config | `work-tracker-admins` |
+| `WL_GITHUB_ADMIN_TEAM` | config | `worklode-admins` |
 | `WL_TOKEN_ENC_KEY` | secret | random 32-byte key, 1Password → ExternalSecret |
-| `WL_PUBLIC_URL` | config | `https://work-tracker.hzdev.sunstoneinstitute.ai` (already required) |
+| `WL_PUBLIC_URL` | config | `https://worklode.hzdev.sunstoneinstitute.ai` (already required) |
 
 Nothing removed: `WL_OIDC_ISSUER`, `WL_OIDC_CLIENT_ID`, and the OIDC secret stay.
 
@@ -170,7 +170,7 @@ App is added alongside the existing Keycloak client (not a replacement).
 
 ## Non-goals
 
-- hzprod migration (later project; create `work-tracker-prod` App then).
+- hzprod migration (later project; create `worklode-prod` App then).
 - Migrating existing Keycloak actors (fresh start).
 - Building specific outbound GitHub features (PR comments, status checks). This
   design establishes the *capability* (stored user tokens + App permissions); the
@@ -194,7 +194,7 @@ App is added alongside the existing Keycloak client (not a replacement).
 - Web: `/auth/github/login` and `/auth/github/callback` handler tests with a fake
   GitHub server (state mismatch, non-member denial, admin team, actor conflict),
   mirroring existing `oidcweb`/`oidcauth` tests.
-- CLI: device-flow start/poll tests with a fake work-tracker server; keychain
+- CLI: device-flow start/poll tests with a fake worklode server; keychain
   storage behind an interface with a memory fake, plus the file fallback.
 - Token store: AES-GCM round-trip and lazy-refresh-before-expiry tests.
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cmd"
+	"github.com/sunstoneinstitute/worklode/internal/cmd"
 )
 
 func main() {

@@ -1,7 +1,7 @@
 # Spec 03 — Knowledge graph: the `ls:` vocabulary, entity model & projection
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:**
-`../2026-07-21-work-tracker-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 01
+`../2026-07-21-worklode-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 01
 (backbone) · **Consumed by:** 04 (drift/query), 06 (data-platform hosts the IRIs defined here).
 
 ## Purpose & scope
@@ -395,12 +395,12 @@ carrying a git branch or version:
 
 | Type | Pattern | Example |
 |---|---|---|
-| Component | `id/component/<slug>` (manifest slug; default = repo coords) | `…/id/component/github.com/sunstoneinstitute/work-tracker` |
+| Component | `id/component/<slug>` (manifest slug; default = repo coords) | `…/id/component/github.com/sunstoneinstitute/worklode` |
 | — multi-component repo | `id/component/<repo-coords>/<sub>` | `…/id/component/github.com/sunstoneinstitute/research-stack/pfas` |
 | DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-worklode-03` |
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
 | Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
-| Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/work-tracker/42` |
+| Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/worklode/42` |
 | Artifact | `id/artifact/<registry>/<repo>/<tag-or-digest>` | `…/id/artifact/ghcr.io/sunstoneinstitute/graph-server/v1` |
 | Deployment / Environment | `id/deployment/<…>` , `id/environment/<name>` | `…/id/environment/prod` |
 

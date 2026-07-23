@@ -13,10 +13,10 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
-	"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
 )
 
 // newGitHubTestStore opens a fresh migrated store in a temp dir. Migrations are
@@ -70,7 +70,7 @@ func TestProvisionGitHubActorRejectsNonMember(t *testing.T) {
 func TestGitHubLoginRedirects(t *testing.T) {
 	st := newGitHubTestStore(t)
 	s := &server{st: st, log: slog.Default(), cfg: Config{PublicURL: "https://wl.test", SessionSecret: "sekret"}}
-	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
+	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "worklode-admins")
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/auth/github/login", nil)
@@ -110,7 +110,7 @@ func fakeGitHub(t *testing.T) *httptest.Server {
 			json.NewEncoder(w).Encode(map[string]any{"id": 42, "login": "octocat", "name": "The Octocat"})
 		case "/user/memberships/orgs/sunstoneinstitute":
 			json.NewEncoder(w).Encode(map[string]any{"state": "active"})
-		case "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+		case "/orgs/sunstoneinstitute/teams/worklode-admins/memberships/octocat":
 			http.NotFound(w, r)
 		default:
 			http.NotFound(w, r)
@@ -134,7 +134,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 		cfg:         Config{PublicURL: "https://wl.test", SessionSecret: "sekret"},
 		tokenCipher: tc,
 	}
-	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
+	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "worklode-admins")
 	s.gh.APIBase = fake.URL
 	s.gh.Endpoint = oauth2.Endpoint{
 		AuthURL:  fake.URL + "/login/oauth/authorize",
@@ -195,7 +195,7 @@ func newGitHubCallbackServer(t *testing.T, member bool) *server {
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"state": "active"})
-		case "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+		case "/orgs/sunstoneinstitute/teams/worklode-admins/memberships/octocat":
 			http.NotFound(w, r)
 		default:
 			http.NotFound(w, r)
@@ -213,7 +213,7 @@ func newGitHubCallbackServer(t *testing.T, member bool) *server {
 		cfg:         Config{PublicURL: "https://wl.test", SessionSecret: "sekret"},
 		tokenCipher: tc,
 	}
-	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
+	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "worklode-admins")
 	s.gh.APIBase = srv.URL
 	s.gh.Endpoint = oauth2.Endpoint{
 		AuthURL:  srv.URL + "/login/oauth/authorize",

@@ -1,8 +1,8 @@
-# work-tracker
+# worklode
 
 ## What it is
 
-work-tracker is Sunstone Institute's org-wide work tracker: one authoritative
+worklode is Sunstone Institute's org-wide work tracker: one authoritative
 view of planned and in-progress work across all repos, replacing a
 hand-maintained `TASKS.md` + GitHub issue sync. It ships as a single Go
 binary, `wl`, backed by a SQLite database, with an append-only event log
@@ -103,18 +103,18 @@ Point Flux's notification-controller at `/hooks/flux` with a
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Provider
 metadata:
-  name: work-tracker
+  name: worklode
   namespace: flux-system
 spec:
   type: generic-hmac
   address: https://<host>/hooks/flux
   secretRef:
-    name: work-tracker-hmac
+    name: worklode-hmac
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: work-tracker-hmac
+  name: worklode-hmac
   namespace: flux-system
 stringData:
   hmac-key: <same value as WL_FLUX_WEBHOOK_SECRET>
@@ -122,11 +122,11 @@ stringData:
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Alert
 metadata:
-  name: work-tracker
+  name: worklode
   namespace: flux-system
 spec:
   providerRef:
-    name: work-tracker
+    name: worklode
   eventSeverity: info
   eventSources:
     - kind: Kustomization
@@ -149,7 +149,7 @@ admin or the bootstrap token). When enabled:
 | Var | Meaning |
 |---|---|
 | `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_OIDC_CLIENT_ID` | e.g. `worklode` |
 | `WL_PUBLIC_URL` | external base URL, for the web login callback |
 | `WL_SESSION_SECRET` | HMAC key for web session cookies (required when OIDC is enabled) |
 

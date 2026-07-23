@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `00-umbrella-architecture.md`
 (shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
-`../2026-07-21-work-tracker-platform-graph-design.md`.
+`../2026-07-21-worklode-platform-graph-design.md`.
 
 ---
 

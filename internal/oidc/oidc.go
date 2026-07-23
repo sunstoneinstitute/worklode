@@ -1,4 +1,4 @@
-// Package oidc wraps go-oidc/oauth2 for work-tracker's SSO flows: it verifies
+// Package oidc wraps go-oidc/oauth2 for worklode's SSO flows: it verifies
 // Keycloak ID tokens and builds the oauth2 config the web and CLI login flows
 // share. A Verifier is constructed only when WL_OIDC_ISSUER and
 // WL_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
@@ -12,7 +12,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Claims are the ID-token claims work-tracker consumes.
+// Claims are the ID-token claims worklode consumes.
 type Claims struct {
 	PreferredUsername string   `json:"preferred_username"`
 	Name              string   `json:"name"`
@@ -20,7 +20,7 @@ type Claims struct {
 }
 
 // HasRole reports whether role is present in the groups claim. Keycloak's
-// client-roles-as-groups mapper delivers the work-tracker client roles
+// client-roles-as-groups mapper delivers the worklode client roles
 // (user, admin) here.
 func (c *Claims) HasRole(role string) bool {
 	for _, g := range c.Groups {
@@ -63,7 +63,7 @@ func (v *Verifier) Issuer() string { return v.issuer }
 func (v *Verifier) ClientID() string { return v.clientID }
 
 // Verify checks the raw ID token's signature, issuer, audience, and expiry,
-// then extracts the claims work-tracker uses.
+// then extracts the claims worklode uses.
 func (v *Verifier) Verify(ctx context.Context, rawIDToken string) (*Claims, error) {
 	tok, err := v.verifier.Verify(ctx, rawIDToken)
 	if err != nil {

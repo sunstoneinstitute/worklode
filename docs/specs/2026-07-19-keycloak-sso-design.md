@@ -1,4 +1,4 @@
-# Keycloak SSO for work-tracker — design
+# Keycloak SSO for worklode — design
 
 **Status:** approved design
 **Date:** 2026-07-19
@@ -7,7 +7,7 @@
 
 Tokens are currently minted only by an admin (or the bootstrap env var).
 Humans should instead authenticate against the org Keycloak
-(https://auth.sunstoneinstitute.ai, realm `sunstone`) and get a work-tracker
+(https://auth.sunstoneinstitute.ai, realm `sunstone`) and get a worklode
 token from their SSO identity. The read-only web UI must also be gated behind
 the same OAuth2 login. Agent/service token issuance is unchanged.
 
@@ -19,7 +19,7 @@ the same OAuth2 login. Agent/service token issuance is unchanged.
 | CLI login | `wl login`: auth-code + PKCE against Keycloak with localhost redirect (kubelogin shape). Benefits transparently from macOS Platform SSO when that lands. |
 | Token exchange | New unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wl_` token. |
 | Web UI gating | Native OIDC sessions in the server (auth-code + PKCE redirect, signed cookie). Not oauth2-proxy — no k8s deployment exists yet, and native works the same in compose and k8s. |
-| Authorization | Keycloak client `work-tracker` with client roles `user` and `admin`, delivered in the `groups` claim (org-standard `client-roles-as-groups` mapper). `user` required to log in; `admin` maps to `Actor.Admin`, re-synced on every login. |
+| Authorization | Keycloak client `worklode` with client roles `user` and `admin`, delivered in the `groups` claim (org-standard `client-roles-as-groups` mapper). `user` required to log in; `admin` maps to `Actor.Admin`, re-synced on every login. |
 | Actor provisioning | Auto-provision `human` actors on first login: id = `preferred_username`, display name = `name` claim. |
 | Feature flag | All of this is off unless `WL_OIDC_ISSUER` + `WL_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
 
@@ -28,7 +28,7 @@ the same OAuth2 login. Agent/service token issuance is unchanged.
 In `clusters/admin/keycloak-config/rbac.yaml` (GitOps only — never the admin
 console, except for group memberships):
 
-- Client `work-tracker`: `publicClient: true`, standard flow, PKCE S256,
+- Client `worklode`: `publicClient: true`, standard flow, PKCE S256,
   `fullScopeAllowed: false`. One client, no dev/prod split, until the service
   itself gets one. Redirect URIs:
   - `http://localhost:8000`, `http://localhost:18000` (CLI callback)
@@ -37,8 +37,8 @@ console, except for group memberships):
 - Protocol mapper `client-roles-as-groups` (same config as the `k8s-*`
   clients) so client roles arrive in the `groups` claim of the ID token.
 - Client roles: `user`, `admin`.
-- Groups: `/apps/work-tracker` carries `work-tracker:user`;
-  `/apps/work-tracker/admins` carries `work-tracker:admin`.
+- Groups: `/apps/worklode` carries `worklode:user`;
+  `/apps/worklode/admins` carries `worklode:admin`.
   Memberships are managed in the admin console (runtime data).
 
 ## Server
@@ -48,7 +48,7 @@ New env (all optional; feature disabled when issuer/client unset):
 | Var | Meaning |
 |---|---|
 | `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WL_OIDC_CLIENT_ID` | e.g. `work-tracker` |
+| `WL_OIDC_CLIENT_ID` | e.g. `worklode` |
 | `WL_PUBLIC_URL` | External base URL, for the web callback redirect URI |
 | `WL_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
 
@@ -93,7 +93,7 @@ unconfigured the UI stays open as today.
 2. Open the browser to the Keycloak authorize URL (auth-code + PKCE).
 3. Redeem the code directly against Keycloak's token endpoint for an ID
    token.
-4. `POST /auth/oidc/token` to the work-tracker server (`--server` /
+4. `POST /auth/oidc/token` to the worklode server (`--server` /
    `WL_SERVER` / config file, as today).
 5. Write the returned `wl_` token to `~/.config/worklode/config.toml` and print
    the actor id and token expiry.

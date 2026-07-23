@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // validRuntimeEventKinds are the kinds the watcher may post. The flux kinds

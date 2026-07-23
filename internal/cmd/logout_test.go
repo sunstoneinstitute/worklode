@@ -5,7 +5,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func TestLogoutClearsKeychain(t *testing.T) {

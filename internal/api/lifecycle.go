@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // leaseJSON is the wire form of a lease.

@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // maxGitHubBody caps webhook request bodies at 5 MiB (GitHub's own delivery

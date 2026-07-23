@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // seedEvent runs apply inside a recorded test event.

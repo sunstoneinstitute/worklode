@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/watch"
+	"github.com/sunstoneinstitute/worklode/internal/watch"
 )
 
 // kubeRestConfig builds the Kubernetes client config: in-cluster when
@@ -39,7 +39,7 @@ func newWatchCmd() *cobra.Command {
 		Use:   "watch",
 		Short: "Watch Kubernetes pods and report crash loops and OOM kills",
 		Long: `Watch runs a pod informer across all namespaces of one cluster and posts
-each detected CrashLoopBackOff or OOMKilled container to the work-tracker
+each detected CrashLoopBackOff or OOMKilled container to the worklode
 runtime-events API. It blocks until interrupted.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if server == "" {
@@ -71,7 +71,7 @@ runtime-events API. It blocks until interrupted.`,
 	cmd.Flags().StringVar(&cluster, "cluster", "",
 		"cluster name reported with every event")
 	cmd.Flags().StringVar(&server, "server", os.Getenv("WL_SERVER"),
-		"work-tracker server URL (default $WL_SERVER)")
+		"worklode server URL (default $WL_SERVER)")
 	cmd.Flags().StringVar(&token, "token", os.Getenv("WL_TOKEN"),
 		"bearer token for the server (default $WL_TOKEN)")
 	cmd.MarkFlagRequired("cluster")

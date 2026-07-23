@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/watch"
+	"github.com/sunstoneinstitute/worklode/internal/watch"
 )
 
 // fakeReporter records every Report call and can be told to fail the first

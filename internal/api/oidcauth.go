@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // ssoTokenTTL is the lifetime of a wl_ token minted from an SSO login. No
@@ -102,7 +102,7 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	actorID, err := s.provisionActor(r.Context(), claims)
 	if errors.Is(err, errNoUserRole) {
-		writeErr(w, http.StatusForbidden, "the work-tracker user role is required")
+		writeErr(w, http.StatusForbidden, "the worklode user role is required")
 		return
 	}
 	if errors.Is(err, errActorKindConflict) {

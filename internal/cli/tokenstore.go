@@ -1,13 +1,13 @@
 // tokenstore.go stores the wl_ bearer token in the OS keychain (macOS Keychain,
 // Linux Secret Service, Windows Credential Manager) instead of cleartext on
 // disk. Tokens are keyed by server URL so one machine can hold tokens for
-// several work-tracker servers.
+// several worklode servers.
 package cli
 
 import "github.com/zalando/go-keyring"
 
 // keychainService is the keychain "service" all wl tokens live under.
-const keychainService = "work-tracker"
+const keychainService = "worklode"
 
 // ErrTokenNotFound is returned by Get/Delete when no token exists for a server.
 var ErrTokenNotFound = keyring.ErrNotFound

@@ -1,4 +1,4 @@
-# work-tracker → platform knowledge graph — design record
+# worklode → platform knowledge graph — design record
 
 **Date:** 2026-07-21 · **Status:** brainstorming (grill in progress) · **Nothing implemented**
 
@@ -115,7 +115,7 @@ descriptors live in graph-server).
 
 ## Naming — DECIDED: **Worklode**
 
-**D13 — Product name = Worklode** (the product formerly "work-tracker"). Guides "what to
+**D13 — Product name = Worklode** (the product formerly "worklode"). Guides "what to
 work on next" — the north star this whole design serves. **CLI = `lode`.** Repo rename is an
 optional follow-up, not decided here.
 

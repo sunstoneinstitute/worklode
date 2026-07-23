@@ -10,7 +10,7 @@
 `GET /auth/oidc/config`, runs the auth-code flow against Keycloak itself, and
 exchanges the ID token at `POST /auth/oidc/token`. On a server configured for
 **GitHub** auth (the hzdev deployment) there is no Keycloak, so `wl login` 404s on
-`/auth/oidc/config` and reports "this work-tracker server does not have SSO
+`/auth/oidc/config` and reports "this worklode server does not have SSO
 enabled." GitHub auth is web-only — it sets a browser session cookie and never
 mints a `wl_` token — so there is no CLI login path for GitHub-auth servers at
 all. The only way to get a CLI token there is an admin minting one by hand.
@@ -119,7 +119,7 @@ Today `SaveConfig` writes `server` **and** `token` into
 non-secret:
 
 - **`config.toml` keeps only `server`.** The token never touches disk.
-- **Token lives in the OS keychain**, keyed by server URL (service `work-tracker`,
+- **Token lives in the OS keychain**, keyed by server URL (service `worklode`,
   account = server URL) so one machine can hold tokens for several servers and
   `WL_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
   Keychain · Linux Secret Service · Windows Credential Manager; no cgo).

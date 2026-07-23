@@ -492,7 +492,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 }
 ```
 
-(Add `"github.com/sunstoneinstitute/work-tracker/internal/githubauth"` to the test imports.)
+(Add `"github.com/sunstoneinstitute/worklode/internal/githubauth"` to the test imports.)
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -641,7 +641,7 @@ func TestCLITokenHappyPath(t *testing.T) {
 }
 ```
 
-Add to the `cliauth_test.go` import block (in addition to those from earlier tasks): `context`, `encoding/json`, `log/slog`, `path/filepath`, `strings`, and `github.com/sunstoneinstitute/work-tracker/internal/store`. No `export_test.go` and no changes to `NewServer` are needed.
+Add to the `cliauth_test.go` import block (in addition to those from earlier tasks): `context`, `encoding/json`, `log/slog`, `path/filepath`, `strings`, and `github.com/sunstoneinstitute/worklode/internal/store`. No `export_test.go` and no changes to `NewServer` are needed.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -841,7 +841,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func TestKeychainTokenStore(t *testing.T) {
@@ -882,13 +882,13 @@ Create `internal/cli/tokenstore.go`:
 // tokenstore.go stores the wl_ bearer token in the OS keychain (macOS Keychain,
 // Linux Secret Service, Windows Credential Manager) instead of cleartext on
 // disk. Tokens are keyed by server URL so one machine can hold tokens for
-// several work-tracker servers.
+// several worklode servers.
 package cli
 
 import "github.com/zalando/go-keyring"
 
 // keychainService is the keychain "service" all wl tokens live under.
-const keychainService = "work-tracker"
+const keychainService = "worklode"
 
 // TokenStore reads and writes the bearer token for a given server URL.
 type TokenStore interface {
@@ -1152,11 +1152,11 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func TestRunLoginServerMediated(t *testing.T) {
-	// Stub work-tracker server: discovery + token exchange.
+	// Stub worklode server: discovery + token exchange.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -1362,7 +1362,7 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wlLoginDiscovery{}, errors.New("this work-tracker server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
+		return wlLoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
@@ -1455,7 +1455,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func TestLogoutClearsKeychain(t *testing.T) {
@@ -1495,7 +1495,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 // runLogout deletes the stored token for server from the keychain. A missing
@@ -1532,7 +1532,7 @@ func newLogoutCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 
@@ -1580,7 +1580,7 @@ git commit -m "feat(cli): wl logout removes the keychain token"
 In `internal/cmd/login.go`, change `Short`/`Long` to be provider-neutral (behavior is unchanged — it already calls `RunLogin` then `SaveConfig`):
 
 ```go
-		Short: "Authenticate to work-tracker and store a token",
+		Short: "Authenticate to worklode and store a token",
 		Long: "Open a browser to sign in with whatever identity provider the server\n" +
 			"is configured for (Keycloak, GitHub, or a choice of both), then store the\n" +
 			"resulting 30-day token in the OS keychain. Re-run after it expires.",
@@ -1609,7 +1609,7 @@ git commit -m "docs(cli): provider-neutral wl login help text"
 
 - [ ] **Step 1: Read an existing e2e test** to learn the harness (how it starts a server + runs the `wl` binary). Run: `ls e2e/ && sed -n '1,60p' e2e/<existing_test>.go`.
 
-- [ ] **Step 2: Write** a test that: starts a work-tracker server with GitHub auth stubbed (or a fake provider), runs `wl login` with an injected browser driver that completes the loopback, and asserts a subsequent authenticated `wl` call (e.g. `wl board`) succeeds using the keychain token (`keyring.MockInit()` in-process). If the e2e harness runs `wl` as a separate process, the keychain mock will not apply across processes — in that case assert via `WL_TOKEN` captured from the login output instead, or skip e2e and rely on the unit coverage. Decide based on the harness shape.
+- [ ] **Step 2: Write** a test that: starts a worklode server with GitHub auth stubbed (or a fake provider), runs `wl login` with an injected browser driver that completes the loopback, and asserts a subsequent authenticated `wl` call (e.g. `wl board`) succeeds using the keychain token (`keyring.MockInit()` in-process). If the e2e harness runs `wl` as a separate process, the keychain mock will not apply across processes — in that case assert via `WL_TOKEN` captured from the login output instead, or skip e2e and rely on the unit coverage. Decide based on the harness shape.
 
 - [ ] **Step 3: Run** `go test ./e2e/ -run CLILogin -v`. Expected: PASS.
 
