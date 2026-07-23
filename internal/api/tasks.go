@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 var validPriorities = map[string]bool{

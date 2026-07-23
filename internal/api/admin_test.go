@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func TestCreateAndListProjects(t *testing.T) {

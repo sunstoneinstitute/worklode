@@ -24,7 +24,7 @@ func newTestClient(apiBase string) *Client {
 		ClientID:     "cid",
 		ClientSecret: "secret",
 		Org:          "sunstoneinstitute",
-		AdminTeam:    "work-tracker-admins",
+		AdminTeam:    "worklode-admins",
 		APIBase:      apiBase,
 		Endpoint:     oauth2.Endpoint{AuthURL: apiBase + "/login/oauth/authorize", TokenURL: apiBase + "/login/oauth/access_token"},
 	}
@@ -68,7 +68,7 @@ func membershipHandler(t *testing.T, orgState, teamStatus string, teamState stri
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"state": orgState})
-		case r.URL.Path == "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+		case r.URL.Path == "/orgs/sunstoneinstitute/teams/worklode-admins/memberships/octocat":
 			if teamStatus == "404" {
 				http.NotFound(w, r)
 				return

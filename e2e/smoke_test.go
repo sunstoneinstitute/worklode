@@ -1,6 +1,6 @@
 //go:build e2e
 
-// Package e2e drives the full work-tracker stack end-to-end through its
+// Package e2e drives the full worklode stack end-to-end through its
 // public surfaces only: the HTTP API (via cli.Client and raw requests), the
 // GitHub and Flux webhook endpoints (signed like real deliveries), and the
 // read-only web pages. No direct store writes — if a step fails here, the
@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 const (

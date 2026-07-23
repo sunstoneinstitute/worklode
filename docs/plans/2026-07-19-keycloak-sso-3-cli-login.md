@@ -4,9 +4,9 @@
 
 **Depends on:** Plan 1 (server core) — this plan calls the `GET /auth/oidc/config` and `POST /auth/oidc/token` endpoints and reuses the `internal/oidc` package and the `oidctest` fake issuer.
 
-**Goal:** Add `wl login`: an auth-code + PKCE flow against Keycloak with a localhost redirect listener, exchanging the resulting ID token at the work-tracker server for a 30-day `wl_` token, which is written to `~/.config/worklode/config.toml`.
+**Goal:** Add `wl login`: an auth-code + PKCE flow against Keycloak with a localhost redirect listener, exchanging the resulting ID token at the worklode server for a 30-day `wl_` token, which is written to `~/.config/worklode/config.toml`.
 
-**Architecture:** A testable core `cli.RunLogin(ctx, LoginOptions)` does the whole flow: discover issuer/client from the server, run the PKCE auth-code flow via a localhost callback listener (ports 8000 → 18000), redeem the code directly at Keycloak, then POST the ID token to the work-tracker server. Browser-open and the HTTP client are injectable so tests drive the callback without a real browser or Keycloak. A thin `wl login` cobra command resolves the server URL, calls `RunLogin`, persists the token via a new `cli.SaveConfig`, and prints the actor id + expiry.
+**Architecture:** A testable core `cli.RunLogin(ctx, LoginOptions)` does the whole flow: discover issuer/client from the server, run the PKCE auth-code flow via a localhost callback listener (ports 8000 → 18000), redeem the code directly at Keycloak, then POST the ID token to the worklode server. Browser-open and the HTTP client are injectable so tests drive the callback without a real browser or Keycloak. A thin `wl login` cobra command resolves the server URL, calls `RunLogin`, persists the token via a new `cli.SaveConfig`, and prints the actor id + expiry.
 
 **Tech Stack:** Go 1.25 stdlib (`net`, `net/http`, `os/exec`), `golang.org/x/oauth2` (PKCE), `internal/oidc`, `github.com/spf13/cobra`.
 
@@ -17,7 +17,7 @@
 - `internal/cli/client.go` (modify) — add `SaveConfig(Config) error` (a writer to match the existing `LoadConfig` reader).
 - `internal/cli/client_test.go` (modify) — test `SaveConfig` round-trips through `parseConfig`.
 - `internal/cli/login.go` (create) — `LoginOptions`, `LoginResult`, `RunLogin`, plus helpers (`fetchOIDCConfig`, `exchangeWTToken`, `listenLocal`, `callbackHandler`, `openBrowser`, `randState`).
-- `internal/cli/login_test.go` (create) — full flow against a stub work-tracker server + `oidctest` issuer, with an injected browser-open that drives the callback.
+- `internal/cli/login_test.go` (create) — full flow against a stub worklode server + `oidctest` issuer, with an injected browser-open that drives the callback.
 - `internal/cmd/login.go` (create) — the `wl login` command.
 
 ---
@@ -115,7 +115,7 @@ Create `internal/cli/login.go`:
 ```go
 // login.go implements `wl login`: an auth-code + PKCE flow against Keycloak
 // with a localhost redirect listener, exchanging the resulting ID token at the
-// work-tracker server for a wl_ token. RunLogin is the testable core — the
+// worklode server for a wl_ token. RunLogin is the testable core — the
 // browser-open step and the HTTP client are injectable so tests can drive the
 // callback without a real browser or Keycloak.
 package cli
@@ -138,12 +138,12 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
 )
 
 // LoginOptions configures RunLogin. Only Server is required; the rest default.
 type LoginOptions struct {
-	Server      string             // work-tracker base URL
+	Server      string             // worklode base URL
 	HTTPClient  *http.Client       // defaults to a 30s-timeout client
 	OpenBrowser func(string) error // defaults to openBrowser; tests inject a driver
 	Ports       []int              // localhost callback ports; defaults to {8000, 18000}
@@ -231,7 +231,7 @@ type oidcDiscovery struct {
 	ClientID string `json:"client_id"`
 }
 
-// fetchOIDCConfig asks the work-tracker server for the issuer and client id.
+// fetchOIDCConfig asks the worklode server for the issuer and client id.
 func fetchOIDCConfig(ctx context.Context, client *http.Client, server string) (oidcDiscovery, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/auth/oidc/config", nil)
 	if err != nil {
@@ -243,7 +243,7 @@ func fetchOIDCConfig(ctx context.Context, client *http.Client, server string) (o
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return oidcDiscovery{}, errors.New("this work-tracker server does not have SSO enabled")
+		return oidcDiscovery{}, errors.New("this worklode server does not have SSO enabled")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return oidcDiscovery{}, fmt.Errorf("fetch oidc config: server returned %d", resp.StatusCode)
@@ -393,8 +393,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc/oidctest"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 )
 
 func TestRunLogin(t *testing.T) {
@@ -405,7 +405,7 @@ func TestRunLogin(t *testing.T) {
 		"aud": iss.ClientID, "groups": []string{"user"},
 	}
 
-	// Stub work-tracker server: config discovery + token exchange.
+	// Stub worklode server: config discovery + token exchange.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/oidc/config", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"issuer": iss.URL(), "client_id": iss.ClientID})
@@ -516,14 +516,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func newLoginCmd() *cobra.Command {
 	var server string
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate via SSO and store a work-tracker token",
+		Short: "Authenticate via SSO and store a worklode token",
 		Long: "Log in through the org Keycloak (auth-code + PKCE, browser + localhost\n" +
 			"callback) and store the resulting 30-day token in ~/.config/worklode/config.toml.\n" +
 			"Re-run after it expires — there are no refresh tokens.",
@@ -551,7 +551,7 @@ func newLoginCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 

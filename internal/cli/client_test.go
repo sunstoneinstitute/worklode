@@ -13,9 +13,9 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // newTestServer opens a store in a temp dir, creates admin actor "alice"

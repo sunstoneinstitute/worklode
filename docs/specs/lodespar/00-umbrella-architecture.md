@@ -1,10 +1,10 @@
 # Worklode v1 — architecture & spec map (umbrella)
 
 **Date:** 2026-07-21 · **Status:** spec · **Source:** graduated from the approved design
-record `../2026-07-21-work-tracker-platform-graph-design.md` (D1–D15; full rationale there).
+record `../2026-07-21-worklode-platform-graph-design.md` (D1–D15; full rationale there).
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
-architecture system — the successor scope of "work-tracker."
+architecture system — the successor scope of "worklode."
 
 **Thesis: development work as ambition reconciliation.** Intent is *asserted*; reality is
 *observed*; every gap between them — architectural drift, an unimplemented spec, a deliverable

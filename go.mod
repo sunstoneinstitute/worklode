@@ -1,4 +1,4 @@
-module github.com/sunstoneinstitute/work-tracker
+module github.com/sunstoneinstitute/worklode
 
 go 1.26.0
 

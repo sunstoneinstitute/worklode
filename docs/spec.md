@@ -1,4 +1,4 @@
-# work-tracker — spec
+# worklode — spec
 
 **Status:** approved design, v1
 **Date:** 2026-07-19

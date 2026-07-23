@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // githubCallbackURL is the GitHub web redirect URI, distinct from Keycloak's
@@ -50,7 +50,7 @@ func (s *server) authChoose(w http.ResponseWriter, r *http.Request) {
 	q := "?next=" + url.QueryEscape(next)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>Sign in</title>`+
-		`<h1>Sign in to work-tracker</h1>`+
+		`<h1>Sign in to worklode</h1>`+
 		`<p><a href="/auth/github/login%s">Sign in with GitHub</a></p>`+
 		`<p><a href="/auth/login%s">Sign in with Keycloak</a></p>`, q, q)
 }

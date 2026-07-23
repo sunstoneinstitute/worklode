@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 //go:embed templates/*.html
@@ -100,7 +100,7 @@ func (s *server) boardPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := boardPageData{
-		basePage:   basePage{Title: "work-tracker: board", AutoRefresh: true},
+		basePage:   basePage{Title: "worklode: board", AutoRefresh: true},
 		Board:      board,
 		InboxCount: len(issues),
 	}
@@ -156,7 +156,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := taskPageData{
-		basePage: basePage{Title: "work-tracker: " + id},
+		basePage: basePage{Title: "worklode: " + id},
 		Task:     *t,
 		Blocked:  blocked[id],
 	}
@@ -220,7 +220,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := projectPageData{
-		basePage: basePage{Title: "work-tracker: " + board.Projects[0].Name, AutoRefresh: true},
+		basePage: basePage{Title: "worklode: " + board.Projects[0].Name, AutoRefresh: true},
 		Project:  board.Projects[0],
 		Repos:    repos,
 	}

@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // parseClusterEnvMap parses "cluster1=dev,cluster2=prod" into a map. Entries
@@ -38,7 +38,7 @@ func newServeCmd() *cobra.Command {
 	var dbPath, listen string
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Run the work-tracker HTTP server",
+		Short: "Run the worklode HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st, err := store.Open(dbPath)
 			if err != nil {

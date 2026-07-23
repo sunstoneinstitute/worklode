@@ -153,7 +153,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 
 	username, err := s.provisionActor(r.Context(), claims)
 	if errors.Is(err, errNoUserRole) {
-		webErr(w, http.StatusForbidden, "the work-tracker user role is required")
+		webErr(w, http.StatusForbidden, "the worklode user role is required")
 		return
 	}
 	if errors.Is(err, errActorKindConflict) {

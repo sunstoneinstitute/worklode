@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add "Sign in with GitHub" to work-tracker's web UI as a second identity provider alongside Keycloak, deriving roles from GitHub org/team membership and storing a per-user GitHub token (encrypted) for future "act on behalf of user" calls.
+**Goal:** Add "Sign in with GitHub" to worklode's web UI as a second identity provider alongside Keycloak, deriving roles from GitHub org/team membership and storing a per-user GitHub token (encrypted) for future "act on behalf of user" calls.
 
 **Architecture:** A new `internal/githubauth` package mirrors `internal/oidc` (authorize-URL construction, code exchange, identity + membership fetch) without touching it. New `githubweb.go` handlers serve namespaced routes (`/auth/github/login`, `/auth/github/callback`) reusing the existing signed-cookie session machinery. GitHub user tokens are encrypted with AES-GCM (`internal/tokencrypt`) and persisted in a new `github_user_tokens` table. Keycloak (`internal/oidc`, `/auth/login`, `/auth/callback`) is left entirely unchanged.
 
@@ -398,7 +398,7 @@ func newTestClient(apiBase string) *Client {
 		ClientID:     "cid",
 		ClientSecret: "secret",
 		Org:          "sunstoneinstitute",
-		AdminTeam:    "work-tracker-admins",
+		AdminTeam:    "worklode-admins",
 		APIBase:      apiBase,
 		Endpoint:     oauth2.Endpoint{AuthURL: apiBase + "/login/oauth/authorize", TokenURL: apiBase + "/login/oauth/access_token"},
 	}
@@ -445,7 +445,7 @@ Expected: FAIL — `undefined: Client`.
 
 ```go
 // Package githubauth wraps the GitHub App user-authorization (OAuth) flow for
-// work-tracker's web login: it builds the authorize URL, exchanges the code for
+// worklode's web login: it builds the authorize URL, exchanges the code for
 // a user-to-server token, and reads the user's identity plus org/team
 // membership. It parallels internal/oidc and never touches it. A Client is
 // built only when the GitHub App client id and secret are configured.
@@ -518,7 +518,7 @@ func (c *Client) Exchange(ctx context.Context, redirectURL, code string) (*Token
 	return &Token{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, Expiry: tok.Expiry}, nil
 }
 
-// Identity is the subset of GET /user work-tracker consumes.
+// Identity is the subset of GET /user worklode consumes.
 type Identity struct {
 	ID    int64  `json:"id"`
 	Login string `json:"login"`
@@ -593,7 +593,7 @@ func membershipHandler(t *testing.T, orgState, teamStatus string, teamState stri
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]any{"state": orgState})
-		case r.URL.Path == "/orgs/sunstoneinstitute/teams/work-tracker-admins/memberships/octocat":
+		case r.URL.Path == "/orgs/sunstoneinstitute/teams/worklode-admins/memberships/octocat":
 			if teamStatus == "404" {
 				http.NotFound(w, r)
 				return
@@ -743,7 +743,7 @@ Add to the `server` struct (after the `oidc` field):
 
 - [ ] **Step 3: Wire in NewServer**
 
-In `internal/api/server.go`, add the imports `"encoding/hex"` (already present), `"github.com/sunstoneinstitute/work-tracker/internal/githubauth"`, and `"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"`. After the OIDC `if` block in `NewServer`, add:
+In `internal/api/server.go`, add the imports `"encoding/hex"` (already present), `"github.com/sunstoneinstitute/worklode/internal/githubauth"`, and `"github.com/sunstoneinstitute/worklode/internal/tokencrypt"`. After the OIDC `if` block in `NewServer`, add:
 
 ```go
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
@@ -812,7 +812,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 )
 
 func TestProvisionGitHubActorNamespacesID(t *testing.T) {
@@ -876,8 +876,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // githubCallbackURL is the GitHub web redirect URI, distinct from Keycloak's
@@ -942,7 +942,7 @@ import (
 func TestGitHubLoginRedirects(t *testing.T) {
 	st := newAPITestStore(t)
 	s := &server{st: st, cfg: Config{PublicURL: "https://wl.test", SessionSecret: "sekret"}}
-	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "work-tracker-admins")
+	s.gh = githubauth.New("cid", "secret", "sunstoneinstitute", "worklode-admins")
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/auth/github/login", nil)
@@ -980,7 +980,7 @@ func TestGitHubCallbackSetsSessionAndStoresToken(t *testing.T) {
 	//   POST /login/oauth/access_token -> access_token=gho_x&token_type=bearer
 	//   GET  /user -> {id:42, login:"octocat"}
 	//   GET  /user/memberships/orgs/sunstoneinstitute -> {state:"active"}
-	//   GET  /orgs/.../teams/work-tracker-admins/memberships/octocat -> 404
+	//   GET  /orgs/.../teams/worklode-admins/memberships/octocat -> 404
 	// Build server, mint the oauth-state cookie via signOAuthState, then call
 	// s.githubCallback with matching ?state=&code=. Assert session cookie set
 	// and GetGitHubUserToken decrypts to a payload containing "gho_x".
@@ -1194,7 +1194,7 @@ func (s *server) authChoose(w http.ResponseWriter, r *http.Request) {
 	q := "?next=" + url.QueryEscape(next)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>Sign in</title>`+
-		`<h1>Sign in to work-tracker</h1>`+
+		`<h1>Sign in to worklode</h1>`+
 		`<p><a href="/auth/github/login%s">Sign in with GitHub</a></p>`+
 		`<p><a href="/auth/login%s">Sign in with Keycloak</a></p>`, q, q)
 }
@@ -1223,7 +1223,7 @@ func TestLoginTarget(t *testing.T) {
 }
 ```
 
-> Requires importing `"github.com/sunstoneinstitute/work-tracker/internal/oidc"` in the test. `oidc.Verifier{}` zero value is fine here — `loginTarget` only checks for non-nil.
+> Requires importing `"github.com/sunstoneinstitute/worklode/internal/oidc"` in the test. `oidc.Verifier{}` zero value is fine here — `loginTarget` only checks for non-nil.
 
 - [ ] **Step 5: Run tests**
 
@@ -1256,7 +1256,7 @@ Expected: no output, no errors.
 ## Follow-up plans (out of scope here)
 
 1. **CLI device flow + OS keychain** — `POST /auth/github/device/start` + `/poll`, `wl login --github`, store the wl token via `zalando/go-keyring` with a `0600` file fallback. Spec Section C.
-2. **Deploy + secrets wiring (hzdev)** — add `WL_GITHUB_APP_CLIENT_ID`, `WL_GITHUB_ORG`, `WL_GITHUB_ADMIN_TEAM` to the ConfigMap and `WL_GITHUB_APP_CLIENT_SECRET`, `WL_TOKEN_ENC_KEY` to the ExternalSecret; create the `work-tracker-dev` GitHub App and install it. Spec Sections A, F. (Note: on `main` the deploy/ overlays do not yet exist — they arrive with the CI/deploy branch; sequence this after that lands.)
+2. **Deploy + secrets wiring (hzdev)** — add `WL_GITHUB_APP_CLIENT_ID`, `WL_GITHUB_ORG`, `WL_GITHUB_ADMIN_TEAM` to the ConfigMap and `WL_GITHUB_APP_CLIENT_SECRET`, `WL_TOKEN_ENC_KEY` to the ExternalSecret; create the `worklode-dev` GitHub App and install it. Spec Sections A, F. (Note: on `main` the deploy/ overlays do not yet exist — they arrive with the CI/deploy branch; sequence this after that lands.)
 3. **First outbound "on behalf of user" action + token refresh** — lazy refresh of the stored token before the call (Spec Section E's refresh path), plus the concrete GitHub write. Defines the exact repo permissions to request on the App (Spec Section A).
 
 ---

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 // runLogout deletes the stored token for server from the keychain. A missing
@@ -43,7 +43,7 @@ func newLogoutCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 

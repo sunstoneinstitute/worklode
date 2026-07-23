@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // newTestStore opens a fresh store in a temp dir.

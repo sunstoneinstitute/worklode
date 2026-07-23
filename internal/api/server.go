@@ -22,11 +22,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/githubauth"
-	"github.com/sunstoneinstitute/work-tracker/internal/hooks"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
-	"github.com/sunstoneinstitute/work-tracker/internal/tokencrypt"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env

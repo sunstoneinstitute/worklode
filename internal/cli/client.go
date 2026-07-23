@@ -1,5 +1,5 @@
 // Package cli implements the wl command-line client: configuration, the HTTP
-// client for the work-tracker API, and table rendering for its commands.
+// client for the worklode API, and table rendering for its commands.
 package cli
 
 import (
@@ -165,7 +165,7 @@ func (e *ClientError) Error() string {
 	return fmt.Sprintf("server error (%d): %s", e.Status, e.Msg)
 }
 
-// Client is a thin, typed wrapper over the work-tracker HTTP API.
+// Client is a thin, typed wrapper over the worklode HTTP API.
 type Client struct {
 	baseURL string
 	token   string

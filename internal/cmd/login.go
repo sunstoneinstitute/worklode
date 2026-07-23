@@ -9,14 +9,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 func newLoginCmd() *cobra.Command {
 	var server string
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate to work-tracker and store a token",
+		Short: "Authenticate to worklode and store a token",
 		Long: "Open a browser to sign in with whatever identity provider the server\n" +
 			"is configured for (Keycloak, GitHub, or a choice of both), then store the\n" +
 			"resulting 30-day token in the OS keychain. Re-run after it expires.",
@@ -47,7 +47,7 @@ func newLoginCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "work-tracker server URL (overrides WL_SERVER / config file)")
+	cmd.Flags().StringVar(&server, "server", "", "worklode server URL (overrides WL_SERVER / config file)")
 	return cmd
 }
 

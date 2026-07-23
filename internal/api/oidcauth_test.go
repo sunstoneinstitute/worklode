@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/api"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc/oidctest"
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // newOIDCServer stands up a store + server wired to a fake issuer. It returns

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // bodyContains fails the test unless every want string appears in body,

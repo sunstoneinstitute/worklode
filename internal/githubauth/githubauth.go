@@ -1,5 +1,5 @@
 // Package githubauth wraps the GitHub App user-authorization (OAuth) flow for
-// work-tracker's web login: it builds the authorize URL, exchanges the code for
+// worklode's web login: it builds the authorize URL, exchanges the code for
 // a user-to-server token, and reads the user's identity plus org/team
 // membership. It parallels internal/oidc and never touches it. A Client is
 // built only when the GitHub App client id and secret are configured.
@@ -75,7 +75,7 @@ func (c *Client) Exchange(ctx context.Context, redirectURL, code string) (*Token
 	return &Token{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, Expiry: tok.Expiry}, nil
 }
 
-// Identity is the subset of GET /user work-tracker consumes.
+// Identity is the subset of GET /user worklode consumes.
 type Identity struct {
 	ID    int64  `json:"id"`
 	Login string `json:"login"`

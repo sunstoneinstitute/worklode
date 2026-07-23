@@ -1,8 +1,8 @@
-# work-tracker v1 Implementation Plan
+# worklode v1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the v1 work-tracker from `docs/spec.md`: a single Go binary (`wl`) serving an org-wide task graph over SQLite with leases, GitHub/flux ingestion, a k8s watcher, a CLI, and a read-only web UI, runnable via docker-compose.
+**Goal:** Build the v1 worklode from `docs/spec.md`: a single Go binary (`wl`) serving an org-wide task graph over SQLite with leases, GitHub/flux ingestion, a k8s watcher, a CLI, and a read-only web UI, runnable via docker-compose.
 
 **Architecture:** One Go module, one binary with subcommands (`serve`, `migrate`, `watch`, client commands). The server is the single writer to SQLite and therefore the lock manager. Every ingested fact lands in an append-only `events` table and the same transaction updates typed state tables; state changes reference their causing event. Pipeline position (task → PR → artifact → deployment → runtime) is derived by edge walks, not stored.
 
@@ -21,12 +21,12 @@
 ### Task 1: Module scaffold and root command
 
 **Files:**
-- Create: `go.mod` (module `github.com/sunstoneinstitute/work-tracker`, `go 1.24`)
+- Create: `go.mod` (module `github.com/sunstoneinstitute/worklode`, `go 1.24`)
 - Create: `cmd/wl/main.go`
 - Create: `internal/cmd/root.go`
 - Create: `.gitignore` (`/wl`, `*.db`, `/data/`)
 
-- [ ] **Step 1:** `go mod init github.com/sunstoneinstitute/work-tracker`
+- [ ] **Step 1:** `go mod init github.com/sunstoneinstitute/worklode`
 - [ ] **Step 2:** `internal/cmd/root.go`: cobra root command `wl` with `Version`, no-op `PersistentPreRun`; `Execute()` func. `cmd/wl/main.go` calls `cmd.Execute()`, exits 1 on error.
 - [ ] **Step 3:** `go build ./... && ./wl --help` — expect usage output. `gofmt -l .` clean.
 - [ ] **Step 4:** Commit `chore: scaffold wl module and root command`.

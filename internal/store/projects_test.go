@@ -42,8 +42,8 @@ func TestListProjects(t *testing.T) {
 	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
 		t.Fatalf("CreateProject horndb: %v", err)
 	}
-	if err := s.CreateProject(ctx, "work-tracker", "Work Tracker"); err != nil {
-		t.Fatalf("CreateProject work-tracker: %v", err)
+	if err := s.CreateProject(ctx, "worklode", "Work Tracker"); err != nil {
+		t.Fatalf("CreateProject worklode: %v", err)
 	}
 
 	got, err := s.ListProjects(ctx)
@@ -55,7 +55,7 @@ func TestListProjects(t *testing.T) {
 	}
 	ids := []string{got[0].ID, got[1].ID}
 	sort.Strings(ids)
-	if !reflect.DeepEqual(ids, []string{"horndb", "work-tracker"}) {
+	if !reflect.DeepEqual(ids, []string{"horndb", "worklode"}) {
 		t.Fatalf("ListProjects ids: got %v", ids)
 	}
 }

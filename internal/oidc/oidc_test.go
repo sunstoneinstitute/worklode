@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc"
-	"github.com/sunstoneinstitute/work-tracker/internal/oidc/oidctest"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 )
 
 func newVerifier(t *testing.T, iss *oidctest.Issuer) *oidc.Verifier {

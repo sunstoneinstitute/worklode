@@ -34,7 +34,7 @@ type Issuer struct {
 }
 
 // NewIssuer starts a fake issuer and registers cleanup. ClientID defaults to
-// "work-tracker".
+// "worklode".
 func NewIssuer(t *testing.T) *Issuer {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -43,7 +43,7 @@ func NewIssuer(t *testing.T) *Issuer {
 	}
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
-	iss := &Issuer{Server: srv, ClientID: "work-tracker", key: key}
+	iss := &Issuer{Server: srv, ClientID: "worklode", key: key}
 
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{
