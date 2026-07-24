@@ -14,11 +14,11 @@
 
 ---
 
-### Task 1: Migration 0003 — the `agent_sessions` table
+### Task 1: Migration 0004 — the `agent_sessions` table
 
 **Files:**
-- Create: `deploy/base/migrations/0003_agent_sessions.up.sql`
-- Create: `deploy/base/migrations/0003_agent_sessions.down.sql`
+- Create: `deploy/base/migrations/0004_agent_sessions.up.sql`
+- Create: `deploy/base/migrations/0004_agent_sessions.down.sql`
 - Modify: `deploy/base/kustomization.yaml:12-18` (configMapGenerator file list)
 - Test: `internal/store/agent_sessions_test.go`
 
@@ -115,7 +115,7 @@ Expected: FAIL with `relation "agent_sessions" does not exist`.
 
 - [ ] **Step 3: Write the migration**
 
-Create `deploy/base/migrations/0003_agent_sessions.up.sql`:
+Create `deploy/base/migrations/0004_agent_sessions.up.sql`:
 
 ```sql
 CREATE TABLE agent_sessions (
@@ -139,7 +139,7 @@ CREATE TABLE agent_sessions (
 CREATE INDEX agent_sessions_lease ON agent_sessions (lease_id);
 ```
 
-Create `deploy/base/migrations/0003_agent_sessions.down.sql`:
+Create `deploy/base/migrations/0004_agent_sessions.down.sql`:
 
 ```sql
 DROP TABLE agent_sessions;
@@ -147,11 +147,11 @@ DROP TABLE agent_sessions;
 
 - [ ] **Step 4: Register the migration with kustomize**
 
-In `deploy/base/kustomization.yaml`, add two lines to the `worklode-migrations` file list, after `migrations/0002_prioritization.down.sql`:
+In `deploy/base/kustomization.yaml`, add two lines to the `worklode-migrations` file list, after `migrations/0003_project_keys.down.sql`:
 
 ```yaml
-      - migrations/0003_agent_sessions.up.sql
-      - migrations/0003_agent_sessions.down.sql
+      - migrations/0004_agent_sessions.up.sql
+      - migrations/0004_agent_sessions.down.sql
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -162,8 +162,8 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add deploy/base/migrations/0003_agent_sessions.up.sql \
-        deploy/base/migrations/0003_agent_sessions.down.sql \
+git add deploy/base/migrations/0004_agent_sessions.up.sql \
+        deploy/base/migrations/0004_agent_sessions.down.sql \
         deploy/base/kustomization.yaml \
         internal/store/agent_sessions_test.go
 git commit -m "Add agent_sessions table"
@@ -831,14 +831,22 @@ package api_test
 import (
 	"net/http"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// claimedTask creates a ready task, claims it as alice, and returns its id.
-// Mirrors the setup in lifecycle_test.go — reuse that file's helper if one
-// already exists rather than duplicating it.
-func claimedTask(t *testing.T, h http.Handler, token string) string {
+// claimedTask creates a project and a task and claims it as alice, returning
+// the task id. Built from the same helpers TestClaim uses in lifecycle_test.go.
+func claimedTask(t *testing.T, st *store.Store, h http.Handler, token string) string {
 	t.Helper()
-	id := readyTask(t, h, token)
+	createProject(t, st, "proj")
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Agent session task", "priority": "high", "kind": "bug",
+	})
+	id, _ := task["id"].(string)
+	if id == "" {
+		t.Fatalf("created task has no id: %v", task)
+	}
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/claim", token,
 		map[string]any{"worktree": "host:/wt/one"})
 	if rr.Code != http.StatusOK {
@@ -848,8 +856,8 @@ func claimedTask(t *testing.T, h http.Handler, token string) string {
 }
 
 func TestAgentSessionEndpoints(t *testing.T) {
-	_, h, token := newTestServer(t)
-	id := claimedTask(t, h, token)
+	st, h, token := newTestServer(t)
+	id := claimedTask(t, st, h, token)
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
 		map[string]any{"agent": "claude-code", "agent_version": "2.0.1", "session_id": "sess-1"})
@@ -863,7 +871,7 @@ func TestAgentSessionEndpoints(t *testing.T) {
 		LastSeenAt string `json:"last_seen_at"`
 		EndedAt    string `json:"ended_at"`
 	}
-	decodeJSON(t, rr, &got)
+	decodeInto(t, rr, &got)
 	if got.Agent != "claude-code" || got.SessionID != "sess-1" {
 		t.Fatalf("touch body: %+v", got)
 	}
@@ -880,7 +888,7 @@ func TestAgentSessionEndpoints(t *testing.T) {
 
 func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 	st, h, token := newTestServer(t)
-	id := claimedTask(t, h, token)
+	id := claimedTask(t, st, h, token)
 
 	other := secondActor(t, st, "bob")
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", other,
@@ -903,7 +911,11 @@ func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 }
 ```
 
-Before running: `readyTask` and `decodeJSON` are assumed to exist in the `api_test` package. Check `internal/api/server_test.go` and `internal/api/tasks_test.go` for the actual helper names (search for `func readyTask` and `func decodeJSON`). If a helper is missing, inline its two or three lines rather than inventing a name — e.g. create the task with `doReq(t, h, "POST", "/api/v1/tasks", token, …)` and move it to `ready` the same way `lifecycle_test.go` does, and decode with `json.Unmarshal(rr.Body.Bytes(), &got)`.
+Helper names above were verified against the tree: `newTestServer`
+(`internal/api/server_test.go:26`), `doReq` (`:58`), `decodeMap` (`:77`),
+`decodeInto` (`:88`), `createProject` (`internal/api/tasks_test.go:18`),
+`createTaskViaAPI` (`:29`), `secondActor` (`internal/api/lifecycle_test.go:16`).
+A task created through the API is immediately claimable, as `TestClaim` shows.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1040,53 +1052,65 @@ git commit -m "Add agent-session HTTP endpoints"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/cli/client_test.go`. Match the existing style in that file for standing up a stub server — check how `TestClientBriefAndRebindWorktree` (line ~369) does it and reuse the same helper:
+Append to `internal/cli/client_test.go`. That file drives a **real** server, not a
+stub: `newTestServer(t)` (line 28) returns `(*store.Store, *cli.Client, string)`
+with a live `httptest` listener, and tests exercise the client end to end — see
+`TestClientBriefAndRebindWorktree` (line 369). Follow that pattern; the package
+is `cli_test`, so exported types are qualified `cli.…`.
 
 ```go
 func TestClientAgentSession(t *testing.T) {
-	var gotPaths []string
-	var gotBodies []string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		gotPaths = append(gotPaths, r.Method+" "+r.URL.Path)
-		gotBodies = append(gotBodies, string(body))
-		if strings.HasSuffix(r.URL.Path, "/end") {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"lease_id":7,"agent":"claude-code","session_id":"sess-1",
-			"started_at":"2026-07-19T12:00:00Z","last_seen_at":"2026-07-19T12:05:00Z"}`))
-	}))
-	defer ts.Close()
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
 
-	c := newTestClient(t, ts.URL)
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Agent session task", Priority: "high", Kind: "bug",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if _, _, err := c.ClaimTask(ctx, task.ID, "host:/wt-1", 0); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
 
-	sess, _, err := c.TouchAgentSession(context.Background(), "WL-1", "claude-code", "2.0.1", "sess-1")
+	sess, _, err := c.TouchAgentSession(ctx, task.ID, "claude-code", "2.0.1", "sess-1")
 	if err != nil {
 		t.Fatalf("TouchAgentSession: %v", err)
 	}
-	if sess.SessionID != "sess-1" || sess.LeaseID != 7 {
-		t.Fatalf("decoded session: %+v", sess)
+	if sess.Agent != "claude-code" || sess.SessionID != "sess-1" || sess.AgentVersion != "2.0.1" {
+		t.Fatalf("TouchAgentSession = %+v", sess)
 	}
-	if gotPaths[0] != "POST /api/v1/tasks/WL-1/agent-session" {
-		t.Fatalf("path: %s", gotPaths[0])
+	if sess.LeaseID == 0 {
+		t.Fatalf("TouchAgentSession lease id = 0: %+v", sess)
 	}
-	if !strings.Contains(gotBodies[0], `"agent_version":"2.0.1"`) {
-		t.Fatalf("body: %s", gotBodies[0])
+	if sess.EndedAt != nil {
+		t.Fatalf("a new session is already ended: %+v", sess)
+	}
+	if sess.LastSeenAt.Before(sess.StartedAt) {
+		t.Fatalf("last_seen_at before started_at: %+v", sess)
 	}
 
-	if err := c.EndAgentSession(context.Background(), "WL-1",
-		EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"}); err != nil {
+	if err := c.EndAgentSession(ctx, task.ID,
+		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"}); err != nil {
 		t.Fatalf("EndAgentSession: %v", err)
 	}
-	if gotPaths[1] != "POST /api/v1/tasks/WL-1/agent-session/end" {
-		t.Fatalf("path: %s", gotPaths[1])
+
+	// A session that was never reported cannot be ended.
+	err = c.EndAgentSession(ctx, task.ID,
+		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "never-seen"})
+	if err == nil {
+		t.Fatal("EndAgentSession on an unknown session id succeeded")
 	}
 }
 ```
 
-`newTestClient` is the assumed local helper for building a `*Client` against a URL — use whatever `client_test.go` already uses (search for `func newTestClient` or how existing tests construct the client) rather than adding a second one.
+Note that ending an *already-ended* session is deliberately not asserted: the
+end event's external id is deterministic, so a repeat call takes `RecordEvent`'s
+already-recorded path and returns nil. That is the intended idempotency, not a
+bug.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1778,16 +1802,611 @@ git commit -m "Document agent session hook bindings"
 
 ---
 
+### Task 10: `lode claude install` / `lode claude uninstall`
+
+Task 9 documents the bindings; this task installs them. `lode claude install`
+writes Worklode's hook bindings into the repo's Claude Code settings file so a
+developer does not hand-edit JSON, and `lode claude uninstall` takes them out
+again. Both converge — safe to re-run, and neither disturbs settings Worklode
+did not write.
+
+**Files:**
+- Create: `internal/cmd/claude.go`
+- Create: `internal/cmd/claude_test.go`
+- Modify: `README.md` (extend the "Agent session tracking" section from Task 9)
+
+**Scope → settings file** (both under the git worktree root, resolved with
+`worktree.Root`, the same way `installhooks.go` does it):
+
+| `--scope` | File |
+|---|---|
+| `local` (default) | `<root>/.claude/settings.local.json` |
+| `project` | `<root>/.claude/settings.json` |
+
+**Bindings installed** — every `lode hook` event that has a Claude Code
+counterpart:
+
+| Claude Code event | Matcher | Command |
+|---|---|---|
+| `SessionStart` | — | `lode hook session-start` |
+| `SessionEnd` | — | `lode hook session-end` |
+| `Stop` | — | `lode hook heartbeat` |
+| `StopFailure` | — | `lode hook heartbeat` |
+| `SubagentStop` | — | `lode hook heartbeat` |
+| `Notification` | — | `lode hook heartbeat` |
+| `WorktreeCreate` | — | `lode hook worktree-create` |
+| `WorktreeRemove` | — | `lode hook worktree-remove` |
+| `PostToolUse` | `EnterWorktree` | `lode hook worktree-enter` |
+| `PostToolUse` | `ExitWorktree` | `lode hook worktree-exit` |
+
+**Ownership marker.** JSON has no comments, so a Worklode-installed hook is
+identified by its command: any entry whose `command` begins with `lode hook `.
+Install strips every such entry before writing the current set (so a re-run
+converges instead of duplicating, and a removed binding disappears); uninstall
+strips them and nothing else.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `internal/cmd/claude_test.go`:
+
+```go
+package cmd
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// readSettings reads a settings file as generic JSON, failing the test if it
+// is missing or malformed.
+func readSettings(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return out
+}
+
+// commandsFor returns every hook command registered for a Claude Code event.
+func commandsFor(t *testing.T, settings map[string]any, event string) []string {
+	t.Helper()
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	groups, ok := hooks[event].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, g := range groups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		entries, ok := group["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := entry["command"].(string); ok {
+				out = append(out, cmd)
+			}
+		}
+	}
+	return out
+}
+
+func TestClaudeInstallScopes(t *testing.T) {
+	root := t.TempDir()
+
+	local, err := claudeSettingsPath(root, scopeLocal)
+	if err != nil {
+		t.Fatalf("local path: %v", err)
+	}
+	if want := filepath.Join(root, ".claude", "settings.local.json"); local != want {
+		t.Fatalf("local scope path: got %s, want %s", local, want)
+	}
+	project, err := claudeSettingsPath(root, scopeProject)
+	if err != nil {
+		t.Fatalf("project path: %v", err)
+	}
+	if want := filepath.Join(root, ".claude", "settings.json"); project != want {
+		t.Fatalf("project scope path: got %s, want %s", project, want)
+	}
+	if _, err := claudeSettingsPath(root, "global"); err == nil {
+		t.Fatal("unknown scope was accepted")
+	}
+}
+
+func TestClaudeInstallWritesBindings(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".claude", "settings.local.json")
+
+	if err := installClaudeHooks(path); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	settings := readSettings(t, path)
+	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+		t.Fatalf("SessionStart commands: %v", got)
+	}
+	if got := commandsFor(t, settings, "Stop"); len(got) != 1 || got[0] != "lode hook heartbeat" {
+		t.Fatalf("Stop commands: %v", got)
+	}
+	// PostToolUse carries two separately matched bindings.
+	got := commandsFor(t, settings, "PostToolUse")
+	if len(got) != 2 {
+		t.Fatalf("PostToolUse commands: %v, want 2", got)
+	}
+	hooks := settings["hooks"].(map[string]any)
+	groups := hooks["PostToolUse"].([]any)
+	var matchers []string
+	for _, g := range groups {
+		matchers = append(matchers, g.(map[string]any)["matcher"].(string))
+	}
+	if len(matchers) != 2 || matchers[0] != "EnterWorktree" || matchers[1] != "ExitWorktree" {
+		t.Fatalf("PostToolUse matchers: %v", matchers)
+	}
+}
+
+func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, "settings.local.json")
+	existing := `{
+	  "permissions": {"allow": ["Bash(go test:*)"]},
+	  "hooks": {
+	    "Stop": [{"hooks": [{"type": "command", "command": "my-own-tool --report"}]}]
+	  }
+	}`
+	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+
+	if err := installClaudeHooks(path); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after first install: %v", err)
+	}
+	if err := installClaudeHooks(path); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	second, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after second install: %v", err)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("install is not idempotent:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	settings := readSettings(t, path)
+	if _, ok := settings["permissions"]; !ok {
+		t.Fatal("install dropped the unrelated permissions block")
+	}
+	stop := commandsFor(t, settings, "Stop")
+	if len(stop) != 2 {
+		t.Fatalf("Stop commands: %v, want the foreign hook plus ours", stop)
+	}
+
+	if err := uninstallClaudeHooks(path); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	settings = readSettings(t, path)
+	if _, ok := settings["permissions"]; !ok {
+		t.Fatal("uninstall dropped the unrelated permissions block")
+	}
+	if got := commandsFor(t, settings, "Stop"); len(got) != 1 || got[0] != "my-own-tool --report" {
+		t.Fatalf("Stop after uninstall: %v, want only the foreign hook", got)
+	}
+	if got := commandsFor(t, settings, "SessionStart"); len(got) != 0 {
+		t.Fatalf("SessionStart after uninstall: %v, want none", got)
+	}
+}
+
+func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+	if err := uninstallClaudeHooks(path); err != nil {
+		t.Fatalf("uninstall with no settings file: %v, want nil", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("uninstall created a settings file")
+	}
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `go test ./internal/cmd/ -run TestClaude -v`
+Expected: FAIL — `undefined: claudeSettingsPath`, `undefined: installClaudeHooks`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `internal/cmd/claude.go`:
+
+```go
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
+)
+
+// Settings scopes. Local settings are the developer's own and are normally
+// git-ignored; project settings are committed and shared by the whole repo.
+const (
+	scopeLocal   = "local"
+	scopeProject = "project"
+)
+
+// lodeHookPrefix marks a settings entry as Worklode's. JSON has no comments,
+// so the command itself is the marker: install strips every entry with this
+// prefix before writing the current set, which makes a re-run converge rather
+// than duplicate.
+const lodeHookPrefix = "lode hook "
+
+// claudeBinding is one Claude Code hook binding. An empty Matcher means the
+// binding applies to every occurrence of the event.
+type claudeBinding struct {
+	Event   string
+	Matcher string
+	Command string
+}
+
+// claudeBindings is every Claude Code event Worklode listens to. Heartbeat is
+// bound to four events because Stop alone leaves a live session looking dead:
+// StopFailure replaces Stop when a turn dies on an API error, SubagentStop
+// covers a long subagent fan-out, and Notification covers a session blocked on
+// a human.
+var claudeBindings = []claudeBinding{
+	{Event: "SessionStart", Command: "lode hook session-start"},
+	{Event: "SessionEnd", Command: "lode hook session-end"},
+	{Event: "Stop", Command: "lode hook heartbeat"},
+	{Event: "StopFailure", Command: "lode hook heartbeat"},
+	{Event: "SubagentStop", Command: "lode hook heartbeat"},
+	{Event: "Notification", Command: "lode hook heartbeat"},
+	{Event: "WorktreeCreate", Command: "lode hook worktree-create"},
+	{Event: "WorktreeRemove", Command: "lode hook worktree-remove"},
+	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
+	{Event: "PostToolUse", Matcher: "ExitWorktree", Command: "lode hook worktree-exit"},
+}
+
+func init() {
+	rootCmd.AddCommand(newClaudeCmd())
+}
+
+func newClaudeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "claude",
+		Short: "Manage Worklode's Claude Code integration",
+	}
+	cmd.AddCommand(newClaudeInstallCmd(), newClaudeUninstallCmd())
+	return cmd
+}
+
+func newClaudeInstallCmd() *cobra.Command {
+	var scope string
+	cmd := &cobra.Command{
+		Use:   "install",
+		Short: "Install Worklode's hooks into this repo's Claude Code settings",
+		Long: "Writes Worklode's lifecycle hook bindings (session start/end, heartbeat, " +
+			"worktree enter/exit/create/remove) into the repo's Claude Code settings file. " +
+			"Safe to re-run: it replaces Worklode's own entries and leaves every other " +
+			"setting untouched.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := settingsPathForScope(scope)
+			if err != nil {
+				return err
+			}
+			if err := installClaudeHooks(path); err != nil {
+				return err
+			}
+			return reportClaudeCmd(cmd, "installed", path)
+		},
+	}
+	cmd.Flags().StringVar(&scope, "scope", scopeLocal,
+		"which settings file to write: local (settings.local.json) or project (settings.json)")
+	return cmd
+}
+
+func newClaudeUninstallCmd() *cobra.Command {
+	var scope string
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove Worklode's hooks from this repo's Claude Code settings",
+		Long: "Removes every `lode hook` binding from the repo's Claude Code settings file, " +
+			"leaving all other settings — including third-party hooks on the same events — " +
+			"in place. A missing settings file is not an error.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := settingsPathForScope(scope)
+			if err != nil {
+				return err
+			}
+			if err := uninstallClaudeHooks(path); err != nil {
+				return err
+			}
+			return reportClaudeCmd(cmd, "uninstalled", path)
+		},
+	}
+	cmd.Flags().StringVar(&scope, "scope", scopeLocal,
+		"which settings file to write: local (settings.local.json) or project (settings.json)")
+	return cmd
+}
+
+// reportClaudeCmd prints the outcome in whichever form the caller asked for.
+func reportClaudeCmd(cmd *cobra.Command, action, path string) error {
+	if jsonOut(cmd) {
+		b, err := json.Marshal(struct {
+			Action string `json:"action"`
+			Path   string `json:"path"`
+		}{Action: action, Path: path})
+		if err != nil {
+			return err
+		}
+		printRaw(cmd, b)
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s Worklode hooks in %s\n", action, path)
+	return nil
+}
+
+// settingsPathForScope resolves the settings file for scope, relative to the
+// git worktree root of the current directory.
+func settingsPathForScope(scope string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("determine working directory: %w", err)
+	}
+	root, ok := worktree.Root(cwd)
+	if !ok {
+		return "", fmt.Errorf("not inside a git repository: %s", cwd)
+	}
+	return claudeSettingsPath(root, scope)
+}
+
+// claudeSettingsPath maps a scope to its settings file under root.
+func claudeSettingsPath(root, scope string) (string, error) {
+	switch scope {
+	case scopeLocal:
+		return filepath.Join(root, ".claude", "settings.local.json"), nil
+	case scopeProject:
+		return filepath.Join(root, ".claude", "settings.json"), nil
+	default:
+		return "", fmt.Errorf("unknown scope %q: want %q or %q", scope, scopeLocal, scopeProject)
+	}
+}
+
+// readSettingsFile reads path as generic JSON. A missing file is an empty
+// settings object, not an error — installing into a repo that has never had
+// Claude Code settings is the common case.
+func readSettingsFile(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return map[string]any{}, nil
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return settings, nil
+}
+
+// writeSettingsFile writes settings back to path, creating the .claude
+// directory if needed. Output is indented and newline-terminated so a
+// committed settings file stays readable and diffs cleanly.
+func writeSettingsFile(path string, settings map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	}
+	b, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	b = append(b, '\n')
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// installClaudeHooks writes Worklode's bindings into the settings file at
+// path, replacing any bindings a previous install left behind and preserving
+// every other setting.
+func installClaudeHooks(path string) error {
+	settings, err := readSettingsFile(path)
+	if err != nil {
+		return err
+	}
+	hooks := stripLodeHooks(settingsHooks(settings))
+	for _, b := range claudeBindings {
+		hooks[b.Event] = appendBinding(hooks[b.Event], b)
+	}
+	settings["hooks"] = hooks
+	return writeSettingsFile(path, settings)
+}
+
+// uninstallClaudeHooks removes Worklode's bindings from the settings file at
+// path. A missing file is a no-op: there is nothing to uninstall.
+func uninstallClaudeHooks(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	settings, err := readSettingsFile(path)
+	if err != nil {
+		return err
+	}
+	hooks := stripLodeHooks(settingsHooks(settings))
+	if len(hooks) == 0 {
+		delete(settings, "hooks")
+	} else {
+		settings["hooks"] = hooks
+	}
+	return writeSettingsFile(path, settings)
+}
+
+// settingsHooks returns the settings' "hooks" object, or an empty one when it
+// is absent or not an object.
+func settingsHooks(settings map[string]any) map[string]any {
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return map[string]any{}
+	}
+	return hooks
+}
+
+// appendBinding adds b to an event's existing group list, which may be nil or
+// a non-list left by hand-editing (in which case it is replaced).
+func appendBinding(existing any, b claudeBinding) []any {
+	groups, _ := existing.([]any)
+	group := map[string]any{
+		"hooks": []any{map[string]any{"type": "command", "command": b.Command}},
+	}
+	if b.Matcher != "" {
+		group["matcher"] = b.Matcher
+	}
+	return append(groups, group)
+}
+
+// stripLodeHooks removes every `lode hook` entry from a hooks object, dropping
+// groups and events that end up empty so an uninstall leaves no residue. Any
+// third-party hook sharing an event is preserved.
+func stripLodeHooks(hooks map[string]any) map[string]any {
+	out := map[string]any{}
+	for event, raw := range hooks {
+		groups, ok := raw.([]any)
+		if !ok {
+			// Not a shape we wrote; leave it exactly as found.
+			out[event] = raw
+			continue
+		}
+		var kept []any
+		for _, g := range groups {
+			group, ok := g.(map[string]any)
+			if !ok {
+				kept = append(kept, g)
+				continue
+			}
+			entries, ok := group["hooks"].([]any)
+			if !ok {
+				kept = append(kept, g)
+				continue
+			}
+			var keptEntries []any
+			for _, e := range entries {
+				if isLodeHookEntry(e) {
+					continue
+				}
+				keptEntries = append(keptEntries, e)
+			}
+			if len(keptEntries) == 0 {
+				continue
+			}
+			group["hooks"] = keptEntries
+			kept = append(kept, group)
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		out[event] = kept
+	}
+	return out
+}
+
+// isLodeHookEntry reports whether one hook entry runs a `lode hook` command.
+func isLodeHookEntry(e any) bool {
+	entry, ok := e.(map[string]any)
+	if !ok {
+		return false
+	}
+	command, ok := entry["command"].(string)
+	if !ok {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(command), lodeHookPrefix)
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `go test ./internal/cmd/ -run TestClaude -v`
+Expected: PASS (all four tests)
+
+- [ ] **Step 5: Run the full suite**
+
+Run: `go build ./... && go vet ./... && go test ./...`
+Expected: PASS
+
+- [ ] **Step 6: Document the commands**
+
+In `README.md`, at the end of the "Agent session tracking" section added in
+Task 9, replace the sentence "Claude Code bindings, for the plugin's
+`hooks.json`:" heading paragraph with a pointer to the command, and append:
+
+```markdown
+Install the bindings into a repo with:
+
+```
+lode claude install                    # ~/…/<repo>/.claude/settings.local.json
+lode claude install --scope project    # ~/…/<repo>/.claude/settings.json
+```
+
+`lode claude uninstall` (same `--scope` flag) removes them again. Both are
+idempotent and only touch entries whose command starts with `lode hook`, so
+third-party hooks on the same events are left alone.
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add internal/cmd/claude.go internal/cmd/claude_test.go README.md
+git commit -m "Add lode claude install/uninstall"
+```
+
+---
+
 ## Notes for the implementer
 
-**Helper names in test files.** Store and hookrun helpers were checked against
-the tree and are named correctly in this plan (`createTask`,
-`defaultTaskInput`, `openLeaseStore`, `newRealServer`, `initGitRepo`,
-`setupLeasedWorktree`, `payloadJSON`, `newRecordingServer`). The two the plan
-could not confirm are flagged at their use sites: `readyTask`/`decodeJSON` in
-Task 5 and `newTestClient` in Task 6. Grep before writing; where one does not
-exist, inline the two or three lines it stands for rather than inventing a
-parallel helper.
+**Helper names in test files.** Every helper this plan calls has been checked
+against the tree: store (`createTask`, `defaultTaskInput`, `openLeaseStore`,
+`leaseTestNow`), hookrun (`newRealServer`, `newRecordingServer`, `initGitRepo`,
+`setupLeasedWorktree`, `payloadJSON`), api (`newTestServer`, `doReq`,
+`decodeMap`, `decodeInto`, `createProject`, `createTaskViaAPI`, `secondActor`)
+and cli (`newTestServer`). Still grep before writing — if a signature has drifted,
+adapt the call site rather than adding a parallel helper.
+
+**Migration numbering.** The plan originally said 0003; `0003_project_keys`
+landed on main first, so the agent-sessions migration is **0004**.
 
 **What is deliberately not built.** No token or cost computation (the columns
 ship empty), no `lode sessions` command, no web UI. `Stop` and `SessionEnd`
