@@ -819,10 +819,10 @@ patches:
       - op: replace
         path: /spec/tls/0/hosts
         value:
-          - worklode.hzdev.sunstoneinstitute.ai
+          - worklode.dev.sunstoneinstitute.ai
       - op: replace
         path: /spec/rules/0/host
-        value: worklode.hzdev.sunstoneinstitute.ai
+        value: worklode.dev.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
@@ -1767,7 +1767,7 @@ These require the user directly — either because they mint real credentials, o
    - Item `worklode-secrets` in that vault with fields `WT_BOOTSTRAP_TOKEN`, `WT_GITHUB_WEBHOOK_SECRET`, `WT_FLUX_WEBHOOK_SECRET` — generate with `openssl rand -hex 20`/`openssl rand -hex 32` per the README's guidance.
    - Item `flux-webhook-tokens` field `worklode` in vault `hzdev-cluster-platform` is handled automatically by Task 19's generator script — no manual step there.
 
-3. **Configure the GitHub webhook** on `sunstoneinstitute/worklode` pointing at `https://worklode.hzdev.sunstoneinstitute.ai/hooks/github` once the app is live, using the `WT_GITHUB_WEBHOOK_SECRET` value from step 2 — see the app-deployment skill's `references/github-webhook-receiver.md` and this repo's README "GitHub App" section.
+3. **Configure the GitHub webhook** on `sunstoneinstitute/worklode` pointing at `https://worklode.dev.sunstoneinstitute.ai/hooks/github` once the app is live, using the `WT_GITHUB_WEBHOOK_SECRET` value from step 2 — see the app-deployment skill's `references/github-webhook-receiver.md` and this repo's README "GitHub App" section.
 
 4. **First-push GHCR package visibility check**: after `Deploy to hzdev` runs once, confirm the `sunstone-ghcr-pull` bot account (or whichever principal backs the cluster's `ghcr-pull` `ClusterExternalSecret`) can read the new `ghcr.io/sunstoneinstitute/worklode` package — same check done when `trusthere`/`sunstone-cms` onboarded to hzdev.
 
