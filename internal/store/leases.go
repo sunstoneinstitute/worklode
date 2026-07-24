@@ -303,12 +303,41 @@ func (s *Store) ActiveLease(ctx context.Context, taskID string) (*Lease, error) 
 // ExpireLeases closes every active lease whose expires_at is before now and
 // moves each affected task back from in_progress to ready (a task that has
 // already left in_progress keeps its state; the lease is still closed).
-// Every expiry is its own "system" event with external id
-// "lease-expired-<leaseID>", so re-running the sweep never double-applies.
-// Returns the number of leases newly expired. Callers pass now explicitly
-// (the serve loop passes s.nowFn()) so sweeps are testable and comparisons
-// are consistent within one run.
+// A "worklode-sweeper" advisory lock lets only one replica sweep at a time;
+// a caller that loses the lock returns (0, nil) immediately. The lock is an
+// optimization only — every expiry is its own "system" event with external
+// id "lease-expired-<leaseID>", so concurrent or re-run sweeps never
+// double-apply. Returns the number of leases newly expired. Callers pass
+// now explicitly (the serve loop passes s.nowFn()) so sweeps are testable
+// and comparisons are consistent within one run.
 func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
+	// Hold a session-scoped advisory lock on a pinned connection for the
+	// whole sweep. A transaction-scoped pg_try_advisory_xact_lock cannot
+	// work here: the per-lease work below runs in separate RecordEvent
+	// transactions on other pooled connections, so the lock must outlive
+	// any single transaction.
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get sweeper connection: %w", err)
+	}
+	defer conn.Close()
+	var locked bool
+	if err := conn.QueryRowContext(ctx,
+		`SELECT pg_try_advisory_lock(hashtext('worklode-sweeper'))`,
+	).Scan(&locked); err != nil {
+		return 0, fmt.Errorf("try sweeper advisory lock: %w", err)
+	}
+	if !locked {
+		// Another replica is sweeping.
+		return 0, nil
+	}
+	// Unlock with an uncancelable context: the session lock must be
+	// released even when ctx is canceled, or it would leak with the
+	// connection back into the pool. If the unlock itself fails the
+	// connection is broken and Postgres drops the lock with the session.
+	defer conn.ExecContext(context.WithoutCancel(ctx),
+		`SELECT pg_advisory_unlock(hashtext('worklode-sweeper'))`)
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, task_id FROM leases WHERE released_at IS NULL AND expires_at < $1 ORDER BY id`,
 		now.UTC())
