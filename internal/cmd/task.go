@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 func newTaskCmd() *cobra.Command {
@@ -258,7 +259,7 @@ func currentWorktreeIdentity() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("determine working directory: %w", err)
 	}
-	wt, err := cli.WorktreeIdentity(cwd)
+	wt, err := worktree.Identity(cwd)
 	if err != nil {
 		return "", fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
 	}
