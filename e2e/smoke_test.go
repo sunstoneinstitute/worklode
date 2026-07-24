@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -124,16 +123,12 @@ func getPage(t *testing.T, url string) (int, string) {
 func TestFullChain(t *testing.T) {
 	ctx := context.Background()
 
-	// 1. Real stack: store on a temp dir, full server, real HTTP listener.
-	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	defer st.Close()
-	handler, err := api.NewServer(st, api.Config{
+	// 1. Real stack: ephemeral Postgres database, full server, real HTTP
+	// listener. OpenTestStore creates a uniquely named migrated database
+	// (TEST_POSTGRES_DSN or the docker-compose default) and drops it on
+	// cleanup.
+	st := store.OpenTestStore(t)
+	handler, _, err := api.NewServer(st, api.Config{
 		BootstrapToken:      bootstrapToken,
 		GitHubWebhookSecret: githubSecret,
 		FluxWebhookSecret:   fluxSecret,
@@ -190,7 +185,10 @@ func TestFullChain(t *testing.T) {
 
 	// 4. GitHub webhooks, in real delivery order. Payload timestamps are
 	// taken as each delivery is built, so the timeline ends up ascending.
-	now := func() string { return time.Now().UTC().Format(time.RFC3339) }
+	// RFC3339Nano, not RFC3339: server-side timeline entries carry Postgres
+	// microsecond precision, so second-truncated payload timestamps would
+	// sort before earlier same-second state changes.
+	now := func() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 	prOpenedAt := now()
 
 	// 4a. pull_request.opened on the claim branch → task moves to in_review.

@@ -5,7 +5,7 @@
 worklode is Sunstone Institute's org-wide work tracker: one authoritative
 view of planned and in-progress work across all repos, replacing a
 hand-maintained `TASKS.md` + GitHub issue sync. It ships as a single Go
-binary, `lode`, backed by a SQLite database, with an append-only event log
+binary, `lode`, backed by a PostgreSQL database, with an append-only event log
 giving full provenance for every state change. Work arrives from three
 sources — a GitHub App (issues, PRs, reviews, CI, releases), a Flux
 notification-controller webhook (deployments), and a Kubernetes pod watcher
@@ -14,20 +14,18 @@ read-only web UI. See `docs/spec.md` for the full design.
 
 ## Quickstart
 
-Start the server with Docker Compose. `LODE_BOOTSTRAP_TOKEN` creates the
-initial admin actor the first time the database is empty. It must match
+Start the stack with Docker Compose — it brings up Postgres, runs the
+migrations, then starts the server. The server reads its database connection
+from `LODE_DSN` (a `postgres://...` DSN; the `--dsn` flag overrides it), which
+the compose file already sets. `LODE_BOOTSTRAP_TOKEN` creates the initial
+admin actor the first time the database is empty. It must match
 `^wl_[0-9a-f]{40}$` — the exact form `wl_$(openssl rand -hex 20)` mints.
 A bare `openssl rand -hex 20` (no `wl_` prefix) fails validation at startup:
 
 ```bash
-mkdir -p data
 export LODE_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)
 docker compose up -d
 ```
-
-On native Linux Docker (not Docker Desktop) the container runs as uid 65532,
-so run `sudo chown 65532:65532 data` (or use a named volume) before first
-start.
 
 Install the `lode` CLI:
 
@@ -175,18 +173,8 @@ variables, same as the CLI client. Omit `--kubeconfig` when running in-cluster
 
 ## Backups
 
-The `backup` Compose profile runs [litestream](https://litestream.io) to
-continuously replicate `data/wl.db` to S3-compatible object storage (Hetzner
-Object Storage, or any other S3-compatible provider — see the comments in
-`litestream.yml`):
-
-```bash
-export LITESTREAM_BUCKET=sunstone-wl-backups
-export LITESTREAM_ENDPOINT=https://fsn1.your-objectstorage.com
-export LITESTREAM_ACCESS_KEY_ID=...
-export LITESTREAM_SECRET_ACCESS_KEY=...
-docker compose --profile backup up -d
-```
+Backups are owned by CNPG (CloudNativePG) in-cluster; the compose stack has
+no backup mechanism of its own.
 
 ## Development
 
@@ -196,13 +184,19 @@ Requires Go 1.25. Run the test suite with:
 go test ./...
 ```
 
+Store tests need a reachable Postgres (default
+`postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,
+override with `TEST_POSTGRES_DSN`); each test creates and drops its own
+ephemeral database. Tests skip when Postgres is unreachable, unless `CI` is
+set.
+
 Migrations live under `deploy/base/migrations/` and use
 [golang-migrate](https://github.com/golang-migrate/migrate). They are no
 longer embedded in the binary or applied automatically — `lode serve` expects
 the schema to already exist. Apply them explicitly with
-`lode migrate --db <path> --migrations-path deploy/base/migrations` (the
-`docker-compose.yml` `migrate` service does this before `tracker` starts;
-in Kubernetes an initContainer does the same from a ConfigMap).
+`lode migrate --dsn <postgres-dsn> --migrations-path deploy/base/migrations`
+(the `docker-compose.yml` `migrate` service does this before `worklode`
+starts; in Kubernetes an initContainer does the same from a ConfigMap).
 Never edit a migration that has already shipped — add a new pair instead:
 
 ```

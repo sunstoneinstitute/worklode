@@ -35,12 +35,15 @@ func parseClusterEnvMap(s string) map[string]string {
 }
 
 func newServeCmd() *cobra.Command {
-	var dbPath, listen, adminListen string
+	var dsn, listen, adminListen string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the worklode HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			st, err := store.Open(dbPath)
+			if dsn == "" {
+				return errors.New("no DSN: set --dsn or LODE_DSN")
+			}
+			st, err := store.Open(dsn)
 			if err != nil {
 				return err
 			}
@@ -93,7 +96,7 @@ func newServeCmd() *cobra.Command {
 			adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler}
 			errCh := make(chan error, 2)
 			go func() {
-				slog.Info("listening", "addr", listen, "db", dbPath)
+				slog.Info("listening", "addr", listen)
 				errCh <- srv.ListenAndServe()
 			}()
 			go func() {
@@ -120,10 +123,9 @@ func newServeCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().StringVar(&dbPath, "db", "", "path to the SQLite database file")
+	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv("LODE_DSN"), "Postgres DSN (postgres://...); defaults to $LODE_DSN")
 	cmd.Flags().StringVar(&listen, "listen", ":8080", "address for the public app server (web UI, API, webhooks)")
 	cmd.Flags().StringVar(&adminListen, "admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
-	cmd.MarkFlagRequired("db")
 	return cmd
 }
 
