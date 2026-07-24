@@ -176,6 +176,34 @@ variables, same as the CLI client. Omit `--kubeconfig` when running in-cluster
 Backups are owned by CNPG (CloudNativePG) in-cluster; the compose stack has
 no backup mechanism of its own.
 
+## Worklode plugin (Claude Code)
+
+Installing the `lode` CLI is covered in Quickstart above; this section covers
+the agent-facing pickup workflow built on top of it.
+
+Run `lode install-git-hooks` inside a repo to install a pre-commit heartbeat
+hook (it renews the current task's lease on every commit). It chains any
+pre-commit hook already installed, and is idempotent — safe to re-run.
+
+The Claude Code plugin (`lode` plugin, `plugins/lode/` in the
+`sunstoneinstitute/claude-plugins` repo, installable from the Sunstone
+plugins marketplace) provides a `/lode:*` slash-command flow for agents
+picking up work:
+
+- `/lode:next` — claim the next ready task, create its `wt/<id>-<slug>`
+  git worktree, bind the lease to it, and start from the injected task brief.
+- `/lode:resume` — re-acquire the task already bound to the current worktree.
+- `/lode:done` — mark the task done, release the lease, and print a
+  worktree-cleanup hint.
+- `/lode:block --on <id>` — record a real blocker on another task and
+  release the lease.
+- `/lode:status` — read-only report of the current task, lease, and
+  heartbeat state.
+
+These are thin wrappers over the underlying `lode` subcommands: `lode next`,
+`lode resume`, `lode done`, `lode block`, `lode status`, and
+`lode task brief <id>`.
+
 ## Development
 
 Requires Go 1.25. Run the test suite with:
