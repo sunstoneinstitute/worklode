@@ -64,7 +64,7 @@ ALTER TABLE projects DROP COLUMN focus;
 
 **Steps:**
 
-- [ ] **Step 1: Implement** `BlockingFanOut(ctx) (map[string]int, error)` — transitive count of tasks each task unblocks over open `blocks` edges:
+- [x] **Step 1: Implement** `BlockingFanOut(ctx) (map[string]int, error)` — transitive count of tasks each task unblocks over open `blocks` edges:
 
 ```sql
 WITH RECURSIVE closure(root, task) AS (
@@ -77,7 +77,7 @@ SELECT root, COUNT(DISTINCT task) FROM closure GROUP BY root
 ```
 
 Tasks absent from the map have fan-out 0. (Unit-weight, all edges — matches spec D12; no filtering by blocked-task state for v1.)
-- [ ] **Step 2: Test:** chain A blocks B blocks C, plus A blocks D → fanout(A)=3, fanout(B)=1, fanout(C)=0. Diamond (A blocks B, A blocks C, B blocks D, C blocks D) → fanout(A)=3 (D counted once). Green, commit.
+- [x] **Step 2: Test:** chain A blocks B blocks C, plus A blocks D → fanout(A)=3, fanout(B)=1, fanout(C)=0. Diamond (A blocks B, A blocks C, B blocks D, C blocks D) → fanout(A)=3 (D counted once). Green, commit.
 
 ### Task 4: Store — `ClaimNext`
 
