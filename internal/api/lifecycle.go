@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -34,33 +33,10 @@ func toLeaseJSON(l *store.Lease) leaseJSON {
 	}
 }
 
-// SlugifyTitle turns a task title into a branch-name slug: lowercase, every
-// run of non-alphanumeric (ASCII) characters becomes a single '-', leading
-// and trailing '-' are trimmed, at most 40 characters, and "task" if nothing
-// remains. Non-ASCII letters are treated as separators so slugs are always
-// safe git branch components.
+// SlugifyTitle re-exports store.SlugifyTitle so api callers keep a local name
+// for the branch-name slug helper (see store.SlugifyTitle for the rules).
 func SlugifyTitle(title string) string {
-	var b strings.Builder
-	pendingDash := false
-	for _, r := range strings.ToLower(title) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			if pendingDash && b.Len() > 0 {
-				b.WriteByte('-')
-			}
-			pendingDash = false
-			b.WriteRune(r)
-		} else {
-			pendingDash = true
-		}
-	}
-	s := b.String()
-	if len(s) > 40 {
-		s = strings.TrimRight(s[:40], "-")
-	}
-	if s == "" {
-		return "task"
-	}
-	return s
+	return store.SlugifyTitle(title)
 }
 
 // readOptionalJSON is readJSON, but an empty request body leaves v at its
