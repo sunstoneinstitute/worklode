@@ -221,9 +221,9 @@ type patchTaskRequest struct {
 
 // patchStateFrom maps the states PATCH may move a task into to the required
 // current state. Only lease-free transitions are allowed here: "ready"
-// publishes a draft, "in_progress" reopens a task whose review requested
+// publishes a draft, "in_progress" reworks a task whose review requested
 // changes. Every other transition has a dedicated endpoint (claim, release,
-// done, abandon) that also manages the task's lease.
+// done, abandon, reopen) that also manages the task's lease.
 var patchStateFrom = map[string]string{
 	"ready":       "draft",
 	"in_progress": "in_review",
