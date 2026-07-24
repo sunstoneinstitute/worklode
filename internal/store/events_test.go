@@ -4,21 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"testing"
 )
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := s.Migrate(MigrationsDirForTests()); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
+	return OpenTestStore(t)
 }
 
 func TestRecordEventIdempotent(t *testing.T) {
@@ -72,7 +63,7 @@ func TestRecordEventAppliesStateInSameTx(t *testing.T) {
 	}
 
 	var count int
-	row := s.db.QueryRowContext(ctx, `SELECT count(*) FROM events WHERE source = ? AND external_id = ?`, "github", "d2")
+	row := s.db.QueryRowContext(ctx, `SELECT count(*) FROM events WHERE source = $1 AND external_id = $2`, "github", "d2")
 	if err := row.Scan(&count); err != nil {
 		t.Fatalf("query events: %v", err)
 	}
