@@ -57,9 +57,9 @@ App configuration:
 - **User authorization:** enabled, with **expiring user tokens** on (8h access /
   ~6-month refresh).
 - **Device flow:** enabled (for the CLI).
-- **Callback URL (hzdev):** `https://worklode.hzdev.sunstoneinstitute.ai/auth/github/callback`
+- **Callback URL (hzdev):** `https://worklode.dev.sunstoneinstitute.ai/auth/github/callback`
   (distinct from Keycloak's existing `/auth/callback`, since both providers coexist).
-- **Webhook URL (hzdev):** `https://worklode.hzdev.sunstoneinstitute.ai/hooks/github`
+- **Webhook URL (hzdev):** `https://worklode.dev.sunstoneinstitute.ai/hooks/github`
   (unchanged from today; HMAC via `WL_GITHUB_WEBHOOK_SECRET`).
 - **Permissions:**
   - Organization → **Members: read** (org + team membership for role mapping).
@@ -160,7 +160,7 @@ New env vars, **added** to the existing Keycloak/OIDC config (nothing removed):
 | `WL_GITHUB_ORG` | config | `sunstoneinstitute` |
 | `WL_GITHUB_ADMIN_TEAM` | config | `worklode-admins` |
 | `WL_TOKEN_ENC_KEY` | secret | random 32-byte key, 1Password → ExternalSecret |
-| `WL_PUBLIC_URL` | config | `https://worklode.hzdev.sunstoneinstitute.ai` (already required) |
+| `WL_PUBLIC_URL` | config | `https://worklode.dev.sunstoneinstitute.ai` (already required) |
 
 Nothing removed: `WL_OIDC_ISSUER`, `WL_OIDC_CLIENT_ID`, and the OIDC secret stay.
 
