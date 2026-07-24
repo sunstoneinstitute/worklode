@@ -70,7 +70,7 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]Task, error)
 		  WHERE e.to_task = $1
 		    AND e.type = 'blocks'
 		    AND t.state NOT IN ('done', 'abandoned')
-		  ORDER BY CAST(substr(t.id, 4) AS INTEGER)`, taskID)
+		  ORDER BY CAST(split_part(t.id, '-', 2) AS INTEGER)`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)
 	}
