@@ -16,7 +16,7 @@ func newOIDCServer(t *testing.T) (*store.Store, http.Handler, *oidctest.Issuer) 
 	t.Helper()
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
-	h, err := api.NewServer(st, api.Config{
+	h, _, err := api.NewServer(st, api.Config{
 		OIDCIssuer:    iss.URL(),
 		OIDCClientID:  iss.ClientID,
 		PublicURL:     "http://localhost:8080",
@@ -26,6 +26,24 @@ func newOIDCServer(t *testing.T) (*store.Store, http.Handler, *oidctest.Issuer) 
 		t.Fatalf("new oidc server: %v", err)
 	}
 	return st, h, iss
+}
+
+// newOIDCServerAdmin is like newOIDCServer but returns the admin handler
+// (/healthz, /metrics) rather than the public app handler.
+func newOIDCServerAdmin(t *testing.T) http.Handler {
+	t.Helper()
+	st := newTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	_, admin, err := api.NewServer(st, api.Config{
+		OIDCIssuer:    iss.URL(),
+		OIDCClientID:  iss.ClientID,
+		PublicURL:     "http://localhost:8080",
+		SessionSecret: "test-session-secret",
+	})
+	if err != nil {
+		t.Fatalf("new oidc server: %v", err)
+	}
+	return admin
 }
 
 // TestNewServerRequiresPublicURLWhenOIDC verifies NewServer fails fast when
@@ -38,7 +56,7 @@ func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
 	iss := oidctest.NewIssuer(t)
 
 	for _, publicURL := range []string{"", "/auth"} {
-		_, err := api.NewServer(st, api.Config{
+		_, _, err := api.NewServer(st, api.Config{
 			OIDCIssuer:    iss.URL(),
 			OIDCClientID:  iss.ClientID,
 			PublicURL:     publicURL,

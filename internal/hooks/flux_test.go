@@ -487,7 +487,7 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 // handler without bearer auth (the HMAC is the auth).
 func TestFluxMountedOnServer(t *testing.T) {
 	e := newFluxEnv(t)
-	h, err := api.NewServer(e.st, api.Config{
+	h, _, err := api.NewServer(e.st, api.Config{
 		FluxWebhookSecret: fluxTestSecret,
 		ClusterEnvMap:     map[string]string{"prod-1": "prod"},
 	})

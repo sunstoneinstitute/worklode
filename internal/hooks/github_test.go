@@ -469,7 +469,7 @@ func TestOversizedBody413(t *testing.T) {
 // handler without bearer auth (the HMAC is the auth).
 func TestMountedOnServer(t *testing.T) {
 	e := newEnv(t)
-	h, err := api.NewServer(e.st, api.Config{GitHubWebhookSecret: testSecret})
+	h, _, err := api.NewServer(e.st, api.Config{GitHubWebhookSecret: testSecret})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

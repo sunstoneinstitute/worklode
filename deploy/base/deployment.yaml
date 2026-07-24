@@ -21,7 +21,7 @@ spec:
         app: worklode
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
       securityContext:
@@ -67,6 +67,11 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            # Admin port: /healthz and /metrics only. Not exposed through the
+            # ingress (which routes the Service http port); reachable in-cluster
+            # for probes and Prometheus scraping.
+            - name: admin
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: worklode-config
@@ -82,7 +87,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: admin
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -90,7 +95,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: admin
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3

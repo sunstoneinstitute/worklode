@@ -35,7 +35,7 @@ func parseClusterEnvMap(s string) map[string]string {
 }
 
 func newServeCmd() *cobra.Command {
-	var dbPath, listen string
+	var dbPath, listen, adminListen string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the worklode HTTP server",
@@ -46,7 +46,7 @@ func newServeCmd() *cobra.Command {
 			}
 			defer st.Close()
 
-			handler, err := api.NewServer(st, api.Config{
+			handler, adminHandler, err := api.NewServer(st, api.Config{
 				BootstrapToken:      os.Getenv("WL_BOOTSTRAP_TOKEN"),
 				GitHubWebhookSecret: os.Getenv("WL_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("WL_FLUX_WEBHOOK_SECRET"),
@@ -87,10 +87,18 @@ func newServeCmd() *cobra.Command {
 			}()
 
 			srv := &http.Server{Addr: listen, Handler: handler}
-			errCh := make(chan error, 1)
+			// Admin server (/healthz, /metrics) on a separate port so they are
+			// never reachable through the public ingress, which routes only the
+			// app port. Probes and in-cluster scraping hit this port directly.
+			adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler}
+			errCh := make(chan error, 2)
 			go func() {
 				slog.Info("listening", "addr", listen, "db", dbPath)
 				errCh <- srv.ListenAndServe()
+			}()
+			go func() {
+				slog.Info("admin listening", "addr", adminListen)
+				errCh <- adminSrv.ListenAndServe()
 			}()
 
 			select {
@@ -100,15 +108,21 @@ func newServeCmd() *cobra.Command {
 				slog.Info("shutting down")
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					return err
+				mainErr := srv.Shutdown(shutdownCtx)
+				adminErr := adminSrv.Shutdown(shutdownCtx)
+				if mainErr != nil && !errors.Is(mainErr, http.ErrServerClosed) {
+					return mainErr
+				}
+				if adminErr != nil && !errors.Is(adminErr, http.ErrServerClosed) {
+					return adminErr
 				}
 				return nil
 			}
 		},
 	}
 	cmd.Flags().StringVar(&dbPath, "db", "", "path to the SQLite database file")
-	cmd.Flags().StringVar(&listen, "listen", ":8080", "address to listen on")
+	cmd.Flags().StringVar(&listen, "listen", ":8080", "address for the public app server (web UI, API, webhooks)")
+	cmd.Flags().StringVar(&adminListen, "admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
 	cmd.MarkFlagRequired("db")
 	return cmd
 }

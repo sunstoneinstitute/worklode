@@ -96,10 +96,16 @@ func validatePublicURL(publicURL string) error {
 	return nil
 }
 
-// NewServer builds the wl HTTP handler. If cfg.BootstrapToken is set and the
-// actors table is empty, it creates the initial admin actor (idempotent). A
-// bootstrap failure is fatal: the server must not start half-configured.
-func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
+// NewServer builds the worklode HTTP handlers. It returns two handlers: the
+// public app handler (web UI, API, webhooks) and a separate admin handler
+// (/healthz, /metrics). The admin handler is served on its own listener so
+// health and metrics are never exposed through the public ingress; probes and
+// in-cluster scraping hit the admin port directly.
+//
+// If cfg.BootstrapToken is set and the actors table is empty, it creates the
+// initial admin actor (idempotent). A bootstrap failure is fatal: the server
+// must not start half-configured.
+func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) {
 	s := &server{
 		st: st, cfg: cfg, log: slog.Default(),
 		tmplBoard:   parseWebTemplates("board.html"),
@@ -110,43 +116,43 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WL_SESSION_SECRET is required when OIDC is enabled")
+			return nil, nil, fmt.Errorf("WL_SESSION_SECRET is required when OIDC is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("WL_PUBLIC_URL is required when OIDC is enabled")
+			return nil, nil, fmt.Errorf("WL_PUBLIC_URL is required when OIDC is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		v, err := oidc.New(ctx, cfg.OIDCIssuer, cfg.OIDCClientID)
 		if err != nil {
-			return nil, fmt.Errorf("configure oidc: %w", err)
+			return nil, nil, fmt.Errorf("configure oidc: %w", err)
 		}
 		s.oidc = v
 	}
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
 		if cfg.SessionSecret == "" {
-			return nil, fmt.Errorf("WL_SESSION_SECRET is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("WL_SESSION_SECRET is required when GitHub auth is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("WL_PUBLIC_URL is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("WL_PUBLIC_URL is required when GitHub auth is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if cfg.GitHubOrg == "" {
-			return nil, fmt.Errorf("WL_GITHUB_ORG is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("WL_GITHUB_ORG is required when GitHub auth is enabled")
 		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
 		if err != nil || len(key) != 32 {
-			return nil, fmt.Errorf("WL_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+			return nil, nil, fmt.Errorf("WL_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
 		}
 		tc, err := tokencrypt.New(key)
 		if err != nil {
-			return nil, fmt.Errorf("configure token cipher: %w", err)
+			return nil, nil, fmt.Errorf("configure token cipher: %w", err)
 		}
 		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubOrg, cfg.GitHubAdminTeam)
 		s.tokenCipher = tc
@@ -154,7 +160,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
-			return nil, fmt.Errorf("bootstrap admin: %w", err)
+			return nil, nil, fmt.Errorf("bootstrap admin: %w", err)
 		}
 	}
 
@@ -172,13 +178,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 	reg.MustRegister(s.requests, s.durations)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.healthz)
-	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
 	// Read-only web UI. When OIDC is enabled these require a valid session
 	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
 	// unconfigured webAuth is a passthrough and the UI stays open as in v1.
-	// /healthz and /metrics (above) always stay open.
 	mux.HandleFunc("GET /{$}", s.webAuth(s.boardPage))
 	mux.HandleFunc("GET /tasks/{id}", s.webAuth(s.taskPage))
 	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.projectPage))
@@ -237,7 +240,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, error) {
 
 	mux.Handle("GET /api/v1/board", s.auth(s.board))
 
-	return s.logging(s.metrics(mux)), nil
+	// Admin handler: health and metrics on a dedicated listener, never routed
+	// through the public ingress. No auth or request-metrics middleware — the
+	// metrics endpoint must not count its own scrapes.
+	admin := http.NewServeMux()
+	admin.HandleFunc("GET /healthz", s.healthz)
+	admin.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	return s.logging(s.metrics(mux)), admin, nil
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
