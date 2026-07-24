@@ -85,7 +85,7 @@ Move/reuse `WorktreeIdentity` from plan 01 (`internal/cli/worktree.go`) into thi
 
 **Steps:**
 
-- [ ] **Step 1: Store `Brief`:**
+- [x] **Step 1: Store `Brief`:**
 
 ```go
 type Brief struct {
@@ -103,9 +103,9 @@ func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error)
 ```
 
 One bounded payload — task row, branch from `SlugifyTitle`, open blockers via one query, active lease. No file contents, no unbounded lists.
-- [ ] **Step 2: Store `RebindLeaseWorktree(ctx, taskID, actorID, worktree string) error`** — updates `worktree` on the active lease held by `actorID` (non-holder → `ErrNotFound`, same probe-resistance as Renew), recorded as event `lease.rebound`; 23505 on `leases_active_worktree` → `ErrLeased`.
-- [ ] **Step 3: API.** `GET /api/v1/tasks/{id}/brief` (bearer) → the Brief as JSON (snake_case keys: `task`, `body`, `branch`, `open_blockers`, `lease`, `governing_design`, `affected_components`, `definition_of_done`). `POST /api/v1/tasks/{id}/lease/worktree` `{"worktree": "..."}` → rebind.
-- [ ] **Step 4: Tests** at store and handler level (brief for task with blockers + lease; rebind by holder ok, by non-holder 404). Green, commit.
+- [x] **Step 2: Store `RebindLeaseWorktree(ctx, taskID, actorID, worktree string) error`** — updates `worktree` on the active lease held by `actorID` (non-holder → `ErrNotFound`, same probe-resistance as Renew), recorded as event `lease.rebound`; 23505 on `leases_active_worktree` → `ErrLeased`.
+- [x] **Step 3: API.** `GET /api/v1/tasks/{id}/brief` (bearer) → the Brief as JSON (snake_case keys: `task`, `body`, `branch`, `open_blockers`, `lease`, `governing_design`, `affected_components`, `definition_of_done`). `POST /api/v1/tasks/{id}/lease/worktree` `{"worktree": "..."}` → rebind.
+- [x] **Step 4: Tests** at store and handler level (brief for task with blockers + lease; rebind by holder ok, by non-holder 404). Green, commit.
 
 ### Task A3: CLI lifecycle — `lode next`, `resume`, `done`, `block`, `status`, `task brief`
 
@@ -115,7 +115,7 @@ One bounded payload — task row, branch from `SlugifyTitle`, open blockers via 
 
 **Steps:**
 
-- [ ] **Step 1: `lode next [<id>] [--project P] [--strict-focus] [--json]`** — the one way to enter Worklode mode:
+- [x] **Step 1: `lode next [<id>] [--project P] [--strict-focus] [--json]`** — the one way to enter Worklode mode:
   1. Resolve repo root (`worktree.Root(".")`; error if absent or if cwd is already inside a `wt/` worktree).
   2. Claim: with `<id>` → `POST /tasks/{id}/claim`; without → claim-next. Worktree field: `<hostname>:<root>#pending-<8hex>`.
   3. None ready → print `{"claimed":false,...}` / "no ready task", exit 0.
@@ -123,11 +123,11 @@ One bounded payload — task row, branch from `SlugifyTitle`, open blockers via 
   5. Rebind lease to `worktree.Identity(dir)`.
   6. Fetch + print the brief (`--json`: `{"claimed":true,"worktree":"<abs dir>","branch":"…","brief":{…}}`).
   On any failure after claim: release the lease, remove a half-created worktree, exit non-zero.
-- [ ] **Step 2: `lode resume [<dir>] [--json]`** — re-acquire an existing worktree: resolve dir (default cwd) → `ParseDir` → task id. If active lease exists for this worktree identity → `renew`. If none (sweeper reclaimed; task back in `ready`) → `claim <id>` with this worktree's identity. Print brief. Outside a `wt/` worktree → error.
-- [ ] **Step 3: `lode done [--json]`** — inside a worktree: task id from `ParseDir` → `POST /tasks/{id}/done` → release → print confirmation + `git worktree remove` cleanup hint. **`lode block --on <blocker-id> [--json]`** — adds `blocks` edge (`blocker blocks current`) via existing edges API, releases the lease, prints confirmation. Both error politely outside a worktree.
-- [ ] **Step 4: `lode status [--json]`** — read-only: worktree dir, task id, brief.Task summary, lease state (held/expired/none, expires_at, renewed_at freshness), session-marker state. Never mutates.
-- [ ] **Step 5: `lode task brief <id> [--json]`** — plain fetch/print of A2's endpoint.
-- [ ] **Step 6: Tests:** httptest-server CLI tests for each command's happy path + guard errors; `lode next` end-to-end against a real temp git repo + ephemeral store via the e2e pattern (worktree actually created, lease rebound to its path, cleanup on forced rebind failure). Green, commit.
+- [x] **Step 2: `lode resume [<dir>] [--json]`** — re-acquire an existing worktree: resolve dir (default cwd) → `ParseDir` → task id. If active lease exists for this worktree identity → `renew`. If none (sweeper reclaimed; task back in `ready`) → `claim <id>` with this worktree's identity. Print brief. Outside a `wt/` worktree → error.
+- [x] **Step 3: `lode done [--json]`** — inside a worktree: task id from `ParseDir` → `POST /tasks/{id}/done` → release → print confirmation + `git worktree remove` cleanup hint. **`lode block --on <blocker-id> [--json]`** — adds `blocks` edge (`blocker blocks current`) via existing edges API, releases the lease, prints confirmation. Both error politely outside a worktree.
+- [x] **Step 4: `lode status [--json]`** — read-only: worktree dir, task id, brief.Task summary, lease state (held/expired/none, expires_at, renewed_at freshness), session-marker state. Never mutates.
+- [x] **Step 5: `lode task brief <id> [--json]`** — plain fetch/print of A2's endpoint.
+- [x] **Step 6: Tests:** httptest-server CLI tests for each command's happy path + guard errors; `lode next` end-to-end against a real temp git repo + ephemeral store via the e2e pattern (worktree actually created, lease rebound to its path, cleanup on forced rebind failure). Green, commit.
 
 ### Task A4: `lode hook <event>` + daisy-chain
 
@@ -136,17 +136,17 @@ One bounded payload — task row, branch from `SlugifyTitle`, open blockers via 
 
 **Steps:**
 
-- [ ] **Step 1: Contract.** `lode hook <event> [--next <cmd> [arg...]]` where `<event>` ∈ `session-start | session-end | pre-commit | worktree-create | worktree-remove`. Common behavior:
+- [x] **Step 1: Contract.** `lode hook <event> [--next <cmd> [arg...]]` where `<event>` ∈ `session-start | session-end | pre-commit | worktree-create | worktree-remove`. Common behavior:
   - Read the hook payload from stdin (tolerate empty/non-JSON: git pre-commit has none). Determine the working dir: payload `cwd`, else `$PWD`.
   - **Uniform guard:** `worktree.Root(dir)` → `worktree.ParseDir(root)`; no match ⇒ do nothing. With `--next` ⇒ `syscall.Exec` the next command (stdin already consumed — pass the raw payload via env `LODE_HOOK_PAYLOAD` and re-feed via a pipe is NOT needed for git hooks; for exec, write payload to the child's stdin by re-execing through `/bin/sh -c` is overkill — instead spawn with `os/exec`, feed payload to child stdin, exit with child's code; use plain `exec.Command`, not execve, and document why: stdin replay). Without `--next` ⇒ exit 0.
   - All backbone calls have a short timeout (2s) and **never fail the editor event**: on error, print a `systemMessage` warning JSON (Claude Code hooks) or a stderr warning (git), exit 0.
-- [ ] **Step 2: Events.**
+- [x] **Step 2: Events.**
   - `session-start`: guard → if inside a Worklode worktree: ensure lease (active → renew if it expires within 30m; expired/none → re-acquire via the `resume` logic); write the session marker; fetch brief; emit `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"<compact brief text>"}}`. If *outside*: cheap offer scan — list `<root>/wt/*` dirs, for each `ParseDir` hit query lease state (one `GET /tasks/{id}/brief` each, max 5); any with expired/no lease and a stale/absent session marker → additionalContext one-liner: "Worklode worktree wt/… (WL-n: title) is abandoned — `/lode:resume wt/…` to adopt it." No claim, no model call.
   - `session-end`: guard → remove session marker. Nothing else.
   - `pre-commit`: guard → `renew` (the commit-cadence heartbeat). Expired-and-swept (task reclaimed) → warning on stderr, still exit 0 (never block a commit).
   - `worktree-create`: guard on the *created* path (payload) → if it's a `wt/` dir with an expired lease and no live session → re-acquire (auto-resume; provably ours). Else NOP.
   - `worktree-remove`: guard on the removed path → `release` (canonical "done holding this").
-- [ ] **Step 3: Tests** (`hookrun` unit + subprocess-style):
+- [x] **Step 3: Tests** (`hookrun` unit + subprocess-style):
   - Guard NOP: every event, run against a plain temp git repo → no API calls (assert with an httptest server that fails the test on any request), exit 0.
   - `--next` chain: guard-NOP with `--next touch <tmpfile>` → file exists, exit 0 (downstream ran).
   - `pre-commit` inside a fixture worktree renews (httptest asserts the renew call).
@@ -160,7 +160,7 @@ One bounded payload — task row, branch from `SlugifyTitle`, open blockers via 
 
 **Steps:**
 
-- [ ] **Step 1: Behavior.** In the current repo's shared hooks dir (`git rev-parse --git-path hooks`, honoring `core.hooksPath`):
+- [x] **Step 1: Behavior.** In the current repo's shared hooks dir (`git rev-parse --git-path hooks`, honoring `core.hooksPath`):
   - Compose the chain target: existing `pre-commit` file (if present and not ours) → rename to `pre-commit.pre-lode`, chain to it. Else if `.pre-commit-config.yaml` exists at repo root → chain to `pre-commit` (the framework binary). Else no chain.
   - Write `pre-commit` (0755):
 
@@ -172,7 +172,7 @@ exec lode hook pre-commit --next <target with args, or nothing> "$@"
 
   (No `--next` clause when there's nothing to chain.)
   - **Idempotent:** a file containing the `# worklode-hook` marker is rewritten in place (re-point, never chain to ourselves, never double-rename the preserved hook).
-- [ ] **Step 2: Tests** in temp git repos: fresh install; re-run unchanged (idempotent); existing third-party pre-commit preserved as `.pre-lode` and chained; `.pre-commit-config.yaml` present → chains the framework; installed hook + guard NOP = `git commit` succeeds in a plain repo without a lode server. Green, commit.
+- [x] **Step 2: Tests** in temp git repos: fresh install; re-run unchanged (idempotent); existing third-party pre-commit preserved as `.pre-lode` and chained; `.pre-commit-config.yaml` present → chains the framework; installed hook + guard NOP = `git commit` succeeds in a plain repo without a lode server. Green, commit.
 
 ### Task A6: worklode repo finishing
 
@@ -181,7 +181,7 @@ exec lode hook pre-commit --next <target with args, or nothing> "$@"
 
 **Steps:**
 
-- [ ] **Step 1:** `.gitignore` + README. Full `go build ./... && go vet ./... && go test ./...` green. Commit.
+- [x] **Step 1:** `.gitignore` + README. Full `go build ./... && go vet ./... && go test ./...` green. Commit.
 
 ## Part B — claude-plugins repo (`~/git/sunstone/claude-plugins`)
 
