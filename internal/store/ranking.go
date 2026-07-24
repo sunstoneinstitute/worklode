@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -164,15 +163,10 @@ func priorityRank(p string) int {
 // SW-9 must sort before SW-10, which a plain string compare gets wrong. A
 // malformed id sorts last rather than panicking.
 func numericTaskID(id string) int {
-	i := strings.LastIndex(id, "-")
-	if i < 0 {
-		return math.MaxInt
+	if _, n, ok := splitTaskID(id); ok {
+		return n
 	}
-	n, err := strconv.Atoi(id[i+1:])
-	if err != nil {
-		return math.MaxInt
-	}
-	return n
+	return math.MaxInt
 }
 
 // rankTasks orders candidates by the spec-02 key:
