@@ -29,12 +29,19 @@ draft → ready → in_progress → in_review → merged → deployed_dev → de
 
 New states: `deployed_dev`, `deployed_prod`, `released`.
 
-| State | Meaning | Terminal for |
-|---|---|---|
-| `merged` | Work landed on the default branch (auto-detected or manual `lode task done`) | Repos with no deployable envs and no releases |
-| `deployed_dev` | Deploy to a dev/test environment covering the landed commit: GitHub `deployment_status: success` **and** Flux `ReconciliationSucceeded` | — |
-| `deployed_prod` | Same, for prod | All repos with a prod env |
-| `released` | GitHub release published covering the landed commit | Repos without a prod env |
+| State | Meaning |
+|---|---|
+| `merged` | Work landed on the default branch (auto-detected or manual `lode task done`) |
+| `deployed_dev` | Deploy to a dev/test environment covering the landed commit: GitHub `deployment_status: success` **and** Flux `ReconciliationSucceeded` |
+| `deployed_prod` | Same, for prod |
+| `released` | GitHub release published covering the landed commit |
+
+Each repo mapping carries a **`done_state`** — the terminal state that counts
+as fully delivered for that repo: `merged`, `deployed_prod`, or `released`.
+Discovery defaults it (prod env → `deployed_prod`; releases without a prod
+env → `released`; neither → `merged`); it can be set explicitly on the repo
+mapping. A task at its repo's `done_state` is fully delivered; states past it
+are never expected for that repo.
 
 New legal transitions:
 
@@ -133,11 +140,23 @@ signals arrived out of order). Every handler calls it for affected tasks at
 the end of its apply. All lifecycle rules live here; handlers only record
 facts. Arrival order of GitHub and Flux events therefore never matters.
 
-**Repo delivery profile** (display only, never gates transitions): on
-`project add-repo` and lazily on webhook traffic, fetch the repo's
-environment list via the GitHub App (`internal/githubauth`) and note whether
-it uses releases. Feeds UI/CLI hints like "merged — awaiting dev deploy". If
-discovery fails, everything still works from events alone.
+**Repo delivery profile**: on `project add-repo` and lazily on webhook
+traffic, fetch the repo's environment list via the GitHub App
+(`internal/githubauth`) and note whether it uses releases. This seeds the
+repo's `done_state` (explicitly settable, see State machine) and feeds UI/CLI
+hints like "merged — awaiting dev deploy". Discovery never gates transitions:
+if it fails, states still advance from events alone.
+
+GitHub App requirements: repository permissions **Actions: read**
+(environment discovery, `GET /repos/{owner}/{repo}/environments`),
+**Deployments: read** (`deployment_status` webhook events), **Contents:
+read** (`push` and `release` webhook events); webhook subscriptions for
+`push` and `deployment_status` added alongside the existing events.
+
+Deferred: some repos deliver multiple artifacts (data-platform ships two
+docker images plus a python library; worklode a docker image plus a CLI
+binary via brew tap). v1 models one `done_state` per repo; per-artifact
+delivery tracking is future work.
 
 **Deployment config** (not code): Flux notification-controller in every
 cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
@@ -151,6 +170,18 @@ cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
 - `lode task done` remains the manual escape hatch.
 - `lode project add-repo` output gains the discovered delivery profile.
 
+Repos shared across projects (`provisioning`, `admin-cluster`,
+`rdf-registry`, …) need no special handling: delivery advances a task via the
+repo its own commits landed in (`task_commits`), never by fan-out through
+project→repo links. A delivery in a shared repo affects exactly the tasks
+correlated to it; cross-project impact is modeled as multiple linked tasks.
+
+Deferred: a single task whose work spans several repos (e.g. adding a new
+application touches the app repo plus `admin-cluster` or `provisioning`)
+still tracks delivery only through its primary repo in v1. Multi-repo task
+delivery — possibly spotted by watching Flux events for the companion repos —
+is future work.
+
 ## Migration
 
 One schema version: create `task_commits`, `main_commits`, `env_deploys`,
@@ -159,10 +190,12 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 
 ## Coordination with WL-12
 
-The branch-pattern change (hardcoded `wl/` → configurable prefix, default
-`lode/`) touches the same regexes as WL-12 (per-project task keys). This
-design assumes task keys are `<PROJECTKEY>-<n>` as WL-12 lands; the branch
-pattern becomes `<prefix><task-key>[-slug]`.
+The branch pattern is a configurable PREFIX (default `lode/`, replacing the
+hardcoded `wl/`) followed by a task key: `<prefix><task-key>[-slug]`. Task
+keys MUST conform to `^[A-Z]+-\d+$`, matching the per-project keys WL-12
+lands; both changes touch the same regexes. Possible later exception: ADRs
+and SPECs addressable through a `<PROJECTKEY>-{ADR,SPEC}-<n>` alias (e.g.
+`WL-ADR-1`, `WL-SPEC-14`), the numbers drawn from the same sequence as tasks.
 
 ## Error handling
 
