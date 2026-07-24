@@ -41,3 +41,10 @@ func isUniqueViolationOn(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
 }
+
+// isCheckViolationOn reports whether err is a Postgres CHECK-constraint
+// violation (SQLSTATE 23514) on the named constraint.
+func isCheckViolationOn(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == constraint
+}
