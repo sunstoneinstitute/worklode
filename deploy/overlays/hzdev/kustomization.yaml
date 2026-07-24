@@ -22,7 +22,7 @@ patches:
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
       - op: add
         path: /data/WL_PUBLIC_URL
-        value: "https://worklode.hzdev.sunstoneinstitute.ai"
+        value: "https://worklode.dev.sunstoneinstitute.ai"
       - op: add
         path: /data/WL_GITHUB_ORG
         value: "sunstoneinstitute"
@@ -33,10 +33,10 @@ patches:
       - op: replace
         path: /spec/tls/0/hosts
         value:
-          - worklode.hzdev.sunstoneinstitute.ai
+          - worklode.dev.sunstoneinstitute.ai
       - op: replace
         path: /spec/rules/0/host
-        value: worklode.hzdev.sunstoneinstitute.ai
+        value: worklode.dev.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
     newTag: latest
