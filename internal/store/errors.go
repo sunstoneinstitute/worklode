@@ -1,6 +1,10 @@
 package store
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/jackc/pgx/v5/pgconn"
+)
 
 // Sentinel errors returned by store operations.
 var (
@@ -21,3 +25,10 @@ var (
 	// ErrInvalidInput means a field value failed validation.
 	ErrInvalidInput = errors.New("invalid input")
 )
+
+// isUniqueViolation reports whether err is a Postgres unique-index violation
+// (SQLSTATE 23505), the backstop for claim races and duplicate edges.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
