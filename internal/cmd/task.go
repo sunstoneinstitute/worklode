@@ -19,6 +19,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskAddCmd(),
 		newTaskListCmd(),
 		newTaskShowCmd(),
+		newTaskEditCmd(),
 		newTaskReadyCmd(),
 		newTaskReopenCmd(),
 		newTaskReworkCmd(),
@@ -38,7 +39,7 @@ func init() {
 }
 
 func newTaskAddCmd() *cobra.Command {
-	var project, title, body, priority, kind string
+	var project, title, body, priority, kind, concern string
 	var draft bool
 	cmd := &cobra.Command{
 		Use:   "add",
@@ -49,7 +50,8 @@ func newTaskAddCmd() *cobra.Command {
 				return err
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
-				Project: project, Title: title, Body: body, Priority: priority, Kind: kind, Draft: draft,
+				Project: project, Title: title, Body: body, Priority: priority, Kind: kind,
+				Concern: concern, Draft: draft,
 			})
 			if err != nil {
 				return err
@@ -67,6 +69,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
+	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.MarkFlagRequired("project")
 	cmd.MarkFlagRequired("title")
@@ -126,6 +129,50 @@ func newTaskShowCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func newTaskEditCmd() *cobra.Command {
+	var concern, priority string
+	var needsDecomposition bool
+	cmd := &cobra.Command{
+		Use:   "edit <id>",
+		Short: "Edit a task's concern, priority, or needs-decomposition flag",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var in cli.EditTaskInput
+			if cmd.Flags().Changed("concern") {
+				in.Concern = &concern
+			}
+			if cmd.Flags().Changed("priority") {
+				in.Priority = &priority
+			}
+			if cmd.Flags().Changed("needs-decomposition") {
+				in.NeedsDecomposition = &needsDecomposition
+			}
+			if in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
+				return fmt.Errorf("nothing to edit: set --concern, --priority, or --needs-decomposition")
+			}
+
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.EditTask(cmd.Context(), args[0], in)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
+	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
+	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	return cmd
 }
 
@@ -207,16 +254,51 @@ func newTaskReworkCmd() *cobra.Command {
 func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
+	var next, strictFocus, dryRun bool
+	var project string
 	cmd := &cobra.Command{
-		Use:   "claim <id>",
+		Use:   "claim [id]",
 		Short: "Lease a task to the current worktree and move it to in_progress",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			if worktree == "" {
+
+			if !next {
+				if len(args) == 0 {
+					return fmt.Errorf("task id is required (or use --next)")
+				}
+				if worktree == "" {
+					cwd, err := os.Getwd()
+					if err != nil {
+						return fmt.Errorf("determine working directory: %w", err)
+					}
+					worktree, err = cli.WorktreeIdentity(cwd)
+					if err != nil {
+						return fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+					}
+				}
+				resp, raw, err := c.ClaimTask(cmd.Context(), args[0], worktree, ttl)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				out := cmd.OutOrStdout()
+				fmt.Fprintf(out, "claimed %s, lease expires %s\n", args[0], resp.Lease.ExpiresAt.Local().Format(time.RFC3339))
+				fmt.Fprintf(out, "branch: %s\n\n", resp.Branch)
+				fmt.Fprintf(out, "  git switch -c %s\n", resp.Branch)
+				return nil
+			}
+
+			if len(args) > 0 {
+				return fmt.Errorf("--next and a task id are mutually exclusive")
+			}
+			if worktree == "" && !dryRun {
 				cwd, err := os.Getwd()
 				if err != nil {
 					return fmt.Errorf("determine working directory: %w", err)
@@ -226,7 +308,10 @@ func newTaskClaimCmd() *cobra.Command {
 					return fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
 				}
 			}
-			resp, raw, err := c.ClaimTask(cmd.Context(), args[0], worktree, ttl)
+
+			resp, raw, err := c.ClaimNext(cmd.Context(), cli.ClaimNextInput{
+				Project: project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
+			})
 			if err != nil {
 				return err
 			}
@@ -235,14 +320,25 @@ func newTaskClaimCmd() *cobra.Command {
 				return nil
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "claimed %s, lease expires %s\n", args[0], resp.Lease.ExpiresAt.Local().Format(time.RFC3339))
-			fmt.Fprintf(out, "branch: %s\n\n", resp.Branch)
-			fmt.Fprintf(out, "  git switch -c %s\n", resp.Branch)
+			if resp.Task == nil {
+				fmt.Fprintln(out, "no ready task")
+				return nil
+			}
+			branch := "wl/" + resp.Task.ID + "-" + resp.Task.Slug
+			if resp.DryRun {
+				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
+			} else {
+				fmt.Fprintf(out, "claimed %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
+	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 02 ranking)")
+	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project")
+	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd
 }
 

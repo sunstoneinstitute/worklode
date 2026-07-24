@@ -292,6 +292,7 @@ type CreateTaskInput struct {
 	Body     string `json:"body"`
 	Priority string `json:"priority"`
 	Kind     string `json:"kind"`
+	Concern  string `json:"concern,omitempty"`
 	Draft    bool   `json:"draft"`
 }
 
@@ -379,6 +380,106 @@ func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Du
 		return ClaimResponse{}, nil, fmt.Errorf("decode claim response: %w", err)
 	}
 	return resp, raw, nil
+}
+
+// ClaimNextPickLease is the lease shard of a ClaimNextPick, present only when
+// the pick was actually claimed (not a dry run or a no-ready-task response).
+type ClaimNextPickLease struct {
+	Worktree  string    `json:"worktree"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ClaimNextPick is the wire form of a claim-next candidate/claimed task: a
+// slimmer projection than Task, matching the ranking-relevant fields (spec
+// 02) rather than the full task record.
+type ClaimNextPick struct {
+	ID       string              `json:"id"`
+	Slug     string              `json:"slug"`
+	Concern  string              `json:"concern"`
+	Priority string              `json:"priority"`
+	FanOut   int                 `json:"fan_out"`
+	Project  string              `json:"project"`
+	Lease    *ClaimNextPickLease `json:"lease,omitempty"`
+}
+
+// ClaimNextResponse is the response body of ClaimNext. Task is nil only when
+// no ready task exists (Claimed is false and Reason is "no-ready-task"). A
+// dry-run hit sets DryRun and Task but leaves Claimed false and Task.Lease
+// nil.
+type ClaimNextResponse struct {
+	Claimed bool           `json:"claimed"`
+	Reason  string         `json:"reason,omitempty"`
+	DryRun  bool           `json:"dry_run,omitempty"`
+	Task    *ClaimNextPick `json:"task,omitempty"`
+}
+
+// ClaimNextInput is the request body for ClaimNext.
+type ClaimNextInput struct {
+	Project     string
+	StrictFocus bool
+	DryRun      bool
+	Worktree    string
+	TTL         time.Duration
+}
+
+// ClaimNext calls POST /api/v1/tasks/claim-next: rank the ready set
+// server-side and atomically claim the top candidate. worktree is required
+// unless DryRun is set. A "no ready task" or dry-run result is a normal
+// (non-error) response — see ClaimNextResponse.
+func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (ClaimNextResponse, []byte, error) {
+	body := map[string]any{
+		"strict_focus": in.StrictFocus,
+		"dry_run":      in.DryRun,
+	}
+	if in.Project != "" {
+		body["project"] = in.Project
+	}
+	if in.Worktree != "" {
+		body["worktree"] = in.Worktree
+	}
+	if in.TTL > 0 {
+		body["ttl_seconds"] = int(in.TTL.Seconds())
+	}
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/claim-next", body)
+	if err != nil {
+		return ClaimNextResponse{}, nil, err
+	}
+	var resp ClaimNextResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return ClaimNextResponse{}, nil, fmt.Errorf("decode claim-next response: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// EditTaskInput carries the optional fields of a task edit; nil means leave
+// the field unchanged. Concern "" or "none" clears the concern.
+type EditTaskInput struct {
+	Concern            *string
+	Priority           *string
+	NeedsDecomposition *bool
+}
+
+// EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
+func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (Task, []byte, error) {
+	body := map[string]any{}
+	if in.Concern != nil {
+		body["concern"] = *in.Concern
+	}
+	if in.Priority != nil {
+		body["priority"] = *in.Priority
+	}
+	if in.NeedsDecomposition != nil {
+		body["needs_decomposition"] = *in.NeedsDecomposition
+	}
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), body)
+	if err != nil {
+		return Task{}, nil, err
+	}
+	var t Task
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+	}
+	return t, raw, nil
 }
 
 // RenewLease calls POST /api/v1/tasks/{id}/renew.
@@ -540,12 +641,14 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 
 // --- projects ---------------------------------------------------------
 
-// Project is the wire form of a project, including its mapped repos.
+// Project is the wire form of a project, including its mapped repos and
+// ranking focus (the ordered list of concerns claim-next should prioritize).
 type Project struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	DeployGated bool     `json:"deploy_gated"`
 	Repos       []string `json:"repos"`
+	Focus       []string `json:"focus"`
 }
 
 // CreateProjectInput is the request body for CreateProject.
@@ -584,6 +687,42 @@ func (c *Client) ListProjects(ctx context.Context) (ProjectListResponse, []byte,
 		return ProjectListResponse{}, nil, fmt.Errorf("decode project list: %w", err)
 	}
 	return resp, raw, nil
+}
+
+// SetProjectFocus calls PATCH /api/v1/projects/{id} with the ordered focus
+// list and returns the updated project. focus is always sent non-nil (an
+// empty slice clears the focus) since the server rejects a missing/null
+// focus with 422.
+func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string) (Project, []byte, error) {
+	if focus == nil {
+		focus = []string{}
+	}
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id),
+		map[string]any{"focus": focus})
+	if err != nil {
+		return Project{}, nil, err
+	}
+	var p Project
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+	}
+	return p, raw, nil
+}
+
+// GetProject returns one project by id, or a *ClientError with Status 404 if
+// no such project exists. There is no single-project GET endpoint, so this
+// filters the project list.
+func (c *Client) GetProject(ctx context.Context, id string) (Project, error) {
+	resp, _, err := c.ListProjects(ctx)
+	if err != nil {
+		return Project{}, err
+	}
+	for _, p := range resp.Projects {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+	return Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
 }
 
 // AddRepo calls POST /api/v1/projects/{id}/repos.

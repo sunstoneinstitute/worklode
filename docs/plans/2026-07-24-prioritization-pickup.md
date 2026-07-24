@@ -190,10 +190,10 @@ or `{"claimed": false, "reason": "no-ready-task"}` (HTTP 200 — an empty ready 
 
 **Steps:**
 
-- [ ] **Step 1: `lode task claim [<id>] --next --project <p> --strict-focus --dry-run`.** `--next` and a positional id are mutually exclusive (error if both). `--next` posts to claim-next with worktree from `WorktreeIdentity(".")` (plan 01); `--json` prints the server response verbatim; human output prints `claimed WL-7 (fix-the-thing) — branch wl/WL-7-fix-the-thing` or `no ready task`. Exit 0 in both claimed and none-ready cases; non-zero only on real errors (spec acceptance 6).
-- [ ] **Step 2: `lode task add --concern <c>`** and new **`lode task edit <id> [--concern <c|none>] [--priority <p>] [--needs-decomposition=<bool>]`** hitting PATCH.
-- [ ] **Step 3: `lode project focus <id> [<concern> ...]`** — no concerns prints current focus; with args sets the ordered list; `--clear` empties. 
-- [ ] **Step 4: CLI tests** following existing `internal/cmd`/`internal/cli` test patterns (httptest server). Include: `--next --json` none-ready prints `{"claimed":false,...}` and exits 0. Green, commit.
+- [x] **Step 1: `lode task claim [<id>] --next --project <p> --strict-focus --dry-run`.** `--next` and a positional id are mutually exclusive (error if both). `--next` posts to claim-next with worktree from `WorktreeIdentity(".")` (plan 01); `--json` prints the server response verbatim; human output prints `claimed WL-7 (fix-the-thing) — branch wl/WL-7-fix-the-thing` or `no ready task`. Exit 0 in both claimed and none-ready cases; non-zero only on real errors (spec acceptance 6).
+- [x] **Step 2: `lode task add --concern <c>`** and new **`lode task edit <id> [--concern <c|none>] [--priority <p>] [--needs-decomposition=<bool>]`** hitting PATCH.
+- [x] **Step 3: `lode project focus <id> [<concern> ...]`** — no concerns prints current focus; with args sets the ordered list; `--clear` empties. 
+- [x] **Step 4: CLI tests** following existing `internal/cmd`/`internal/cli` test patterns (httptest server). Include: `--next --json` none-ready prints `{"claimed":false,...}` and exits 0. Green, commit.
 
 ### Task 8: End-to-end pickup loop test
 
