@@ -237,8 +237,8 @@ exec lode hook "$1"
 
 **Steps:**
 
-- [ ] **Step 1:** Create the three files; register the plugin wherever the repo's marketplace listing lives (mirror an existing entry).
-- [ ] **Step 2: Manual verification note** (put in the PR description): with the plugin installed and `lode` on PATH, a session in a plain repo shows no Worklode output; in a `wt/…` worktree, SessionStart injects the brief. Commit.
+- [x] **Step 1:** Create the three files; register the plugin wherever the repo's marketplace listing lives (mirror an existing entry).
+- [x] **Step 2: Manual verification note** (put in the PR description): with the plugin installed and `lode` on PATH, a session in a plain repo shows no Worklode output; in a `wt/…` worktree, SessionStart injects the brief. Commit.
 
 ### Task B2: Slash-command skills
 
@@ -291,8 +291,8 @@ worktree-cleanup instruction to the user.
 
 **Steps:**
 
-- [ ] **Step 1:** Write the five skills (`/lode:spec` is deferred — see plan header).
-- [ ] **Step 2:** Sanity-check each against the plugin skill format (frontmatter fields verified in this plan's header). Commit.
+- [x] **Step 1:** Write the five skills (`/lode:spec` is deferred — see plan header).
+- [x] **Step 2:** Sanity-check each against the plugin skill format (frontmatter fields verified in this plan's header). Commit.
 
 ### Task B3: `working-under-worklode` skill + `lode-worker` agent
 
@@ -379,14 +379,14 @@ applies only when you fan out.
 
 **Steps:**
 
-- [ ] **Step 1:** Write both files as above (adjust `tools:` syntax to match existing agents in the repo). Keep the "Model selection when you delegate" section verbatim — it mirrors the repo-root MODEL_SELECTION.md and is the operational copy the autonomous worker reads.
-- [ ] **Step 2:** Commit; open the claude-plugins PR (plugin + marketplace entry, B1–B3 together).
+- [x] **Step 1:** Write both files as above (adjust `tools:` syntax to match existing agents in the repo). Keep the "Model selection when you delegate" section verbatim — it mirrors the repo-root MODEL_SELECTION.md and is the operational copy the autonomous worker reads.
+- [x] **Step 2:** Commit; open the claude-plugins PR (plugin + marketplace entry, B1–B3 together).
 
 ### Task B4: Acceptance walkthrough (manual, scripted in the PR)
 
 **Steps:**
 
-- [ ] **Step 1:** Script the spec-05 acceptance list against a local server (`docker compose up`) and record results in the worklode PR description:
+- [x] **Step 1:** Script the spec-05 acceptance list against a local server (`docker compose up`) and record results in the worklode PR description:
   1. `/lode:next` → `wt/<id>-<slug>` worktree + bound lease + injected brief; plain-checkout session untouched (criteria 1).
   2. `git worktree remove` → lease released; `git commit` in the worktree renews; neither fires outside (criteria 2, via `lode status` before/after).
   3. Sweeper-expired lease re-acquired by `/lode:resume` and by auto-resume, no new claim (criteria 3; shrink TTL via claim `ttl` to test).
