@@ -105,6 +105,10 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 				"actor_id":   holder.ActorID,
 				"expires_at": holder.ExpiresAt,
 			}
+		} else if errors.Is(herr, store.ErrNotFound) {
+			// The task itself has no active lease, so the conflict came from
+			// the claimant's worktree already holding a lease elsewhere.
+			body["error"] = "worktree already holds an active lease on another task"
 		}
 		writeJSON(w, http.StatusConflict, body)
 		return
