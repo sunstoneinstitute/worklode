@@ -36,7 +36,7 @@
 
 **Steps:**
 
-- [ ] **Step 1: Write tests first** for the pure functions:
+- [x] **Step 1: Write tests first** for the pure functions:
 
 ```go
 func TestDirName(t *testing.T)      // DirName("WL-7", "fix-the-thing") == "wt/WL-7-fix-the-thing"
@@ -45,7 +45,7 @@ func TestParseDir(t *testing.T)     // ParseDir("/repo/wt/WL-7-fix-the-thing") -
 func TestBranchName(t *testing.T)   // BranchName("WL-7","fix-the-thing") == "wl/WL-7-fix-the-thing"
 ```
 
-- [ ] **Step 2: Implement:**
+- [x] **Step 2: Implement:**
 
 ```go
 // Package worktree maps Worklode task identity onto git worktrees: the
@@ -74,7 +74,7 @@ func GitDir(root string) (string, error)
 ```
 
 Move/reuse `WorktreeIdentity` from plan 01 (`internal/cli/worktree.go`) into this package; update its callers.
-- [ ] **Step 3:** `go test ./internal/worktree/` green. Commit.
+- [x] **Step 3:** `go test ./internal/worktree/` green. Commit.
 
 ### Task A2: Server — `GET /tasks/{id}/brief` + lease rebind
 
@@ -357,11 +357,29 @@ You are an unattended Worklode worker. Loop:
 
 Never claim more than one task at a time; never work outside the task's
 worktree; never mark done what does not meet its definition of done.
+
+## Model selection when you delegate
+
+If a task is large enough that you dispatch subagents (decomposition,
+subagent-driven implementation, review), you become a coordinator — pick the
+tier per the work, and **always set `model` explicitly on every dispatch.**
+Omitting it does NOT inherit your model; it silently falls back to the
+top-level session model, running mechanical work on the most expensive tier.
+
+- Fully-specified implementation task (exact files/code/tests, no open
+  design decisions) → `model: "sonnet"`.
+- Spec review / code review, and any task with unknowns (debugging, design
+  gaps, plan-vs-reality conflicts) → `model: "opus"`.
+- If a Sonnet implementer hits ambiguity, escalate that task to Opus rather
+  than letting it improvise.
+
+Doing the leased task's work yourself (no subagents) needs no dispatch — this
+applies only when you fan out.
 ```
 
 **Steps:**
 
-- [ ] **Step 1:** Write both files as above (adjust `tools:` syntax to match existing agents in the repo).
+- [ ] **Step 1:** Write both files as above (adjust `tools:` syntax to match existing agents in the repo). Keep the "Model selection when you delegate" section verbatim — it mirrors the repo-root MODEL_SELECTION.md and is the operational copy the autonomous worker reads.
 - [ ] **Step 2:** Commit; open the claude-plugins PR (plugin + marketplace entry, B1–B3 together).
 
 ### Task B4: Acceptance walkthrough (manual, scripted in the PR)
