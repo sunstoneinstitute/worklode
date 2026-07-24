@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,20 +18,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
 )
 
-// newGitHubTestStore opens a fresh migrated store in a temp dir. Migrations are
-// decoupled from the binary, so Open does not apply them — call Migrate with the
-// test migrations dir, as the rest of the store tests do.
+// newGitHubTestStore opens a fresh migrated per-test Postgres store.
 func newGitHubTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return store.OpenTestStore(t)
 }
 
 func TestProvisionGitHubActorNamespacesID(t *testing.T) {

@@ -27,14 +27,7 @@ import (
 // token).
 func newTestServer(t *testing.T) (*store.Store, *cli.Client, string) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := store.OpenTestStore(t)
 
 	ctx := context.Background()
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {

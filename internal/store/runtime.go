@@ -46,18 +46,16 @@ func InsertRuntimeEvent(tx *sql.Tx, re RuntimeEvent) (int64, error) {
 		artifactIDArg = sql.NullInt64{Int64: *artifactID, Valid: true}
 	}
 
-	res, err := tx.Exec(
+	var id int64
+	err := tx.QueryRow(
 		`INSERT INTO runtime_events (cluster, kind, workload, image, artifact_id, message, occurred_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING id`,
 		re.Cluster, re.Kind, re.Workload, re.Image, artifactIDArg, re.Message,
-		re.OccurredAt.UTC().Format(time.RFC3339),
-	)
+		re.OccurredAt.UTC(),
+	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("insert runtime event: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("runtime event insert id: %w", err)
 	}
 	return id, nil
 }
@@ -68,10 +66,9 @@ const runtimeEventColumns = `id, cluster, kind, workload, image, artifact_id, me
 func scanRuntimeEvent(row rowScanner) (*RuntimeEvent, error) {
 	var re RuntimeEvent
 	var workload, image, message sql.NullString
-	var occurredAt string
 	var artifactID sql.NullInt64
 	if err := row.Scan(&re.ID, &re.Cluster, &re.Kind, &workload, &image,
-		&artifactID, &message, &occurredAt); err != nil {
+		&artifactID, &message, &re.OccurredAt); err != nil {
 		return nil, err
 	}
 	re.Workload = workload.String
@@ -80,11 +77,7 @@ func scanRuntimeEvent(row rowScanner) (*RuntimeEvent, error) {
 	if artifactID.Valid {
 		re.ArtifactID = &artifactID.Int64
 	}
-	t, err := time.Parse(time.RFC3339, occurredAt)
-	if err != nil {
-		return nil, fmt.Errorf("parse runtime event %d occurred_at: %w", re.ID, err)
-	}
-	re.OccurredAt = t
+	re.OccurredAt = re.OccurredAt.UTC()
 	return &re, nil
 }
 
@@ -92,7 +85,7 @@ func scanRuntimeEvent(row rowScanner) (*RuntimeEvent, error) {
 // artifactID, oldest first.
 func (s *Store) RuntimeEventsForArtifact(ctx context.Context, artifactID int64) ([]RuntimeEvent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+runtimeEventColumns+` FROM runtime_events WHERE artifact_id = ? ORDER BY occurred_at, id`,
+		`SELECT `+runtimeEventColumns+` FROM runtime_events WHERE artifact_id = $1 ORDER BY occurred_at, id`,
 		artifactID)
 	if err != nil {
 		return nil, fmt.Errorf("runtime events for artifact %d: %w", artifactID, err)
@@ -123,11 +116,11 @@ func (s *Store) ListRuntimeEvents(ctx context.Context, cluster string, limit int
 	q := `SELECT ` + runtimeEventColumns + ` FROM runtime_events`
 	var args []any
 	if cluster != "" {
-		q += ` WHERE cluster = ?`
 		args = append(args, cluster)
+		q += fmt.Sprintf(` WHERE cluster = $%d`, len(args))
 	}
-	q += ` ORDER BY occurred_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
+	q += fmt.Sprintf(` ORDER BY occurred_at DESC, id DESC LIMIT $%d`, len(args))
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

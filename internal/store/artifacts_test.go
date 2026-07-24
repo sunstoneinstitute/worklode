@@ -84,7 +84,7 @@ func TestCreateArtifactUpsertReturnsSameID(t *testing.T) {
 	}
 
 	var gotDigest, gotSourceSHA string
-	if err := s.db.QueryRow(`SELECT digest, source_sha FROM artifacts WHERE id = ?`, id1).
+	if err := s.db.QueryRow(`SELECT digest, source_sha FROM artifacts WHERE id = $1`, id1).
 		Scan(&gotDigest, &gotSourceSHA); err != nil {
 		t.Fatalf("read artifact: %v", err)
 	}

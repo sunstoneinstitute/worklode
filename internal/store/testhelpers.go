@@ -70,6 +70,12 @@ func OpenTestStore(t *testing.T) *Store {
 	return s
 }
 
+// DBForTests exposes the underlying connection pool so tests in other
+// packages can make raw SQL assertions against a store's database.
+func (s *Store) DBForTests() *sql.DB {
+	return s.db
+}
+
 // MigrationsDirForTests returns the absolute path to deploy/base/migrations,
 // resolved relative to this source file so it works no matter which
 // package's test binary calls it. Tests that need a migrated database call

@@ -24,25 +24,16 @@ import (
 const testSecret = "test-webhook-secret"
 
 // env is a webhook test fixture: a real store with repo
-// sunstoneinstitute/demo mapped to project "demo", the GitHub handler, and
-// the db path for raw SQL assertions.
+// sunstoneinstitute/demo mapped to project "demo" and the GitHub handler.
+// Raw SQL assertions go through the store's own connection pool.
 type env struct {
-	st     *store.Store
-	h      http.Handler
-	dbPath string
+	st *store.Store
+	h  http.Handler
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "wl.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := store.OpenTestStore(t)
 
 	ctx := context.Background()
 	if err := st.CreateProject(ctx, "demo", "Demo"); err != nil {
@@ -52,9 +43,8 @@ func newEnv(t *testing.T) *env {
 		t.Fatalf("add repo: %v", err)
 	}
 	return &env{
-		st:     st,
-		h:      hooks.NewGitHubHandler(st, testSecret, slog.Default()),
-		dbPath: dbPath,
+		st: st,
+		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default()),
 	}
 }
 
@@ -136,17 +126,11 @@ func status(t *testing.T, rr *httptest.ResponseRecorder) string {
 	return m["status"]
 }
 
-// rawQueryInt runs a single-value SQL query against the db file on a
-// separate read connection.
+// rawQueryInt runs a single-value SQL query against the store's database.
 func (e *env) rawQueryInt(t *testing.T, query string, args ...any) int {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+e.dbPath+"?mode=ro")
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	defer db.Close()
 	var n int
-	if err := db.QueryRow(query, args...).Scan(&n); err != nil {
+	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&n); err != nil {
 		t.Fatalf("raw query %q: %v", query, err)
 	}
 	return n
@@ -158,14 +142,9 @@ func (e *env) eventCount(t *testing.T) int {
 
 func (e *env) eventType(t *testing.T, deliveryID string) string {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+e.dbPath+"?mode=ro")
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	defer db.Close()
 	var typ string
-	if err := db.QueryRow(
-		`SELECT type FROM events WHERE source = 'github' AND external_id = ?`, deliveryID,
+	if err := e.st.DBForTests().QueryRow(
+		`SELECT type FROM events WHERE source = 'github' AND external_id = $1`, deliveryID,
 	).Scan(&typ); err != nil {
 		t.Fatalf("event type for %s: %v", deliveryID, err)
 	}

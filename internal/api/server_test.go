@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,18 +15,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// newTestStore opens a fresh store in a temp dir.
+// newTestStore opens a fresh migrated per-test Postgres store.
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return store.OpenTestStore(t)
 }
 
 // newTestServer returns a store, a server handler, and a valid bearer token
