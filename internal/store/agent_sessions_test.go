@@ -1,21 +1,18 @@
 package store
 
 import (
-	"strings"
 	"testing"
-	"time"
 )
 
 // insertRawSession inserts directly into agent_sessions, bypassing the store
 // API, so schema constraints can be asserted on their own.
 func insertRawSession(t *testing.T, s *Store, leaseID int64, agent, sessionID string) error {
 	t.Helper()
-	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	_, err := s.db.Exec(
 		`INSERT INTO agent_sessions
 		   (lease_id, agent, external_session_id, started_at, last_seen_at)
 		 VALUES ($1, $2, $3, $4, $4)`,
-		leaseID, agent, sessionID, now)
+		leaseID, agent, sessionID, leaseTestNow)
 	return err
 }
 
@@ -32,48 +29,75 @@ func leaseForTest(t *testing.T, s *Store, worktree string) *Lease {
 }
 
 func TestAgentSessionsSchema(t *testing.T) {
-	s, _ := openLeaseStore(t)
-	lease := leaseForTest(t, s, "host:/wt/one")
+	t.Run("cost_currency defaults to USD", func(t *testing.T) {
+		s, _ := openLeaseStore(t)
+		lease := leaseForTest(t, s, "host:/wt/one")
 
-	if err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1"); err != nil {
-		t.Fatalf("insert valid session: %v", err)
-	}
+		if err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1"); err != nil {
+			t.Fatalf("insert valid session: %v", err)
+		}
 
-	// cost_currency defaults to USD.
-	var currency string
-	if err := s.db.QueryRow(
-		`SELECT cost_currency FROM agent_sessions WHERE lease_id = $1`, lease.ID,
-	).Scan(&currency); err != nil {
-		t.Fatalf("read cost_currency: %v", err)
-	}
-	if currency != "USD" {
-		t.Fatalf("cost_currency default: got %q, want %q", currency, "USD")
-	}
+		var currency string
+		if err := s.db.QueryRow(
+			`SELECT cost_currency FROM agent_sessions WHERE lease_id = $1`, lease.ID,
+		).Scan(&currency); err != nil {
+			t.Fatalf("read cost_currency: %v", err)
+		}
+		if currency != "USD" {
+			t.Fatalf("cost_currency default: got %q, want %q", currency, "USD")
+		}
+	})
 
-	// Same (lease, agent, session id) twice is rejected.
-	if err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1"); err == nil {
-		t.Fatal("duplicate (lease_id, agent, external_session_id) was accepted")
-	}
+	t.Run("duplicate lease/agent/session id rejected", func(t *testing.T) {
+		s, _ := openLeaseStore(t)
+		lease := leaseForTest(t, s, "host:/wt/one")
 
-	// The same session id under a DIFFERENT lease is fine: a session survives
-	// lease expiry and re-claim.
-	other := leaseForTest(t, s, "host:/wt/two")
-	if err := insertRawSession(t, s, other.ID, "claude-code", "sess-1"); err != nil {
-		t.Fatalf("same session id under a second lease: %v", err)
-	}
+		if err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1"); err != nil {
+			t.Fatalf("insert valid session: %v", err)
+		}
 
-	// Unknown agent is rejected by the CHECK constraint.
-	if err := insertRawSession(t, s, lease.ID, "not-a-tool", "sess-2"); err == nil {
-		t.Fatal("unknown agent was accepted")
-	}
+		err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1")
+		if !isUniqueViolationOn(err, "agent_sessions_lease_session_unique") {
+			t.Fatalf("duplicate insert: got %v, want a agent_sessions_lease_session_unique violation", err)
+		}
+	})
 
-	// Non-ISO currency is rejected.
-	_, err := s.db.Exec(
-		`UPDATE agent_sessions SET cost_currency = 'dollars' WHERE lease_id = $1`, lease.ID)
-	if err == nil {
-		t.Fatal("non-ISO cost_currency was accepted")
-	}
-	if !strings.Contains(err.Error(), "cost_currency") {
-		t.Fatalf("expected a cost_currency constraint error, got: %v", err)
-	}
+	t.Run("same session id under a different lease is fine", func(t *testing.T) {
+		// A session survives lease expiry and re-claim, so the same
+		// external session id may recur under a fresh lease.
+		s, _ := openLeaseStore(t)
+		first := leaseForTest(t, s, "host:/wt/one")
+		if err := insertRawSession(t, s, first.ID, "claude-code", "sess-1"); err != nil {
+			t.Fatalf("insert under first lease: %v", err)
+		}
+
+		other := leaseForTest(t, s, "host:/wt/two")
+		if err := insertRawSession(t, s, other.ID, "claude-code", "sess-1"); err != nil {
+			t.Fatalf("same session id under a second lease: %v", err)
+		}
+	})
+
+	t.Run("unknown agent rejected", func(t *testing.T) {
+		s, _ := openLeaseStore(t)
+		lease := leaseForTest(t, s, "host:/wt/one")
+
+		err := insertRawSession(t, s, lease.ID, "not-a-tool", "sess-1")
+		if !isCheckViolationOn(err, "agent_sessions_agent_known") {
+			t.Fatalf("unknown agent: got %v, want a agent_sessions_agent_known violation", err)
+		}
+	})
+
+	t.Run("non-ISO cost_currency rejected", func(t *testing.T) {
+		s, _ := openLeaseStore(t)
+		lease := leaseForTest(t, s, "host:/wt/one")
+		if err := insertRawSession(t, s, lease.ID, "claude-code", "sess-1"); err != nil {
+			t.Fatalf("insert valid session: %v", err)
+		}
+
+		_, err := s.db.Exec(
+			`UPDATE agent_sessions SET cost_currency = 'dollars' WHERE lease_id = $1`, lease.ID)
+		if !isCheckViolationOn(err, "agent_sessions_cost_currency_format") {
+			t.Fatalf("non-ISO cost_currency: got %v, want a agent_sessions_cost_currency_format violation", err)
+		}
+	})
 }

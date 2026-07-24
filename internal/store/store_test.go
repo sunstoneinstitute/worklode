@@ -22,6 +22,7 @@ var wantTables = []string{
 	"runtime_events",
 	"state_log",
 	"github_user_tokens",
+	"agent_sessions",
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {
