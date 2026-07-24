@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,10 @@ import (
 func WorktreeIdentity(dir string) (string, error) {
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("%s is not inside a git worktree: %s", dir, strings.TrimSpace(string(exitErr.Stderr)))
+		}
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", dir, err)
 	}
 	root := strings.TrimSpace(string(out))

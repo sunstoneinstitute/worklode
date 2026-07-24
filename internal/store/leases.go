@@ -152,7 +152,11 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				taskID, actorID, worktree, now, now, expires,
 			).Scan(&id); err != nil {
 				// Either active-lease index (task or worktree) losing a race
-				// means the claim is refused the same way.
+				// means the claim is refused the same way; the message says
+				// which backstop fired so the caller knows what to release.
+				if isUniqueViolationOn(err, "leases_active_worktree") {
+					return fmt.Errorf("worktree %s already holds an active lease: %w", worktree, ErrLeased)
+				}
 				if isUniqueViolation(err) {
 					return fmt.Errorf("task %s: %w", taskID, ErrLeased)
 				}
