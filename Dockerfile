@@ -20,4 +20,4 @@ COPY --from=build /lode /lode
 
 EXPOSE 8080
 ENTRYPOINT ["/lode"]
-CMD ["serve", "--db", "/data/wl.db", "--listen", ":8080"]
+CMD ["serve", "--listen", ":8080"]

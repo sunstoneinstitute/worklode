@@ -41,7 +41,7 @@ itself stays small.
 One Go module, one binary `wl`, subcommands:
 
 - `wl serve` — HTTP API, webhook receivers, read-only web UI.
-- `wl migrate --db <path> --migrations-path <dir>` — apply golang-migrate migrations from a directory of `*.up.sql`/`*.down.sql` files. Not applied automatically on `serve` startup; run this first (compose `migrate` service / k8s initContainer).
+- `wl migrate --dsn <postgres-dsn> --migrations-path <dir>` — apply golang-migrate migrations from a directory of `*.up.sql`/`*.down.sql` files. Not applied automatically on `serve` startup; run this first (compose `migrate` service / k8s initContainer).
 - `wl watch` — cluster watcher; posts runtime events to the server API. `--kubeconfig` for local use, in-cluster config when deployed.
 - `wl <noun> <verb>` — CLI client commands (see CLI section). Config from `~/.config/worklode/config.toml` (server URL, token) overridable by `WL_SERVER` / `WL_TOKEN`.
 
