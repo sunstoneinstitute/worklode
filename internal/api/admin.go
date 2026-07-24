@@ -34,6 +34,21 @@ type createProjectRequest struct {
 	DeployGated bool   `json:"deploy_gated"`
 }
 
+// toProjectJSON builds the wire form of a project, normalizing nil repo and
+// focus slices to empty arrays so they serialize as [] rather than null.
+func toProjectJSON(p *store.Project, repos []string) projectJSON {
+	if repos == nil {
+		repos = []string{}
+	}
+	focus := p.Focus
+	if focus == nil {
+		focus = []string{}
+	}
+	return projectJSON{
+		ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
+	}
+}
+
 // createProject handles POST /api/v1/projects.
 func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	var req createProjectRequest
@@ -59,9 +74,8 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusCreated, projectJSON{
-		ID: req.ID, Name: req.Name, DeployGated: req.DeployGated, Repos: []string{}, Focus: []string{},
-	})
+	writeJSON(w, http.StatusCreated, toProjectJSON(
+		&store.Project{ID: req.ID, Name: req.Name, DeployGated: req.DeployGated}, nil))
 }
 
 // listProjects handles GET /api/v1/projects: every project with its mapped repos.
@@ -80,16 +94,7 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 			s.mapStoreErr(w, err)
 			return
 		}
-		if repos == nil {
-			repos = []string{}
-		}
-		focus := p.Focus
-		if focus == nil {
-			focus = []string{}
-		}
-		resp.Projects = append(resp.Projects, projectJSON{
-			ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
-		})
+		resp.Projects = append(resp.Projects, toProjectJSON(&p, repos))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -128,16 +133,7 @@ func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	if repos == nil {
-		repos = []string{}
-	}
-	focus := p.Focus
-	if focus == nil {
-		focus = []string{}
-	}
-	writeJSON(w, http.StatusOK, projectJSON{
-		ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
-	})
+	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
 type addRepoRequest struct {
