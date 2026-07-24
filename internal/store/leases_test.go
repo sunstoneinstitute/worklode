@@ -305,6 +305,59 @@ func TestLeaseEventTypesPastTense(t *testing.T) {
 	}
 }
 
+func TestRebindLeaseWorktree(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	if err := s.CreateActor(ctx, "bob", "agent", "Bob", false); err != nil {
+		t.Fatalf("CreateActor bob: %v", err)
+	}
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+	if _, err := s.Claim(ctx, task.ID, "stig", "host:/wt-1", 0); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	// The holder rebinds to a new worktree; ActiveLease reflects the change.
+	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-moved"); err != nil {
+		t.Fatalf("RebindLeaseWorktree by holder: %v", err)
+	}
+	got, err := s.ActiveLease(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("ActiveLease: %v", err)
+	}
+	if got.Worktree != "host:/wt-moved" {
+		t.Fatalf("worktree after rebind = %q, want host:/wt-moved", got.Worktree)
+	}
+
+	// A non-holder gets ErrNotFound, indistinguishable from no lease at all.
+	if err := s.RebindLeaseWorktree(ctx, task.ID, "bob", "host:/wt-bob"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rebind by non-holder: want ErrNotFound, got %v", err)
+	}
+	if got, _ := s.ActiveLease(ctx, task.ID); got.Worktree != "host:/wt-moved" {
+		t.Fatalf("worktree changed by failed non-holder rebind: %q", got.Worktree)
+	}
+
+	// Rebinding onto a worktree that already holds another active lease fires
+	// the leases_active_worktree unique index and maps to ErrLeased.
+	task2 := createTask(t, s, leaseTestNow, defaultTaskInput())
+	if _, err := s.Claim(ctx, task2.ID, "stig", "host:/wt-other", 0); err != nil {
+		t.Fatalf("Claim task2: %v", err)
+	}
+	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-other"); !errors.Is(err, ErrLeased) {
+		t.Fatalf("rebind onto taken worktree: want ErrLeased, got %v", err)
+	}
+	if got, _ := s.ActiveLease(ctx, task.ID); got.Worktree != "host:/wt-moved" {
+		t.Fatalf("worktree changed by refused rebind: %q", got.Worktree)
+	}
+
+	// Rebind with no active lease at all → ErrNotFound.
+	if err := s.Release(ctx, task.ID, "stig"); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rebind without lease: want ErrNotFound, got %v", err)
+	}
+}
+
 func TestSweeper(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()

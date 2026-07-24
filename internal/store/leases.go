@@ -251,6 +251,45 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 	return err
 }
 
+// RebindLeaseWorktree moves the active lease on taskID held by actorID to a
+// new worktree (e.g. the agent re-checked-out the task in a different
+// directory). Only the worktree changes; the lease's expiry is untouched.
+//
+// A non-holder — no active lease at all, or one held by a different actor —
+// gets ErrNotFound, the same probe-resistant policy as Renew and Release: the
+// two cases are deliberately indistinguishable so a rebind attempt does not
+// leak who holds the task. If the target worktree already holds another active
+// lease, the leases_active_worktree unique index fires and RebindLeaseWorktree
+// returns ErrLeased. Recorded as a "lease.rebound" cli event.
+func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktree string) error {
+	extID, err := randomExternalID()
+	if err != nil {
+		return err
+	}
+
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.rebound", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			l, err := activeLeaseTx(tx, taskID)
+			if err != nil {
+				return err
+			}
+			if l.ActorID != actorID {
+				return fmt.Errorf("no active lease on task %s held by %s: %w", taskID, actorID, ErrNotFound)
+			}
+			if _, err := tx.Exec(
+				`UPDATE leases SET worktree = $1 WHERE id = $2`,
+				worktree, l.ID,
+			); err != nil {
+				if isUniqueViolationOn(err, "leases_active_worktree") {
+					return fmt.Errorf("worktree %s already holds an active lease: %w", worktree, ErrLeased)
+				}
+				return fmt.Errorf("rebind lease %d worktree: %w", l.ID, err)
+			}
+			return nil
+		})
+	return err
+}
+
 // closeLease sets released_at on the lease and, when the task is still
 // in_progress, transitions it back to ready. Shared by Release and
 // ExpireLeases.

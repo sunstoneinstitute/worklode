@@ -272,6 +272,41 @@ func scanTask(row rowScanner) (*Task, error) {
 	return &t, nil
 }
 
+// SlugifyTitle turns a task title into a branch-name slug: lowercase, every
+// run of non-alphanumeric (ASCII) characters becomes a single '-', leading and
+// trailing '-' are trimmed, at most 40 characters, and "task" if nothing
+// remains. Non-ASCII letters are treated as separators so slugs are always safe
+// git branch components. It is the single source of truth for the branch
+// naming convention (see BranchFor); the api package re-exports it.
+func SlugifyTitle(title string) string {
+	var b strings.Builder
+	pendingDash := false
+	for _, r := range strings.ToLower(title) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if pendingDash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			pendingDash = false
+			b.WriteRune(r)
+		} else {
+			pendingDash = true
+		}
+	}
+	s := b.String()
+	if len(s) > 40 {
+		s = strings.TrimRight(s[:40], "-")
+	}
+	if s == "" {
+		return "task"
+	}
+	return s
+}
+
+// BranchFor returns the conventional git branch for a task: wl/<id>-<slug>.
+func BranchFor(t *Task) string {
+	return "wl/" + t.ID + "-" + SlugifyTitle(t.Title)
+}
+
 // GetTask looks up a task by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 	row := s.db.QueryRowContext(ctx,
