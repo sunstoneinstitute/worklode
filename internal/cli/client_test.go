@@ -426,6 +426,207 @@ func TestClientInboxFlow(t *testing.T) {
 	}
 }
 
+func TestClientClaimNextClaimed(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug", Concern: "security",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-claim-next"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !resp.Claimed {
+		t.Fatalf("ClaimNext.Claimed = false, want true (resp = %+v)", resp)
+	}
+	if resp.Task == nil || resp.Task.ID != created.ID {
+		t.Fatalf("ClaimNext.Task = %+v, want %s", resp.Task, created.ID)
+	}
+	if resp.Task.Lease == nil || resp.Task.Lease.Worktree != "host:/wt-claim-next" {
+		t.Fatalf("ClaimNext.Task.Lease = %+v", resp.Task.Lease)
+	}
+}
+
+func TestClientClaimNextNoneReady(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-empty"})
+	if err != nil {
+		t.Fatalf("ClaimNext with no ready tasks: err = %v, want nil (exit-0 contract)", err)
+	}
+	if resp.Claimed {
+		t.Fatalf("ClaimNext.Claimed = true, want false")
+	}
+	if resp.Reason != "no-ready-task" {
+		t.Fatalf("ClaimNext.Reason = %q, want %q", resp.Reason, "no-ready-task")
+	}
+}
+
+func TestClientClaimNextDryRun(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Dry run me", Priority: "medium", Kind: "feature",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{DryRun: true})
+	if err != nil {
+		t.Fatalf("ClaimNext (dry-run): %v", err)
+	}
+	if resp.Claimed {
+		t.Fatalf("ClaimNext.Claimed = true on dry-run, want false")
+	}
+	if !resp.DryRun {
+		t.Fatalf("ClaimNext.DryRun = false, want true")
+	}
+	if resp.Task == nil || resp.Task.ID != created.ID {
+		t.Fatalf("ClaimNext.Task = %+v, want %s", resp.Task, created.ID)
+	}
+	if resp.Task.Lease != nil {
+		t.Fatalf("ClaimNext.Task.Lease = %+v on dry-run, want nil", resp.Task.Lease)
+	}
+
+	// The task must still be claimable: a real claim-next afterward still
+	// finds it (no lease was actually taken).
+	real, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-after-dry-run"})
+	if err != nil {
+		t.Fatalf("ClaimNext (real, after dry-run): %v", err)
+	}
+	if !real.Claimed || real.Task == nil || real.Task.ID != created.ID {
+		t.Fatalf("ClaimNext (real, after dry-run) = %+v, want claimed %s", real, created.ID)
+	}
+}
+
+func TestClientCreateTaskWithConcern(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Concerned", Priority: "medium", Kind: "feature", Concern: "usability",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	// taskJSON does not expose concern, so verify via the store handle.
+	stored, err := st.GetTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("store.GetTask: %v", err)
+	}
+	if stored.Concern != "usability" {
+		t.Fatalf("stored task concern = %q, want %q", stored.Concern, "usability")
+	}
+}
+
+func TestClientEditTask(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Editable", Priority: "low", Kind: "feature",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	concern := "security"
+	priority := "critical"
+	needsDecomp := true
+	edited, _, err := c.EditTask(ctx, created.ID, cli.EditTaskInput{
+		Concern: &concern, Priority: &priority, NeedsDecomposition: &needsDecomp,
+	})
+	if err != nil {
+		t.Fatalf("EditTask: %v", err)
+	}
+	if edited.Priority != "critical" {
+		t.Fatalf("edited.Priority = %q, want critical", edited.Priority)
+	}
+	stored, err := st.GetTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("store.GetTask: %v", err)
+	}
+	if stored.Concern != "security" || !stored.NeedsDecomposition {
+		t.Fatalf("stored task after edit = %+v", stored)
+	}
+
+	// Clear the concern with "none".
+	none := "none"
+	if _, _, err := c.EditTask(ctx, created.ID, cli.EditTaskInput{Concern: &none}); err != nil {
+		t.Fatalf("EditTask clear concern: %v", err)
+	}
+	stored, err = st.GetTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("store.GetTask after clear: %v", err)
+	}
+	if stored.Concern != "" {
+		t.Fatalf("stored task concern after clear = %q, want empty", stored.Concern)
+	}
+}
+
+func TestClientProjectFocus(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	set, _, err := c.SetProjectFocus(ctx, "proj", []string{"security", "completeness"})
+	if err != nil {
+		t.Fatalf("SetProjectFocus: %v", err)
+	}
+	if len(set.Focus) != 2 || set.Focus[0] != "security" || set.Focus[1] != "completeness" {
+		t.Fatalf("SetProjectFocus result = %+v", set.Focus)
+	}
+
+	got, err := c.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(got.Focus) != 2 || got.Focus[0] != "security" || got.Focus[1] != "completeness" {
+		t.Fatalf("GetProject.Focus = %+v, want ordered [security completeness]", got.Focus)
+	}
+
+	cleared, _, err := c.SetProjectFocus(ctx, "proj", []string{})
+	if err != nil {
+		t.Fatalf("SetProjectFocus (clear): %v", err)
+	}
+	if len(cleared.Focus) != 0 {
+		t.Fatalf("SetProjectFocus (clear) result = %+v, want empty", cleared.Focus)
+	}
+
+	got, err = c.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject after clear: %v", err)
+	}
+	if len(got.Focus) != 0 {
+		t.Fatalf("GetProject.Focus after clear = %+v, want empty", got.Focus)
+	}
+
+	if _, err := c.GetProject(ctx, "nonexistent"); err == nil {
+		t.Fatalf("GetProject unknown id: err = nil, want error")
+	}
+}
+
 func TestClientErrorRendering(t *testing.T) {
 	err := &cli.ClientError{Status: 404, Msg: "task WL-9 not found"}
 	want := "server error (404): task WL-9 not found"

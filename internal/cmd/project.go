@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,7 +15,7 @@ func newProjectCmd() *cobra.Command {
 		Use:   "project",
 		Short: "Manage projects and their repos",
 	}
-	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd())
+	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(), newProjectFocusCmd())
 	return cmd
 }
 
@@ -99,5 +101,78 @@ func newProjectAddRepoCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+// printFocus writes the human-readable "focus: a, b" (or "focus: (none)")
+// line for a project's focus list.
+func printFocus(cmd *cobra.Command, focus []string) {
+	if len(focus) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "focus: (none)")
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "focus: %s\n", strings.Join(focus, ", "))
+}
+
+func newProjectFocusCmd() *cobra.Command {
+	var clear bool
+	cmd := &cobra.Command{
+		Use:   "focus <id> [<concern> ...]",
+		Short: "Show, set, or clear a project's ranking focus (ordered list of concerns)",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := args[0]
+			concerns := args[1:]
+			if clear && len(concerns) > 0 {
+				return fmt.Errorf("--clear takes no concerns")
+			}
+
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+
+			switch {
+			case clear:
+				p, raw, err := c.SetProjectFocus(cmd.Context(), id, []string{})
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				printFocus(cmd, p.Focus)
+				return nil
+			case len(concerns) > 0:
+				p, raw, err := c.SetProjectFocus(cmd.Context(), id, concerns)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				printFocus(cmd, p.Focus)
+				return nil
+			default:
+				p, err := c.GetProject(cmd.Context(), id)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					raw, err := json.Marshal(map[string]any{"id": p.ID, "focus": p.Focus})
+					if err != nil {
+						return fmt.Errorf("marshal focus: %w", err)
+					}
+					printRaw(cmd, raw)
+					return nil
+				}
+				printFocus(cmd, p.Focus)
+				return nil
+			}
+		},
+	}
+	cmd.Flags().BoolVar(&clear, "clear", false, "clear the project's focus")
 	return cmd
 }
