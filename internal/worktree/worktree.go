@@ -14,8 +14,8 @@ import (
 )
 
 // dirRe matches a worktree directory's last segment: a task id, optionally
-// followed by a lowercase slug. The bare-id form (WL-7) is intentionally valid.
-var dirRe = regexp.MustCompile(`^(WL-\d+)(?:-[a-z0-9-]+)?$`)
+// followed by a lowercase slug. The bare-id form (SW-7) is intentionally valid.
+var dirRe = regexp.MustCompile(`^([A-Z][A-Z0-9]*-\d+)(?:-[a-z0-9-]+)?$`)
 
 // DirName returns the deterministic worktree directory name for a task.
 func DirName(taskID, slug string) string { return "wt/" + taskID + "-" + slug }

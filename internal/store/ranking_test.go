@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -218,6 +219,18 @@ func TestRankTasksFanOutDirection(t *testing.T) {
 	want := []string{"WL-2", "WL-1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("rankTasks fan-out direction: got %v, want %v", got, want)
+	}
+}
+
+func TestNumericTaskIDGeneralPrefix(t *testing.T) {
+	if numericTaskID("SW-9") != 9 {
+		t.Errorf("numericTaskID(SW-9) = %d, want 9", numericTaskID("SW-9"))
+	}
+	if numericTaskID("AB12-10") != 10 {
+		t.Errorf("numericTaskID(AB12-10) = %d, want 10", numericTaskID("AB12-10"))
+	}
+	if numericTaskID("bad") != math.MaxInt {
+		t.Errorf("numericTaskID(bad) should be MaxInt")
 	}
 }
 

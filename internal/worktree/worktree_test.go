@@ -44,6 +44,23 @@ func TestParseDir(t *testing.T) {
 	}
 }
 
+func TestParseDirGeneralPrefix(t *testing.T) {
+	for _, tc := range []struct{ path, want string }{
+		{"/x/wt/SW-3-fix-footer", "SW-3"},
+		{"/x/wt/SW-3", "SW-3"},
+		{"/x/wt/AB12-7-thing", "AB12-7"},
+		{"/x/wt/wl-3-nope", ""}, // lowercase prefix still rejected
+	} {
+		got, ok := worktree.ParseDir(tc.path)
+		if tc.want == "" && ok {
+			t.Errorf("ParseDir(%q) = (%q, true), want ok=false", tc.path, got)
+		}
+		if tc.want != "" && got != tc.want {
+			t.Errorf("ParseDir(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
 // initGitRepo creates a fresh git repo in a temp dir and returns its path.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
