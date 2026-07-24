@@ -19,9 +19,11 @@ func TestCreateAndGetProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
-	want := &Project{ID: "horndb", Name: "HornDB", DeployGated: false}
-	if *got != *want {
-		t.Fatalf("GetProject: got %+v, want %+v", got, want)
+	if got.ID != "horndb" || got.Name != "HornDB" || got.DeployGated {
+		t.Fatalf("GetProject: got %+v, want id=horndb name=HornDB deploy_gated=false", got)
+	}
+	if len(got.Focus) != 0 {
+		t.Fatalf("GetProject: got Focus=%v, want empty", got.Focus)
 	}
 }
 
@@ -89,6 +91,93 @@ func TestSetDeployGated(t *testing.T) {
 	}
 	if got.DeployGated {
 		t.Fatalf("GetProject: want DeployGated=false after unsetting")
+	}
+}
+
+func TestSetProjectFocusRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	want := []string{"security", "completeness"}
+	if err := s.SetProjectFocus(ctx, "horndb", want); err != nil {
+		t.Fatalf("SetProjectFocus: %v", err)
+	}
+
+	got, err := s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if !reflect.DeepEqual(got.Focus, want) {
+		t.Fatalf("GetProject Focus: got %v, want %v (order must be preserved)", got.Focus, want)
+	}
+}
+
+func TestSetProjectFocusEmpty(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// New project already has empty focus.
+	got, err := s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(got.Focus) != 0 {
+		t.Fatalf("GetProject Focus on new project: got %v, want empty", got.Focus)
+	}
+
+	// Set to non-empty, then back to empty; must round-trip to empty.
+	if err := s.SetProjectFocus(ctx, "horndb", []string{"usability"}); err != nil {
+		t.Fatalf("SetProjectFocus non-empty: %v", err)
+	}
+	if err := s.SetProjectFocus(ctx, "horndb", nil); err != nil {
+		t.Fatalf("SetProjectFocus nil: %v", err)
+	}
+	got, err = s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(got.Focus) != 0 {
+		t.Fatalf("GetProject Focus after clearing: got %v, want empty", got.Focus)
+	}
+}
+
+func TestSetProjectFocusMissingProject(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	err := s.SetProjectFocus(ctx, "nope", []string{"security"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SetProjectFocus missing project: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetProjectFocusInvalidEntry(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	err := s.SetProjectFocus(ctx, "horndb", []string{"security", "not-a-concern"})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("SetProjectFocus invalid entry: want ErrInvalidInput, got %v", err)
+	}
+
+	got, err := s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(got.Focus) != 0 {
+		t.Fatalf("GetProject Focus after rejected SetProjectFocus: got %v, want unchanged (empty)", got.Focus)
 	}
 }
 

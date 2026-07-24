@@ -26,7 +26,7 @@
 
 **Steps:**
 
-- [ ] **Step 1: Write the migration** (load `golang-migrate:authoring`):
+- [x] **Step 1: Write the migration** (load `golang-migrate:authoring`):
 
 ```sql
 -- 0002_prioritization.up.sql
@@ -43,7 +43,7 @@ ALTER TABLE tasks DROP COLUMN needs_decomposition;
 ALTER TABLE projects DROP COLUMN focus;
 ```
 
-- [ ] **Step 2:** `go test ./internal/store/ -run TestMigrateRoundTrip` green. Commit.
+- [x] **Step 2:** `go test ./internal/store/ -run TestMigrateRoundTrip` green. Commit.
 
 ### Task 2: Store model — Task.Concern / NeedsDecomposition, Project.Focus
 
@@ -53,9 +53,9 @@ ALTER TABLE projects DROP COLUMN focus;
 
 **Steps:**
 
-- [ ] **Step 1: Tasks.** Add `Concern string` (empty = null) and `NeedsDecomposition bool` to the `Task` struct; extend the column list, scanner, `CreateTask` (new optional params via the existing pattern — follow how `priority`/`kind` flow today), and `UpdateTask`/patch path to accept `concern` (validated against the enum, `""`/`"none"` clears to NULL) and `needs_decomposition`. Write `concern` as `sql.NullString`.
-- [ ] **Step 2: Projects.** Add `Focus []string` to `Project`; scan/write as jsonb (`json.Marshal`/`Unmarshal`). Add `SetProjectFocus(ctx, projectID string, focus []string) error` validating every entry against the concern enum (shared `ValidConcern(s string) bool` helper in `tasks.go`), recorded as a `cli` event `project.focus_set` via `RecordEvent` like other mutations.
-- [ ] **Step 3: Tests.** Create task with concern; invalid concern rejected (`ErrInvalidInput`); focus set/get round-trips ordered; invalid focus entry rejected. `go test ./internal/store/` green. Commit.
+- [x] **Step 1: Tasks.** Add `Concern string` (empty = null) and `NeedsDecomposition bool` to the `Task` struct; extend the column list, scanner, `CreateTask` (new optional params via the existing pattern — follow how `priority`/`kind` flow today), and `UpdateTask`/patch path to accept `concern` (validated against the enum, `""`/`"none"` clears to NULL) and `needs_decomposition`. Write `concern` as `sql.NullString`.
+- [x] **Step 2: Projects.** Add `Focus []string` to `Project`; scan/write as jsonb (`json.Marshal`/`Unmarshal`). Add `SetProjectFocus(ctx, projectID string, focus []string) error` validating every entry against the concern enum (shared `ValidConcern(s string) bool` helper in `tasks.go`), recorded as a `cli` event `project.focus_set` via `RecordEvent` like other mutations.
+- [x] **Step 3: Tests.** Create task with concern; invalid concern rejected (`ErrInvalidInput`); focus set/get round-trips ordered; invalid focus entry rejected. `go test ./internal/store/` green. Commit.
 
 ### Task 3: Store — blocking fan-out
 
