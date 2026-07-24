@@ -186,7 +186,7 @@ func TestCLITokenHappyPath(t *testing.T) {
 
 func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 	s := &server{} // no oidc, no gh
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/lode-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -196,7 +196,7 @@ func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 
 func TestWellKnownLoginReportsProviders(t *testing.T) {
 	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wl.example.com"}}
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/wl-login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/lode-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
 	if rr.Code != http.StatusOK {

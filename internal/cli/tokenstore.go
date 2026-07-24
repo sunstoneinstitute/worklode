@@ -6,7 +6,7 @@ package cli
 
 import "github.com/zalando/go-keyring"
 
-// keychainService is the keychain "service" all wl tokens live under.
+// keychainService is the keychain "service" all worklode tokens live under.
 const keychainService = "worklode"
 
 // ErrTokenNotFound is returned by Get/Delete when no token exists for a server.

@@ -1,4 +1,4 @@
-// Package api implements the wl HTTP server: bearer-token auth, JSON task
+// Package api implements the lode HTTP server: bearer-token auth, JSON task
 // endpoints, and Prometheus metrics. Handlers stay thin — parse/validate,
 // call store functions through RecordEvent, map errors, respond.
 package api
@@ -32,30 +32,30 @@ import (
 // Config carries server configuration. The webhook secrets and cluster/env
 // map are consumed by the /hooks/github and /hooks/flux endpoints.
 type Config struct {
-	BootstrapToken      string            // WL_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret string            // WL_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret   string            // WL_FLUX_WEBHOOK_SECRET
-	ClusterEnvMap       map[string]string // WL_CLUSTER_ENV_MAP: cluster name -> environment
+	BootstrapToken      string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
+	GitHubWebhookSecret string            // LODE_GITHUB_WEBHOOK_SECRET
+	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
+	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
 	// external base URL used to build the web callback redirect URI.
-	OIDCIssuer    string // WL_OIDC_ISSUER
-	OIDCClientID  string // WL_OIDC_CLIENT_ID
-	PublicURL     string // WL_PUBLIC_URL
-	SessionSecret string // WL_SESSION_SECRET
+	OIDCIssuer    string // LODE_OIDC_ISSUER
+	OIDCClientID  string // LODE_OIDC_CLIENT_ID
+	PublicURL     string // LODE_PUBLIC_URL
+	SessionSecret string // LODE_SESSION_SECRET
 
 	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
 	// are both set; independent of the OIDC feature. PublicURL and
 	// SessionSecret (above) are shared and required when this is enabled.
-	GitHubClientID     string // WL_GITHUB_APP_CLIENT_ID
-	GitHubClientSecret string // WL_GITHUB_APP_CLIENT_SECRET
-	GitHubOrg          string // WL_GITHUB_ORG
-	// GitHubAdminTeam (WL_GITHUB_ADMIN_TEAM) is optional; when empty no user is
+	GitHubClientID     string // LODE_GITHUB_APP_CLIENT_ID
+	GitHubClientSecret string // LODE_GITHUB_APP_CLIENT_SECRET
+	GitHubOrg          string // LODE_GITHUB_ORG
+	// GitHubAdminTeam (LODE_GITHUB_ADMIN_TEAM) is optional; when empty no user is
 	// granted admin via GitHub (the team-membership check simply 404s).
 	GitHubAdminTeam string
-	TokenEncKey     string // WL_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	TokenEncKey     string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 }
 
 type server struct {
@@ -91,7 +91,7 @@ type server struct {
 func validatePublicURL(publicURL string) error {
 	u, err := url.Parse(publicURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("WL_PUBLIC_URL must be an absolute http(s) URL (e.g. https://wl.example.com)")
+		return fmt.Errorf("LODE_PUBLIC_URL must be an absolute http(s) URL (e.g. https://lode.example.com)")
 	}
 	return nil
 }
@@ -116,10 +116,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("WL_SESSION_SECRET is required when OIDC is enabled")
+			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when OIDC is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("WL_PUBLIC_URL is required when OIDC is enabled")
+			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when OIDC is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
 			return nil, nil, err
@@ -135,20 +135,20 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
 		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("WL_SESSION_SECRET is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when GitHub auth is enabled")
 		}
 		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("WL_PUBLIC_URL is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when GitHub auth is enabled")
 		}
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
 			return nil, nil, err
 		}
 		if cfg.GitHubOrg == "" {
-			return nil, nil, fmt.Errorf("WL_GITHUB_ORG is required when GitHub auth is enabled")
+			return nil, nil, fmt.Errorf("LODE_GITHUB_ORG is required when GitHub auth is enabled")
 		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
 		if err != nil || len(key) != 32 {
-			return nil, nil, fmt.Errorf("WL_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+			return nil, nil, fmt.Errorf("LODE_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
 		}
 		tc, err := tokencrypt.New(key)
 		if err != nil {
@@ -203,7 +203,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
-	mux.HandleFunc("GET /.well-known/wl-login", s.wellKnownLogin)
+	mux.HandleFunc("GET /.well-known/lode-login", s.wellKnownLogin)
 	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
 	mux.HandleFunc("POST /auth/cli/token", s.cliToken)
 

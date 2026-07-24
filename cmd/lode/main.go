@@ -1,4 +1,4 @@
-// Command wl is the Sunstone Institute work tracker CLI.
+// Command lode is the Sunstone Institute work tracker CLI.
 package main
 
 import (

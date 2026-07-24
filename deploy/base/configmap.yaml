@@ -5,4 +5,4 @@ metadata:
   name: worklode-config
   namespace: worklode
 data:
-  WL_CLUSTER_ENV_MAP: ""
+  LODE_CLUSTER_ENV_MAP: ""

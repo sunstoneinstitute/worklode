@@ -47,19 +47,19 @@ func newServeCmd() *cobra.Command {
 			defer st.Close()
 
 			handler, adminHandler, err := api.NewServer(st, api.Config{
-				BootstrapToken:      os.Getenv("WL_BOOTSTRAP_TOKEN"),
-				GitHubWebhookSecret: os.Getenv("WL_GITHUB_WEBHOOK_SECRET"),
-				FluxWebhookSecret:   os.Getenv("WL_FLUX_WEBHOOK_SECRET"),
-				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("WL_CLUSTER_ENV_MAP")),
-				OIDCIssuer:          os.Getenv("WL_OIDC_ISSUER"),
-				OIDCClientID:        os.Getenv("WL_OIDC_CLIENT_ID"),
-				PublicURL:           os.Getenv("WL_PUBLIC_URL"),
-				SessionSecret:       os.Getenv("WL_SESSION_SECRET"),
-				GitHubClientID:      os.Getenv("WL_GITHUB_APP_CLIENT_ID"),
-				GitHubClientSecret:  os.Getenv("WL_GITHUB_APP_CLIENT_SECRET"),
-				GitHubOrg:           os.Getenv("WL_GITHUB_ORG"),
-				GitHubAdminTeam:     os.Getenv("WL_GITHUB_ADMIN_TEAM"),
-				TokenEncKey:         os.Getenv("WL_TOKEN_ENC_KEY"),
+				BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
+				GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
+				FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
+				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("LODE_CLUSTER_ENV_MAP")),
+				OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
+				OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
+				PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
+				SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
+				GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
+				GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
+				GitHubOrg:           os.Getenv("LODE_GITHUB_ORG"),
+				GitHubAdminTeam:     os.Getenv("LODE_GITHUB_ADMIN_TEAM"),
+				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
 			})
 			if err != nil {
 				return err

@@ -21,12 +21,12 @@ services:
       - ./data:/data
     environment:
       # ${VAR:-} passes the var through when set on the host, empty otherwise.
-      # WL_BOOTSTRAP_TOKEN must be set on first run to create the admin actor;
+      # LODE_BOOTSTRAP_TOKEN must be set on first run to create the admin actor;
       # see README "Quickstart".
-      WL_BOOTSTRAP_TOKEN: ${WL_BOOTSTRAP_TOKEN:-}
-      WL_GITHUB_WEBHOOK_SECRET: ${WL_GITHUB_WEBHOOK_SECRET:-}
-      WL_FLUX_WEBHOOK_SECRET: ${WL_FLUX_WEBHOOK_SECRET:-}
-      WL_CLUSTER_ENV_MAP: ${WL_CLUSTER_ENV_MAP:-}
+      LODE_BOOTSTRAP_TOKEN: ${LODE_BOOTSTRAP_TOKEN:-}
+      LODE_GITHUB_WEBHOOK_SECRET: ${LODE_GITHUB_WEBHOOK_SECRET:-}
+      LODE_FLUX_WEBHOOK_SECRET: ${LODE_FLUX_WEBHOOK_SECRET:-}
+      LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}
     restart: unless-stopped
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
     # there is no in-container binary to run an HTTP probe with. Check

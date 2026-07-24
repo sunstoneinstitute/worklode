@@ -1,4 +1,4 @@
-# Multi-stage build: compile the static wl binary, then ship it on a minimal,
+# Multi-stage build: compile the static lode binary, then ship it on a minimal,
 # non-root distroless base with no shell and no package manager.
 
 FROM golang:1.26 AS build
@@ -13,11 +13,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /wl ./cmd/wl
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /lode ./cmd/lode
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /wl /wl
+COPY --from=build /lode /lode
 
 EXPOSE 8080
-ENTRYPOINT ["/wl"]
+ENTRYPOINT ["/lode"]
 CMD ["serve", "--db", "/data/wl.db", "--listen", ":8080"]

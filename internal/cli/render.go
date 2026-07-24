@@ -33,7 +33,7 @@ func TaskTable(w io.Writer, tasks []Task) {
 }
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
-// holder (if any) — the `wl task show` view.
+// holder (if any) — the `lode task show` view.
 func TaskDetailRender(w io.Writer, t TaskDetail) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)

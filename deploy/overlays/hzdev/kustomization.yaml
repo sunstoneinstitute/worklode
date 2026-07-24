@@ -18,13 +18,13 @@ patches:
       name: worklode-config
     patch: |-
       - op: replace
-        path: /data/WL_CLUSTER_ENV_MAP
+        path: /data/LODE_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
       - op: add
-        path: /data/WL_PUBLIC_URL
+        path: /data/LODE_PUBLIC_URL
         value: "https://worklode.dev.sunstoneinstitute.ai"
       - op: add
-        path: /data/WL_GITHUB_ORG
+        path: /data/LODE_GITHUB_ORG
         value: "sunstoneinstitute"
   - target:
       kind: Ingress
