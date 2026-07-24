@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -37,26 +38,21 @@ func (s *Store) RecordEvent(
 	apply func(tx *sql.Tx, eventID int64) error,
 ) (id int64, inserted bool, err error) {
 	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
-		receivedAt := s.nowFn().Format(time.RFC3339)
+		receivedAt := s.nowFn().UTC()
 
-		res, err := tx.ExecContext(ctx,
+		// With DO NOTHING, RETURNING yields no row on conflict, so
+		// sql.ErrNoRows means the event was already recorded.
+		scanErr := tx.QueryRowContext(ctx,
 			`INSERT INTO events (source, external_id, type, payload, received_at)
-			 VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT (source, external_id) DO NOTHING`,
+			 VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT (source, external_id) DO NOTHING
+			 RETURNING id`,
 			source, externalID, typ, payload, receivedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("insert event: %w", err)
-		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("rows affected: %w", err)
-		}
-
-		if affected == 0 {
+		).Scan(&id)
+		if errors.Is(scanErr, sql.ErrNoRows) {
 			// Already recorded: look up the existing id and skip apply.
 			row := tx.QueryRowContext(ctx,
-				`SELECT id FROM events WHERE source = ? AND external_id = ?`,
+				`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
 				source, externalID,
 			)
 			if err := row.Scan(&id); err != nil {
@@ -65,12 +61,9 @@ func (s *Store) RecordEvent(
 			inserted = false
 			return nil
 		}
-
-		newID, err := res.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("last insert id: %w", err)
+		if scanErr != nil {
+			return fmt.Errorf("insert event: %w", scanErr)
 		}
-		id = newID
 		inserted = true
 
 		if apply != nil {
@@ -100,7 +93,7 @@ type StateLogEntry struct {
 func (s *Store) StateLogForEntity(ctx context.Context, entityKind, entityID string) ([]StateLogEntry, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, change, event_id, at FROM state_log
-		 WHERE entity_kind = ? AND entity_id = ? ORDER BY at, id`,
+		 WHERE entity_kind = $1 AND entity_id = $2 ORDER BY at, id`,
 		entityKind, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("state log for %s %s: %w", entityKind, entityID, err)
@@ -110,13 +103,10 @@ func (s *Store) StateLogForEntity(ctx context.Context, entityKind, entityID stri
 	var out []StateLogEntry
 	for rows.Next() {
 		var e StateLogEntry
-		var at string
-		if err := rows.Scan(&e.ID, &e.Change, &e.EventID, &at); err != nil {
+		if err := rows.Scan(&e.ID, &e.Change, &e.EventID, &e.At); err != nil {
 			return nil, fmt.Errorf("scan state log entry: %w", err)
 		}
-		if e.At, err = time.Parse(time.RFC3339, at); err != nil {
-			return nil, fmt.Errorf("parse state log %d at: %w", e.ID, err)
-		}
+		e.At = e.At.UTC()
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
@@ -136,8 +126,8 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 	}
 	_, err = tx.Exec(
 		`INSERT INTO state_log (entity_kind, entity_id, change, event_id, at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		entityKind, entityID, string(changeJSON), eventID, time.Now().UTC().Format(time.RFC3339),
+		 VALUES ($1, $2, $3, $4, $5)`,
+		entityKind, entityID, changeJSON, eventID, time.Now().UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("insert state_log: %w", err)
