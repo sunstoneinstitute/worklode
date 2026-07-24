@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -381,5 +382,90 @@ func TestSweeper(t *testing.T) {
 	}
 	if !releasedAt.Valid {
 		t.Fatalf("task2 lease still open after expiry")
+	}
+}
+
+// TestSweeperConcurrentReplicas runs two sweeps at once from two Stores on
+// the same database (two replicas). The advisory lock plus the idempotent
+// per-lease events must yield exactly one lease.expired event per lease,
+// with the swept counts summing to the number of expired leases.
+func TestSweeperConcurrentReplicas(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+
+	const numLeases = 8
+	leaseIDs := make([]int64, 0, numLeases)
+	for i := range numLeases {
+		task := createTask(t, s, leaseTestNow, defaultTaskInput())
+		lease, err := s.Claim(ctx, task.ID, "stig", fmt.Sprintf("host:/wt-sweep-%d", i), 2*time.Hour)
+		if err != nil {
+			t.Fatalf("Claim %d: %v", i, err)
+		}
+		leaseIDs = append(leaseIDs, lease.ID)
+	}
+	*now = leaseTestNow.Add(3 * time.Hour)
+
+	// Second store on the same test database simulates a second replica.
+	var dbName string
+	if err := s.db.QueryRow(`SELECT current_database()`).Scan(&dbName); err != nil {
+		t.Fatalf("current_database: %v", err)
+	}
+	u, err := url.Parse(TestDSN())
+	if err != nil {
+		t.Fatalf("parse test DSN: %v", err)
+	}
+	u.Path = "/" + dbName
+	s2, err := Open(u.String())
+	if err != nil {
+		t.Fatalf("open second store: %v", err)
+	}
+	t.Cleanup(func() { s2.Close() })
+
+	stores := []*Store{s, s2}
+	counts := make([]int, len(stores))
+	errs := make([]error, len(stores))
+	var wg sync.WaitGroup
+	for i, st := range stores {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			counts[i], errs[i] = st.ExpireLeases(ctx, *now)
+		}()
+	}
+	wg.Wait()
+
+	total := 0
+	for i := range stores {
+		if errs[i] != nil {
+			t.Fatalf("ExpireLeases replica %d: %v", i, errs[i])
+		}
+		total += counts[i]
+	}
+	// One replica may lose the lock race and return 0; any split is fine
+	// as long as every lease was swept exactly once in total.
+	if total != numLeases {
+		t.Fatalf("swept counts %v sum to %d, want %d", counts, total, numLeases)
+	}
+
+	for _, id := range leaseIDs {
+		var n int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM events WHERE source = 'system' AND type = 'lease.expired' AND external_id = $1`,
+			fmt.Sprintf("lease-expired-%d", id),
+		).Scan(&n); err != nil {
+			t.Fatalf("count events for lease %d: %v", id, err)
+		}
+		if n != 1 {
+			t.Fatalf("lease %d: got %d lease.expired events, want 1", id, n)
+		}
+	}
+	var eventTotal int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM events WHERE type = 'lease.expired'`,
+	).Scan(&eventTotal); err != nil {
+		t.Fatalf("count lease.expired events: %v", err)
+	}
+	if eventTotal != numLeases {
+		t.Fatalf("total lease.expired events: got %d, want %d", eventTotal, numLeases)
 	}
 }
