@@ -4,7 +4,7 @@
 record `../2026-07-21-worklode-platform-graph-design.md` (D1–D15; full rationale there).
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
-architecture system — the successor scope of "worklode."
+architecture system — the successor scope of the original `wl` work tracker.
 
 **Thesis: development work as ambition reconciliation.** Intent is *asserted*; reality is
 *observed*; every gap between them — architectural drift, an unimplemented spec, a deliverable

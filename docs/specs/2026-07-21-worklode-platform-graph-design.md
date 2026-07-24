@@ -115,9 +115,8 @@ descriptors live in graph-server).
 
 ## Naming — DECIDED: **Worklode**
 
-**D13 — Product name = Worklode** (the product formerly "worklode"). Guides "what to
-work on next" — the north star this whole design serves. **CLI = `lode`.** Repo rename is an
-optional follow-up, not decided here.
+**D13 — Product name = Worklode**  Guides "what to work on next" — the north star this
+whole design serves. **CLI = `lode`.** Repo rename is an optional follow-up, not decided here.
 
 Shortlist considered:
 

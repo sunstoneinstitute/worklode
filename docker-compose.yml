@@ -6,7 +6,7 @@ services:
       - ./data:/data
       - ./deploy/base/migrations:/migrations:ro
 
-  tracker:
+  worklode:
     build: .
     depends_on:
       migrate:
