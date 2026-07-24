@@ -29,7 +29,7 @@ func TestBoardPageOrgBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj1", "title": "Leased task", "priority": "high", "kind": "feature",
 	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim WL-1 status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -85,7 +85,7 @@ func TestTaskPage(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
 	})
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}

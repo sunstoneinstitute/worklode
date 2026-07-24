@@ -161,14 +161,14 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("GetTask before claim = %+v", detail)
 	}
 
-	claim, _, err := c.ClaimTask(ctx, "WL-1", "sess-1", 0)
+	claim, _, err := c.ClaimTask(ctx, "WL-1", "host:/wt-1", 0)
 	if err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
 	if !strings.HasPrefix(claim.Branch, "wl/WL-1-") {
 		t.Fatalf("claim branch = %q", claim.Branch)
 	}
-	if claim.Lease.ActorID != "alice" {
+	if claim.Lease.ActorID != "alice" || claim.Lease.Worktree != "host:/wt-1" {
 		t.Fatalf("claim lease = %+v", claim.Lease)
 	}
 
@@ -231,7 +231,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 
 	// Done: claim, move to in_review out of band (no CLI command for the PR
 	// flow that normally does this), then mark done.
-	if _, _, err := c.ClaimTask(ctx, "WL-1", "", 0); err != nil {
+	if _, _, err := c.ClaimTask(ctx, "WL-1", "host:/wt-2", 0); err != nil {
 		t.Fatalf("re-claim: %v", err)
 	}
 	moveToReview(t, st, "WL-1")
@@ -285,7 +285,7 @@ func TestClientReadyAndReopen(t *testing.T) {
 		t.Fatalf("second ReadyTask succeeded, want error")
 	}
 
-	if _, _, err := c.ClaimTask(ctx, created.ID, "sess", 0); err != nil {
+	if _, _, err := c.ClaimTask(ctx, created.ID, "host:/wt", 0); err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
 	moveToReview(t, st, created.ID)

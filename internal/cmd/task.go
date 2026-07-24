@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -178,18 +179,28 @@ func newTaskReopenCmd() *cobra.Command {
 }
 
 func newTaskClaimCmd() *cobra.Command {
-	var session string
+	var worktree string
 	var ttl time.Duration
 	cmd := &cobra.Command{
 		Use:   "claim <id>",
-		Short: "Lease a task and move it to in_progress",
+		Short: "Lease a task to the current worktree and move it to in_progress",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.ClaimTask(cmd.Context(), args[0], session, ttl)
+			if worktree == "" {
+				cwd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("determine working directory: %w", err)
+				}
+				worktree, err = cli.WorktreeIdentity(cwd)
+				if err != nil {
+					return fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+				}
+			}
+			resp, raw, err := c.ClaimTask(cmd.Context(), args[0], worktree, ttl)
 			if err != nil {
 				return err
 			}
@@ -204,7 +215,7 @@ func newTaskClaimCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&session, "session", "", "session id (e.g. an agent conversation id)")
+	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	return cmd
 }
