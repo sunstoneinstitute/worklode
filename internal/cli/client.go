@@ -555,6 +555,28 @@ func (c *Client) ReleaseLease(ctx context.Context, id string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/release", nil)
 }
 
+// ReacquireOrRenew re-acquires the lease on taskID for the worktree identity:
+// renew when this worktree already holds it (including an expired lease still
+// nominally ours), re-claim when no lease exists (the sweeper reclaimed it),
+// and error when it is actively leased to a different worktree. lease is the
+// current lease from a freshly-fetched brief (nil ⇒ none). This is the shared
+// resume/auto-resume core used by both `lode resume` and the hook handlers.
+func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, lease *Lease) error {
+	switch {
+	case lease == nil:
+		if _, _, err := c.ClaimTask(ctx, taskID, identity, 0); err != nil {
+			return fmt.Errorf("re-claim %s: %w", taskID, err)
+		}
+	case lease.Worktree == identity:
+		if _, _, err := c.RenewLease(ctx, taskID, 0); err != nil {
+			return fmt.Errorf("renew lease on %s: %w", taskID, err)
+		}
+	default:
+		return fmt.Errorf("%s is actively leased to a different worktree (%s); refusing to resume", taskID, lease.Worktree)
+	}
+	return nil
+}
+
 // DoneTask calls POST /api/v1/tasks/{id}/done.
 func (c *Client) DoneTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.taskAction(ctx, id, "done")
