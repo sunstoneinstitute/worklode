@@ -70,6 +70,47 @@ func TestBriefNoBlockersNoLease(t *testing.T) {
 	}
 }
 
+// TestBriefOpenBlockersMultiCharKey regression-tests openBlockers' ordering
+// query against a project whose key is not 2 chars. The bug: openBlockers
+// ordered by CAST(substr(id, 4) AS INTEGER), which assumes a 3-char "WL-"
+// prefix. For a 4-char key like "DEMO", substr("DEMO-2", 4) = "O-2", which
+// is not valid integer input, so the query used to error (surfacing as a 500
+// on the task-brief read path) instead of ordering blockers numerically.
+func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "demo", "Demo", "DEMO"); err != nil {
+		t.Fatalf("CreateProject demo: %v", err)
+	}
+
+	demoInput := defaultTaskInput()
+	demoInput.ProjectID = "demo"
+
+	target := createTask(t, s, leaseTestNow, demoInput)   // DEMO-1
+	blocker1 := createTask(t, s, leaseTestNow, demoInput) // DEMO-2
+	blocker2 := createTask(t, s, leaseTestNow, demoInput) // DEMO-3
+
+	if err := addEdge(t, s, blocker1.ID, target.ID, "blocks"); err != nil {
+		t.Fatalf("add blocks edge %s -> %s: %v", blocker1.ID, target.ID, err)
+	}
+	if err := addEdge(t, s, blocker2.ID, target.ID, "blocks"); err != nil {
+		t.Fatalf("add blocks edge %s -> %s: %v", blocker2.ID, target.ID, err)
+	}
+
+	b, err := s.Brief(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.OpenBlockers) != 2 {
+		t.Fatalf("open blockers = %+v, want 2", b.OpenBlockers)
+	}
+	if b.OpenBlockers[0].ID != "DEMO-2" || b.OpenBlockers[1].ID != "DEMO-3" {
+		t.Fatalf("open blockers = [%s %s], want [DEMO-2 DEMO-3]",
+			b.OpenBlockers[0].ID, b.OpenBlockers[1].ID)
+	}
+}
+
 func TestBriefNotFound(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	if _, err := s.Brief(t.Context(), "WL-999"); !errors.Is(err, ErrNotFound) {
