@@ -39,6 +39,34 @@ func TestBlockingFanOutChainAndBranch(t *testing.T) {
 	}
 }
 
+// TestBlockingFanOutCycleTerminates pins the query's one real failure mode:
+// the schema does not prevent blocks-cycles (AddEdge only cycle-checks
+// child_of), and only the CTE's UNION dedup keeps the recursion finite. A
+// UNION ALL regression would hang here instead of returning.
+func TestBlockingFanOutCycleTerminates(t *testing.T) {
+	s := openTaskStore(t)
+
+	a := createTask(t, s, taskTestNow, defaultTaskInput())
+	b := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge a blocks b: %v", err)
+	}
+	if err := addEdge(t, s, b.ID, a.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge b blocks a: %v", err)
+	}
+
+	got, err := s.BlockingFanOut(t.Context())
+	if err != nil {
+		t.Fatalf("BlockingFanOut: %v", err)
+	}
+	// In a cycle each root reaches every member including itself.
+	want := map[string]int{a.ID: 2, b.ID: 2}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("BlockingFanOut cycle: got %v, want %v", got, want)
+	}
+}
+
 func TestBlockingFanOutDiamond(t *testing.T) {
 	s := openTaskStore(t)
 
