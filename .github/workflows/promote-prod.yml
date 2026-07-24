@@ -4,16 +4,9 @@ name: Promote to prod
 # rebuilding. Uses crane to copy the byte-identical image within the same
 # ghcr.io/sunstoneinstitute namespace, tagged with a computed semver version.
 #
-# hzprod has no cluster yet, so nothing consumes last-deploy/prod until
-# one is provisioned and Flux is wired to watch it — this workflow just
-# keeps the branch and image ready for when that happens.
-#
-# Do not dispatch this yet: promote-images@v1 calls compute-version@v1 by a
-# floating tag internally (not a pinned SHA this repo controls), and v1's
-# compute-version doesn't support version-file: VERSION until
-# sunstoneinstitute/actions#10 merges and v1 slides onto it. Dispatching
-# before then fails at the "Promote image to hzprod" step with
-# "Unsupported file type: VERSION".
+# hzprod has no cluster yet, so nothing consumes last-deploy/prod until one is
+# provisioned and Flux is wired to watch it — this workflow just keeps the
+# branch and image ready for when that happens.
 
 on:
   workflow_dispatch:
@@ -28,7 +21,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/sunstoneinstitute
-  APP: work-tracker
+  APP: worklode
 
 jobs:
   promote:
@@ -54,7 +47,7 @@ jobs:
         with:
           from-env: dev
           to-env: prod
-          images: work-tracker
+          images: worklode
           from-registry: ${{ env.REGISTRY }}
           to-registry: ${{ env.REGISTRY }}
           version-file: VERSION

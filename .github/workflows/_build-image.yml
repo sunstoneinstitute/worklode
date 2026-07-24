@@ -18,7 +18,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io/sunstoneinstitute
-  APP: work-tracker
+  APP: worklode
 
 jobs:
   build:
@@ -48,7 +48,7 @@ jobs:
           else
             {
               echo "list<<EOF"
-              echo "work-tracker:ci"
+              echo "worklode:ci"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi

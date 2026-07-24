@@ -31,7 +31,7 @@ jobs:
         uses: sunstoneinstitute/actions/update-deploy-branch@c6ecfa19244e61ccb8b318521eebffacdccb3ce4 # v1
         with:
           env: dev
-          images: work-tracker
+          images: worklode
           registry: ghcr.io/sunstoneinstitute
           tag: ${{ needs.build-image.outputs.image-tag }}
           overlay-path: deploy/overlays/hzdev/kustomization.yaml
