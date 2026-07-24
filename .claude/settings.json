@@ -1,9 +1,4 @@
 {
-  "enabledPlugins": {
-    "golang-migrate@sunstone-plugins": true,
-    "sunstone-dev@sunstone-plugins": true,
-    "sunstone-devops@sunstone-plugins": true
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -16,5 +11,18 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "golang-migrate@sunstone-plugins": true,
+    "sunstone-dev@sunstone-plugins": true,
+    "sunstone-devops@sunstone-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "sunstone-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "sunstoneinstitute/claude-plugins"
+      }
+    }
   }
 }
