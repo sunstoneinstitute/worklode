@@ -6,7 +6,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.go) gofmt -w \"$f\";; esac; } 2>/dev/null || true"
+            "command": "gofmt -w \"$(jq -r .tool_input.file_path)\" 2>/dev/null || true",
+            "if": "Edit(**/*.go)"
+          },
+          {
+            "type": "command",
+            "command": "gofmt -w \"$(jq -r .tool_input.file_path)\" 2>/dev/null || true",
+            "if": "Write(**/*.go)"
           }
         ]
       }
