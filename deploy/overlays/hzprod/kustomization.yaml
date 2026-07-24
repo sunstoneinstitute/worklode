@@ -18,7 +18,7 @@ patches:
       name: worklode-config
     patch: |-
       - op: replace
-        path: /data/WL_CLUSTER_ENV_MAP
+        path: /data/LODE_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
   - target:
       kind: Ingress

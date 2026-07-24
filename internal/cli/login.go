@@ -1,4 +1,4 @@
-// login.go implements `wl login`: a provider-neutral, server-mediated auth flow.
+// login.go implements `lode login`: a provider-neutral, server-mediated auth flow.
 // The CLI discovers the server's login URLs, opens a browser to the server's
 // /auth/cli/login with an ephemeral-port loopback redirect, waits for the
 // server to redirect a one-time code back to the loopback, and exchanges that
@@ -83,7 +83,7 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		return nil, fmt.Errorf("open browser: %w", err)
 	}
 
-	// Bound the wait so an unattended `wl login` whose callback never arrives
+	// Bound the wait so an unattended `lode login` whose callback never arrives
 	// fails cleanly instead of blocking forever. Derived from the passed ctx so
 	// Ctrl-C still cancels immediately.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -104,7 +104,7 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 // fetchLoginConfig gets the discovery document. A 404 means the server has no
 // interactive login configured.
 func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wlLoginDiscovery, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/wl-login", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/lode-login", nil)
 	if err != nil {
 		return wlLoginDiscovery{}, err
 	}
@@ -114,7 +114,7 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wlLoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set WL_TOKEN")
+		return wlLoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set LODE_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
@@ -222,7 +222,7 @@ func callbackHandler(state string, codeCh chan<- string, errCh chan<- error) htt
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintln(w, "<!doctype html><title>wl login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
+		fmt.Fprintln(w, "<!doctype html><title>lode login</title><p>Login complete. You can close this tab and return to the terminal.</p>")
 		select {
 		case codeCh <- q.Get("code"):
 		default:

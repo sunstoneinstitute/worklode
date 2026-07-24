@@ -18,7 +18,7 @@ import (
 )
 
 // ssoTokenTTL is the lifetime of a wl_ token minted from an SSO login. No
-// refresh tokens — re-run `wl login` after expiry.
+// refresh tokens — re-run `lode login` after expiry.
 const ssoTokenTTL = 30 * 24 * time.Hour
 
 // errNoUserRole is returned by provisionActor when the ID token's groups lack

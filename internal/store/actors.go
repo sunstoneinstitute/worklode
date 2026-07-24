@@ -115,7 +115,7 @@ var bootstrapTokenRe = regexp.MustCompile(`^wl_[0-9a-f]{40}$`)
 // BootstrapAdmin creates the initial "admin" service actor (admin = true)
 // with the given plaintext token — but only if the actors table is empty. On
 // a store that already has actors it is a no-op, so serve can call it
-// unconditionally at startup with the WL_BOOTSTRAP_TOKEN env value. A token
+// unconditionally at startup with the LODE_BOOTSTRAP_TOKEN env value. A token
 // not matching bootstrapTokenRe is an error even on the no-op path: fail at
 // startup, not with silent 401s later.
 func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error {

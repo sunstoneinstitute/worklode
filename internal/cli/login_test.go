@@ -17,7 +17,7 @@ import (
 func TestRunLoginServerMediated(t *testing.T) {
 	// Stub worklode server: discovery + token exchange.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -64,7 +64,7 @@ func TestRunLoginServerMediated(t *testing.T) {
 
 func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",
@@ -96,7 +96,7 @@ func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 
 func TestRunLoginNoInteractiveLogin(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no interactive login configured", http.StatusNotFound)
 	})
 	wt := httptest.NewServer(mux)
@@ -112,7 +112,7 @@ func TestRunLoginNoInteractiveLogin(t *testing.T) {
 
 func TestRunLoginStateMismatch(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/wl-login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"authorize_url": "http://" + r.Host + "/auth/cli/login",
 			"token_url":     "http://" + r.Host + "/auth/cli/token",

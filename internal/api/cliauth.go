@@ -86,7 +86,7 @@ func (s *server) now() time.Time {
 }
 
 // finishLogin ends a successful web login for actorID. When the CLI-intent
-// cookie is present (a server-mediated `wl login`), it mints a one-time code
+// cookie is present (a server-mediated `lode login`), it mints a one-time code
 // and redirects to the loopback redirect_uri instead of establishing a browser
 // session. Otherwise it delegates to finishLoginWeb.
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
@@ -196,7 +196,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	exp := s.now().Add(ssoTokenTTL)
-	token, err := s.st.CreateToken(r.Context(), actorID, "wl login", &exp)
+	token, err := s.st.CreateToken(r.Context(), actorID, "lode login", &exp)
 	if err != nil {
 		s.log.Error("mint cli token", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
@@ -209,7 +209,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// wellKnownLogin handles GET /.well-known/wl-login: tells the CLI where to start
+// wellKnownLogin handles GET /.well-known/lode-login: tells the CLI where to start
 // the login and which providers are available. 404 when the server has no
 // interactive provider configured.
 func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {

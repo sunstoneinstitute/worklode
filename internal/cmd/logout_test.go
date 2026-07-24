@@ -12,8 +12,8 @@ func TestLogoutClearsKeychain(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	t.Setenv("WL_TOKEN", "")
-	t.Setenv("WL_SERVER", "https://wl.example.com")
+	t.Setenv("LODE_TOKEN", "")
+	t.Setenv("LODE_SERVER", "https://wl.example.com")
 
 	if err := cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_x"); err != nil {
 		t.Fatalf("seed: %v", err)

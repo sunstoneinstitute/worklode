@@ -1,5 +1,5 @@
 // session.go implements the web UI's stateless auth cookies, all signed under
-// WL_SESSION_SECRET (there is no server-side session store):
+// LODE_SESSION_SECRET (there is no server-side session store):
 //   - the session cookie: {username, expiry}, ~12h, set after a successful
 //     login and checked by webAuth on every gated web request.
 //   - the oauth-state cookie: {state, PKCE verifier, next, expiry}, short-lived,

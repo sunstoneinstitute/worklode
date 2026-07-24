@@ -1,4 +1,4 @@
-// Package watch implements the wl watcher: a Kubernetes pod informer that
+// Package watch implements the lode watcher: a Kubernetes pod informer that
 // detects crash-looping and OOM-killed containers and reports each one once
 // to the worklode runtime-events API.
 package watch

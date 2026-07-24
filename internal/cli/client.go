@@ -1,4 +1,4 @@
-// Package cli implements the wl command-line client: configuration, the HTTP
+// Package cli implements the lode command-line client: configuration, the HTTP
 // client for the worklode API, and table rendering for its commands.
 package cli
 
@@ -29,7 +29,7 @@ import (
 // still accepted on read (as a deprecated fallback) so older config files keep
 // working until the next SaveConfig migrates the token into the keychain.
 //
-// The environment variables WL_SERVER and WL_TOKEN, when set, override both the
+// The environment variables LODE_SERVER and LODE_TOKEN, when set, override both the
 // file and the keychain.
 type Config struct {
 	ServerURL string
@@ -49,7 +49,7 @@ func configPath() (string, error) {
 }
 
 // LoadConfig reads the config file (a missing file is not an error — its
-// fields are just left empty) and applies the WL_SERVER/WL_TOKEN environment
+// fields are just left empty) and applies the LODE_SERVER/LODE_TOKEN environment
 // overrides on top.
 func LoadConfig() (Config, error) {
 	var cfg Config
@@ -72,16 +72,16 @@ func LoadConfig() (Config, error) {
 	}
 
 	// Server + explicit env token first.
-	if v := os.Getenv("WL_SERVER"); v != "" {
+	if v := os.Getenv("LODE_SERVER"); v != "" {
 		// A legacy cleartext token in the file belongs to the file's server; if
-		// WL_SERVER points elsewhere, it must not leak onto the new server. Only
-		// a keychain hit (or WL_TOKEN) may supply a token for the override.
+		// LODE_SERVER points elsewhere, it must not leak onto the new server. Only
+		// a keychain hit (or LODE_TOKEN) may supply a token for the override.
 		if v != cfg.ServerURL {
 			cfg.Token = ""
 		}
 		cfg.ServerURL = v
 	}
-	if v := os.Getenv("WL_TOKEN"); v != "" {
+	if v := os.Getenv("LODE_TOKEN"); v != "" {
 		cfg.Token = v
 		return cfg, nil
 	}
@@ -129,7 +129,7 @@ func parseConfig(data string) (Config, error) {
 func SaveConfig(cfg Config) error {
 	if cfg.Token != "" {
 		if err := tokenStore.Set(cfg.ServerURL, cfg.Token); err != nil {
-			return fmt.Errorf("store token in keychain (set WL_TOKEN to use a token without the keychain): %w", err)
+			return fmt.Errorf("store token in keychain (set LODE_TOKEN to use a token without the keychain): %w", err)
 		}
 	}
 	return SaveServerOnly(cfg.ServerURL)

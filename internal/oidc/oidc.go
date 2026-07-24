@@ -1,7 +1,7 @@
 // Package oidc wraps go-oidc/oauth2 for worklode's SSO flows: it verifies
 // Keycloak ID tokens and builds the oauth2 config the web and CLI login flows
-// share. A Verifier is constructed only when WL_OIDC_ISSUER and
-// WL_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
+// share. A Verifier is constructed only when LODE_OIDC_ISSUER and
+// LODE_OIDC_CLIENT_ID are set; an unconfigured server never builds one.
 package oidc
 
 import (

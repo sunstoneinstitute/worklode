@@ -1,4 +1,4 @@
-// Package cmd defines the wl command-line interface.
+// Package cmd defines the lode command-line interface.
 package cmd
 
 import (
@@ -11,8 +11,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "wl",
-	Short:   "wl is the Sunstone Institute work tracker",
+	Use:     "lode",
+	Short:   "lode is the Sunstone Institute work tracker",
 	Version: "dev",
 	// SilenceUsage/SilenceErrors: main.go already prints the error returned
 	// by Execute() and exits 1. Without these, cobra additionally prints
@@ -41,7 +41,7 @@ func jsonOut(cmd *cobra.Command) bool {
 	return v
 }
 
-// newAPIClient loads the client config (WL_SERVER/WL_TOKEN env vars override
+// newAPIClient loads the client config (LODE_SERVER/LODE_TOKEN env vars override
 // ~/.config/worklode/config.toml) and returns a ready-to-use Client, or an error
 // telling the user how to configure the server URL.
 func newAPIClient() (*cli.Client, error) {
@@ -50,7 +50,7 @@ func newAPIClient() (*cli.Client, error) {
 		return nil, err
 	}
 	if cfg.ServerURL == "" {
-		return nil, errors.New(`server URL not set: set WL_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
+		return nil, errors.New(`server URL not set: set LODE_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
 	}
 	return cli.NewClient(cfg), nil
 }
