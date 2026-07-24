@@ -40,10 +40,12 @@ observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are re
 **v1:** Component-grained graph; DesignDoc (ADR/Spec/Plan) with `dct:hasPart` decomposition;
 Task/Issue/PR/Artifact/Deployment/Environment projected from what Worklode already ingests;
 Deliverable as declared definition-of-done; `concern`/`focus`/atomic `claim --next`; drift +
-ready-frontier queries; the worktree-bound plugin.
+ready-frontier queries; the worktree-bound plugin; skill catalog + reviewed `usingSkill`
+bindings front-loaded via the brief (07).
 
 **v2:** Milestone grouping + observed deliverable confirmation; Flux notifications for a live
-deploy view; finer VCS/runtime nodes; weighted critical path; an operational ontology.
+deploy view; finer VCS/runtime nodes; weighted critical path; an operational ontology; the
+skill friction loop (07).
 
 ---
 
@@ -60,7 +62,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **04 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 03 |
 | **05 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 01, 02 |
 | **06 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
-| **07 — Skills registry & friction loop** | Skill catalog ingested from claude-plugins version tags; `ls:Skill`; embedding-suggested, human-reviewed `usingSkill` bindings; front-loading via the brief; friction-vent aggregation → maintenance tasks. | 01, 02, 03, 04, 05 |
+| **07 — Skills registry & friction loop** | Skill catalog ingested from claude-plugins version tags; `ls:Skill`; embedding-suggested (self-hosted, Lance on data-platform), human-reviewed `usingSkill` bindings; front-loading via the brief. Friction-vent aggregation → maintenance tasks is **v2**. | 01, 02, 03, 04, 05, 06 |
 
 ---
 
@@ -114,5 +116,5 @@ D13 naming → 00 · D14 plugin → 05 · D15 task sizing → 02/05.
 - **[04]** projection-lag between authoritative (backbone) and overview (KG) frontier — acceptable?
 - **[01]** isolation level (READ COMMITTED + `FOR UPDATE` vs SERIALIZABLE); sweeper correctness
   under multiple server replicas; Task↔GitHub-Issue mirror lifecycle (spec 01 Q5 / 05 Q05.4).
-- **[07]** `ls:Skill ⊑ ls:DesignDoc` vs standalone class; embedding provider (Voyage vs
-  self-hosted); vent transport into the backbone; friction-threshold tuning.
+- **[07]** OTel vent-transport details (v2); suggestion refresh on parent decomposition;
+  friction-threshold tuning (v2).

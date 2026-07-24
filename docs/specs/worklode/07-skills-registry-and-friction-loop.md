@@ -3,20 +3,22 @@
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` ·
 **Depends on:** 01 (events, task rows), 02 (`claim --next`, D15 sizing), 03 (`ls:` vocabulary,
 projection), 04 (drift queries), 05 (brief injection, hooks) · **Cross-repo:** claude-plugins
-(skill source of truth), agent-feedback (vent stream), data-platform (graph hosting, 06).
+(skill source of truth), data-platform (graph hosting + embedding store, 06), agent-feedback
+(vent stream, v2).
 
 ## Purpose & scope
 
 Make org skills first-class Worklode objects so that (a) a task can explicitly name the skills
 an agent should use, (b) the server suggests those skills and a human reviews the suggestions,
-(c) skill versions stay consistent with the claude-plugins release machinery, and (d) the
-friction agents report against skills flows back as maintenance work. Skills stop being a
+(c) skill versions stay consistent with the claude-plugins release machinery, and (d — **v2**)
+the friction agents report against skills flows back as maintenance work. Skills stop being a
 static, always-loaded catalog and become task-scoped context, assembled deterministically.
 
-**In scope:** the skill catalog and its ingestion from claude-plugins version tags; the
+**In scope (v1):** the skill catalog and its ingestion from claude-plugins version tags; the
 `ls:Skill` graph entity; the `usingSkill` binding with its suggest → review → accept lifecycle;
-embedding-based suggestion; front-loading bound skills through `lode task brief`; friction-vent
-ingestion, aggregation, and the maintenance-task policy.
+embedding-based suggestion; front-loading bound skills through `lode task brief`.
+**In scope (v2):** friction-vent ingestion, aggregation, and the maintenance-task policy —
+specified here for coherence, but **not gating the v1 release**.
 
 **Out of scope (consumed, not defined here):** the brief injection mechanics and hook events
 (05), the projection pipeline and IRI grammar (03), drift query plumbing (04), the
@@ -62,7 +64,7 @@ tag-create events on claude-plugins. On a `<plugin>-<version>` tag:
    `skill_versions(plugin, skill, version, description, body, body_sha, surfaces, tagged_at)`.
    An unchanged `body_sha` (a sibling skill drove the bump) records the version row but skips
    re-embedding.
-4. Compute the embedding for changed skills (below).
+4. Request embeddings for changed skills (data-platform call, below).
 5. Project to the graph: upsert the `ls:Skill` node with `dct:hasVersion` = latest version.
 
 A plugin description containing `DEPRECATED` marks all its skills deprecated in the catalog
@@ -74,21 +76,28 @@ webhook-gap repair (idempotent by `(plugin, skill, version)`).
 
 ## Graph entity (03 extension)
 
-Mint **`ls:Skill`**, subclass of `ls:DesignDoc`:
+Mint **`ls:Skill`** as a standalone class — deliberately **not** a `ls:DesignDoc` subclass.
+Subclassing was considered and rejected: `rdfs:subClassOf` is an is-a claim, and a skill is
+not a design document. A DesignDoc asserts *what to build* and moves through a
+draft→accepted lifecycle; a skill prescribes *how to work* and is versioned by release tags.
+What they share (markdown-in-repo content with an RDF descriptor, component coverage) is a
+common *pattern*, not ancestry — so it is modeled as parallel properties, not inheritance:
 
 ```turtle
-ls:Skill a owl:Class ; rdfs:subClassOf ls:DesignDoc ;   # operational "how to work on X" doc
+ls:Skill a owl:Class ;             # practice doc: "how to work on X"; content in claude-plugins
+    ls:layer lsc:intent .
+
+ls:covers a owl:ObjectProperty ;   # skill → component it teaches how to work on
+    rdfs:domain ls:Skill ; rdfs:range ls:Component ;
     ls:layer lsc:intent .
 ```
 
-Rationale: a skill *is* design documentation of practice — subclassing inherits `ls:status`,
-`ls:governs` edges to Components, and, decisively, spec 04's staleness machinery: "component
-changed materially since its governing doc was last updated" now flags stale skills with zero
-new queries. Content stays markdown-in-repo with only the RDF descriptor in the graph — the
-same markdown-as-asset split DesignDocs already use. `ls:Skill` joins the
-ADR/Spec/Plan disjointness list. Status mapping: live → `lsc:accepted`, `DEPRECATED` →
-`lsc:superseded`. (Whether subclassing survives crit is Q07.1; the fallback is a standalone
-class plus one more minted covers-property.)
+`ls:Skill` joins the top-level AllDisjointClasses set (Component / DesignDoc / Task /
+Deliverable / Workstream). Lifecycle needs no SKOS scheme: a live skill is simply present at
+its current `dct:hasVersion`; a `DEPRECATED` plugin marks its skills with the standard
+`owl:deprecated true` annotation. Spec 04's staleness query ("component changed materially
+since its governing doc was last updated") gains a sibling clause over `ls:covers` — same
+machinery, one more property in the pattern.
 
 IRI: `lsid:skill/<plugin>/<skill>` (ADR-0006 grammar; instances under `/id/…`).
 
@@ -104,10 +113,9 @@ ls:atVersion a owl:AnnotationProperty .           # version pin, RDF-1.2 triple-
 
 The version pin annotates the `usingSkill` triple (`<< :task ls:usingSkill :skill >>
 ls:atVersion "1.6.0"`), the same RDF-1.2 mechanism 03 uses for `ls:supersededSection` —
-no SkillVersion node bloat. Skill→Component coverage uses the inherited `ls:governs`;
-authoring these edges is part of skill review in claude-plugins, ingested from a `components:`
-frontmatter list when present (optional in v1 — suggestion works without it, staleness
-detection is what it buys).
+no SkillVersion node bloat. `ls:covers` edges are ingested from a `components:` frontmatter
+list when present (optional in v1 — suggestion works without it; staleness detection is what
+it buys), authored as part of skill review in claude-plugins.
 
 Authority split (D2/D3): the catalog and bindings are **backbone-owned** (bindings are
 execution facts consumed transactionally at brief time, like Task itself, D11); `ls:Skill`
@@ -116,12 +124,13 @@ claude-plugins events and backbone writes.
 
 ## Suggestion → review → accept
 
-**Embedding index.** One vector per skill (latest version): description + body, embedded at
-ingest, stored in Postgres (pgvector; at catalog scale — hundreds of rows — even brute-force
-cosine would do, so the extension is a convenience, not a dependency). Provider is Q07.2:
-Anthropic ships no embeddings API, so it is Voyage (managed) or a small self-hosted model on
-the data-platform; the interface is one `embed(text) → vector` call at ingest and one per
-suggestion query, so the choice is swappable.
+**Embedding index (decided: self-hosted, Lance on the data-platform).** One vector per skill
+(latest version): description + body, embedded at ingest by a **self-hosted embedding model**
+on the data-platform and stored there as **Lance files** (06). The backbone stays authoritative
+for the catalog; Lance holds only derived vectors, rebuildable at any time by re-embedding from
+catalog rows. The interface is two calls the backbone makes to the data-platform: `embed` (at
+skill ingest and once per suggestion query) and top-k cosine search over the index. Scale is
+small (10²–10³ vectors), so a modest open model behind an internal endpoint suffices.
 
 **Suggestion.** On task create and on material edit (title/description/decomposition), the
 server embeds *task title + description + governing Spec/Plan excerpt* and stores the top-k
@@ -176,26 +185,33 @@ preserved for everything but the body. The preamble also notes that these skills
 loaded, so the model does not additionally invoke a marketplace copy that may be installed at
 another version (the pinned, injected copy governs for the task).
 
-**Budget (D15 tie-in).** SKILL.md bodies run ≤~4k tokens by marketplace rule; the brief stays
-bounded by capping inlined bodies (default budget: 16k tokens, ~3–4 skills). A task whose
-reviewed skill set blows the budget is oversized by definition — set `needs-decomposition`
+**Budget (D15 tie-in).** Marketplace rules aim skills at ≤3k words (~4k tokens hard worst
+case, most far smaller), so the 16k-token inline budget comfortably fits any plausible
+reviewed set — overflow is an exceptional signal, not a routine guard. A task whose reviewed
+skill set genuinely blows the budget is oversized by definition: set `needs-decomposition`
 (02/D15) rather than trimming silently; the reviewer can also drop bindings. Overflow is
 reported at accept time (`lode task skills` shows the running total), not discovered at claim.
 
-## Friction loop
+## Friction loop (v2 — does not gate the v1 release)
 
-Skills are the first surface where Worklode closes emit → aggregate → act → measure:
+v1 ships the catalog, bindings, and front-loading only. The emit side already runs org-wide
+and keeps accumulating signal in the agent-feedback stream in the meantime, so v2 ingestion
+starts with history rather than from zero. When built, skills become the first surface where
+Worklode closes emit → aggregate → act → measure:
 
 - **Emit (unchanged).** Agents vent via the `report-friction` skill; reports carry
   `surface_id` (`plugin:skill`) and `plugin_versions`. The emit-side promise — fire-and-forget,
   never individually actioned — stands; action attaches to *aggregates* only, which keeps
   report quality honest.
-- **Ingest.** Worklode consumes the agent-feedback stream as a fourth source beside the GitHub
-  App, Flux, and the pod watcher, storing vents as backbone events keyed by surface_id,
-  category, severity, and plugin version. Transport is Q07.3 (forwarder from agent-feedback vs
-  a `/hooks/vents` endpoint vs polling).
+- **Ingest.** Worklode consumes vents as a fourth source beside the GitHub App, Flux, and the
+  pod watcher, storing them as backbone events keyed by surface_id, category, severity, and
+  plugin version. Transport (Q07.3): **piggyback on the existing OTel collectors** — the org
+  already runs an external traces/logs endpoint, and a vent maps naturally onto a structured
+  log record (body = report text; attributes = the frontmatter fields), so the emit side
+  ships OTLP into the collector and worklode consumes from that pipeline instead of growing a
+  second public ingest surface.
 - **Aggregate.** Standing queries: friction density per skill per version
-  (severity-weighted); skills whose `ls:governs` components changed since their last version
+  (severity-weighted); skills whose `ls:covers` components changed since their last version
   (staleness, via 04); bindings pinned to superseded versions.
 - **Act.** A skill crossing the density threshold (tunable; severity-weighted count per
   window) auto-creates a maintenance task — kind `chore`, in a standing *skill-maintenance*
@@ -214,31 +230,38 @@ Skills are the first surface where Worklode closes emit → aggregate → act �
 - **Spec 02** — `needs-decomposition` (budget overflow); ranking picks up maintenance tasks
   with no special casing.
 - **Spec 03** — `ls:` additions above ship in the same rdf-registry PR; projection pipeline
-  extended with Skill nodes and usingSkill edges.
-- **Spec 04** — standing-query machinery for staleness, superseded pins, friction density.
+  extended with Skill nodes, `ls:covers`, and `ls:usingSkill` edges.
+- **Spec 04** — standing-query machinery for staleness (over `ls:covers`), superseded pins,
+  and (v2) friction density.
 - **Spec 05** — brief payload and injection hooks carry the skills section; `/lode-spec`
   review step.
+- **Spec 06 / data-platform** — the self-hosted embedding service and the Lance vector store
+  (06 §Skills embedding store).
 - **External** — claude-plugins tag workflow (`bump-versions-on-merge.yml`) as the version
-  signal; GitHub App tag events; an embedding provider (Q07.2); the agent-feedback stream
-  (Q07.3).
+  signal; GitHub App tag events; (v2) the OTel collector pipeline as vent transport (Q07.3).
 
 ## Open questions
 
-- **Q07.1 — `ls:Skill ⊑ ls:DesignDoc`.** Subclass (status + governs + staleness for free) vs
-  standalone class with a minted covers-property. Crit decides; spec assumes subclass.
-- **Q07.2 — Embedding provider.** Voyage (managed, new vendor) vs self-hosted small model on
-  the data-platform. Interface is a single embed call; decide on ops preference, not API shape.
-- **Q07.3 — Vent transport.** agent-feedback forwards to worklode vs worklode exposes
-  `/hooks/vents` vs periodic pull. Leaning forwarder: keeps one public ingest surface.
+- **Q07.1 — Skill vs DesignDoc — RESOLVED: standalone class.** `rdfs:subClassOf` would claim
+  a skill *is* a design document; it isn't — it only shares patterns with one. `ls:Skill` is
+  standalone with a minted `ls:covers`; staleness gets one extra clause in 04.
+- **Q07.2 — Embedding provider — RESOLVED: self-hosted.** A self-hosted model on the
+  data-platform; vectors stored as Lance files there. No external embedding vendor.
+- **Q07.3 — Vent transport (v2).** Confirm the OTel piggyback specifics: the vent→log-record
+  attribute mapping, how the collector routes vents to worklode (dedicated pipeline/exporter
+  vs worklode reading the log store), and whether `vent.py` emits OTLP directly or the
+  agent-feedback service forwards into the collector.
 - **Q07.4 — Suggestion refresh triggers.** Create + material-edit is spec'd; should
   decomposition of a parent re-suggest for children automatically?
 - **Q07.5 — Non-Code surfaces.** Bindings can't be front-loaded on web/desktop/cowork (no
   hooks, no `lode`); those surfaces keep the static skill-zips path. Accepted degradation for
   v1 — Worklode work is `code`-surface work.
-- **Q07.6 — Threshold tuning.** Initial friction-density threshold and window; start
+- **Q07.6 — Threshold tuning (v2).** Initial friction-density threshold and window; start
   conservative (high threshold) and lower it once report volume is understood.
 
 ## Acceptance criteria
+
+**v1:**
 
 1. Tagging `<plugin>-<version>` in claude-plugins yields, without manual steps, updated
    catalog rows, embeddings for changed skills, and an updated `ls:Skill` node; `lode skills
@@ -252,8 +275,12 @@ Skills are the first surface where Worklode closes emit → aggregate → act �
    without a skills section.
 4. Accepting bindings past the inline budget flags the task `needs-decomposition` and reports
    the overflow at accept time.
-5. Vents ingest as events; the density query aggregates by skill and version; crossing the
-   threshold creates exactly one open maintenance task per skill with reports attached, and a
-   subsequent version tag allows the pre/post friction-rate query to run.
-6. A component change after a skill's last version surfaces that skill in the staleness
-   standing query (given its `ls:governs` edges exist).
+5. A component change after a skill's last version surfaces that skill in the staleness
+   standing query (given its `ls:covers` edges exist).
+
+**v2 (friction loop):**
+
+6. Vents ingest as events via the OTel pipeline; the density query aggregates by skill and
+   version; crossing the threshold creates exactly one open maintenance task per skill with
+   reports attached, and a subsequent version tag allows the pre/post friction-rate query to
+   run.

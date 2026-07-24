@@ -37,6 +37,16 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
    branches are invisible to each other, which would hide cross-project edges). Branch-create +
    overlay-read are built; confirm committing to a fixed `main`-equivalent branch.
 
+## Skills embedding store (from spec 07; blocks 07's suggestion path, not specs 01–05)
+
+- **Self-hosted embedding service + Lance vector store.** Spec 07's skill suggestions need
+  two calls from the Worklode backbone: `embed(text) → vector` (at skill ingest and once per
+  suggestion query) and a top-k cosine search over the skill index. Vectors are stored as
+  **Lance files** on the data-platform; the Worklode catalog stays the source rows, so the
+  index is rebuildable at any time by re-embedding. Scale is small (10²–10³ vectors, a
+  handful of embeds per day) — a modest open embedding model behind an internal
+  Keycloak-authenticated endpoint suffices. No external embedding vendor.
+
 ## Should-have (soon; not v1 blockers)
 
 6. **`If-Match` / ETag CAS on GSP writes** (their spec's v1.1). With a *single* Worklode projector

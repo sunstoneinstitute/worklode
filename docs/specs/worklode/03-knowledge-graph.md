@@ -93,7 +93,9 @@ where nothing does.
 | Task→Task dependency (transitive) | `ls:dependsOn` / `ls:blocks` | **MINT** — type-homogeneous `owl:TransitiveProperty` (ADR-0004); runtime reachability via property paths |
 | Task→Workstream membership | `ls:inWorkstream` | **MINT** — split from `dct:isPartOf` to keep the Task→Task closure type-homogeneous |
 
-Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not now.
+Nothing else is minted in v1 of *this* spec. Milestone (v2) will mint `ls:Milestone` then, not
+now. Spec 07 (skills) additionally mints `ls:Skill`, `ls:covers`, `ls:usingSkill`, and the
+`ls:atVersion` annotation — defined there, shipped in the same rdf-registry PR.
 
 ### Classes & subclassing
 
