@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -220,5 +221,29 @@ func (s *server) abandonTask(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			return store.Transition(tx, now, taskID, cur, "abandoned", eventID)
+		})
+}
+
+// reopenTask handles POST /api/v1/tasks/{id}/reopen: done|abandoned -> ready
+// (422 from any other state), closing any active lease in the same
+// transaction as a belt-and-suspenders measure (done/abandoned tasks should
+// not hold one). The from-state is read inside the transaction so a
+// concurrent change cannot be raced. Reopen always lands on ready, never
+// in_progress, so re-entry always goes through a fresh claim; "ready" is
+// deliberately not read off legalTransitions here, since ready is also the
+// target of unrelated transitions (draft's publish, in_progress's
+// release/expiry) that must not be reachable through this endpoint.
+func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
+	s.finishTask(w, r, "task.reopened",
+		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
+			cur, err := store.TaskState(tx, taskID)
+			if err != nil {
+				return err
+			}
+			if cur != "done" && cur != "abandoned" {
+				return fmt.Errorf("task %s is in state %s, not done or abandoned: %w",
+					taskID, cur, store.ErrBadTransition)
+			}
+			return store.Transition(tx, now, taskID, cur, "ready", eventID)
 		})
 }

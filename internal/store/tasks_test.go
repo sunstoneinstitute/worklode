@@ -84,6 +84,7 @@ func walkTo(t *testing.T, s *Store, taskID, state string) {
 		"in_progress": {"in_progress"},
 		"in_review":   {"in_progress", "in_review"},
 		"done":        {"in_progress", "in_review", "done"},
+		"abandoned":   {"abandoned"},
 	}
 	steps, ok := paths[state]
 	if !ok {
@@ -182,6 +183,8 @@ func TestTransitionLegal(t *testing.T) {
 		{"ready", "abandoned"},
 		{"in_progress", "abandoned"},
 		{"in_review", "abandoned"},
+		{"done", "ready"},
+		{"abandoned", "ready"},
 	}
 	for _, c := range cases {
 		in := defaultTaskInput()
@@ -208,9 +211,10 @@ func TestTransitionIllegal(t *testing.T) {
 
 	cases := []struct{ from, to string }{
 		{"ready", "done"},
-		{"done", "ready"},
 		{"draft", "in_progress"},
 		{"done", "abandoned"},
+		{"abandoned", "done"},
+		{"abandoned", "in_progress"},
 	}
 	for _, c := range cases {
 		in := defaultTaskInput()

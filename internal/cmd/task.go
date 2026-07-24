@@ -21,6 +21,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskShowCmd(),
 		newTaskReadyCmd(),
 		newTaskReopenCmd(),
+		newTaskReworkCmd(),
 		newTaskClaimCmd(),
 		newTaskRenewCmd(),
 		newTaskReleaseCmd(),
@@ -156,7 +157,7 @@ func newTaskReadyCmd() *cobra.Command {
 func newTaskReopenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reopen <id>",
-		Short: "Reopen a task under review (in_review -> in_progress, e.g. changes requested)",
+		Short: "Reopen a done or abandoned task (done|abandoned -> ready; a fresh claim is then required)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -164,6 +165,31 @@ func newTaskReopenCmd() *cobra.Command {
 				return err
 			}
 			t, raw, err := c.ReopenTask(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskReworkCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rework <id>",
+		Short: "Send a task under review back to in_progress (e.g. changes requested)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReworkTask(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}

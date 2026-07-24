@@ -414,8 +414,8 @@ func TestBoardInProgressWithoutLease(t *testing.T) {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	moveToReview(t, st, "WL-1")
-	// Review sends it back to in_progress; the original lease was not renewed.
-	_, _, err := st.RecordEvent(context.Background(), "github", "reopen-WL-1", "task.reopened", nil,
+	// Review sends it back to in_progress (rework); the original lease was not renewed.
+	_, _, err := st.RecordEvent(context.Background(), "github", "rework-WL-1", "task.reworked", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			now := st.Now()
 			if err := store.CloseActiveLease(tx, now, "WL-1"); err != nil {

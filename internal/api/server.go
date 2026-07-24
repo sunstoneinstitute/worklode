@@ -218,6 +218,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("POST /api/v1/tasks/{id}/release", s.auth(s.releaseLease))
 	mux.Handle("POST /api/v1/tasks/{id}/done", s.auth(s.doneTask))
 	mux.Handle("POST /api/v1/tasks/{id}/abandon", s.auth(s.abandonTask))
+	mux.Handle("POST /api/v1/tasks/{id}/reopen", s.auth(s.reopenTask))
 	mux.Handle("GET /api/v1/tasks/{id}/timeline", s.auth(s.taskTimeline))
 
 	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))

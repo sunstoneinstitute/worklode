@@ -257,7 +257,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	}
 }
 
-func TestClientReadyAndReopen(t *testing.T) {
+func TestClientReadyAndRework(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
@@ -289,12 +289,42 @@ func TestClientReadyAndReopen(t *testing.T) {
 		t.Fatalf("ClaimTask: %v", err)
 	}
 	moveToReview(t, st, created.ID)
-	reopened, _, err := c.ReopenTask(ctx, created.ID)
+	reworked, _, err := c.ReworkTask(ctx, created.ID)
 	if err != nil {
-		t.Fatalf("ReopenTask: %v", err)
+		t.Fatalf("ReworkTask: %v", err)
 	}
-	if reopened.State != "in_progress" {
-		t.Fatalf("ReopenTask state = %q, want in_progress", reopened.State)
+	if reworked.State != "in_progress" {
+		t.Fatalf("ReworkTask state = %q, want in_progress", reworked.State)
+	}
+}
+
+func TestClientReopen(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	abandonTarget, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Abandoned then reopened", Priority: "medium", Kind: "feature",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if _, _, err := c.AbandonTask(ctx, abandonTarget.ID); err != nil {
+		t.Fatalf("AbandonTask: %v", err)
+	}
+	reopened, _, err := c.ReopenTask(ctx, abandonTarget.ID)
+	if err != nil {
+		t.Fatalf("ReopenTask from abandoned: %v", err)
+	}
+	if reopened.State != "ready" {
+		t.Fatalf("ReopenTask state = %q, want ready", reopened.State)
+	}
+
+	// Reopening a task that is already ready is an illegal transition.
+	if _, _, err := c.ReopenTask(ctx, abandonTarget.ID); err == nil {
+		t.Fatalf("ReopenTask from ready succeeded, want error")
 	}
 }
 
