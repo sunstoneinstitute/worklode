@@ -10,7 +10,7 @@ once an instance is running (dogfooding); until then this file is the list.
   flux-revision → artifact → task chain rarely connects.
 - **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
 - **PR closed without merge**: release the lease and surface the task on the
-  board (today it stays `in_review`; `wl task reopen` is the manual path).
+  board (today it stays `in_review`; `lode task rework` is the manual path).
 - **`wl import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
   (spec §Migration).
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC

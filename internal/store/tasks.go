@@ -53,7 +53,9 @@ type Edge struct {
 // legalTransitions is the complete task state machine: draft → ready →
 // in_progress → in_review → done, with backward moves in_progress → ready and
 // in_review → in_progress, and abandoned reachable from every non-terminal
-// state. done and abandoned are terminal.
+// state. done and abandoned are not strictly terminal: reopen returns either
+// to ready (a fresh claim is then required; no task is ever in_progress
+// without a live lease).
 var legalTransitions = map[[2]string]bool{
 	{"draft", "ready"}:           true,
 	{"ready", "in_progress"}:     true,
@@ -65,6 +67,8 @@ var legalTransitions = map[[2]string]bool{
 	{"ready", "abandoned"}:       true,
 	{"in_progress", "abandoned"}: true,
 	{"in_review", "abandoned"}:   true,
+	{"done", "ready"}:            true,
+	{"abandoned", "ready"}:       true,
 }
 
 // CreateTask allocates the next WL-<n> id from task_seq and inserts the task

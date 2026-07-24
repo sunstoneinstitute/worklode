@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -308,5 +309,94 @@ func TestAbandon(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/abandon", token, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("abandon unknown task status = %d, want 404", rr.Code)
+	}
+}
+
+// lastEventType returns the type of the most recently recorded event, for
+// asserting which event a lifecycle endpoint recorded.
+func lastEventType(t *testing.T, st *store.Store) string {
+	t.Helper()
+	var typ string
+	if err := st.DBForTests().QueryRow(`SELECT type FROM events ORDER BY id DESC LIMIT 1`).Scan(&typ); err != nil {
+		t.Fatalf("last event type: %v", err)
+	}
+	return typ
+}
+
+func TestReopen(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Done then reopened", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Abandoned then reopened", "priority": "low", "kind": "chore"})
+
+	// From done: 200, lands on ready, task.reopened event + state_log row.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	moveToReview(t, st, "WL-1")
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen from done status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "ready" {
+		t.Fatalf("state after reopen from done = %v, want ready", got["state"])
+	}
+	if typ := lastEventType(t, st); typ != "task.reopened" {
+		t.Fatalf("event type after reopen from done = %q, want task.reopened", typ)
+	}
+	entries, err := st.StateLogForEntity(context.Background(), "task", "WL-1")
+	if err != nil {
+		t.Fatalf("StateLogForEntity: %v", err)
+	}
+	last := entries[len(entries)-1]
+	var change map[string]string
+	if err := json.Unmarshal([]byte(last.Change), &change); err != nil {
+		t.Fatalf("unmarshal state_log change %q: %v", last.Change, err)
+	}
+	if change["field"] != "state" || change["old"] != "done" || change["new"] != "ready" {
+		t.Fatalf("last state_log change = %+v, want field=state old=done new=ready", change)
+	}
+
+	// From abandoned: 200, lands on ready, task.reopened event.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/abandon", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("abandon status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/reopen", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen from abandoned status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "ready" {
+		t.Fatalf("state after reopen from abandoned = %v, want ready", got["state"])
+	}
+	if typ := lastEventType(t, st); typ != "task.reopened" {
+		t.Fatalf("event type after reopen from abandoned = %q, want task.reopened", typ)
+	}
+
+	// Illegal reopen: task is now ready, not done or abandoned.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/reopen", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reopen from ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Reopen never lands on in_progress.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/claim", token, map[string]any{"worktree": "host:/wt-2"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/reopen", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reopen from in_progress status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Unknown task: 404.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/reopen", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("reopen unknown task status = %d, want 404", rr.Code)
 	}
 }

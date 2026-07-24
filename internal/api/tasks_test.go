@@ -241,7 +241,7 @@ func TestPatchTaskState(t *testing.T) {
 		t.Fatalf("ready->ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 
-	// in_review -> in_progress (reviewer requested changes).
+	// in_review -> in_progress (rework: reviewer requested changes).
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
@@ -249,10 +249,10 @@ func TestPatchTaskState(t *testing.T) {
 	moveToReview(t, st, "WL-1")
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"state": "in_progress"})
 	if rr.Code != http.StatusOK {
-		t.Fatalf("reopen patch status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("rework patch status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	if got := decodeMap(t, rr)["state"]; got != "in_progress" {
-		t.Fatalf("state after reopen patch = %v, want in_progress", got)
+		t.Fatalf("state after rework patch = %v, want in_progress", got)
 	}
 
 	// States with dedicated endpoints are rejected with guidance.

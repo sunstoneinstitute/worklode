@@ -413,15 +413,21 @@ func (c *Client) AbandonTask(ctx context.Context, id string) (Task, []byte, erro
 	return c.taskAction(ctx, id, "abandon")
 }
 
+// ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a done or abandoned
+// task back to ready (a fresh claim is then required).
+func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.taskAction(ctx, id, "reopen")
+}
+
 // ReadyTask calls PATCH /api/v1/tasks/{id} with state "ready": publish a
 // draft task so it becomes claimable.
 func (c *Client) ReadyTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "ready")
 }
 
-// ReopenTask calls PATCH /api/v1/tasks/{id} with state "in_progress": move a
+// ReworkTask calls PATCH /api/v1/tasks/{id} with state "in_progress": move a
 // task under review back to in_progress after a review requested changes.
-func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) ReworkTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "in_progress")
 }
 
