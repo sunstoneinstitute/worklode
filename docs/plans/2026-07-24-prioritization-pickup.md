@@ -156,7 +156,7 @@ Focus `[security, completeness]`; T1 high/completeness/5, T2 high/security/1, T3
 
 **Steps:**
 
-- [ ] **Step 1:** Spec acceptance 1: fixture with M=4 ready tasks, fire N=8 concurrent `ClaimNext` calls (distinct worktrees `h:/wt/<i>`, same actor) → exactly 4 return `Claimed:true` with 4 **distinct** task ids, 4 return `Claimed:false`; zero errors. `-race -count=3` green. Commit.
+- [x] **Step 1:** Spec acceptance 1: fixture with M=4 ready tasks, fire N=8 concurrent `ClaimNext` calls (distinct worktrees `h:/wt/<i>`, same actor) → exactly 4 return `Claimed:true` with 4 **distinct** task ids, 4 return `Claimed:false`; zero errors. `-race -count=3` green. Commit.
 
 ### Task 6: API — `POST /api/v1/tasks/claim-next` + PATCH extensions
 
