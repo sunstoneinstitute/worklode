@@ -1,6 +1,8 @@
 # worklode — spec
 
-**Status:** approved design, v1
+**Status:** superseded — see `docs/specs/worklode/` (spec 01 moved the backbone to
+Postgres with worktree-bound leases; storage/lease details below describe the v1
+SQLite design and are historical)
 **Date:** 2026-07-19
 
 ## Why

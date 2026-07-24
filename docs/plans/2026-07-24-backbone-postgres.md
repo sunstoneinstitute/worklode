@@ -1,6 +1,6 @@
 # Execution Backbone on Postgres (spec 01) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Port the backbone from single-writer SQLite to Postgres (pgx v5), rebind leases from `session_id` to git-worktree identity, and rename the CLI `wl` → `lode` — implementing `docs/specs/worklode/01-execution-backbone.md`.
 
@@ -34,10 +34,10 @@ Pure mechanical rename, one commit, before any Postgres work so all later diffs 
 
 **Steps:**
 
-- [ ] **Step 1: Inventory.** Run `grep -rn "cmd/wl\b\|\"wl\"\|WL_" --include="*.go" --include="*.yml" --include="*.yaml" --include="*.md" --include="Dockerfile" . | grep -v "WL-" | grep -v "wl/"` and list every hit to change. (Careful: `WL-<n>` task ids and `wl/` branch refs stay.)
-- [ ] **Step 2: `git mv cmd/wl cmd/lode`**, update `internal/cmd/root.go` `Use:`/examples, update Dockerfile/workflows/compose/deploy/README/env-var reads. Env reads live in `internal/cmd/serve.go`, `internal/cmd/root.go` (or wherever `os.Getenv("WL_` appears), `internal/cli/`.
-- [ ] **Step 3: Verify.** `go build ./... && go test ./...` (still SQLite at this point) — all green. `grep -rn "WL_" --include="*.go" .` returns nothing (except `WL-` id constants if any).
-- [ ] **Step 4: Commit** `git commit -m "Rename CLI wl -> lode, env vars WL_* -> LODE_*"`
+- [x] **Step 1: Inventory.** Run `grep -rn "cmd/wl\b\|\"wl\"\|WL_" --include="*.go" --include="*.yml" --include="*.yaml" --include="*.md" --include="Dockerfile" . | grep -v "WL-" | grep -v "wl/"` and list every hit to change. (Careful: `WL-<n>` task ids and `wl/` branch refs stay.)
+- [x] **Step 2: `git mv cmd/wl cmd/lode`**, update `internal/cmd/root.go` `Use:`/examples, update Dockerfile/workflows/compose/deploy/README/env-var reads. Env reads live in `internal/cmd/serve.go`, `internal/cmd/root.go` (or wherever `os.Getenv("WL_` appears), `internal/cli/`.
+- [x] **Step 3: Verify.** `go build ./... && go test ./...` (still SQLite at this point) — all green. `grep -rn "WL_" --include="*.go" .` returns nothing (except `WL-` id constants if any).
+- [x] **Step 4: Commit** `git commit -m "Rename CLI wl -> lode, env vars WL_* -> LODE_*"`
 
 ### Task 2: Postgres migration baseline
 
@@ -49,8 +49,8 @@ Replace the three SQLite migrations with one fresh Postgres baseline implementin
 
 **Steps:**
 
-- [ ] **Step 1: Read the three old SQLite migrations** end to end — every table they create must exist in the new baseline (backbone tables per spec 01 §Data model; observed/auth tables carried over: `projects`, `project_repos`, `actors` (+ `admin` boolean from 0002), `tokens`, `github_user_tokens` (from 0003), `issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`, `runtime_events`, `task_seq`).
-- [ ] **Step 2: Write `0001_baseline.up.sql`.** Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (where the SQLite schema had autoincrement ids), `timestamptz` for every timestamp, `boolean` for flags (`actors.admin`, `projects.deploy_gated`), `jsonb` for `events.payload` / `state_log.change` / any other JSON-text column, FKs as in the old schema. The backbone tables exactly per spec 01:
+- [x] **Step 1: Read the three old SQLite migrations** end to end — every table they create must exist in the new baseline (backbone tables per spec 01 §Data model; observed/auth tables carried over: `projects`, `project_repos`, `actors` (+ `admin` boolean from 0002), `tokens`, `github_user_tokens` (from 0003), `issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`, `runtime_events`, `task_seq`).
+- [x] **Step 2: Write `0001_baseline.up.sql`.** Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (where the SQLite schema had autoincrement ids), `timestamptz` for every timestamp, `boolean` for flags (`actors.admin`, `projects.deploy_gated`), `jsonb` for `events.payload` / `state_log.change` / any other JSON-text column, FKs as in the old schema. The backbone tables exactly per spec 01:
 
 ```sql
 CREATE TABLE tasks (
@@ -112,9 +112,9 @@ INSERT INTO task_seq (id, next) VALUES (1, 1);
 ```
 
 Carry the remaining tables over from the SQLite schema translated to the same conventions (keep every column and index; translate `TEXT` timestamps → `timestamptz`, JSON text → `jsonb`, int flags → `boolean`).
-- [ ] **Step 3: Write `0001_baseline.down.sql`** — `DROP TABLE … CASCADE` in reverse-dependency order (or a single `DROP TABLE a, b, c … CASCADE`).
-- [ ] **Step 4: Round-trip.** Per `golang-migrate:test-roundtrip`: against a scratch Postgres (`docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5499:5432 postgres:17`), run migrate up → down → up cleanly with the golang-migrate CLI (or a tiny Go test if the CLI isn't installed; Task 3's roundtrip test will also cover this permanently).
-- [ ] **Step 5: Commit** `git commit -m "Replace SQLite migrations with Postgres baseline (spec 01 schema)"` (build is expected red between Tasks 2–4 only if code references removed files — it doesn't; migrations are data, code still compiles).
+- [x] **Step 3: Write `0001_baseline.down.sql`** — `DROP TABLE … CASCADE` in reverse-dependency order (or a single `DROP TABLE a, b, c … CASCADE`).
+- [x] **Step 4: Round-trip.** Per `golang-migrate:test-roundtrip`: against a scratch Postgres (`docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5499:5432 postgres:17`), run migrate up → down → up cleanly with the golang-migrate CLI (or a tiny Go test if the CLI isn't installed; Task 3's roundtrip test will also cover this permanently).
+- [x] **Step 5: Commit** `git commit -m "Replace SQLite migrations with Postgres baseline (spec 01 schema)"` (build is expected red between Tasks 2–4 only if code references removed files — it doesn't; migrations are data, code still compiles).
 
 ### Task 3: Store on pgx — `Open`, `Migrate`, test infrastructure
 
@@ -128,7 +128,7 @@ Carry the remaining tables over from the SQLite schema translated to the same co
 
 **Steps:**
 
-- [ ] **Step 1: Rewrite `store.Open`:**
+- [x] **Step 1: Rewrite `store.Open`:**
 
 ```go
 // Open opens a Postgres-backed store for the given postgres:// DSN.
@@ -145,7 +145,7 @@ func Open(dsn string) (*Store, error) {
 ```
 
 Imports: `_ "github.com/jackc/pgx/v5/stdlib"`. Rewrite `Migrate` with `migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"` (`WithInstance(s.db, &migratepgx.Config{})`, `NewWithInstance("file", src, "pgx5", drv)`). Update the package doc comment (no more single-writer).
-- [ ] **Step 2: Add unique-violation helper to `errors.go`:**
+- [x] **Step 2: Add unique-violation helper to `errors.go`:**
 
 ```go
 // isUniqueViolation reports whether err is a Postgres unique-index violation
@@ -156,7 +156,7 @@ func isUniqueViolation(err error) bool {
 }
 ```
 
-- [ ] **Step 3: Rewrite `testhelpers.go`** — per-test ephemeral database:
+- [x] **Step 3: Rewrite `testhelpers.go`** — per-test ephemeral database:
 
 ```go
 // TestDSN returns the Postgres DSN test databases are created under.
@@ -175,7 +175,7 @@ func OpenTestStore(t *testing.T) *Store
 ```
 
 Implementation: connect to `TestDSN()`, `CREATE DATABASE wl_test_<12-hex>`; build the per-test DSN by swapping the database path segment; `Open` it; `Migrate(MigrationsDirForTests())`; `t.Cleanup`: close store, `DROP DATABASE … WITH (FORCE)`. If the initial connect/ping fails: `t.Skipf` when `os.Getenv("CI") == ""`, `t.Fatalf` in CI (tests must not silently skip in CI). Keep `MigrationsDirForTests` as-is.
-- [ ] **Step 4: Add a store_test round-trip test** (replaces the ad-hoc check from Task 2):
+- [x] **Step 4: Add a store_test round-trip test** (replaces the ad-hoc check from Task 2):
 
 ```go
 func TestMigrateRoundTrip(t *testing.T) {
@@ -187,7 +187,7 @@ func TestMigrateRoundTrip(t *testing.T) {
 ```
 
 Add the small `MigrateDown` sibling of `Migrate` (calls `m.Down()`, tolerating `migrate.ErrNoChange`).
-- [ ] **Step 5: docker-compose:** add
+- [x] **Step 5: docker-compose:** add
 
 ```yaml
   postgres:
@@ -202,8 +202,8 @@ Add the small `MigrateDown` sibling of `Migrate` (calls `m.Down()`, tolerating `
 ```
 
 Repoint `migrate` service command to `["migrate", "--dsn", "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable", "--migrations-path", "/migrations"]` with `depends_on: postgres` (add a `pg_isready` healthcheck to the postgres service and `condition: service_healthy`); `worklode` service gets `LODE_DSN` env instead of the `/data` volume. **Delete the `litestream` service and `litestream.yml`.**
-- [ ] **Step 6: CI:** in `.github/workflows/_test.yml` add a `postgres:17` service container (env `POSTGRES_PASSWORD: postgres`, port 5432, `--health-cmd pg_isready` options) and export `TEST_POSTGRES_DSN` to the test step.
-- [ ] **Step 7:** `go build ./...` (store tests still red until Task 4 — that's expected; do not run the full suite yet). Commit `git commit -m "Store opens Postgres via pgx; ephemeral test databases; compose/CI postgres"`.
+- [x] **Step 6: CI:** in `.github/workflows/_test.yml` add a `postgres:17` service container (env `POSTGRES_PASSWORD: postgres`, port 5432, `--health-cmd pg_isready` options) and export `TEST_POSTGRES_DSN` to the test step.
+- [x] **Step 7:** `go build ./...` (store tests still red until Task 4 — that's expected; do not run the full suite yet). Commit `git commit -m "Store opens Postgres via pgx; ephemeral test databases; compose/CI postgres"`.
 
 ### Task 4: Port store queries to Postgres
 
@@ -226,12 +226,12 @@ Mechanical port of every `internal/store/*.go` file. **Porting recipe, applied u
 
 **Steps:**
 
-- [ ] **Step 1:** Port `events.go`; update `events_test.go` to `OpenTestStore`; `go test ./internal/store/ -run TestRecordEvent -v` green (adjust run pattern to the file's actual test names).
-- [ ] **Step 2:** Port `tasks.go` (+`tasks_test.go`); tests for that file green.
-- [ ] **Step 3:** Port `leases.go` together with Task 5's worktree rebind (one edit pass over the file); its tests green after Task 5.
-- [ ] **Step 4:** Port the remaining store files + tests, one commit per coherent chunk.
-- [ ] **Step 5:** Drop `modernc.org/sqlite` and the migrate sqlite driver from `go.mod` (`go mod tidy`); `grep -rn "sqlite" --include="*.go" .` returns nothing.
-- [ ] **Step 6:** `go test ./internal/store/` fully green. Commit.
+- [x] **Step 1:** Port `events.go`; update `events_test.go` to `OpenTestStore`; `go test ./internal/store/ -run TestRecordEvent -v` green (adjust run pattern to the file's actual test names).
+- [x] **Step 2:** Port `tasks.go` (+`tasks_test.go`); tests for that file green.
+- [x] **Step 3:** Port `leases.go` together with Task 5's worktree rebind (one edit pass over the file); its tests green after Task 5.
+- [x] **Step 4:** Port the remaining store files + tests, one commit per coherent chunk.
+- [x] **Step 5:** Drop `modernc.org/sqlite` and the migrate sqlite driver from `go.mod` (`go mod tidy`); `grep -rn "sqlite" --include="*.go" .` returns nothing.
+- [x] **Step 6:** `go test ./internal/store/` fully green. Commit.
 
 ### Task 5: Worktree-bound leases (schema is done; code + API + CLI)
 
@@ -243,8 +243,8 @@ Mechanical port of every `internal/store/*.go` file. **Porting recipe, applied u
 
 **Steps:**
 
-- [ ] **Step 1: Store.** In `Lease` struct: `SessionID string` → `Worktree string`; `leaseColumns` and `scanLease` follow (`worktree` is `NOT NULL` — plain string, no NullString). `Claim(ctx, taskID, actorID, worktree string, ttl)` — same signature shape, renamed param, inserts `worktree`. `Renew`/`Release` keep `(taskID, actorID)` holder semantics (spec: holder is the actor; worktree is binding metadata). The `leases_active_worktree` index now enforces one active lease per worktree — claim maps its 23505 to `ErrLeased` regardless of which index fired.
-- [ ] **Step 2: Claim row lock.** First statement inside the claim apply-callback:
+- [x] **Step 1: Store.** In `Lease` struct: `SessionID string` → `Worktree string`; `leaseColumns` and `scanLease` follow (`worktree` is `NOT NULL` — plain string, no NullString). `Claim(ctx, taskID, actorID, worktree string, ttl)` — same signature shape, renamed param, inserts `worktree`. `Renew`/`Release` keep `(taskID, actorID)` holder semantics (spec: holder is the actor; worktree is binding metadata). The `leases_active_worktree` index now enforces one active lease per worktree — claim maps its 23505 to `ErrLeased` regardless of which index fired.
+- [x] **Step 2: Claim row lock.** First statement inside the claim apply-callback:
 
 ```go
 var state string
@@ -253,15 +253,15 @@ err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID).S
 ```
 
 Then actor check, active-lease check (`ErrLeased`), `IsBlocked` (`ErrBlocked`), `Transition(tx, now, taskID, "ready", "in_progress", eventID)`, lease INSERT with `isUniqueViolation` → `ErrLeased` backstop. (Order per spec 01 §The claim transaction.)
-- [ ] **Step 3: Store tests.** Update existing lease tests for `Worktree`; add:
+- [x] **Step 3: Store tests.** Update existing lease tests for `Worktree`; add:
 
 ```go
 func TestClaimSecondWorktreeSameTask(t *testing.T)   // second claim, different worktree -> ErrLeased
 func TestClaimSameWorktreeSecondTask(t *testing.T)   // one worktree claiming a second task -> ErrLeased (leases_active_worktree)
 ```
 
-- [ ] **Step 4: API.** Claim request field `session_id` → `worktree` (required, non-empty → 400 if missing); `Lease` JSON: `session_id` → `worktree`. Update `internal/api` tests.
-- [ ] **Step 5: CLI.** `lode task claim <id> [--worktree <id>]`; default computed by new helper:
+- [x] **Step 4: API.** Claim request field `session_id` → `worktree` (required, non-empty → 400 if missing); `Lease` JSON: `session_id` → `worktree`. Update `internal/api` tests.
+- [x] **Step 5: CLI.** `lode task claim <id> [--worktree <id>]`; default computed by new helper:
 
 ```go
 // WorktreeIdentity returns the canonical worktree identity for dir:
@@ -276,7 +276,7 @@ func WorktreeIdentity(dir string) (string, error) {
 ```
 
 `--json` output carries `worktree`. Test with a temp git repo (`git init` in `t.TempDir()`).
-- [ ] **Step 6:** `go test ./...`; commit `git commit -m "Bind leases to worktree identity; drop session_id"`.
+- [x] **Step 6:** `go test ./...`; commit `git commit -m "Bind leases to worktree identity; drop session_id"`.
 
 ### Task 6: Claim concurrency race test
 
@@ -285,7 +285,7 @@ func WorktreeIdentity(dir string) (string, error) {
 
 **Steps:**
 
-- [ ] **Step 1: Write the test** (spec 01 acceptance 4):
+- [x] **Step 1: Write the test** (spec 01 acceptance 4):
 
 ```go
 // TestClaimRace fires N concurrent Claims at one ready task: exactly one
@@ -319,7 +319,7 @@ func TestClaimRace(t *testing.T) {
 ```
 
 (Adapt fixture creation to the store's actual helpers from existing tests.)
-- [ ] **Step 2:** `go test ./internal/store/ -run TestClaimRace -count=5 -race` green. Commit.
+- [x] **Step 2:** `go test ./internal/store/ -run TestClaimRace -count=5 -race` green. Commit.
 
 ### Task 7: Reopen — verify against spec
 
@@ -328,8 +328,8 @@ func TestClaimRace(t *testing.T) {
 
 **Steps:**
 
-- [ ] **Step 1:** Verify `legalTransitions` contains `done→ready` AND `abandoned→ready`; the reopen path emits event type `task.reopened` and a `state_log` row; `lode task reopen <id>` exists and hits it. Fix whatever is missing.
-- [ ] **Step 2:** Test: reopen from `done` and from `abandoned` both land in `ready` with a `task.reopened` event; reopen from `ready` → `ErrBadTransition`. Commit if changed.
+- [x] **Step 1:** Verify `legalTransitions` contains `done→ready` AND `abandoned→ready`; the reopen path emits event type `task.reopened` and a `state_log` row; `lode task reopen <id>` exists and hits it. Fix whatever is missing.
+- [x] **Step 2:** Test: reopen from `done` and from `abandoned` both land in `ready` with a `task.reopened` event; reopen from `ready` → `ErrBadTransition`. Commit if changed.
 
 ### Task 8: Sweeper advisory lock
 
@@ -338,7 +338,7 @@ func TestClaimRace(t *testing.T) {
 
 **Steps:**
 
-- [ ] **Step 1:** Wrap the sweep in an advisory lock so only one replica sweeps:
+- [x] **Step 1:** Wrap the sweep in an advisory lock so only one replica sweeps:
 
 ```go
 // ExpireLeases: begin tx; SELECT pg_try_advisory_xact_lock(hashtext('worklode-sweeper'));
@@ -346,7 +346,7 @@ func TestClaimRace(t *testing.T) {
 ```
 
 Keep per-lease idempotent events (`lease-expired-<leaseID>`) exactly as they are — the lock is an optimization, idempotency remains the correctness backstop.
-- [ ] **Step 2:** Test: two concurrent `ExpireLeases` calls over a fixture of expired leases produce each `lease.expired` event exactly once (assert by event count). Commit.
+- [x] **Step 2:** Test: two concurrent `ExpireLeases` calls over a fixture of expired leases produce each `lease.expired` event exactly once (assert by event count). Commit.
 
 ### Task 9: Serve/migrate wiring, e2e, docs
 
@@ -358,10 +358,10 @@ Keep per-lease idempotent events (`lease-expired-<leaseID>`) exactly as they are
 
 **Steps:**
 
-- [ ] **Step 1:** Replace the `--db` flag with `--dsn` (default `os.Getenv("LODE_DSN")`) in `serve` and `migrate`; error clearly when empty.
-- [ ] **Step 2:** Port `e2e/smoke_test.go` setup to the ephemeral-Postgres helper; `go test -tags e2e ./e2e/` green.
-- [ ] **Step 3:** README: Quickstart = `docker compose up -d` (postgres + migrate + server), `LODE_DSN` documented, litestream section removed, backup note pointing at CNPG.
-- [ ] **Step 4:** Full check: `go build ./... && go vet ./... && go test ./... && go test -tags e2e ./e2e/`. Commit.
+- [x] **Step 1:** Replace the `--db` flag with `--dsn` (default `os.Getenv("LODE_DSN")`) in `serve` and `migrate`; error clearly when empty.
+- [x] **Step 2:** Port `e2e/smoke_test.go` setup to the ephemeral-Postgres helper; `go test -tags e2e ./e2e/` green.
+- [x] **Step 3:** README: Quickstart = `docker compose up -d` (postgres + migrate + server), `LODE_DSN` documented, litestream section removed, backup note pointing at CNPG.
+- [x] **Step 4:** Full check: `go build ./... && go vet ./... && go test ./... && go test -tags e2e ./e2e/`. Commit.
 
 ### Task 10: Deploy — CNPG + migrate job
 
@@ -375,8 +375,8 @@ Load the `kubernetes` (CNPG section) and `golang-migrate:k8s-job` skills before 
 
 **Steps:**
 
-- [ ] **Step 1:** Write the CNPG cluster + wire `LODE_DSN` + migrate job per the two skills; `kustomize build deploy/overlays/hzdev` (or the repo's equivalent) renders clean.
-- [ ] **Step 2:** Commit. **Human step (note in PR):** merge deploys to hzdev via flux; verify `/healthz` and a `lode task list` against `worklode.dev.sunstoneinstitute.ai` afterwards. Data loss on hzdev is accepted (dev only, fresh baseline).
+- [x] **Step 1:** Write the CNPG cluster + wire `LODE_DSN` + migrate job per the two skills; `kustomize build deploy/overlays/hzdev` (or the repo's equivalent) renders clean.
+- [x] **Step 2:** Commit. **Human step (note in PR):** merge deploys to hzdev via flux; verify `/healthz` and a `lode task list` against `worklode.dev.sunstoneinstitute.ai` afterwards. Data loss on hzdev is accepted (dev only, fresh baseline).
 
 ---
 
