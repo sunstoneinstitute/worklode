@@ -32,7 +32,7 @@ func TestPickupLoop(t *testing.T) {
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
-		ID: "pick", Name: "Pick",
+		ID: "pick", Name: "Pick", Key: "PICK",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}

@@ -143,7 +143,7 @@ func TestFullChain(t *testing.T) {
 	// 2. Bootstrap admin sets up project, repo, and an agent actor + token.
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
-		ID: "demo", Name: "Demo", DeployGated: false,
+		ID: "demo", Name: "Demo", Key: "DEMO", DeployGated: false,
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
