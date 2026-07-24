@@ -124,6 +124,33 @@ func TestCreateProjectValidation(t *testing.T) {
 	}
 }
 
+func TestCreateProjectKeyValidation(t *testing.T) {
+	_, h, token := newTestServer(t)
+	// missing key
+	rr := doReq(t, h, "POST", "/api/v1/projects", token,
+		map[string]any{"id": "p1", "name": "P1"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing key status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	// malformed key (lowercase)
+	rr = doReq(t, h, "POST", "/api/v1/projects", token,
+		map[string]any{"id": "p2", "name": "P2", "key": "wl"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad key status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	// duplicate key -> 409
+	rr = doReq(t, h, "POST", "/api/v1/projects", token,
+		map[string]any{"id": "p3", "name": "P3", "key": "WL"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("first WL status = %d, want 201; body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/projects", token,
+		map[string]any{"id": "p4", "name": "P4", "key": "WL"})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("duplicate WL status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateActorAndTokenLifecycle(t *testing.T) {
 	_, h, token := newTestServer(t)
 

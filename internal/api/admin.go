@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,10 @@ import (
 var validActorKinds = map[string]bool{
 	"human": true, "agent": true, "service": true,
 }
+
+// projectKeyRe mirrors the projects_key_format CHECK constraint, so callers
+// get a clean 422 instead of a raw constraint violation.
+var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // --- projects ---------------------------------------------------------
 
@@ -64,6 +69,11 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Name) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "name is required")
+		return
+	}
+	if !projectKeyRe.MatchString(req.Key) {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"key must be an uppercase code matching ^[A-Z][A-Z0-9]{1,9}$")
 		return
 	}
 	if err := s.st.CreateProject(r.Context(), req.ID, req.Name, req.Key); err != nil {
