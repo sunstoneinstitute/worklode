@@ -84,7 +84,6 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 		state = "draft"
 	}
 	ts := now.UTC().Truncate(time.Second)
-	tsStr := ts.Format(time.RFC3339)
 
 	var createdBy sql.NullString
 	if in.CreatedBy != "" {
@@ -92,8 +91,8 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	}
 	_, err := tx.Exec(
 		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, created_by, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, createdBy, tsStr, tsStr,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, createdBy, ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -123,7 +122,7 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	}
 
 	var current string
-	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = ?`, taskID).Scan(&current)
+	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
@@ -135,8 +134,8 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	}
 
 	_, err = tx.Exec(
-		`UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?`,
-		to, now.UTC().Format(time.RFC3339), taskID,
+		`UPDATE tasks SET state = $1, updated_at = $2 WHERE id = $3`,
+		to, now.UTC(), taskID,
 	)
 	if err != nil {
 		return fmt.Errorf("update task %s state: %w", taskID, err)
@@ -150,7 +149,7 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 // Transition must be read atomically with the transition itself.
 func TaskState(tx *sql.Tx, taskID string) (string, error) {
 	var state string
-	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = ?`, taskID).Scan(&state)
+	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
@@ -176,22 +175,25 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	var sets []string
 	var args []any
+	set := func(column string, value any) {
+		args = append(args, value)
+		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
 	if title != nil {
-		sets = append(sets, `title = ?`)
-		args = append(args, *title)
+		set("title", *title)
 	}
 	if body != nil {
-		sets = append(sets, `body = ?`)
-		args = append(args, *body)
+		set("body", *body)
 	}
 	if priority != nil {
-		sets = append(sets, `priority = ?`)
-		args = append(args, *priority)
+		set("priority", *priority)
 	}
-	sets = append(sets, `updated_at = ?`)
-	args = append(args, now.UTC().Format(time.RFC3339), id)
+	set("updated_at", now.UTC())
+	args = append(args, id)
 
-	res, err := tx.Exec(`UPDATE tasks SET `+strings.Join(sets, `, `)+` WHERE id = ?`, args...)
+	res, err := tx.Exec(
+		fmt.Sprintf(`UPDATE tasks SET %s WHERE id = $%d`, strings.Join(sets, `, `), len(args)),
+		args...)
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", id, err)
 	}
@@ -215,27 +217,21 @@ type rowScanner interface {
 func scanTask(row rowScanner) (*Task, error) {
 	var t Task
 	var body, createdBy sql.NullString
-	var createdAt, updatedAt string
 	if err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &createdBy, &createdAt, &updatedAt); err != nil {
+		&t.State, &createdBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
 	t.Body = body.String
 	t.CreatedBy = createdBy.String
-	var err error
-	if t.CreatedAt, err = time.Parse(time.RFC3339, createdAt); err != nil {
-		return nil, fmt.Errorf("parse task %s created_at: %w", t.ID, err)
-	}
-	if t.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt); err != nil {
-		return nil, fmt.Errorf("parse task %s updated_at: %w", t.ID, err)
-	}
+	t.CreatedAt = t.CreatedAt.UTC()
+	t.UpdatedAt = t.UpdatedAt.UTC()
 	return &t, nil
 }
 
 // GetTask looks up a task by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+taskColumns+` FROM tasks WHERE id = ?`, id)
+		`SELECT `+taskColumns+` FROM tasks WHERE id = $1`, id)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -253,19 +249,20 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	var conds []string
 	var args []any
 	if f.Project != "" {
-		conds = append(conds, `project_id = ?`)
 		args = append(args, f.Project)
+		conds = append(conds, fmt.Sprintf(`project_id = $%d`, len(args)))
 	}
 	if len(f.States) > 0 {
-		placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(f.States)), ", ")
-		conds = append(conds, `state IN (`+placeholders+`)`)
+		var placeholders []string
 		for _, st := range f.States {
 			args = append(args, st)
+			placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
 		}
+		conds = append(conds, `state IN (`+strings.Join(placeholders, ", ")+`)`)
 	}
 	if f.Priority != "" {
-		conds = append(conds, `priority = ?`)
 		args = append(args, f.Priority)
+		conds = append(conds, fmt.Sprintf(`priority = $%d`, len(args)))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
@@ -310,7 +307,7 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 	}
 	for _, id := range []string{fromTask, toTask} {
 		var one int
-		err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = ?`, id).Scan(&one)
+		err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1`, id).Scan(&one)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
@@ -328,11 +325,11 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 		}
 	}
 	_, err := tx.Exec(
-		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES (?, ?, ?, ?)`,
-		fromTask, toTask, typ, now.UTC().Format(time.RFC3339),
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
+		fromTask, toTask, typ, now.UTC(),
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueViolation(err) {
 			return fmt.Errorf("edge %s %s %s: %w", fromTask, typ, toTask, ErrEdgeExists)
 		}
 		return fmt.Errorf("insert edge %s %s %s: %w", fromTask, typ, toTask, err)
@@ -351,7 +348,7 @@ func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
 		frontier = frontier[1:]
 
 		rows, err := tx.Query(
-			`SELECT to_task FROM task_edges WHERE from_task = ? AND type = 'child_of'`, cur)
+			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, cur)
 		if err != nil {
 			return false, fmt.Errorf("walk child_of parents of %s: %w", cur, err)
 		}
@@ -387,7 +384,7 @@ func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
 // ErrNotFound if the edge does not exist.
 func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string) error {
 	res, err := tx.Exec(
-		`DELETE FROM task_edges WHERE from_task = ? AND to_task = ? AND type = ?`,
+		`DELETE FROM task_edges WHERE from_task = $1 AND to_task = $2 AND type = $3`,
 		fromTask, toTask, typ,
 	)
 	if err != nil {
@@ -426,10 +423,10 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 		}
 		return edges, nil
 	}
-	if out, err = list(`from_task = ?`); err != nil {
+	if out, err = list(`from_task = $1`); err != nil {
 		return nil, nil, err
 	}
-	if in, err = list(`to_task = ?`); err != nil {
+	if in, err = list(`to_task = $1`); err != nil {
 		return nil, nil, err
 	}
 	return out, in, nil
@@ -472,7 +469,7 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 	var blocked bool
 	err := tx.QueryRow(
-		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = ? AND `+blockedCondition+`)`,
+		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)`,
 		taskID,
 	).Scan(&blocked)
 	if err != nil {
