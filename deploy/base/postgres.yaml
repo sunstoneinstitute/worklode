@@ -1,0 +1,25 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: worklode-postgres
+  namespace: worklode
+spec:
+  instances: 1  # dev-scale; bump to 3 for prod HA
+  imageName: ghcr.io/cloudnative-pg/postgresql:17
+  storage:
+    size: 10Gi
+  bootstrap:
+    initdb:
+      database: worklode
+      owner: worklode
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  affinity:
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname

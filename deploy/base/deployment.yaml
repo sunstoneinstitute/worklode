@@ -11,10 +11,6 @@ spec:
   selector:
     matchLabels:
       app: worklode
-  strategy:
-    # SQLite on a ReadWriteOnce volume has one writer. Recreate avoids two
-    # pods racing for the same volume/file lock during a rollout.
-    type: Recreate
   template:
     metadata:
       labels:
@@ -34,7 +30,13 @@ spec:
       initContainers:
         - name: migrate
           image: ghcr.io/sunstoneinstitute/worklode:latest
-          command: ["/lode", "migrate", "--db", "/data/wl.db", "--migrations-path", "/migrations"]
+          command: ["/lode", "migrate", "--migrations-path", "/migrations"]
+          env:
+            - name: LODE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: worklode-postgres-app
+                  key: uri
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -49,8 +51,6 @@ spec:
               memory: "256Mi"
               cpu: "500m"
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: migrations
               mountPath: /migrations
               readOnly: true
@@ -77,6 +77,12 @@ spec:
                 name: worklode-config
             - secretRef:
                 name: worklode-secrets
+          env:
+            - name: LODE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: worklode-postgres-app
+                  key: uri
           resources:
             requests:
               memory: "128Mi"
@@ -100,13 +106,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-          volumeMounts:
-            - name: data
-              mountPath: /data
       volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: worklode-data
         - name: migrations
           configMap:
             name: worklode-migrations
