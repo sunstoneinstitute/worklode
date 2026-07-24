@@ -11,26 +11,31 @@ import (
 
 // Task is one unit of work, identified by a global WL-<n> id.
 type Task struct {
-	ID        string
-	ProjectID string
-	Title     string
-	Body      string
-	Priority  string
-	Kind      string
-	State     string
-	CreatedBy string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                 string
+	ProjectID          string
+	Title              string
+	Body               string
+	Priority           string
+	Kind               string
+	State              string
+	Concern            string
+	NeedsDecomposition bool
+	CreatedBy          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // TaskInput carries the fields for creating a new task. Draft creates the
 // task in state "draft" (not claimable) instead of the default "ready".
+// Concern is optional ("" means no concern); needs_decomposition is not a
+// creation input — new tasks always start with the column default (false).
 type TaskInput struct {
 	ProjectID string
 	Title     string
 	Body      string
 	Priority  string
 	Kind      string
+	Concern   string
 	CreatedBy string
 	Draft     bool
 }
@@ -75,6 +80,10 @@ var legalTransitions = map[[2]string]bool{
 // inside the given transaction. It is meant to be called from a RecordEvent
 // apply callback with the store's clock as now.
 func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
+	if in.Concern != "" && !ValidConcern(in.Concern) {
+		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
+	}
+
 	var n int64
 	if err := tx.QueryRow(
 		`UPDATE task_seq SET next = next + 1 WHERE id = 1 RETURNING next - 1`,
@@ -93,10 +102,14 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	if in.CreatedBy != "" {
 		createdBy = sql.NullString{String: in.CreatedBy, Valid: true}
 	}
+	var concern sql.NullString
+	if in.Concern != "" {
+		concern = sql.NullString{String: in.Concern, Valid: true}
+	}
 	_, err := tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, createdBy, ts, ts,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -109,6 +122,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 		Priority:  in.Priority,
 		Kind:      in.Kind,
 		State:     state,
+		Concern:   in.Concern,
 		CreatedBy: in.CreatedBy,
 		CreatedAt: ts,
 		UpdatedAt: ts,
@@ -169,13 +183,28 @@ var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
 
+// validConcerns is the tasks.concern CHECK constraint, mirrored in Go so
+// callers get a clean error instead of a raw constraint violation.
+var validConcerns = map[string]bool{
+	"completeness": true, "performance": true, "usability": true, "security": true,
+}
+
+// ValidConcern reports whether s is one of the recognized task concerns.
+func ValidConcern(s string) bool {
+	return validConcerns[s]
+}
+
 // UpdateTaskFields updates the non-nil fields of a task inside the given
 // transaction and bumps updated_at. Returns ErrNotFound if the task does not
 // exist. A nil field is left unchanged; all-nil is a no-op (existence is
-// still checked).
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority *string) error {
+// still checked). concern follows special clearing rules: "" or "none" clears
+// it to NULL; any other value must be a valid concern.
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, needsDecomposition *bool) error {
 	if priority != nil && !validPriorities[*priority] {
 		return fmt.Errorf("unknown priority %q: %w", *priority, ErrInvalidInput)
+	}
+	if concern != nil && *concern != "" && *concern != "none" && !ValidConcern(*concern) {
+		return fmt.Errorf("unknown concern %q: %w", *concern, ErrInvalidInput)
 	}
 	var sets []string
 	var args []any
@@ -191,6 +220,16 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if priority != nil {
 		set("priority", *priority)
+	}
+	if concern != nil {
+		if *concern == "" || *concern == "none" {
+			set("concern", sql.NullString{})
+		} else {
+			set("concern", sql.NullString{String: *concern, Valid: true})
+		}
+	}
+	if needsDecomposition != nil {
+		set("needs_decomposition", *needsDecomposition)
 	}
 	set("updated_at", now.UTC())
 	args = append(args, id)
@@ -212,7 +251,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 }
 
 // taskColumns is the SELECT list scanTask expects, in order.
-const taskColumns = `id, project_id, title, body, priority, kind, state, created_by, created_at, updated_at`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, needs_decomposition, created_by, created_at, updated_at`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -220,12 +259,13 @@ type rowScanner interface {
 
 func scanTask(row rowScanner) (*Task, error) {
 	var t Task
-	var body, createdBy sql.NullString
+	var body, createdBy, concern sql.NullString
 	if err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &createdBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&t.State, &concern, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
 	t.Body = body.String
+	t.Concern = concern.String
 	t.CreatedBy = createdBy.String
 	t.CreatedAt = t.CreatedAt.UTC()
 	t.UpdatedAt = t.UpdatedAt.UTC()

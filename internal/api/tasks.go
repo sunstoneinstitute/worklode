@@ -271,7 +271,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.updated", payload,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, nil, nil); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{

@@ -567,3 +567,146 @@ func TestGetTaskNotFound(t *testing.T) {
 		t.Fatalf("GetTask unknown: want ErrNotFound, got %v", err)
 	}
 }
+
+func TestCreateTaskConcern(t *testing.T) {
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Concern = "security"
+	task := createTask(t, s, taskTestNow, in)
+	if task.Concern != "security" {
+		t.Fatalf("CreateTask concern: got %q, want security", task.Concern)
+	}
+	if task.NeedsDecomposition {
+		t.Fatalf("CreateTask needs_decomposition: want false by default")
+	}
+
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Concern != "security" {
+		t.Fatalf("GetTask concern: got %q, want security", got.Concern)
+	}
+	if got.NeedsDecomposition {
+		t.Fatalf("GetTask needs_decomposition: want false by default")
+	}
+}
+
+func TestCreateTaskNoConcern(t *testing.T) {
+	s := openTaskStore(t)
+
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+	if task.Concern != "" {
+		t.Fatalf("CreateTask concern: got %q, want empty", task.Concern)
+	}
+
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Concern != "" {
+		t.Fatalf("GetTask concern: got %q, want empty", got.Concern)
+	}
+}
+
+func TestCreateTaskInvalidConcernRejected(t *testing.T) {
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Concern = "not-a-concern"
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, in)
+			return err
+		})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("CreateTask invalid concern: want ErrInvalidInput, got %v", err)
+	}
+}
+
+// updateTaskFields drives UpdateTaskFields through RecordEvent.
+func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, body, priority, concern *string, needsDecomposition *bool) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, needsDecomposition)
+		})
+	return err
+}
+
+func strPtr(s string) *string { return &s }
+func boolPtr(b bool) *bool    { return &b }
+
+func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
+	s := openTaskStore(t)
+
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	// Set concern.
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr("performance"), nil); err != nil {
+		t.Fatalf("set concern: %v", err)
+	}
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Concern != "performance" {
+		t.Fatalf("concern after set: got %q, want performance", got.Concern)
+	}
+
+	// Clear with "".
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr(""), nil); err != nil {
+		t.Fatalf("clear concern with \"\": %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Concern != "" {
+		t.Fatalf("concern after clear with \"\": got %q, want empty", got.Concern)
+	}
+
+	// Set again, then clear with "none".
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr("usability"), nil); err != nil {
+		t.Fatalf("set concern again: %v", err)
+	}
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr("none"), nil); err != nil {
+		t.Fatalf("clear concern with none: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Concern != "" {
+		t.Fatalf("concern after clear with none: got %q, want empty", got.Concern)
+	}
+
+	// needs_decomposition true then false.
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, nil, boolPtr(true)); err != nil {
+		t.Fatalf("set needs_decomposition true: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if !got.NeedsDecomposition {
+		t.Fatalf("needs_decomposition: want true")
+	}
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, nil, boolPtr(false)); err != nil {
+		t.Fatalf("set needs_decomposition false: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.NeedsDecomposition {
+		t.Fatalf("needs_decomposition: want false")
+	}
+
+	// Invalid concern rejected.
+	err = updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr("not-a-concern"), nil)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("update with invalid concern: want ErrInvalidInput, got %v", err)
+	}
+}
