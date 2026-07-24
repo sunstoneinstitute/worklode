@@ -202,7 +202,7 @@ or `{"claimed": false, "reason": "no-ready-task"}` (HTTP 200 — an empty ready 
 
 **Steps:**
 
-- [ ] **Step 1:** Through public surfaces only: create project (set focus), create tasks with concerns/priorities/edges, `claim --next` via the API client → assert the spec-ordered task arrives, task is `in_progress`, lease worktree recorded; second claim-next gets the next task; `dry_run` leaves no lease. Green with `-tags e2e`. Commit.
+- [x] **Step 1:** Through public surfaces only: create project (set focus), create tasks with concerns/priorities/edges, `claim --next` via the API client → assert the spec-ordered task arrives, task is `in_progress`, lease worktree recorded; second claim-next gets the next task; `dry_run` leaves no lease. Green with `-tags e2e`. Commit.
 
 ---
 
