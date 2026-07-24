@@ -120,6 +120,8 @@ Payload (bounded, JSON):
 - **Affected components** — the `ls:affects` component set (03).
 - **Definition-of-done** — the declared Deliverable target (D7).
 - **Branch** — the worktree's branch / `wt/<id>-<slug>` name.
+- **Skills** — the task's accepted `usingSkill` bindings, SKILL.md bodies inlined at their
+  pinned versions for front-loading (spec 07). Reviewed bindings only, never raw suggestions.
 
 Injected by `SessionStart`/resume and by `/lode-next` right after claim. **No file spelunking** — the
 brief is the context contract. If the brief is insufficient, that's a signal the task needs

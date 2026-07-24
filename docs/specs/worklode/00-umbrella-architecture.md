@@ -60,6 +60,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **04 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 03 |
 | **05 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 01, 02 |
 | **06 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
+| **07 — Skills registry & friction loop** | Skill catalog ingested from claude-plugins version tags; `ls:Skill`; embedding-suggested, human-reviewed `usingSkill` bindings; front-loading via the brief; friction-vent aggregation → maintenance tasks. | 01, 02, 03, 04, 05 |
 
 ---
 
@@ -113,3 +114,5 @@ D13 naming → 00 · D14 plugin → 05 · D15 task sizing → 02/05.
 - **[04]** projection-lag between authoritative (backbone) and overview (KG) frontier — acceptable?
 - **[01]** isolation level (READ COMMITTED + `FOR UPDATE` vs SERIALIZABLE); sweeper correctness
   under multiple server replicas; Task↔GitHub-Issue mirror lifecycle (spec 01 Q5 / 05 Q05.4).
+- **[07]** `ls:Skill ⊑ ls:DesignDoc` vs standalone class; embedding provider (Voyage vs
+  self-hosted); vent transport into the backbone; friction-threshold tuning.
