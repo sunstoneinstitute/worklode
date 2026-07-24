@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // Project groups one or more repos under a single unit of work.
@@ -18,7 +17,7 @@ type Project struct {
 // CreateProject registers a new project.
 func (s *Store) CreateProject(ctx context.Context, id, name string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (id, name) VALUES (?, ?)`, id, name)
+		`INSERT INTO projects (id, name) VALUES ($1, $2)`, id, name)
 	if err != nil {
 		return fmt.Errorf("insert project %s: %w", id, err)
 	}
@@ -28,16 +27,14 @@ func (s *Store) CreateProject(ctx context.Context, id, name string) error {
 // GetProject looks up a project by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
-	var deployGated int
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, deploy_gated FROM projects WHERE id = ?`, id)
-	if err := row.Scan(&p.ID, &p.Name, &deployGated); err != nil {
+		`SELECT id, name, deploy_gated FROM projects WHERE id = $1`, id)
+	if err := row.Scan(&p.ID, &p.Name, &p.DeployGated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get project %s: %w", id, err)
 	}
-	p.DeployGated = deployGated != 0
 	return &p, nil
 }
 
@@ -52,11 +49,9 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
 	for rows.Next() {
 		var p Project
-		var deployGated int
-		if err := rows.Scan(&p.ID, &p.Name, &deployGated); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.DeployGated); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
-		p.DeployGated = deployGated != 0
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -68,12 +63,8 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 // SetDeployGated sets whether a project's tasks require a verified
 // deployment (rather than just a merged PR) to move to done.
 func (s *Store) SetDeployGated(ctx context.Context, id string, gated bool) error {
-	gatedInt := 0
-	if gated {
-		gatedInt = 1
-	}
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET deploy_gated = ? WHERE id = ?`, gatedInt, id)
+		`UPDATE projects SET deploy_gated = $1 WHERE id = $2`, gated, id)
 	if err != nil {
 		return fmt.Errorf("set deploy_gated for project %s: %w", id, err)
 	}
@@ -92,9 +83,9 @@ func (s *Store) SetDeployGated(ctx context.Context, id string, gated bool) error
 // same project) returns ErrRepoTaken.
 func (s *Store) AddRepo(ctx context.Context, projectID, repo string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO project_repos (project_id, repo) VALUES (?, ?)`, projectID, repo)
+		`INSERT INTO project_repos (project_id, repo) VALUES ($1, $2)`, projectID, repo)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueViolation(err) {
 			return ErrRepoTaken
 		}
 		return fmt.Errorf("add repo %s to project %s: %w", repo, projectID, err)
@@ -107,7 +98,7 @@ func (s *Store) AddRepo(ctx context.Context, projectID, repo string) error {
 func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, error) {
 	var projectID string
 	row := s.db.QueryRowContext(ctx,
-		`SELECT project_id FROM project_repos WHERE repo = ?`, repo)
+		`SELECT project_id FROM project_repos WHERE repo = $1`, repo)
 	if err := row.Scan(&projectID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -120,7 +111,7 @@ func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, erro
 // ListRepos returns the repos mapped to a project.
 func (s *Store) ListRepos(ctx context.Context, projectID string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo FROM project_repos WHERE project_id = ?`, projectID)
+		`SELECT repo FROM project_repos WHERE project_id = $1`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
 	}

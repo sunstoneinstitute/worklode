@@ -209,8 +209,8 @@ func TestListRuntimeEventsNullColumns(t *testing.T) {
 	// flux_failure with no pod context) must still scan.
 	if _, err := s.db.Exec(
 		`INSERT INTO runtime_events (cluster, kind, workload, image, artifact_id, message, occurred_at)
-		 VALUES ('prod-cluster', 'flux_failure', NULL, NULL, NULL, NULL, ?)`,
-		runtimeTestNow.Format(time.RFC3339),
+		 VALUES ('prod-cluster', 'flux_failure', NULL, NULL, NULL, NULL, $1)`,
+		runtimeTestNow,
 	); err != nil {
 		t.Fatalf("insert NULL-column runtime event: %v", err)
 	}

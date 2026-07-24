@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -135,15 +134,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 // store the same way the black-box harness does).
 func newStoreT(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return store.OpenTestStore(t)
 }
 
 func TestCLITokenRejectsUnknownCode(t *testing.T) {

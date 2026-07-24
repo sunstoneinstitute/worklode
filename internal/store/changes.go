@@ -86,7 +86,7 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 		return false, nil
 	}
 	var one int
-	err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = ?`, taskID).Scan(&one)
+	err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1`, taskID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -119,17 +119,17 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 		}
 	}
 
-	var mergedAt sql.NullString
+	var mergedAt sql.NullTime
 	if pr.MergedAt != nil {
-		mergedAt = sql.NullString{String: pr.MergedAt.UTC().Format(time.RFC3339), Valid: true}
+		mergedAt = sql.NullTime{Time: pr.MergedAt.UTC(), Valid: true}
 	}
 	var mergeSHA sql.NullString
 	if pr.MergeSHA != nil {
 		mergeSHA = sql.NullString{String: *pr.MergeSHA, Valid: true}
 	}
-	var openedAt sql.NullString
+	var openedAt sql.NullTime
 	if !pr.OpenedAt.IsZero() {
-		openedAt = sql.NullString{String: pr.OpenedAt.UTC().Format(time.RFC3339), Valid: true}
+		openedAt = sql.NullTime{Time: pr.OpenedAt.UTC(), Valid: true}
 	}
 	var taskIDArg sql.NullString
 	if taskID != nil {
@@ -138,7 +138,7 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 
 	_, err := tx.Exec(
 		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
@@ -161,7 +161,8 @@ const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merg
 
 func scanPR(row rowScanner) (*PullRequest, error) {
 	var pr PullRequest
-	var title, state, taskID, headRef, headSHA, mergeSHA, url, openedAt, mergedAt sql.NullString
+	var title, state, taskID, headRef, headSHA, mergeSHA, url sql.NullString
+	var openedAt, mergedAt sql.NullTime
 	if err := row.Scan(&pr.Repo, &pr.Number, &title, &state, &taskID,
 		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt); err != nil {
 		return nil, err
@@ -178,24 +179,17 @@ func scanPR(row rowScanner) (*PullRequest, error) {
 		pr.MergeSHA = &mergeSHA.String
 	}
 	if openedAt.Valid {
-		t, err := time.Parse(time.RFC3339, openedAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse PR %s#%d opened_at: %w", pr.Repo, pr.Number, err)
-		}
-		pr.OpenedAt = t
+		pr.OpenedAt = openedAt.Time.UTC()
 	}
 	if mergedAt.Valid {
-		t, err := time.Parse(time.RFC3339, mergedAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse PR %s#%d merged_at: %w", pr.Repo, pr.Number, err)
-		}
+		t := mergedAt.Time.UTC()
 		pr.MergedAt = &t
 	}
 	return &pr, nil
 }
 
 func getPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
-	row := tx.QueryRow(`SELECT `+prColumns+` FROM pull_requests WHERE repo = ? AND number = ?`, repo, number)
+	row := tx.QueryRow(`SELECT `+prColumns+` FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number)
 	pr, err := scanPR(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("PR %s#%d: %w", repo, number, ErrNotFound)
@@ -209,7 +203,7 @@ func getPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
 // GetPR looks up a pull request by repo and number. Returns ErrNotFound if
 // it does not exist.
 func (s *Store) GetPR(ctx context.Context, repo string, number int64) (*PullRequest, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+prColumns+` FROM pull_requests WHERE repo = ? AND number = ?`, repo, number)
+	row := s.db.QueryRowContext(ctx, `SELECT `+prColumns+` FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number)
 	pr, err := scanPR(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("PR %s#%d: %w", repo, number, ErrNotFound)
@@ -224,7 +218,7 @@ func (s *Store) GetPR(ctx context.Context, repo string, number int64) (*PullRequ
 // repo then number.
 func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+prColumns+` FROM pull_requests WHERE task_id = ? ORDER BY repo, number`, taskID)
+		`SELECT `+prColumns+` FROM pull_requests WHERE task_id = $1 ORDER BY repo, number`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("PRs for task %s: %w", taskID, err)
 	}
@@ -249,7 +243,7 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT repo, head_sha, workflow, status, conclusion, url, started_at, completed_at
-		 FROM ci_runs WHERE repo = ? AND head_sha = ? ORDER BY started_at, id`,
+		 FROM ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
 		repo, headSHA)
 	if err != nil {
 		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
@@ -259,7 +253,8 @@ func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun
 	var out []CIRun
 	for rows.Next() {
 		var r CIRun
-		var status, conclusion, url, startedAt, completedAt sql.NullString
+		var status, conclusion, url sql.NullString
+		var startedAt, completedAt sql.NullTime
 		if err := rows.Scan(&r.Repo, &r.HeadSHA, &r.Workflow, &status, &conclusion,
 			&url, &startedAt, &completedAt); err != nil {
 			return nil, fmt.Errorf("scan ci run: %w", err)
@@ -270,17 +265,10 @@ func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun
 			r.Conclusion = &conclusion.String
 		}
 		if startedAt.Valid {
-			t, err := time.Parse(time.RFC3339, startedAt.String)
-			if err != nil {
-				return nil, fmt.Errorf("parse ci run started_at: %w", err)
-			}
-			r.StartedAt = t
+			r.StartedAt = startedAt.Time.UTC()
 		}
 		if completedAt.Valid {
-			t, err := time.Parse(time.RFC3339, completedAt.String)
-			if err != nil {
-				return nil, fmt.Errorf("parse ci run completed_at: %w", err)
-			}
+			t := completedAt.Time.UTC()
 			r.CompletedAt = &t
 		}
 		out = append(out, r)
@@ -296,7 +284,7 @@ func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun
 func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) ([]Review, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT repo, pr_number, reviewer, state, submitted_at
-		 FROM reviews WHERE repo = ? AND pr_number = ? ORDER BY submitted_at, id`,
+		 FROM reviews WHERE repo = $1 AND pr_number = $2 ORDER BY submitted_at, id`,
 		repo, prNumber)
 	if err != nil {
 		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
@@ -306,15 +294,10 @@ func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) (
 	var out []Review
 	for rows.Next() {
 		var rv Review
-		var submittedAt string
-		if err := rows.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &submittedAt); err != nil {
+		if err := rows.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &rv.SubmittedAt); err != nil {
 			return nil, fmt.Errorf("scan review: %w", err)
 		}
-		t, err := time.Parse(time.RFC3339, submittedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse review submitted_at: %w", err)
-		}
-		rv.SubmittedAt = t
+		rv.SubmittedAt = rv.SubmittedAt.UTC()
 		out = append(out, rv)
 	}
 	if err := rows.Err(); err != nil {
@@ -330,20 +313,20 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 	if r.Conclusion != nil {
 		conclusion = sql.NullString{String: *r.Conclusion, Valid: true}
 	}
-	var completedAt sql.NullString
+	var completedAt sql.NullTime
 	if r.CompletedAt != nil {
-		completedAt = sql.NullString{String: r.CompletedAt.UTC().Format(time.RFC3339), Valid: true}
+		completedAt = sql.NullTime{Time: r.CompletedAt.UTC(), Valid: true}
 	}
 	_, err := tx.Exec(
 		`INSERT INTO ci_runs (repo, head_sha, workflow, status, conclusion, url, started_at, completed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (repo, head_sha, workflow, started_at) DO UPDATE SET
 		   status = excluded.status,
 		   conclusion = excluded.conclusion,
 		   url = excluded.url,
 		   completed_at = excluded.completed_at`,
 		r.Repo, r.HeadSHA, r.Workflow, r.Status, conclusion, r.URL,
-		r.StartedAt.UTC().Format(time.RFC3339), completedAt,
+		r.StartedAt.UTC(), completedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ci run %s %s %s: %w", r.Repo, r.HeadSHA, r.Workflow, err)
@@ -356,10 +339,10 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 func UpsertReview(tx *sql.Tx, rv Review) error {
 	_, err := tx.Exec(
 		`INSERT INTO reviews (repo, pr_number, reviewer, state, submitted_at)
-		 VALUES (?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (repo, pr_number, reviewer, submitted_at) DO UPDATE SET
 		   state = excluded.state`,
-		rv.Repo, rv.PRNumber, rv.Reviewer, rv.State, rv.SubmittedAt.UTC().Format(time.RFC3339),
+		rv.Repo, rv.PRNumber, rv.Reviewer, rv.State, rv.SubmittedAt.UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert review %s#%d by %s: %w", rv.Repo, rv.PRNumber, rv.Reviewer, err)

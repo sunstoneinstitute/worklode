@@ -43,14 +43,14 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 	if a.Digest != nil {
 		digest = sql.NullString{String: *a.Digest, Valid: true}
 	}
-	var builtAt sql.NullString
+	var builtAt sql.NullTime
 	if !a.BuiltAt.IsZero() {
-		builtAt = sql.NullString{String: a.BuiltAt.UTC().Format(time.RFC3339), Valid: true}
+		builtAt = sql.NullTime{Time: a.BuiltAt.UTC(), Valid: true}
 	}
 
 	_, err := tx.Exec(
 		`INSERT INTO artifacts (kind, name, version, digest, repo, source_sha, built_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (kind, name, version) DO UPDATE SET
 		   digest = excluded.digest,
 		   repo = excluded.repo,
@@ -64,7 +64,7 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 
 	var id int64
 	if err := tx.QueryRow(
-		`SELECT id FROM artifacts WHERE kind = ? AND name = ? AND version = ?`,
+		`SELECT id FROM artifacts WHERE kind = $1 AND name = $2 AND version = $3`,
 		a.Kind, a.Name, a.Version,
 	).Scan(&id); err != nil {
 		return 0, fmt.Errorf("look up artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
@@ -77,7 +77,8 @@ const artifactColumns = `id, kind, name, version, digest, repo, source_sha, buil
 
 func scanArtifact(row rowScanner) (*Artifact, error) {
 	var a Artifact
-	var digest, repo, sourceSHA, builtAt sql.NullString
+	var digest, repo, sourceSHA sql.NullString
+	var builtAt sql.NullTime
 	if err := row.Scan(&a.ID, &a.Kind, &a.Name, &a.Version, &digest, &repo, &sourceSHA, &builtAt); err != nil {
 		return nil, err
 	}
@@ -87,11 +88,7 @@ func scanArtifact(row rowScanner) (*Artifact, error) {
 	a.Repo = repo.String
 	a.SourceSHA = sourceSHA.String
 	if builtAt.Valid {
-		t, err := time.Parse(time.RFC3339, builtAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse artifact %d built_at: %w", a.ID, err)
-		}
-		a.BuiltAt = t
+		a.BuiltAt = builtAt.Time.UTC()
 	}
 	return &a, nil
 }
@@ -100,7 +97,7 @@ func scanArtifact(row rowScanner) (*Artifact, error) {
 // by id.
 func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifact, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+artifactColumns+` FROM artifacts WHERE source_sha = ? ORDER BY id`, sha)
+		`SELECT `+artifactColumns+` FROM artifacts WHERE source_sha = $1 ORDER BY id`, sha)
 	if err != nil {
 		return nil, fmt.Errorf("artifacts by source sha %s: %w", sha, err)
 	}
@@ -128,7 +125,7 @@ func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifac
 func ArtifactIDBySourceSHA(tx *sql.Tx, sha string) (*int64, error) {
 	var id int64
 	err := tx.QueryRow(
-		`SELECT id FROM artifacts WHERE source_sha = ? ORDER BY id DESC LIMIT 1`, sha,
+		`SELECT id FROM artifacts WHERE source_sha = $1 ORDER BY id DESC LIMIT 1`, sha,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -168,7 +165,7 @@ func (s *Store) FindArtifactByImage(ctx context.Context, image string) (*Artifac
 		return nil, fmt.Errorf("image %q has no tag: %w", image, ErrNotFound)
 	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+artifactColumns+` FROM artifacts WHERE kind = 'docker_image' AND name = ? AND version = ?`,
+		`SELECT `+artifactColumns+` FROM artifacts WHERE kind = 'docker_image' AND name = $1 AND version = $2`,
 		name, tag)
 	a, err := scanArtifact(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -189,7 +186,7 @@ func findArtifactByImageTx(tx *sql.Tx, image string) (*Artifact, error) {
 		return nil, fmt.Errorf("image %q has no tag: %w", image, ErrNotFound)
 	}
 	row := tx.QueryRow(
-		`SELECT `+artifactColumns+` FROM artifacts WHERE kind = 'docker_image' AND name = ? AND version = ?`,
+		`SELECT `+artifactColumns+` FROM artifacts WHERE kind = 'docker_image' AND name = $1 AND version = $2`,
 		name, tag)
 	a, err := scanArtifact(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -212,15 +209,15 @@ func UpsertDeployment(tx *sql.Tx, now time.Time, d Deployment) error {
 	if d.ArtifactID != nil {
 		artifactID = sql.NullInt64{Int64: *d.ArtifactID, Valid: true}
 	}
-	nowStr := now.UTC().Format(time.RFC3339)
+	ts := now.UTC()
 	_, err := tx.Exec(
 		`INSERT INTO deployments (artifact_id, environment, target_kind, target_name, status, first_seen, last_update)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (environment, target_kind, target_name) DO UPDATE SET
 		   status = excluded.status,
 		   artifact_id = COALESCE(excluded.artifact_id, deployments.artifact_id),
 		   last_update = excluded.last_update`,
-		artifactID, d.Environment, d.TargetKind, d.TargetName, d.Status, nowStr, nowStr,
+		artifactID, d.Environment, d.TargetKind, d.TargetName, d.Status, ts, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert deployment %s/%s/%s: %w", d.Environment, d.TargetKind, d.TargetName, err)
@@ -235,7 +232,7 @@ func UpsertDeployment(tx *sql.Tx, now time.Time, d Deployment) error {
 func DeploymentStatus(tx *sql.Tx, environment, targetKind, targetName string) (string, error) {
 	var status string
 	err := tx.QueryRow(
-		`SELECT status FROM deployments WHERE environment = ? AND target_kind = ? AND target_name = ?`,
+		`SELECT status FROM deployments WHERE environment = $1 AND target_kind = $2 AND target_name = $3`,
 		environment, targetKind, targetName,
 	).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -250,21 +247,15 @@ func DeploymentStatus(tx *sql.Tx, environment, targetKind, targetName string) (s
 func scanDeployment(row rowScanner) (*Deployment, error) {
 	var d Deployment
 	var artifactID sql.NullInt64
-	var firstSeen, lastUpdate string
 	if err := row.Scan(&d.ID, &artifactID, &d.Environment, &d.TargetKind, &d.TargetName,
-		&d.Status, &firstSeen, &lastUpdate); err != nil {
+		&d.Status, &d.FirstSeen, &d.LastUpdate); err != nil {
 		return nil, err
 	}
 	if artifactID.Valid {
 		d.ArtifactID = &artifactID.Int64
 	}
-	var err error
-	if d.FirstSeen, err = time.Parse(time.RFC3339, firstSeen); err != nil {
-		return nil, fmt.Errorf("parse deployment %d first_seen: %w", d.ID, err)
-	}
-	if d.LastUpdate, err = time.Parse(time.RFC3339, lastUpdate); err != nil {
-		return nil, fmt.Errorf("parse deployment %d last_update: %w", d.ID, err)
-	}
+	d.FirstSeen = d.FirstSeen.UTC()
+	d.LastUpdate = d.LastUpdate.UTC()
 	return &d, nil
 }
 
@@ -275,7 +266,7 @@ const deploymentColumns = `id, artifact_id, environment, target_kind, target_nam
 // artifactID, ordered by last_update then id.
 func (s *Store) DeploymentsForArtifact(ctx context.Context, artifactID int64) ([]Deployment, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+deploymentColumns+` FROM deployments WHERE artifact_id = ? ORDER BY last_update, id`,
+		`SELECT `+deploymentColumns+` FROM deployments WHERE artifact_id = $1 ORDER BY last_update, id`,
 		artifactID)
 	if err != nil {
 		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
@@ -302,7 +293,7 @@ func (s *Store) ListDeployments(ctx context.Context, environment string) ([]Depl
 	q := `SELECT ` + deploymentColumns + ` FROM deployments`
 	var args []any
 	if environment != "" {
-		q += ` WHERE environment = ?`
+		q += ` WHERE environment = $1`
 		args = append(args, environment)
 	}
 	q += ` ORDER BY environment, target_kind, target_name`

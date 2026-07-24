@@ -30,7 +30,7 @@ type Issue struct {
 func UpsertIssue(tx *sql.Tx, is Issue) error {
 	_, err := tx.Exec(
 		`INSERT INTO issues (repo, number, title, state, url)
-		 VALUES (?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
@@ -51,7 +51,7 @@ func UpsertIssue(tx *sql.Tx, is Issue) error {
 func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*Task, error) {
 	var triageState string
 	err := tx.QueryRow(
-		`SELECT triage_state FROM issues WHERE repo = ? AND number = ?`, repo, number,
+		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&triageState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
@@ -73,8 +73,8 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 		return nil, fmt.Errorf("marshal applies_to_versions: %w", err)
 	}
 	if _, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'promoted', task_id = ?, applies_to_versions = ?
-		 WHERE repo = ? AND number = ?`,
+		`UPDATE issues SET triage_state = 'promoted', task_id = $1, applies_to_versions = $2
+		 WHERE repo = $3 AND number = $4`,
 		task.ID, string(versionsJSON), repo, number,
 	); err != nil {
 		return nil, fmt.Errorf("promote issue %s#%d: %w", repo, number, err)
@@ -88,7 +88,7 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 	var triageState string
 	err := tx.QueryRow(
-		`SELECT triage_state FROM issues WHERE repo = ? AND number = ?`, repo, number,
+		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&triageState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
@@ -100,7 +100,7 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
 	}
 	if _, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'dismissed' WHERE repo = ? AND number = ?`,
+		`UPDATE issues SET triage_state = 'dismissed' WHERE repo = $1 AND number = $2`,
 		repo, number,
 	); err != nil {
 		return fmt.Errorf("dismiss issue %s#%d: %w", repo, number, err)
@@ -115,7 +115,7 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 func IssueTitle(tx *sql.Tx, repo string, number int64) (string, error) {
 	var title sql.NullString
 	err := tx.QueryRow(
-		`SELECT title FROM issues WHERE repo = ? AND number = ?`, repo, number,
+		`SELECT title FROM issues WHERE repo = $1 AND number = $2`, repo, number,
 	).Scan(&title)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
@@ -153,7 +153,7 @@ func (s *Store) ListIssues(ctx context.Context, triageState string) ([]Issue, er
 	q := `SELECT repo, number, title, state, triage_state, task_id, applies_to_versions, url FROM issues`
 	var args []any
 	if triageState != "" {
-		q += ` WHERE triage_state = ?`
+		q += ` WHERE triage_state = $1`
 		args = append(args, triageState)
 	}
 	q += ` ORDER BY repo, number`

@@ -37,7 +37,7 @@ func sha256Hex(s string) string {
 // projects, actors, and tokens.
 func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, admin bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name, admin) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO actors (id, kind, display_name, admin) VALUES ($1, $2, $3, $4)`,
 		id, kind, displayName, admin,
 	)
 	if err != nil {
@@ -52,7 +52,7 @@ func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, a
 // on insert and left unchanged on update.
 func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name, admin) VALUES (?, 'human', ?, ?)
+		`INSERT INTO actors (id, kind, display_name, admin) VALUES ($1, 'human', $2, $3)
 		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin`,
 		id, displayName, admin,
 	)
@@ -67,7 +67,7 @@ func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 	var a Actor
 	var displayName sql.NullString
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, display_name, admin FROM actors WHERE id = ?`, id)
+		`SELECT id, kind, display_name, admin FROM actors WHERE id = $1`, id)
 	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -90,15 +90,15 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	plaintext := tokenPrefix + hex.EncodeToString(raw)
 	hash := sha256Hex(plaintext)
 
-	var expiresAtStr sql.NullString
+	var expiresAtArg sql.NullTime
 	if expiresAt != nil {
-		expiresAtStr = sql.NullString{String: expiresAt.UTC().Format(time.RFC3339), Valid: true}
+		expiresAtArg = sql.NullTime{Time: expiresAt.UTC(), Valid: true}
 	}
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO tokens (token_hash, actor_id, description, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		hash, actorID, description, s.nowFn().Format(time.RFC3339), expiresAtStr,
+		 VALUES ($1, $2, $3, $4, $5)`,
+		hash, actorID, description, s.nowFn().UTC(), expiresAtArg,
 	)
 	if err != nil {
 		return "", fmt.Errorf("insert token for actor %s: %w", actorID, err)
@@ -132,14 +132,14 @@ func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error
 			return nil
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO actors (id, kind, display_name, admin) VALUES ('admin', 'service', 'bootstrap admin', 1)`,
+			`INSERT INTO actors (id, kind, display_name, admin) VALUES ('admin', 'service', 'bootstrap admin', true)`,
 		); err != nil {
 			return fmt.Errorf("insert bootstrap admin: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO tokens (token_hash, actor_id, description, created_at)
-			 VALUES (?, 'admin', 'bootstrap token', ?)`,
-			sha256Hex(plaintextToken), s.nowFn().Format(time.RFC3339),
+			 VALUES ($1, 'admin', 'bootstrap token', $2)`,
+			sha256Hex(plaintextToken), s.nowFn().UTC(),
 		); err != nil {
 			return fmt.Errorf("insert bootstrap token: %w", err)
 		}
@@ -152,8 +152,8 @@ func (s *Store) BootstrapAdmin(ctx context.Context, plaintextToken string) error
 func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 	hash := tokenHashOf(plaintextOrHash)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`,
-		s.nowFn().Format(time.RFC3339), hash,
+		`UPDATE tokens SET revoked_at = $1 WHERE token_hash = $2 AND revoked_at IS NULL`,
+		s.nowFn().UTC(), hash,
 	)
 	if err != nil {
 		return fmt.Errorf("revoke token: %w", err)
@@ -174,10 +174,10 @@ func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, err
 	hash := tokenHashOf(plaintext)
 
 	var actorID string
-	var revokedAt sql.NullString
-	var expiresAt sql.NullString
+	var revokedAt sql.NullTime
+	var expiresAt sql.NullTime
 	row := s.db.QueryRowContext(ctx,
-		`SELECT actor_id, revoked_at, expires_at FROM tokens WHERE token_hash = ?`, hash)
+		`SELECT actor_id, revoked_at, expires_at FROM tokens WHERE token_hash = $1`, hash)
 	if err := row.Scan(&actorID, &revokedAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -188,14 +188,8 @@ func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, err
 	if revokedAt.Valid {
 		return nil, ErrNotFound
 	}
-	if expiresAt.Valid {
-		exp, err := time.Parse(time.RFC3339, expiresAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse token expiry: %w", err)
-		}
-		if exp.Before(s.nowFn()) {
-			return nil, ErrNotFound
-		}
+	if expiresAt.Valid && expiresAt.Time.Before(s.nowFn()) {
+		return nil, ErrNotFound
 	}
 
 	return s.GetActor(ctx, actorID)

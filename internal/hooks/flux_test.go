@@ -25,31 +25,21 @@ const fluxTestSecret = "test-flux-secret"
 // artifact and assert it gets linked.
 const fluxSeededSHA = "abc1230000000000000000000000000000000000"
 
-// fluxEnv is a webhook test fixture: a real store, the Flux handler with a
-// single-cluster map (prod-1 -> prod), and the db path for raw SQL
-// assertions.
+// fluxEnv is a webhook test fixture: a real store and the Flux handler with
+// a single-cluster map (prod-1 -> prod). Raw SQL assertions go through the
+// store's own connection pool.
 type fluxEnv struct {
-	st     *store.Store
-	h      http.Handler
-	dbPath string
+	st *store.Store
+	h  http.Handler
 }
 
 func newFluxEnv(t *testing.T) *fluxEnv {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "wl.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := store.OpenTestStore(t)
 
 	return &fluxEnv{
-		st:     st,
-		h:      hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil),
-		dbPath: dbPath,
+		st: st,
+		h:  hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil),
 	}
 }
 
@@ -118,12 +108,7 @@ func fluxStatus(t *testing.T, rr *httptest.ResponseRecorder) string {
 
 func (e *fluxEnv) rawQueryRow(t *testing.T, dest []any, query string, args ...any) bool {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+e.dbPath+"?mode=ro")
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	defer db.Close()
-	err = db.QueryRow(query, args...).Scan(dest...)
+	err := e.st.DBForTests().QueryRow(query, args...).Scan(dest...)
 	if err == sql.ErrNoRows {
 		return false
 	}
@@ -135,13 +120,8 @@ func (e *fluxEnv) rawQueryRow(t *testing.T, dest []any, query string, args ...an
 
 func (e *fluxEnv) rawQueryInt(t *testing.T, query string, args ...any) int {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+e.dbPath+"?mode=ro")
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	defer db.Close()
 	var n int
-	if err := db.QueryRow(query, args...).Scan(&n); err != nil {
+	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&n); err != nil {
 		t.Fatalf("raw query %q: %v", query, err)
 	}
 	return n
@@ -158,7 +138,7 @@ func (e *fluxEnv) deployment(t *testing.T, environment, targetKind, targetName s
 	var st string
 	var aid sql.NullInt64
 	ok = e.rawQueryRow(t, []any{&st, &aid},
-		`SELECT status, artifact_id FROM deployments WHERE environment = ? AND target_kind = ? AND target_name = ?`,
+		`SELECT status, artifact_id FROM deployments WHERE environment = $1 AND target_kind = $2 AND target_name = $3`,
 		environment, targetKind, targetName)
 	if !ok {
 		return "", nil, false
@@ -170,7 +150,7 @@ func (e *fluxEnv) deployment(t *testing.T, environment, targetKind, targetName s
 }
 
 func (e *fluxEnv) runtimeEventCount(t *testing.T, kind string) int {
-	return e.rawQueryInt(t, `SELECT COUNT(*) FROM runtime_events WHERE kind = ?`, kind)
+	return e.rawQueryInt(t, `SELECT COUNT(*) FROM runtime_events WHERE kind = $1`, kind)
 }
 
 func TestFluxSignatureRejected(t *testing.T) {
@@ -393,7 +373,7 @@ func TestFluxUnknownKindIgnored(t *testing.T) {
 	body := fluxFixture(t, "unknown_kind.json")
 	sum := sha256.Sum256(body)
 	extID := hex.EncodeToString(sum[:])
-	ok := e.rawQueryRow(t, []any{&typ}, `SELECT type FROM events WHERE source = 'flux' AND external_id = ?`, extID)
+	ok := e.rawQueryRow(t, []any{&typ}, `SELECT type FROM events WHERE source = 'flux' AND external_id = $1`, extID)
 	if !ok {
 		t.Fatalf("no event row for unknown-kind delivery")
 	}
@@ -461,17 +441,9 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 	})
 
 	t.Run("unmapped cluster defaults to dev", func(t *testing.T) {
-		dbPath := filepath.Join(t.TempDir(), "wl.db")
-		st, err := store.Open(dbPath)
-		if err != nil {
-			t.Fatalf("open store: %v", err)
-		}
-		if err := st.Migrate(store.MigrationsDirForTests()); err != nil {
-			t.Fatalf("migrate store: %v", err)
-		}
-		t.Cleanup(func() { st.Close() })
+		st := store.OpenTestStore(t)
 		h := hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil)
-		e := &fluxEnv{st: st, h: h, dbPath: dbPath}
+		e := &fluxEnv{st: st, h: h}
 
 		rr := fluxDeliverBody(t, e.h, mkBody("staging-9"))
 		if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
