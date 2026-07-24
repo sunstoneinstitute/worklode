@@ -285,7 +285,7 @@ func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
 	var kind, entityID, changeJSON string
 	var loggedEventID int64
 	row := s.db.QueryRow(
-		`SELECT entity_kind, entity_id, change, event_id FROM state_log WHERE entity_id = ?`, task.ID)
+		`SELECT entity_kind, entity_id, change, event_id FROM state_log WHERE entity_id = $1`, task.ID)
 	if err := row.Scan(&kind, &entityID, &changeJSON, &loggedEventID); err != nil {
 		t.Fatalf("read state_log: %v", err)
 	}
