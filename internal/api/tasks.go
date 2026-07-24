@@ -58,6 +58,7 @@ type createTaskRequest struct {
 	Body     string `json:"body"`
 	Priority string `json:"priority"`
 	Kind     string `json:"kind"`
+	Concern  string `json:"concern"`
 	Draft    bool   `json:"draft"`
 }
 
@@ -78,6 +79,10 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, or spec")
+		return
+	}
+	if req.Concern != "" && !store.ValidConcern(req.Concern) {
+		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
 		return
 	}
 	if _, err := s.st.GetProject(r.Context(), req.Project); err != nil {
@@ -106,6 +111,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Priority:  req.Priority,
 				Kind:      req.Kind,
+				Concern:   req.Concern,
 				CreatedBy: actor.ID,
 				Draft:     req.Draft,
 			})
@@ -213,10 +219,12 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchTaskRequest struct {
-	Title    *string `json:"title"`
-	Body     *string `json:"body"`
-	Priority *string `json:"priority"`
-	State    *string `json:"state"`
+	Title              *string `json:"title"`
+	Body               *string `json:"body"`
+	Priority           *string `json:"priority"`
+	Concern            *string `json:"concern"`
+	NeedsDecomposition *bool   `json:"needs_decomposition"`
+	State              *string `json:"state"`
 }
 
 // patchStateFrom maps the states PATCH may move a task into to the required
@@ -239,12 +247,17 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	if req.Title == nil && req.Body == nil && req.Priority == nil && req.State == nil {
+	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
+		req.NeedsDecomposition == nil && req.State == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
+		return
+	}
+	if req.Concern != nil && *req.Concern != "" && *req.Concern != "none" && !store.ValidConcern(*req.Concern) {
+		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
 		return
 	}
 	var stateFrom string
@@ -271,11 +284,11 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.updated", payload,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, nil, nil); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.NeedsDecomposition); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{
-				"title": req.Title, "body": req.Body, "priority": req.Priority,
+				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
 			} {
 				if val == nil {
 					continue

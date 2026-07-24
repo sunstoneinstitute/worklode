@@ -66,6 +66,49 @@ func TestCreateAndListProjects(t *testing.T) {
 	}
 }
 
+// TestPatchProjectFocus covers PATCH /api/v1/projects/{id}: focus is echoed
+// back on success, an invalid concern entry is 422, and a missing project is
+// 404.
+func TestPatchProjectFocus(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["focus"]; got == nil {
+		t.Fatalf("create project focus missing: %v", decodeMap(t, rr))
+	} else if arr, ok := got.([]any); !ok || len(arr) != 0 {
+		t.Fatalf("create project focus = %v, want empty array", got)
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{
+		"focus": []string{"security", "completeness"},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("patch focus status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	focus, ok := got["focus"].([]any)
+	if !ok || len(focus) != 2 || focus[0] != "security" || focus[1] != "completeness" {
+		t.Fatalf("focus = %v, want [security completeness]", got["focus"])
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{"focus": []string{"nonsense"}})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid concern status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/nosuch", token, map[string]any{"focus": []string{"security"}})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("missing project status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty patch status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateProjectValidation(t *testing.T) {
 	_, h, token := newTestServer(t)
 	for name, body := range map[string]map[string]any{
@@ -154,6 +197,7 @@ func TestAdminGatedEndpoints(t *testing.T) {
 		body         map[string]any
 	}{
 		{"POST", "/api/v1/projects", map[string]any{"id": "p2", "name": "P2"}},
+		{"PATCH", "/api/v1/projects/p2", map[string]any{"focus": []string{"security"}}},
 		{"POST", "/api/v1/projects/p2/repos", map[string]any{"repo": "acme/other"}},
 		{"POST", "/api/v1/actors", map[string]any{"id": "eve", "kind": "agent"}},
 		{"POST", "/api/v1/actors/worker/tokens", map[string]any{}},

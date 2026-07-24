@@ -165,7 +165,7 @@ Focus `[security, completeness]`; T1 high/completeness/5, T2 high/security/1, T3
 
 **Steps:**
 
-- [ ] **Step 1: Route + handler.** `POST /api/v1/tasks/claim-next`, bearer-authed like claim. Request:
+- [x] **Step 1: Route + handler.** `POST /api/v1/tasks/claim-next`, bearer-authed like claim. Request:
 
 ```json
 {"project": "", "strict_focus": false, "dry_run": false, "worktree": "h:/path", "ttl_seconds": 0}
@@ -180,8 +180,8 @@ Focus `[security, completeness]`; T1 high/completeness/5, T2 high/security/1, T3
 ```
 
 or `{"claimed": false, "reason": "no-ready-task"}` (HTTP 200 — an empty ready set is normal). `slug` = existing `SlugifyTitle(title)`.
-- [ ] **Step 2: Create/patch.** `POST /tasks` accepts `concern`; `PATCH /tasks/{id}` accepts `concern` (empty string clears) and `needs_decomposition`. Project focus: `PATCH /api/v1/projects/{id}` (add if missing) accepting `{"focus": ["security","completeness"]}` (admin-token, consistent with other project mutations).
-- [ ] **Step 3: Handler tests:** claim-next claims and returns spec JSON; none-ready returns 200 + reason; missing worktree → 400; PATCH invalid concern → 400. Green, commit.
+- [x] **Step 2: Create/patch.** `POST /tasks` accepts `concern`; `PATCH /tasks/{id}` accepts `concern` (empty string clears) and `needs_decomposition`. Project focus: `PATCH /api/v1/projects/{id}` (add if missing) accepting `{"focus": ["security","completeness"]}` (admin-token, consistent with other project mutations).
+- [x] **Step 3: Handler tests:** claim-next claims and returns spec JSON; none-ready returns 200 + reason; missing worktree → 400; PATCH invalid concern → 422 (this codebase's convention for invalid-enum, matching invalid priority). Green, commit.
 
 ### Task 7: CLI — `claim --next`, `task edit`, `project focus`
 

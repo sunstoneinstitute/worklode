@@ -68,6 +68,30 @@ func TestCreateTaskDraft(t *testing.T) {
 	}
 }
 
+// TestCreateTaskWithConcern verifies the concern field round-trips into the
+// store (taskJSON deliberately does not expose concern, see patchTask).
+func TestCreateTaskWithConcern(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Concerned", "priority": "high", "kind": "bug", "concern": "security",
+	})
+	task, err := st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Concern != "security" {
+		t.Fatalf("stored concern = %q, want security", task.Concern)
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
+		"project": "proj", "title": "Bad concern", "priority": "high", "kind": "bug", "concern": "nonsense",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid concern status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateTaskValidation(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -216,6 +240,52 @@ func TestPatchTask(t *testing.T) {
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "bug"})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field status = %d, want 400", rr.Code)
+	}
+}
+
+// TestPatchTaskConcern covers the concern/needs_decomposition PATCH
+// extension. taskJSON does not expose either field, so the effect is
+// verified by reading the store directly.
+func TestPatchTaskConcern(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Concern target", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"concern": "nonsense"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid concern status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{
+		"concern": "usability", "needs_decomposition": true,
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("valid patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	task, err := st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Concern != "usability" {
+		t.Fatalf("stored concern = %q, want usability", task.Concern)
+	}
+	if !task.NeedsDecomposition {
+		t.Fatalf("stored needs_decomposition = false, want true")
+	}
+
+	// Clearing concern with "" or "none".
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"concern": "none"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear concern status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	task, err = st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Concern != "" {
+		t.Fatalf("stored concern after clear = %q, want empty", task.Concern)
 	}
 }
 

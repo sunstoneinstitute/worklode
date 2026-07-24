@@ -130,6 +130,99 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// leasePickJSON is the lease shard of a claim-next task pick.
+type leasePickJSON struct {
+	Worktree  string    `json:"worktree"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// taskPickJSON is the wire form of a claim-next candidate/claimed task: a
+// slimmer projection than taskJSON, matching the ranking-relevant fields
+// (spec 02) rather than the full task record.
+type taskPickJSON struct {
+	ID       string         `json:"id"`
+	Slug     string         `json:"slug"`
+	Concern  string         `json:"concern"`
+	Priority string         `json:"priority"`
+	FanOut   int            `json:"fan_out"`
+	Project  string         `json:"project"`
+	Lease    *leasePickJSON `json:"lease,omitempty"`
+}
+
+// toTaskPickJSON builds a claim-next response task, including a lease shard
+// only when lease is non-nil (dry-run and no-ready-task responses have none).
+func toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
+	pick := taskPickJSON{
+		ID:       t.ID,
+		Slug:     SlugifyTitle(t.Title),
+		Concern:  t.Concern,
+		Priority: t.Priority,
+		FanOut:   fanOut,
+		Project:  t.ProjectID,
+	}
+	if lease != nil {
+		pick.Lease = &leasePickJSON{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
+	}
+	return pick
+}
+
+type claimNextRequest struct {
+	Project     string `json:"project"`
+	StrictFocus bool   `json:"strict_focus"`
+	DryRun      bool   `json:"dry_run"`
+	Worktree    string `json:"worktree"`
+	TTLSeconds  int    `json:"ttl_seconds"`
+}
+
+// claimNext handles POST /api/v1/tasks/claim-next: rank the ready set (see
+// store.ClaimNext) and atomically claim the top candidate, falling through to
+// the next-ranked one whenever a claim loses the race. worktree is required
+// unless dry_run is set. Three response shapes: no ready task (claimed=false,
+// reason set), a dry-run hit (claimed=false, dry_run=true, task set, no
+// lease), or a real claim (claimed=true, task set with its new lease).
+func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
+	var req claimNextRequest
+	if err := readOptionalJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.Worktree == "" && !req.DryRun {
+		writeErr(w, http.StatusBadRequest, "worktree is required")
+		return
+	}
+	actor := actorFrom(r)
+
+	res, err := s.st.ClaimNext(r.Context(), store.ClaimNextOpts{
+		ProjectID:   req.Project,
+		StrictFocus: req.StrictFocus,
+		DryRun:      req.DryRun,
+		Worktree:    req.Worktree,
+		ActorID:     actor.ID,
+		TTL:         time.Duration(req.TTLSeconds) * time.Second,
+	})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	if !res.Claimed && res.Task == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"claimed": false, "reason": "no-ready-task"})
+		return
+	}
+	if req.DryRun {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"claimed": false,
+			"dry_run": true,
+			"task":    toTaskPickJSON(res.Task, res.FanOut, nil),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"claimed": true,
+		"task":    toTaskPickJSON(res.Task, res.FanOut, res.Lease),
+	})
+}
+
 type renewRequest struct {
 	TTLSeconds int `json:"ttl_seconds"`
 }
