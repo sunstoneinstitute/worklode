@@ -7,18 +7,19 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
 // Lease grants one actor exclusive claim to a task until it expires or is
-// released. At most one active (unreleased) lease exists per task — the
-// leases_active partial unique index enforces this in the database.
+// released, bound to the worktree the work happens in. At most one active
+// (unreleased) lease exists per task and per worktree — the leases_active
+// and leases_active_worktree partial unique indexes enforce this in the
+// database.
 type Lease struct {
 	ID         int64
 	TaskID     string
 	ActorID    string
-	SessionID  string
+	Worktree   string
 	AcquiredAt time.Time
 	RenewedAt  time.Time
 	ExpiresAt  time.Time
@@ -40,34 +41,22 @@ func randomExternalID() (string, error) {
 }
 
 // leaseColumns is the SELECT list scanLease expects, in order.
-const leaseColumns = `id, task_id, actor_id, session_id, acquired_at, renewed_at, expires_at, released_at`
+const leaseColumns = `id, task_id, actor_id, worktree, acquired_at, renewed_at, expires_at, released_at`
 
 func scanLease(row rowScanner) (*Lease, error) {
 	var l Lease
-	var session, renewedAt, releasedAt sql.NullString
-	var acquiredAt, expiresAt string
-	if err := row.Scan(&l.ID, &l.TaskID, &l.ActorID, &session,
-		&acquiredAt, &renewedAt, &expiresAt, &releasedAt); err != nil {
+	var renewedAt, releasedAt sql.NullTime
+	if err := row.Scan(&l.ID, &l.TaskID, &l.ActorID, &l.Worktree,
+		&l.AcquiredAt, &renewedAt, &l.ExpiresAt, &releasedAt); err != nil {
 		return nil, err
 	}
-	l.SessionID = session.String
-	var err error
-	if l.AcquiredAt, err = time.Parse(time.RFC3339, acquiredAt); err != nil {
-		return nil, fmt.Errorf("parse lease %d acquired_at: %w", l.ID, err)
-	}
+	l.AcquiredAt = l.AcquiredAt.UTC()
+	l.ExpiresAt = l.ExpiresAt.UTC()
 	if renewedAt.Valid {
-		if l.RenewedAt, err = time.Parse(time.RFC3339, renewedAt.String); err != nil {
-			return nil, fmt.Errorf("parse lease %d renewed_at: %w", l.ID, err)
-		}
-	}
-	if l.ExpiresAt, err = time.Parse(time.RFC3339, expiresAt); err != nil {
-		return nil, fmt.Errorf("parse lease %d expires_at: %w", l.ID, err)
+		l.RenewedAt = renewedAt.Time.UTC()
 	}
 	if releasedAt.Valid {
-		t, err := time.Parse(time.RFC3339, releasedAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse lease %d released_at: %w", l.ID, err)
-		}
+		t := releasedAt.Time.UTC()
 		l.ReleasedAt = &t
 	}
 	return &l, nil
@@ -77,7 +66,7 @@ func scanLease(row rowScanner) (*Lease, error) {
 // or ErrNotFound if there is none.
 func activeLeaseTx(tx *sql.Tx, taskID string) (*Lease, error) {
 	row := tx.QueryRow(
-		`SELECT `+leaseColumns+` FROM leases WHERE task_id = ? AND released_at IS NULL`, taskID)
+		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID)
 	l, err := scanLease(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no active lease on task %s: %w", taskID, ErrNotFound)
@@ -88,17 +77,18 @@ func activeLeaseTx(tx *sql.Tx, taskID string) (*Lease, error) {
 	return l, nil
 }
 
-// Claim atomically leases taskID to actorID and moves the task from ready to
-// in_progress, all inside one recorded "cli" event. Errors:
+// Claim atomically leases taskID to actorID (bound to worktree) and moves the
+// task from ready to in_progress, all inside one recorded "cli" event. Errors:
 //
-//   - ErrLeased: the task already has an active lease (the leases_active
-//     unique index is the backstop for races).
+//   - ErrLeased: the task already has an active lease, or the worktree
+//     already holds an active lease on another task (the leases_active and
+//     leases_active_worktree unique indexes are the backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task.
 //   - ErrBadTransition: the task is not in state ready (draft, done, ...).
 //   - ErrNotFound: the task or actor does not exist.
 //
 // ttl <= 0 means DefaultLeaseTTL.
-func (s *Store) Claim(ctx context.Context, taskID, actorID, sessionID string, ttl time.Duration) (*Lease, error) {
+func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl time.Duration) (*Lease, error) {
 	if ttl <= 0 {
 		ttl = DefaultLeaseTTL
 	}
@@ -112,8 +102,17 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, sessionID string, tt
 		func(tx *sql.Tx, eventID int64) error {
 			now := s.nowFn().UTC().Truncate(time.Second)
 
+			// Lock the task row first so concurrent claims serialize here.
+			var state string
+			if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID).Scan(&state); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+				}
+				return fmt.Errorf("lock task %s: %w", taskID, err)
+			}
+
 			var one int
-			if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = ?`, actorID).Scan(&one); err != nil {
+			if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, actorID).Scan(&one); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("actor %s: %w", actorID, ErrNotFound)
 				}
@@ -122,7 +121,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, sessionID string, tt
 
 			var existing int64
 			err := tx.QueryRow(
-				`SELECT id FROM leases WHERE task_id = ? AND released_at IS NULL`, taskID,
+				`SELECT id FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID,
 			).Scan(&existing)
 			if err == nil {
 				return fmt.Errorf("task %s: %w", taskID, ErrLeased)
@@ -139,37 +138,31 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, sessionID string, tt
 				return fmt.Errorf("task %s: %w", taskID, ErrBlocked)
 			}
 
-			// Unknown task → ErrNotFound; task not in ready → ErrBadTransition.
+			// Task not in ready → ErrBadTransition.
 			if err := Transition(tx, now, taskID, "ready", "in_progress", eventID); err != nil {
 				return err
 			}
 
-			var session sql.NullString
-			if sessionID != "" {
-				session = sql.NullString{String: sessionID, Valid: true}
-			}
 			expires := now.Add(ttl)
-			nowStr := now.Format(time.RFC3339)
-			res, err := tx.Exec(
-				`INSERT INTO leases (task_id, actor_id, session_id, acquired_at, renewed_at, expires_at)
-				 VALUES (?, ?, ?, ?, ?, ?)`,
-				taskID, actorID, session, nowStr, nowStr, expires.Format(time.RFC3339),
-			)
-			if err != nil {
-				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			var id int64
+			if err := tx.QueryRow(
+				`INSERT INTO leases (task_id, actor_id, worktree, acquired_at, renewed_at, expires_at)
+				 VALUES ($1, $2, $3, $4, $5, $6)
+				 RETURNING id`,
+				taskID, actorID, worktree, now, now, expires,
+			).Scan(&id); err != nil {
+				// Either active-lease index (task or worktree) losing a race
+				// means the claim is refused the same way.
+				if isUniqueViolation(err) {
 					return fmt.Errorf("task %s: %w", taskID, ErrLeased)
 				}
 				return fmt.Errorf("insert lease on %s: %w", taskID, err)
-			}
-			id, err := res.LastInsertId()
-			if err != nil {
-				return fmt.Errorf("lease insert id: %w", err)
 			}
 			lease = &Lease{
 				ID:         id,
 				TaskID:     taskID,
 				ActorID:    actorID,
-				SessionID:  sessionID,
+				Worktree:   worktree,
 				AcquiredAt: now,
 				RenewedAt:  now,
 				ExpiresAt:  expires,
@@ -212,8 +205,8 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 			now := s.nowFn().UTC().Truncate(time.Second)
 			expires := now.Add(ttl)
 			if _, err := tx.Exec(
-				`UPDATE leases SET renewed_at = ?, expires_at = ? WHERE id = ?`,
-				now.Format(time.RFC3339), expires.Format(time.RFC3339), l.ID,
+				`UPDATE leases SET renewed_at = $1, expires_at = $2 WHERE id = $3`,
+				now, expires, l.ID,
 			); err != nil {
 				return fmt.Errorf("renew lease %d: %w", l.ID, err)
 			}
@@ -259,13 +252,13 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 // ExpireLeases.
 func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID int64) error {
 	if _, err := tx.Exec(
-		`UPDATE leases SET released_at = ? WHERE id = ?`,
-		now.UTC().Format(time.RFC3339), leaseID,
+		`UPDATE leases SET released_at = $1 WHERE id = $2`,
+		now.UTC(), leaseID,
 	); err != nil {
 		return fmt.Errorf("close lease %d: %w", leaseID, err)
 	}
 	var state string
-	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = ?`, taskID).Scan(&state); err != nil {
+	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state); err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
 	}
 	if state == "in_progress" {
@@ -280,8 +273,8 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // abandon, merge) set the task's state themselves in the same transaction.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 	if _, err := tx.Exec(
-		`UPDATE leases SET released_at = ? WHERE task_id = ? AND released_at IS NULL`,
-		now.UTC().Format(time.RFC3339), taskID,
+		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL`,
+		now.UTC(), taskID,
 	); err != nil {
 		return fmt.Errorf("close active lease on %s: %w", taskID, err)
 	}
@@ -292,7 +285,7 @@ func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 // ErrNotFound if there is none.
 func (s *Store) ActiveLease(ctx context.Context, taskID string) (*Lease, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+leaseColumns+` FROM leases WHERE task_id = ? AND released_at IS NULL`, taskID)
+		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID)
 	l, err := scanLease(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no active lease on task %s: %w", taskID, ErrNotFound)
@@ -312,12 +305,9 @@ func (s *Store) ActiveLease(ctx context.Context, taskID string) (*Lease, error) 
 // (the serve loop passes s.nowFn()) so sweeps are testable and comparisons
 // are consistent within one run.
 func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
-	nowStr := now.UTC().Format(time.RFC3339)
-
-	// RFC3339 UTC strings compare lexicographically in time order.
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, task_id FROM leases WHERE released_at IS NULL AND expires_at < ? ORDER BY id`,
-		nowStr)
+		`SELECT id, task_id FROM leases WHERE released_at IS NULL AND expires_at < $1 ORDER BY id`,
+		now.UTC())
 	if err != nil {
 		return 0, fmt.Errorf("find expired leases: %w", err)
 	}
@@ -348,7 +338,7 @@ func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
 				// Re-check inside the tx: a release may have won the race.
 				var stillActive int
 				err := tx.QueryRow(
-					`SELECT 1 FROM leases WHERE id = ? AND released_at IS NULL`, e.leaseID,
+					`SELECT 1 FROM leases WHERE id = $1 AND released_at IS NULL`, e.leaseID,
 				).Scan(&stillActive)
 				if errors.Is(err, sql.ErrNoRows) {
 					return nil

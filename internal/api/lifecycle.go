@@ -16,7 +16,7 @@ import (
 type leaseJSON struct {
 	TaskID     string    `json:"task_id"`
 	ActorID    string    `json:"actor_id"`
-	SessionID  string    `json:"session_id"`
+	Worktree   string    `json:"worktree"`
 	AcquiredAt time.Time `json:"acquired_at"`
 	RenewedAt  time.Time `json:"renewed_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
@@ -26,7 +26,7 @@ func toLeaseJSON(l *store.Lease) leaseJSON {
 	return leaseJSON{
 		TaskID:     l.TaskID,
 		ActorID:    l.ActorID,
-		SessionID:  l.SessionID,
+		Worktree:   l.Worktree,
 		AcquiredAt: l.AcquiredAt,
 		RenewedAt:  l.RenewedAt,
 		ExpiresAt:  l.ExpiresAt,
@@ -73,13 +73,14 @@ func readOptionalJSON(w http.ResponseWriter, r *http.Request, v any) error {
 }
 
 type claimRequest struct {
-	SessionID  string `json:"session_id"`
+	Worktree   string `json:"worktree"`
 	TTLSeconds int    `json:"ttl_seconds"`
 }
 
 // claimTask handles POST /api/v1/tasks/{id}/claim: lease the task to the
-// caller and move it ready -> in_progress. A 409 for an already-leased task
-// carries the current holder.
+// caller and move it ready -> in_progress, bound to the caller's worktree
+// identity (required). A 409 for an already-leased task carries the current
+// holder.
 func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req claimRequest
@@ -87,9 +88,13 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
+	if req.Worktree == "" {
+		writeErr(w, http.StatusBadRequest, "worktree is required")
+		return
+	}
 	actor := actorFrom(r)
 
-	lease, err := s.st.Claim(r.Context(), id, actor.ID, req.SessionID,
+	lease, err := s.st.Claim(r.Context(), id, actor.ID, req.Worktree,
 		time.Duration(req.TTLSeconds)*time.Second)
 	if errors.Is(err, store.ErrLeased) {
 		body := map[string]any{"error": "task already leased"}

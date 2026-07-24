@@ -75,7 +75,7 @@ func (e *env) claimTask(t *testing.T, taskID string) {
 	if err := e.st.CreateActor(ctx, "agent", "agent", "Agent", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
-	if _, err := e.st.Claim(ctx, taskID, "agent", "", 0); err != nil {
+	if _, err := e.st.Claim(ctx, taskID, "agent", "host:/wt-"+taskID, 0); err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
 }

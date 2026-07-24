@@ -257,7 +257,7 @@ type Task struct {
 type Lease struct {
 	TaskID     string    `json:"task_id"`
 	ActorID    string    `json:"actor_id"`
-	SessionID  string    `json:"session_id"`
+	Worktree   string    `json:"worktree"`
 	AcquiredAt time.Time `json:"acquired_at"`
 	RenewedAt  time.Time `json:"renewed_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
@@ -362,13 +362,11 @@ type ClaimResponse struct {
 	Branch string `json:"branch"`
 }
 
-// ClaimTask calls POST /api/v1/tasks/{id}/claim. ttl <= 0 means the server
-// default (2h); session is omitted from the request when empty.
-func (c *Client) ClaimTask(ctx context.Context, id, session string, ttl time.Duration) (ClaimResponse, []byte, error) {
-	body := map[string]any{}
-	if session != "" {
-		body["session_id"] = session
-	}
+// ClaimTask calls POST /api/v1/tasks/{id}/claim. worktree is the caller's
+// worktree identity (required by the server); ttl <= 0 means the server
+// default (2h).
+func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Duration) (ClaimResponse, []byte, error) {
+	body := map[string]any{"worktree": worktree}
 	if ttl > 0 {
 		body["ttl_seconds"] = int(ttl.Seconds())
 	}

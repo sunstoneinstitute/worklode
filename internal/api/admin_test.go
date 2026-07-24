@@ -321,12 +321,12 @@ func TestBoard(t *testing.T) {
 		t.Fatalf("add blocking edge status = %d", rr.Code)
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"session_id": "s1"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim WL-3 status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/claim", token, map[string]any{"session_id": "s2"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/claim", token, map[string]any{"worktree": "host:/wt-2"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim WL-4 status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -409,7 +409,7 @@ func TestBoardInProgressWithoutLease(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Reopened", "priority": "high", "kind": "bug"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -469,7 +469,7 @@ func TestGetTaskIncludesLease(t *testing.T) {
 		t.Fatalf("lease before claim = %v, want absent", got)
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}

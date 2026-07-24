@@ -69,7 +69,7 @@ func TestClaim(t *testing.T) {
 		"project": "proj", "title": "Fix the: Thing!!", "priority": "high", "kind": "bug",
 	})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "sess-1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -81,7 +81,7 @@ func TestClaim(t *testing.T) {
 	if !ok {
 		t.Fatalf("lease missing: %v", got)
 	}
-	if lease["task_id"] != "WL-1" || lease["actor_id"] != "alice" || lease["session_id"] != "sess-1" {
+	if lease["task_id"] != "WL-1" || lease["actor_id"] != "alice" || lease["worktree"] != "host:/wt-1" {
 		t.Fatalf("lease = %v", lease)
 	}
 	for _, k := range []string{"acquired_at", "renewed_at", "expires_at"} {
@@ -105,12 +105,12 @@ func TestClaimConflict(t *testing.T) {
 	})
 	bobToken := secondActor(t, st, "bob")
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("first claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", bobToken, map[string]any{"session_id": "s2"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", bobToken, map[string]any{"worktree": "host:/wt-2"})
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("second claim status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
@@ -144,15 +144,17 @@ func TestClaimErrors(t *testing.T) {
 
 	cases := []struct {
 		name, path string
+		body       map[string]any
 		want       int
 	}{
-		{"blocked task", "/api/v1/tasks/WL-2/claim", 409},
-		{"draft task", "/api/v1/tasks/WL-3/claim", 422},
-		{"unknown task", "/api/v1/tasks/WL-99/claim", 404},
+		{"blocked task", "/api/v1/tasks/WL-2/claim", map[string]any{"worktree": "host:/wt"}, 409},
+		{"draft task", "/api/v1/tasks/WL-3/claim", map[string]any{"worktree": "host:/wt"}, 422},
+		{"unknown task", "/api/v1/tasks/WL-99/claim", map[string]any{"worktree": "host:/wt"}, 404},
+		{"missing worktree", "/api/v1/tasks/WL-1/claim", map[string]any{}, 400},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rr := doReq(t, h, "POST", tc.path, token, map[string]any{})
+			rr := doReq(t, h, "POST", tc.path, token, tc.body)
 			if rr.Code != tc.want {
 				t.Fatalf("status = %d, want %d; body %s", rr.Code, tc.want, rr.Body.String())
 			}
@@ -165,7 +167,7 @@ func TestRenewRelease(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Work", "priority": "high", "kind": "feature"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -209,7 +211,7 @@ func TestDone(t *testing.T) {
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Ship it", "priority": "high", "kind": "feature"})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"session_id": "s1"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -240,7 +242,7 @@ func TestDoneBadStates(t *testing.T) {
 		t.Fatalf("done from ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 	// From in_progress: still 422 per the transition table.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
@@ -272,7 +274,7 @@ func TestAbandon(t *testing.T) {
 	}
 
 	// From in_progress (claimed): lease is auto-released.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/claim", token, map[string]any{})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/claim", token, map[string]any{"worktree": "host:/wt-2"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
@@ -288,7 +290,7 @@ func TestAbandon(t *testing.T) {
 	}
 
 	// From done (terminal): 422.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-3"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
