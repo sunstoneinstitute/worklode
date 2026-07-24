@@ -260,13 +260,16 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 // two cases are deliberately indistinguishable so a rebind attempt does not
 // leak who holds the task. If the target worktree already holds another active
 // lease, the leases_active_worktree unique index fires and RebindLeaseWorktree
-// returns ErrLeased. Recorded as a "lease.rebound" cli event.
-func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktree string) error {
+// returns ErrLeased. Recorded as a "lease.rebound" cli event. On success it
+// returns the updated lease (with the new worktree) so the caller confirms the
+// rebind without a separate read that could race a release/expiry.
+func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktree string) (*Lease, error) {
 	extID, err := randomExternalID()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var lease *Lease
 	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.rebound", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
@@ -285,9 +288,14 @@ func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktr
 				}
 				return fmt.Errorf("rebind lease %d worktree: %w", l.ID, err)
 			}
+			l.Worktree = worktree
+			lease = l
 			return nil
 		})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return lease, nil
 }
 
 // closeLease sets released_at on the lease and, when the task is still

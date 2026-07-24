@@ -87,11 +87,7 @@ func (s *server) rebindWorktree(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := actorFrom(r)
 
-	if err := s.st.RebindLeaseWorktree(r.Context(), id, actor.ID, req.Worktree); err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	lease, err := s.st.ActiveLease(r.Context(), id)
+	lease, err := s.st.RebindLeaseWorktree(r.Context(), id, actor.ID, req.Worktree)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

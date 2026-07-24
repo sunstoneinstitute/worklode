@@ -316,9 +316,14 @@ func TestRebindLeaseWorktree(t *testing.T) {
 		t.Fatalf("Claim: %v", err)
 	}
 
-	// The holder rebinds to a new worktree; ActiveLease reflects the change.
-	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-moved"); err != nil {
+	// The holder rebinds to a new worktree; the returned lease and a fresh
+	// ActiveLease read both reflect the change.
+	rebound, err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-moved")
+	if err != nil {
 		t.Fatalf("RebindLeaseWorktree by holder: %v", err)
+	}
+	if rebound.Worktree != "host:/wt-moved" {
+		t.Fatalf("returned lease worktree = %q, want host:/wt-moved", rebound.Worktree)
 	}
 	got, err := s.ActiveLease(ctx, task.ID)
 	if err != nil {
@@ -329,7 +334,7 @@ func TestRebindLeaseWorktree(t *testing.T) {
 	}
 
 	// A non-holder gets ErrNotFound, indistinguishable from no lease at all.
-	if err := s.RebindLeaseWorktree(ctx, task.ID, "bob", "host:/wt-bob"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RebindLeaseWorktree(ctx, task.ID, "bob", "host:/wt-bob"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("rebind by non-holder: want ErrNotFound, got %v", err)
 	}
 	if got, _ := s.ActiveLease(ctx, task.ID); got.Worktree != "host:/wt-moved" {
@@ -342,7 +347,7 @@ func TestRebindLeaseWorktree(t *testing.T) {
 	if _, err := s.Claim(ctx, task2.ID, "stig", "host:/wt-other", 0); err != nil {
 		t.Fatalf("Claim task2: %v", err)
 	}
-	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-other"); !errors.Is(err, ErrLeased) {
+	if _, err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-other"); !errors.Is(err, ErrLeased) {
 		t.Fatalf("rebind onto taken worktree: want ErrLeased, got %v", err)
 	}
 	if got, _ := s.ActiveLease(ctx, task.ID); got.Worktree != "host:/wt-moved" {
@@ -353,7 +358,7 @@ func TestRebindLeaseWorktree(t *testing.T) {
 	if err := s.Release(ctx, task.ID, "stig"); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-x"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RebindLeaseWorktree(ctx, task.ID, "stig", "host:/wt-x"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("rebind without lease: want ErrNotFound, got %v", err)
 	}
 }
