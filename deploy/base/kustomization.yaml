@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: worklode
 resources:
   - namespace.yaml
-  - pvc.yaml
+  - postgres.yaml
   - configmap.yaml
   - deployment.yaml
   - service.yaml
