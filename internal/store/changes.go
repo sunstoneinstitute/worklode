@@ -52,8 +52,8 @@ var refTaskIDPattern = regexp.MustCompile(`^wl/([A-Z][A-Z0-9]*-[0-9]+)(?:-.*)?$`
 
 // TaskIDFromRef extracts a task id from a branch name following the
 // "wl/<task-id>-<slug>" convention (the slug is optional). It returns "" if
-// ref does not match — including when the id part uses a lowercase "wl-"
-// prefix, since task ids are always uppercase "WL-".
+// ref does not match — including when the id part uses a lowercase prefix,
+// since task-id prefixes are always uppercase (e.g. WL-, SW-).
 func TaskIDFromRef(ref string) string {
 	m := refTaskIDPattern.FindStringSubmatch(ref)
 	if m == nil {
