@@ -451,6 +451,57 @@ func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (ClaimNextRes
 	return resp, raw, nil
 }
 
+// BriefBlocker is the slim projection of an open blocker in a Brief.
+type BriefBlocker struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	State string `json:"state"`
+}
+
+// Brief is the wire form of GET /api/v1/tasks/{id}/brief: the bounded
+// start-of-work payload for a task. Lease is nil when the task has no active
+// lease. GoverningDesign, AffectedComponents, and DefinitionOfDone are
+// reserved fields that serialize as JSON null in v1.
+type Brief struct {
+	Task               Task           `json:"task"`
+	Body               string         `json:"body"`
+	Branch             string         `json:"branch"`
+	OpenBlockers       []BriefBlocker `json:"open_blockers"`
+	Lease              *Lease         `json:"lease"`
+	GoverningDesign    *string        `json:"governing_design"`
+	AffectedComponents []string       `json:"affected_components"`
+	DefinitionOfDone   *string        `json:"definition_of_done"`
+}
+
+// Brief calls GET /api/v1/tasks/{id}/brief.
+func (c *Client) Brief(ctx context.Context, id string) (Brief, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id)+"/brief", nil)
+	if err != nil {
+		return Brief{}, nil, err
+	}
+	var b Brief
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return Brief{}, nil, fmt.Errorf("decode brief: %w", err)
+	}
+	return b, raw, nil
+}
+
+// RebindWorktree calls POST /api/v1/tasks/{id}/lease/worktree: move the
+// caller's active lease on id to a new worktree identity. Returns the
+// updated lease.
+func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (Lease, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/lease/worktree",
+		map[string]string{"worktree": worktree})
+	if err != nil {
+		return Lease{}, nil, err
+	}
+	var l Lease
+	if err := json.Unmarshal(raw, &l); err != nil {
+		return Lease{}, nil, fmt.Errorf("decode lease: %w", err)
+	}
+	return l, raw, nil
+}
+
 // EditTaskInput carries the optional fields of a task edit; nil means leave
 // the field unchanged. Concern "" or "none" clears the concern.
 type EditTaskInput struct {

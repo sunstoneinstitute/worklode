@@ -31,6 +31,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskAbandonCmd(),
 		newTaskBlockCmd(),
 		newTaskUnblockCmd(),
+		newTaskBriefCmd(),
 	)
 	return cmd
 }
@@ -478,6 +479,52 @@ func newTaskBlockCmd() *cobra.Command {
 	cmd.Flags().StringVar(&by, "by", "", "id of the blocking task (required)")
 	cmd.MarkFlagRequired("by")
 	return cmd
+}
+
+func newTaskBriefCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "brief <id>",
+		Short: "Fetch a task's brief: body, branch, open blockers, and active lease",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			b, raw, err := c.Brief(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			printBrief(cmd, b)
+			return nil
+		},
+	}
+	return cmd
+}
+
+// printBrief renders a Brief as a readable summary, shared by `lode task
+// brief` and `lode next`.
+func printBrief(cmd *cobra.Command, b cli.Brief) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "%s: %s\n", b.Task.ID, b.Task.Title)
+	fmt.Fprintf(out, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
+	fmt.Fprintf(out, "branch: %s\n", b.Branch)
+	if b.Lease != nil {
+		fmt.Fprintf(out, "lease: %s (expires %s)\n", b.Lease.Worktree, b.Lease.ExpiresAt.Local().Format(time.RFC3339))
+	}
+	if len(b.OpenBlockers) > 0 {
+		fmt.Fprintln(out, "blocked by:")
+		for _, blk := range b.OpenBlockers {
+			fmt.Fprintf(out, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
+		}
+	}
+	if b.Body != "" {
+		fmt.Fprintf(out, "\n%s\n", b.Body)
+	}
 }
 
 func newTaskUnblockCmd() *cobra.Command {

@@ -366,6 +366,59 @@ func TestClientBlockUnblock(t *testing.T) {
 	}
 }
 
+func TestClientBriefAndRebindWorktree(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug"})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	// No lease yet: brief.Lease is nil, open_blockers is an empty (non-nil) slice.
+	brief, _, err := c.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief (no lease): %v", err)
+	}
+	if brief.Task.ID != task.ID || brief.Branch != "wl/"+task.ID+"-fix-the-thing" {
+		t.Fatalf("Brief = %+v, want task %s branch wl/%s-fix-the-thing", brief, task.ID, task.ID)
+	}
+	if brief.Lease != nil {
+		t.Fatalf("Brief.Lease = %+v, want nil", brief.Lease)
+	}
+	if brief.OpenBlockers == nil || len(brief.OpenBlockers) != 0 {
+		t.Fatalf("Brief.OpenBlockers = %+v, want empty non-nil slice", brief.OpenBlockers)
+	}
+
+	if _, _, err := c.ClaimTask(ctx, task.ID, "host:/wt-1", 0); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
+	brief, _, err = c.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief (leased): %v", err)
+	}
+	if brief.Lease == nil || brief.Lease.Worktree != "host:/wt-1" {
+		t.Fatalf("Brief.Lease = %+v, want worktree host:/wt-1", brief.Lease)
+	}
+
+	moved, _, err := c.RebindWorktree(ctx, task.ID, "host:/wt-2")
+	if err != nil {
+		t.Fatalf("RebindWorktree: %v", err)
+	}
+	if moved.Worktree != "host:/wt-2" || moved.TaskID != task.ID {
+		t.Fatalf("RebindWorktree result = %+v, want worktree host:/wt-2 task %s", moved, task.ID)
+	}
+	brief, _, err = c.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief (after rebind): %v", err)
+	}
+	if brief.Lease == nil || brief.Lease.Worktree != "host:/wt-2" {
+		t.Fatalf("Brief.Lease after rebind = %+v, want worktree host:/wt-2", brief.Lease)
+	}
+}
+
 func TestClientInboxFlow(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
