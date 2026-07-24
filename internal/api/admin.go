@@ -25,6 +25,7 @@ type projectJSON struct {
 	Name        string   `json:"name"`
 	DeployGated bool     `json:"deploy_gated"`
 	Repos       []string `json:"repos"`
+	Focus       []string `json:"focus"`
 }
 
 type createProjectRequest struct {
@@ -59,7 +60,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, projectJSON{
-		ID: req.ID, Name: req.Name, DeployGated: req.DeployGated, Repos: []string{},
+		ID: req.ID, Name: req.Name, DeployGated: req.DeployGated, Repos: []string{}, Focus: []string{},
 	})
 }
 
@@ -82,11 +83,61 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		if repos == nil {
 			repos = []string{}
 		}
+		focus := p.Focus
+		if focus == nil {
+			focus = []string{}
+		}
 		resp.Projects = append(resp.Projects, projectJSON{
-			ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos,
+			ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type patchProjectRequest struct {
+	Focus *[]string `json:"focus"`
+}
+
+// patchProject handles PATCH /api/v1/projects/{id}: currently only updates
+// focus, the ordered list of concerns the project's ranking should
+// prioritize (see store.SetProjectFocus). Admin-gated like the other project
+// mutations, since focus affects claim-next ordering for everyone.
+func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req patchProjectRequest
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.Focus == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
+		return
+	}
+	if err := s.st.SetProjectFocus(r.Context(), id, *req.Focus); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	p, err := s.st.GetProject(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	repos, err := s.st.ListRepos(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if repos == nil {
+		repos = []string{}
+	}
+	focus := p.Focus
+	if focus == nil {
+		focus = []string{}
+	}
+	writeJSON(w, http.StatusOK, projectJSON{
+		ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
+	})
 }
 
 type addRepoRequest struct {

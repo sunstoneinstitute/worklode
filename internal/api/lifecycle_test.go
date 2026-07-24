@@ -323,6 +323,124 @@ func lastEventType(t *testing.T, st *store.Store) string {
 	return typ
 }
 
+// TestClaimNext covers the basic claimed shape: with two ready tasks of
+// different priority, claim-next picks the higher-priority one (spec
+// ranking, exercised in depth at the store level) and returns it in the
+// spec-02 pick shape, with the task actually moved to in_progress.
+func TestClaimNext(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Low priority filler", "priority": "low", "kind": "chore",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Fix the: Thing!!", "priority": "critical", "kind": "bug", "concern": "security",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["claimed"] != true {
+		t.Fatalf("claimed = %v, want true", got["claimed"])
+	}
+	task, ok := got["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("task missing: %v", got)
+	}
+	if task["id"] != "WL-2" {
+		t.Fatalf("claimed task id = %v, want WL-2 (the critical/security one)", task["id"])
+	}
+	if task["slug"] != "fix-the-thing" {
+		t.Fatalf("slug = %v, want fix-the-thing", task["slug"])
+	}
+	if task["concern"] != "security" || task["priority"] != "critical" || task["project"] != "proj" {
+		t.Fatalf("task = %v", task)
+	}
+	if _, ok := task["fan_out"].(float64); !ok {
+		t.Fatalf("fan_out missing or not a number: %v", task)
+	}
+	lease, ok := task["lease"].(map[string]any)
+	if !ok {
+		t.Fatalf("lease missing: %v", task)
+	}
+	if lease["worktree"] != "host:/wt-1" {
+		t.Fatalf("lease.worktree = %v, want host:/wt-1", lease["worktree"])
+	}
+	if s, _ := lease["expires_at"].(string); s == "" {
+		t.Fatalf("lease.expires_at missing: %v", lease)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)
+	if got := decodeMap(t, rr); got["state"] != "in_progress" {
+		t.Fatalf("state after claim-next = %v, want in_progress", got["state"])
+	}
+}
+
+// TestClaimNextNoReadyTask covers the empty-ready-set response shape.
+func TestClaimNextNoReadyTask(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["claimed"] != false || got["reason"] != "no-ready-task" {
+		t.Fatalf("body = %v, want claimed:false reason:no-ready-task", got)
+	}
+}
+
+// TestClaimNextMissingWorktree covers the 400 guard: worktree is required
+// unless dry_run is set.
+func TestClaimNextMissingWorktree(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Needs worktree", "priority": "high", "kind": "feature"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{})
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestClaimNextDryRun covers the dry-run response shape: the top candidate
+// is returned but nothing is claimed or leased.
+func TestClaimNextDryRun(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Preview me", "priority": "high", "kind": "feature"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{"project": "proj", "dry_run": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next dry-run status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["claimed"] != false || got["dry_run"] != true {
+		t.Fatalf("body = %v, want claimed:false dry_run:true", got)
+	}
+	task, ok := got["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("task missing: %v", got)
+	}
+	if task["id"] != "WL-1" {
+		t.Fatalf("task id = %v, want WL-1", task["id"])
+	}
+	if _, hasLease := task["lease"]; hasLease {
+		t.Fatalf("task has lease in dry-run response: %v", task)
+	}
+
+	if _, err := st.ActiveLease(context.Background(), "WL-1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("active lease after dry-run: err = %v, want ErrNotFound", err)
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
+	if got := decodeMap(t, rr); got["state"] != "ready" {
+		t.Fatalf("state after dry-run = %v, want ready", got["state"])
+	}
+}
+
 func TestReopen(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
