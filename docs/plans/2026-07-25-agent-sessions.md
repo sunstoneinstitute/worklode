@@ -133,11 +133,16 @@ CREATE TABLE agent_sessions (
     output_tokens       bigint,
     cost_amount         numeric(12,6),
     cost_currency       text NOT NULL DEFAULT 'USD'
+                          CONSTRAINT agent_sessions_cost_currency_format
                           CHECK (cost_currency ~ '^[A-Z]{3}$'),
-    UNIQUE (lease_id, agent, external_session_id)
+    CONSTRAINT agent_sessions_lease_session_unique
+      UNIQUE (lease_id, agent, external_session_id)
 );
-CREATE INDEX agent_sessions_lease ON agent_sessions (lease_id);
 ```
+
+The `agent` CHECK is likewise named `agent_sessions_agent_known`. No separate
+index on `lease_id`: the unique constraint's index already leads with that
+column.
 
 Create `deploy/base/migrations/0004_agent_sessions.down.sql`:
 

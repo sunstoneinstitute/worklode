@@ -40,11 +40,17 @@ CREATE TABLE agent_sessions (
     output_tokens       bigint,
     cost_amount         numeric(12,6),
     cost_currency       text NOT NULL DEFAULT 'USD'
+                          CONSTRAINT agent_sessions_cost_currency_format
                           CHECK (cost_currency ~ '^[A-Z]{3}$'),
-    UNIQUE (lease_id, agent, external_session_id)
+    CONSTRAINT agent_sessions_lease_session_unique
+      UNIQUE (lease_id, agent, external_session_id)
 );
-CREATE INDEX agent_sessions_lease ON agent_sessions (lease_id);
 ```
+
+No separate index on `lease_id`: the unique constraint's index already leads
+with that column, so it serves every by-lease lookup, including the foreign key
+check. Constraints are named rather than left to Postgres, so store code and
+tests can refer to them.
 
 Why a child table rather than columns on `leases`: a lease routinely outlives a
 single agent session. `handleSessionStart` renews or re-acquires an existing
