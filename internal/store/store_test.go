@@ -1,7 +1,6 @@
 package store
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -26,18 +25,12 @@ var wantTables = []string{
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "wl.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer s.Close()
-	if err := s.Migrate(MigrationsDirForTests()); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	s := OpenTestStore(t)
 
-	rows, err := s.db.Query(`SELECT name FROM sqlite_master WHERE type = 'table'`)
+	rows, err := s.db.Query(
+		`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`)
 	if err != nil {
-		t.Fatalf("query sqlite_master: %v", err)
+		t.Fatalf("query information_schema.tables: %v", err)
 	}
 	defer rows.Close()
 
@@ -61,25 +54,18 @@ func TestMigrateAppliesMigrations(t *testing.T) {
 }
 
 func TestMigrateIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wl.db")
-
-	s1, err := Open(path)
-	if err != nil {
-		t.Fatalf("first Open: %v", err)
-	}
-	if err := s1.Migrate(MigrationsDirForTests()); err != nil {
-		t.Fatalf("first Migrate: %v", err)
-	}
-	if err := s1.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-
-	s2, err := Open(path)
-	if err != nil {
-		t.Fatalf("second Open: %v", err)
-	}
-	defer s2.Close()
-	if err := s2.Migrate(MigrationsDirForTests()); err != nil {
+	s := OpenTestStore(t) // first Migrate happened here
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
 		t.Fatalf("second Migrate: %v", err)
+	}
+}
+
+func TestMigrateRoundTrip(t *testing.T) {
+	s := OpenTestStore(t) // up happened here
+	if err := s.MigrateDown(MigrationsDirForTests()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatal(err)
 	}
 }

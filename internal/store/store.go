@@ -1,6 +1,6 @@
-// Package store provides the SQLite-backed data store for the work tracker.
-// The server is the single writer; SetMaxOpenConns(1) serializes access at
-// the connection-pool level.
+// Package store provides the Postgres-backed data store for the work tracker.
+// It holds a pgx-backed database/sql connection pool; concurrency control is
+// delegated to Postgres (transactions plus unique-constraint backstops).
 package store
 
 import (
@@ -12,29 +12,29 @@ import (
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	migratesqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
+	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// Store wraps the single-writer SQLite database.
+// Store wraps the Postgres connection pool.
 type Store struct {
 	db    *sql.DB
 	nowFn func() time.Time
 }
 
-// Open opens (creating if necessary) the SQLite database at path. Callers
+// Open opens a Postgres-backed store for the given postgres:// DSN. Callers
 // are responsible for applying migrations (see Migrate) before relying on
-// the schema being present — Open no longer does this implicitly.
-func Open(path string) (*Store, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", path)
-	db, err := sql.Open("sqlite", dsn)
+// the schema being present — Open does not do this implicitly.
+func Open(dsn string) (*Store, error) {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %s: %w", path, err)
+		return nil, fmt.Errorf("open postgres: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-
+	db.SetMaxOpenConns(16)
+	db.SetMaxIdleConns(4)
+	db.SetConnMaxLifetime(30 * time.Minute)
 	return &Store{db: db, nowFn: func() time.Time { return time.Now().UTC() }}, nil
 }
 
@@ -55,26 +55,47 @@ func (s *Store) Now() time.Time {
 // Migrate applies all pending migrations found as *.up.sql/*.down.sql files
 // in migrationsPath. A database that is already up to date is not an error.
 func (s *Store) Migrate(migrationsPath string) error {
-	absPath, err := filepath.Abs(migrationsPath)
+	m, err := s.newMigrate(migrationsPath)
 	if err != nil {
-		return fmt.Errorf("resolve migrations path %s: %w", migrationsPath, err)
-	}
-	src, err := source.Open("file://" + absPath)
-	if err != nil {
-		return fmt.Errorf("load migrations from %s: %w", absPath, err)
-	}
-	drv, err := migratesqlite.WithInstance(s.db, &migratesqlite.Config{})
-	if err != nil {
-		return fmt.Errorf("init migrate driver: %w", err)
-	}
-	m, err := migrate.NewWithInstance("file", src, "sqlite", drv)
-	if err != nil {
-		return fmt.Errorf("init migrate: %w", err)
+		return err
 	}
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 	return nil
+}
+
+// MigrateDown reverts all applied migrations found as *.up.sql/*.down.sql
+// files in migrationsPath. A database with nothing to revert is not an error.
+func (s *Store) MigrateDown(migrationsPath string) error {
+	m, err := s.newMigrate(migrationsPath)
+	if err != nil {
+		return err
+	}
+	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("revert migrations: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) newMigrate(migrationsPath string) (*migrate.Migrate, error) {
+	absPath, err := filepath.Abs(migrationsPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve migrations path %s: %w", migrationsPath, err)
+	}
+	src, err := source.Open("file://" + absPath)
+	if err != nil {
+		return nil, fmt.Errorf("load migrations from %s: %w", absPath, err)
+	}
+	drv, err := migratepgx.WithInstance(s.db, &migratepgx.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("init migrate driver: %w", err)
+	}
+	m, err := migrate.NewWithInstance("file", src, "pgx5", drv)
+	if err != nil {
+		return nil, fmt.Errorf("init migrate: %w", err)
+	}
+	return m, nil
 }
 
 // Close closes the underlying database.

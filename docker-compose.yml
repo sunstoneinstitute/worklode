@@ -1,14 +1,33 @@
 services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   migrate:
     build: .
-    command: ["migrate", "--db", "/data/wl.db", "--migrations-path", "/migrations"]
+    command: ["migrate", "--dsn", "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable", "--migrations-path", "/migrations"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./data:/data
       - ./deploy/base/migrations:/migrations:ro
 
   worklode:
     build: .
     depends_on:
+      postgres:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     ports:
@@ -17,9 +36,8 @@ services:
       # TLS-terminating reverse proxy in front — to expose it; see README
       # "Network exposure".
       - "127.0.0.1:8080:8080"
-    volumes:
-      - ./data:/data
     environment:
+      LODE_DSN: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
       # ${VAR:-} passes the var through when set on the host, empty otherwise.
       # LODE_BOOTSTRAP_TOKEN must be set on first run to create the admin actor;
       # see README "Quickstart".
@@ -31,17 +49,3 @@ services:
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
     # there is no in-container binary to run an HTTP probe with. Check
     # liveness from the host instead: curl http://localhost:8080/healthz.
-
-  # Continuous SQLite replication to S3-compatible object storage. Enable
-  # with: docker compose --profile backup up -d
-  litestream:
-    profiles: [backup]
-    image: litestream/litestream:0.3
-    command: ["replicate"]
-    volumes:
-      - ./data:/data
-      - ./litestream.yml:/etc/litestream.yml:ro
-    environment:
-      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:-}
-      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:-}
-    restart: unless-stopped
