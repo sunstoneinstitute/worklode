@@ -86,7 +86,7 @@ Tasks absent from the map have fan-out 0. (Unit-weight, all edges — matches sp
 
 **Steps:**
 
-- [ ] **Step 1: Candidate fetch.** `readyCandidates(ctx, projectID string) ([]Task, error)`:
+- [x] **Step 1: Candidate fetch.** `readyCandidates(ctx, projectID string) ([]Task, error)`:
 
 ```sql
 SELECT <task columns> FROM tasks t
@@ -101,7 +101,7 @@ WHERE t.state = 'ready'
                     AND b.state NOT IN ('done','abandoned'))
 ```
 
-- [ ] **Step 2: Rank.** Pure function, unit-testable without DB:
+- [x] **Step 2: Rank.** Pure function, unit-testable without DB:
 
 ```go
 type rankInput struct {
@@ -118,7 +118,7 @@ func rankTasks(in []rankInput, strictFocus bool) []Task
 ```
 
 `concernRank(concern string, focus []string) int`: index in focus; not listed or empty concern → `math.MaxInt`. `priorityRank`: critical 0 … low 3. Numeric id: `strconv.Atoi(strings.TrimPrefix(id, "WL-"))`.
-- [ ] **Step 3: ClaimNext.**
+- [x] **Step 3: ClaimNext.**
 
 ```go
 type ClaimNextOpts struct {
@@ -144,10 +144,10 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 ```
 
 Flow: fetch candidates → fetch fan-out map → fetch each involved project's focus (one query, `WHERE id = ANY($1)`) → `rankTasks` → if DryRun return top (no claim) → else loop candidates: `s.Claim(ctx, id, opts.ActorID, opts.Worktree, opts.TTL)`; on `ErrLeased`/`ErrBlocked`/`ErrBadTransition` continue; other error return; success → result. Exhausted → `Claimed:false`.
-- [ ] **Step 4: Unit tests for `rankTasks`** — encode the spec's worked example as a table test (no DB):
+- [x] **Step 4: Unit tests for `rankTasks`** — encode the spec's worked example as a table test (no DB):
 
 Focus `[security, completeness]`; T1 high/completeness/5, T2 high/security/1, T3 critical/usability/0, T4 medium/security/8, T5 high/performance/12. Assert default order `[T3,T2,T4,T1,T5]` and strict order `[T2,T4,T1,T3,T5]`.
-- [ ] **Step 5: DB tests for `ClaimNext`:** (a) worked-example fixture (create the 5 tasks; fan-out via real `blocks` edges to filler draft tasks: T1→5, T2→1, T4→8, T5→12) — default claims T3, strict (fresh fixture) claims T2; (b) soft focus: only off-focus tasks ready → still claims one; (c) `needs_decomposition` task never returned even when it's the only ready task (returns `Claimed:false`); (d) dry-run claims nothing (lease table empty after). Green, commit.
+- [x] **Step 5: DB tests for `ClaimNext`:** (a) worked-example fixture (create the 5 tasks; fan-out via real `blocks` edges to filler draft tasks: T1→5, T2→1, T4→8, T5→12) — default claims T3, strict (fresh fixture) claims T2; (b) soft focus: only off-focus tasks ready → still claims one; (c) `needs_decomposition` task never returned even when it's the only ready task (returns `Claimed:false`); (d) dry-run claims nothing (lease table empty after). Green, commit.
 
 ### Task 5: `ClaimNext` concurrency test
 
