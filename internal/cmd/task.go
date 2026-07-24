@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -80,11 +81,12 @@ func newTaskAddCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var project, priority string
-	var states []string
+	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List tasks",
+		Short: "List tasks (done and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			states := resolveStatusFilter(statuses)
 			c, err := newAPIClient()
 			if err != nil {
 				return err
@@ -104,9 +106,32 @@ func newTaskListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "filter by project id")
-	cmd.Flags().StringArrayVar(&states, "state", nil, "filter by state (repeatable)")
+	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, done, abandoned, or all (repeatable; default hides done and abandoned)")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	return cmd
+}
+
+// resolveStatusFilter turns `lode task list --status` values into the state
+// filter sent to the server: no flag hides terminal states (done, abandoned),
+// "all" disables filtering entirely.
+func resolveStatusFilter(statuses []string) []string {
+	if len(statuses) == 0 {
+		return []string{"draft", "ready", "in_progress", "in_review"}
+	}
+	var states []string
+	for _, s := range statuses {
+		for _, part := range strings.Split(s, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if part == "all" {
+				return nil
+			}
+			states = append(states, part)
+		}
+	}
+	return states
 }
 
 func newTaskShowCmd() *cobra.Command {
