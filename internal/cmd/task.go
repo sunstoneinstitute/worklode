@@ -251,6 +251,20 @@ func newTaskReworkCmd() *cobra.Command {
 	return cmd
 }
 
+// currentWorktreeIdentity derives the worktree identity for the current
+// directory, used as the default lease binding for claim and claim --next.
+func currentWorktreeIdentity() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("determine working directory: %w", err)
+	}
+	wt, err := cli.WorktreeIdentity(cwd)
+	if err != nil {
+		return "", fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+	}
+	return wt, nil
+}
+
 func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
@@ -271,13 +285,9 @@ func newTaskClaimCmd() *cobra.Command {
 					return fmt.Errorf("task id is required (or use --next)")
 				}
 				if worktree == "" {
-					cwd, err := os.Getwd()
+					worktree, err = currentWorktreeIdentity()
 					if err != nil {
-						return fmt.Errorf("determine working directory: %w", err)
-					}
-					worktree, err = cli.WorktreeIdentity(cwd)
-					if err != nil {
-						return fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+						return err
 					}
 				}
 				resp, raw, err := c.ClaimTask(cmd.Context(), args[0], worktree, ttl)
@@ -299,13 +309,9 @@ func newTaskClaimCmd() *cobra.Command {
 				return fmt.Errorf("--next and a task id are mutually exclusive")
 			}
 			if worktree == "" && !dryRun {
-				cwd, err := os.Getwd()
+				worktree, err = currentWorktreeIdentity()
 				if err != nil {
-					return fmt.Errorf("determine working directory: %w", err)
-				}
-				worktree, err = cli.WorktreeIdentity(cwd)
-				if err != nil {
-					return fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+					return err
 				}
 			}
 
@@ -327,9 +333,10 @@ func newTaskClaimCmd() *cobra.Command {
 			branch := "wl/" + resp.Task.ID + "-" + resp.Task.Slug
 			if resp.DryRun {
 				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
-			} else {
-				fmt.Fprintf(out, "claimed %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
+				return nil
 			}
+			fmt.Fprintf(out, "claimed %s (%s) — branch %s\n\n", resp.Task.ID, resp.Task.Slug, branch)
+			fmt.Fprintf(out, "  git switch -c %s\n", branch)
 			return nil
 		},
 	}
