@@ -31,10 +31,9 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      # Loopback-only by default: the web board and /metrics have no auth
-      # (bearer tokens cover /api/v1 only). Change to "8080:8080" — or put a
-      # TLS-terminating reverse proxy in front — to expose it; see README
-      # "Network exposure".
+      # Loopback-only by default: the web board has no auth (bearer tokens
+      # cover /api/v1 only). Change to "8080:8080" — or put a TLS-terminating
+      # reverse proxy in front — to expose it; see README "Network exposure".
       - "127.0.0.1:8080:8080"
     environment:
       LODE_DSN: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
@@ -47,5 +46,6 @@ services:
       LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}
     restart: unless-stopped
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
-    # there is no in-container binary to run an HTTP probe with. Check
-    # liveness from the host instead: curl http://localhost:8080/healthz.
+    # there is no in-container binary to run an HTTP probe with. /healthz and
+    # /metrics live on the admin port (:9090), which compose does not publish;
+    # add a "127.0.0.1:9090:9090" port mapping to probe liveness from the host.
