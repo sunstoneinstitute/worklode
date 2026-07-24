@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"reflect"
 	"sort"
@@ -11,7 +13,7 @@ func TestCreateAndGetProject(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -41,10 +43,10 @@ func TestListProjects(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject horndb: %v", err)
 	}
-	if err := s.CreateProject(ctx, "worklode", "Work Tracker"); err != nil {
+	if err := s.CreateProject(ctx, "worklode", "Work Tracker", "WL"); err != nil {
 		t.Fatalf("CreateProject worklode: %v", err)
 	}
 
@@ -66,7 +68,7 @@ func TestSetDeployGated(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -98,7 +100,7 @@ func TestSetProjectFocusRoundTrip(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -120,7 +122,7 @@ func TestSetProjectFocusEmpty(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -163,7 +165,7 @@ func TestSetProjectFocusInvalidEntry(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -185,7 +187,7 @@ func TestAddRepoAndProjectForRepo(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if err := s.AddRepo(ctx, "horndb", "sunstoneinstitute/horndb"); err != nil {
@@ -215,7 +217,7 @@ func TestAddRepoDuplicateSameProject(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if err := s.AddRepo(ctx, "horndb", "sunstoneinstitute/horndb"); err != nil {
@@ -232,10 +234,10 @@ func TestAddRepoDuplicateDifferentProject(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject horndb: %v", err)
 	}
-	if err := s.CreateProject(ctx, "other", "Other"); err != nil {
+	if err := s.CreateProject(ctx, "other", "Other", "OTH"); err != nil {
 		t.Fatalf("CreateProject other: %v", err)
 	}
 	if err := s.AddRepo(ctx, "horndb", "sunstoneinstitute/horndb"); err != nil {
@@ -252,7 +254,7 @@ func TestListRepos(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if err := s.AddRepo(ctx, "horndb", "sunstoneinstitute/horndb"); err != nil {
@@ -271,4 +273,64 @@ func TestListRepos(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ListRepos: got %v, want %v", got, want)
 	}
+}
+
+func TestPerProjectTaskNumbering(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	if err := s.CreateProject(ctx, "worklode", "Worklode", "WL"); err != nil {
+		t.Fatalf("create worklode: %v", err)
+	}
+	if err := s.CreateProject(ctx, "web", "Web", "SW"); err != nil {
+		t.Fatalf("create web: %v", err)
+	}
+
+	mk := func(project string) string {
+		var task *Task
+		_, _, err := s.RecordEvent(ctx, "cli", mustExtID(t), "task.created", []byte(`{}`),
+			func(tx *sql.Tx, eventID int64) error {
+				var e error
+				task, e = CreateTask(tx, s.Now(), TaskInput{
+					ProjectID: project, Title: "t", Priority: "medium", Kind: "feature",
+				})
+				return e
+			})
+		if err != nil {
+			t.Fatalf("create task in %s: %v", project, err)
+		}
+		return task.ID
+	}
+
+	if got := mk("worklode"); got != "WL-1" {
+		t.Fatalf("first worklode task = %q, want WL-1", got)
+	}
+	if got := mk("web"); got != "SW-1" {
+		t.Fatalf("first web task = %q, want SW-1", got)
+	}
+	if got := mk("worklode"); got != "WL-2" {
+		t.Fatalf("second worklode task = %q, want WL-2", got)
+	}
+}
+
+func TestCreateProjectDuplicateKey(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "a", "A", "WL"); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	err := s.CreateProject(ctx, "b", "B", "WL")
+	if !errors.Is(err, ErrKeyTaken) {
+		t.Fatalf("duplicate key err = %v, want ErrKeyTaken", err)
+	}
+}
+
+// mustExtID returns a random external id for test events.
+func mustExtID(t *testing.T) string {
+	t.Helper()
+	id, err := randomExternalID()
+	if err != nil {
+		t.Fatalf("ext id: %v", err)
+	}
+	return id
 }

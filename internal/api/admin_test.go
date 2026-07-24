@@ -15,7 +15,7 @@ func TestCreateAndListProjects(t *testing.T) {
 	_, h, token := newTestServer(t)
 
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
-		"id": "proj", "name": "Project", "deploy_gated": true,
+		"id": "proj", "name": "Project", "key": "PROJ", "deploy_gated": true,
 	})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
@@ -71,7 +71,7 @@ func TestCreateAndListProjects(t *testing.T) {
 // 404.
 func TestPatchProjectFocus(t *testing.T) {
 	_, h, token := newTestServer(t)
-	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project"})
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -196,7 +196,7 @@ func TestAdminGatedEndpoints(t *testing.T) {
 		method, path string
 		body         map[string]any
 	}{
-		{"POST", "/api/v1/projects", map[string]any{"id": "p2", "name": "P2"}},
+		{"POST", "/api/v1/projects", map[string]any{"id": "p2", "name": "P2", "key": "P2"}},
 		{"PATCH", "/api/v1/projects/p2", map[string]any{"focus": []string{"security"}}},
 		{"POST", "/api/v1/projects/p2/repos", map[string]any{"repo": "acme/other"}},
 		{"POST", "/api/v1/actors", map[string]any{"id": "eve", "kind": "agent"}},

@@ -11,7 +11,6 @@ var wantTables = []string{
 	"projects",
 	"project_repos",
 	"tasks",
-	"task_seq",
 	"task_edges",
 	"leases",
 	"issues",

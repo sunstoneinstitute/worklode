@@ -14,6 +14,7 @@ import (
 type Project struct {
 	ID          string
 	Name        string
+	Key         string
 	DeployGated bool
 	Focus       []string
 }
@@ -31,11 +32,14 @@ func scanProjectFocus(raw []byte) ([]string, error) {
 	return focus, nil
 }
 
-// CreateProject registers a new project.
-func (s *Store) CreateProject(ctx context.Context, id, name string) error {
+// CreateProject registers a new project with the given immutable key.
+func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (id, name) VALUES ($1, $2)`, id, name)
+		`INSERT INTO projects (id, name, key) VALUES ($1, $2, $3)`, id, name, key)
 	if err != nil {
+		if isUniqueViolationOn(err, "projects_key_unique") {
+			return ErrKeyTaken
+		}
 		return fmt.Errorf("insert project %s: %w", id, err)
 	}
 	return nil
@@ -46,8 +50,8 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	var focus []byte
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, deploy_gated, focus FROM projects WHERE id = $1`, id)
-	if err := row.Scan(&p.ID, &p.Name, &p.DeployGated, &focus); err != nil {
+		`SELECT id, name, key, deploy_gated, focus FROM projects WHERE id = $1`, id)
+	if err := row.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -63,7 +67,7 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 
 // ListProjects returns all projects.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, deploy_gated, focus FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, deploy_gated, focus FROM projects`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -73,7 +77,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	for rows.Next() {
 		var p Project
 		var focus []byte
-		if err := rows.Scan(&p.ID, &p.Name, &p.DeployGated, &focus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		f, err := scanProjectFocus(focus)

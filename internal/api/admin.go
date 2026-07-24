@@ -23,6 +23,7 @@ var validActorKinds = map[string]bool{
 type projectJSON struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
+	Key         string   `json:"key"`
 	DeployGated bool     `json:"deploy_gated"`
 	Repos       []string `json:"repos"`
 	Focus       []string `json:"focus"`
@@ -31,6 +32,7 @@ type projectJSON struct {
 type createProjectRequest struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Key         string `json:"key"`
 	DeployGated bool   `json:"deploy_gated"`
 }
 
@@ -45,7 +47,7 @@ func toProjectJSON(p *store.Project, repos []string) projectJSON {
 		focus = []string{}
 	}
 	return projectJSON{
-		ID: p.ID, Name: p.Name, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
+		ID: p.ID, Name: p.Name, Key: p.Key, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
 	}
 }
 
@@ -64,7 +66,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "name is required")
 		return
 	}
-	if err := s.st.CreateProject(r.Context(), req.ID, req.Name); err != nil {
+	if err := s.st.CreateProject(r.Context(), req.ID, req.Name, req.Key); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
@@ -75,7 +77,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, toProjectJSON(
-		&store.Project{ID: req.ID, Name: req.Name, DeployGated: req.DeployGated}, nil))
+		&store.Project{ID: req.ID, Name: req.Name, Key: req.Key, DeployGated: req.DeployGated}, nil))
 }
 
 // listProjects handles GET /api/v1/projects: every project with its mapped repos.

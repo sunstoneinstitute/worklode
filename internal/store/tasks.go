@@ -76,21 +76,26 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:       true,
 }
 
-// CreateTask allocates the next WL-<n> id from task_seq and inserts the task
-// inside the given transaction. It is meant to be called from a RecordEvent
-// apply callback with the store's clock as now.
+// CreateTask allocates the next <KEY>-<n> id from the project's counter and
+// inserts the task inside the given transaction. It is meant to be called
+// from a RecordEvent apply callback with the store's clock as now.
 func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
 
 	var n int64
+	var key string
 	if err := tx.QueryRow(
-		`UPDATE task_seq SET next = next + 1 WHERE id = 1 RETURNING next - 1`,
-	).Scan(&n); err != nil {
+		`UPDATE projects SET next_task_num = next_task_num + 1
+		 WHERE id = $1 RETURNING key, next_task_num - 1`, in.ProjectID,
+	).Scan(&key, &n); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("project %s: %w", in.ProjectID, ErrNotFound)
+		}
 		return nil, fmt.Errorf("allocate task id: %w", err)
 	}
-	id := fmt.Sprintf("WL-%d", n)
+	id := fmt.Sprintf("%s-%d", key, n)
 
 	state := "ready"
 	if in.Draft {
@@ -351,7 +356,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	         WHEN 'high' THEN 1
 	         WHEN 'medium' THEN 2
 	         ELSE 3
-	       END, CAST(substr(id, 4) AS INTEGER)`
+	       END, project_id, CAST(split_part(id, '-', 2) AS INTEGER)`
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
