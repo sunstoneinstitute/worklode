@@ -105,6 +105,21 @@ func TestTaskIDFromBody(t *testing.T) {
 	}
 }
 
+func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
+	if got := TaskIDFromRef("wl/SW-3-slug"); got != "SW-3" {
+		t.Errorf("TaskIDFromRef = %q, want SW-3", got)
+	}
+	if got := TaskIDFromRef("wl/SW-3"); got != "SW-3" {
+		t.Errorf("TaskIDFromRef = %q, want SW-3", got)
+	}
+}
+
+func TestTaskIDFromBodyGeneralPrefix(t *testing.T) {
+	if got := TaskIDFromBody("WL-Task: SW-12\nother"); got != "SW-12" {
+		t.Errorf("TaskIDFromBody = %q, want SW-12", got)
+	}
+}
+
 func TestUpsertPRCorrelatesViaRef(t *testing.T) {
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())

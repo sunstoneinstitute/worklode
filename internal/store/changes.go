@@ -47,8 +47,8 @@ type Review struct {
 }
 
 // refTaskIDPattern matches worktree branch names of the form
-// "wl/WL-<n>" or "wl/WL-<n>-<slug>", capturing the task id.
-var refTaskIDPattern = regexp.MustCompile(`^wl/(WL-[0-9]+)(?:-.*)?$`)
+// "wl/<ID>" or "wl/<ID>-<slug>", capturing the task id (e.g. WL-7, SW-3).
+var refTaskIDPattern = regexp.MustCompile(`^wl/([A-Z][A-Z0-9]*-[0-9]+)(?:-.*)?$`)
 
 // TaskIDFromRef extracts a task id from a branch name following the
 // "wl/<task-id>-<slug>" convention (the slug is optional). It returns "" if
@@ -62,9 +62,10 @@ func TaskIDFromRef(ref string) string {
 	return m[1]
 }
 
-// bodyTaskIDPattern matches a "WL-Task: WL-<n>" marker line (after
-// trimming surrounding whitespace), capturing the task id.
-var bodyTaskIDPattern = regexp.MustCompile(`^WL-Task:\s*(WL-[0-9]+)`)
+// bodyTaskIDPattern matches a "WL-Task: <ID>" marker line (after trimming
+// surrounding whitespace), capturing the task id. "WL-Task" is the fixed
+// marker label, not the id prefix.
+var bodyTaskIDPattern = regexp.MustCompile(`^WL-Task:\s*([A-Z][A-Z0-9]*-[0-9]+)`)
 
 // TaskIDFromBody scans body line by line for a "WL-Task: <task-id>" marker
 // (case-sensitive prefix, after trimming the line's surrounding

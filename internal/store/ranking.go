@@ -160,11 +160,15 @@ func priorityRank(p string) int {
 	}
 }
 
-// numericTaskID parses the numeric suffix of a WL-<n> id for tiebreaking.
-// WL-9 must sort before WL-10, which a plain string compare gets wrong. A
+// numericTaskID parses the numeric suffix of a <KEY>-<n> id for tiebreaking.
+// SW-9 must sort before SW-10, which a plain string compare gets wrong. A
 // malformed id sorts last rather than panicking.
 func numericTaskID(id string) int {
-	n, err := strconv.Atoi(strings.TrimPrefix(id, "WL-"))
+	i := strings.LastIndex(id, "-")
+	if i < 0 {
+		return math.MaxInt
+	}
+	n, err := strconv.Atoi(id[i+1:])
 	if err != nil {
 		return math.MaxInt
 	}

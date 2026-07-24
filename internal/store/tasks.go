@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Task is one unit of work, identified by a global WL-<n> id.
+// Task is one unit of work, identified by a per-project <KEY>-<n> id.
 type Task struct {
 	ID                 string
 	ProjectID          string
