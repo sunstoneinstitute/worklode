@@ -205,6 +205,22 @@ func TestRankTasksTiebreakNumericID(t *testing.T) {
 	}
 }
 
+// TestRankTasksFanOutDirection pins the fan_out desc key: two candidates
+// equal on every earlier key must sort higher fan-out first. (The worked
+// example never isolates this key, so a direction flip would otherwise
+// survive the suite.)
+func TestRankTasksFanOutDirection(t *testing.T) {
+	in := []rankInput{
+		{Task: rankTask("WL-1", "high", "", rankTestNow), FanOut: 2},
+		{Task: rankTask("WL-2", "high", "", rankTestNow), FanOut: 7},
+	}
+	got := rankIDs(rankTasks(in, false))
+	want := []string{"WL-2", "WL-1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rankTasks fan-out direction: got %v, want %v", got, want)
+	}
+}
+
 // claimNextTestNow is the shared clock for ClaimNext DB fixtures.
 var claimNextTestNow = time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 

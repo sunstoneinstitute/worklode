@@ -68,9 +68,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, 
 		  AND NOT EXISTS (SELECT 1 FROM leases l
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
-		                  JOIN tasks b ON b.id = e.from_task
-		                  WHERE e.to_task = t.id AND e.type = 'blocks'
-		                    AND b.state NOT IN ('done','abandoned'))`, projectID)
+		                  WHERE e.to_task = t.id AND `+blockedCondition+`)`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)
 	}
