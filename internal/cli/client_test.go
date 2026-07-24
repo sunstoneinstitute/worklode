@@ -45,7 +45,7 @@ func newTestServer(t *testing.T) (*store.Store, *cli.Client, string) {
 		t.Fatalf("create token: %v", err)
 	}
 
-	h, err := api.NewServer(st, api.Config{})
+	h, _, err := api.NewServer(st, api.Config{})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

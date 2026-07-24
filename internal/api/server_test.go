@@ -43,11 +43,23 @@ func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	h, err := api.NewServer(st, api.Config{})
+	h, _, err := api.NewServer(st, api.Config{})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
 	return st, h, token
+}
+
+// newTestServerAdmin returns both the public app handler and the admin handler
+// (/healthz, /metrics), for tests that assert on their separation.
+func newTestServerAdmin(t *testing.T) (main, admin http.Handler) {
+	t.Helper()
+	st := newTestStore(t)
+	main, admin, err := api.NewServer(st, api.Config{})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return main, admin
 }
 
 // doReq performs a request against the handler. A non-nil body is JSON-encoded.
@@ -90,13 +102,25 @@ func decodeInto(t *testing.T, rr *httptest.ResponseRecorder, v any) {
 }
 
 func TestHealthzNoAuth(t *testing.T) {
-	_, h, _ := newTestServer(t)
-	rr := doReq(t, h, "GET", "/healthz", "", nil)
+	_, admin := newTestServerAdmin(t)
+	rr := doReq(t, admin, "GET", "/healthz", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("healthz status = %d, want 200", rr.Code)
 	}
 	if got := decodeMap(t, rr)["status"]; got != "ok" {
 		t.Fatalf("healthz status field = %v, want ok", got)
+	}
+}
+
+// /healthz and /metrics live on the admin handler only; the public handler
+// (the one behind the ingress) must not serve them.
+func TestHealthzAndMetricsNotOnPublicHandler(t *testing.T) {
+	main, _ := newTestServerAdmin(t)
+	for _, path := range []string{"/healthz", "/metrics"} {
+		rr := doReq(t, main, "GET", path, "", nil)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("GET %s on public handler = %d, want 404", path, rr.Code)
+		}
 	}
 }
 
@@ -213,11 +237,13 @@ func TestOversizedBody413(t *testing.T) {
 }
 
 func TestMetricsEndpoint(t *testing.T) {
-	_, h, _ := newTestServer(t)
-	// Generate at least one recorded request first.
-	doReq(t, h, "GET", "/healthz", "", nil)
+	main, admin := newTestServerAdmin(t)
+	// Generate at least one recorded request on the public handler first (an
+	// unauthenticated API call is fine — it still passes through the metrics
+	// middleware). Metrics are then read from the admin handler.
+	doReq(t, main, "GET", "/api/v1/tasks", "", nil)
 
-	rr := doReq(t, h, "GET", "/metrics", "", nil)
+	rr := doReq(t, admin, "GET", "/metrics", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("metrics status = %d, want 200", rr.Code)
 	}

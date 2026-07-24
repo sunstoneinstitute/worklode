@@ -293,7 +293,7 @@ func TestAuthChooseRendersBothLinks(t *testing.T) {
 
 func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
 	st := newGitHubTestStore(t)
-	_, err := NewServer(st, Config{
+	_, _, err := NewServer(st, Config{
 		GitHubClientID:     "cid",
 		GitHubClientSecret: "secret",
 		SessionSecret:      "sekret",
@@ -308,7 +308,7 @@ func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
 
 func TestNewServerRejectsBadTokenEncKey(t *testing.T) {
 	st := newGitHubTestStore(t)
-	_, err := NewServer(st, Config{
+	_, _, err := NewServer(st, Config{
 		GitHubClientID:     "cid",
 		GitHubClientSecret: "secret",
 		SessionSecret:      "sekret",

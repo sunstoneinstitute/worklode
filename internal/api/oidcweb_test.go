@@ -25,10 +25,11 @@ func TestWebRedirectsWhenNoSession(t *testing.T) {
 	}
 }
 
-// /healthz stays open even with OIDC enabled.
+// /healthz stays open even with OIDC enabled — it lives on the admin handler,
+// which carries no auth middleware.
 func TestHealthzOpenWithOIDC(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
-	rr := doReq(t, h, "GET", "/healthz", "", nil)
+	admin := newOIDCServerAdmin(t)
+	rr := doReq(t, admin, "GET", "/healthz", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("healthz status = %d, want 200", rr.Code)
 	}
