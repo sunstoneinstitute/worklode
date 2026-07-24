@@ -15,10 +15,14 @@ the executor can be.
 
 Rules of thumb:
 
+- **Always set `model` explicitly on every Agent dispatch. Never omit it.**
+  An omitted model does NOT inherit the dispatching agent's model — it
+  resolves to the top-level session model (Fable when a Fable session is
+  driving), silently running mechanical work on the most expensive tier.
+  Reviewers: `model: "opus"`. Coordinators: dispatched with `model: "opus"`.
+  Fully-specified implementation: `model: "sonnet"`.
 - A coordinator dispatches Sonnet implementers by default when the plan task
   meets the "fully specified" bar, and escalates that task to Opus on the
   first sign the plan doesn't match reality.
-- Subagents inherit their parent's model unless overridden — set the model
-  explicitly on dispatch rather than relying on inheritance.
 - Fable does not execute; Opus/Sonnet do not (re)plan. If execution reveals a
   plan defect, fix the plan at the planning tier, don't improvise downstream.
