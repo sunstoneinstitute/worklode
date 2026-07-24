@@ -131,7 +131,11 @@ func (s *Store) SetProjectFocus(ctx context.Context, projectID string, focus []s
 	if err != nil {
 		return err
 	}
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "project.focus_set", nil,
+	payload, err := json.Marshal(map[string]any{"project": projectID, "focus": focus})
+	if err != nil {
+		return fmt.Errorf("marshal focus event payload: %w", err)
+	}
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "project.focus_set", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			res, err := tx.Exec(
 				`UPDATE projects SET focus = $1 WHERE id = $2`, focusJSON, projectID)
