@@ -26,6 +26,9 @@ patches:
       - op: add
         path: /data/LODE_GITHUB_ORG
         value: "sunstoneinstitute"
+      - op: add
+        path: /data/LODE_GITHUB_ADMIN_TEAM
+        value: "worklode-admins"
   - target:
       kind: Ingress
       name: worklode-ingress
