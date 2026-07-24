@@ -97,9 +97,18 @@ func installGitHooks(repoDir string) (hooksDir, chainedTo string, err error) {
 		return "", "", fmt.Errorf("read %s: %w", preCommitPath, readErr)
 	}
 	isOurs := existingPresent && strings.Contains(string(existing), hookMarker)
+	preLodePresent := fileExists(preLodePath)
 
 	switch {
-	case fileExists(preLodePath):
+	case existingPresent && !isOurs && preLodePresent:
+		// A new, unrecognized pre-commit hook has appeared alongside a
+		// previously preserved third-party hook. Overwriting it and chaining
+		// to the stale .pre-lode would silently drop the newer hook, so refuse
+		// and let the user reconcile.
+		return "", "", fmt.Errorf(
+			"refusing to overwrite %s: an unrecognized pre-commit hook exists alongside %s; "+
+				"remove or merge one of them, then re-run", preCommitPath, preLodePath)
+	case preLodePresent:
 		chainedTo = preLodePath
 	case existingPresent && !isOurs:
 		if err := os.Rename(preCommitPath, preLodePath); err != nil {
@@ -158,11 +167,19 @@ func fileExists(path string) bool {
 }
 
 // renderHookScript renders the pre-commit hook body. chainedTo == "" omits
-// the --next clause entirely.
+// the --next clause entirely. The chain target is single-quoted so a target
+// path containing spaces (common on macOS) is not word-split by /bin/sh before
+// lode runs, which would silently drop the chained hook.
 func renderHookScript(chainedTo string) string {
 	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install-git-hooks`; do not edit.\n"
 	if chainedTo == "" {
 		return header + `exec lode hook pre-commit "$@"` + "\n"
 	}
-	return header + fmt.Sprintf(`exec lode hook pre-commit --next %s "$@"`, chainedTo) + "\n"
+	return header + fmt.Sprintf(`exec lode hook pre-commit --next %s "$@"`, shellSingleQuote(chainedTo)) + "\n"
+}
+
+// shellSingleQuote wraps s in single quotes for safe use as one POSIX shell
+// word, escaping any embedded single quote as the standard '\” sequence.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

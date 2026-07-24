@@ -144,7 +144,7 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 		t.Fatalf("pre-commit.pre-lode = %q, want original third-party content %q", got, thirdParty)
 	}
 	newContent := readFile(t, preCommitPath)
-	wantNext := "--next " + preLodePath + " \"$@\""
+	wantNext := "--next '" + preLodePath + "' \"$@\""
 	if !strings.Contains(newContent, wantNext) {
 		t.Fatalf("pre-commit = %q, want it to contain %q", newContent, wantNext)
 	}
@@ -181,8 +181,8 @@ func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
 		t.Fatalf("chainedTo = %q, want %q", chainedTo, "pre-commit")
 	}
 	content := readFile(t, filepath.Join(hooksDir, "pre-commit"))
-	if !strings.Contains(content, `--next pre-commit "$@"`) {
-		t.Fatalf("pre-commit = %q, want it to chain --next pre-commit", content)
+	if !strings.Contains(content, `--next 'pre-commit' "$@"`) {
+		t.Fatalf("pre-commit = %q, want it to chain --next 'pre-commit'", content)
 	}
 
 	// Re-run stays converged (still chains to the framework, no accumulation).
@@ -250,5 +250,149 @@ func TestInstallGitHooksCommitSucceedsWithoutServer(t *testing.T) {
 	commit.Stderr = &out
 	if err := commit.Run(); err != nil {
 		t.Fatalf("git commit failed: %v\n%s", err, out.String())
+	}
+}
+
+// initGitRepoInDir inits a git repo with one commit at the given dir and
+// returns its path resolved to git's own toplevel (macOS /var symlink). Unlike
+// initGitRepo it lets the caller choose the directory, so a test can put the
+// repo under a path containing a space.
+func initGitRepoInDir(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	run("add", "README.md")
+	run("commit", "-m", "initial commit")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		t.Fatalf("rev-parse toplevel: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// --- ISSUE 1: chain target with spaces is quoted and still runs --------------
+
+func TestInstallGitHooksQuotesChainTargetWithSpaces(t *testing.T) {
+	bin := buildLodeBinary(t)
+	// A repo path containing a space (common on macOS).
+	root := initGitRepoInDir(t, filepath.Join(t.TempDir(), "My Repo"))
+
+	hooksDir, err := resolveHooksDir(root)
+	if err != nil {
+		t.Fatalf("resolveHooksDir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	// Seed a distinctive third-party hook that touches a sentinel when it runs.
+	sentinel := filepath.Join(t.TempDir(), "third-party-ran")
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+	thirdParty := "#!/bin/sh\ntouch '" + sentinel + "'\n"
+	if err := os.WriteFile(preCommitPath, []byte(thirdParty), 0o755); err != nil {
+		t.Fatalf("write third-party pre-commit: %v", err)
+	}
+
+	_, chainedTo, err := installGitHooks(root)
+	if err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
+	if chainedTo != preLodePath {
+		t.Fatalf("chainedTo = %q, want %q", chainedTo, preLodePath)
+	}
+
+	// The generated --next clause must single-quote the space-containing path.
+	content := readFile(t, preCommitPath)
+	wantLine := "--next '" + preLodePath + "' \"$@\""
+	if !strings.Contains(content, wantLine) {
+		t.Fatalf("pre-commit = %q, want it to contain %q", content, wantLine)
+	}
+
+	// And a real commit must actually run the preserved third-party hook.
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatalf("write file.txt: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "file.txt").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	commit := exec.Command("git", "-C", root, "commit", "-m", "add file.txt")
+	commit.Env = append(os.Environ(),
+		"PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+		"LODE_SERVER=", "LODE_TOKEN=",
+	)
+	var out bytes.Buffer
+	commit.Stdout = &out
+	commit.Stderr = &out
+	if err := commit.Run(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, out.String())
+	}
+	if !fileExists(sentinel) {
+		t.Fatalf("preserved third-party hook did not run (sentinel %s missing) — chain target was word-split", sentinel)
+	}
+}
+
+// --- ISSUE 2: refuse to clobber an unrecognized hook beside .pre-lode --------
+
+func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, err := resolveHooksDir(root)
+	if err != nil {
+		t.Fatalf("resolveHooksDir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+
+	// Establish the preserved-third-party state: lode owns pre-commit, the
+	// original hook lives in pre-commit.pre-lode.
+	original := "#!/bin/sh\necho original-third-party\n"
+	if err := os.WriteFile(preCommitPath, []byte(original), 0o755); err != nil {
+		t.Fatalf("write original pre-commit: %v", err)
+	}
+	if _, _, err := installGitHooks(root); err != nil {
+		t.Fatalf("first installGitHooks: %v", err)
+	}
+	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
+
+	// Another tool overwrites pre-commit with a NEW unrecognized hook.
+	newHook := "#!/bin/sh\necho a-different-tool\n"
+	if err := os.WriteFile(preCommitPath, []byte(newHook), 0o755); err != nil {
+		t.Fatalf("overwrite pre-commit: %v", err)
+	}
+
+	// Re-running must refuse rather than silently drop newHook.
+	_, _, err = installGitHooks(root)
+	if err == nil {
+		t.Fatalf("installGitHooks: err = nil, want a refusal error")
+	}
+	if !strings.Contains(err.Error(), "refusing to overwrite") {
+		t.Fatalf("error = %q, want it to mention refusing to overwrite", err.Error())
+	}
+	// Neither file may have been touched.
+	if got := readFile(t, preCommitPath); got != newHook {
+		t.Fatalf("pre-commit was modified: %q, want %q", got, newHook)
+	}
+	if got := readFile(t, preLodePath); got != original {
+		t.Fatalf("pre-commit.pre-lode was modified: %q, want %q", got, original)
 	}
 }
