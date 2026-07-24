@@ -5,15 +5,15 @@
 
 ## Problem
 
-The task state machine ends at `done`, reached only from `in_review` (PR-merge
+The task state machine ends at `merged`, reached only from `in_review` (PR-merge
 auto-transition or manual `lode task done`). This misses two realities:
 
 1. Work sometimes lands on `main` without a PR; nothing detects it.
-2. "Done" is not "delivered". A service (data-platform, worklode) is delivered
+2. "Merged" is not "delivered". A service (data-platform, worklode) is delivered
    when it runs in prod, via two stages (dev, then prod). A library
    (sunstone-py) is delivered when a release is published. Today nothing
    tracks either; the per-project `deploy_gated` flag only *blocks* the
-   merge→done transition and nothing ever unblocks it.
+   merge→merged transition and nothing ever unblocks it.
 
 The goal is one generic, event-driven mechanism for all sunstoneinstitute
 repos — no per-repo lifecycle configuration.
@@ -21,7 +21,7 @@ repos — no per-repo lifecycle configuration.
 ## State machine
 
 ```
-draft → ready → in_progress → in_review → done → deployed_dev → deployed_prod
+draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod
                      │                     ↑ │  ↘ released        (terminal)
                      └─────────────────────┘ └──── (terminal, release-based repos)
                         direct-to-main jump
@@ -31,20 +31,20 @@ New states: `deployed_dev`, `deployed_prod`, `released`.
 
 | State | Meaning | Terminal for |
 |---|---|---|
-| `done` | Work landed on the default branch (auto-detected or manual `lode task done`) | Repos with no deployable envs and no releases |
+| `merged` | Work landed on the default branch (auto-detected or manual `lode task done`) | Repos with no deployable envs and no releases |
 | `deployed_dev` | Deploy to a dev/test environment covering the landed commit: GitHub `deployment_status: success` **and** Flux `ReconciliationSucceeded` | — |
 | `deployed_prod` | Same, for prod | All repos with a prod env |
 | `released` | GitHub release published covering the landed commit | Repos without a prod env |
 
 New legal transitions:
 
-- `ready|in_progress|in_review → done` — landing on main advances the task
+- `ready|in_progress|in_review → merged` — landing on main advances the task
   from wherever it sat; the resolver never advances a `draft`.
-- `done → deployed_dev | deployed_prod | released` — skipping `deployed_dev`
+- `merged → deployed_dev | deployed_prod | released` — skipping `deployed_dev`
   is legal (prod-only repos, or a missed dev signal).
 - `deployed_dev → deployed_prod | released`.
-- Reopen: `deployed_dev|deployed_prod|released → ready`, same as `done → ready`.
-- `abandoned` stays reachable only from pre-`done` states.
+- Reopen: `deployed_dev|deployed_prod|released → ready`, same as `merged → ready`.
+- `abandoned` stays reachable only from pre-`merged` states.
 
 All delivery transitions are forward-only; the resolver never walks a task
 backward. Landing on main closes any active lease (as PR-merge does today).
@@ -100,7 +100,7 @@ correlatable (revision SHAs matching the repo's branches). For a repo/env
 where no Flux revision has ever matched — a deploy not reconciled by Flux, or
 a cluster whose webhook isn't wired yet — the GitHub signal alone confirms
 the frontier; the first matching Flux revision upgrades that repo/env to
-dual-signal gating permanently. This prevents tasks stranding at `done` while
+dual-signal gating permanently. This prevents tasks stranding at `merged` while
 still enforcing Flux confirmation everywhere it exists.
 
 **`release_frontiers`** — `(repo, tag, main_seq, published_at)`. A
@@ -121,7 +121,7 @@ All handlers use the existing HMAC/idempotency plumbing in `internal/hooks`.
   seq)` and update `env_deploys.flux_status`. Existing `deployments`-table
   behavior unchanged.
 - **`pull_request`** (changed): merged-PR handling records facts only; the
-  `in_review → done` transition moves into the resolver. The `deploy_gated`
+  `in_review → merged` transition moves into the resolver. The `deploy_gated`
   branch is deleted.
 - **`release`** (extended): still creates the artifact; also records the
   release frontier.
@@ -136,7 +136,7 @@ facts. Arrival order of GitHub and Flux events therefore never matters.
 **Repo delivery profile** (display only, never gates transitions): on
 `project add-repo` and lazily on webhook traffic, fetch the repo's
 environment list via the GitHub App (`internal/githubauth`) and note whether
-it uses releases. Feeds UI/CLI hints like "done — awaiting dev deploy". If
+it uses releases. Feeds UI/CLI hints like "merged — awaiting dev deploy". If
 discovery fails, everything still works from events alone.
 
 **Deployment config** (not code): Flux notification-controller in every
@@ -155,7 +155,7 @@ cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
 
 One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 `release_frontiers`; extend the `tasks.state` CHECK constraint; drop
-`projects.deploy_gated`. Existing `done` tasks stay `done` — no backfill.
+`projects.deploy_gated`. Existing `merged` tasks stay `merged` — no backfill.
 
 ## Coordination with WL-12
 
