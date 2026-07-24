@@ -124,7 +124,7 @@ func createTestTask(t *testing.T, c *cli.Client, title string) cli.Task {
 
 func setupProject(t *testing.T, c *cli.Client) {
 	t.Helper()
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 }

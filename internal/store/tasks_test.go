@@ -26,7 +26,7 @@ func openTaskStore(t *testing.T) *Store {
 	t.Helper()
 	s := openTestStore(t)
 	ctx := t.Context()
-	if err := s.CreateProject(ctx, "horndb", "HornDB"); err != nil {
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "WL"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if err := s.CreateActor(ctx, "stig", "human", "Stig", false); err != nil {
@@ -485,7 +485,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
 
-	if err := s.CreateProject(ctx, "other", "Other"); err != nil {
+	if err := s.CreateProject(ctx, "other", "Other", "OT"); err != nil {
 		t.Fatalf("CreateProject other: %v", err)
 	}
 

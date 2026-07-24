@@ -9,9 +9,19 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
+// createProject registers a project for tests. Most tests only create one
+// project and rely on tasks getting "WL-<n>" ids (a holdover from the old
+// global WL- counter, baked into many literal assertions across this
+// package's tests); "proj" and "proj1" are the conventional ids for that
+// project, so they always get key "WL". Any other id gets a key derived from
+// itself, distinct from "WL", for tests that create a second project.
 func createProject(t *testing.T, st *store.Store, id string) {
 	t.Helper()
-	if err := st.CreateProject(context.Background(), id, id); err != nil {
+	key := strings.ToUpper(id)
+	if id == "proj" || id == "proj1" {
+		key = "WL"
+	}
+	if err := st.CreateProject(context.Background(), id, id, key); err != nil {
 		t.Fatalf("create project %s: %v", id, err)
 	}
 }

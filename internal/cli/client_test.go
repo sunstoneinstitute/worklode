@@ -67,7 +67,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
 
-	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", DeployGated: true})
+	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL", DeployGated: true})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestClientActorsAndTokens(t *testing.T) {
 func TestClientTaskLifecycle(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -260,7 +260,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 func TestClientReadyAndRework(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
@@ -301,7 +301,7 @@ func TestClientReadyAndRework(t *testing.T) {
 func TestClientReopen(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -331,7 +331,7 @@ func TestClientReopen(t *testing.T) {
 func TestClientBlockUnblock(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	blocker, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Blocker", Priority: "high", Kind: "feature"})
@@ -369,7 +369,7 @@ func TestClientBlockUnblock(t *testing.T) {
 func TestClientBriefAndRebindWorktree(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug"})
@@ -422,7 +422,7 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 func TestClientInboxFlow(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if _, err := c.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
@@ -482,7 +482,7 @@ func TestClientInboxFlow(t *testing.T) {
 func TestClientClaimNextClaimed(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
@@ -510,7 +510,7 @@ func TestClientClaimNextClaimed(t *testing.T) {
 func TestClientClaimNextNoneReady(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -529,7 +529,7 @@ func TestClientClaimNextNoneReady(t *testing.T) {
 func TestClientClaimNextDryRun(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
@@ -570,7 +570,7 @@ func TestClientClaimNextDryRun(t *testing.T) {
 func TestClientCreateTaskWithConcern(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
@@ -592,7 +592,7 @@ func TestClientCreateTaskWithConcern(t *testing.T) {
 func TestClientEditTask(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
@@ -639,7 +639,7 @@ func TestClientEditTask(t *testing.T) {
 func TestClientProjectFocus(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 

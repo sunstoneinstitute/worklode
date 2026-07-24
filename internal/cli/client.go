@@ -719,6 +719,7 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 type Project struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
+	Key         string   `json:"key"`
 	DeployGated bool     `json:"deploy_gated"`
 	Repos       []string `json:"repos"`
 	Focus       []string `json:"focus"`
@@ -728,6 +729,7 @@ type Project struct {
 type CreateProjectInput struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Key         string `json:"key"`
 	DeployGated bool   `json:"deploy_gated,omitempty"`
 }
 

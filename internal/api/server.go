@@ -406,6 +406,7 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrLeased),
 		errors.Is(err, store.ErrBlocked),
 		errors.Is(err, store.ErrRepoTaken),
+		errors.Is(err, store.ErrKeyTaken),
 		errors.Is(err, store.ErrEdgeExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:

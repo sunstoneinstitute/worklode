@@ -36,7 +36,7 @@ func newEnv(t *testing.T) *env {
 	st := store.OpenTestStore(t)
 
 	ctx := context.Background()
-	if err := st.CreateProject(ctx, "demo", "Demo"); err != nil {
+	if err := st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 	if err := st.AddRepo(ctx, "demo", "sunstoneinstitute/demo"); err != nil {

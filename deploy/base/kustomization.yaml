@@ -16,3 +16,5 @@ configMapGenerator:
       - migrations/0001_baseline.down.sql
       - migrations/0002_prioritization.up.sql
       - migrations/0002_prioritization.down.sql
+      - migrations/0003_project_keys.up.sql
+      - migrations/0003_project_keys.down.sql
