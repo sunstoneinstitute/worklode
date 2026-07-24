@@ -20,3 +20,5 @@ configMapGenerator:
       - migrations/0003_project_keys.down.sql
       - migrations/0004_agent_sessions.up.sql
       - migrations/0004_agent_sessions.down.sql
+      - migrations/0005_delivery.up.sql
+      - migrations/0005_delivery.down.sql
