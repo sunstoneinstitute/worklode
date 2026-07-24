@@ -99,7 +99,7 @@ func TestNextEndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{ID: "nx", Name: "Next"}); err != nil {
+	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{ID: "nx", Name: "Next", Key: "NX"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{ID: "agent-1", Kind: "agent", DisplayName: "Agent One"}); err != nil {
