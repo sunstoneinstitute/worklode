@@ -255,17 +255,8 @@ func runResume(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	switch {
-	case brief.Lease == nil:
-		if _, _, err := c.ClaimTask(ctx, taskID, identity, 0); err != nil {
-			return fmt.Errorf("re-claim %s: %w", taskID, err)
-		}
-	case brief.Lease.Worktree == identity:
-		if _, _, err := c.RenewLease(ctx, taskID, 0); err != nil {
-			return fmt.Errorf("renew lease on %s: %w", taskID, err)
-		}
-	default:
-		return fmt.Errorf("%s is actively leased to a different worktree (%s); refusing to resume", taskID, brief.Lease.Worktree)
+	if err := cli.ReacquireOrRenew(ctx, c, taskID, identity, brief.Lease); err != nil {
+		return err
 	}
 
 	brief, raw, err := c.Brief(ctx, taskID)
