@@ -539,20 +539,14 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 }
 
 // handleWorktreeExit closes the session's row on the worktree it is leaving
-// and removes its marker — symmetric with handleSessionEnd — since the
-// session is no longer live here.
+// and removes its marker — symmetric with handleSessionEnd.
 //
-// Unlike every other worktree hook, this one requires an EXPLICIT path from
-// tool_input and does NOT fall back to the payload cwd (dir is accepted for
-// signature symmetry with the other handlers but unused). Claude Code's real
-// ExitWorktree tool_input is {action, discard_changes} — there is no path key
-// — and by the time PostToolUse fires, ExitWorktree has already restored cwd
-// to the worktree being returned TO, not the one being left. Falling back to
-// cwd would therefore end and delete the marker of the wrong worktree. A
-// session that leaves without an explicit exit is still handled without this
-// hook: its last_seen_at simply stops advancing, dropping the row out of the
-// running-sessions window, and the row closes for good when the lease is
-// released, expires, or the task completes.
+// Alone among the worktree hooks it requires an explicit tool_input path and
+// never falls back to the payload cwd (dir is unused, kept for dispatch
+// symmetry): by the time a PostToolUse fires, cwd is the worktree being
+// returned TO, so the fallback would end the wrong session. A session that
+// leaves without an explicit exit still ages out — last_seen_at stops
+// advancing, and the lease close ends the row for good.
 func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string) {
 	exited := pathFromToolInput(p.ToolInput)
 	if exited == "" {
