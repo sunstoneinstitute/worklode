@@ -115,12 +115,14 @@ func newNextCmd() *cobra.Command {
 	return cmd
 }
 
+// defaultBranchPrefix is the fallback when a server response carries no
+// branch (older server); it mirrors store.SetBranchPrefix's default.
+const defaultBranchPrefix = "lode/"
+
 // slugFromBranch recovers the slug from a "<prefix><id>-<slug>" branch
-// without assuming the prefix. The first "<id>-" is the prefix-adjacent one,
-// so a slug that repeats the task id stays intact. Falls back to branch
-// itself if id is absent.
+// without assuming the prefix. Falls back to branch itself if id is absent.
 func slugFromBranch(branch, id string) string {
-	if i := strings.Index(branch, id+"-"); i >= 0 {
+	if i := strings.LastIndex(branch, id+"-"); i >= 0 {
 		return branch[i+len(id)+1:]
 	}
 	return branch
@@ -172,7 +174,7 @@ func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
 		branch = resp.Task.Branch
 	}
 	if branch == "" {
-		branch = worktree.BranchName(store.DefaultBranchPrefix, taskID, slug)
+		branch = worktree.BranchName(defaultBranchPrefix, taskID, slug)
 	}
 
 	dir := filepath.Join(root, worktree.DirName(taskID, slug))
