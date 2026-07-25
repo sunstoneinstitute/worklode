@@ -94,7 +94,10 @@ func TestMainCommitsAndLanding(t *testing.T) {
 func TestLandedMainIDNoCommits(t *testing.T) {
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
-	tx, _ := s.db.Begin()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer tx.Rollback()
 	landed, err := LandedMainID(tx, taskID, "acme/app")
 	if err != nil || landed != nil {
@@ -102,15 +105,59 @@ func TestLandedMainIDNoCommits(t *testing.T) {
 	}
 }
 
+// TestInsertTaskCommitUnknownTask verifies that a task id with no matching
+// task is a no-op rather than an FK violation: correlation failures must
+// never fail the delivery transaction. The load-bearing assertion is the
+// second one — the transaction must still be usable afterward.
+func TestInsertTaskCommitUnknownTask(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	if err := InsertTaskCommit(tx, TaskCommit{
+		TaskID: "NOPE-1", Repo: "acme/app", SHA: "aaa1", Source: "branch_push", SeenAt: now,
+	}); err != nil {
+		t.Fatalf("insert task_commit for unknown task = %v, want nil", err)
+	}
+
+	// No row should have been recorded for the unknown task.
+	var count int
+	if err := tx.QueryRow(`SELECT count(*) FROM task_commits WHERE task_id = 'NOPE-1'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("task_commits rows for unknown task = %d, want 0", count)
+	}
+
+	// The transaction must still be usable: a later statement succeeds.
+	if _, err := AppendMainCommit(tx, "acme/app", "m1", now); err != nil {
+		t.Fatalf("transaction unusable after unknown-task insert: %v", err)
+	}
+}
+
 func TestEnvDeployFrontier(t *testing.T) {
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
-	tx, _ := s.db.Begin()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer tx.Rollback()
 
-	id1, _ := AppendMainCommit(tx, "acme/app", "m1", now)
-	id2, _ := AppendMainCommit(tx, "acme/app", "m2", now)
+	id1, err := AppendMainCommit(tx, "acme/app", "m1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2, err := AppendMainCommit(tx, "acme/app", "m2", now)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// No row yet: frontier nil.
 	f, err := ConfirmedFrontier(tx, "acme/app", "dev")
@@ -122,18 +169,18 @@ func TestEnvDeployFrontier(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id2); err != nil {
 		t.Fatal(err)
 	}
-	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
-	if f == nil || *f != id2 {
-		t.Fatalf("gh-only frontier = %v, want %d", f, id2)
+	f, err = ConfirmedFrontier(tx, "acme/app", "dev")
+	if err != nil || f == nil || *f != id2 {
+		t.Fatalf("gh-only frontier = %v, %v, want %d", f, err, id2)
 	}
 
 	// First flux signal latches dual-gating: frontier = min(gh, flux).
 	if err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id1); err != nil {
 		t.Fatal(err)
 	}
-	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
-	if f == nil || *f != id1 {
-		t.Fatalf("dual frontier = %v, want min %d", f, id1)
+	f, err = ConfirmedFrontier(tx, "acme/app", "dev")
+	if err != nil || f == nil || *f != id1 {
+		t.Fatalf("dual frontier = %v, %v, want min %d", f, err, id1)
 	}
 
 	// Watermarks are forward-only.
@@ -143,9 +190,24 @@ func TestEnvDeployFrontier(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id1); err != nil { // stale, ignored
 		t.Fatal(err)
 	}
-	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
-	if f == nil || *f != id2 {
-		t.Fatalf("forward-only frontier = %v, want %d", f, id2)
+	f, err = ConfirmedFrontier(tx, "acme/app", "dev")
+	if err != nil || f == nil || *f != id2 {
+		t.Fatalf("forward-only frontier = %v, %v, want %d", f, err, id2)
+	}
+
+	// The flux_seen latch is permanent: once tripped, a GH bump alone can
+	// never move the frontier past the flux watermark, even when gh advances
+	// beyond it. This also exercises the dual-gating path once gh > flux.
+	id3, err := AppendMainCommit(tx, "acme/app", "m3", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id3); err != nil {
+		t.Fatal(err)
+	}
+	f, err = ConfirmedFrontier(tx, "acme/app", "dev")
+	if err != nil || f == nil || *f != id2 {
+		t.Fatalf("latched frontier after gh advance = %v, %v, want flux watermark %d", f, err, id2)
 	}
 }
 
@@ -153,14 +215,20 @@ func TestReleaseFrontier(t *testing.T) {
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
-	tx, _ := s.db.Begin()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer tx.Rollback()
 
 	f, err := ReleaseFrontier(tx, "acme/app")
 	if err != nil || f != nil {
 		t.Fatalf("empty release frontier = %v, %v", f, err)
 	}
-	id1, _ := AppendMainCommit(tx, "acme/app", "m1", now)
+	id1, err := AppendMainCommit(tx, "acme/app", "m1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
 		t.Fatal(err)
 	}
@@ -168,9 +236,9 @@ func TestReleaseFrontier(t *testing.T) {
 	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
 		t.Fatal(err)
 	}
-	f, _ = ReleaseFrontier(tx, "acme/app")
-	if f == nil || *f != id1 {
-		t.Fatalf("release frontier = %v, want %d", f, id1)
+	f, err = ReleaseFrontier(tx, "acme/app")
+	if err != nil || f == nil || *f != id1 {
+		t.Fatalf("release frontier = %v, %v, want %d", f, err, id1)
 	}
 }
 
