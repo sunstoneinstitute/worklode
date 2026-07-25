@@ -251,10 +251,13 @@ debounced — they carry a lease change, not just liveness.
   `PostToolUse` is a different matter and is used above: the matcher is a tool
   name, so binding `EnterWorktree` costs nothing per ordinary tool call.
 - `UserPromptSubmit` — a strict subset of `Stop`, missing autonomous turns.
-- `WorktreeCreate` / `WorktreeRemove` — already handled. `handleWorktreeCreate`
-  runs before any session exists in that worktree, and `handleWorktreeRemove`
-  releases the lease, which stamps `ended_at` on every open session through
-  `closeLease`.
+- `WorktreeCreate` / `WorktreeRemove` — delegation hooks, not notifications:
+  binding one makes it *the* worktree creator, replacing Claude Code's built-in
+  `git worktree add`, and `EnterWorktree` fails unless the hook prints the path
+  it created. Worklode observes rather than creates. Nothing is lost: Claude
+  Code's worktrees live under `.claude/worktrees/`, which `worktree.ParseDir`
+  rejects, and Worklode's own `wt/<task-id>` worktrees are covered by
+  `session-start` (auto-resume) and the matched `EnterWorktree` binding above.
 - `PreCompact` / `PostCompact` — `SessionStart` already re-fires with
   `source: compact`.
 - `TaskCreated` / `TaskCompleted` — these are Claude Code's *in-session todo*
