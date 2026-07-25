@@ -97,6 +97,6 @@ jobs:
         with:
           tag: ${{ needs.promote.outputs.tag }}
           deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}
-          arm64-sonoma-sha: ${{ needs.build-bottles.outputs.arm64_sonoma_sha256 }}
+          arm64-sequoia-sha: ${{ needs.build-bottles.outputs.arm64_sequoia_sha256 }}
           arm64-tahoe-sha: ${{ needs.build-bottles.outputs.arm64_tahoe_sha256 }}
           cellar: ${{ needs.build-bottles.outputs.cellar }}
