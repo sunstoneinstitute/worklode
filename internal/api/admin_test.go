@@ -48,20 +48,132 @@ func TestCreateAndListProjects(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("list projects status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	var body struct {
-		Projects []struct {
-			ID    string   `json:"id"`
-			Name  string   `json:"name"`
-			Repos []string `json:"repos"`
-		} `json:"projects"`
-	}
+	var body projectListBody
 	decodeInto(t, rr, &body)
 	if len(body.Projects) != 1 {
 		t.Fatalf("projects = %v, want 1", body.Projects)
 	}
 	p := body.Projects[0]
-	if p.ID != "proj" || len(p.Repos) != 1 || p.Repos[0] != "acme/widgets" {
+	if p.ID != "proj" || len(p.Repos) != 1 {
 		t.Fatalf("project = %+v", p)
+	}
+	if p.Repos[0].Repo != "acme/widgets" || p.Repos[0].DoneState != "merged" {
+		t.Fatalf("repo mapping = %+v, want acme/widgets/merged", p.Repos[0])
+	}
+}
+
+// projectListBody is the decoded shape of GET /api/v1/projects.
+type projectListBody struct {
+	Projects []struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Repos []struct {
+			Repo      string `json:"repo"`
+			DoneState string `json:"done_state"`
+		} `json:"repos"`
+	} `json:"projects"`
+}
+
+// listedDoneState returns the done_state GET /api/v1/projects reports for
+// repo, or "" if the repo is not listed anywhere.
+func listedDoneState(t *testing.T, h http.Handler, token, repo string) string {
+	t.Helper()
+	rr := doReq(t, h, "GET", "/api/v1/projects", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list projects status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var body projectListBody
+	decodeInto(t, rr, &body)
+	for _, p := range body.Projects {
+		for _, m := range p.Repos {
+			if m.Repo == repo {
+				return m.DoneState
+			}
+		}
+	}
+	return ""
+}
+
+// TestAddRepoDoneState covers the optional done_state field on POST
+// /api/v1/projects/{id}/repos.
+func TestAddRepoDoneState(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token,
+		map[string]any{"repo": "acme/widgets", "done_state": "deployed_prod"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add repo status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["done_state"]; got != "deployed_prod" {
+		t.Fatalf("add repo response done_state = %v, want deployed_prod", got)
+	}
+	if got := listedDoneState(t, h, token, "acme/widgets"); got != "deployed_prod" {
+		t.Fatalf("stored done_state = %q, want deployed_prod", got)
+	}
+
+	// An invalid done_state is rejected and maps nothing.
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token,
+		map[string]any{"repo": "acme/other", "done_state": "bogus"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("add repo bogus done_state status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if got := listedDoneState(t, h, token, "acme/other"); got != "" {
+		t.Fatalf("acme/other was mapped with done_state %q despite 422", got)
+	}
+
+	// Omitting done_state leaves the mapping at the schema default.
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token, map[string]any{"repo": "acme/third"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add repo without done_state status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := listedDoneState(t, h, token, "acme/third"); got != "merged" {
+		t.Fatalf("default done_state = %q, want merged", got)
+	}
+}
+
+// TestPatchRepoDoneState covers PATCH /api/v1/repos/{owner}/{name}.
+func TestPatchRepoDoneState(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token, map[string]any{"repo": "acme/widgets"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add repo status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/repos/acme/widgets", token, map[string]any{"done_state": "released"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("patch repo status = %d, want 204; body %s", rr.Code, rr.Body.String())
+	}
+	if got := listedDoneState(t, h, token, "acme/widgets"); got != "released" {
+		t.Fatalf("done_state = %q, want released", got)
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/repos/acme/widgets", token, map[string]any{"done_state": "bogus"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("patch bogus done_state status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if got := listedDoneState(t, h, token, "acme/widgets"); got != "released" {
+		t.Fatalf("done_state after rejected patch = %q, want released", got)
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/repos/acme/widgets", token, map[string]any{})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("patch without done_state status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["error"]; got != "done_state is required" {
+		t.Fatalf("patch without done_state error = %v, want \"done_state is required\"", got)
+	}
+
+	rr = doReq(t, h, "PATCH", "/api/v1/repos/acme/nosuch", token, map[string]any{"done_state": "released"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("patch unmapped repo status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -225,6 +337,7 @@ func TestAdminGatedEndpoints(t *testing.T) {
 		{"POST", "/api/v1/projects", map[string]any{"id": "p2", "name": "P2", "key": "P2"}},
 		{"PATCH", "/api/v1/projects/p2", map[string]any{"focus": []string{"security"}}},
 		{"POST", "/api/v1/projects/p2/repos", map[string]any{"repo": "acme/other"}},
+		{"PATCH", "/api/v1/repos/acme/other", map[string]any{"done_state": "released"}},
 		{"POST", "/api/v1/actors", map[string]any{"id": "eve", "kind": "agent"}},
 		{"POST", "/api/v1/actors/worker/tokens", map[string]any{}},
 		{"DELETE", "/api/v1/tokens", map[string]any{"token": workerToken}},

@@ -197,7 +197,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 type projectPageData struct {
 	basePage
 	Project boardProjectJSON
-	Repos   []string
+	Repos   []store.RepoMapping
 }
 
 // projectPage handles GET /projects/{id}: the project's board (scoped via

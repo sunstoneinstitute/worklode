@@ -20,7 +20,7 @@ func RepoDoneState(tx *sql.Tx, repo string) (string, error) {
 	err := tx.QueryRow(`SELECT done_state FROM project_repos WHERE repo = $1`,
 		repo).Scan(&st)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "merged", nil
+		return DefaultDoneState, nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("done_state for %s: %w", repo, err)

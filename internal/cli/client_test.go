@@ -75,7 +75,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 		t.Fatalf("CreateProject result = %+v", p)
 	}
 
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 
@@ -83,8 +83,33 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
-	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != "acme/widgets" {
+	want := cli.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
+	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != want {
 		t.Fatalf("ListProjects result = %+v", list.Projects)
+	}
+
+	if _, err := c.SetRepoDoneState(ctx, "acme/widgets", "released"); err != nil {
+		t.Fatalf("SetRepoDoneState: %v", err)
+	}
+	list, _, err = c.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects after SetRepoDoneState: %v", err)
+	}
+	if got := list.Projects[0].Repos[0].DoneState; got != "released" {
+		t.Fatalf("done_state after SetRepoDoneState = %q, want released", got)
+	}
+
+	// A repo without an owner/name split is rejected client-side, never sent.
+	_, err = c.SetRepoDoneState(ctx, "widgets", "released")
+	if err == nil {
+		t.Fatal("SetRepoDoneState with a bare repo name: want error, got nil")
+	}
+	var clientErr *cli.ClientError
+	if errors.As(err, &clientErr) {
+		t.Fatalf("SetRepoDoneState with a bare repo name reached the server: %v", err)
+	}
+	if !strings.Contains(err.Error(), "owner/name") {
+		t.Fatalf("SetRepoDoneState with a bare repo name: error = %v, want it to mention owner/name", err)
 	}
 }
 
@@ -425,7 +450,7 @@ func TestClientInboxFlow(t *testing.T) {
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 

@@ -15,7 +15,8 @@ func newProjectCmd() *cobra.Command {
 		Use:   "project",
 		Short: "Manage projects and their repos",
 	}
-	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(), newProjectFocusCmd())
+	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
+		newProjectSetRepoCmd(), newProjectFocusCmd())
 	return cmd
 }
 
@@ -80,7 +81,11 @@ func newProjectListCmd() *cobra.Command {
 	return cmd
 }
 
+// doneStateFlagUsage documents --done-state on the repo subcommands.
+const doneStateFlagUsage = "terminal delivery state for the repo: merged, deployed_prod, or released"
+
 func newProjectAddRepoCmd() *cobra.Command {
+	var doneState string
 	cmd := &cobra.Command{
 		Use:   "add-repo <id> <owner/name>",
 		Short: "Map a GitHub repo to a project",
@@ -90,7 +95,7 @@ func newProjectAddRepoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			raw, err := c.AddRepo(cmd.Context(), args[0], args[1])
+			raw, err := c.AddRepo(cmd.Context(), args[0], args[1], doneState)
 			if err != nil {
 				return err
 			}
@@ -102,6 +107,35 @@ func newProjectAddRepoCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&doneState, "done-state", "", doneStateFlagUsage+" (default: server default)")
+	return cmd
+}
+
+func newProjectSetRepoCmd() *cobra.Command {
+	var doneState string
+	cmd := &cobra.Command{
+		Use:   "set-repo <owner/name>",
+		Short: "Update settings on an already-mapped repo",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			raw, err := c.SetRepoDoneState(cmd.Context(), args[0], doneState)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s done-state: %s\n", args[0], doneState)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&doneState, "done-state", "", doneStateFlagUsage)
+	cmd.MarkFlagRequired("done-state")
 	return cmd
 }
 

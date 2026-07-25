@@ -246,6 +246,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
 	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
 	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
+	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))
 
 	mux.Handle("POST /api/v1/actors", s.auth(requireAdmin(s.createActor)))
 	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(requireAdmin(s.createToken)))

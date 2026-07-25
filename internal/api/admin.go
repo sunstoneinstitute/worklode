@@ -25,12 +25,19 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // --- projects ---------------------------------------------------------
 
+// repoJSON is the wire form of a repo mapping: the repo and the terminal
+// delivery state that counts as fully delivered for it.
+type repoJSON struct {
+	Repo      string `json:"repo"`
+	DoneState string `json:"done_state"`
+}
+
 type projectJSON struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	Key   string   `json:"key"`
-	Repos []string `json:"repos"`
-	Focus []string `json:"focus"`
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	Key   string     `json:"key"`
+	Repos []repoJSON `json:"repos"`
+	Focus []string   `json:"focus"`
 }
 
 type createProjectRequest struct {
@@ -41,16 +48,17 @@ type createProjectRequest struct {
 
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
 // focus slices to empty arrays so they serialize as [] rather than null.
-func toProjectJSON(p *store.Project, repos []string) projectJSON {
-	if repos == nil {
-		repos = []string{}
+func toProjectJSON(p *store.Project, repos []store.RepoMapping) projectJSON {
+	rs := make([]repoJSON, 0, len(repos))
+	for _, m := range repos {
+		rs = append(rs, repoJSON{Repo: m.Repo, DoneState: m.DoneState})
 	}
 	focus := p.Focus
 	if focus == nil {
 		focus = []string{}
 	}
 	return projectJSON{
-		ID: p.ID, Name: p.Name, Key: p.Key, Repos: repos, Focus: focus,
+		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 	}
 }
 
@@ -142,6 +150,8 @@ func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 
 type addRepoRequest struct {
 	Repo string `json:"repo"`
+	// DoneState is optional; empty leaves the mapping at the schema default.
+	DoneState string `json:"done_state"`
 }
 
 // addRepo handles POST /api/v1/projects/{id}/repos.
@@ -156,6 +166,12 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "repo is required")
 		return
 	}
+	// Validated before the insert so a bad done_state does not leave the repo
+	// mapped with the wrong terminal state.
+	if req.DoneState != "" && !store.ValidDoneState(req.DoneState) {
+		writeErr(w, http.StatusUnprocessableEntity, doneStateErrMsg)
+		return
+	}
 	if _, err := s.st.GetProject(r.Context(), id); err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -164,7 +180,42 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"project_id": id, "repo": req.Repo})
+	doneState := store.DefaultDoneState
+	if req.DoneState != "" {
+		if err := s.st.SetRepoDoneState(r.Context(), req.Repo, req.DoneState); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		doneState = req.DoneState
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"project_id": id, "repo": req.Repo, "done_state": doneState,
+	})
+}
+
+// doneStateErrMsg is the 422 message for an unusable done_state value.
+const doneStateErrMsg = "invalid done_state: must be merged, deployed_prod, or released"
+
+// patchRepo handles PATCH /api/v1/repos/{owner}/{name}: currently only
+// done_state is settable.
+func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
+	repo := r.PathValue("owner") + "/" + r.PathValue("name")
+	var req struct {
+		DoneState string `json:"done_state"`
+	}
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.DoneState == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "done_state is required")
+		return
+	}
+	if err := s.st.SetRepoDoneState(r.Context(), repo, req.DoneState); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- actors and tokens --------------------------------------------------

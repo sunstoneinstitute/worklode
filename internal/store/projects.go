@@ -169,22 +169,63 @@ func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, erro
 	return s.GetProject(ctx, projectID)
 }
 
-// ListRepos returns the repos mapped to a project.
-func (s *Store) ListRepos(ctx context.Context, projectID string) ([]string, error) {
+// RepoMapping is a repo mapped to a project, with the terminal delivery
+// state that counts as fully delivered for it (see SetRepoDoneState).
+type RepoMapping struct {
+	Repo      string
+	DoneState string
+}
+
+// DefaultDoneState is the project_repos.done_state schema default, used for
+// repos with no explicit terminal state (and for unmapped repos).
+const DefaultDoneState = "merged"
+
+// validDoneStates are the terminal states a repo mapping may declare as
+// "fully delivered" (docs/specs/2026-07-25-delivery-lifecycle-design.md).
+var validDoneStates = map[string]bool{"merged": true, "deployed_prod": true, "released": true}
+
+// ValidDoneState reports whether state is an accepted repo done_state.
+func ValidDoneState(state string) bool { return validDoneStates[state] }
+
+// SetRepoDoneState sets the delivery terminal state for a mapped repo. A repo
+// maps to at most one project (project_repos.repo is UNIQUE), so this updates
+// exactly one row. Returns ErrInvalidInput for an unknown state and
+// ErrNotFound if the repo is not mapped to any project.
+func (s *Store) SetRepoDoneState(ctx context.Context, repo, state string) error {
+	if !validDoneStates[state] {
+		return fmt.Errorf("done_state %q: %w", state, ErrInvalidInput)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE project_repos SET done_state = $1 WHERE repo = $2`, state, repo)
+	if err != nil {
+		return fmt.Errorf("set done_state for %s: %w", repo, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set done_state rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("repo %s: %w", repo, ErrNotFound)
+	}
+	return nil
+}
+
+// ListRepos returns the repos mapped to a project, each with its done_state.
+func (s *Store) ListRepos(ctx context.Context, projectID string) ([]RepoMapping, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo FROM project_repos WHERE project_id = $1`, projectID)
+		`SELECT repo, done_state FROM project_repos WHERE project_id = $1`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
 	}
 	defer rows.Close()
 
-	var out []string
+	var out []RepoMapping
 	for rows.Next() {
-		var repo string
-		if err := rows.Scan(&repo); err != nil {
+		var m RepoMapping
+		if err := rows.Scan(&m.Repo, &m.DoneState); err != nil {
 			return nil, fmt.Errorf("scan repo: %w", err)
 		}
-		out = append(out, repo)
+		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)

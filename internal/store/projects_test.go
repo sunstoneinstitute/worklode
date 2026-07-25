@@ -232,15 +232,71 @@ func TestListRepos(t *testing.T) {
 		t.Fatalf("AddRepo horndb-docs: %v", err)
 	}
 
+	if err := s.SetRepoDoneState(ctx, "sunstoneinstitute/horndb", "released"); err != nil {
+		t.Fatalf("SetRepoDoneState: %v", err)
+	}
+
 	got, err := s.ListRepos(ctx, "horndb")
 	if err != nil {
 		t.Fatalf("ListRepos: %v", err)
 	}
-	sort.Strings(got)
-	want := []string{"sunstoneinstitute/horndb", "sunstoneinstitute/horndb-docs"}
+	sort.Slice(got, func(i, j int) bool { return got[i].Repo < got[j].Repo })
+	want := []RepoMapping{
+		{Repo: "sunstoneinstitute/horndb", DoneState: "released"},
+		{Repo: "sunstoneinstitute/horndb-docs", DoneState: "merged"},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ListRepos: got %v, want %v", got, want)
 	}
+}
+
+func TestSetRepoDoneState(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "P1"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	if err := s.AddRepo(ctx, "p1", "acme/app"); err != nil {
+		t.Fatalf("AddRepo: %v", err)
+	}
+
+	// A new mapping defaults to "merged".
+	if got := repoDoneState(t, s, "acme/app"); got != "merged" {
+		t.Fatalf("default done_state = %q, want merged", got)
+	}
+
+	for _, state := range []string{"released", "deployed_prod", "merged"} {
+		if err := s.SetRepoDoneState(ctx, "acme/app", state); err != nil {
+			t.Fatalf("SetRepoDoneState %q: %v", state, err)
+		}
+		if got := repoDoneState(t, s, "acme/app"); got != state {
+			t.Fatalf("done_state after set %q = %q", state, got)
+		}
+	}
+
+	if err := s.SetRepoDoneState(ctx, "acme/app", "bogus"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("SetRepoDoneState bogus: want ErrInvalidInput, got %v", err)
+	}
+	if got := repoDoneState(t, s, "acme/app"); got != "merged" {
+		t.Fatalf("done_state after rejected set = %q, want merged (unchanged)", got)
+	}
+
+	if err := s.SetRepoDoneState(ctx, "acme/nope", "released"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SetRepoDoneState unmapped repo: want ErrNotFound, got %v", err)
+	}
+}
+
+// repoDoneState reads project_repos.done_state directly, so the assertions
+// above do not depend on the reader under test.
+func repoDoneState(t *testing.T, s *Store, repo string) string {
+	t.Helper()
+	var state string
+	if err := s.db.QueryRow(
+		`SELECT done_state FROM project_repos WHERE repo = $1`, repo).Scan(&state); err != nil {
+		t.Fatalf("read done_state for %s: %v", repo, err)
+	}
+	return state
 }
 
 func TestPerProjectTaskNumbering(t *testing.T) {
