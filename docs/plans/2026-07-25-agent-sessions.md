@@ -22,7 +22,7 @@
 - Modify: `deploy/base/kustomization.yaml:12-18` (configMapGenerator file list)
 - Test: `internal/store/agent_sessions_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `internal/store/agent_sessions_test.go`:
 
@@ -108,12 +108,12 @@ func TestAgentSessionsSchema(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestAgentSessionsSchema -v`
 Expected: FAIL with `relation "agent_sessions" does not exist`.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 Create `deploy/base/migrations/0004_agent_sessions.up.sql`:
 
@@ -150,7 +150,7 @@ Create `deploy/base/migrations/0004_agent_sessions.down.sql`:
 DROP TABLE agent_sessions;
 ```
 
-- [ ] **Step 4: Register the migration with kustomize**
+- [x] **Step 4: Register the migration with kustomize**
 
 In `deploy/base/kustomization.yaml`, add two lines to the `worklode-migrations` file list, after `migrations/0003_project_keys.down.sql`:
 
@@ -159,12 +159,12 @@ In `deploy/base/kustomization.yaml`, add two lines to the `worklode-migrations` 
       - migrations/0004_agent_sessions.down.sql
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `go test ./internal/store/ -run TestAgentSessionsSchema -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add deploy/base/migrations/0004_agent_sessions.up.sql \
@@ -182,7 +182,7 @@ git commit -m "Add agent_sessions table"
 - Create: `internal/store/agent_sessions.go`
 - Test: `internal/store/agent_sessions_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/store/agent_sessions_test.go`:
 
@@ -269,12 +269,12 @@ func TestTouchAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 
 `errors` is already imported by the test file from Task 1 only if you added it; add `"errors"` to that file's import block now.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestTouchAgentSession -v`
 Expected: FAIL — `s.TouchAgentSession undefined`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `internal/store/agent_sessions.go`:
 
@@ -468,12 +468,12 @@ func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionI
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/store/ -run TestTouchAgentSession -v`
 Expected: PASS (both tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/store/agent_sessions.go internal/store/agent_sessions_test.go
@@ -492,7 +492,7 @@ re-enters it is working that lease again and must not stay closed.
 - Modify: `internal/store/agent_sessions.go` (append, plus the heartbeat UPDATE)
 - Test: `internal/store/agent_sessions_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/store/agent_sessions_test.go`:
 
@@ -568,12 +568,12 @@ func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestEndAgentSession -v`
 Expected: FAIL — `undefined: SessionUsage`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `internal/store/agent_sessions.go`:
 
@@ -653,12 +653,12 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/store/ -run TestEndAgentSession -v`
 Expected: PASS (both tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/store/agent_sessions.go internal/store/agent_sessions_test.go
@@ -674,7 +674,7 @@ git commit -m "Add EndAgentSession store function"
 - Modify: `internal/store/leases.go:304-333` (`closeLease` and `CloseActiveLease`)
 - Test: `internal/store/agent_sessions_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/store/agent_sessions_test.go`:
 
@@ -748,12 +748,12 @@ func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/store/ -run 'TestReleaseClosesOpen|TestExpiryClosesOpen|TestCloseActiveLeaseClosesOpen' -v`
 Expected: FAIL — each reports `open sessions after ...: got 1, want 0`.
 
-- [ ] **Step 3: Add the helper**
+- [x] **Step 3: Add the helper**
 
 Append to `internal/store/agent_sessions.go`:
 
@@ -787,7 +787,7 @@ func endOpenAgentSessionsOnTask(tx *sql.Tx, now time.Time, taskID string) error 
 }
 ```
 
-- [ ] **Step 4: Call it from both lease-closing paths**
+- [x] **Step 4: Call it from both lease-closing paths**
 
 In `internal/store/leases.go`, in `closeLease`, add the call immediately after the `UPDATE leases SET released_at` block and before the task-state read:
 
@@ -816,12 +816,12 @@ func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/store/ -v`
 Expected: PASS — all store tests, including the pre-existing lease tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/store/agent_sessions.go internal/store/agent_sessions_test.go internal/store/leases.go
@@ -837,7 +837,7 @@ git commit -m "End open agent sessions when a lease closes"
 - Modify: `internal/api/server.go:217-221` (route table)
 - Test: `internal/api/agentsessions_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `internal/api/agentsessions_test.go`:
 
@@ -933,12 +933,12 @@ Helper names above were verified against the tree: `newTestServer`
 `createTaskViaAPI` (`:29`), `secondActor` (`internal/api/lifecycle_test.go:16`).
 A task created through the API is immediately claimable, as `TestClaim` shows.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/ -run TestAgentSession -v`
 Expected: FAIL — 404 from the mux, because the routes do not exist.
 
-- [ ] **Step 3: Write the handlers**
+- [x] **Step 3: Write the handlers**
 
 Create `internal/api/agentsessions.go`:
 
@@ -1037,7 +1037,7 @@ func (s *server) endAgentSession(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 4: Register the routes**
+- [x] **Step 4: Register the routes**
 
 In `internal/api/server.go`, directly after the `lease/worktree` route (line ~221):
 
@@ -1046,12 +1046,12 @@ In `internal/api/server.go`, directly after the `lease/worktree` route (line ~22
 	mux.Handle("POST /api/v1/tasks/{id}/agent-session/end", s.auth(s.endAgentSession))
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `go test ./internal/api/ -run TestAgentSession -v`
 Expected: PASS (both tests)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/api/agentsessions.go internal/api/agentsessions_test.go internal/api/server.go
@@ -1066,7 +1066,7 @@ git commit -m "Add agent-session HTTP endpoints"
 - Modify: `internal/cli/client.go` (append after `RebindWorktree`, ~line 502)
 - Test: `internal/cli/client_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/cli/client_test.go`. That file drives a **real** server, not a
 stub: `newTestServer(t)` (line 28) returns `(*store.Store, *cli.Client, string)`
@@ -1128,12 +1128,12 @@ end event's external id is deterministic, so a repeat call takes `RecordEvent`'s
 already-recorded path and returns nil. That is the intended idempotency, not a
 bug.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/cli/ -run TestClientAgentSession -v`
 Expected: FAIL — `c.TouchAgentSession undefined`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `internal/cli/client.go`, after `RebindWorktree`:
 
@@ -1201,12 +1201,12 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in EndAgentSess
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/cli/ -run TestClientAgentSession -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/cli/client.go internal/cli/client_test.go
@@ -1225,7 +1225,7 @@ The marker file already records the live session per worktree. It gains
 - Modify: `internal/hookrun/hookrun.go:459-500` (marker helpers)
 - Test: `internal/hookrun/hookrun_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/hookrun/hookrun_test.go`:
 
@@ -1279,12 +1279,12 @@ a temp dir a git repo with one commit and returns the path resolved to git's
 own toplevel. The marker lives in the worktree-private git dir, so
 `worktree.GitDir` must resolve — a bare `t.TempDir()` will not do.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/hookrun/ -run TestSessionMarkerHeartbeat -v`
 Expected: FAIL — `too many arguments in call to writeSessionMarker`, `undefined: heartbeatDue`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `internal/hookrun/hookrun.go`, add the debounce constant next to `leaseRenewWindow`:
 
@@ -1404,7 +1404,7 @@ func sessionMarkerFresh(root string) bool {
 
 `pidAlive` already exists directly below it and is unchanged.
 
-- [ ] **Step 4: Fix the existing caller**
+- [x] **Step 4: Fix the existing caller**
 
 `handleSessionStart` calls `writeSessionMarker(root, p.SessionID)`. Update it to pass the clock:
 
@@ -1414,12 +1414,12 @@ func sessionMarkerFresh(root string) bool {
 	}
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/hookrun/ -v`
 Expected: PASS — the new test and every pre-existing hookrun test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/hookrun/hookrun.go internal/hookrun/hookrun_test.go
@@ -1435,7 +1435,7 @@ git commit -m "Add heartbeat timestamp to the session marker"
 - Modify: `internal/cmd/hook.go:23-28` (`Use`/`Short` text)
 - Test: `internal/hookrun/hookrun_test.go` (append; update `allEvents`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `internal/hookrun/hookrun_test.go`, extend the guarded event list:
 
@@ -1533,12 +1533,12 @@ func (p *pathRecorder) count(substr string) int {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/hookrun/ -run 'TestHeartbeat' -v`
 Expected: FAIL — `session-start did not report the agent session` (and unknown-event warnings for `heartbeat`).
 
-- [ ] **Step 3: Add the agent-identity helper and the report calls**
+- [x] **Step 3: Add the agent-identity helper and the report calls**
 
 In `internal/hookrun/hookrun.go`, add near the top-level helpers:
 
@@ -1586,7 +1586,7 @@ In `handleSessionStart`, report the session immediately after `ensureLease` and 
 	emitAdditionalContext(opts.Stdout, compactBrief(brief))
 ```
 
-- [ ] **Step 4: Add the three new handlers**
+- [x] **Step 4: Add the three new handlers**
 
 Append to the handler section of `internal/hookrun/hookrun.go`:
 
@@ -1674,7 +1674,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 }
 ```
 
-- [ ] **Step 5: Make `session-end` and `pre-commit` report**
+- [x] **Step 5: Make `session-end` and `pre-commit` report**
 
 `handleSessionEnd` currently takes `(opts, dir)` and makes no backbone call. Change its signature to `(ctx context.Context, opts Options, p Payload, dir string)` and close the session before removing the marker:
 
@@ -1722,7 +1722,7 @@ In `handlePreCommit`, after the existing `RenewLease` call, add an opportunistic
 	}
 ```
 
-- [ ] **Step 6: Wire the dispatch table**
+- [x] **Step 6: Wire the dispatch table**
 
 In the guarded event set (`internal/hookrun/hookrun.go`, ~line 96), add:
 
@@ -1751,12 +1751,12 @@ In `internal/cmd/hook.go`, update the `Short` line to list the new events:
 		Short: "Run a Worklode lifecycle hook (session-start|heartbeat|session-end|pre-commit|worktree-create|worktree-remove|worktree-enter|worktree-exit)",
 ```
 
-- [ ] **Step 7: Run the full test suite**
+- [x] **Step 7: Run the full test suite**
 
 Run: `go test ./... `
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add internal/hookrun/hookrun.go internal/hookrun/hookrun_test.go internal/cmd/hook.go
@@ -1774,7 +1774,7 @@ updated; it changes no Go code.
 **Files:**
 - Modify: `README.md` (the hooks section around line 184)
 
-- [ ] **Step 1: Document the events and their bindings**
+- [x] **Step 1: Document the events and their bindings**
 
 In `README.md`, after the existing `install-git-hooks` paragraph (~line 186), add:
 
@@ -1803,12 +1803,12 @@ cheap even in a fast conversation. Every hook stays bounded by the 2s backbone
 timeout and never fails the event that triggered it.
 ```
 
-- [ ] **Step 2: Verify the docs build/lint cleanly**
+- [x] **Step 2: Verify the docs build/lint cleanly**
 
 Run: `go build ./... && go vet ./...`
 Expected: no output (README changes cannot break these, but this confirms the tree is still clean before the final commit).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md
@@ -1859,7 +1859,7 @@ Install strips every such entry before writing the current set (so a re-run
 converges instead of duplicating, and a removed binding disappears); uninstall
 strips them and nothing else.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `internal/cmd/claude_test.go`:
 
@@ -2045,12 +2045,12 @@ func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/cmd/ -run TestClaude -v`
 Expected: FAIL — `undefined: claudeSettingsPath`, `undefined: installClaudeHooks`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `internal/cmd/claude.go`:
 
@@ -2370,17 +2370,17 @@ func isLodeHookEntry(e any) bool {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/cmd/ -run TestClaude -v`
 Expected: PASS (all four tests)
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `go build ./... && go vet ./... && go test ./...`
 Expected: PASS
 
-- [ ] **Step 6: Document the commands**
+- [x] **Step 6: Document the commands**
 
 In `README.md`, at the end of the "Agent session tracking" section added in
 Task 9, replace the sentence "Claude Code bindings, for the plugin's
@@ -2399,7 +2399,7 @@ idempotent and only touch entries whose command starts with `lode hook`, so
 third-party hooks on the same events are left alone.
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/cmd/claude.go internal/cmd/claude_test.go README.md

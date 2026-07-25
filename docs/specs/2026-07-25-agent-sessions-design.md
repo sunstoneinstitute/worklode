@@ -74,6 +74,10 @@ agents in one directory; it is harmless and not worth a constraint.
 Token and cost columns ship nullable and unpopulated. Nothing computes them in
 this cut; they are in the migration so the table is shaped right.
 
+`agent_version` is likewise reserved: it is plumbed through every layer, but
+the Claude Code hook payload carries no version, so it is always empty today.
+It is there for agents that do report one.
+
 Cost is an amount plus an ISO 4217 currency code, never a bare USD number: not
 every vendor bills in dollars (Mistral bills EUR). The currency defaults to
 `USD` and is NOT NULL, so an amount can never sit there without a currency to
@@ -138,9 +142,19 @@ this. It is uncorrelated, so it is evaluated once against the statement
 snapshot, and READ COMMITTED's row re-check covers only the target row's own
 predicates — the update still lands after the closing transaction commits.
 
-All three paths that touch both tables (heartbeat, `closeLease`,
-`CloseActiveLease`) lock `leases` before `agent_sessions`, so they cannot
-deadlock against each other.
+The session **insert** needs the same lock, for the same reason and with a
+worse failure mode: the foreign key does not serialize it, because an insert
+takes `FOR KEY SHARE` on the lease row while `UPDATE leases SET released_at`
+takes only `FOR NO KEY UPDATE` (`released_at` appears solely in partial
+indexes, which are not key attributes). Without the lock a session can be
+created *after* the close has already swept the lease's open sessions, and
+nothing will ever close it — not `closeLease`, whose lease is gone; not
+`EndAgentSession`, which requires an active held lease; not the sweeper, which
+walks only unreleased leases.
+
+All four paths that touch both tables — session insert, heartbeat,
+`closeLease`, `CloseActiveLease` — lock `leases` before `agent_sessions`, so
+they cannot deadlock against each other.
 
 **`EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)`** — records
 an `agent_session.ended` event, sets `ended_at`, and writes any token/cost
