@@ -103,7 +103,11 @@ with a date — out of scope here; the table records what the vendor charged.
 - `ended_at` is stamped by the session-end hook, **and** by `closeLease` /
   `CloseActiveLease` for any session still open on the lease being closed. A
   swept, released, or completed task therefore never leaves a session that
-  looks live, and "what is running now" stays a single-table query.
+  looks live, and "what is running now" stays a single-table query. A close by
+  this route stamps `ended_at` without emitting an `agent_session.ended` event:
+  the lease's own `lease.released` / `lease.expired` event already records the
+  transition, so `started`/`ended` pairs in the event stream are deliberately
+  unbalanced.
 
 ## Store and API
 
@@ -122,11 +126,21 @@ external_id)` uniqueness. The `last_seen_at` bump is a plain `UPDATE` issued
 path and skips apply entirely — and because a heartbeat is not an event worth
 keeping.
 
-That bump also clears `ended_at` (see Lifecycle) and is guarded, in the same
-statement, on the lease still being unreleased. The holder check that precedes
-it runs on a plain connection, so it cannot see a release that lands while the
-call is in flight; without the guard a heartbeat could leave a permanently
-open session on a released lease, which nothing would ever close.
+That bump also clears `ended_at` (see Lifecycle), and runs in its own
+transaction that first takes a locking read on the lease
+(`SELECT … FOR SHARE`), skipping the write when the lease has been released.
+The holder check that precedes it runs on a plain connection and cannot see a
+release landing mid-call; without the lock a heartbeat could leave a
+permanently open session on a released lease, which nothing would ever close.
+
+A plain `EXISTS (SELECT … FROM leases …)` in the `UPDATE` does **not** achieve
+this. It is uncorrelated, so it is evaluated once against the statement
+snapshot, and READ COMMITTED's row re-check covers only the target row's own
+predicates — the update still lands after the closing transaction commits.
+
+All three paths that touch both tables (heartbeat, `closeLease`,
+`CloseActiveLease`) lock `leases` before `agent_sessions`, so they cannot
+deadlock against each other.
 
 **`EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)`** — records
 an `agent_session.ended` event, sets `ended_at`, and writes any token/cost
