@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -48,9 +49,13 @@ func newTaskAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
+			}
+			project := resolveProject(cmd, project, cfg.CurrentProject)
+			if project == "" {
+				return errors.New(`--project is required (or set current_project in .worklode/config.toml or ~/.config/worklode/config.toml)`)
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
 				Project: project, Title: title, Body: body, Priority: priority, Kind: kind,
@@ -67,14 +72,13 @@ func newTaskAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "project id (required)")
+	cmd.Flags().StringVar(&project, "project", "", "project id"+projectFlagUsage)
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
-	cmd.MarkFlagRequired("project")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -87,12 +91,12 @@ func newTaskListCmd() *cobra.Command {
 		Short: "List tasks (done and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			states := resolveStatusFilter(statuses)
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-				Project: project, States: states, Priority: priority,
+				Project: resolveProject(cmd, project, cfg.CurrentProject), States: states, Priority: priority,
 			})
 			if err != nil {
 				return err
@@ -105,7 +109,7 @@ func newTaskListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "filter by project id")
+	cmd.Flags().StringVar(&project, "project", "", "filter by project id"+projectFlagUsage+"; pass --project= for all projects")
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, done, abandoned, or all (repeatable; default hides done and abandoned)")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	return cmd
@@ -302,10 +306,11 @@ func newTaskClaimCmd() *cobra.Command {
 		Short: "Lease a task to the current worktree and move it to in_progress",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
+			project := resolveProject(cmd, project, cfg.CurrentProject)
 
 			if !next {
 				if len(args) == 0 {
@@ -370,7 +375,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 02 ranking)")
-	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project")
+	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project"+projectFlagUsage)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd

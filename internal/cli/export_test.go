@@ -25,6 +25,12 @@ func ReadRawConfigForTest() (string, error) {
 	return string(b), err
 }
 
+// LoadConfigFromForTest is LoadConfig with an explicit starting directory for
+// the repo-local config walk, so tests need not chdir.
+func LoadConfigFromForTest(startDir string) (Config, error) {
+	return loadConfigFrom(startDir)
+}
+
 // SwapTokenStoreForTest replaces the package-level token store and returns a
 // function that restores the original (pass to t.Cleanup).
 func SwapTokenStoreForTest(ts TokenStore) func() {

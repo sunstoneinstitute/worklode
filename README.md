@@ -59,6 +59,27 @@ lode task claim <task-id>
 Managing projects, actors, and tokens requires an admin actor; the
 bootstrap actor is admin, and `lode actor add --admin` creates more.
 
+### Setting the current project per repo
+
+`current_project` supplies the default for `--project` on `lode task add`,
+`lode task list`, `lode task claim --next`, and `lode next`. Set it once per
+checkout in `.worklode/config.toml` (or `.lode/config.toml`) at the repo root:
+
+```toml
+current_project = "sunstone-web"
+```
+
+```bash
+lode task add --title "Fix the footer link"   # goes to sunstone-web
+lode task list --project=                     # opt back out to all projects
+```
+
+The CLI walks up from the working directory to the first `.worklode` or
+`.lode` directory containing a `config.toml`, stopping before `$HOME`, and
+merges it over `~/.config/worklode/config.toml`. It may set `server` and
+`current_project`, but not `token` — repo configs tend to be committed, and
+the token belongs in the OS keychain (or `LODE_TOKEN`).
+
 The read-only web UI is at http://localhost:8080/.
 
 ## Network exposure

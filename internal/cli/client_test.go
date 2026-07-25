@@ -933,3 +933,164 @@ func TestLoadConfigMalformed(t *testing.T) {
 		})
 	}
 }
+
+// writeRepoConfig writes content to <dir>/<confDir>/config.toml, creating the
+// directory.
+func writeRepoConfig(t *testing.T, dir, confDir, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, confDir), 0o755); err != nil {
+		t.Fatalf("mkdir %s/%s: %v", dir, confDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, confDir, "config.toml"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s/%s/config.toml: %v", dir, confDir, err)
+	}
+}
+
+// repoTestHome sets up a fake $HOME with a user config and returns the home
+// directory plus a nested repo working directory (<home>/git/proj/sub) to load
+// from.
+func repoTestHome(t *testing.T, userConfig string) (home, workDir string) {
+	t.Helper()
+	keyring.MockInit()
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("LODE_SERVER", "")
+	t.Setenv("LODE_TOKEN", "")
+	if userConfig != "" {
+		if err := cli.WriteRawConfigForTest(userConfig); err != nil {
+			t.Fatalf("write user config: %v", err)
+		}
+	}
+	workDir = filepath.Join(home, "git", "proj", "sub")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir work dir: %v", err)
+	}
+	return home, workDir
+}
+
+func TestLoadConfigCurrentProjectFromUserConfig(t *testing.T) {
+	_, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\ncurrent_project = \"user-proj\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CurrentProject != "user-proj" {
+		t.Fatalf("current project = %q; want user-proj", cfg.CurrentProject)
+	}
+}
+
+func TestRepoConfigOverridesCurrentProject(t *testing.T) {
+	for _, confDir := range []string{".worklode", ".lode"} {
+		t.Run(confDir, func(t *testing.T) {
+			home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\ncurrent_project = \"user-proj\"\n")
+			// The repo config sits two levels above the working directory, so
+			// finding it exercises the upward walk.
+			writeRepoConfig(t, filepath.Join(home, "git", "proj"), confDir, "current_project = \"repo-proj\"\n")
+
+			cfg, err := cli.LoadConfigFromForTest(workDir)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if cfg.CurrentProject != "repo-proj" {
+				t.Fatalf("current project = %q; want repo-proj", cfg.CurrentProject)
+			}
+			if cfg.ServerURL != "https://wl.example.com" {
+				t.Fatalf("server = %q; the repo config must not clear unset keys", cfg.ServerURL)
+			}
+		})
+	}
+}
+
+func TestRepoConfigNearestWins(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git"), ".worklode", "current_project = \"outer\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git", "proj"), ".worklode", "current_project = \"inner\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CurrentProject != "inner" {
+		t.Fatalf("current project = %q; want inner (nearest config wins)", cfg.CurrentProject)
+	}
+}
+
+func TestRepoConfigWorklodeBeatsLodeAtSameLevel(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "current_project = \"from-worklode\"\n")
+	writeRepoConfig(t, repo, ".lode", "current_project = \"from-lode\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CurrentProject != "from-worklode" {
+		t.Fatalf("current project = %q; want from-worklode", cfg.CurrentProject)
+	}
+}
+
+func TestRepoConfigWalkStopsAtHome(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+	// A .worklode in $HOME itself is not a repo config and must be ignored.
+	writeRepoConfig(t, home, ".worklode", "current_project = \"home-proj\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CurrentProject != "" {
+		t.Fatalf("current project = %q; the walk must stop before $HOME", cfg.CurrentProject)
+	}
+}
+
+func TestRepoConfigRejectsToken(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git", "proj"), ".worklode", "token = \"wl_leaked\"\n")
+
+	_, err := cli.LoadConfigFromForTest(workDir)
+	if err == nil {
+		t.Fatal("load with a token in the repo config: err = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "must not set a token") {
+		t.Fatalf("err = %v; want it to explain that repo configs may not set a token", err)
+	}
+}
+
+func TestRepoConfigServerOverrideDropsLegacyFileToken(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://file.example.com\"\ntoken = \"wl_filetoken\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git", "proj"), ".worklode", "server = \"https://repo.example.com\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ServerURL != "https://repo.example.com" {
+		t.Fatalf("server = %q; want the repo config's server", cfg.ServerURL)
+	}
+	if cfg.Token != "" {
+		t.Fatalf("token = %q; the user config's legacy token must not leak onto the repo's server", cfg.Token)
+	}
+}
+
+func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	t.Setenv("LODE_TOKEN", "")
+
+	if err := cli.WriteRawConfigForTest("server = \"https://old.example.com\"\ncurrent_project = \"keepme\"\n"); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	if err := cli.SaveServerOnly("https://new.example.com"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	cfg, err := cli.LoadConfigFromForTest("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ServerURL != "https://new.example.com" || cfg.CurrentProject != "keepme" {
+		t.Fatalf("config after SaveServerOnly = %+v; want the new server and current_project kept", cfg)
+	}
+}
