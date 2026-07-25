@@ -305,12 +305,21 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		if err := store.CloseActiveLease(tx, now, taskID); err != nil {
 			return err
 		}
-		taskState, err := store.TaskState(tx, taskID)
-		if err != nil {
-			return err
+		// Record the PR's shas as task commits; the resolver advances the
+		// task once (and if) they appear on main via a push event.
+		if gh.Head.SHA != "" {
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: taskID, Repo: repo, SHA: gh.Head.SHA, Source: "pr", SeenAt: now,
+			}); err != nil {
+				return err
+			}
 		}
-		if taskState == "in_review" {
-			return store.Transition(tx, now, taskID, "in_review", "merged", eventID)
+		if gh.MergeCommitSHA != nil && *gh.MergeCommitSHA != "" {
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: taskID, Repo: repo, SHA: *gh.MergeCommitSHA, Source: "pr", SeenAt: now,
+			}); err != nil {
+				return err
+			}
 		}
 		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
 	}
@@ -415,27 +424,19 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 	if publishedAt.IsZero() {
 		publishedAt = now
 	}
-	// Record the release frontier. Prefer the tagged commit itself, so a
-	// backport tag covers only what it actually contains. target_commitish
-	// is often a branch name (UI-created tags) rather than a sha, which
-	// resolves to nil; the release then covers main's head as of this
-	// webhook's arrival, which is right for release-on-merge.
-	frontier, err := store.MainIDForSHA(tx, repo, p.Release.TargetCommitish)
+	// Record the release frontier: releases tag main's head, so the newest
+	// main commit we've seen is what the release covers.
+	latest, err := store.LatestMainID(tx, repo)
 	if err != nil {
 		return err
 	}
-	if frontier == nil {
-		if frontier, err = store.LatestMainID(tx, repo); err != nil {
-			return err
-		}
-	}
-	if frontier == nil {
+	if latest == nil {
 		return nil
 	}
-	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *frontier, publishedAt); err != nil {
+	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *latest, publishedAt); err != nil {
 		return err
 	}
-	tasks, err := store.TasksBelowFrontier(tx, repo, *frontier)
+	tasks, err := store.TasksBelowFrontier(tx, repo, *latest)
 	if err != nil {
 		return err
 	}
