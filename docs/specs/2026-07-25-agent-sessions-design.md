@@ -156,6 +156,11 @@ HTTP surface, in the existing lifecycle group:
 - `POST /api/v1/tasks/{id}/agent-session` — body `{agent, agent_version, session_id}`
 - `POST /api/v1/tasks/{id}/agent-session/end` — body `{agent, session_id, input_tokens?, output_tokens?, cost_amount?, cost_currency?}`
 
+`cost_amount` crosses the wire as a decimal **string**, so `numeric(12,6)`
+round-trips exactly. It is validated in Go against the column's shape, like
+`cost_currency` — letting Postgres do the parsing turns a client typo into a
+500 and a spurious error-log entry.
+
 Everything is named `agent-session`, never `session`: `internal/api/session.go`
 already owns "session" for web and CLI auth.
 
