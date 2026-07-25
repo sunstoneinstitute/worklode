@@ -7,6 +7,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -223,9 +224,22 @@ func BumpEnvDeployGH(tx *sql.Tx, now time.Time, repo, env string, mainID int64) 
 }
 
 // BumpEnvDeployFlux advances the Flux confirmation watermark and latches
-// flux_seen, switching the repo/env to dual-signal gating permanently.
-func BumpEnvDeployFlux(tx *sql.Tx, now time.Time, repo, env string, mainID int64) error {
-	return bumpEnvDeploy(tx, now, repo, env, "flux_main_id", mainID, true)
+// flux_seen, switching the repo/env to dual-signal gating permanently. It
+// reports whether this call is the one that latched, so the caller can log
+// the switch once: a Flux revision correlated to the wrong repo latches a
+// repo/env onto a signal that will never arrive, stranding its tasks, and
+// that is otherwise invisible.
+func BumpEnvDeployFlux(tx *sql.Tx, now time.Time, repo, env string, mainID int64) (latched bool, err error) {
+	var seen bool
+	err = tx.QueryRow(`SELECT flux_seen FROM env_deploys WHERE repo = $1 AND environment = $2`,
+		repo, env).Scan(&seen)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("flux_seen %s/%s: %w", repo, env, err)
+	}
+	if err := bumpEnvDeploy(tx, now, repo, env, "flux_main_id", mainID, true); err != nil {
+		return false, err
+	}
+	return !seen, nil
 }
 
 // ConfirmedFrontier returns the newest main-commit id confirmed deployed to
@@ -276,6 +290,138 @@ func SetReleaseFrontier(tx *sql.Tx, repo, tag string, mainID int64, publishedAt 
 	if err != nil {
 		return fmt.Errorf("set release frontier %s %s: %w", repo, tag, err)
 	}
+	return nil
+}
+
+// DeliveryFacts summarizes one repo's delivery progress for a task.
+type DeliveryFacts struct {
+	Repo       string
+	LandedSHA  string
+	LandedAt   time.Time
+	Deployed   []DeployFact // confirmed envs covering the landed commit
+	ReleaseTag string       // "" if not released
+	ReleasedAt time.Time
+}
+
+// DeployFact is one environment that has confirmably received the work.
+type DeployFact struct {
+	Environment string
+	At          time.Time
+}
+
+// DeliveryFactsForTask returns the task's delivery facts, one entry per repo
+// its work landed in (newest landed commit per repo); repos where nothing has
+// landed are absent. Read-only, but runs in a transaction so it can reuse
+// ConfirmedFrontier's dual-signal rule instead of restating it in SQL.
+func (s *Store) DeliveryFactsForTask(ctx context.Context, taskID string) ([]DeliveryFacts, error) {
+	var out []DeliveryFacts
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		var err error
+		out, err = deliveryFactsForTask(tx, taskID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func deliveryFactsForTask(tx *sql.Tx, taskID string) ([]DeliveryFacts, error) {
+	// DISTINCT ON collapses several landed commits in one repo to the newest,
+	// matching LandedMainID.
+	rows, err := tx.Query(
+		`SELECT DISTINCT ON (tc.repo) tc.repo, mc.id, mc.sha, mc.pushed_at
+		 FROM task_commits tc
+		 JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
+		 WHERE tc.task_id = $1
+		 ORDER BY tc.repo, mc.id DESC`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("delivery facts for %s: %w", taskID, err)
+	}
+	defer rows.Close()
+	var out []DeliveryFacts
+	var landedIDs []int64
+	for rows.Next() {
+		var f DeliveryFacts
+		var landedID int64
+		var pushedAt time.Time
+		if err := rows.Scan(&f.Repo, &landedID, &f.LandedSHA, &pushedAt); err != nil {
+			return nil, fmt.Errorf("scan delivery facts for %s: %w", taskID, err)
+		}
+		f.LandedAt = pushedAt.UTC()
+		out = append(out, f)
+		landedIDs = append(landedIDs, landedID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("delivery facts for %s: %w", taskID, err)
+	}
+
+	for i := range out {
+		if err := attachDeployFacts(tx, &out[i], landedIDs[i]); err != nil {
+			return nil, err
+		}
+		if err := attachReleaseFact(tx, &out[i], landedIDs[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// attachDeployFacts records the environments whose confirmed frontier covers
+// landedID. The confirmation rule is ConfirmedFrontier's, not this query's:
+// env_deploys rows exist as soon as one signal arrives, long before they
+// confirm anything. The rows are drained before the frontier lookups: a
+// transaction holds one connection, so the queries cannot overlap.
+func attachDeployFacts(tx *sql.Tx, f *DeliveryFacts, landedID int64) error {
+	rows, err := tx.Query(
+		`SELECT environment, updated_at FROM env_deploys WHERE repo = $1
+		 ORDER BY environment`, f.Repo)
+	if err != nil {
+		return fmt.Errorf("env deploys for %s: %w", f.Repo, err)
+	}
+	defer rows.Close()
+	var envs []DeployFact
+	for rows.Next() {
+		var d DeployFact
+		var updatedAt time.Time
+		if err := rows.Scan(&d.Environment, &updatedAt); err != nil {
+			return fmt.Errorf("scan env deploy for %s: %w", f.Repo, err)
+		}
+		d.At = updatedAt.UTC()
+		envs = append(envs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("env deploys for %s: %w", f.Repo, err)
+	}
+	for _, d := range envs {
+		frontier, err := ConfirmedFrontier(tx, f.Repo, d.Environment)
+		if err != nil {
+			return err
+		}
+		if frontier != nil && *frontier >= landedID {
+			f.Deployed = append(f.Deployed, d)
+		}
+	}
+	return nil
+}
+
+// attachReleaseFact records the earliest release covering landedID — the cut
+// that shipped the work, not the newest one that happens to include it.
+func attachReleaseFact(tx *sql.Tx, f *DeliveryFacts, landedID int64) error {
+	var tag string
+	var publishedAt time.Time
+	err := tx.QueryRow(
+		`SELECT tag, published_at FROM release_frontiers
+		 WHERE repo = $1 AND main_id >= $2 ORDER BY main_id LIMIT 1`,
+		f.Repo, landedID).Scan(&tag, &publishedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("release covering %s/%d: %w", f.Repo, landedID, err)
+	}
+	f.ReleaseTag = tag
+	f.ReleasedAt = publishedAt.UTC()
 	return nil
 }
 

@@ -178,17 +178,26 @@ func TestEnvDeployFrontier(t *testing.T) {
 	}
 
 	// First flux signal latches dual-gating: frontier = min(gh, flux).
-	if err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id1); err != nil {
+	latched, err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id1)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !latched {
+		t.Fatal("first flux bump did not report latching")
 	}
 	f, err = ConfirmedFrontier(tx, "acme/app", "dev")
 	if err != nil || f == nil || *f != id1 {
 		t.Fatalf("dual frontier = %v, %v, want min %d", f, err, id1)
 	}
 
-	// Watermarks are forward-only.
-	if err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id2); err != nil {
+	// Watermarks are forward-only. Latching is reported once, on the
+	// transition only.
+	latched, err = BumpEnvDeployFlux(tx, now, "acme/app", "dev", id2)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if latched {
+		t.Fatal("second flux bump reported latching again")
 	}
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id1); err != nil { // stale, ignored
 		t.Fatal(err)
