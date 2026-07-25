@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -252,5 +255,504 @@ func TestNormalizeEnvironment(t *testing.T) {
 		if got := NormalizeEnvironment(in); got != want {
 			t.Errorf("NormalizeEnvironment(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// taskStateForTest reads a task's state directly.
+func taskStateForTest(t *testing.T, tx *sql.Tx, id string) string {
+	t.Helper()
+	var st string
+	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, id).Scan(&st); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// deliveryEventID inserts an event row inside tx and returns its id.
+// Transition writes a state_log row with a NOT NULL FK to events, so
+// resolver tests need a real event id, not a zero placeholder.
+func deliveryEventID(t *testing.T, tx *sql.Tx) int64 {
+	t.Helper()
+	var id int64
+	if err := tx.QueryRow(
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('github', 'ev-' || md5(random()::text), 'push', '{}'::jsonb, now())
+		 RETURNING id`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestResolveDeliveryFullFlow(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE project_repos SET done_state = 'deployed_prod' WHERE repo = 'acme/app'`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	// Not landed: no-op.
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "ready" {
+		t.Fatalf("state = %s, want ready", st)
+	}
+
+	// Land the work.
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "branch_push", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "merged" {
+		t.Fatalf("state = %s, want merged", st)
+	}
+
+	// Dev deploy confirmed (gh only, flux never seen) -> deployed_dev.
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_dev" {
+		t.Fatalf("state = %s, want deployed_dev", st)
+	}
+
+	// Prod deploy -> deployed_prod (terminal for done_state=deployed_prod).
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
+		t.Fatalf("state = %s, want deployed_prod", st)
+	}
+	// Idempotent re-resolve.
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
+		t.Fatalf("state after re-resolve = %s, want deployed_prod", st)
+	}
+}
+
+// TestResolveDeliveryOutOfOrderCatchUp checks that one resolve walks every
+// hop the facts support: ready -> merged -> deployed_dev -> deployed_prod,
+// each a separate legal transition with its own state_log row.
+func TestResolveDeliveryOutOfOrderCatchUp(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
+		t.Fatalf("state = %s, want deployed_prod", st)
+	}
+
+	// Every intermediate hop is recorded, not just the endpoints.
+	var hops int
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM state_log WHERE entity_kind = 'task' AND entity_id = $1
+		   AND change->>'field' = 'state'`, taskID).Scan(&hops); err != nil {
+		t.Fatal(err)
+	}
+	if hops != 3 {
+		t.Fatalf("state_log hops = %d, want 3 (ready->merged->deployed_dev->deployed_prod)", hops)
+	}
+}
+
+func TestResolveDeliveryReleased(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE project_repos SET done_state = 'released' WHERE repo = 'acme/app'`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "marker", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "released" {
+		t.Fatalf("state = %s, want released", st)
+	}
+}
+
+func TestResolveDeliveryNeverAdvancesDraft(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx, `UPDATE tasks SET state = 'draft' WHERE id = $1`, taskID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "marker", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendMainCommit(tx, "acme/app", "c1", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "draft" {
+		t.Fatalf("state = %s, want draft (resolver must not touch drafts)", st)
+	}
+}
+
+// TestResolveDeliveryReleaseIgnoredForServiceRepo: with done_state=merged a
+// release event must not move the task to released.
+func TestResolveDeliveryReleaseIgnoredForServiceRepo(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s) // done_state defaults to 'merged'
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "merged" {
+		t.Fatalf("state = %s, want merged (released gated on done_state)", st)
+	}
+}
+
+// TestResolveDeliveryProdIgnoredForReleaseRepo: deployed_prod -> released is
+// not a legal transition, so advancing a release-based repo's task on a prod
+// deploy would strand it one hop short of its done_state forever. A prod
+// deploy on such a repo must not advance the task past deployed_dev.
+func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE project_repos SET done_state = 'released' WHERE repo = 'acme/app'`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_dev" {
+		t.Fatalf("state = %s, want deployed_dev (prod must not strand a release repo)", st)
+	}
+
+	// The release still lands the task on its done_state.
+	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "released" {
+		t.Fatalf("state = %s, want released", st)
+	}
+}
+
+// TestResolveDeliveryClosesActiveLease: the resolver transitions straight
+// from in_progress to merged, so it must close the active lease itself or
+// the merged task strands holding a live lease.
+func TestResolveDeliveryClosesActiveLease(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	ctx := context.Background()
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustExec(`INSERT INTO actors (id, kind, display_name) VALUES ('stig','human','Stig')`)
+	mustExec(`UPDATE tasks SET state = 'in_progress' WHERE id = $1`, taskID)
+	mustExec(`INSERT INTO leases (task_id, actor_id, worktree, acquired_at, expires_at)
+	          VALUES ($1, 'stig', 'host:/wt', now(), now() + interval '1 hour')`, taskID)
+
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "branch_push", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendMainCommit(tx, "acme/app", "c1", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "merged" {
+		t.Fatalf("state = %s, want merged", st)
+	}
+	var active int
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM leases WHERE task_id = $1 AND released_at IS NULL`,
+		taskID).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 0 {
+		t.Fatalf("active leases after landing = %d, want 0", active)
+	}
+}
+
+// permutations returns every ordering of xs.
+func permutations(xs []string) [][]string {
+	if len(xs) <= 1 {
+		return [][]string{slices.Clone(xs)}
+	}
+	var out [][]string
+	for i := range xs {
+		rest := slices.Concat(xs[:i], xs[i+1:])
+		for _, p := range permutations(rest) {
+			out = append(out, append([]string{xs[i]}, p...))
+		}
+	}
+	return out
+}
+
+// TestResolveDeliveryArrivalOrder feeds one identical fact set in every
+// arrival order and asserts the same final state each time (design spec,
+// "Testing"). Each step is one webhook's worth of facts followed by a
+// resolve, exactly as handlers do. Orders where a deploy precedes the main
+// push are skipped: a deployment_status for a commit not yet on main cannot
+// resolve to a main id, so that is not a real arrival order.
+func TestResolveDeliveryArrivalOrder(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	now := time.Now()
+
+	deploy := func(env string) func(*sql.Tx) error {
+		return func(tx *sql.Tx) error {
+			mid, err := MainIDForSHA(tx, "acme/app", "c1")
+			if err != nil || mid == nil {
+				return err
+			}
+			return BumpEnvDeployGH(tx, now, "acme/app", env, *mid)
+		}
+	}
+	steps := map[string]func(*sql.Tx) error{
+		"land": func(tx *sql.Tx) error {
+			_, err := AppendMainCommit(tx, "acme/app", "c1", now)
+			return err
+		},
+		"attribute": func(tx *sql.Tx) error {
+			return InsertTaskCommit(tx, TaskCommit{
+				TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now})
+		},
+		"dev":  deploy("dev"),
+		"prod": deploy("prod"),
+	}
+
+	cases := 0
+	for _, order := range permutations([]string{"land", "attribute", "dev", "prod"}) {
+		land := slices.Index(order, "land")
+		if land > slices.Index(order, "dev") || land > slices.Index(order, "prod") {
+			continue
+		}
+		cases++
+		t.Run(strings.Join(order, "_"), func(t *testing.T) {
+			tx, err := s.db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback() // restores the seeded ready task for the next order
+			ev := deliveryEventID(t, tx)
+			for _, name := range order {
+				if err := steps[name](tx); err != nil {
+					t.Fatalf("step %s: %v", name, err)
+				}
+				if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+					t.Fatalf("resolve after %s: %v", name, err)
+				}
+			}
+			if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
+				t.Fatalf("order %v: state = %s, want deployed_prod", order, st)
+			}
+		})
+	}
+	if cases != 8 {
+		t.Fatalf("ran %d orders, want 8", cases)
+	}
+}
+
+func TestRepoDoneState(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	got, err := RepoDoneState(tx, "acme/app")
+	if err != nil || got != "merged" {
+		t.Fatalf("mapped repo done_state = %q, %v; want merged", got, err)
+	}
+	if _, err := tx.Exec(`UPDATE project_repos SET done_state = 'released' WHERE repo = 'acme/app'`); err != nil {
+		t.Fatal(err)
+	}
+	got, err = RepoDoneState(tx, "acme/app")
+	if err != nil || got != "released" {
+		t.Fatalf("done_state = %q, %v; want released", got, err)
+	}
+	got, err = RepoDoneState(tx, "acme/unmapped")
+	if err != nil || got != "merged" {
+		t.Fatalf("unmapped repo done_state = %q, %v; want merged", got, err)
+	}
+}
+
+func TestTasksBelowFrontier(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	ctx := context.Background()
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// P1-2 lands above the frontier, P1-3 is already released (not advanceable),
+	// P1-4 never lands.
+	for _, id := range []string{"P1-2", "P1-3", "P1-4"} {
+		mustExec(`INSERT INTO tasks (id, project_id, title, priority, kind, state, created_at, updated_at)
+		          VALUES ($1,'p1','t','high','feature','ready', now(), now())`, id)
+	}
+	mustExec(`UPDATE tasks SET state = 'released' WHERE id = 'P1-3'`)
+
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	for _, tc := range []struct{ task, sha string }{
+		{"P1-1", "c1"}, {"P1-2", "c3"}, {"P1-3", "c2"}, {"P1-4", "unlanded"},
+	} {
+		if err := InsertTaskCommit(tx, TaskCommit{
+			TaskID: tc.task, Repo: "acme/app", SHA: tc.sha, Source: "pr", SeenAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var frontier int64
+	for _, sha := range []string{"c1", "c2", "c3"} {
+		id, err := AppendMainCommit(tx, "acme/app", sha, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sha == "c2" {
+			frontier = id
+		}
+	}
+
+	got, err := TasksBelowFrontier(tx, "acme/app", frontier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"P1-1"}) {
+		t.Fatalf("TasksBelowFrontier = %v, want [P1-1]", got)
+	}
+
+	// Other repos are never returned.
+	got, err = TasksBelowFrontier(tx, "acme/other", frontier)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("other repo = %v, %v; want empty", got, err)
 	}
 }

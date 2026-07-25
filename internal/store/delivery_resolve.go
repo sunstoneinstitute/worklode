@@ -14,13 +14,13 @@ import (
 
 // RepoDoneState returns the done_state configured on the repo mapping — the
 // terminal state that counts as fully delivered for that repo. Unmapped
-// repos return the default.
+// repos return the default, "merged".
 func RepoDoneState(tx *sql.Tx, repo string) (string, error) {
 	var st string
 	err := tx.QueryRow(`SELECT done_state FROM project_repos WHERE repo = $1`,
 		repo).Scan(&st)
 	if errors.Is(err, sql.ErrNoRows) {
-		return DefaultDoneState, nil
+		return "merged", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("done_state for %s: %w", repo, err)
@@ -47,14 +47,11 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan task below frontier %s/%d: %w", repo, frontier, err)
+			return nil, err
 		}
 		out = append(out, id)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tasks below frontier %s/%d: %w", repo, frontier, err)
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // ResolveDelivery advances taskID to the furthest delivery milestone the
@@ -67,14 +64,7 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // repo follows merged → deployed_dev → released and ignores prod deploys:
 // deployed_prod → released is not a legal transition, so advancing on a prod
 // deploy would strand the task one hop short of its done_state forever.
-// Every other repo follows merged → deployed_dev → deployed_prod. The
-// asymmetry is deliberate: a done_state of "merged" still advances past
-// merged when deploy facts exist, because "merged" is also the default for
-// repos discovery has not profiled yet — real deploy signals outrank it.
-//
-// Reopening a task clears its commit attribution (ClearTaskCommits), so a
-// reopened task has no landed commit here and is left alone until new work
-// lands.
+// Every other repo follows merged → deployed_dev → deployed_prod.
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
 	landed, err := LandedMainID(tx, taskID, repo)
 	if err != nil {
