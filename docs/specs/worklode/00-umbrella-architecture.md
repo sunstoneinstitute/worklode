@@ -60,6 +60,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **04 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 03 |
 | **05 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 01, 02 |
 | **06 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
+| **07 — Reconciliation & setup diagnosis** | `lode reconcile` (replay dropped events, poll GitHub, spec-doc drift); `lode project doctor`; `lode doctor`. Recovers activity the webhook path missed. | 01 |
 
 ---
 
