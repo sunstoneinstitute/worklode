@@ -131,6 +131,23 @@ func setupProject(t *testing.T, c *cli.Client) {
 
 // --- lode next --------------------------------------------------------
 
+func TestSlugFromBranch(t *testing.T) {
+	cases := []struct{ branch, id, want string }{
+		{"lode/WL-7-fix-thing", "WL-7", "fix-thing"},
+		{"team/WL-7-fix-thing", "WL-7", "fix-thing"},
+		{"wl/WL-7-fix-thing", "WL-7", "fix-thing"},
+		// A slug repeating the task id must stay intact: the prefix-adjacent
+		// occurrence is the separator, not the last one.
+		{"lode/WL-7-fix-WL-7-bug", "WL-7", "fix-WL-7-bug"},
+		{"main", "WL-7", "main"}, // no id: caller keeps the branch as-is
+	}
+	for _, c := range cases {
+		if got := slugFromBranch(c.branch, c.id); got != c.want {
+			t.Errorf("slugFromBranch(%q, %q) = %q, want %q", c.branch, c.id, got, c.want)
+		}
+	}
+}
+
 func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

@@ -52,11 +52,13 @@ type Review struct {
 // guarded because webhook handlers read it concurrently.
 var (
 	branchPatternMu     sync.RWMutex
-	branchPrefix        = defaultBranchPrefix
-	branchPrefixPattern = buildBranchPattern(defaultBranchPrefix)
+	branchPrefix        = DefaultBranchPrefix
+	branchPrefixPattern = buildBranchPattern(DefaultBranchPrefix)
 )
 
-const defaultBranchPrefix = "lode/"
+// DefaultBranchPrefix is the task-branch prefix used when LODE_BRANCH_PREFIX
+// is unset.
+const DefaultBranchPrefix = "lode/"
 
 func buildBranchPattern(prefix string) *regexp.Regexp {
 	alts := regexp.QuoteMeta(prefix)
@@ -67,10 +69,15 @@ func buildBranchPattern(prefix string) *regexp.Regexp {
 }
 
 // SetBranchPrefix configures the task-branch prefix (LODE_BRANCH_PREFIX,
-// default "lode/"). The legacy "wl/" prefix is always also recognized.
+// default "lode/"). A prefix not ending in "/" or "-" gets a "/" appended, so
+// LODE_BRANCH_PREFIX=lode yields "lode/WL-7-slug", not "lodeWL-7-slug". The
+// legacy "wl/" prefix is always also recognized.
 func SetBranchPrefix(prefix string) {
 	if prefix == "" {
-		prefix = defaultBranchPrefix
+		prefix = DefaultBranchPrefix
+	}
+	if !strings.HasSuffix(prefix, "/") && !strings.HasSuffix(prefix, "-") {
+		prefix += "/"
 	}
 	branchPatternMu.Lock()
 	defer branchPatternMu.Unlock()
