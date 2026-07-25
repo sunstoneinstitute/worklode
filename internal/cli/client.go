@@ -612,6 +612,70 @@ func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (Lease
 	return l, raw, nil
 }
 
+// AgentSession is the wire form of an agent session on a task's lease.
+type AgentSession struct {
+	LeaseID      int64      `json:"lease_id"`
+	Agent        string     `json:"agent"`
+	AgentVersion string     `json:"agent_version,omitempty"`
+	SessionID    string     `json:"session_id"`
+	StartedAt    time.Time  `json:"started_at"`
+	LastSeenAt   time.Time  `json:"last_seen_at"`
+	EndedAt      *time.Time `json:"ended_at,omitempty"`
+}
+
+// TouchAgentSession calls POST /api/v1/tasks/{id}/agent-session: report that
+// this agent session is working id, or heartbeat an already-reported one.
+func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string) (AgentSession, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost,
+		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session",
+		map[string]string{
+			"agent":         agent,
+			"agent_version": agentVersion,
+			"session_id":    sessionID,
+		})
+	if err != nil {
+		return AgentSession{}, nil, err
+	}
+	var a AgentSession
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return AgentSession{}, nil, fmt.Errorf("decode agent session: %w", err)
+	}
+	return a, raw, nil
+}
+
+// EndAgentSessionInput carries the required identity plus optional accounting
+// for ending a session. A nil usage field leaves the stored value untouched.
+type EndAgentSessionInput struct {
+	Agent        string
+	SessionID    string
+	InputTokens  *int64
+	OutputTokens *int64
+	// CostAmount is a decimal string, not a float, so it round-trips through
+	// the server's numeric(12,6) column exactly (see agentsessions.go).
+	CostAmount   *string
+	CostCurrency string
+}
+
+// EndAgentSession calls POST /api/v1/tasks/{id}/agent-session/end.
+func (c *Client) EndAgentSession(ctx context.Context, id string, in EndAgentSessionInput) error {
+	body := map[string]any{"agent": in.Agent, "session_id": in.SessionID}
+	if in.InputTokens != nil {
+		body["input_tokens"] = *in.InputTokens
+	}
+	if in.OutputTokens != nil {
+		body["output_tokens"] = *in.OutputTokens
+	}
+	if in.CostAmount != nil {
+		body["cost_amount"] = *in.CostAmount
+	}
+	if in.CostCurrency != "" {
+		body["cost_currency"] = in.CostCurrency
+	}
+	_, err := c.do(ctx, http.MethodPost,
+		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session/end", body)
+	return err
+}
+
 // EditTaskInput carries the optional fields of a task edit; nil means leave
 // the field unchanged. Concern "" or "none" clears the concern.
 type EditTaskInput struct {

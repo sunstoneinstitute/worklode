@@ -1094,3 +1094,62 @@ func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
 		t.Fatalf("config after SaveServerOnly = %+v; want the new server and current_project kept", cfg)
 	}
 }
+
+func TestClientAgentSession(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+		Project: "proj", Title: "Agent session task", Priority: "high", Kind: "bug",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if _, _, err := c.ClaimTask(ctx, task.ID, "host:/wt-1", 0); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
+
+	sess, _, err := c.TouchAgentSession(ctx, task.ID, "claude-code", "2.0.1", "sess-1")
+	if err != nil {
+		t.Fatalf("TouchAgentSession: %v", err)
+	}
+	if sess.Agent != "claude-code" || sess.SessionID != "sess-1" || sess.AgentVersion != "2.0.1" {
+		t.Fatalf("TouchAgentSession = %+v", sess)
+	}
+	if sess.LeaseID == 0 {
+		t.Fatalf("TouchAgentSession lease id = 0: %+v", sess)
+	}
+	if sess.EndedAt != nil {
+		t.Fatalf("a new session is already ended: %+v", sess)
+	}
+	if sess.LastSeenAt.Before(sess.StartedAt) {
+		t.Fatalf("last_seen_at before started_at: %+v", sess)
+	}
+
+	if err := c.EndAgentSession(ctx, task.ID,
+		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("EndAgentSession: %v", err)
+	}
+
+	// A session that was never reported cannot be ended.
+	err = c.EndAgentSession(ctx, task.ID,
+		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "never-seen"})
+	if err == nil {
+		t.Fatal("EndAgentSession on an unknown session id succeeded")
+	}
+
+	// Ending an already-ended session is also an error (guarded by
+	// ended_at IS NULL in the store).
+	err = c.EndAgentSession(ctx, task.ID,
+		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"})
+	if err == nil {
+		t.Fatal("EndAgentSession on an already-ended session succeeded")
+	}
+	var clientErr *cli.ClientError
+	if !errors.As(err, &clientErr) || clientErr.Status != 404 {
+		t.Fatalf("EndAgentSession on already-ended session error = %v, want *cli.ClientError with status 404", err)
+	}
+}
