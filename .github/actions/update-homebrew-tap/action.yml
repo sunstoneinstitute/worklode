@@ -26,8 +26,8 @@ inputs:
       sunstoneinstitute/homebrew-tap. A deploy key is owned by that repo rather
       than by a person, so the credential outlives any individual's account.
     required: true
-  arm64-sonoma-sha:
-    description: sha256 of the arm64_sonoma bottle tarball
+  arm64-sequoia-sha:
+    description: sha256 of the arm64_sequoia bottle tarball
     required: true
   arm64-tahoe-sha:
     description: sha256 of the arm64_tahoe bottle tarball
@@ -65,7 +65,7 @@ runs:
         URL: ${{ steps.tarball.outputs.url }}
         SHA256: ${{ steps.tarball.outputs.sha256 }}
         ROOT_URL: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}
-        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_SEQUOIA_SHA: ${{ inputs.arm64-sequoia-sha }}
         ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
         CELLAR: ${{ inputs.cellar }}
       run: |
@@ -127,7 +127,7 @@ runs:
       env:
         TAG: ${{ inputs.tag }}
         SHA256: ${{ steps.tarball.outputs.sha256 }}
-        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_SEQUOIA_SHA: ${{ inputs.arm64-sequoia-sha }}
         ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
       run: |
         {
@@ -135,7 +135,7 @@ runs:
           echo ""
           echo "**Tag:** \`${TAG}\`"
           echo "**Tarball sha256:** \`${SHA256}\`"
-          echo "**arm64_sonoma bottle sha256:** \`${ARM64_SONOMA_SHA}\`"
+          echo "**arm64_sequoia bottle sha256:** \`${ARM64_SEQUOIA_SHA}\`"
           echo "**arm64_tahoe bottle sha256:** \`${ARM64_TAHOE_SHA}\`"
           echo "**Formula:** sunstoneinstitute/homebrew-tap \`Formula/worklode.rb\`"
         } >> "$GITHUB_STEP_SUMMARY"
