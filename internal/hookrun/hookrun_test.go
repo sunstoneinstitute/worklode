@@ -590,7 +590,7 @@ func TestHeartbeatOutsideWorktreeIsNOP(t *testing.T) {
 // session id, and exiting stamps ended_at on that row while the first
 // worktree's row stays open.
 func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
-	st, c, _ := newRealServer(t)
+	st, c, rec := newRealServer(t)
 	root := initGitRepo(t)
 	taskA, wtDirA, _ := setupLeasedWorktree(t, c, root, "Task A")
 	taskB, wtDirB, _ := setupLeasedWorktree(t, c, root, "Task B")
@@ -626,6 +626,35 @@ func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
 		t.Fatal("session B should be open after worktree-enter")
 	}
 
+	// worktree-enter must also write B's marker — symmetric with
+	// session-start — or heartbeats there debounce off forever and B looks
+	// abandoned to offerScan/handleWorktreeCreate.
+	if id, ok := markerSessionID(wtDirB); !ok || id != "sess-1" {
+		t.Fatalf("markerSessionID(B) after enter = %q, %v, want sess-1, true", id, ok)
+	}
+	if !sessionMarkerFresh(wtDirB) {
+		t.Fatal("worktree B marker not fresh after worktree-enter")
+	}
+
+	// A heartbeat past the debounce window in the entered worktree reaches
+	// the backbone (proving the marker written above is actually usable).
+	before := rec.count("/agent-session")
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "heartbeat",
+		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDirB, SessionID: "sess-1"})),
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Now:    func() time.Time { return time.Now().Add(2 * time.Minute) },
+	})
+	if code != 0 {
+		t.Fatalf("heartbeat in entered worktree exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if rec.count("/agent-session") != before+1 {
+		t.Fatalf("heartbeat in entered worktree did not reach the backbone: count before=%d after=%d",
+			before, rec.count("/agent-session"))
+	}
+
 	// Exit the second worktree: B's row closes, A's stays open.
 	runHook(t, "worktree-exit", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
 
@@ -643,5 +672,10 @@ func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
 	}
 	if sessA.EndedAt != nil {
 		t.Fatal("session A should remain open after exiting B")
+	}
+
+	// worktree-exit must remove B's marker — symmetric with session-end.
+	if _, ok := markerSessionID(wtDirB); ok {
+		t.Fatal("worktree B marker still present after worktree-exit")
 	}
 }
