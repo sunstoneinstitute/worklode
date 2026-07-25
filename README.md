@@ -100,13 +100,20 @@ Create a GitHub App on the `sunstoneinstitute` org and install it org-wide
 - **Webhook secret**: a random string, set as `LODE_GITHUB_WEBHOOK_SECRET` on
   the server
 - **Subscribe to events**: Issues, Pull requests, Pull request reviews,
-  Workflow runs, Releases
+  Workflow runs, Releases, Pushes, Deployment statuses
+- **Repository permissions**: Contents: read (pushes, releases), Deployments:
+  read (deployment statuses), Actions: read (environment discovery). Without
+  Actions: read, repos stay at `done_state = merged` and tasks stop advancing
+  there.
+- **App credentials**: set `LODE_GITHUB_APP_ID` and
+  `LODE_GITHUB_APP_PRIVATE_KEY` (the PEM) on the server so it can mint
+  installation tokens for repo discovery.
 
 For local testing without a public URL, forward deliveries from a real repo:
 
 ```bash
 gh webhook forward --repo=sunstoneinstitute/<repo> \
-  --events=issues,pull_request,pull_request_review,workflow_run,release \
+  --events=issues,pull_request,pull_request_review,workflow_run,release,push,deployment_status \
   --url=http://localhost:8080/hooks/github
 ```
 
@@ -156,8 +163,10 @@ spec:
 
 Set `LODE_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
 `LODE_CLUSTER_ENV_MAP` to map cluster names to environments, e.g.
-`LODE_CLUSTER_ENV_MAP="prod-cluster=prod,staging-cluster=staging"`. A cluster
-missing from the map falls back to the `dev` environment.
+`LODE_CLUSTER_ENV_MAP="hzprod=prod,hzdev=dev"`. Only `dev` and `prod` are
+valid environments — any other value is a startup error, since delivery
+tracking has no other stage. A cluster missing from the map falls back to
+`dev`.
 
 ## Task branches
 
