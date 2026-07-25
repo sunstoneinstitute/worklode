@@ -484,8 +484,12 @@ git commit -m "Add TouchAgentSession store function"
 
 ### Task 3: `EndAgentSession` — close a session, record usage
 
+Also makes a heartbeat re-open a closed session, which only becomes reachable
+once `EndAgentSession` exists: a session that exits a worktree and later
+re-enters it is working that lease again and must not stay closed.
+
 **Files:**
-- Modify: `internal/store/agent_sessions.go` (append)
+- Modify: `internal/store/agent_sessions.go` (append, plus the heartbeat UPDATE)
 - Test: `internal/store/agent_sessions_test.go` (append)
 
 - [ ] **Step 1: Write the failing test**
