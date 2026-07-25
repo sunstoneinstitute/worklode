@@ -262,6 +262,34 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 	return err
 }
 
+// endOpenAgentSessionsOnLease stamps ended_at on every still-open session for
+// leaseID. Called whenever a lease closes: a released, swept, or completed
+// task must never leave a session that reads as live.
+func endOpenAgentSessionsOnLease(tx *sql.Tx, now time.Time, leaseID int64) error {
+	if _, err := tx.Exec(
+		`UPDATE agent_sessions SET ended_at = $1 WHERE lease_id = $2 AND ended_at IS NULL`,
+		now.UTC(), leaseID,
+	); err != nil {
+		return fmt.Errorf("end open agent sessions on lease %d: %w", leaseID, err)
+	}
+	return nil
+}
+
+// endOpenAgentSessionsOnTask is endOpenAgentSessionsOnLease for the active
+// lease on taskID. It MUST run before the lease's released_at is set — once
+// that is written, the subquery no longer matches.
+func endOpenAgentSessionsOnTask(tx *sql.Tx, now time.Time, taskID string) error {
+	if _, err := tx.Exec(
+		`UPDATE agent_sessions SET ended_at = $1
+		  WHERE ended_at IS NULL
+		    AND lease_id IN (SELECT id FROM leases WHERE task_id = $2 AND released_at IS NULL)`,
+		now.UTC(), taskID,
+	); err != nil {
+		return fmt.Errorf("end open agent sessions on task %s: %w", taskID, err)
+	}
+	return nil
+}
+
 // AgentSession returns one session row by its natural key, or ErrNotFound.
 func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionID string) (*AgentSession, error) {
 	row := s.db.QueryRowContext(ctx,
