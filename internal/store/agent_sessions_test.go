@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -585,5 +587,64 @@ func TestLeaseCloseLeavesOtherLeaseSessionsOpen(t *testing.T) {
 	}
 	if got := openSessions(t, s, leaseB.ID); got != 1 {
 		t.Fatalf("open sessions on untouched lease B: got %d, want 1", got)
+	}
+}
+
+// TestTouchAgentSessionAfterReleaseIsNotFoundAndCreatesNoRow pins the
+// sequential (non-racing) shape of the insert-path guard: once a lease is
+// released, an inserting TouchAgentSession call on that task must fail
+// closed, not create a session that reads as live on a dead lease.
+func TestTouchAgentSessionAfterReleaseIsNotFoundAndCreatesNoRow(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+
+	if err := s.Release(ctx, lease.TaskID, "stig"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	_, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("touch after release: got %v, want ErrNotFound", err)
+	}
+	if got := openSessions(t, s, lease.ID); got != 0 {
+		t.Fatalf("sessions on released lease after touch: got %d, want 0", got)
+	}
+}
+
+// TestTouchAgentSessionInsertRaceWithLeaseClose races the inserting call
+// (first TouchAgentSession for a session) against a concurrent Release on
+// the same lease — the interleaving the FOR SHARE lock in
+// activeLeaseTxForShare exists to close: without it, a release landing
+// between the insert's unlocked lease read and its commit leaves a session
+// with ended_at IS NULL on a released lease that nothing will ever close
+// again. Whichever side wins the row lock, the invariant must hold: no
+// session is left open on a lease that ends up released. The exact
+// interleaving is real goroutine/connection-pool scheduling, not something
+// this test drives directly, so it runs several iterations to raise the odds
+// of exercising both orderings rather than asserting on one.
+func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	const iterations = 25
+	for i := 0; i < iterations; i++ {
+		lease := leaseForTest(t, s, fmt.Sprintf("host:/wt/race-%d", i))
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+		}()
+		go func() {
+			defer wg.Done()
+			_ = s.Release(ctx, lease.TaskID, "stig")
+		}()
+		wg.Wait()
+
+		if got := openSessions(t, s, lease.ID); got != 0 {
+			t.Fatalf("iteration %d: open sessions after racing touch/release: got %d, want 0", i, got)
+		}
 	}
 }
