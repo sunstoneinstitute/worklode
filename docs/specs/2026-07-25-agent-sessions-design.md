@@ -175,7 +175,7 @@ a backbone call it does not make today:
 | `session-start` | `TouchAgentSession` after `ensureLease` | payload | `SessionStart` |
 | `heartbeat` | `TouchAgentSession` | payload | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
 | `worktree-enter` | `TouchAgentSession` on the entered worktree's lease | payload | `PostToolUse` matcher `EnterWorktree` |
-| `worktree-exit` | `EndAgentSession` for the exited lease's row | payload | `PostToolUse` matcher `ExitWorktree` |
+| `worktree-exit` | `EndAgentSession` for the exited lease's row | payload | *(none — see below)* |
 | `pre-commit` | `TouchAgentSession` alongside the existing `RenewLease` | marker file | git `pre-commit` |
 | `session-end` | `EndAgentSession` before removing the marker | payload | `SessionEnd` |
 
@@ -204,12 +204,25 @@ attribution possible later for a session that spanned tasks.
 
 Entering and exiting a worktree also moves the session marker, symmetrically
 with session start and end: `worktree-enter` writes it, `worktree-exit` removes
-it. The marker is "which session is live in this worktree", and two other
-mechanisms read it — `heartbeatDue`, which would otherwise debounce heartbeats
-off permanently in an entered worktree, and `sessionMarkerFresh`, which
-`offerScan` uses to decide a worktree is abandoned. Without the marker, a
-worktree a session had just moved into would be offered up for adoption while
-it was actively being worked.
+it. The marker is "which session is live in this worktree", and `heartbeatDue`
+reads it — without one, heartbeats in an entered worktree would be debounced
+off permanently.
+
+**`worktree-exit` has no Claude Code binding.** `ExitWorktree`'s tool input is
+`{action, discard_changes}` — no path — and by the time `PostToolUse` fires the
+session's cwd has already been restored to the directory being returned *to*.
+Falling back to cwd would therefore close the session on the wrong worktree:
+a session that entered B from A would, on exiting B, end A's row while still
+working A. So `worktree-exit` requires an explicit path in `tool_input` and is
+a NOP without one. `worktree-enter` keeps the cwd fallback, where it is correct
+— `EnterWorktree` switches cwd to the entered worktree before the hook fires,
+and supplies no path at all when creating a worktree by name.
+
+A session that leaves a worktree therefore leaves its row open. That is
+acceptable: `last_seen_at` stops advancing, so the row drops out of the
+30-minute running window, and the row is closed for good when the lease is
+released, expires, or the task completes. The event exists for agents that can
+report an exit path, and for explicit invocation.
 
 **Volume control.** These bindings fire more often than `Stop` alone, so the
 heartbeat is debounced client-side: `worklode-session.json` gains a
@@ -222,8 +235,7 @@ debounced — they carry a lease change, not just liveness.
 - `PostToolUse` *unmatched*, and `PostToolBatch` — hundreds of firings per
   session against a 10s default timeout, for no signal `Stop` lacks. Matched
   `PostToolUse` is a different matter and is used above: the matcher is a tool
-  name, so binding `EnterWorktree` / `ExitWorktree` costs nothing per ordinary
-  tool call.
+  name, so binding `EnterWorktree` costs nothing per ordinary tool call.
 - `UserPromptSubmit` — a strict subset of `Stop`, missing autonomous turns.
 - `WorktreeCreate` / `WorktreeRemove` — already handled. `handleWorktreeCreate`
   runs before any session exists in that worktree, and `handleWorktreeRemove`
@@ -292,3 +304,10 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
   `Stop` and `SessionEnd` payloads both carry `transcript_path`, so the hooks
   wired here are already standing where that work will go.
 - A `lode sessions` listing command and any web UI surface.
+- Fixing the session marker's pid. `writeSessionMarker` records
+  `os.Getpid()` — the pid of the short-lived `lode hook` process, which is dead
+  the moment the hook exits — so `sessionMarkerFresh` is effectively always
+  false in production, and `offerScan` reads any expired-lease worktree as
+  abandoned even when a session is live in it. This predates agent sessions and
+  is untouched here; the backbone's own `last_seen_at` is now the better
+  liveness signal anyway.

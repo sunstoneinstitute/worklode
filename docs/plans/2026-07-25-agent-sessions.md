@@ -4,7 +4,7 @@
 
 **Goal:** Record which coding-agent session is working each leased task, so the backbone can report running sessions and later attribute token cost.
 
-**Architecture:** A new `agent_sessions` child table hangs off `leases` (a lease outlives many sessions). Two store functions — `TouchAgentSession` (start-or-heartbeat, idempotent through a deterministic event external id) and `EndAgentSession` — are exposed as two POST endpoints and driven by `lode hook` events bound to Claude Code's `SessionStart`, `Stop`/`StopFailure`/`SubagentStop`/`Notification`, `PostToolUse(EnterWorktree|ExitWorktree)` and `SessionEnd`.
+**Architecture:** A new `agent_sessions` child table hangs off `leases` (a lease outlives many sessions). Two store functions — `TouchAgentSession` (start-or-heartbeat, idempotent through a deterministic event external id) and `EndAgentSession` — are exposed as two POST endpoints and driven by `lode hook` events bound to Claude Code's `SessionStart`, `Stop`/`StopFailure`/`SubagentStop`/`Notification`, `PostToolUse(EnterWorktree)` and `SessionEnd`.
 
 **Tech Stack:** Go 1.x, Postgres (database/sql + pgx stdlib), golang-migrate, cobra, net/http `ServeMux`.
 
@@ -1796,7 +1796,6 @@ Claude Code bindings, for the plugin's `hooks.json`:
 | `session-start` | `SessionStart` |
 | `heartbeat` | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
 | `worktree-enter` | `PostToolUse` matcher `EnterWorktree` |
-| `worktree-exit` | `PostToolUse` matcher `ExitWorktree` |
 | `session-end` | `SessionEnd` |
 
 Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
@@ -1853,7 +1852,6 @@ counterpart:
 | `WorktreeCreate` | — | `lode hook worktree-create` |
 | `WorktreeRemove` | — | `lode hook worktree-remove` |
 | `PostToolUse` | `EnterWorktree` | `lode hook worktree-enter` |
-| `PostToolUse` | `ExitWorktree` | `lode hook worktree-exit` |
 
 **Ownership marker.** JSON has no comments, so a Worklode-installed hook is
 identified by its command: any entry whose `command` begins with `lode hook `.
@@ -1961,19 +1959,19 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 	if got := commandsFor(t, settings, "Stop"); len(got) != 1 || got[0] != "lode hook heartbeat" {
 		t.Fatalf("Stop commands: %v", got)
 	}
-	// PostToolUse carries two separately matched bindings.
+	// PostToolUse is matched on a tool name, so it costs nothing per
+	// ordinary tool call.
 	got := commandsFor(t, settings, "PostToolUse")
-	if len(got) != 2 {
-		t.Fatalf("PostToolUse commands: %v, want 2", got)
+	if len(got) != 1 || got[0] != "lode hook worktree-enter" {
+		t.Fatalf("PostToolUse commands: %v", got)
 	}
 	hooks := settings["hooks"].(map[string]any)
 	groups := hooks["PostToolUse"].([]any)
-	var matchers []string
-	for _, g := range groups {
-		matchers = append(matchers, g.(map[string]any)["matcher"].(string))
+	if len(groups) != 1 {
+		t.Fatalf("PostToolUse groups: %v, want 1", groups)
 	}
-	if len(matchers) != 2 || matchers[0] != "EnterWorktree" || matchers[1] != "ExitWorktree" {
-		t.Fatalf("PostToolUse matchers: %v", matchers)
+	if m := groups[0].(map[string]any)["matcher"]; m != "EnterWorktree" {
+		t.Fatalf("PostToolUse matcher: %v, want EnterWorktree", m)
 	}
 }
 
@@ -2107,7 +2105,6 @@ var claudeBindings = []claudeBinding{
 	{Event: "WorktreeCreate", Command: "lode hook worktree-create"},
 	{Event: "WorktreeRemove", Command: "lode hook worktree-remove"},
 	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
-	{Event: "PostToolUse", Matcher: "ExitWorktree", Command: "lode hook worktree-exit"},
 }
 
 func init() {
