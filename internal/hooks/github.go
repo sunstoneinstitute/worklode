@@ -424,19 +424,27 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 	if publishedAt.IsZero() {
 		publishedAt = now
 	}
-	// Record the release frontier: releases tag main's head, so the newest
-	// main commit we've seen is what the release covers.
-	latest, err := store.LatestMainID(tx, repo)
+	// Record the release frontier. Prefer the tagged commit itself, so a
+	// backport tag covers only what it actually contains. target_commitish
+	// is often a branch name (UI-created tags) rather than a sha, which
+	// resolves to nil; the release then covers main's head as of this
+	// webhook's arrival, which is right for release-on-merge.
+	frontier, err := store.MainIDForSHA(tx, repo, p.Release.TargetCommitish)
 	if err != nil {
 		return err
 	}
-	if latest == nil {
+	if frontier == nil {
+		if frontier, err = store.LatestMainID(tx, repo); err != nil {
+			return err
+		}
+	}
+	if frontier == nil {
 		return nil
 	}
-	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *latest, publishedAt); err != nil {
+	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *frontier, publishedAt); err != nil {
 		return err
 	}
-	tasks, err := store.TasksBelowFrontier(tx, repo, *latest)
+	tasks, err := store.TasksBelowFrontier(tx, repo, *frontier)
 	if err != nil {
 		return err
 	}

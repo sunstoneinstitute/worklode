@@ -478,6 +478,58 @@ func TestReleaseSetsFrontier(t *testing.T) {
 	}
 }
 
+// releaseBody builds a release.published payload for an explicit tag and
+// target commitish.
+func releaseBody(tag, targetCommitish string) []byte {
+	return []byte(`{
+		"action": "published",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"release": {
+			"tag_name": "` + tag + `",
+			"target_commitish": "` + targetCommitish + `",
+			"published_at": "2026-07-19T12:00:00Z"
+		}
+	}`)
+}
+
+// TestReleaseFrontierNarrowsToTaggedCommit: a release whose target_commitish
+// resolves to a known main commit covers only up to that commit, so a task
+// that landed after it stays put until a later release reaches it.
+func TestReleaseFrontierNarrowsToTaggedCommit(t *testing.T) {
+	e := newEnv(t)
+	e.setDoneState(t, demoRepo, "released")
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverPushOK(t, e, "d-1", "push_branch.json")
+	deliverPushOK(t, e, "d-2", "push_main_merge.json")
+
+	// Backport tag cut from the first commit on main; the task's work landed
+	// at the third.
+	const oldSHA = "1111111111111111111111111111111111111111"
+	const headSHA = "3333333333333333333333333333333333333333"
+	rr := deliverBody(t, e.h, "release", "d-3", releaseBody("v0.9.0", oldSHA))
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("backport release: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got, want := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v0.9.0'`, demoRepo),
+		e.mainCommitID(t, oldSHA); got != want {
+		t.Fatalf("backport frontier main_id = %d, want %d (the tagged commit)", got, want)
+	}
+	if st := e.taskState(t, taskID); st != "merged" {
+		t.Fatalf("task state after backport release = %q, want merged (not covered by the tag)", st)
+	}
+
+	// A release that does reach the task's commit delivers it.
+	rr = deliverBody(t, e.h, "release", "d-4", releaseBody("v1.0.0", headSHA))
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("head release: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if st := e.taskState(t, taskID); st != "released" {
+		t.Fatalf("task state after head release = %q, want released", st)
+	}
+}
+
 // TestReleaseDoesNotAdvanceNonReleaseRepo pins the done_state gate at the
 // handler level: a release still records its frontier, but only a repo whose
 // done_state is "released" lets tasks reach the released state.
