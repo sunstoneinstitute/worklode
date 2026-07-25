@@ -58,6 +58,16 @@ jobs:
           install -m 600 /dev/null "$KEY_FILE"
           printf '%s\n' "$TAP_DEPLOY_KEY" > "$KEY_FILE"
 
+          # An empty or malformed secret otherwise surfaces as ssh's opaque
+          # "error in libcrypto" followed by a publickey denial, which reads
+          # like a missing deploy key rather than a bad secret. The length is
+          # safe to print: a wrong length is the diagnosis, not the key.
+          if ! ssh-keygen -y -f "$KEY_FILE" > /dev/null 2>&1 < /dev/null; then
+            echo "::error::TAP_DEPLOY_KEY (release environment) is not a usable" \
+                 "OpenSSH private key — ${#TAP_DEPLOY_KEY} bytes received."
+            exit 1
+          fi
+
           # Host keys from the GitHub meta API over TLS, rather than a
           # trust-on-first-use ssh-keyscan or a hardcoded key that rots when
           # GitHub rotates theirs.
