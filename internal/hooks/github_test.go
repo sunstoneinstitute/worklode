@@ -322,15 +322,12 @@ func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 	}
 }
 
-// prHeadSHA and prMergeSHA are the shas in pull_request_closed_merged.json;
-// push_main_pr_merge.json lands exactly those two on main. Its merge subject
-// ("... from contributor/patch-1") deliberately names no task branch, so the
-// push contributes no attribution of its own: whatever advances the task in
-// these tests came from the PR facts.
-const (
-	prHeadSHA  = "abc1230000000000000000000000000000000000"
-	prMergeSHA = "def4560000000000000000000000000000000000"
-)
+func TestPRMergedMovesTaskToMerged(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json") // → in_review
 
 // TestPRMergeRecordsFactsAndResolves: a merged PR records its head and merge
 // shas as task commits; the task reaches merged only once those shas are
