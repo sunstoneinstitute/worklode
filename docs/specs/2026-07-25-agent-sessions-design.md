@@ -91,6 +91,11 @@ with a date — out of scope here; the table records what the vendor charged.
 
 - A row is created on the first heartbeat from a session and belongs to
   whichever lease was active at that moment.
+- A heartbeat on a row that is already closed re-opens it: `ended_at` goes back
+  to NULL. A session that leaves a worktree and returns to it later is working
+  that lease again, and must not stay closed. The row then spans first touch to
+  last, without recording the gap — per-visit granularity is not something the
+  design promises.
 - `last_seen_at` is bumped on every heartbeat. Running sessions are
   `ended_at IS NULL AND last_seen_at > now() - interval '30 minutes'`. The
   staleness window is a read-side constant only; nothing writes or enforces it,
