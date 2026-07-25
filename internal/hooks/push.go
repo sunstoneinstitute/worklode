@@ -29,9 +29,6 @@ var mergeMessagePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^Merge pull request #\d+ from [^/\s]+/(\S+)`),
 }
 
-// markerPattern matches a "WL-Task: <id>" line anywhere in a commit message.
-var markerPattern = regexp.MustCompile(`(?m)^WL-Task:\s*([A-Z][A-Z0-9]*-[0-9]+)`)
-
 // mainSHATrailer matches the main-sha trailer the update-deploy-branch
 // action stamps on last-deploy/* cherry-picks.
 var mainSHATrailer = regexp.MustCompile(`(?mi)^main-sha:\s*([0-9a-f]{7,40})`)
@@ -131,7 +128,9 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 }
 
 // taskIDsFromMessage extracts task ids from a commit message: the branch
-// named in a merge-commit subject, plus any WL-Task marker line.
+// named in a merge-commit subject, plus any "WL-Task: <id>" marker line.
+// "WL-Task" is the fixed marker label — the id after it carries its own
+// project key (SW-3, ...), matched by store.TaskIDFromBody.
 func taskIDsFromMessage(msg string) []string {
 	var out []string
 	for _, pat := range mergeMessagePatterns {
@@ -141,14 +140,14 @@ func taskIDsFromMessage(msg string) []string {
 			}
 		}
 	}
-	if m := markerPattern.FindStringSubmatch(msg); m != nil {
-		out = append(out, m[1])
+	if id := store.TaskIDFromBody(msg); id != "" {
+		out = append(out, id)
 	}
 	return out
 }
 
 func sourceForMessage(msg string) string {
-	if markerPattern.MatchString(msg) {
+	if store.TaskIDFromBody(msg) != "" {
 		return "marker"
 	}
 	return "merge_message"
