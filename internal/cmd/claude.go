@@ -38,6 +38,18 @@ type claudeBinding struct {
 // StopFailure replaces Stop when a turn dies on an API error, SubagentStop
 // covers a long subagent fan-out, and Notification covers a session blocked on
 // a human.
+//
+// WorktreeCreate and WorktreeRemove are deliberately absent. They are
+// delegation hooks, not notifications: binding one makes it *the* worktree
+// creator, replacing Claude Code's built-in `git worktree add`, and
+// EnterWorktree then fails unless the hook prints the path it created.
+// Worklode observes rather than creates, so binding them broke EnterWorktree
+// outright. Nothing is lost by dropping them — Claude Code creates worktrees
+// under .claude/worktrees/, which worktree.ParseDir rejects, so both handlers
+// were unreachable NOPs on that path. Worklode's own wt/<task-id> worktrees
+// are covered by session-start (which auto-resumes an abandoned lease) and by
+// the worktree-enter binding below; `lode hook worktree-create` and
+// `worktree-remove` remain available for scripts that do create them.
 var claudeBindings = []claudeBinding{
 	{Event: "SessionStart", Command: "lode hook session-start"},
 	{Event: "SessionEnd", Command: "lode hook session-end"},
@@ -45,8 +57,6 @@ var claudeBindings = []claudeBinding{
 	{Event: "StopFailure", Command: "lode hook heartbeat"},
 	{Event: "SubagentStop", Command: "lode hook heartbeat"},
 	{Event: "Notification", Command: "lode hook heartbeat"},
-	{Event: "WorktreeCreate", Command: "lode hook worktree-create"},
-	{Event: "WorktreeRemove", Command: "lode hook worktree-remove"},
 	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
 }
 
@@ -69,7 +79,7 @@ func newClaudeInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "Install Worklode's hooks into this repo's Claude Code settings",
 		Long: "Writes Worklode's lifecycle hook bindings (session start/end, heartbeat, " +
-			"worktree enter/create/remove) into the repo's Claude Code settings file. " +
+			"worktree enter) into the repo's Claude Code settings file. " +
 			"Safe to re-run: it replaces Worklode's own entries and leaves every other " +
 			"setting untouched.",
 		Args: cobra.NoArgs,
