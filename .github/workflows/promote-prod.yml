@@ -70,9 +70,24 @@ jobs:
 
   # promote-images pushes the v* tag with GITHUB_TOKEN, and pushes made with
   # that token do not trigger workflows — release.yml's `on: push: tags` never
-  # fires here, so the tap update is called directly.
+  # fires here, so the tap update runs directly.
   homebrew:
     needs: promote
-    uses: ./.github/workflows/_update-homebrew-tap.yml
-    with:
-      tag: ${{ needs.promote.outputs.tag }}
+    runs-on: ubuntu-latest
+    # Resolves TAP_DEPLOY_KEY and gates it to the refs the environment's branch
+    # policy allows. The environment must be declared on this job: a job that
+    # delegates to a reusable workflow cannot declare one, and an environment
+    # secret read inside a called workflow arrives empty.
+    environment: release
+    timeout-minutes: 10
+    steps:
+      # The tap update is a local composite action, so the repo must be on disk
+      # before it can be resolved.
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Update Homebrew tap
+        uses: ./.github/actions/update-homebrew-tap
+        with:
+          tag: ${{ needs.promote.outputs.tag }}
+          deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}

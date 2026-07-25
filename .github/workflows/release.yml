@@ -4,8 +4,8 @@ name: Release
 #
 # Tags pushed by "Promote to prod" use GITHUB_TOKEN, and pushes made with that
 # token do not trigger workflows — so this file never fires for a promotion.
-# promote-prod.yml calls _update-homebrew-tap.yml directly for that path. This
-# workflow covers hand-pushed tags and manual re-runs.
+# promote-prod.yml runs the same tap update itself for that path. This workflow
+# covers hand-pushed tags and manual re-runs.
 
 on:
   push:
@@ -26,6 +26,20 @@ concurrency:
 
 jobs:
   homebrew:
-    uses: ./.github/workflows/_update-homebrew-tap.yml
-    with:
-      tag: ${{ inputs.tag || github.ref_name }}
+    runs-on: ubuntu-latest
+    # Resolves TAP_DEPLOY_KEY and gates it to the refs the environment's branch
+    # policy allows. See the same job in promote-prod.yml for why the
+    # environment sits here rather than behind a reusable workflow.
+    environment: release
+    timeout-minutes: 10
+    steps:
+      # The tap update is a local composite action, so the repo must be on disk
+      # before it can be resolved.
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Update Homebrew tap
+        uses: ./.github/actions/update-homebrew-tap
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}
