@@ -111,6 +111,27 @@ func TestTaskIDFromRefPrefixes(t *testing.T) {
 	}
 }
 
+// TestSetBranchPrefixNormalizes covers the separator guard: a prefix with no
+// trailing "/" or "-" would otherwise yield branches like "lodeWL-7-slug".
+func TestSetBranchPrefixNormalizes(t *testing.T) {
+	t.Cleanup(func() { SetBranchPrefix("") })
+	cases := map[string]string{
+		"":      "lode/",
+		"lode":  "lode/",
+		"team/": "team/",
+		"team-": "team-",
+	}
+	for in, want := range cases {
+		SetBranchPrefix(in)
+		if got := BranchPrefix(); got != want {
+			t.Errorf("SetBranchPrefix(%q) -> BranchPrefix() = %q, want %q", in, got, want)
+		}
+		if got := TaskIDFromRef(want + "WL-7-slug"); got != "WL-7" {
+			t.Errorf("SetBranchPrefix(%q): TaskIDFromRef(%q) = %q, want WL-7", in, want+"WL-7-slug", got)
+		}
+	}
+}
+
 func TestTaskIDFromBody(t *testing.T) {
 	cases := []struct {
 		body string
