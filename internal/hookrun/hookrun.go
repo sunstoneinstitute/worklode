@@ -217,6 +217,27 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, roo
 	}
 }
 
+// endSession ends an agent session on taskID. Mirrors reportSession's shape —
+// bounded, downgrades failure to a warning — so the two halves of a session's
+// lifecycle (touch/end) enforce the same timeout-and-warn contract in exactly
+// one place each.
+func endSession(ctx context.Context, opts Options, taskID, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	c, err := opts.client()
+	if err != nil {
+		warn(opts, "load config: %v", err)
+		return
+	}
+	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	if err := c.EndAgentSession(ectx, taskID,
+		cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
+		warn(opts, "end agent session on %s: %v", taskID, err)
+	}
+}
+
 // --- event handlers ---------------------------------------------------------
 
 func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string) {
@@ -350,18 +371,7 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) 
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	if sessionID != "" {
-		if c, err := opts.client(); err != nil {
-			warn(opts, "load config: %v", err)
-		} else {
-			ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
-			if err := c.EndAgentSession(ectx, taskID,
-				cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
-				warn(opts, "end agent session on %s: %v", taskID, err)
-			}
-			cancel()
-		}
-	}
+	endSession(ctx, opts, taskID, sessionID)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}
@@ -390,9 +400,8 @@ func handlePreCommit(ctx context.Context, opts Options, dir string) {
 	}
 
 	if heartbeatDue(root, opts.now()) {
-		if sessionID, ok := markerSessionID(root); ok {
-			reportSession(ctx, opts, c, taskID, root, sessionID)
-		}
+		sessionID, _ := markerSessionID(root)
+		reportSession(ctx, opts, c, taskID, root, sessionID)
 	}
 }
 
@@ -452,6 +461,15 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 // a session that finishes a turn, dies on an API error, spends a long turn in
 // subagents, or sits blocked on a human. Debounced against the marker so a
 // fast conversation does not flood the backbone.
+//
+// The marker is the authority for both the session id and the debounce
+// window, and this handler keeps it that way: a missing marker is self-healed
+// (a worktree that lost its marker would otherwise go silent forever), and a
+// marker recording a different session id than the payload (e.g. after a
+// /clear) is brought up to date rather than left stale for the next
+// marker-only caller (pre-commit). Either case reports immediately — a
+// debounce window that was never actually started for this id is not one to
+// wait out.
 func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
 	root, ok := worktree.Root(dir)
 	if !ok {
@@ -461,13 +479,24 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
 	if !ok {
 		return
 	}
-	if !heartbeatDue(root, opts.now()) {
-		return
-	}
+
+	m, hasMarker := readSessionMarker(root)
 	sessionID := p.SessionID
 	if sessionID == "" {
-		sessionID, _ = markerSessionID(root)
+		sessionID = m.SessionID
 	}
+	if sessionID == "" {
+		return // no marker and no payload id ⇒ nothing to report
+	}
+
+	if !hasMarker || (p.SessionID != "" && p.SessionID != m.SessionID) {
+		if err := writeSessionMarker(root, sessionID, opts.now()); err != nil {
+			warn(opts, "write session marker: %v", err)
+		}
+	} else if !heartbeatDue(root, opts.now()) {
+		return
+	}
+
 	c, err := opts.client()
 	if err != nil {
 		warn(opts, "load config: %v", err)
@@ -511,11 +540,24 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 
 // handleWorktreeExit closes the session's row on the worktree it is leaving
 // and removes its marker — symmetric with handleSessionEnd — since the
-// session is no longer live here. The marker is removed whenever this is a
-// recognized worktree, even if no session id could be resolved, so a
-// worktree-exit never leaves a stale marker behind.
+// session is no longer live here.
+//
+// Unlike every other worktree hook, this one requires an EXPLICIT path from
+// tool_input and does NOT fall back to the payload cwd (dir is accepted for
+// signature symmetry with the other handlers but unused). Claude Code's real
+// ExitWorktree tool_input is {action, discard_changes} — there is no path key
+// — and by the time PostToolUse fires, ExitWorktree has already restored cwd
+// to the worktree being returned TO, not the one being left. Falling back to
+// cwd would therefore end and delete the marker of the wrong worktree. A
+// session that leaves without an explicit exit is still handled without this
+// hook: its last_seen_at simply stops advancing, dropping the row out of the
+// running-sessions window, and the row closes for good when the lease is
+// released, expires, or the task completes.
 func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string) {
-	exited := payloadPath(p, dir)
+	exited := pathFromToolInput(p.ToolInput)
+	if exited == "" {
+		return
+	}
 	root, ok := worktree.Root(exited)
 	if !ok {
 		return
@@ -528,18 +570,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	if sessionID != "" {
-		if c, err := opts.client(); err != nil {
-			warn(opts, "load config: %v", err)
-		} else {
-			ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
-			if err := c.EndAgentSession(ectx, taskID,
-				cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
-				warn(opts, "end agent session on %s: %v", taskID, err)
-			}
-			cancel()
-		}
-	}
+	endSession(ctx, opts, taskID, sessionID)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}
@@ -674,14 +705,17 @@ func writeMarker(root string, m sessionMarker) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
-// writeSessionMarker writes the current process's session marker for root,
-// counting now as the first heartbeat.
+// writeSessionMarker writes the current process's session marker for root.
+// LastHeartbeatAt is left empty rather than stamped with now: heartbeatDue
+// already treats an unparseable/absent stamp as due, and recordHeartbeat
+// (called only after a heartbeat actually reaches the backbone) is the sole
+// writer of that field. Stamping it here would claim a heartbeat that never
+// happened and could suppress a real one for up to heartbeatDebounce.
 func writeSessionMarker(root, sessionID string, now time.Time) error {
 	return writeMarker(root, sessionMarker{
-		SessionID:       sessionID,
-		PID:             os.Getpid(),
-		StartedAt:       now.Format(time.RFC3339),
-		LastHeartbeatAt: now.Format(time.RFC3339),
+		SessionID: sessionID,
+		PID:       os.Getpid(),
+		StartedAt: now.Format(time.RFC3339),
 	})
 }
 
