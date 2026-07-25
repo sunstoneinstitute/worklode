@@ -301,7 +301,7 @@ func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 	}
 }
 
-func TestPRMergedNonGatedMovesToDone(t *testing.T) {
+func TestPRMergedMovesTaskToMerged(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	taskID := e.seedTask(t)

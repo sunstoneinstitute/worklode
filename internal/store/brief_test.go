@@ -22,11 +22,14 @@ func TestBrief(t *testing.T) {
 	if err := addEdge(t, s, openBlocker.ID, task.ID, "blocks"); err != nil {
 		t.Fatalf("add open blocks edge: %v", err)
 	}
-	// A merged blocker no longer blocks, so it must not appear in the brief.
-	mergedBlocker := createTask(t, s, leaseTestNow, defaultTaskInput())
-	walkTo(t, s, mergedBlocker.ID, "merged")
-	if err := addEdge(t, s, mergedBlocker.ID, task.ID, "blocks"); err != nil {
-		t.Fatalf("add merged blocks edge: %v", err)
+	// Blockers in a closed state (see closedStates) no longer block, so they
+	// must not appear in the brief -- merged and everything past it.
+	for _, state := range []string{"merged", "deployed_dev", "deployed_prod", "released"} {
+		closedBlocker := createTask(t, s, leaseTestNow, defaultTaskInput())
+		walkTo(t, s, closedBlocker.ID, state)
+		if err := addEdge(t, s, closedBlocker.ID, task.ID, "blocks"); err != nil {
+			t.Fatalf("add %s blocks edge: %v", state, err)
+		}
 	}
 
 	b, err := s.Brief(ctx, task.ID)

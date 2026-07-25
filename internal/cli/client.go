@@ -761,8 +761,8 @@ func (c *Client) AbandonTask(ctx context.Context, id string) (Task, []byte, erro
 	return c.taskAction(ctx, id, "abandon")
 }
 
-// ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a done or abandoned
-// task back to ready (a fresh claim is then required).
+// ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a delivered or
+// abandoned task back to ready (a fresh claim is then required).
 func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.taskAction(ctx, id, "reopen")
 }

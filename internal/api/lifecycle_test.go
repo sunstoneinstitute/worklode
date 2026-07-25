@@ -39,6 +39,19 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 	}
 }
 
+// moveTo drives one legal transition on taskID directly through the store,
+// for states the HTTP API has no endpoint for (the delivery states).
+func moveTo(t *testing.T, st *store.Store, taskID, from, to string) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "github", "to-"+to+"-"+taskID, "task.transition", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.Transition(tx, st.Now(), taskID, from, to, eventID)
+		})
+	if err != nil {
+		t.Fatalf("move %s %s -> %s: %v", taskID, from, to, err)
+	}
+}
+
 func TestSlugifyTitle(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -290,7 +303,7 @@ func TestAbandon(t *testing.T) {
 		t.Fatalf("active lease after abandon: err = %v, want ErrNotFound", err)
 	}
 
-	// From done (terminal): 422.
+	// From merged (already delivered): 422.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-3"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
@@ -302,7 +315,7 @@ func TestAbandon(t *testing.T) {
 	}
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/abandon", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("abandon from done status = %d, want 422; body %s", rr.Code, rr.Body.String())
+		t.Fatalf("abandon from merged status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 
 	// Unknown task: 404.
@@ -447,7 +460,7 @@ func TestReopen(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Done then reopened", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Abandoned then reopened", "priority": "low", "kind": "chore"})
 
-	// From done: 200, lands on ready, task.reopened event + state_log row.
+	// From merged: 200, lands on ready, task.reopened event + state_log row.
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
@@ -459,7 +472,7 @@ func TestReopen(t *testing.T) {
 	}
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("reopen from done status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("reopen from merged status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	if got := decodeMap(t, rr); got["state"] != "ready" {
 		t.Fatalf("state after reopen from merged = %v, want ready", got["state"])
@@ -496,7 +509,7 @@ func TestReopen(t *testing.T) {
 		t.Fatalf("event type after reopen from abandoned = %q, want task.reopened", typ)
 	}
 
-	// Illegal reopen: task is now ready, not done or abandoned.
+	// Illegal reopen: task is now ready, which is not reopenable.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/reopen", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("reopen from ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
@@ -516,5 +529,48 @@ func TestReopen(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/reopen", token, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("reopen unknown task status = %d, want 404", rr.Code)
+	}
+}
+
+// TestReopenFromDeliveryStates pins the rest of the reopenable set in
+// reopenTask: every state past merged reopens to ready. The delivery states
+// have no HTTP endpoint yet, so the task is walked there through the store.
+func TestReopenFromDeliveryStates(t *testing.T) {
+	paths := map[string][][2]string{
+		"deployed_dev":  {{"merged", "deployed_dev"}},
+		"deployed_prod": {{"merged", "deployed_dev"}, {"deployed_dev", "deployed_prod"}},
+		"released":      {{"merged", "released"}},
+	}
+	for state, steps := range paths {
+		t.Run(state, func(t *testing.T) {
+			st, h, token := newTestServer(t)
+			createProject(t, st, "proj")
+			createTaskViaAPI(t, h, token, map[string]any{
+				"project": "proj", "title": "Delivered", "priority": "high", "kind": "feature"})
+
+			rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+			if rr.Code != http.StatusOK {
+				t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+			}
+			moveToReview(t, st, "WL-1")
+			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
+			}
+			for _, step := range steps {
+				moveTo(t, st, "WL-1", step[0], step[1])
+			}
+
+			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("reopen from %s status = %d, body %s", state, rr.Code, rr.Body.String())
+			}
+			if got := decodeMap(t, rr); got["state"] != "ready" {
+				t.Fatalf("state after reopen from %s = %v, want ready", state, got["state"])
+			}
+			if typ := lastEventType(t, st); typ != "task.reopened" {
+				t.Fatalf("event type after reopen from %s = %q, want task.reopened", state, typ)
+			}
+		})
 	}
 }

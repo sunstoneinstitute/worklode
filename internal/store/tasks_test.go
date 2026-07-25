@@ -369,7 +369,38 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 		t.Fatalf("BlockedTaskIDs with blocker merged: %s should be unblocked, got %v", blocked.ID, ids)
 	}
 	if isBlocked(t, s, blocked.ID) {
-		t.Fatalf("IsBlocked(%s): want false after blocker done", blocked.ID)
+		t.Fatalf("IsBlocked(%s): want false after blocker merged", blocked.ID)
+	}
+}
+
+// TestBlockedTaskIDsDeliveredBlocker pins closedStates: a blocker that has
+// advanced past merged must stay unblocking. Narrowing closedStates back to
+// ('merged', 'abandoned') would make these dependents block again.
+func TestBlockedTaskIDsDeliveredBlocker(t *testing.T) {
+	for _, state := range []string{"deployed_dev", "deployed_prod", "released"} {
+		t.Run(state, func(t *testing.T) {
+			s := openTaskStore(t)
+			ctx := t.Context()
+
+			blocker := createTask(t, s, taskTestNow, defaultTaskInput())
+			blocked := createTask(t, s, taskTestNow, defaultTaskInput())
+			if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+				t.Fatalf("AddEdge blocks: %v", err)
+			}
+			walkTo(t, s, blocker.ID, state)
+
+			ids, err := s.BlockedTaskIDs(ctx)
+			if err != nil {
+				t.Fatalf("BlockedTaskIDs: %v", err)
+			}
+			if ids[blocked.ID] {
+				t.Fatalf("BlockedTaskIDs with blocker %s: %s should be unblocked, got %v",
+					state, blocked.ID, ids)
+			}
+			if isBlocked(t, s, blocked.ID) {
+				t.Fatalf("IsBlocked(%s): want false with blocker %s", blocked.ID, state)
+			}
+		})
 	}
 }
 
