@@ -4,10 +4,12 @@ name: update-homebrew-tap
 # this repo. The formula builds cmd/lode from the tag's source tarball, so the
 # only per-release facts are the tarball URL and its sha256.
 #
-# Requires TAP_GITHUB_TOKEN in the `release` environment: a token with
-# contents:write on sunstoneinstitute/homebrew-tap. Environment secrets resolve
-# inside the called workflow, so callers pass no secrets — but the environment's
-# deployment policy must permit the caller's ref.
+# Requires TAP_DEPLOY_KEY in the `release` environment: the private half of a
+# write-enabled deploy key on sunstoneinstitute/homebrew-tap. A deploy key is
+# owned by that repo rather than by a person, so the credential outlives any
+# individual's account. Environment secrets resolve inside the called workflow,
+# so callers pass no secrets — but the environment's deployment policy must
+# permit the caller's ref.
 
 on:
   workflow_call:
@@ -44,14 +46,28 @@ jobs:
 
       - name: Update formula in the tap
         env:
-          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
           TAG: ${{ inputs.tag }}
           URL: ${{ steps.tarball.outputs.url }}
           SHA256: ${{ steps.tarball.outputs.sha256 }}
         run: |
           set -euo pipefail
+
+          KEY_FILE="$RUNNER_TEMP/tap_deploy_key"
+          KNOWN_HOSTS="$RUNNER_TEMP/known_hosts"
+          install -m 600 /dev/null "$KEY_FILE"
+          printf '%s\n' "$TAP_DEPLOY_KEY" > "$KEY_FILE"
+
+          # Host keys from the GitHub meta API over TLS, rather than a
+          # trust-on-first-use ssh-keyscan or a hardcoded key that rots when
+          # GitHub rotates theirs.
+          curl -fsS https://api.github.com/meta \
+            | jq -r '.ssh_keys[] | "github.com " + .' > "$KNOWN_HOSTS"
+
+          export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
+
           git clone --depth 1 \
-            "https://x-access-token:${TAP_TOKEN}@github.com/sunstoneinstitute/homebrew-tap.git" \
+            git@github.com:sunstoneinstitute/homebrew-tap.git \
             "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap"
 
