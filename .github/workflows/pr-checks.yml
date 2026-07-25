@@ -21,18 +21,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Decide whether this PR may consume CI. The checks run only when the author
-  # is trusted (repo owner, org member, or invited collaborator — GitHub
-  # computes `author_association`, it is not attacker-controlled) or a
-  # maintainer has applied the `can-be-tested` label. This keeps fork /
-  # drive-by PRs from auto-running the build on a public repo. Applying labels
-  # needs Triage+ on the repo, so a PR author cannot self-authorise.
-  #
-  # Docs-only PRs also skip the checks: a diff touching only markdown and
-  # docs/ cannot change what they verify. GitHub treats jobs skipped via `if:`
-  # as satisfied for branch-protection required checks, so a skipped job does
-  # not block merging. The `can-be-tested` label overrides the docs-only skip —
-  # a maintainer can apply it to force a full run.
+  # Decide whether this PR may consume CI, keeping fork / drive-by PRs from
+  # auto-running the build on a public repo. Docs-only PRs also skip; jobs
+  # skipped via `if:` count as satisfied for branch protection.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,29 +36,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
-          # A trusted collaborator applied the opt-in label. This both
-          # authorises an untrusted author AND forces a run on a docs-only PR,
-          # so it is checked before the docs-only skip.
+          # Opt-in label (needs Triage+, so authors cannot self-authorise).
+          # Checked first so it also forces a run on a docs-only PR.
           if ${{ contains(github.event.pull_request.labels.*.name, 'can-be-tested') }}; then
             echo "PR carries the 'can-be-tested' label — running checks."
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Docs-only skip: if every changed file is markdown or under docs/,
-          # there is nothing for the checks to verify. On an API failure
-          # CHANGED comes back empty and we fall through to the trust check —
-          # failing open towards running, never towards a wrong skip.
+          # Docs-only skip. On API failure CHANGED is empty and we fall through
+          # to the trust checks — failing open towards running.
           CHANGED=$(gh api --paginate \
             "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
             --jq '.[].filename' 2>/dev/null || true)
           if [ -n "$CHANGED" ] && ! echo "$CHANGED" | grep -qvE '(^docs/|\.md$)'; then
             echo "::notice::PR touches only docs/ and markdown files — skipping the checks. Apply the 'can-be-tested' label to force a full run."
             echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Not a fork — pushing the head branch required write access. Checked
+          # before ASSOCIATION, which the webhook reports as CONTRIBUTOR for org
+          # members whose membership is private.
+          if [ "$HEAD_REPO" = "${{ github.repository }}" ]; then
+            echo "PR head branch is in ${{ github.repository }} — running checks."
+            echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -79,7 +77,7 @@ jobs:
               ;;
           esac
 
-          echo "::notice::Author '$AUTHOR' ($ASSOCIATION) is not a member or collaborator and the PR lacks the 'can-be-tested' label — skipping the checks. A maintainer can add that label to authorise CI."
+          echo "::notice::PR is from a fork and author '$AUTHOR' ($ASSOCIATION) is not a member or collaborator, and the PR lacks the 'can-be-tested' label — skipping the checks. A maintainer can add that label to authorise CI."
           echo "run=false" >> "$GITHUB_OUTPUT"
 
   lint:
