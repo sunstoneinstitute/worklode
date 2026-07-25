@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.promote.outputs.to-tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -62,3 +64,12 @@ jobs:
             echo "**prod version:** \`${{ steps.promote.outputs.to-tag }}\`"
             echo "**Deploy branch updated:** \`last-deploy/prod\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # promote-images pushes the v* tag with GITHUB_TOKEN, and pushes made with
+  # that token do not trigger workflows — release.yml's `on: push: tags` never
+  # fires here, so the tap update is called directly.
+  homebrew:
+    needs: promote
+    uses: ./.github/workflows/_update-homebrew-tap.yml
+    with:
+      tag: ${{ needs.promote.outputs.tag }}
