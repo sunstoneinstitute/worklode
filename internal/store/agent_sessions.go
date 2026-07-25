@@ -118,8 +118,8 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // A heartbeat on a closed row (ended_at set by EndAgentSession) reopens it:
 // the caller working the lease again is still that same session. Since
 // heldLease is read outside any transaction, it cannot rule out a release
-// landing between that check and the UPDATE below; the UPDATE's own
-// "lease still unreleased" EXISTS clause is what actually guards the reopen.
+// landing between that check and the bump below; bumpAgentSessionLastSeen's
+// own locking read of the lease is what actually guards the reopen.
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
@@ -167,19 +167,44 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	}
 
 	// The inserting call already wrote last_seen_at = now; only a heartbeat
-	// on an existing row needs the UPDATE.
+	// on an existing row needs the bump.
 	if !inserted {
-		if _, err := s.db.ExecContext(ctx,
-			`UPDATE agent_sessions SET last_seen_at = $1, ended_at = NULL
-			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4
-			    AND EXISTS (SELECT 1 FROM leases WHERE id = $2 AND released_at IS NULL)`,
-			now, lease.ID, agent, sessionID,
-		); err != nil {
-			return nil, fmt.Errorf("bump agent session last_seen_at: %w", err)
+		if err := s.bumpAgentSessionLastSeen(ctx, lease.ID, agent, sessionID, now); err != nil {
+			return nil, err
 		}
 	}
 
 	return s.AgentSession(ctx, lease.ID, agent, sessionID)
+}
+
+// bumpAgentSessionLastSeen advances last_seen_at (and clears ended_at, so a
+// heartbeat reopens a closed session). The guard against racing a lease close
+// is the FOR SHARE read: it blocks until any concurrent closeLease or
+// CloseActiveLease commits, then sees released_at set and skips the UPDATE,
+// so a session that close just ended stays ended.
+func (s *Store) bumpAgentSessionLastSeen(ctx context.Context, leaseID int64, agent, sessionID string, now time.Time) error {
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		var one int
+		err := tx.QueryRow(
+			`SELECT 1 FROM leases WHERE id = $1 AND released_at IS NULL FOR SHARE`, leaseID,
+		).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			// Lease closed (or gone) between heldLease and here: the close
+			// already ended this session. Nothing to bump.
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("lock lease %d for heartbeat: %w", leaseID, err)
+		}
+		if _, err := tx.Exec(
+			`UPDATE agent_sessions SET last_seen_at = $1, ended_at = NULL
+			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4`,
+			now, leaseID, agent, sessionID,
+		); err != nil {
+			return fmt.Errorf("bump agent session last_seen_at: %w", err)
+		}
+		return nil
+	})
 }
 
 // SessionUsage carries the optional accounting a caller can report when
@@ -271,21 +296,6 @@ func endOpenAgentSessionsOnLease(tx *sql.Tx, now time.Time, leaseID int64) error
 		now.UTC(), leaseID,
 	); err != nil {
 		return fmt.Errorf("end open agent sessions on lease %d: %w", leaseID, err)
-	}
-	return nil
-}
-
-// endOpenAgentSessionsOnTask is endOpenAgentSessionsOnLease for the active
-// lease on taskID. It MUST run before the lease's released_at is set — once
-// that is written, the subquery no longer matches.
-func endOpenAgentSessionsOnTask(tx *sql.Tx, now time.Time, taskID string) error {
-	if _, err := tx.Exec(
-		`UPDATE agent_sessions SET ended_at = $1
-		  WHERE ended_at IS NULL
-		    AND lease_id IN (SELECT id FROM leases WHERE task_id = $2 AND released_at IS NULL)`,
-		now.UTC(), taskID,
-	); err != nil {
-		return fmt.Errorf("end open agent sessions on task %s: %w", taskID, err)
 	}
 	return nil
 }

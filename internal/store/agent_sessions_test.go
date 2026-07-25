@@ -467,10 +467,17 @@ func TestExpiryClosesOpenAgentSessions(t *testing.T) {
 	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
+	if got := openSessions(t, s, lease.ID); got != 1 {
+		t.Fatalf("open sessions before expiry: got %d, want 1", got)
+	}
 
 	*now = now.Add(3 * time.Hour) // past the default 2h TTL
-	if _, err := s.ExpireLeases(ctx, *now); err != nil {
+	n, err := s.ExpireLeases(ctx, *now)
+	if err != nil {
 		t.Fatalf("expire: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expired lease count: got %d, want 1", n)
 	}
 	if got := openSessions(t, s, lease.ID); got != 0 {
 		t.Fatalf("open sessions after expiry: got %d, want 0", got)
@@ -484,6 +491,9 @@ func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
 	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
+	if got := openSessions(t, s, lease.ID); got != 1 {
+		t.Fatalf("open sessions before CloseActiveLease: got %d, want 1", got)
+	}
 
 	_, _, err := s.RecordEvent(ctx, "cli", "close-active-"+lease.TaskID, "task.abandon", nil,
 		func(tx *sql.Tx, eventID int64) error {
@@ -494,5 +504,65 @@ func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
 	}
 	if got := openSessions(t, s, lease.ID); got != 0 {
 		t.Fatalf("open sessions after CloseActiveLease: got %d, want 0", got)
+	}
+}
+
+// TestLeaseCloseKeepsOriginalEndedAt confirms endOpenAgentSessionsOnLease
+// only touches still-open sessions: a session already ended keeps the
+// ended_at value EndAgentSession stamped, not the later close time.
+func TestLeaseCloseKeepsOriginalEndedAt(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+	ended, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	wantEndedAt := *ended.EndedAt
+
+	*now = now.Add(time.Hour)
+	if err := s.Release(ctx, lease.TaskID, "stig"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	after, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back after release: %v", err)
+	}
+	if after.EndedAt == nil || !after.EndedAt.Equal(wantEndedAt) {
+		t.Fatalf("ended_at after release: got %v, want unchanged %v", after.EndedAt, wantEndedAt)
+	}
+}
+
+// TestLeaseCloseLeavesOtherLeaseSessionsOpen confirms endOpenAgentSessionsOnLease
+// scopes to the closing lease only: an open session on an unrelated lease
+// survives.
+func TestLeaseCloseLeavesOtherLeaseSessionsOpen(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	leaseA := leaseForTest(t, s, "host:/wt/one")
+	leaseB := leaseForTest(t, s, "host:/wt/two")
+	if _, err := s.TouchAgentSession(ctx, leaseA.TaskID, "stig", "claude-code", "", "sess-a"); err != nil {
+		t.Fatalf("touch A: %v", err)
+	}
+	if _, err := s.TouchAgentSession(ctx, leaseB.TaskID, "stig", "claude-code", "", "sess-b"); err != nil {
+		t.Fatalf("touch B: %v", err)
+	}
+
+	if err := s.Release(ctx, leaseA.TaskID, "stig"); err != nil {
+		t.Fatalf("release A: %v", err)
+	}
+
+	if got := openSessions(t, s, leaseA.ID); got != 0 {
+		t.Fatalf("open sessions on closed lease A: got %d, want 0", got)
+	}
+	if got := openSessions(t, s, leaseB.ID); got != 1 {
+		t.Fatalf("open sessions on untouched lease B: got %d, want 1", got)
 	}
 }
