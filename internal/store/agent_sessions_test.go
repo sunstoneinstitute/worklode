@@ -428,3 +428,71 @@ func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
 		t.Fatalf("agent_session.started events: got %d, want 1 (reopen must not emit a new start event)", events)
 	}
 }
+
+// openSessions returns the number of sessions on leaseID with no ended_at.
+func openSessions(t *testing.T, s *Store, leaseID int64) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM agent_sessions WHERE lease_id = $1 AND ended_at IS NULL`, leaseID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count open sessions: %v", err)
+	}
+	return n
+}
+
+func TestReleaseClosesOpenAgentSessions(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+	if got := openSessions(t, s, lease.ID); got != 1 {
+		t.Fatalf("open sessions before release: got %d, want 1", got)
+	}
+
+	if err := s.Release(ctx, lease.TaskID, "stig"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if got := openSessions(t, s, lease.ID); got != 0 {
+		t.Fatalf("open sessions after release: got %d, want 0", got)
+	}
+}
+
+func TestExpiryClosesOpenAgentSessions(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	*now = now.Add(3 * time.Hour) // past the default 2h TTL
+	if _, err := s.ExpireLeases(ctx, *now); err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+	if got := openSessions(t, s, lease.ID); got != 0 {
+		t.Fatalf("open sessions after expiry: got %d, want 0", got)
+	}
+}
+
+func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	_, _, err := s.RecordEvent(ctx, "cli", "close-active-"+lease.TaskID, "task.abandon", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return CloseActiveLease(tx, s.Now(), lease.TaskID)
+		})
+	if err != nil {
+		t.Fatalf("CloseActiveLease: %v", err)
+	}
+	if got := openSessions(t, s, lease.ID); got != 0 {
+		t.Fatalf("open sessions after CloseActiveLease: got %d, want 0", got)
+	}
+}
