@@ -22,8 +22,20 @@ type TaskCommit struct {
 }
 
 // InsertTaskCommit records a task↔commit attribution; duplicates are no-ops.
+// An unknown task id is also a no-op, checked explicitly rather than left to
+// the task_id foreign key: a correlation failure must never fail the
+// delivery, but an FK violation aborts the whole enclosing transaction
+// (Postgres does not let ON CONFLICT DO NOTHING suppress it), which would
+// discard every other fact recorded alongside it and the event row itself.
 func InsertTaskCommit(tx *sql.Tx, tc TaskCommit) error {
-	_, err := tx.Exec(
+	exists, err := taskExists(tx, tc.TaskID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	_, err = tx.Exec(
 		`INSERT INTO task_commits (task_id, repo, sha, source, seen_at)
 		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
 		tc.TaskID, tc.Repo, tc.SHA, tc.Source, tc.SeenAt.UTC())
@@ -84,14 +96,16 @@ func MainIDForSHA(tx *sql.Tx, repo, sha string) (*int64, error) {
 }
 
 // MainIDForSHAAnyRepo resolves a sha with no repo context (Flux events don't
-// carry one). Returns the owning repo and id, or ("", nil) if unknown.
+// carry one). Returns the owning repo and id, or ("", nil) if unknown. If the
+// sha exists in more than one repo (forks, repo migration), picks the most
+// recently appended match deterministically rather than an arbitrary row.
 func MainIDForSHAAnyRepo(tx *sql.Tx, sha string) (string, *int64, error) {
 	var repo string
 	var id int64
-	err := tx.QueryRow(`SELECT repo, id FROM main_commits WHERE sha = $1 LIMIT 1`,
+	err := tx.QueryRow(`SELECT repo, id FROM main_commits WHERE sha = $1 ORDER BY id DESC LIMIT 1`,
 		sha).Scan(&repo, &id)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = tx.QueryRow(`SELECT repo, main_id FROM deploy_shas WHERE sha = $1 LIMIT 1`,
+		err = tx.QueryRow(`SELECT repo, main_id FROM deploy_shas WHERE sha = $1 ORDER BY main_id DESC LIMIT 1`,
 			sha).Scan(&repo, &id)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
