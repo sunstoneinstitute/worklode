@@ -202,14 +202,25 @@ func agentName() string {
 // reportSession reports an agent session on taskID and stamps the marker's
 // heartbeat time. Like every hookrun backbone call it is bounded and
 // downgrades failure to a warning.
+//
+// A touch can come back with EndedAt set: the lease closed between this
+// call's ActiveLease check and its write, so the store left the session
+// closed instead of reopening it (see TouchAgentSession's doc comment). That
+// is not a heartbeat — stamping the marker here would suppress the next
+// real one for up to heartbeatDebounce, so the marker is only stamped when
+// the returned session is actually open.
 func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID string) {
 	if sessionID == "" {
 		return
 	}
 	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if _, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID); err != nil {
+	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID)
+	if err != nil {
 		warn(opts, "report agent session on %s: %v", taskID, err)
+		return
+	}
+	if sess.EndedAt != nil {
 		return
 	}
 	if err := recordHeartbeat(root, opts.now()); err != nil {

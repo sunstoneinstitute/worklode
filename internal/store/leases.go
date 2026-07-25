@@ -67,6 +67,27 @@ func scanLease(row rowScanner) (*Lease, error) {
 func activeLeaseTx(tx *sql.Tx, taskID string) (*Lease, error) {
 	row := tx.QueryRow(
 		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID)
+	return scanActiveLeaseRow(row, taskID)
+}
+
+// activeLeaseTxForShare is activeLeaseTx with a FOR SHARE row lock, for a
+// caller about to insert or update a row keyed on the lease that must not be
+// left orphaned by a lease closing underneath it. The lease's own foreign
+// keys don't serialize this: an insert referencing lease_id takes FOR KEY
+// SHARE (via the FK), but closing a lease only writes released_at, which
+// lives in a partial index rather than a key column, so the closing UPDATE
+// takes FOR NO KEY UPDATE — a mode that does not conflict with FOR KEY SHARE.
+// Taking FOR SHARE here explicitly closes that gap: it blocks a concurrent
+// close until this transaction commits, and if the close wins the race
+// first, the WHERE released_at IS NULL predicate is re-checked on wakeup and
+// correctly returns no rows.
+func activeLeaseTxForShare(tx *sql.Tx, taskID string) (*Lease, error) {
+	row := tx.QueryRow(
+		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL FOR SHARE`, taskID)
+	return scanActiveLeaseRow(row, taskID)
+}
+
+func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 	l, err := scanLease(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no active lease on task %s: %w", taskID, ErrNotFound)
