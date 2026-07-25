@@ -99,17 +99,22 @@ func TestClientProjectsAndRepos(t *testing.T) {
 		t.Fatalf("done_state after SetRepoDoneState = %q, want released", got)
 	}
 
-	// A repo without an owner/name split is rejected client-side, never sent.
-	_, err = c.SetRepoDoneState(ctx, "widgets", "released")
-	if err == nil {
-		t.Fatal("SetRepoDoneState with a bare repo name: want error, got nil")
-	}
-	var clientErr *cli.ClientError
-	if errors.As(err, &clientErr) {
-		t.Fatalf("SetRepoDoneState with a bare repo name reached the server: %v", err)
-	}
-	if !strings.Contains(err.Error(), "owner/name") {
-		t.Fatalf("SetRepoDoneState with a bare repo name: error = %v, want it to mention owner/name", err)
+	// Anything that is not two non-empty segments is rejected client-side and
+	// never sent — one case per disjunct of the guard.
+	for _, repo := range []string{"widgets", "acme/", "/widgets", ""} {
+		t.Run("reject "+repo, func(t *testing.T) {
+			_, err := c.SetRepoDoneState(ctx, repo, "released")
+			if err == nil {
+				t.Fatalf("SetRepoDoneState(%q): want error, got nil", repo)
+			}
+			var clientErr *cli.ClientError
+			if errors.As(err, &clientErr) {
+				t.Fatalf("SetRepoDoneState(%q) reached the server: %v", repo, err)
+			}
+			if !strings.Contains(err.Error(), "owner/name") {
+				t.Fatalf("SetRepoDoneState(%q): error = %v, want it to mention owner/name", repo, err)
+			}
+		})
 	}
 }
 
