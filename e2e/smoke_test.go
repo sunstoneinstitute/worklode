@@ -178,7 +178,7 @@ func TestFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	wantBranch := "wl/" + task.ID + "-add-login-page"
+	wantBranch := "lode/" + task.ID + "-add-login-page"
 	if claim.Branch != wantBranch {
 		t.Fatalf("claim branch = %q, want %q", claim.Branch, wantBranch)
 	}

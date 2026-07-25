@@ -18,7 +18,7 @@ import (
 type Brief struct {
 	Task               Task     // the task row
 	Body               string   // task body (mirrors Task.Body for the wire contract)
-	Branch             string   // wl/<id>-<slug>
+	Branch             string   // <prefix><id>-<slug>
 	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
 	Lease              *Lease   // active lease, or nil
 	GoverningDesign    *string  // reserved: spec 03 (nil in v1)

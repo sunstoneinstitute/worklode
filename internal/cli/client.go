@@ -503,8 +503,10 @@ type ClaimNextPickLease struct {
 // slimmer projection than Task, matching the ranking-relevant fields (spec
 // 02) rather than the full task record.
 type ClaimNextPick struct {
-	ID       string              `json:"id"`
-	Slug     string              `json:"slug"`
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	// Branch is the server-authoritative task branch (<prefix><id>-<slug>).
+	Branch   string              `json:"branch"`
 	Concern  string              `json:"concern"`
 	Priority string              `json:"priority"`
 	FanOut   int                 `json:"fan_out"`

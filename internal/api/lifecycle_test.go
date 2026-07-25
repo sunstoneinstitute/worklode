@@ -76,6 +76,37 @@ func TestSlugifyTitle(t *testing.T) {
 	}
 }
 
+// TestClaimBranchPrefix checks Config.BranchPrefix (LODE_BRANCH_PREFIX)
+// reaches the branch the claim response hands out.
+func TestClaimBranchPrefix(t *testing.T) {
+	t.Cleanup(func() { store.SetBranchPrefix("") })
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, _, err := api.NewServer(st, api.Config{BranchPrefix: "team/"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Fix the: Thing!!", "priority": "high", "kind": "bug",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["branch"]; got != "team/WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want team/WL-1-fix-the-thing", got)
+	}
+}
+
 func TestClaim(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -88,8 +119,8 @@ func TestClaim(t *testing.T) {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	if got["branch"] != "wl/WL-1-fix-the-thing" {
-		t.Fatalf("branch = %v, want wl/WL-1-fix-the-thing", got["branch"])
+	if got["branch"] != "lode/WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want lode/WL-1-fix-the-thing", got["branch"])
 	}
 	lease, ok := got["lease"].(map[string]any)
 	if !ok {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -46,16 +47,52 @@ type Review struct {
 	SubmittedAt time.Time
 }
 
-// refTaskIDPattern matches worktree branch names of the form
-// "wl/<ID>" or "wl/<ID>-<slug>", capturing the task id (e.g. WL-7, SW-3).
-var refTaskIDPattern = regexp.MustCompile(`^wl/([A-Z][A-Z0-9]*-[0-9]+)(?:-.*)?$`)
+// branchPrefixPattern matches task branches "<prefix><ID>[-slug]" for the
+// configured prefix plus the legacy "wl/". Rebuilt by SetBranchPrefix;
+// guarded because webhook handlers read it concurrently.
+var (
+	branchPatternMu     sync.RWMutex
+	branchPrefix        = defaultBranchPrefix
+	branchPrefixPattern = buildBranchPattern(defaultBranchPrefix)
+)
+
+const defaultBranchPrefix = "lode/"
+
+func buildBranchPattern(prefix string) *regexp.Regexp {
+	alts := regexp.QuoteMeta(prefix)
+	if prefix != "wl/" {
+		alts += "|wl/"
+	}
+	return regexp.MustCompile(`^(?:` + alts + `)([A-Z][A-Z0-9]*-[0-9]+)(?:-.*)?$`)
+}
+
+// SetBranchPrefix configures the task-branch prefix (LODE_BRANCH_PREFIX,
+// default "lode/"). The legacy "wl/" prefix is always also recognized.
+func SetBranchPrefix(prefix string) {
+	if prefix == "" {
+		prefix = defaultBranchPrefix
+	}
+	branchPatternMu.Lock()
+	defer branchPatternMu.Unlock()
+	branchPrefix = prefix
+	branchPrefixPattern = buildBranchPattern(prefix)
+}
+
+// BranchPrefix returns the configured task-branch prefix.
+func BranchPrefix() string {
+	branchPatternMu.RLock()
+	defer branchPatternMu.RUnlock()
+	return branchPrefix
+}
 
 // TaskIDFromRef extracts a task id from a branch name following the
-// "wl/<task-id>-<slug>" convention (the slug is optional). It returns "" if
-// ref does not match — including when the id part uses a lowercase prefix,
+// "<prefix><task-id>-<slug>" convention (the slug is optional). It returns ""
+// if ref does not match — including when the id part uses a lowercase prefix,
 // since task-id prefixes are always uppercase (e.g. WL-, SW-).
 func TaskIDFromRef(ref string) string {
-	m := refTaskIDPattern.FindStringSubmatch(ref)
+	branchPatternMu.RLock()
+	defer branchPatternMu.RUnlock()
+	m := branchPrefixPattern.FindStringSubmatch(ref)
 	if m == nil {
 		return ""
 	}

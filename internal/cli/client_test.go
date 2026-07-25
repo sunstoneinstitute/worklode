@@ -165,7 +165,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
-	if !strings.HasPrefix(claim.Branch, "wl/WL-1-") {
+	if !strings.HasPrefix(claim.Branch, "lode/WL-1-") {
 		t.Fatalf("claim branch = %q", claim.Branch)
 	}
 	if claim.Lease.ActorID != "alice" || claim.Lease.Worktree != "host:/wt-1" {
@@ -382,8 +382,8 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief (no lease): %v", err)
 	}
-	if brief.Task.ID != task.ID || brief.Branch != "wl/"+task.ID+"-fix-the-thing" {
-		t.Fatalf("Brief = %+v, want task %s branch wl/%s-fix-the-thing", brief, task.ID, task.ID)
+	if brief.Task.ID != task.ID || brief.Branch != "lode/"+task.ID+"-fix-the-thing" {
+		t.Fatalf("Brief = %+v, want task %s branch lode/%s-fix-the-thing", brief, task.ID, task.ID)
 	}
 	if brief.Lease != nil {
 		t.Fatalf("Brief.Lease = %+v, want nil", brief.Lease)

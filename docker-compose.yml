@@ -44,6 +44,7 @@ services:
       LODE_GITHUB_WEBHOOK_SECRET: ${LODE_GITHUB_WEBHOOK_SECRET:-}
       LODE_FLUX_WEBHOOK_SECRET: ${LODE_FLUX_WEBHOOK_SECRET:-}
       LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}
+      LODE_BRANCH_PREFIX: ${LODE_BRANCH_PREFIX:-}
     restart: unless-stopped
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
     # there is no in-container binary to run an HTTP probe with. /healthz and

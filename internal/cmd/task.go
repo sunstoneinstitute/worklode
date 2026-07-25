@@ -363,7 +363,12 @@ func newTaskClaimCmd() *cobra.Command {
 				fmt.Fprintln(out, "no ready task")
 				return nil
 			}
-			branch := "wl/" + resp.Task.ID + "-" + resp.Task.Slug
+			// The server is the authority on the branch name; the fallback
+			// only covers a server too old to send one.
+			branch := resp.Task.Branch
+			if branch == "" {
+				branch = defaultBranchPrefix + resp.Task.ID + "-" + resp.Task.Slug
+			}
 			if resp.DryRun {
 				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
 				return nil

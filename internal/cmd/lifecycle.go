@@ -97,7 +97,7 @@ func newNextCmd() *cobra.Command {
 		Use:   "next [id]",
 		Short: "Claim a task (or the top-ranked ready one), set up its worktree, and print its brief",
 		Long: "The one way to enter Worklode mode: claims a task, creates its wt/<id>-<slug> " +
-			"worktree and wl/<id>-<slug> branch, binds the lease to that worktree, and prints " +
+			"worktree and its task branch, binds the lease to that worktree, and prints " +
 			"the task's brief. With an id, claims that task; without one, claims the top-ranked " +
 			"ready task (like `lode task claim --next`).",
 		Args: cobra.MaximumNArgs(1),
@@ -112,6 +112,19 @@ func newNextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "restrict the pick to one project (only without an id)"+projectFlagUsage)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
+}
+
+// defaultBranchPrefix is the fallback when a server response carries no
+// branch (older server); it mirrors store.SetBranchPrefix's default.
+const defaultBranchPrefix = "lode/"
+
+// slugFromBranch recovers the slug from a "<prefix><id>-<slug>" branch
+// without assuming the prefix. Falls back to branch itself if id is absent.
+func slugFromBranch(branch, id string) string {
+	if i := strings.LastIndex(branch, id+"-"); i >= 0 {
+		return branch[i+len(id)+1:]
+	}
+	return branch
 }
 
 func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
@@ -135,7 +148,9 @@ func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
 		return err
 	}
 
-	var taskID, slug string
+	// The server is the authority on the branch name (its prefix is
+	// server-configured), so both paths take it from the claim response.
+	var taskID, slug, branch string
 	switch {
 	case id != "":
 		resp, _, err := c.ClaimTask(ctx, id, pending, 0)
@@ -143,7 +158,8 @@ func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
 			return err
 		}
 		taskID = id
-		slug = strings.TrimPrefix(resp.Branch, "wl/"+id+"-")
+		branch = resp.Branch
+		slug = slugFromBranch(resp.Branch, id)
 	default:
 		resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Project: project, StrictFocus: strictFocus, Worktree: pending})
 		if err != nil {
@@ -154,10 +170,13 @@ func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
 		}
 		taskID = resp.Task.ID
 		slug = resp.Task.Slug
+		branch = resp.Task.Branch
+	}
+	if branch == "" {
+		branch = worktree.BranchName(defaultBranchPrefix, taskID, slug)
 	}
 
 	dir := filepath.Join(root, worktree.DirName(taskID, slug))
-	branch := worktree.BranchName(taskID, slug)
 
 	if err := addWorktree(root, dir, branch); err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)

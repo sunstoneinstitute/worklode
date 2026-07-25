@@ -65,7 +65,7 @@ not built in v1.
 - `task_edges` — from_task, to_task, type (`child_of`|`blocks`), created_at. (`A blocks B`; `A child_of B` makes B an epic.)
 - `leases` — task_id (unique among active), actor_id, session_id, acquired_at, renewed_at, expires_at, released_at. Claim = one transaction: verify no active lease, insert lease, transition task to `in_progress`. Default TTL 2h, renewable. A sweeper expires stale leases: task reverts to `ready`, expiry recorded as an event.
 - `issues` (inbox) — repo, number, title, state (github state), triage_state (`new`|`promoted`|`dismissed`), task_id (when promoted), applies_to_versions (JSON, set at triage), url.
-- `pull_requests` — repo, number, title, state (`open`|`merged`|`closed`), task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at. Correlated to a task by branch name `wl/<task-id>-<slug>` or a `WL-Task: <id>` line in the PR body.
+- `pull_requests` — repo, number, title, state (`open`|`merged`|`closed`), task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at. Correlated to a task by branch name `<prefix><task-id>-<slug>` (`LODE_BRANCH_PREFIX`, default `lode/`; legacy `wl/` also recognized) or a `WL-Task: <id>` line in the PR body.
 - `ci_runs` — repo, head_sha, workflow, status, conclusion, url, started_at, completed_at.
 - `reviews` — repo, pr number, reviewer, state (`approved`|`changes_requested`|`commented`), submitted_at.
 - `artifacts` — id, kind (`docker_image`|`pypi`|`git_tag`|`binary`), name, version, digest, repo, source_sha, built_at. Correlated to PRs via source_sha.
@@ -96,7 +96,7 @@ not built in v1.
 `wl timeline <task>`, `wl board [project]` (org/project overview),
 `wl actor add`, `wl token create|revoke`.
 
-`wl task claim` prints the branch name (`wl/<id>-<slug>`) so agents and humans
+`wl task claim` prints the branch name (`<prefix><id>-<slug>`) so agents and humans
 correlate PRs automatically.
 
 ## Web view (read-only)

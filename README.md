@@ -159,6 +159,13 @@ Set `LODE_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
 `LODE_CLUSTER_ENV_MAP="prod-cluster=prod,staging-cluster=staging"`. A cluster
 missing from the map falls back to the `dev` environment.
 
+## Task branches
+
+Task branches are `<prefix><task-id>-<slug>`. The prefix is `LODE_BRANCH_PREFIX`
+on the server (default `lode/`); the legacy `wl/` prefix stays recognized for PR
+and push correlation regardless. The server is the authority: `lode next` and
+`lode task claim` use the branch the claim response returns.
+
 ## SSO (optional)
 
 Human login via the org Keycloak is off unless both `LODE_OIDC_ISSUER` and

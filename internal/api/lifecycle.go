@@ -102,7 +102,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lease":  toLeaseJSON(lease),
-		"branch": "wl/" + id + "-" + SlugifyTitle(t.Title),
+		"branch": s.branchPrefix + id + "-" + SlugifyTitle(t.Title),
 	})
 }
 
@@ -118,6 +118,7 @@ type leasePickJSON struct {
 type taskPickJSON struct {
 	ID       string         `json:"id"`
 	Slug     string         `json:"slug"`
+	Branch   string         `json:"branch"`
 	Concern  string         `json:"concern"`
 	Priority string         `json:"priority"`
 	FanOut   int            `json:"fan_out"`
@@ -127,10 +128,11 @@ type taskPickJSON struct {
 
 // toTaskPickJSON builds a claim-next response task, including a lease shard
 // only when lease is non-nil (dry-run and no-ready-task responses have none).
-func toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
+func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
 	pick := taskPickJSON{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
+		Branch:   s.branchPrefix + t.ID + "-" + SlugifyTitle(t.Title),
 		Concern:  t.Concern,
 		Priority: t.Priority,
 		FanOut:   fanOut,
@@ -189,13 +191,13 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"claimed": false,
 			"dry_run": true,
-			"task":    toTaskPickJSON(res.Task, res.FanOut, nil),
+			"task":    s.toTaskPickJSON(res.Task, res.FanOut, nil),
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"claimed": true,
-		"task":    toTaskPickJSON(res.Task, res.FanOut, res.Lease),
+		"task":    s.toTaskPickJSON(res.Task, res.FanOut, res.Lease),
 	})
 }
 

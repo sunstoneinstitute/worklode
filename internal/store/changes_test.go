@@ -84,6 +84,33 @@ func TestTaskIDFromRef(t *testing.T) {
 	}
 }
 
+func TestTaskIDFromRefPrefixes(t *testing.T) {
+	SetBranchPrefix("lode/")
+	t.Cleanup(func() { SetBranchPrefix("lode/") })
+	cases := map[string]string{
+		"lode/WL-7-fix-thing": "WL-7",
+		"lode/WL-7":           "WL-7",
+		"wl/WL-7-fix-thing":   "WL-7", // legacy prefix still recognized
+		"main":                "",
+		"lode/wl-7-lower":     "",
+	}
+	for ref, want := range cases {
+		if got := TaskIDFromRef(ref); got != want {
+			t.Errorf("TaskIDFromRef(%q) = %q, want %q", ref, got, want)
+		}
+	}
+	SetBranchPrefix("team/")
+	if got := TaskIDFromRef("team/AB-3-x"); got != "AB-3" {
+		t.Errorf("custom prefix: got %q, want AB-3", got)
+	}
+	if got := TaskIDFromRef("wl/AB-3-x"); got != "AB-3" {
+		t.Errorf("legacy prefix under custom prefix: got %q, want AB-3", got)
+	}
+	if got := BranchFor(&Task{ID: "AB-3", Title: "Fix the thing"}); got != "team/AB-3-fix-the-thing" {
+		t.Errorf("BranchFor = %q, want team/AB-3-fix-the-thing", got)
+	}
+}
+
 func TestTaskIDFromBody(t *testing.T) {
 	cases := []struct {
 		body string

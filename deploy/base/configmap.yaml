@@ -6,3 +6,4 @@ metadata:
   namespace: worklode
 data:
   LODE_CLUSTER_ENV_MAP: ""
+  LODE_BRANCH_PREFIX: ""

@@ -156,7 +156,7 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true (output %s)", out)
 	}
-	wantBranch := "wl/" + task.ID + "-fix-the-thing"
+	wantBranch := "lode/" + task.ID + "-fix-the-thing"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
@@ -205,7 +205,7 @@ func TestNextClaimsTopRankedWithNoID(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true")
 	}
-	wantBranch := "wl/" + task.ID + "-only-ready-task"
+	wantBranch := "lode/" + task.ID + "-only-ready-task"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
@@ -372,7 +372,7 @@ func TestResumeErrorsWhenLeasedElsewhere(t *testing.T) {
 
 	root := initGitRepo(t)
 	dir := filepath.Join(root, "wt", task.ID+"-held-elsewhere")
-	branch := "wl/" + task.ID + "-held-elsewhere"
+	branch := "lode/" + task.ID + "-held-elsewhere"
 	c2 := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", branch)
 	if out, err := c2.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
@@ -603,7 +603,7 @@ func TestTaskBriefCmd(t *testing.T) {
 	if b.Task.ID != task.ID {
 		t.Fatalf("brief.Task.ID = %q, want %q", b.Task.ID, task.ID)
 	}
-	if b.Branch != "wl/"+task.ID+"-brief-me" {
-		t.Fatalf("brief.Branch = %q, want wl/%s-brief-me", b.Branch, task.ID)
+	if b.Branch != "lode/"+task.ID+"-brief-me" {
+		t.Fatalf("brief.Branch = %q, want lode/%s-brief-me", b.Branch, task.ID)
 	}
 }
