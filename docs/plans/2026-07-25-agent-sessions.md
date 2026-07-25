@@ -614,7 +614,14 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 		return err
 	}
 	now := s.nowFn().UTC().Truncate(time.Second)
-	extID := fmt.Sprintf("agent-session-ended-%d-%s-%s", lease.ID, agent, sessionID)
+	// Random, not derived from the session: a session can legitimately be
+	// closed more than once on one lease (exit, re-enter, exit). Idempotency
+	// comes from the ended_at IS NULL predicate below, which fails apply and
+	// rolls the event back on a repeat close.
+	extID, err := randomExternalID()
+	if err != nil {
+		return err
+	}
 
 	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", nil,
 		func(tx *sql.Tx, eventID int64) error {
