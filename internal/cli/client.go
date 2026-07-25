@@ -16,24 +16,31 @@ import (
 	"time"
 )
 
-// Config holds the client's server URL and bearer token.
+// Config holds the client's server URL, bearer token, and the project the user
+// is currently working in.
 //
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// only recognized key is "server", e.g.:
+// recognized keys are "server" and "current_project", e.g.:
 //
 //	server = "https://wl.example.com"
+//	current_project = "sunstone-web"
+//
+// A repo-local config file overrides those per checkout — see
+// findRepoConfig — which is how current_project is normally set: one project
+// per repository.
 //
 // The token lives in the OS keychain, not the file. A legacy "token" key is
 // still accepted on read (as a deprecated fallback) so older config files keep
 // working until the next SaveConfig migrates the token into the keychain.
 //
-// The environment variables LODE_SERVER and LODE_TOKEN, when set, override both the
-// file and the keychain.
+// The environment variables LODE_SERVER and LODE_TOKEN, when set, override the
+// files and the keychain.
 type Config struct {
-	ServerURL string
-	Token     string
+	ServerURL      string
+	Token          string
+	CurrentProject string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -48,10 +55,59 @@ func configPath() (string, error) {
 	return filepath.Join(home, ".config", "worklode", "config.toml"), nil
 }
 
-// LoadConfig reads the config file (a missing file is not an error — its
-// fields are just left empty) and applies the LODE_SERVER/LODE_TOKEN environment
-// overrides on top.
+// repoConfigDirs are the per-repo config directory names, in the order they
+// are probed at each level of the walk.
+var repoConfigDirs = []string{".worklode", ".lode"}
+
+// findRepoConfig walks up from startDir looking for a repo-local
+// .worklode/config.toml (or .lode/config.toml) and returns the first hit. The
+// walk stops just before $HOME — a config there is the user's, not a repo's —
+// and at the filesystem root.
+func findRepoConfig(startDir string) (string, bool) {
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", false
+	}
+	home, err := os.UserHomeDir()
+	if err == nil {
+		home, err = filepath.Abs(home)
+		if err != nil {
+			home = ""
+		}
+	}
+	for {
+		if home != "" && dir == home {
+			return "", false
+		}
+		for _, name := range repoConfigDirs {
+			p := filepath.Join(dir, name, "config.toml")
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				return p, true
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+// LoadConfig reads the config files (a missing file is not an error — its
+// fields are just left empty), merges the repo-local config found from the
+// working directory on top of the user config, and applies the
+// LODE_SERVER/LODE_TOKEN environment overrides on top of that.
 func LoadConfig() (Config, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = ""
+	}
+	return loadConfigFrom(wd)
+}
+
+// loadConfigFrom is LoadConfig with an explicit directory to search for a
+// repo-local config from. An empty startDir skips the repo-local lookup.
+func loadConfigFrom(startDir string) (Config, error) {
 	var cfg Config
 
 	path, err := configPath()
@@ -69,6 +125,16 @@ func LoadConfig() (Config, error) {
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
 		return Config{}, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	if startDir != "" {
+		if repoPath, ok := findRepoConfig(startDir); ok {
+			repoCfg, err := readRepoConfig(repoPath)
+			if err != nil {
+				return Config{}, err
+			}
+			cfg.merge(repoCfg)
+		}
 	}
 
 	// Server + explicit env token first.
@@ -115,11 +181,45 @@ func parseConfig(data string) (Config, error) {
 			cfg.ServerURL = val
 		case "token":
 			cfg.Token = val
+		case "current_project":
+			cfg.CurrentProject = val
 		default:
 			return Config{}, fmt.Errorf("line %d: unknown key %q", i+1, key)
 		}
 	}
 	return cfg, nil
+}
+
+// readRepoConfig parses a repo-local config file. A token there is refused
+// rather than honoured: repo configs tend to be committed, and the token
+// belongs in the OS keychain (or LODE_TOKEN).
+func readRepoConfig(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	cfg, err := parseConfig(string(data))
+	if err != nil {
+		return Config{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if cfg.Token != "" {
+		return Config{}, fmt.Errorf("%s: a repo config must not set a token; it lives in the OS keychain (or LODE_TOKEN)", path)
+	}
+	return cfg, nil
+}
+
+// merge applies the non-empty values of a repo-local config on top of cfg.
+func (cfg *Config) merge(repo Config) {
+	if repo.ServerURL != "" && repo.ServerURL != cfg.ServerURL {
+		// Same reasoning as the LODE_SERVER override in loadConfigFrom: a
+		// legacy cleartext token in the user config belongs to that config's
+		// server and must not leak onto a different one.
+		cfg.Token = ""
+		cfg.ServerURL = repo.ServerURL
+	}
+	if repo.CurrentProject != "" {
+		cfg.CurrentProject = repo.CurrentProject
+	}
 }
 
 // SaveConfig stores the token in the OS keychain and writes only the server URL
@@ -136,17 +236,27 @@ func SaveConfig(cfg Config) error {
 }
 
 // SaveServerOnly writes just the server key to config.toml (0600), creating the
-// directory (0700) as needed. It never writes the token.
+// directory (0700) as needed. It never writes the token, and preserves an
+// existing current_project.
 func SaveServerOnly(server string) error {
 	path, err := configPath()
 	if err != nil {
 		return err
+	}
+	var existing Config
+	if data, err := os.ReadFile(path); err == nil {
+		// A malformed existing file is not worth failing the write over; it is
+		// about to be replaced with a well-formed one.
+		existing, _ = parseConfig(string(data))
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "server = %q\n", server)
+	if existing.CurrentProject != "" {
+		fmt.Fprintf(&b, "current_project = %q\n", existing.CurrentProject)
+	}
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}

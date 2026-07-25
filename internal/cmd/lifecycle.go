@@ -109,16 +109,17 @@ func newNextCmd() *cobra.Command {
 			return runNext(cmd, id, project, strictFocus)
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "restrict the pick to one project (only without an id)")
+	cmd.Flags().StringVar(&project, "project", "", "restrict the pick to one project (only without an id)"+projectFlagUsage)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
 }
 
 func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
-	c, err := newAPIClient()
+	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err
 	}
+	project = resolveProject(cmd, project, cfg.CurrentProject)
 	ctx := cmd.Context()
 
 	root, ok := worktree.Root(".")

@@ -42,18 +42,40 @@ func jsonOut(cmd *cobra.Command) bool {
 }
 
 // newAPIClient loads the client config (LODE_SERVER/LODE_TOKEN env vars override
+// a repo-local .worklode/config.toml, which overrides
 // ~/.config/worklode/config.toml) and returns a ready-to-use Client, or an error
 // telling the user how to configure the server URL.
 func newAPIClient() (*cli.Client, error) {
+	c, _, err := newAPIClientWithConfig()
+	return c, err
+}
+
+// newAPIClientWithConfig is newAPIClient plus the config it was built from,
+// for commands that also read config values such as current_project.
+func newAPIClientWithConfig() (*cli.Client, cli.Config, error) {
 	cfg, err := cli.LoadConfig()
 	if err != nil {
-		return nil, err
+		return nil, cli.Config{}, err
 	}
 	if cfg.ServerURL == "" {
-		return nil, errors.New(`server URL not set: set LODE_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
+		return nil, cli.Config{}, errors.New(`server URL not set: set LODE_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
 	}
-	return cli.NewClient(cfg), nil
+	return cli.NewClient(cfg), cfg, nil
 }
+
+// resolveProject returns the project a command should act on: the --project
+// flag when it was passed (even as an empty string, which means "all
+// projects"), otherwise the configured current_project.
+func resolveProject(cmd *cobra.Command, flag, currentProject string) string {
+	if cmd.Flags().Changed("project") {
+		return flag
+	}
+	return currentProject
+}
+
+// projectFlagUsage suffixes a --project flag's help with where its default
+// comes from.
+const projectFlagUsage = " (default: current_project from config)"
 
 // printRaw writes a raw JSON response body to cmd's stdout, adding a
 // trailing newline if the body doesn't already end with one. Used by every
