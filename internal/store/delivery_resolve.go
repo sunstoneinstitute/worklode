@@ -14,7 +14,7 @@ import (
 
 // RepoDoneState returns the done_state configured on the repo mapping — the
 // terminal state that counts as fully delivered for that repo. Unmapped
-// repos return the default, "merged".
+// repos return the default.
 func RepoDoneState(tx *sql.Tx, repo string) (string, error) {
 	var st string
 	err := tx.QueryRow(`SELECT done_state FROM project_repos WHERE repo = $1`,

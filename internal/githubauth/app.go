@@ -151,7 +151,10 @@ func (a *AppAuth) DiscoverDoneState(ctx context.Context, repo string) (string, e
 			Name string `json:"name"`
 		} `json:"environments"`
 	}
-	code, err := githubJSON(ctx, http.MethodGet, a.BaseURL+"/repos/"+path+"/environments", auth, &envs)
+	// per_page=100 is GitHub's maximum; the default of 30 would hide a prod
+	// environment past the first page and mis-seed done_state permanently.
+	envURL := a.BaseURL + "/repos/" + path + "/environments?per_page=100"
+	code, err := githubJSON(ctx, http.MethodGet, envURL, auth, &envs)
 	if err != nil {
 		return "", err
 	}
