@@ -110,9 +110,12 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // recorded "agent_session.started" event, every call bumps last_seen_at.
 //
 // The event's external id is deterministic, so repeat calls take RecordEvent's
-// already-recorded path and emit no further events. That also means the
-// last_seen_at bump must happen OUTSIDE the event — apply is skipped entirely
-// on the repeat path.
+// already-recorded path and emit no further events, and apply is not called —
+// so the in-transaction lease re-check below only ever runs on the inserting
+// call. Every later heartbeat is authorized solely by the non-transactional
+// heldLease check above, and kept from resurrecting a session already closed
+// by closeLease/CloseActiveLease by the UPDATE's own "AND ended_at IS NULL" —
+// that predicate is load-bearing, not redundant.
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
@@ -131,11 +134,12 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	now := s.nowFn().UTC().Truncate(time.Second)
 	extID := fmt.Sprintf("agent-session-%d-%s-%s", lease.ID, agent, sessionID)
 
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.started", nil,
+	_, inserted, err := s.RecordEvent(ctx, "cli", extID, "agent_session.started", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			// Re-check inside the tx: the lease may have been released and
 			// re-claimed since heldLease read it, which would make extID refer
-			// to a different lease than the one being written.
+			// to a different lease than the one being written. This guard only
+			// runs here, on the inserting call — see the doc comment above.
 			cur, err := activeLeaseTx(tx, taskID)
 			if err != nil {
 				return err
@@ -158,13 +162,17 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 		return nil, err
 	}
 
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE agent_sessions SET last_seen_at = $1
-		  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4
-		    AND ended_at IS NULL`,
-		now, lease.ID, agent, sessionID,
-	); err != nil {
-		return nil, fmt.Errorf("bump agent session last_seen_at: %w", err)
+	// The inserting call already wrote last_seen_at = now; only a heartbeat
+	// on an existing row needs the UPDATE.
+	if !inserted {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE agent_sessions SET last_seen_at = $1
+			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4
+			    AND ended_at IS NULL`,
+			now, lease.ID, agent, sessionID,
+		); err != nil {
+			return nil, fmt.Errorf("bump agent session last_seen_at: %w", err)
+		}
 	}
 
 	return s.AgentSession(ctx, lease.ID, agent, sessionID)

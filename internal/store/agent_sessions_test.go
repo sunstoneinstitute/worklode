@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -116,6 +117,9 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 	if sess.LeaseID != lease.ID {
 		t.Fatalf("lease id: got %d, want %d", sess.LeaseID, lease.ID)
 	}
+	if sess.AgentVersion != "2.0.1" {
+		t.Fatalf("agent version: got %q, want %q", sess.AgentVersion, "2.0.1")
+	}
 	if !sess.StartedAt.Equal(sess.LastSeenAt) {
 		t.Fatalf("first touch should set started_at == last_seen_at, got %v and %v",
 			sess.StartedAt, sess.LastSeenAt)
@@ -180,5 +184,37 @@ func TestTouchAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 	_, err = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("empty session id: got %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestTouchAgentSessionEmptyVersionIsNull(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+
+	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	if err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	var version sql.NullString
+	if err := s.db.QueryRow(
+		`SELECT agent_version FROM agent_sessions WHERE id = $1`, sess.ID,
+	).Scan(&version); err != nil {
+		t.Fatalf("read agent_version: %v", err)
+	}
+	if version.Valid {
+		t.Fatalf("agent_version: got %q, want SQL NULL", version.String)
+	}
+}
+
+func TestAgentSessionNotFound(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+
+	_, err := s.AgentSession(ctx, lease.ID, "claude-code", "no-such-session")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown session id: got %v, want ErrNotFound", err)
 	}
 }
