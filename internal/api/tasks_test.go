@@ -336,7 +336,7 @@ func TestPatchTaskState(t *testing.T) {
 	}
 
 	// States with dedicated endpoints are rejected with guidance.
-	for _, state := range []string{"done", "abandoned", "draft"} {
+	for _, state := range []string{"merged", "abandoned", "draft"} {
 		rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"state": state})
 		if rr.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("state=%s status = %d, want 422; body %s", state, rr.Code, rr.Body.String())

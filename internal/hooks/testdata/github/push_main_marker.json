@@ -1,0 +1,8 @@
+{
+  "ref": "refs/heads/main",
+  "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
+  "commits": [
+    {"id": "4444444444444444444444444444444444444444", "message": "Hotfix crash on empty input\n\nWL-Task: WL-1"}
+  ],
+  "head_commit": {"id": "4444444444444444444444444444444444444444", "message": "Hotfix crash on empty input\n\nWL-Task: WL-1"}
+}

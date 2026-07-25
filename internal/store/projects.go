@@ -12,11 +12,10 @@ import (
 // ordered list of concerns (see ValidConcern) the project's ranking should
 // prioritize; an empty slice means no focus preference.
 type Project struct {
-	ID          string
-	Name        string
-	Key         string
-	DeployGated bool
-	Focus       []string
+	ID    string
+	Name  string
+	Key   string
+	Focus []string
 }
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
@@ -50,8 +49,8 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	var focus []byte
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, key, deploy_gated, focus FROM projects WHERE id = $1`, id)
-	if err := row.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
+		`SELECT id, name, key, focus FROM projects WHERE id = $1`, id)
+	if err := row.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -67,7 +66,7 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 
 // ListProjects returns all projects.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, deploy_gated, focus FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, focus FROM projects`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -77,7 +76,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	for rows.Next() {
 		var p Project
 		var focus []byte
-		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		f, err := scanProjectFocus(focus)
@@ -91,24 +90,6 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
 	return out, nil
-}
-
-// SetDeployGated sets whether a project's tasks require a verified
-// deployment (rather than just a merged PR) to move to done.
-func (s *Store) SetDeployGated(ctx context.Context, id string, gated bool) error {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET deploy_gated = $1 WHERE id = $2`, gated, id)
-	if err != nil {
-		return fmt.Errorf("set deploy_gated for project %s: %w", id, err)
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set deploy_gated rows affected: %w", err)
-	}
-	if affected == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 
 // SetProjectFocus records the ordered list of concerns a project's ranking
@@ -188,22 +169,63 @@ func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, erro
 	return s.GetProject(ctx, projectID)
 }
 
-// ListRepos returns the repos mapped to a project.
-func (s *Store) ListRepos(ctx context.Context, projectID string) ([]string, error) {
+// RepoMapping is a repo mapped to a project, with the terminal delivery
+// state that counts as fully delivered for it (see SetRepoDoneState).
+type RepoMapping struct {
+	Repo      string
+	DoneState string
+}
+
+// DefaultDoneState is the project_repos.done_state schema default, used for
+// repos with no explicit terminal state (and for unmapped repos).
+const DefaultDoneState = "merged"
+
+// validDoneStates are the terminal states a repo mapping may declare as
+// "fully delivered" (docs/specs/2026-07-25-delivery-lifecycle-design.md).
+var validDoneStates = map[string]bool{"merged": true, "deployed_prod": true, "released": true}
+
+// ValidDoneState reports whether state is an accepted repo done_state.
+func ValidDoneState(state string) bool { return validDoneStates[state] }
+
+// SetRepoDoneState sets the delivery terminal state for a mapped repo. A repo
+// maps to at most one project (project_repos.repo is UNIQUE), so this updates
+// exactly one row. Returns ErrInvalidInput for an unknown state and
+// ErrNotFound if the repo is not mapped to any project.
+func (s *Store) SetRepoDoneState(ctx context.Context, repo, state string) error {
+	if !validDoneStates[state] {
+		return fmt.Errorf("done_state %q: %w", state, ErrInvalidInput)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE project_repos SET done_state = $1 WHERE repo = $2`, state, repo)
+	if err != nil {
+		return fmt.Errorf("set done_state for %s: %w", repo, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set done_state rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("repo %s: %w", repo, ErrNotFound)
+	}
+	return nil
+}
+
+// ListRepos returns the repos mapped to a project, each with its done_state.
+func (s *Store) ListRepos(ctx context.Context, projectID string) ([]RepoMapping, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo FROM project_repos WHERE project_id = $1`, projectID)
+		`SELECT repo, done_state FROM project_repos WHERE project_id = $1`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
 	}
 	defer rows.Close()
 
-	var out []string
+	var out []RepoMapping
 	for rows.Next() {
-		var repo string
-		if err := rows.Scan(&repo); err != nil {
+		var m RepoMapping
+		if err := rows.Scan(&m.Repo, &m.DoneState); err != nil {
 			return nil, fmt.Errorf("scan repo: %w", err)
 		}
-		out = append(out, repo)
+		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)

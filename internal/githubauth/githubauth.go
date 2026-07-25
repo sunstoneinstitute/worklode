@@ -86,26 +86,33 @@ type Identity struct {
 // the login callback forever, matching the codebase convention.
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
-// get performs an authenticated GET and decodes JSON into out. It returns the
-// HTTP status so callers can distinguish 404 (not a member) from real errors.
-func (c *Client) get(ctx context.Context, token, path string, out any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.APIBase+path, nil)
+// githubJSON performs an authenticated request against the GitHub API and,
+// on a 2xx with a non-nil out, decodes the JSON body into it. It returns the
+// HTTP status so callers can treat a specific code (404 = not a member, no
+// releases) as a fact rather than an error.
+func githubJSON(ctx context.Context, method, url, auth string, out any) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("build github request for %s: %w", path, err)
+		return 0, fmt.Errorf("build github request %s %s: %w", method, url, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", auth)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("github GET %s: %w", path, err)
+		return 0, fmt.Errorf("github %s %s: %w", method, url, err)
 	}
 	defer resp.Body.Close()
-	if out != nil && resp.StatusCode == http.StatusOK {
+	if out != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return resp.StatusCode, fmt.Errorf("decode github %s: %w", path, err)
+			return resp.StatusCode, fmt.Errorf("decode github %s %s: %w", method, url, err)
 		}
 	}
 	return resp.StatusCode, nil
+}
+
+// get performs an authenticated GET against the client's API base.
+func (c *Client) get(ctx context.Context, token, path string, out any) (int, error) {
+	return githubJSON(ctx, http.MethodGet, c.APIBase+path, "Bearer "+token, out)
 }
 
 // FetchIdentity reads GET /user with the user-to-server token.

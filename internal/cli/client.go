@@ -503,8 +503,10 @@ type ClaimNextPickLease struct {
 // slimmer projection than Task, matching the ranking-relevant fields (spec
 // 02) rather than the full task record.
 type ClaimNextPick struct {
-	ID       string              `json:"id"`
-	Slug     string              `json:"slug"`
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	// Branch is the server-authoritative task branch (<prefix><id>-<slug>).
+	Branch   string              `json:"branch"`
 	Concern  string              `json:"concern"`
 	Priority string              `json:"priority"`
 	FanOut   int                 `json:"fan_out"`
@@ -761,8 +763,8 @@ func (c *Client) AbandonTask(ctx context.Context, id string) (Task, []byte, erro
 	return c.taskAction(ctx, id, "abandon")
 }
 
-// ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a done or abandoned
-// task back to ready (a fresh claim is then required).
+// ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a delivered or
+// abandoned task back to ready (a fresh claim is then required).
 func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.taskAction(ctx, id, "reopen")
 }
@@ -891,20 +893,25 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 // Project is the wire form of a project, including its mapped repos and
 // ranking focus (the ordered list of concerns claim-next should prioritize).
 type Project struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Key         string   `json:"key"`
-	DeployGated bool     `json:"deploy_gated"`
-	Repos       []string `json:"repos"`
-	Focus       []string `json:"focus"`
+	ID    string        `json:"id"`
+	Name  string        `json:"name"`
+	Key   string        `json:"key"`
+	Repos []RepoMapping `json:"repos"`
+	Focus []string      `json:"focus"`
+}
+
+// RepoMapping is a repo mapped to a project, with the terminal delivery state
+// that counts as fully delivered for it (merged, deployed_prod, or released).
+type RepoMapping struct {
+	Repo      string `json:"repo"`
+	DoneState string `json:"done_state"`
 }
 
 // CreateProjectInput is the request body for CreateProject.
 type CreateProjectInput struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Key         string `json:"key"`
-	DeployGated bool   `json:"deploy_gated,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 // CreateProject calls POST /api/v1/projects.
@@ -974,10 +981,26 @@ func (c *Client) GetProject(ctx context.Context, id string) (Project, error) {
 	return Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
 }
 
-// AddRepo calls POST /api/v1/projects/{id}/repos.
-func (c *Client) AddRepo(ctx context.Context, projectID, repo string) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos",
-		map[string]string{"repo": repo})
+// AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
+// the mapping at the server's default terminal delivery state.
+func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) ([]byte, error) {
+	body := map[string]string{"repo": repo}
+	if doneState != "" {
+		body["done_state"] = doneState
+	}
+	return c.do(ctx, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+}
+
+// SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
+// setting the terminal delivery state for an already-mapped repo.
+func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok || owner == "" || name == "" {
+		return nil, fmt.Errorf("repo must be owner/name, got %q", repo)
+	}
+	return c.do(ctx, http.MethodPatch,
+		"/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name),
+		map[string]string{"done_state": doneState})
 }
 
 // --- actors and tokens --------------------------------------------------
