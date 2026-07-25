@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the `worklode` Homebrew formula real bottles (arm64_sonoma + arm64_tahoe) built and published automatically on every release, matching the pattern already proven in `sunstoneinstitute/horndb`.
+**Goal:** Give the `worklode` Homebrew formula real bottles (arm64_sequoia + arm64_tahoe) built and published automatically on every release, matching the pattern already proven in `sunstoneinstitute/horndb`.
 
-**Architecture:** A new reusable workflow (`_build-bottles.yml`) runs on two macOS runners (macos-15 → `arm64_sonoma`, macos-26 → `arm64_tahoe`). Each leg taps the real `sunstoneinstitute/tap`, overwrites the formula there with a bottle-free render of a shared template, then runs the **real** `brew install --build-bottle` + `brew bottle` — not a hand-rolled tarball — because worklode's `install()` calls Homebrew helpers (`std_go_args`, `generate_completions_from_executable`) that are impractical to reimplement correctly outside brew. A `release` job downloads both bottle artifacts, renames each to the filename Homebrew's pour logic actually requests (`name-version.tag.bottle.tar.gz`, single dash — *not* the `local_filename` brew writes to disk, which uses a double dash), and attaches them to a GitHub Release for the tag. `update-homebrew-tap` (the composite action both `release.yml` and `promote-prod.yml` already call) is extended to render the same shared template *with* a `bottle do` block and push the result to the tap.
+**Architecture:** A new reusable workflow (`_build-bottles.yml`) runs on two macOS runners (macos-15 → `arm64_sequoia`, macos-26 → `arm64_tahoe`). Each leg taps the real `sunstoneinstitute/tap`, overwrites the formula there with a bottle-free render of a shared template, then runs the **real** `brew install --build-bottle` + `brew bottle` — not a hand-rolled tarball — because worklode's `install()` calls Homebrew helpers (`std_go_args`, `generate_completions_from_executable`) that are impractical to reimplement correctly outside brew. A `release` job downloads both bottle artifacts, renames each to the filename Homebrew's pour logic actually requests (`name-version.tag.bottle.tar.gz`, single dash — *not* the `local_filename` brew writes to disk, which uses a double dash), and attaches them to a GitHub Release for the tag. `update-homebrew-tap` (the composite action both `release.yml` and `promote-prod.yml` already call) is extended to render the same shared template *with* a `bottle do` block and push the result to the tap.
 
 This whole approach — template + render script, JSON field names, and the single-vs-double-dash filename gotcha — was validated end-to-end on this machine before writing this plan: built a real bottle for the current v0.3.0 formula, served it from a local `file://` root_url, and confirmed `brew install` poured it (not built from source) and the resulting `lode --version` worked. Do not re-derive this from scratch; the steps below encode exactly what worked.
 
@@ -81,10 +81,10 @@ import os, sys
 
 def build_bottle_block():
     root_url = os.environ.get("ROOT_URL")
-    sonoma = os.environ.get("ARM64_SONOMA_SHA")
+    sequoia = os.environ.get("ARM64_SEQUOIA_SHA")
     tahoe = os.environ.get("ARM64_TAHOE_SHA")
     cellar = os.environ.get("CELLAR")
-    if not (root_url and sonoma and tahoe and cellar):
+    if not (root_url and sequoia and tahoe and cellar):
         return ""
     return (
         "\n"
@@ -92,8 +92,8 @@ def build_bottle_block():
         "  # the same arch on newer macOS, and to a source build if none match.\n"
         "  bottle do\n"
         f'    root_url "{root_url}"\n'
-        f'    sha256 cellar: :{cellar}, arm64_sonoma: "{sonoma}"\n'
-        f'    sha256 cellar: :{cellar}, arm64_tahoe:  "{tahoe}"\n'
+        f'    sha256 cellar: :{cellar}, arm64_sequoia: "{sequoia}"\n'
+        f'    sha256 cellar: :{cellar}, arm64_tahoe:   "{tahoe}"\n'
         "  end\n"
     )
 
@@ -131,7 +131,7 @@ URL="https://example.com/x.tar.gz" SHA256="$(printf 'a%.0s' {1..64})" \
 
 URL="https://example.com/x.tar.gz" SHA256="$(printf 'a%.0s' {1..64})" \
   ROOT_URL="https://example.com/rel" \
-  ARM64_SONOMA_SHA="$(printf 'b%.0s' {1..64})" \
+  ARM64_SEQUOIA_SHA="$(printf 'b%.0s' {1..64})" \
   ARM64_TAHOE_SHA="$(printf 'c%.0s' {1..64})" \
   CELLAR="any_skip_relocation" \
   python3 /path/to/worklode/.github/homebrew/render-formula.py \
@@ -180,8 +180,8 @@ on:
         required: true
         type: string
     outputs:
-      arm64_sonoma_sha256:
-        value: ${{ jobs.release.outputs.arm64_sonoma_sha256 }}
+      arm64_sequoia_sha256:
+        value: ${{ jobs.release.outputs.arm64_sequoia_sha256 }}
       arm64_tahoe_sha256:
         value: ${{ jobs.release.outputs.arm64_tahoe_sha256 }}
       cellar:
@@ -198,7 +198,7 @@ jobs:
       matrix:
         include:
           - os: macos-15 # Apple Silicon, macOS Sequoia
-            bottle_tag: arm64_sonoma
+            bottle_tag: arm64_sequoia
           - os: macos-26 # Apple Silicon, macOS Tahoe
             bottle_tag: arm64_tahoe
     runs-on: ${{ matrix.os }}
@@ -281,7 +281,7 @@ jobs:
     needs: bottle
     runs-on: ubuntu-latest
     outputs:
-      arm64_sonoma_sha256: ${{ steps.shas.outputs.arm64_sonoma }}
+      arm64_sequoia_sha256: ${{ steps.shas.outputs.arm64_sequoia }}
       arm64_tahoe_sha256: ${{ steps.shas.outputs.arm64_tahoe }}
       cellar: ${{ steps.shas.outputs.cellar }}
     steps:
@@ -296,26 +296,26 @@ jobs:
         id: shas
         run: |
           set -euo pipefail
-          sonoma_file=$(ls dist/*.arm64_sonoma.bottle.tar.gz)
+          sequoia_file=$(ls dist/*.arm64_sequoia.bottle.tar.gz)
           tahoe_file=$(ls dist/*.arm64_tahoe.bottle.tar.gz)
-          sonoma_sha=$(shasum -a 256 "$sonoma_file" | awk '{print $1}')
+          sequoia_sha=$(shasum -a 256 "$sequoia_file" | awk '{print $1}')
           tahoe_sha=$(shasum -a 256 "$tahoe_file" | awk '{print $1}')
 
           # Both legs build the same pure-Go binary, so brew should report
           # the same cellar spec for each; a mismatch means something about
           # the build diverged between runners and needs investigating
           # rather than silently picking one value.
-          sonoma_cellar=$(cat "${sonoma_file}.cellar")
+          sequoia_cellar=$(cat "${sequoia_file}.cellar")
           tahoe_cellar=$(cat "${tahoe_file}.cellar")
-          if [ "$sonoma_cellar" != "$tahoe_cellar" ]; then
-            echo "::error::cellar spec differs between arm64_sonoma ($sonoma_cellar) and arm64_tahoe ($tahoe_cellar) — investigate before publishing a formula that can only state one."
+          if [ "$sequoia_cellar" != "$tahoe_cellar" ]; then
+            echo "::error::cellar spec differs between arm64_sequoia ($sequoia_cellar) and arm64_tahoe ($tahoe_cellar) — investigate before publishing a formula that can only state one."
             exit 1
           fi
 
           {
-            echo "arm64_sonoma=${sonoma_sha}"
+            echo "arm64_sequoia=${sequoia_sha}"
             echo "arm64_tahoe=${tahoe_sha}"
-            echo "cellar=${sonoma_cellar}"
+            echo "cellar=${sequoia_cellar}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish/attach to GitHub Release
@@ -355,8 +355,8 @@ Run: `cat -n .github/actions/update-homebrew-tap/action.yml`
 After the existing `deploy-key` input block (currently ends around line 28), add:
 
 ```yaml
-  arm64-sonoma-sha:
-    description: sha256 of the arm64_sonoma bottle tarball
+  arm64-sequoia-sha:
+    description: sha256 of the arm64_sequoia bottle tarball
     required: true
   arm64-tahoe-sha:
     description: sha256 of the arm64_tahoe bottle tarball
@@ -381,7 +381,7 @@ Replace the entire step (currently the `sed`-based one, roughly lines 50-108) wi
         URL: ${{ steps.tarball.outputs.url }}
         SHA256: ${{ steps.tarball.outputs.sha256 }}
         ROOT_URL: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}
-        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_SEQUOIA_SHA: ${{ inputs.arm64-sequoia-sha }}
         ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
         CELLAR: ${{ inputs.cellar }}
       run: |
@@ -447,7 +447,7 @@ Keep the existing "Compute source tarball sha256" step (`id: tarball`) unchanged
       env:
         TAG: ${{ inputs.tag }}
         SHA256: ${{ steps.tarball.outputs.sha256 }}
-        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_SEQUOIA_SHA: ${{ inputs.arm64-sequoia-sha }}
         ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
       run: |
         {
@@ -455,7 +455,7 @@ Keep the existing "Compute source tarball sha256" step (`id: tarball`) unchanged
           echo ""
           echo "**Tag:** \`${TAG}\`"
           echo "**Tarball sha256:** \`${SHA256}\`"
-          echo "**arm64_sonoma bottle sha256:** \`${ARM64_SONOMA_SHA}\`"
+          echo "**arm64_sequoia bottle sha256:** \`${ARM64_SEQUOIA_SHA}\`"
           echo "**arm64_tahoe bottle sha256:** \`${ARM64_TAHOE_SHA}\`"
           echo "**Formula:** sunstoneinstitute/homebrew-tap \`Formula/worklode.rb\`"
         } >> "$GITHUB_STEP_SUMMARY"
@@ -473,7 +473,7 @@ cd /path/to/worklode
 URL="https://github.com/sunstoneinstitute/worklode/archive/refs/tags/v0.3.0.tar.gz" \
 SHA256="e6a97175aecbee41587adb305f36102281df7d3eba8388cac73d391c7fca29fd" \
 ROOT_URL="https://github.com/sunstoneinstitute/worklode/releases/download/v0.3.0" \
-ARM64_SONOMA_SHA="$(printf 'a%.0s' {1..64})" \
+ARM64_SEQUOIA_SHA="$(printf 'a%.0s' {1..64})" \
 ARM64_TAHOE_SHA="$(printf 'b%.0s' {1..64})" \
 CELLAR="any_skip_relocation" \
 python3 .github/homebrew/render-formula.py \
@@ -540,7 +540,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || github.ref_name }}
           deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}
-          arm64-sonoma-sha: ${{ needs.build-bottles.outputs.arm64_sonoma_sha256 }}
+          arm64-sequoia-sha: ${{ needs.build-bottles.outputs.arm64_sequoia_sha256 }}
           arm64-tahoe-sha: ${{ needs.build-bottles.outputs.arm64_tahoe_sha256 }}
           cellar: ${{ needs.build-bottles.outputs.cellar }}
 ```
@@ -597,7 +597,7 @@ And extend its `Update Homebrew tap` step's `with:` block:
         with:
           tag: ${{ needs.promote.outputs.tag }}
           deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}
-          arm64-sonoma-sha: ${{ needs.build-bottles.outputs.arm64_sonoma_sha256 }}
+          arm64-sequoia-sha: ${{ needs.build-bottles.outputs.arm64_sequoia_sha256 }}
           arm64-tahoe-sha: ${{ needs.build-bottles.outputs.arm64_tahoe_sha256 }}
           cellar: ${{ needs.build-bottles.outputs.cellar }}
 ```

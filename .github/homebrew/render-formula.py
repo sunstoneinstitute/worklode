@@ -4,7 +4,7 @@ import os, sys
 def build_bottle_block():
     bottle_vars = {
         "ROOT_URL": os.environ.get("ROOT_URL"),
-        "ARM64_SONOMA_SHA": os.environ.get("ARM64_SONOMA_SHA"),
+        "ARM64_SEQUOIA_SHA": os.environ.get("ARM64_SEQUOIA_SHA"),
         "ARM64_TAHOE_SHA": os.environ.get("ARM64_TAHOE_SHA"),
         "CELLAR": os.environ.get("CELLAR"),
     }
@@ -14,12 +14,12 @@ def build_bottle_block():
     if set_count != len(bottle_vars):
         missing = [name for name, value in bottle_vars.items() if not value]
         sys.exit(
-            "error: partial bottle env — set all of ROOT_URL, ARM64_SONOMA_SHA, "
+            "error: partial bottle env — set all of ROOT_URL, ARM64_SEQUOIA_SHA, "
             "ARM64_TAHOE_SHA, CELLAR or none of them; missing: "
             f"{', '.join(missing)}"
         )
     root_url = bottle_vars["ROOT_URL"]
-    sonoma = bottle_vars["ARM64_SONOMA_SHA"]
+    sequoia = bottle_vars["ARM64_SEQUOIA_SHA"]
     tahoe = bottle_vars["ARM64_TAHOE_SHA"]
     cellar = bottle_vars["CELLAR"]
     return (
@@ -27,8 +27,8 @@ def build_bottle_block():
         "  # the same arch on newer macOS, and to a source build if none match.\n"
         "  bottle do\n"
         f'    root_url "{root_url}"\n'
-        f'    sha256 cellar: :{cellar}, arm64_sonoma: "{sonoma}"\n'
-        f'    sha256 cellar: :{cellar}, arm64_tahoe:  "{tahoe}"\n'
+        f'    sha256 cellar: :{cellar}, arm64_sequoia: "{sequoia}"\n'
+        f'    sha256 cellar: :{cellar}, arm64_tahoe:   "{tahoe}"\n'
         "  end\n"
         "\n"
     )
