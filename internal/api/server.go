@@ -78,10 +78,8 @@ const githubAPIBase = "https://api.github.com"
 
 // newAppAuth builds the GitHub App client used for repo discovery, or nil when
 // the app id and key are not both configured. An unusable key is a startup
-// error, matching how NewServer treats every other secret: unset means the
-// feature is off, malformed means the operator meant to enable it and the
-// server must not start half-configured (cf. LODE_TOKEN_ENC_KEY, LODE_OIDC_*).
-// Degrading here would look like a repo with no environments.
+// error: silently disabling discovery would look like a repo with no
+// environments.
 func newAppAuth(cfg Config) (*githubauth.AppAuth, error) {
 	if cfg.GitHubAppID == "" || cfg.GitHubAppPrivateKey == "" {
 		return nil, nil
@@ -112,7 +110,7 @@ type server struct {
 	tokenCipher *tokencrypt.Cipher
 
 	// appAuth is nil unless the GitHub App id and private key are configured;
-	// when nil, addRepo skips done_state discovery.
+	// addRepo then skips done_state discovery.
 	appAuth *githubauth.AppAuth
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.

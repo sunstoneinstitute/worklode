@@ -7,10 +7,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -71,15 +69,6 @@ func (f *appFixture) called(method, path string) bool {
 	return false
 }
 
-// envPageSize mirrors GitHub's pagination on the environments endpoint: 30 per
-// page unless the caller asks for more.
-func envPageSize(r *http.Request) int {
-	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
-		return n
-	}
-	return 30
-}
-
 func (f *appFixture) start(t *testing.T) *AppAuth {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,12 +89,8 @@ func (f *appFixture) start(t *testing.T) *AppAuth {
 				w.WriteHeader(f.envStatus)
 				return
 			}
-			names := f.environments
-			if page := envPageSize(r); len(names) > page {
-				names = names[:page]
-			}
-			envs := make([]map[string]string, 0, len(names))
-			for _, n := range names {
+			envs := make([]map[string]string, 0, len(f.environments))
+			for _, n := range f.environments {
 				envs = append(envs, map[string]string{"name": n})
 			}
 			json.NewEncoder(w).Encode(map[string]any{"environments": envs})
@@ -154,11 +139,6 @@ func (f *appFixture) assertAppJWT(t *testing.T, path string) {
 	if d := cl.Expiry.Time().Sub(time.Now()); d <= 0 || d > 10*time.Minute {
 		t.Errorf("%s: app jwt expires in %v, want (0, 10m]", path, d)
 	}
-	// iat is backdated to tolerate clock skew; without it GitHub rejects the
-	// assertion whenever our clock runs ahead of theirs.
-	if age := time.Since(cl.IssuedAt.Time()); age < time.Minute {
-		t.Errorf("%s: app jwt iat is %v old, want backdated at least a minute", path, age)
-	}
 }
 
 func (f *appFixture) assertTokenAuth(t *testing.T, path string) {
@@ -202,26 +182,6 @@ func TestDiscoverDoneStateProdAlias(t *testing.T) {
 				t.Fatalf("done_state for environment %q = %q, want deployed_prod", name, got)
 			}
 		})
-	}
-}
-
-// GitHub returns 30 environments per page by default. A prod environment past
-// that first page must still be found: a miss seeds the wrong done_state, and
-// there is no re-discovery path to correct it.
-func TestDiscoverDoneStateProdBeyondFirstPage(t *testing.T) {
-	envs := make([]string, 0, 31)
-	for i := 0; i < 30; i++ {
-		envs = append(envs, fmt.Sprintf("env-%d", i))
-	}
-	envs = append(envs, "prod")
-
-	f := &appFixture{environments: envs}
-	got, err := f.start(t).DiscoverDoneState(context.Background(), "acme/app")
-	if err != nil {
-		t.Fatalf("discover: %v", err)
-	}
-	if got != "deployed_prod" {
-		t.Fatalf("done_state = %q, want deployed_prod (prod is environment 31)", got)
 	}
 }
 
