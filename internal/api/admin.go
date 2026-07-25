@@ -33,11 +33,11 @@ type repoJSON struct {
 }
 
 type projectJSON struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	Key   string   `json:"key"`
-	Repos []string `json:"repos"`
-	Focus []string `json:"focus"`
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	Key   string     `json:"key"`
+	Repos []repoJSON `json:"repos"`
+	Focus []string   `json:"focus"`
 }
 
 type createProjectRequest struct {
@@ -58,7 +58,7 @@ func toProjectJSON(p *store.Project, repos []store.RepoMapping) projectJSON {
 		focus = []string{}
 	}
 	return projectJSON{
-		ID: p.ID, Name: p.Name, Key: p.Key, Repos: repos, Focus: focus,
+		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 	}
 }
 
@@ -181,42 +181,16 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doneState := store.DefaultDoneState
-	switch {
-	case req.DoneState != "":
+	if req.DoneState != "" {
 		if err := s.st.SetRepoDoneState(r.Context(), req.Repo, req.DoneState); err != nil {
 			s.mapStoreErr(w, err)
 			return
 		}
 		doneState = req.DoneState
-	case s.appAuth != nil:
-		doneState = s.discoverDoneState(r.Context(), req.Repo)
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"project_id": id, "repo": req.Repo, "done_state": doneState,
 	})
-}
-
-// discoveryTimeout bounds the GitHub round trips addRepo makes; the mapping is
-// already committed, so a slow GitHub must not hold the response.
-const discoveryTimeout = 5 * time.Second
-
-// discoverDoneState seeds a freshly mapped repo's terminal delivery state from
-// its GitHub environments and releases, and returns what is now stored.
-// Discovery never gates the mapping (delivery-lifecycle design spec): any
-// failure is logged and leaves the repo at the schema default.
-func (s *server) discoverDoneState(ctx context.Context, repo string) string {
-	dctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
-	defer cancel()
-	state, err := s.appAuth.DiscoverDoneState(dctx, repo)
-	if err != nil {
-		s.log.Warn("discover repo done_state", "repo", repo, "err", err)
-		return store.DefaultDoneState
-	}
-	if err := s.st.SetRepoDoneState(ctx, repo, state); err != nil {
-		s.log.Warn("store discovered done_state", "repo", repo, "state", state, "err", err)
-		return store.DefaultDoneState
-	}
-	return state
 }
 
 // doneStateErrMsg is the 422 message for an unusable done_state value.

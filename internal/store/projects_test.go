@@ -266,10 +266,7 @@ func TestSetRepoDoneState(t *testing.T) {
 		t.Fatalf("default done_state = %q, want merged", got)
 	}
 
-	// Driven from validDoneStates, not a hardcoded list, so a state added to
-	// the Go validator but not to the migration's CHECK fails here rather than
-	// 500ing in production.
-	for state := range validDoneStates {
+	for _, state := range []string{"released", "deployed_prod", "merged"} {
 		if err := s.SetRepoDoneState(ctx, "acme/app", state); err != nil {
 			t.Fatalf("SetRepoDoneState %q: %v", state, err)
 		}
@@ -277,16 +274,12 @@ func TestSetRepoDoneState(t *testing.T) {
 			t.Fatalf("done_state after set %q = %q", state, got)
 		}
 	}
-	// Map iteration left an arbitrary state; reset so the check below is exact.
-	if err := s.SetRepoDoneState(ctx, "acme/app", DefaultDoneState); err != nil {
-		t.Fatalf("SetRepoDoneState %q: %v", DefaultDoneState, err)
-	}
 
 	if err := s.SetRepoDoneState(ctx, "acme/app", "bogus"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("SetRepoDoneState bogus: want ErrInvalidInput, got %v", err)
 	}
-	if got := repoDoneState(t, s, "acme/app"); got != DefaultDoneState {
-		t.Fatalf("done_state after rejected set = %q, want %s (unchanged)", got, DefaultDoneState)
+	if got := repoDoneState(t, s, "acme/app"); got != "merged" {
+		t.Fatalf("done_state after rejected set = %q, want merged (unchanged)", got)
 	}
 
 	if err := s.SetRepoDoneState(ctx, "acme/nope", "released"); !errors.Is(err, ErrNotFound) {

@@ -71,12 +71,17 @@ func IssueTable(w io.Writer, issues []Issue) {
 	tw.Flush()
 }
 
-// ProjectTable prints one row per project: id, key, name, repos.
+// ProjectTable prints one row per project: id, key, name, repos. Each repo is
+// rendered as "owner/name (done_state)".
 func ProjectTable(w io.Writer, projects []Project) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tKEY\tNAME\tREPOS")
 	for _, p := range projects {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Key, p.Name, strings.Join(p.Repos, ", "))
+		repos := make([]string, 0, len(p.Repos))
+		for _, m := range p.Repos {
+			repos = append(repos, fmt.Sprintf("%s (%s)", m.Repo, m.DoneState))
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Key, p.Name, strings.Join(repos, ", "))
 	}
 	tw.Flush()
 }
