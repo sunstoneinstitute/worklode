@@ -21,7 +21,8 @@ import (
 )
 
 // allEvents is the guarded event set (unknown events are handled separately).
-var allEvents = []string{"session-start", "session-end", "pre-commit", "worktree-create", "worktree-remove"}
+var allEvents = []string{"session-start", "session-end", "pre-commit",
+	"worktree-create", "worktree-remove", "heartbeat", "worktree-enter", "worktree-exit"}
 
 // recordingServer stands in for the backbone and flags ANY inbound request.
 // The guard-NOP tests assert it is never hit.
@@ -70,6 +71,18 @@ func (p *pathRecorder) hitAny(substr string) bool {
 		}
 	}
 	return false
+}
+
+func (p *pathRecorder) count(substr string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, s := range p.paths {
+		if strings.Contains(s, substr) {
+			n++
+		}
+	}
+	return n
 }
 
 // newRealServer starts a real store-backed API server (admin actor "alice")
@@ -137,11 +150,15 @@ func initGitRepo(t *testing.T) string {
 
 // setupLeasedWorktree creates a project, a task, its wt/<id>-<slug> worktree,
 // and a lease bound to that worktree's real identity (mirroring `lode next`).
+// Creating the project is idempotent so a test can call this more than once
+// against the same server to put several tasks under one project.
 func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskID, wtDir, identity string) {
 	t.Helper()
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
-		t.Fatalf("create project: %v", err)
+	if _, err := c.GetProject(ctx, "proj"); err != nil {
+		if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+			t.Fatalf("create project: %v", err)
+		}
 	}
 	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
 	if err != nil {
@@ -499,5 +516,132 @@ func TestSessionMarkerHeartbeat(t *testing.T) {
 	}
 	if _, ok := markerSessionID(empty); ok {
 		t.Fatal("markerSessionID found an id with no marker file")
+	}
+}
+
+// runHook drives one hook invocation the way the existing tests do inline,
+// and fails the test on a non-zero exit code.
+func runHook(t *testing.T, event string, p Payload) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  event,
+		Stdin:  bytes.NewReader(payloadJSON(t, p)),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("%s exit code = %d, want 0 (stderr: %s)", event, code, stderr.String())
+	}
+}
+
+func TestHeartbeatReportsAgentSession(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Heartbeat task")
+
+	// session-start opens the session and writes the marker.
+	runHook(t, "session-start", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if !rec.hitAny("/agent-session") {
+		t.Fatal("session-start did not report the agent session")
+	}
+
+	// A heartbeat inside the debounce window makes no backbone call.
+	before := rec.count("/agent-session")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if rec.count("/agent-session") != before {
+		t.Fatal("heartbeat inside the debounce window still called the backbone")
+	}
+
+	// The session is recorded against the task's lease.
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	sess, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session: %v", err)
+	}
+	if sess.EndedAt != nil {
+		t.Fatal("session should still be open")
+	}
+
+	// session-end closes it.
+	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	sess, err = st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session after end: %v", err)
+	}
+	if sess.EndedAt == nil {
+		t.Fatal("session-end did not close the session")
+	}
+}
+
+func TestHeartbeatOutsideWorktreeIsNOP(t *testing.T) {
+	rec := newRecordingServer(t)
+	runHook(t, "heartbeat", Payload{Cwd: t.TempDir(), SessionID: "sess-1"})
+	if rec.hit() {
+		t.Fatal("heartbeat outside a Worklode worktree called the backbone")
+	}
+}
+
+// TestWorktreeEnterExitSwitchesLease drives one session across two leased
+// worktrees: entering the second opens a row under its lease with the same
+// session id, and exiting stamps ended_at on that row while the first
+// worktree's row stays open.
+func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskA, wtDirA, _ := setupLeasedWorktree(t, c, root, "Task A")
+	taskB, wtDirB, _ := setupLeasedWorktree(t, c, root, "Task B")
+
+	// Start a session in the first worktree.
+	runHook(t, "session-start", Payload{Cwd: wtDirA, SessionID: "sess-1"})
+
+	leaseA, err := st.ActiveLease(t.Context(), taskA)
+	if err != nil {
+		t.Fatalf("active lease A: %v", err)
+	}
+	sessA, err := st.AgentSession(t.Context(), leaseA.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session A: %v", err)
+	}
+	if sessA.EndedAt != nil {
+		t.Fatal("session A should still be open before entering B")
+	}
+
+	// Enter the second worktree: a new row opens under B's lease.
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDirB})
+	runHook(t, "worktree-enter", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
+
+	leaseB, err := st.ActiveLease(t.Context(), taskB)
+	if err != nil {
+		t.Fatalf("active lease B: %v", err)
+	}
+	sessB, err := st.AgentSession(t.Context(), leaseB.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session B: %v", err)
+	}
+	if sessB.EndedAt != nil {
+		t.Fatal("session B should be open after worktree-enter")
+	}
+
+	// Exit the second worktree: B's row closes, A's stays open.
+	runHook(t, "worktree-exit", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
+
+	sessB, err = st.AgentSession(t.Context(), leaseB.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session B after exit: %v", err)
+	}
+	if sessB.EndedAt == nil {
+		t.Fatal("worktree-exit did not close session B")
+	}
+
+	sessA, err = st.AgentSession(t.Context(), leaseA.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session A after exit: %v", err)
+	}
+	if sessA.EndedAt != nil {
+		t.Fatal("session A should remain open after exiting B")
 	}
 }

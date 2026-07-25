@@ -106,6 +106,9 @@ var knownEvents = map[string]bool{
 	"pre-commit":      true,
 	"worktree-create": true,
 	"worktree-remove": true,
+	"heartbeat":       true,
+	"worktree-enter":  true,
+	"worktree-exit":   true,
 }
 
 // Run executes one hook invocation and returns the process exit code. It reads
@@ -147,13 +150,19 @@ func dispatch(ctx context.Context, opts Options, p Payload, dir string) {
 	case "session-start":
 		handleSessionStart(ctx, opts, p, dir)
 	case "session-end":
-		handleSessionEnd(opts, dir)
+		handleSessionEnd(ctx, opts, p, dir)
 	case "pre-commit":
 		handlePreCommit(ctx, opts, dir)
 	case "worktree-create":
 		handleWorktreeCreate(ctx, opts, p, dir)
 	case "worktree-remove":
 		handleWorktreeRemove(ctx, opts, p, dir)
+	case "heartbeat":
+		handleHeartbeat(ctx, opts, p, dir)
+	case "worktree-enter":
+		handleWorktreeEnter(ctx, opts, p, dir)
+	case "worktree-exit":
+		handleWorktreeExit(ctx, opts, p, dir)
 	default:
 		warn(opts, "unknown hook event %q", opts.Event)
 	}
@@ -177,6 +186,35 @@ func runNext(opts Options, raw []byte) int {
 		return 1
 	}
 	return 0
+}
+
+// agentName is the coding agent reporting this hook. Claude Code is the only
+// integration today, so it is the default; other agents set LODE_AGENT. It is
+// an env var rather than a flag because `lode hook` disables flag parsing so
+// the --next argv passes through verbatim.
+func agentName() string {
+	if a := os.Getenv("LODE_AGENT"); a != "" {
+		return a
+	}
+	return "claude-code"
+}
+
+// reportSession reports an agent session on taskID and stamps the marker's
+// heartbeat time. Like every hookrun backbone call it is bounded and
+// downgrades failure to a warning.
+func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	if _, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID); err != nil {
+		warn(opts, "report agent session on %s: %v", taskID, err)
+		return
+	}
+	if err := recordHeartbeat(root, opts.now()); err != nil {
+		warn(opts, "record heartbeat: %v", err)
+	}
 }
 
 // --- event handlers ---------------------------------------------------------
@@ -216,6 +254,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
 		warn(opts, "write session marker: %v", err)
 	}
+	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 
 	emitAdditionalContext(opts.Stdout, compactBrief(brief))
 }
@@ -298,13 +337,30 @@ func offerScan(ctx context.Context, opts Options, repoRoot string) {
 	}
 }
 
-func handleSessionEnd(opts Options, dir string) {
+func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return
 	}
-	if _, ok := worktree.ParseDir(root); !ok {
+	taskID, ok := worktree.ParseDir(root)
+	if !ok {
 		return
+	}
+	sessionID := p.SessionID
+	if sessionID == "" {
+		sessionID, _ = markerSessionID(root)
+	}
+	if sessionID != "" {
+		if c, err := opts.client(); err != nil {
+			warn(opts, "load config: %v", err)
+		} else {
+			ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+			if err := c.EndAgentSession(ectx, taskID,
+				cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
+				warn(opts, "end agent session on %s: %v", taskID, err)
+			}
+			cancel()
+		}
 	}
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
@@ -331,6 +387,12 @@ func handlePreCommit(ctx context.Context, opts Options, dir string) {
 		// Expired-and-swept (e.g. 404) or any other failure must never block a
 		// commit.
 		warn(opts, "renew lease on %s: %v (commit not blocked)", taskID, err)
+	}
+
+	if heartbeatDue(root, opts.now()) {
+		if sessionID, ok := markerSessionID(root); ok {
+			reportSession(ctx, opts, c, taskID, root, sessionID)
+		}
 	}
 }
 
@@ -382,6 +444,88 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 	defer cancel()
 	if _, err := c.ReleaseLease(rctx, taskID); err != nil {
 		warn(opts, "release lease on %s: %v", taskID, err)
+	}
+}
+
+// handleHeartbeat reports that this worktree's session is still alive. Bound
+// to Stop, StopFailure, SubagentStop and Notification: between them they cover
+// a session that finishes a turn, dies on an API error, spends a long turn in
+// subagents, or sits blocked on a human. Debounced against the marker so a
+// fast conversation does not flood the backbone.
+func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
+	root, ok := worktree.Root(dir)
+	if !ok {
+		return
+	}
+	taskID, ok := worktree.ParseDir(root)
+	if !ok {
+		return
+	}
+	if !heartbeatDue(root, opts.now()) {
+		return
+	}
+	sessionID := p.SessionID
+	if sessionID == "" {
+		sessionID, _ = markerSessionID(root)
+	}
+	c, err := opts.client()
+	if err != nil {
+		warn(opts, "load config: %v", err)
+		return
+	}
+	reportSession(ctx, opts, c, taskID, root, sessionID)
+}
+
+// handleWorktreeEnter reports the session against the lease of the worktree it
+// just moved into. One session can work several tasks in sequence; each gets
+// its own row, keyed by (lease, agent, session id).
+func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string) {
+	entered := payloadPath(p, dir)
+	root, ok := worktree.Root(entered)
+	if !ok {
+		return
+	}
+	taskID, ok := worktree.ParseDir(root)
+	if !ok {
+		return
+	}
+	c, err := opts.client()
+	if err != nil {
+		warn(opts, "load config: %v", err)
+		return
+	}
+	reportSession(ctx, opts, c, taskID, root, p.SessionID)
+}
+
+// handleWorktreeExit closes the session's row on the worktree it is leaving.
+// The session itself continues elsewhere; only its work on this lease ends.
+func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string) {
+	exited := payloadPath(p, dir)
+	root, ok := worktree.Root(exited)
+	if !ok {
+		return
+	}
+	taskID, ok := worktree.ParseDir(root)
+	if !ok {
+		return
+	}
+	sessionID := p.SessionID
+	if sessionID == "" {
+		sessionID, _ = markerSessionID(root)
+	}
+	if sessionID == "" {
+		return
+	}
+	c, err := opts.client()
+	if err != nil {
+		warn(opts, "load config: %v", err)
+		return
+	}
+	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	if err := c.EndAgentSession(ectx, taskID,
+		cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
+		warn(opts, "end agent session on %s: %v", taskID, err)
 	}
 }
 

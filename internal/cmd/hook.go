@@ -21,7 +21,7 @@ func init() {
 func newHookCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "hook <event> [--next <cmd> [arg...]]",
-		Short: "Run a Worklode lifecycle hook (session-start|session-end|pre-commit|worktree-create|worktree-remove)",
+		Short: "Run a Worklode lifecycle hook (session-start|heartbeat|session-end|pre-commit|worktree-create|worktree-remove|worktree-enter|worktree-exit)",
 		Long: "Backbone lifecycle hooks that keep a worktree's lease alive around a coding " +
 			"session. Reads the hook payload on stdin, does nothing outside a wt/<id>-<slug> " +
 			"worktree, and never fails the triggering event. With --next, it also runs the " +
