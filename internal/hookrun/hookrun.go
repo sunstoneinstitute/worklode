@@ -478,7 +478,11 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
 
 // handleWorktreeEnter reports the session against the lease of the worktree it
 // just moved into. One session can work several tasks in sequence; each gets
-// its own row, keyed by (lease, agent, session id).
+// its own row, keyed by (lease, agent, session id). It writes the marker here
+// too — symmetric with handleSessionStart — because the session is now live
+// in THIS worktree: without a marker, heartbeats here would debounce off
+// forever (no marker ⇒ nothing due) and sessionMarkerFresh would read this
+// worktree as abandoned while it is actively being worked.
 func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string) {
 	entered := payloadPath(p, dir)
 	root, ok := worktree.Root(entered)
@@ -494,11 +498,22 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 		warn(opts, "load config: %v", err)
 		return
 	}
+	// An empty session id would make a marker that only confuses
+	// markerSessionID/heartbeatDue (both treat "" as "no session"), so only
+	// write one when there is a real id to write.
+	if p.SessionID != "" {
+		if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
+			warn(opts, "write session marker: %v", err)
+		}
+	}
 	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 }
 
-// handleWorktreeExit closes the session's row on the worktree it is leaving.
-// The session itself continues elsewhere; only its work on this lease ends.
+// handleWorktreeExit closes the session's row on the worktree it is leaving
+// and removes its marker — symmetric with handleSessionEnd — since the
+// session is no longer live here. The marker is removed whenever this is a
+// recognized worktree, even if no session id could be resolved, so a
+// worktree-exit never leaves a stale marker behind.
 func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string) {
 	exited := payloadPath(p, dir)
 	root, ok := worktree.Root(exited)
@@ -513,19 +528,20 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	if sessionID == "" {
-		return
+	if sessionID != "" {
+		if c, err := opts.client(); err != nil {
+			warn(opts, "load config: %v", err)
+		} else {
+			ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+			if err := c.EndAgentSession(ectx, taskID,
+				cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
+				warn(opts, "end agent session on %s: %v", taskID, err)
+			}
+			cancel()
+		}
 	}
-	c, err := opts.client()
-	if err != nil {
-		warn(opts, "load config: %v", err)
-		return
-	}
-	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	defer cancel()
-	if err := c.EndAgentSession(ectx, taskID,
-		cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
-		warn(opts, "end agent session on %s: %v", taskID, err)
+	if err := removeSessionMarker(root); err != nil {
+		warn(opts, "remove session marker: %v", err)
 	}
 }
 
