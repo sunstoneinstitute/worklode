@@ -261,6 +261,15 @@ func summarizeEntry(e timelineEntry) webTimelineRow {
 	case "runtime":
 		row.Label = "Runtime event"
 		row.Summary = fmt.Sprintf("%s on %s/%s: %s", strField(e.obj, "kind"), strField(e.obj, "cluster"), strField(e.obj, "workload"), strField(e.obj, "message"))
+	case "landed":
+		row.Label = "Landed"
+		row.Summary = fmt.Sprintf("%s %s on main", strField(e.obj, "repo"), shortSHA(strField(e.obj, "sha")))
+	case "deployed":
+		row.Label = "Delivered"
+		row.Summary = fmt.Sprintf("%s confirmed in %s", strField(e.obj, "repo"), strField(e.obj, "environment"))
+	case "released":
+		row.Label = "Released"
+		row.Summary = fmt.Sprintf("%s %s", strField(e.obj, "repo"), strField(e.obj, "tag"))
 	default:
 		row.Label = typ
 	}
@@ -287,6 +296,14 @@ func summarizeStateChange(obj map[string]any) string {
 		return fmt.Sprintf("%s set to %s", change.Field, change.New)
 	}
 	return fmt.Sprintf("%s: %s -> %s", change.Field, change.Old, change.New)
+}
+
+// shortSHA abbreviates a commit sha for display.
+func shortSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
 }
 
 func strField(m map[string]any, k string) string {
