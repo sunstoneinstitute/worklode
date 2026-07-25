@@ -260,14 +260,18 @@ func ConfirmedFrontier(tx *sql.Tx, repo, env string) (*int64, error) {
 // SetReleaseFrontier records the newest main commit covered by a published
 // release. Forward-only per tag, like every other watermark here: re-cutting
 // a tag onto a newer commit advances it, a stale re-publish (or a plain
-// redelivery) never moves it back.
+// redelivery) never moves it back. published_at moves with main_id so the
+// row always describes one cut — a stale re-publish must not backdate the
+// newer frontier.
 func SetReleaseFrontier(tx *sql.Tx, repo, tag string, mainID int64, publishedAt time.Time) error {
 	_, err := tx.Exec(
 		`INSERT INTO release_frontiers (repo, tag, main_id, published_at)
 		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (repo, tag) DO UPDATE SET
 		   main_id = greatest(release_frontiers.main_id, excluded.main_id),
-		   published_at = excluded.published_at`,
+		   published_at = CASE WHEN excluded.main_id > release_frontiers.main_id
+		                       THEN excluded.published_at
+		                       ELSE release_frontiers.published_at END`,
 		repo, tag, mainID, publishedAt.UTC())
 	if err != nil {
 		return fmt.Errorf("set release frontier %s %s: %w", repo, tag, err)

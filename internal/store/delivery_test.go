@@ -266,24 +266,46 @@ func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+	// Distinct publish times so the row's timestamp identifies which cut it
+	// describes.
+	first := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	second := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	publishedAt := func() time.Time {
+		t.Helper()
+		var ts time.Time
+		if err := tx.QueryRow(
+			`SELECT published_at FROM release_frontiers WHERE repo = 'acme/app' AND tag = 'v1.0.0'`,
+		).Scan(&ts); err != nil {
+			t.Fatal(err)
+		}
+		return ts.UTC()
+	}
+
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, first); err != nil {
 		t.Fatal(err)
 	}
 	// Tag re-cut onto a newer commit: the row advances.
-	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id2, now); err != nil {
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id2, second); err != nil {
 		t.Fatal(err)
 	}
 	f, err := ReleaseFrontier(tx, "acme/app")
 	if err != nil || f == nil || *f != id2 {
 		t.Fatalf("frontier after re-cut = %v, %v, want %d", f, err, id2)
 	}
-	// Stale re-publish of the same tag: the row must not move back.
-	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+	if ts := publishedAt(); !ts.Equal(second) {
+		t.Fatalf("published_at after re-cut = %s, want %s", ts, second)
+	}
+	// Stale re-publish of the same tag: neither the commit nor the timestamp
+	// may move back — the row must keep describing the newer cut.
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, first); err != nil {
 		t.Fatal(err)
 	}
 	f, err = ReleaseFrontier(tx, "acme/app")
 	if err != nil || f == nil || *f != id2 {
 		t.Fatalf("frontier after stale re-publish = %v, %v, want %d", f, err, id2)
+	}
+	if ts := publishedAt(); !ts.Equal(second) {
+		t.Fatalf("published_at after stale re-publish = %s, want %s (not backdated)", ts, second)
 	}
 }
 
