@@ -120,11 +120,15 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // call. Every later heartbeat is authorized solely by the non-transactional
 // heldLease check above.
 //
-// A heartbeat on a closed row (ended_at set by EndAgentSession) reopens it:
-// the caller working the lease again is still that same session. Since
-// heldLease is read outside any transaction, it cannot rule out a release
-// landing between that check and the bump below; bumpAgentSessionLastSeen's
-// own locking read of the lease is what actually guards the reopen.
+// heldLease is read outside any transaction, so it cannot rule out a lease
+// close landing between that read and the write that follows — on the
+// inserting call, or on a heartbeat that reopens a closed row (ended_at set
+// by EndAgentSession, cleared here because the caller working the lease
+// again is still that same session). Both writes guard against this the same
+// way: activeLeaseTxForShare and bumpAgentSessionLastSeen each take a
+// FOR SHARE lock on the lease before writing, so a concurrent close either
+// blocks until this call commits, or wins the race and makes the re-check
+// fail.
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
@@ -145,11 +149,13 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 
 	_, inserted, err := s.RecordEvent(ctx, "cli", extID, "agent_session.started", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			// Re-check inside the tx: the lease may have been released and
-			// re-claimed since heldLease read it, which would make extID refer
-			// to a different lease than the one being written. This guard only
-			// runs here, on the inserting call — see the doc comment above.
-			cur, err := activeLeaseTx(tx, taskID)
+			// Re-check inside the tx, with a FOR SHARE lock: the lease may have
+			// been released (or released and re-claimed) since heldLease read
+			// it, which would either orphan this insert against a closed lease
+			// or make extID refer to a different lease than the one being
+			// written. This guard only runs here, on the inserting call — see
+			// the doc comment above.
+			cur, err := activeLeaseTxForShare(tx, taskID)
 			if err != nil {
 				return err
 			}
