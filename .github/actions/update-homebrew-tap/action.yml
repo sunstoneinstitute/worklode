@@ -26,6 +26,18 @@ inputs:
       sunstoneinstitute/homebrew-tap. A deploy key is owned by that repo rather
       than by a person, so the credential outlives any individual's account.
     required: true
+  arm64-sonoma-sha:
+    description: sha256 of the arm64_sonoma bottle tarball
+    required: true
+  arm64-tahoe-sha:
+    description: sha256 of the arm64_tahoe bottle tarball
+    required: true
+  cellar:
+    description: >
+      Bottle cellar spec as reported by `brew bottle` (e.g.
+      any_skip_relocation), identical for both bottles since they're the
+      same pure-Go binary.
+    required: true
 
 runs:
   using: composite
@@ -47,13 +59,25 @@ runs:
           echo "sha256=$(sha256sum "$RUNNER_TEMP/tarball.tgz" | awk '{print $1}')"
         } >> "$GITHUB_OUTPUT"
 
+    - name: Render final formula
+      shell: bash
+      env:
+        URL: ${{ steps.tarball.outputs.url }}
+        SHA256: ${{ steps.tarball.outputs.sha256 }}
+        ROOT_URL: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}
+        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
+        CELLAR: ${{ inputs.cellar }}
+      run: |
+        set -euo pipefail
+        python3 .github/homebrew/render-formula.py \
+          .github/homebrew/worklode.rb.template "$RUNNER_TEMP/worklode.rb"
+
     - name: Update formula in the tap
       shell: bash
       env:
         TAP_DEPLOY_KEY: ${{ inputs.deploy-key }}
         TAG: ${{ inputs.tag }}
-        URL: ${{ steps.tarball.outputs.url }}
-        SHA256: ${{ steps.tarball.outputs.sha256 }}
       run: |
         set -euo pipefail
 
@@ -86,19 +110,10 @@ runs:
           "$RUNNER_TEMP/tap"
         cd "$RUNNER_TEMP/tap"
 
-        FORMULA=Formula/worklode.rb
-        sed -i -E \
-          -e "s|^  url \".*\"$|  url \"${URL}\"|" \
-          -e "s|^  sha256 \"[0-9a-f]{64}\"$|  sha256 \"${SHA256}\"|" \
-          "$FORMULA"
-
-        # A sed that matched nothing is silent; without these the workflow
-        # would report success having left the formula on the old release.
-        grep -qF "  url \"${URL}\"" "$FORMULA"
-        grep -qF "  sha256 \"${SHA256}\"" "$FORMULA"
+        cp "$RUNNER_TEMP/worklode.rb" Formula/worklode.rb
 
         if git diff --quiet; then
-          echo "::notice::Formula already points at ${TAG} — nothing to push."
+          echo "::notice::Formula already matches ${TAG} — nothing to push."
           exit 0
         fi
 
@@ -112,11 +127,15 @@ runs:
       env:
         TAG: ${{ inputs.tag }}
         SHA256: ${{ steps.tarball.outputs.sha256 }}
+        ARM64_SONOMA_SHA: ${{ inputs.arm64-sonoma-sha }}
+        ARM64_TAHOE_SHA: ${{ inputs.arm64-tahoe-sha }}
       run: |
         {
           echo "### Homebrew tap updated"
           echo ""
           echo "**Tag:** \`${TAG}\`"
           echo "**Tarball sha256:** \`${SHA256}\`"
+          echo "**arm64_sonoma bottle sha256:** \`${ARM64_SONOMA_SHA}\`"
+          echo "**arm64_tahoe bottle sha256:** \`${ARM64_TAHOE_SHA}\`"
           echo "**Formula:** sunstoneinstitute/homebrew-tap \`Formula/worklode.rb\`"
         } >> "$GITHUB_STEP_SUMMARY"
