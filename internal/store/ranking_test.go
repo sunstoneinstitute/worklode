@@ -128,11 +128,11 @@ func rankIDs(tasks []Task) []string {
 // sorts T3 (critical but off-focus) by its own concern rank instead.
 func TestRankTasksWorkedExample(t *testing.T) {
 	focus := []string{"security", "completeness"}
-	t1 := rankTask("WL-1", "high", "completeness", rankTestNow)
-	t2 := rankTask("WL-2", "high", "security", rankTestNow)
-	t3 := rankTask("WL-3", "critical", "usability", rankTestNow)
-	t4 := rankTask("WL-4", "medium", "security", rankTestNow)
-	t5 := rankTask("WL-5", "high", "performance", rankTestNow)
+	t1 := rankTask("HDB-1", "high", "completeness", rankTestNow)
+	t2 := rankTask("HDB-2", "high", "security", rankTestNow)
+	t3 := rankTask("HDB-3", "critical", "usability", rankTestNow)
+	t4 := rankTask("HDB-4", "medium", "security", rankTestNow)
+	t5 := rankTask("HDB-5", "high", "performance", rankTestNow)
 
 	in := []rankInput{
 		{Task: t1, Focus: focus, FanOut: 5},
@@ -143,13 +143,13 @@ func TestRankTasksWorkedExample(t *testing.T) {
 	}
 
 	gotDefault := rankIDs(rankTasks(in, false))
-	wantDefault := []string{"WL-3", "WL-2", "WL-4", "WL-1", "WL-5"}
+	wantDefault := []string{"HDB-3", "HDB-2", "HDB-4", "HDB-1", "HDB-5"}
 	if !reflect.DeepEqual(gotDefault, wantDefault) {
 		t.Fatalf("rankTasks default: got %v, want %v", gotDefault, wantDefault)
 	}
 
 	gotStrict := rankIDs(rankTasks(in, true))
-	wantStrict := []string{"WL-2", "WL-4", "WL-1", "WL-3", "WL-5"}
+	wantStrict := []string{"HDB-2", "HDB-4", "HDB-1", "HDB-3", "HDB-5"}
 	if !reflect.DeepEqual(gotStrict, wantStrict) {
 		t.Fatalf("rankTasks strict-focus: got %v, want %v", gotStrict, wantStrict)
 	}
@@ -160,11 +160,11 @@ func TestRankTasksWorkedExample(t *testing.T) {
 func TestRankTasksDeterministic(t *testing.T) {
 	focus := []string{"security", "completeness"}
 	in := []rankInput{
-		{Task: rankTask("WL-1", "high", "completeness", rankTestNow), Focus: focus, FanOut: 5},
-		{Task: rankTask("WL-2", "high", "security", rankTestNow), Focus: focus, FanOut: 1},
-		{Task: rankTask("WL-3", "critical", "usability", rankTestNow), Focus: focus, FanOut: 0},
-		{Task: rankTask("WL-4", "medium", "security", rankTestNow), Focus: focus, FanOut: 8},
-		{Task: rankTask("WL-5", "high", "performance", rankTestNow), Focus: focus, FanOut: 12},
+		{Task: rankTask("HDB-1", "high", "completeness", rankTestNow), Focus: focus, FanOut: 5},
+		{Task: rankTask("HDB-2", "high", "security", rankTestNow), Focus: focus, FanOut: 1},
+		{Task: rankTask("HDB-3", "critical", "usability", rankTestNow), Focus: focus, FanOut: 0},
+		{Task: rankTask("HDB-4", "medium", "security", rankTestNow), Focus: focus, FanOut: 8},
+		{Task: rankTask("HDB-5", "high", "performance", rankTestNow), Focus: focus, FanOut: 12},
 	}
 
 	first := rankIDs(rankTasks(in, false))
@@ -182,25 +182,25 @@ func TestRankTasksTiebreakCreatedAt(t *testing.T) {
 	older := rankTestNow
 	newer := rankTestNow.Add(time.Hour)
 	in := []rankInput{
-		{Task: rankTask("WL-2", "high", "", newer), FanOut: 0},
-		{Task: rankTask("WL-1", "high", "", older), FanOut: 0},
+		{Task: rankTask("HDB-2", "high", "", newer), FanOut: 0},
+		{Task: rankTask("HDB-1", "high", "", older), FanOut: 0},
 	}
 	got := rankIDs(rankTasks(in, false))
-	want := []string{"WL-1", "WL-2"}
+	want := []string{"HDB-1", "HDB-2"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("rankTasks tiebreak created_at: got %v, want %v", got, want)
 	}
 }
 
-// TestRankTasksTiebreakNumericID pins the numeric-id tiebreak: WL-9 must
-// sort before WL-10 (a plain string compare would get this backwards).
+// TestRankTasksTiebreakNumericID pins the numeric-id tiebreak: HDB-9 must
+// sort before HDB-10 (a plain string compare would get this backwards).
 func TestRankTasksTiebreakNumericID(t *testing.T) {
 	in := []rankInput{
-		{Task: rankTask("WL-10", "high", "", rankTestNow), FanOut: 0},
-		{Task: rankTask("WL-9", "high", "", rankTestNow), FanOut: 0},
+		{Task: rankTask("HDB-10", "high", "", rankTestNow), FanOut: 0},
+		{Task: rankTask("HDB-9", "high", "", rankTestNow), FanOut: 0},
 	}
 	got := rankIDs(rankTasks(in, false))
-	want := []string{"WL-9", "WL-10"}
+	want := []string{"HDB-9", "HDB-10"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("rankTasks tiebreak numeric id: got %v, want %v", got, want)
 	}
@@ -212,11 +212,11 @@ func TestRankTasksTiebreakNumericID(t *testing.T) {
 // survive the suite.)
 func TestRankTasksFanOutDirection(t *testing.T) {
 	in := []rankInput{
-		{Task: rankTask("WL-1", "high", "", rankTestNow), FanOut: 2},
-		{Task: rankTask("WL-2", "high", "", rankTestNow), FanOut: 7},
+		{Task: rankTask("HDB-1", "high", "", rankTestNow), FanOut: 2},
+		{Task: rankTask("HDB-2", "high", "", rankTestNow), FanOut: 7},
 	}
 	got := rankIDs(rankTasks(in, false))
-	want := []string{"WL-2", "WL-1"}
+	want := []string{"HDB-2", "HDB-1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("rankTasks fan-out direction: got %v, want %v", got, want)
 	}

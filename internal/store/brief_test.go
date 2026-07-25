@@ -113,7 +113,7 @@ func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
 
 func TestBriefNotFound(t *testing.T) {
 	s, _ := openLeaseStore(t)
-	if _, err := s.Brief(t.Context(), "WL-999"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Brief(t.Context(), "HDB-999"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Brief unknown task: err = %v, want ErrNotFound", err)
 	}
 }

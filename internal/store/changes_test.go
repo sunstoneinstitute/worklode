@@ -67,15 +67,15 @@ func TestTaskIDFromRef(t *testing.T) {
 		ref  string
 		want string
 	}{
-		{"wl/WL-123-some-slug", "WL-123"},
-		{"wl/WL-1-x", "WL-1"},
-		{"wl/WL-12", "WL-12"},
+		{"wl/HDB-123-some-slug", "HDB-123"},
+		{"wl/HDB-1-x", "HDB-1"},
+		{"wl/HDB-12", "HDB-12"},
 		{"main", ""},
 		{"feature/foo", ""},
 		{"wl/wl-12-x", ""}, // lowercase wl- prefix in the id part: no match
 		{"", ""},
 		{"wl/-x", ""},
-		{"wl/WL-abc-x", ""}, // no digits after WL-
+		{"wl/HDB-abc-x", ""}, // no digits after HDB-
 	}
 	for _, c := range cases {
 		if got := TaskIDFromRef(c.ref); got != c.want {
@@ -89,14 +89,14 @@ func TestTaskIDFromBody(t *testing.T) {
 		body string
 		want string
 	}{
-		{"WL-Task: WL-42", "WL-42"},
-		{"some text\nWL-Task: WL-7\nmore text", "WL-7"},
+		{"WL-Task: HDB-42", "HDB-42"},
+		{"some text\nWL-Task: HDB-7\nmore text", "HDB-7"},
 		{"no marker here", ""},
 		{"", ""},
-		{"wl-task: WL-7", ""},         // case-sensitive prefix
-		{"  WL-Task: WL-7  ", "WL-7"}, // surrounding whitespace on the line is trimmed
-		{"WL-Task: WL-7 trailing text", "WL-7"},
-		{"prefix WL-Task: WL-7", ""}, // marker must start the line, not be embedded mid-line
+		{"wl-task: HDB-7", ""},          // case-sensitive prefix
+		{"  WL-Task: HDB-7  ", "HDB-7"}, // surrounding whitespace on the line is trimmed
+		{"WL-Task: HDB-7 trailing text", "HDB-7"},
+		{"prefix WL-Task: HDB-7", ""}, // marker must start the line, not be embedded mid-line
 	}
 	for _, c := range cases {
 		if got := TaskIDFromBody(c.body); got != c.want {
@@ -175,7 +175,7 @@ func TestUpsertPRNoMatch(t *testing.T) {
 func TestUpsertPRReferencesNonexistentTaskStaysNil(t *testing.T) {
 	s := openChangesStore(t)
 
-	pr := defaultPR("WL-999")
+	pr := defaultPR("HDB-999")
 	got, err := upsertPR(t, s, pr, "")
 	if err != nil {
 		t.Fatalf("UpsertPR: %v", err)
