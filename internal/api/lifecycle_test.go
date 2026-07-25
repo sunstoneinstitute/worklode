@@ -222,8 +222,8 @@ func TestDone(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	if got := decodeMap(t, rr); got["state"] != "done" {
-		t.Fatalf("state = %v, want done", got["state"])
+	if got := decodeMap(t, rr); got["state"] != "merged" {
+		t.Fatalf("state = %v, want merged", got["state"])
 	}
 
 	// The active lease was auto-released in the same transaction.
@@ -462,10 +462,10 @@ func TestReopen(t *testing.T) {
 		t.Fatalf("reopen from done status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	if got := decodeMap(t, rr); got["state"] != "ready" {
-		t.Fatalf("state after reopen from done = %v, want ready", got["state"])
+		t.Fatalf("state after reopen from merged = %v, want ready", got["state"])
 	}
 	if typ := lastEventType(t, st); typ != "task.reopened" {
-		t.Fatalf("event type after reopen from done = %q, want task.reopened", typ)
+		t.Fatalf("event type after reopen from merged = %q, want task.reopened", typ)
 	}
 	entries, err := st.StateLogForEntity(context.Background(), "task", "WL-1")
 	if err != nil {
@@ -476,8 +476,8 @@ func TestReopen(t *testing.T) {
 	if err := json.Unmarshal([]byte(last.Change), &change); err != nil {
 		t.Fatalf("unmarshal state_log change %q: %v", last.Change, err)
 	}
-	if change["field"] != "state" || change["old"] != "done" || change["new"] != "ready" {
-		t.Fatalf("last state_log change = %+v, want field=state old=done new=ready", change)
+	if change["field"] != "state" || change["old"] != "merged" || change["new"] != "ready" {
+		t.Fatalf("last state_log change = %+v, want field=state old=merged new=ready", change)
 	}
 
 	// From abandoned: 200, lands on ready, task.reopened event.

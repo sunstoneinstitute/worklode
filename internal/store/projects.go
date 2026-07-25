@@ -12,11 +12,10 @@ import (
 // ordered list of concerns (see ValidConcern) the project's ranking should
 // prioritize; an empty slice means no focus preference.
 type Project struct {
-	ID          string
-	Name        string
-	Key         string
-	DeployGated bool
-	Focus       []string
+	ID    string
+	Name  string
+	Key   string
+	Focus []string
 }
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
@@ -50,8 +49,8 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	var focus []byte
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, key, deploy_gated, focus FROM projects WHERE id = $1`, id)
-	if err := row.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
+		`SELECT id, name, key, focus FROM projects WHERE id = $1`, id)
+	if err := row.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -67,7 +66,7 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 
 // ListProjects returns all projects.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, deploy_gated, focus FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, focus FROM projects`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -77,7 +76,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	for rows.Next() {
 		var p Project
 		var focus []byte
-		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &p.DeployGated, &focus); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		f, err := scanProjectFocus(focus)
@@ -91,24 +90,6 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
 	return out, nil
-}
-
-// SetDeployGated sets whether a project's tasks require a verified
-// deployment (rather than just a merged PR) to move to done.
-func (s *Store) SetDeployGated(ctx context.Context, id string, gated bool) error {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET deploy_gated = $1 WHERE id = $2`, gated, id)
-	if err != nil {
-		return fmt.Errorf("set deploy_gated for project %s: %w", id, err)
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set deploy_gated rows affected: %w", err)
-	}
-	if affected == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 
 // SetProjectFocus records the ordered list of concerns a project's ranking

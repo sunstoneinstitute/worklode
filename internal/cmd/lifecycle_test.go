@@ -422,8 +422,8 @@ func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task: %v", err)
 	}
-	if detail.State != "done" {
-		t.Fatalf("task state = %q, want done", detail.State)
+	if detail.State != "merged" {
+		t.Fatalf("task state = %q, want merged", detail.State)
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after done = %+v, want nil", detail.Lease)

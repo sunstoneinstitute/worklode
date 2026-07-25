@@ -276,7 +276,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 func newDoneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "done",
-		Short: "Mark the current worktree's task done and release its lease",
+		Short: "Mark the current worktree's task merged and release its lease",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

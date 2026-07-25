@@ -26,19 +26,17 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 // --- projects ---------------------------------------------------------
 
 type projectJSON struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Key         string   `json:"key"`
-	DeployGated bool     `json:"deploy_gated"`
-	Repos       []string `json:"repos"`
-	Focus       []string `json:"focus"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Key   string   `json:"key"`
+	Repos []string `json:"repos"`
+	Focus []string `json:"focus"`
 }
 
 type createProjectRequest struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Key         string `json:"key"`
-	DeployGated bool   `json:"deploy_gated"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
@@ -52,7 +50,7 @@ func toProjectJSON(p *store.Project, repos []string) projectJSON {
 		focus = []string{}
 	}
 	return projectJSON{
-		ID: p.ID, Name: p.Name, Key: p.Key, DeployGated: p.DeployGated, Repos: repos, Focus: focus,
+		ID: p.ID, Name: p.Name, Key: p.Key, Repos: repos, Focus: focus,
 	}
 }
 
@@ -80,14 +78,8 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	if req.DeployGated {
-		if err := s.st.SetDeployGated(r.Context(), req.ID, true); err != nil {
-			s.mapStoreErr(w, err)
-			return
-		}
-	}
 	writeJSON(w, http.StatusCreated, toProjectJSON(
-		&store.Project{ID: req.ID, Name: req.Name, Key: req.Key, DeployGated: req.DeployGated}, nil))
+		&store.Project{ID: req.ID, Name: req.Name, Key: req.Key}, nil))
 }
 
 // listProjects handles GET /api/v1/projects: every project with its mapped repos.

@@ -15,13 +15,13 @@ func TestCreateAndListProjects(t *testing.T) {
 	_, h, token := newTestServer(t)
 
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
-		"id": "proj", "name": "Project", "key": "PROJ", "deploy_gated": true,
+		"id": "proj", "name": "Project", "key": "PROJ",
 	})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	if got["id"] != "proj" || got["name"] != "Project" || got["deploy_gated"] != true {
+	if got["id"] != "proj" || got["name"] != "Project" || got["key"] != "PROJ" {
 		t.Fatalf("create project body = %v", got)
 	}
 	if repos, ok := got["repos"].([]any); !ok || len(repos) != 0 {
@@ -50,10 +50,9 @@ func TestCreateAndListProjects(t *testing.T) {
 	}
 	var body struct {
 		Projects []struct {
-			ID          string   `json:"id"`
-			Name        string   `json:"name"`
-			DeployGated bool     `json:"deploy_gated"`
-			Repos       []string `json:"repos"`
+			ID    string   `json:"id"`
+			Name  string   `json:"name"`
+			Repos []string `json:"repos"`
 		} `json:"projects"`
 	}
 	decodeInto(t, rr, &body)
@@ -61,7 +60,7 @@ func TestCreateAndListProjects(t *testing.T) {
 		t.Fatalf("projects = %v, want 1", body.Projects)
 	}
 	p := body.Projects[0]
-	if p.ID != "proj" || !p.DeployGated || len(p.Repos) != 1 || p.Repos[0] != "acme/widgets" {
+	if p.ID != "proj" || len(p.Repos) != 1 || p.Repos[0] != "acme/widgets" {
 		t.Fatalf("project = %+v", p)
 	}
 }

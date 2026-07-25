@@ -67,11 +67,11 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
 
-	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL", DeployGated: true})
+	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if p.ID != "proj" || p.Name != "Project" || !p.DeployGated {
+	if p.ID != "proj" || p.Name != "Project" || p.Key != "WL" {
 		t.Fatalf("CreateProject result = %+v", p)
 	}
 
@@ -239,7 +239,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DoneTask: %v", err)
 	}
-	if done.State != "done" {
+	if done.State != "merged" {
 		t.Fatalf("DoneTask result = %+v", done)
 	}
 

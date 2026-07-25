@@ -26,7 +26,6 @@ func init() {
 func newProjectAddCmd() *cobra.Command {
 	var name string
 	var key string
-	var deployGated bool
 	cmd := &cobra.Command{
 		Use:   "add <id>",
 		Short: "Create a project",
@@ -37,7 +36,7 @@ func newProjectAddCmd() *cobra.Command {
 				return err
 			}
 			p, raw, err := c.CreateProject(cmd.Context(), cli.CreateProjectInput{
-				ID: args[0], Name: name, Key: key, DeployGated: deployGated,
+				ID: args[0], Name: name, Key: key,
 			})
 			if err != nil {
 				return err
@@ -52,7 +51,6 @@ func newProjectAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "project display name (required)")
 	cmd.Flags().StringVar(&key, "key", "", "project key: unique uppercase code, immutable (e.g. WL)")
-	cmd.Flags().BoolVar(&deployGated, "deploy-gated", false, "require a verified deployment (not just a merged PR) before a task can reach done")
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("key")
 	return cmd

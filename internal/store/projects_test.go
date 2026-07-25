@@ -21,8 +21,8 @@ func TestCreateAndGetProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
-	if got.ID != "horndb" || got.Name != "HornDB" || got.DeployGated {
-		t.Fatalf("GetProject: got %+v, want id=horndb name=HornDB deploy_gated=false", got)
+	if got.ID != "horndb" || got.Name != "HornDB" {
+		t.Fatalf("GetProject: got %+v, want id=horndb name=HornDB", got)
 	}
 	if len(got.Focus) != 0 {
 		t.Fatalf("GetProject: got Focus=%v, want empty", got.Focus)
@@ -61,38 +61,6 @@ func TestListProjects(t *testing.T) {
 	sort.Strings(ids)
 	if !reflect.DeepEqual(ids, []string{"horndb", "worklode"}) {
 		t.Fatalf("ListProjects ids: got %v", ids)
-	}
-}
-
-func TestSetDeployGated(t *testing.T) {
-	s := openTestStore(t)
-	ctx := t.Context()
-
-	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
-		t.Fatalf("CreateProject: %v", err)
-	}
-
-	if err := s.SetDeployGated(ctx, "horndb", true); err != nil {
-		t.Fatalf("SetDeployGated: %v", err)
-	}
-
-	got, err := s.GetProject(ctx, "horndb")
-	if err != nil {
-		t.Fatalf("GetProject: %v", err)
-	}
-	if !got.DeployGated {
-		t.Fatalf("GetProject: want DeployGated=true after SetDeployGated")
-	}
-
-	if err := s.SetDeployGated(ctx, "horndb", false); err != nil {
-		t.Fatalf("SetDeployGated false: %v", err)
-	}
-	got, err = s.GetProject(ctx, "horndb")
-	if err != nil {
-		t.Fatalf("GetProject: %v", err)
-	}
-	if got.DeployGated {
-		t.Fatalf("GetProject: want DeployGated=false after unsetting")
 	}
 }
 

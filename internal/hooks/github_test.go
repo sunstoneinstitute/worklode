@@ -324,28 +324,8 @@ func TestPRMergedNonGatedMovesToDone(t *testing.T) {
 		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
 	}
 	task, err := e.st.GetTask(ctx, taskID)
-	if err != nil || task.State != "done" {
-		t.Fatalf("task = %+v (err %v), want state done", task, err)
-	}
-}
-
-func TestPRMergedDeployGatedStaysInReview(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	if err := e.st.SetDeployGated(ctx, "demo", true); err != nil {
-		t.Fatalf("set deploy gated: %v", err)
-	}
-	taskID := e.seedTask(t)
-	e.claimTask(t, taskID)
-	deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
-	deliver(t, e.h, "pull_request", "d-2", "pull_request_closed_merged.json")
-
-	if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
-	}
-	task, err := e.st.GetTask(ctx, taskID)
-	if err != nil || task.State != "in_review" {
-		t.Fatalf("task = %+v (err %v), want state in_review", task, err)
+	if err != nil || task.State != "merged" {
+		t.Fatalf("task = %+v (err %v), want state merged", task, err)
 	}
 }
 

@@ -80,11 +80,14 @@ func transition(t *testing.T, s *Store, now time.Time, taskID, from, to string) 
 func walkTo(t *testing.T, s *Store, taskID, state string) {
 	t.Helper()
 	paths := map[string][]string{
-		"ready":       {},
-		"in_progress": {"in_progress"},
-		"in_review":   {"in_progress", "in_review"},
-		"done":        {"in_progress", "in_review", "done"},
-		"abandoned":   {"abandoned"},
+		"ready":         {},
+		"in_progress":   {"in_progress"},
+		"in_review":     {"in_progress", "in_review"},
+		"merged":        {"in_progress", "in_review", "merged"},
+		"deployed_dev":  {"in_progress", "in_review", "merged", "deployed_dev"},
+		"deployed_prod": {"in_progress", "in_review", "merged", "deployed_dev", "deployed_prod"},
+		"released":      {"in_progress", "in_review", "merged", "released"},
+		"abandoned":     {"abandoned"},
 	}
 	steps, ok := paths[state]
 	if !ok {
@@ -177,13 +180,23 @@ func TestTransitionLegal(t *testing.T) {
 		{"ready", "in_progress"},
 		{"in_progress", "in_review"},
 		{"in_progress", "ready"},
-		{"in_review", "done"},
 		{"in_review", "in_progress"},
+		{"ready", "merged"},
+		{"in_progress", "merged"},
+		{"in_review", "merged"},
+		{"merged", "deployed_dev"},
+		{"merged", "deployed_prod"},
+		{"merged", "released"},
+		{"deployed_dev", "deployed_prod"},
+		{"deployed_dev", "released"},
 		{"draft", "abandoned"},
 		{"ready", "abandoned"},
 		{"in_progress", "abandoned"},
 		{"in_review", "abandoned"},
-		{"done", "ready"},
+		{"merged", "ready"},
+		{"deployed_dev", "ready"},
+		{"deployed_prod", "ready"},
+		{"released", "ready"},
 		{"abandoned", "ready"},
 	}
 	for _, c := range cases {
@@ -210,10 +223,11 @@ func TestTransitionIllegal(t *testing.T) {
 	s := openTaskStore(t)
 
 	cases := []struct{ from, to string }{
-		{"ready", "done"},
+		{"draft", "merged"},
 		{"draft", "in_progress"},
-		{"done", "abandoned"},
-		{"abandoned", "done"},
+		{"merged", "abandoned"},
+		{"released", "deployed_dev"},
+		{"abandoned", "merged"},
 		{"abandoned", "in_progress"},
 	}
 	for _, c := range cases {
@@ -340,19 +354,19 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 		t.Fatalf("BlockedTaskIDs with blocker in_progress: %s missing from %v", blocked.ID, ids)
 	}
 
-	// Unblocked once the blocker reaches done (legal walk: in_review then done).
+	// Unblocked once the blocker is merged (legal walk: in_review then merged).
 	if err := transition(t, s, taskTestNow, blocker.ID, "in_progress", "in_review"); err != nil {
 		t.Fatalf("transition to in_review: %v", err)
 	}
-	if err := transition(t, s, taskTestNow, blocker.ID, "in_review", "done"); err != nil {
-		t.Fatalf("transition to done: %v", err)
+	if err := transition(t, s, taskTestNow, blocker.ID, "in_review", "merged"); err != nil {
+		t.Fatalf("transition to merged: %v", err)
 	}
 	ids, err = s.BlockedTaskIDs(ctx)
 	if err != nil {
 		t.Fatalf("BlockedTaskIDs: %v", err)
 	}
 	if ids[blocked.ID] {
-		t.Fatalf("BlockedTaskIDs with blocker done: %s should be unblocked, got %v", blocked.ID, ids)
+		t.Fatalf("BlockedTaskIDs with blocker merged: %s should be unblocked, got %v", blocked.ID, ids)
 	}
 	if isBlocked(t, s, blocked.ID) {
 		t.Fatalf("IsBlocked(%s): want false after blocker done", blocked.ID)

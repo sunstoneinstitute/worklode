@@ -280,7 +280,7 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 	switch {
 	case action == "opened" || action == "ready_for_review":
 		// A PR on a claimed task means the work went to review. Any other
-		// task state (ready, done, ...) is left alone — a correlation must
+		// task state (ready, merged, ...) is left alone — a correlation must
 		// never fail the delivery.
 		taskState, err := store.TaskState(tx, taskID)
 		if err != nil {
@@ -293,16 +293,12 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		if err := store.CloseActiveLease(tx, now, taskID); err != nil {
 			return err
 		}
-		// Deploy-gated projects hold the task in in_review until a verified
-		// deployment; otherwise the merge completes it.
-		if project != nil && !project.DeployGated {
-			taskState, err := store.TaskState(tx, taskID)
-			if err != nil {
-				return err
-			}
-			if taskState == "in_review" {
-				return store.Transition(tx, now, taskID, "in_review", "done", eventID)
-			}
+		taskState, err := store.TaskState(tx, taskID)
+		if err != nil {
+			return err
+		}
+		if taskState == "in_review" {
+			return store.Transition(tx, now, taskID, "in_review", "merged", eventID)
 		}
 	}
 	return nil

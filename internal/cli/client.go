@@ -891,20 +891,18 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 // Project is the wire form of a project, including its mapped repos and
 // ranking focus (the ordered list of concerns claim-next should prioritize).
 type Project struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Key         string   `json:"key"`
-	DeployGated bool     `json:"deploy_gated"`
-	Repos       []string `json:"repos"`
-	Focus       []string `json:"focus"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Key   string   `json:"key"`
+	Repos []string `json:"repos"`
+	Focus []string `json:"focus"`
 }
 
 // CreateProjectInput is the request body for CreateProject.
 type CreateProjectInput struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Key         string `json:"key"`
-	DeployGated bool   `json:"deploy_gated,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 // CreateProject calls POST /api/v1/projects.

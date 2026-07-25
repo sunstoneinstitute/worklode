@@ -28,7 +28,7 @@
 <table>
   <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
   {{range .Project.InReview}}
-  <tr><td><span class="badge state-in_review">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+  <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}

@@ -143,7 +143,7 @@ func TestFullChain(t *testing.T) {
 	// 2. Bootstrap admin sets up project, repo, and an agent actor + token.
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
-		ID: "demo", Name: "Demo", Key: "DEMO", DeployGated: false,
+		ID: "demo", Name: "Demo", Key: "DEMO",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
@@ -271,8 +271,8 @@ func TestFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task after merge: %v", err)
 	}
-	if detail.State != "done" {
-		t.Fatalf("task state after merge = %q, want done", detail.State)
+	if detail.State != "merged" {
+		t.Fatalf("task state after merge = %q, want merged", detail.State)
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after merge = %+v, want released (nil)", detail.Lease)
@@ -484,7 +484,7 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		t.Fatalf("deployment entry = %v, want prod/deployed on flux-system/demo", deployment)
 	}
 
-	// The task's state chain ends at done.
+	// The task's state chain ends at merged.
 	var lastState map[string]any
 	for _, e := range tl.Timeline {
 		if e["type"] == "state" {
@@ -492,8 +492,8 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		}
 	}
 	change, _ := lastState["change"].(map[string]any)
-	if change == nil || change["new"] != "done" {
-		t.Fatalf("last state entry = %v, want change.new done", lastState)
+	if change == nil || change["new"] != "merged" {
+		t.Fatalf("last state entry = %v, want change.new merged", lastState)
 	}
 }
 
