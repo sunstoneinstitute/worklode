@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -112,6 +113,103 @@ func LandedMainID(tx *sql.Tx, taskID, repo string) (*int64, error) {
 		 WHERE tc.task_id = $1 AND tc.repo = $2`, taskID, repo).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("landed main id for %s: %w", taskID, err)
+	}
+	if !id.Valid {
+		return nil, nil
+	}
+	return &id.Int64, nil
+}
+
+// NormalizeEnvironment maps a GitHub environment name to the delivery stage
+// it represents: "dev", "prod", or "" for environments the lifecycle
+// ignores (copilot, github-pages, pypi, *-apply, ...).
+func NormalizeEnvironment(name string) string {
+	switch strings.ToLower(name) {
+	case "dev", "test", "development", "staging":
+		return "dev"
+	case "prod", "production":
+		return "prod"
+	default:
+		return ""
+	}
+}
+
+func bumpEnvDeploy(tx *sql.Tx, now time.Time, repo, env, column string, mainID int64, fluxSeen bool) error {
+	// column is one of two compile-time constants below — never user input.
+	q := fmt.Sprintf(
+		`INSERT INTO env_deploys (repo, environment, %[1]s, flux_seen, updated_at)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (repo, environment) DO UPDATE SET
+		   %[1]s = greatest(coalesce(env_deploys.%[1]s, 0), excluded.%[1]s),
+		   flux_seen = env_deploys.flux_seen OR excluded.flux_seen,
+		   updated_at = excluded.updated_at`, column)
+	if _, err := tx.Exec(q, repo, env, mainID, fluxSeen, now.UTC()); err != nil {
+		return fmt.Errorf("bump env_deploy %s/%s %s: %w", repo, env, column, err)
+	}
+	return nil
+}
+
+// BumpEnvDeployGH advances the GitHub deployment watermark for repo/env.
+func BumpEnvDeployGH(tx *sql.Tx, now time.Time, repo, env string, mainID int64) error {
+	return bumpEnvDeploy(tx, now, repo, env, "gh_main_id", mainID, false)
+}
+
+// BumpEnvDeployFlux advances the Flux confirmation watermark and latches
+// flux_seen, switching the repo/env to dual-signal gating permanently.
+func BumpEnvDeployFlux(tx *sql.Tx, now time.Time, repo, env string, mainID int64) error {
+	return bumpEnvDeploy(tx, now, repo, env, "flux_main_id", mainID, true)
+}
+
+// ConfirmedFrontier returns the newest main-commit id confirmed deployed to
+// repo/env: min(gh, flux) once a Flux signal has ever been correlated for
+// the pair, the GitHub watermark alone before that (bootstrap fallback).
+// nil if nothing is confirmed.
+func ConfirmedFrontier(tx *sql.Tx, repo, env string) (*int64, error) {
+	var gh, flux sql.NullInt64
+	var fluxSeen bool
+	err := tx.QueryRow(
+		`SELECT gh_main_id, flux_main_id, flux_seen FROM env_deploys
+		 WHERE repo = $1 AND environment = $2`, repo, env).Scan(&gh, &flux, &fluxSeen)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("frontier %s/%s: %w", repo, env, err)
+	}
+	if !fluxSeen {
+		if !gh.Valid {
+			return nil, nil
+		}
+		return &gh.Int64, nil
+	}
+	if !gh.Valid || !flux.Valid {
+		return nil, nil
+	}
+	confirmed := min(gh.Int64, flux.Int64)
+	return &confirmed, nil
+}
+
+// SetReleaseFrontier records the newest main commit covered by a published
+// release; redelivery of the same tag is a no-op.
+func SetReleaseFrontier(tx *sql.Tx, repo, tag string, mainID int64, publishedAt time.Time) error {
+	_, err := tx.Exec(
+		`INSERT INTO release_frontiers (repo, tag, main_id, published_at)
+		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+		repo, tag, mainID, publishedAt.UTC())
+	if err != nil {
+		return fmt.Errorf("set release frontier %s %s: %w", repo, tag, err)
+	}
+	return nil
+}
+
+// ReleaseFrontier returns the newest released main-commit id for repo, or
+// nil if the repo has no releases recorded.
+func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
+	var id sql.NullInt64
+	err := tx.QueryRow(`SELECT max(main_id) FROM release_frontiers WHERE repo = $1`,
+		repo).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("release frontier %s: %w", repo, err)
 	}
 	if !id.Valid {
 		return nil, nil
