@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 const demoRepo = "sunstoneinstitute/demo"
@@ -36,6 +38,38 @@ func deliverPushOK(t *testing.T, e *env, deliveryID, fixtureFile string) {
 	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
 		t.Fatalf("deliver %s (%s): code=%d body=%s", fixtureFile, deliveryID, rr.Code, rr.Body.String())
 	}
+}
+
+// mainCommitID returns the per-repo ordering id recorded for sha.
+func (e *env) mainCommitID(t *testing.T, sha string) int {
+	t.Helper()
+	return e.rawQueryInt(t,
+		`SELECT id FROM main_commits WHERE repo = $1 AND sha = $2`, demoRepo, sha)
+}
+
+// seedTaskInProject creates a second project with its own task-id key and
+// one ready task in it, returning the task id (e.g. "SW-1"). Its repo is
+// still sunstoneinstitute/demo: a marker names any project's task.
+func (e *env) seedTaskInProject(t *testing.T, projectID, key string) string {
+	t.Helper()
+	if err := e.st.CreateProject(context.Background(), projectID, projectID, key); err != nil {
+		t.Fatalf("create project %s: %v", projectID, err)
+	}
+	var id string
+	err := e.st.Tx(context.Background(), func(tx *sql.Tx) error {
+		task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
+			ProjectID: projectID, Title: "validate input", Priority: "medium", Kind: "bug",
+		})
+		if err != nil {
+			return err
+		}
+		id = task.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("seed task in %s: %v", projectID, err)
+	}
+	return id
 }
 
 func (e *env) taskState(t *testing.T, taskID string) string {
@@ -93,6 +127,15 @@ func TestPushMainMergeAdvancesTask(t *testing.T) {
 	if src := e.taskCommitSource(t, taskID, demoRepo, mergeSHA); src != "merge_message" {
 		t.Fatalf("merge task_commit source = %q, want merge_message", src)
 	}
+	// main_commits ids must follow payload order: the per-repo id is the
+	// "seq" every frontier comparison in the resolver is built on.
+	first := e.mainCommitID(t, "1111111111111111111111111111111111111111")
+	second := e.mainCommitID(t, "2222222222222222222222222222222222222222")
+	third := e.mainCommitID(t, mergeSHA)
+	if !(first < second && second < third) {
+		t.Fatalf("main_commits ids = %d, %d, %d; want strictly increasing in push order",
+			first, second, third)
+	}
 	if st := e.taskState(t, taskID); st != "merged" {
 		t.Fatalf("task state = %q, want merged", st)
 	}
@@ -112,6 +155,51 @@ func TestPushMainMarkerAdvancesTask(t *testing.T) {
 	}
 	if st := e.taskState(t, taskID); st != "merged" {
 		t.Fatalf("task state = %q, want merged", st)
+	}
+}
+
+// TestPushMainFastForwardAdvancesTask covers a rebase/fast-forward merge:
+// the branch commits land on main verbatim, with no merge subject and no
+// marker. Attribution then rests entirely on the commits recorded by the
+// earlier branch push.
+func TestPushMainFastForwardAdvancesTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+
+	deliverPushOK(t, e, "d-1", "push_branch.json")
+	deliverPushOK(t, e, "d-2", "push_main_ff.json")
+
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM main_commits WHERE repo = $1`, demoRepo); n != 2 {
+		t.Fatalf("main_commits rows = %d, want 2", n)
+	}
+	if st := e.taskState(t, taskID); st != "merged" {
+		t.Fatalf("task state = %q, want merged", st)
+	}
+}
+
+// TestPushMainMarkerOtherProjectKey pins the marker rule: "WL-Task:" is a
+// fixed label followed by any project's task key, not a WL- prefix match.
+func TestPushMainMarkerOtherProjectKey(t *testing.T) {
+	e := newEnv(t)
+	e.seedTask(t) // WL-1, unrelated
+	taskID := e.seedTaskInProject(t, "other", "SW")
+	if taskID != "SW-1" {
+		t.Fatalf("seeded task id = %q, want SW-1", taskID)
+	}
+
+	deliverPushOK(t, e, "d-1", "push_main_marker_other_key.json")
+
+	const sha = "8888888888888888888888888888888888888888"
+	if src := e.taskCommitSource(t, taskID, demoRepo, sha); src != "marker" {
+		t.Fatalf("marker task_commit source = %q, want marker", src)
+	}
+	if st := e.taskState(t, taskID); st != "merged" {
+		t.Fatalf("task state = %q, want merged", st)
+	}
+	if st := e.taskState(t, "WL-1"); st != "ready" {
+		t.Fatalf("unrelated task state = %q, want ready", st)
 	}
 }
 
