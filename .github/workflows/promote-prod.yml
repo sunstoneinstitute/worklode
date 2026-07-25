@@ -45,7 +45,7 @@ jobs:
 
       - name: Promote image to hzprod
         id: promote
-        uses: sunstoneinstitute/actions/promote-images@5b9ea3d7d0e777e095c0e0994f1a0fdf59810811 # v1.6.1
+        uses: sunstoneinstitute/actions/promote-images@23d867008b2c88a200c6c64cd540cd6d31839518 # v1.7.0
         with:
           from-env: dev
           to-env: prod
@@ -53,6 +53,9 @@ jobs:
           from-registry: ${{ env.REGISTRY }}
           to-registry: ${{ env.REGISTRY }}
           version-file: VERSION
+          # Overlay dirs are named after the cluster (hzdev/hzprod), not the
+          # env (dev/prod), so neither path can be auto-detected from from-env.
+          from-overlay-path: deploy/overlays/hzdev/kustomization.yaml
           overlay-path: deploy/overlays/hzprod/kustomization.yaml
 
       - name: Output summary
