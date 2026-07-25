@@ -250,8 +250,10 @@ func TestFullChain(t *testing.T) {
 		},
 	})
 
-	// 4d. pull_request.closed merged → non-gated project: task done, lease
-	// released.
+	// 4d. pull_request.closed merged → the PR's shas are recorded as task
+	// commits and the lease is released, but the task stays in_review:
+	// merged is a delivery milestone, resolved only once those shas appear
+	// on the default branch.
 	deliverGitHub(t, srv.URL, "pull_request", "e2e-pr-merged", map[string]any{
 		"action":     "closed",
 		"repository": map[string]any{"full_name": repo},
@@ -271,14 +273,34 @@ func TestFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task after merge: %v", err)
 	}
-	if detail.State != "merged" {
-		t.Fatalf("task state after merge = %q, want merged", detail.State)
+	if detail.State != "in_review" {
+		t.Fatalf("task state after merge = %q, want in_review until the merge lands on main", detail.State)
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after merge = %+v, want released (nil)", detail.Lease)
 	}
 
-	// 4e. release.published from the merge commit → git_tag artifact.
+	// 4e. push to the default branch — the push every real merge produces.
+	// Squash-merge shape: only the PR's merge commit lands, so attribution
+	// runs purely through the shas the merged PR recorded, and the resolver
+	// advances the task to merged.
+	deliverGitHub(t, srv.URL, "push", "e2e-push-main", map[string]any{
+		"ref":        "refs/heads/main",
+		"repository": map[string]any{"full_name": repo, "default_branch": "main"},
+		"commits": []any{
+			map[string]any{"id": mergeSHA, "message": "Add login page (#42)"},
+		},
+		"head_commit": map[string]any{"id": mergeSHA, "message": "Add login page (#42)"},
+	})
+	detail, _, err = agent.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task after main push: %v", err)
+	}
+	if detail.State != "merged" {
+		t.Fatalf("task state after main push = %q, want merged", detail.State)
+	}
+
+	// 4f. release.published from the merge commit → git_tag artifact.
 	deliverGitHub(t, srv.URL, "release", "e2e-release-1", map[string]any{
 		"action":     "published",
 		"repository": map[string]any{"full_name": repo},
@@ -291,7 +313,8 @@ func TestFullChain(t *testing.T) {
 
 	// 5. Flux webhook: reconciliation success on the release revision in
 	// cluster "testcluster" → deployment "deployed" in env "prod", linked to
-	// the artifact.
+	// the artifact. This is only the Flux half of the prod frontier, so the
+	// task must not advance yet.
 	deliverFlux(t, srv.URL, map[string]any{
 		"involvedObject": map[string]any{
 			"kind": "Kustomization", "namespace": "flux-system", "name": "demo",
@@ -305,6 +328,30 @@ func TestFullChain(t *testing.T) {
 			"cluster":  "testcluster",
 		},
 	})
+	detail, _, err = agent.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task after flux deploy: %v", err)
+	}
+	if detail.State != "merged" {
+		t.Fatalf("task state after flux-only prod deploy = %q, want merged (GitHub half missing)", detail.State)
+	}
+
+	// 5b. deployment_status success for production on the same commit → the
+	// GitHub half of the prod frontier. Both halves now confirm it, so the
+	// resolver advances the task to deployed_prod.
+	deliverGitHub(t, srv.URL, "deployment_status", "e2e-deploy-prod", map[string]any{
+		"action":            "created",
+		"repository":        map[string]any{"full_name": repo},
+		"deployment":        map[string]any{"environment": "production", "sha": mergeSHA},
+		"deployment_status": map[string]any{"state": "success"},
+	})
+	detail, _, err = agent.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task after prod deployment_status: %v", err)
+	}
+	if detail.State != "deployed_prod" {
+		t.Fatalf("task state after confirmed prod deploy = %q, want deployed_prod", detail.State)
+	}
 
 	// 6. Watcher path: one crashloop runtime event with a dedupe key. Its
 	// image matches no artifact, so it stays unlinked (and off the task
@@ -484,7 +531,7 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		t.Fatalf("deployment entry = %v, want prod/deployed on flux-system/demo", deployment)
 	}
 
-	// The task's state chain ends at merged.
+	// The task's state chain ends at deployed_prod.
 	var lastState map[string]any
 	for _, e := range tl.Timeline {
 		if e["type"] == "state" {
@@ -492,8 +539,8 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		}
 	}
 	change, _ := lastState["change"].(map[string]any)
-	if change == nil || change["new"] != "merged" {
-		t.Fatalf("last state entry = %v, want change.new merged", lastState)
+	if change == nil || change["new"] != "deployed_prod" {
+		t.Fatalf("last state entry = %v, want change.new deployed_prod", lastState)
 	}
 }
 
