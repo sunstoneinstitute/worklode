@@ -360,7 +360,7 @@ func TestSessionEndRemovesMarker(t *testing.T) {
 	root := initGitRepo(t)
 	_, wtDir, _ := setupLeasedWorktree(t, c, root, "End me")
 
-	if err := writeSessionMarker(wtDir, "s-end"); err != nil {
+	if err := writeSessionMarker(wtDir, "s-end", time.Now()); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 	if !sessionMarkerFresh(wtDir) {
@@ -456,5 +456,48 @@ func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
 	}
 	if after.State != "in_progress" || after.Lease == nil {
 		t.Fatalf("task after auto-resume = state %q lease %+v, want in_progress/non-nil", after.State, after.Lease)
+	}
+}
+
+func TestSessionMarkerHeartbeat(t *testing.T) {
+	root := initGitRepo(t)
+	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+
+	if err := writeSessionMarker(root, "sess-1", base); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	id, ok := markerSessionID(root)
+	if !ok || id != "sess-1" {
+		t.Fatalf("markerSessionID: got %q, %v", id, ok)
+	}
+
+	// Within the debounce window: no heartbeat is due.
+	if heartbeatDue(root, base.Add(30*time.Second)) {
+		t.Fatal("heartbeat due 30s after the last one; want debounced")
+	}
+	// Past the window: due again.
+	if !heartbeatDue(root, base.Add(2*time.Minute)) {
+		t.Fatal("heartbeat not due 2m after the last one")
+	}
+
+	// Recording a heartbeat moves the window without disturbing the session id.
+	if err := recordHeartbeat(root, base.Add(2*time.Minute)); err != nil {
+		t.Fatalf("record heartbeat: %v", err)
+	}
+	if heartbeatDue(root, base.Add(2*time.Minute+30*time.Second)) {
+		t.Fatal("heartbeat due 30s after a recorded heartbeat; want debounced")
+	}
+	if id, ok := markerSessionID(root); !ok || id != "sess-1" {
+		t.Fatalf("session id after heartbeat: got %q, %v", id, ok)
+	}
+
+	// No marker at all: nothing to heartbeat, and no session id.
+	empty := initGitRepo(t)
+	if heartbeatDue(empty, base) {
+		t.Fatal("heartbeat due with no marker file")
+	}
+	if _, ok := markerSessionID(empty); ok {
+		t.Fatal("markerSessionID found an id with no marker file")
 	}
 }

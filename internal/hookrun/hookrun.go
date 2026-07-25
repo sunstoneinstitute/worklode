@@ -39,6 +39,11 @@ const backboneTimeout = 2 * time.Second
 // session-start to proactively renew it.
 const leaseRenewWindow = 30 * time.Minute
 
+// heartbeatDebounce is the minimum gap between two agent-session heartbeats
+// reported from one worktree. Stop fires per assistant turn, which in a fast
+// conversation is several times a minute; the backbone does not need that.
+const heartbeatDebounce = time.Minute
+
 // sessionMarkerFile is written in the worktree-private git dir to mark a live
 // coding session; see the marker helpers below.
 const sessionMarkerFile = "worklode-session.json"
@@ -208,7 +213,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 
 	ensureLease(ctx, opts, c, taskID, identity, brief.Lease)
 
-	if err := writeSessionMarker(root, p.SessionID); err != nil {
+	if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
 		warn(opts, "write session marker: %v", err)
 	}
 
@@ -461,9 +466,10 @@ func compactBrief(b cli.Brief) string {
 // sessionMarker records the process owning a live coding session in a
 // worktree. A marker is stale once its pid is no longer alive.
 type sessionMarker struct {
-	SessionID string `json:"session_id"`
-	PID       int    `json:"pid"`
-	StartedAt string `json:"started_at"`
+	SessionID       string `json:"session_id"`
+	PID             int    `json:"pid"`
+	StartedAt       string `json:"started_at"`
+	LastHeartbeatAt string `json:"last_heartbeat_at,omitempty"`
 }
 
 // markerPath returns the marker file path inside root's worktree-private git
@@ -476,21 +482,83 @@ func markerPath(root string) (string, error) {
 	return filepath.Join(gitDir, sessionMarkerFile), nil
 }
 
-// writeSessionMarker writes the current process's session marker for root.
-func writeSessionMarker(root, sessionID string) error {
+// readSessionMarker reads root's marker. A missing or unparseable marker
+// returns ok=false — never an error, since every caller treats "no marker" as
+// "nothing to do".
+func readSessionMarker(root string) (sessionMarker, bool) {
+	path, err := markerPath(root)
+	if err != nil {
+		return sessionMarker{}, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return sessionMarker{}, false
+	}
+	var m sessionMarker
+	if json.Unmarshal(data, &m) != nil {
+		return sessionMarker{}, false
+	}
+	return m, true
+}
+
+// writeMarker serializes m to root's marker path.
+func writeMarker(root string, m sessionMarker) error {
 	path, err := markerPath(root)
 	if err != nil {
 		return err
 	}
-	b, err := json.Marshal(sessionMarker{
-		SessionID: sessionID,
-		PID:       os.Getpid(),
-		StartedAt: time.Now().Format(time.RFC3339),
-	})
+	b, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, b, 0o644)
+}
+
+// writeSessionMarker writes the current process's session marker for root,
+// counting now as the first heartbeat.
+func writeSessionMarker(root, sessionID string, now time.Time) error {
+	return writeMarker(root, sessionMarker{
+		SessionID:       sessionID,
+		PID:             os.Getpid(),
+		StartedAt:       now.Format(time.RFC3339),
+		LastHeartbeatAt: now.Format(time.RFC3339),
+	})
+}
+
+// markerSessionID returns the session id recorded for root. Used by hooks that
+// receive no stdin (git pre-commit) and so cannot learn it from a payload.
+func markerSessionID(root string) (string, bool) {
+	m, ok := readSessionMarker(root)
+	if !ok || m.SessionID == "" {
+		return "", false
+	}
+	return m.SessionID, true
+}
+
+// heartbeatDue reports whether root's session is due another heartbeat. No
+// marker means no session to report, so nothing is due. An unparseable
+// timestamp counts as due — reporting once too often beats going silent.
+func heartbeatDue(root string, now time.Time) bool {
+	m, ok := readSessionMarker(root)
+	if !ok || m.SessionID == "" {
+		return false
+	}
+	last, err := time.Parse(time.RFC3339, m.LastHeartbeatAt)
+	if err != nil {
+		return true
+	}
+	return now.Sub(last) >= heartbeatDebounce
+}
+
+// recordHeartbeat stamps root's marker with the time of a heartbeat that was
+// just reported to the backbone.
+func recordHeartbeat(root string, now time.Time) error {
+	m, ok := readSessionMarker(root)
+	if !ok {
+		return nil
+	}
+	m.LastHeartbeatAt = now.Format(time.RFC3339)
+	return writeMarker(root, m)
 }
 
 // removeSessionMarker deletes root's session marker; a missing marker is fine.
@@ -508,16 +576,8 @@ func removeSessionMarker(root string) error {
 // sessionMarkerFresh reports whether root has a session marker whose recorded
 // pid is still alive. An absent/unreadable marker, or a dead pid, is stale.
 func sessionMarkerFresh(root string) bool {
-	path, err := markerPath(root)
-	if err != nil {
-		return false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var m sessionMarker
-	if json.Unmarshal(data, &m) != nil || m.PID <= 0 {
+	m, ok := readSessionMarker(root)
+	if !ok || m.PID <= 0 {
 		return false
 	}
 	return pidAlive(m.PID)
