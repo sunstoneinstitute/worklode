@@ -1,7 +1,9 @@
-// Delivery-lifecycle fact tables and resolver
+// Delivery-lifecycle fact tables
 // (docs/specs/2026-07-25-delivery-lifecycle-design.md). Handlers record
-// facts inside a RecordEvent transaction, then call ResolveDelivery, which
-// advances the task to the furthest milestone the facts support.
+// facts inside a RecordEvent transaction, then call ResolveDelivery
+// (delivery_resolve.go), which advances the task to the furthest milestone
+// the facts support.
+
 package store
 
 import (
