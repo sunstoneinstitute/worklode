@@ -1,0 +1,24 @@
+class Worklode < Formula
+  desc "Work tracker CLI (lode) for Sunstone Institute"
+  homepage "https://github.com/sunstoneinstitute/worklode"
+  url "__URL__"
+  sha256 "__SHA256__"
+  head "https://github.com/sunstoneinstitute/worklode.git", branch: "main"
+
+__BOTTLE_BLOCK__
+  depends_on "go" => :build
+
+  def install
+    ldflags = %W[
+      -s -w
+      -X github.com/sunstoneinstitute/worklode/internal/cmd.version=#{version}
+    ]
+    system "go", "build", *std_go_args(ldflags:, output: bin/"lode"), "./cmd/lode"
+
+    generate_completions_from_executable(bin/"lode", "completion")
+  end
+
+  test do
+    assert_match "lode version", shell_output("#{bin}/lode --version")
+  end
+end
