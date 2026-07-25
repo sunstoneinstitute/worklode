@@ -176,7 +176,7 @@ func TestClaimUnknownTaskOrActor(t *testing.T) {
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
-	if _, err := s.Claim(ctx, "WL-999", "stig", "host:/wt", 0); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Claim(ctx, "HDB-999", "stig", "host:/wt", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("claim unknown task: want ErrNotFound, got %v", err)
 	}
 	if _, err := s.Claim(ctx, task.ID, "ghost", "host:/wt", 0); !errors.Is(err, ErrNotFound) {

@@ -327,7 +327,8 @@ func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 }
 
 // ListTasks returns tasks matching the filter, ordered by priority (critical
-// first) and then by numeric id.
+// first), then by task id in CompareTaskIDs order (key lexically, suffix
+// numerically, so WL-9 precedes WL-10).
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
@@ -351,12 +352,14 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
 	}
+	// Same order as CompareTaskIDs — key lexically, then the numeric suffix,
+	// so WL-9 precedes WL-10 — but done in the database.
 	q += ` ORDER BY CASE priority
 	         WHEN 'critical' THEN 0
 	         WHEN 'high' THEN 1
 	         WHEN 'medium' THEN 2
 	         ELSE 3
-	       END, project_id, CAST(split_part(id, '-', 2) AS INTEGER)`
+	       END, split_part(id, '-', 1), CAST(split_part(id, '-', 2) AS INTEGER)`
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
