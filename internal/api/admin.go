@@ -33,11 +33,11 @@ type repoJSON struct {
 }
 
 type projectJSON struct {
-	ID    string     `json:"id"`
-	Name  string     `json:"name"`
-	Key   string     `json:"key"`
-	Repos []repoJSON `json:"repos"`
-	Focus []string   `json:"focus"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Key   string   `json:"key"`
+	Repos []string `json:"repos"`
+	Focus []string `json:"focus"`
 }
 
 type createProjectRequest struct {
@@ -58,7 +58,7 @@ func toProjectJSON(p *store.Project, repos []store.RepoMapping) projectJSON {
 		focus = []string{}
 	}
 	return projectJSON{
-		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
+		ID: p.ID, Name: p.Name, Key: p.Key, Repos: repos, Focus: focus,
 	}
 }
 
