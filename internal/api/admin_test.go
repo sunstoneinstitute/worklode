@@ -48,19 +48,13 @@ func TestCreateAndListProjects(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("list projects status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	var body struct {
-		Projects []struct {
-			ID    string   `json:"id"`
-			Name  string   `json:"name"`
-			Repos []string `json:"repos"`
-		} `json:"projects"`
-	}
+	var body projectListBody
 	decodeInto(t, rr, &body)
 	if len(body.Projects) != 1 {
 		t.Fatalf("projects = %v, want 1", body.Projects)
 	}
 	p := body.Projects[0]
-	if p.ID != "proj" || len(p.Repos) != 1 || p.Repos[0] != "acme/widgets" {
+	if p.ID != "proj" || len(p.Repos) != 1 {
 		t.Fatalf("project = %+v", p)
 	}
 	if p.Repos[0].Repo != "acme/widgets" || p.Repos[0].DoneState != "merged" {
