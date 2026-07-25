@@ -609,9 +609,15 @@ func permutations(xs []string) [][]string {
 // TestResolveDeliveryArrivalOrder feeds one identical fact set in every
 // arrival order and asserts the same final state each time (design spec,
 // "Testing"). Each step is one webhook's worth of facts followed by a
-// resolve, exactly as handlers do. Orders where a deploy precedes the main
-// push are skipped: a deployment_status for a commit not yet on main cannot
-// resolve to a main id, so that is not a real arrival order.
+// resolve, exactly as handlers do.
+//
+// Orders where a deploy precedes the main push are skipped, but they do
+// occur: GitHub gives no delivery-ordering guarantee, and the
+// last-deploy/<env> push that anchors a deploy SHA is a separate delivery.
+// A deploy whose SHA is not yet on main cannot resolve to a main id, and v1
+// drops that fact rather than parking it (accepted: deploys follow their
+// push by minutes here, and the next deploy of the repo re-records the
+// frontier, so the affected tasks catch up then).
 func TestResolveDeliveryArrivalOrder(t *testing.T) {
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
@@ -707,13 +713,15 @@ func TestTasksBelowFrontier(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// P1-2 lands above the frontier, P1-3 is already released (not advanceable),
-	// P1-4 never lands.
-	for _, id := range []string{"P1-2", "P1-3", "P1-4"} {
+	// P1-1 lands below the frontier, P1-5 lands exactly on it (the common
+	// case: a deploy of precisely the task's commit). P1-2 lands above,
+	// P1-3 is already released (not advanceable), P1-4 never lands.
+	for _, id := range []string{"P1-2", "P1-3", "P1-4", "P1-5"} {
 		mustExec(`INSERT INTO tasks (id, project_id, title, priority, kind, state, created_at, updated_at)
 		          VALUES ($1,'p1','t','high','feature','ready', now(), now())`, id)
 	}
 	mustExec(`UPDATE tasks SET state = 'released' WHERE id = 'P1-3'`)
+	mustExec(`UPDATE tasks SET state = 'merged' WHERE id = 'P1-5'`)
 
 	now := time.Now()
 	tx, err := s.db.Begin()
@@ -723,7 +731,7 @@ func TestTasksBelowFrontier(t *testing.T) {
 	defer tx.Rollback()
 
 	for _, tc := range []struct{ task, sha string }{
-		{"P1-1", "c1"}, {"P1-2", "c3"}, {"P1-3", "c2"}, {"P1-4", "unlanded"},
+		{"P1-1", "c1"}, {"P1-2", "c3"}, {"P1-3", "c2"}, {"P1-4", "unlanded"}, {"P1-5", "c2"},
 	} {
 		if err := InsertTaskCommit(tx, TaskCommit{
 			TaskID: tc.task, Repo: "acme/app", SHA: tc.sha, Source: "pr", SeenAt: now}); err != nil {
@@ -746,13 +754,67 @@ func TestTasksBelowFrontier(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.Sort(got)
-	if !slices.Equal(got, []string{"P1-1"}) {
-		t.Fatalf("TasksBelowFrontier = %v, want [P1-1]", got)
+	if !slices.Equal(got, []string{"P1-1", "P1-5"}) {
+		t.Fatalf("TasksBelowFrontier = %v, want [P1-1 P1-5]", got)
 	}
 
 	// Other repos are never returned.
 	got, err = TasksBelowFrontier(tx, "acme/other", frontier)
 	if err != nil || len(got) != 0 {
 		t.Fatalf("other repo = %v, %v; want empty", got, err)
+	}
+}
+
+// TestClearTaskCommitsVoidsDelivery: the commits behind a delivered task are
+// still on main after a reopen, so without clearing them the next resolve
+// snaps the task straight back to its former delivered state.
+func TestClearTaskCommitsVoidsDelivery(t *testing.T) {
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	if err := InsertTaskCommit(tx, TaskCommit{TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
+		t.Fatalf("state = %s, want deployed_prod", st)
+	}
+
+	// Reopen, as POST /tasks/{id}/reopen does.
+	if err := Transition(tx, now, taskID, "deployed_prod", "ready", ev); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearTaskCommits(tx, taskID); err != nil {
+		t.Fatal(err)
+	}
+
+	landed, err := LandedMainID(tx, taskID, "acme/app")
+	if err != nil || landed != nil {
+		t.Fatalf("landed after clear = %v, %v; want nil, nil", landed, err)
+	}
+	if ids, err := TasksBelowFrontier(tx, "acme/app", mid); err != nil || len(ids) != 0 {
+		t.Fatalf("TasksBelowFrontier after clear = %v, %v; want empty", ids, err)
+	}
+	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+		t.Fatal(err)
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "ready" {
+		t.Fatalf("state after re-resolve = %s, want ready (reopen voids the prior delivery)", st)
 	}
 }
