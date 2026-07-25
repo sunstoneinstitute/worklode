@@ -331,3 +331,7 @@ The gate also skips the checks for **docs-only PRs** — every changed file
 markdown (`*.md`) or under `docs/`. The `can-be-tested` label overrides this.
 Jobs skipped via `if:` count as satisfied for branch-protection required
 checks, so a skipped run does not block merging.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
