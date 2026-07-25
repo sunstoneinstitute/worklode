@@ -218,3 +218,117 @@ func TestAgentSessionNotFound(t *testing.T) {
 		t.Fatalf("unknown session id: got %v, want ErrNotFound", err)
 	}
 }
+
+func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	in, out := int64(1200), int64(340)
+	amount := "1.234500"
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{InputTokens: &in, OutputTokens: &out, CostAmount: &amount}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+
+	sess, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if sess.EndedAt == nil {
+		t.Fatal("ended_at was not stamped")
+	}
+	if sess.InputTokens == nil || *sess.InputTokens != in {
+		t.Fatalf("input_tokens: got %v, want %d", sess.InputTokens, in)
+	}
+	// An amount reported without a currency lands as USD: the column DEFAULT
+	// does not fire on the UPDATE path.
+	if sess.CostCurrency != "USD" {
+		t.Fatalf("cost_currency: got %q, want %q", sess.CostCurrency, "USD")
+	}
+	if sess.CostAmount == nil || *sess.CostAmount != amount {
+		t.Fatalf("cost_amount: got %v, want %s", sess.CostAmount, amount)
+	}
+}
+
+func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	amount := "2.500000"
+	err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{CostAmount: &amount, CostCurrency: "dollars"})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("bad currency: got %v, want ErrInvalidInput", err)
+	}
+
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{CostAmount: &amount, CostCurrency: "EUR"}); err != nil {
+		t.Fatalf("EUR cost: %v", err)
+	}
+	sess, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if sess.CostCurrency != "EUR" {
+		t.Fatalf("cost_currency: got %q, want EUR", sess.CostCurrency)
+	}
+
+	err = s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "nope", SessionUsage{})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown session: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+
+	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	if err != nil {
+		t.Fatalf("first touch: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	reopened, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	if err != nil {
+		t.Fatalf("touch after end: %v", err)
+	}
+	if reopened.EndedAt != nil {
+		t.Fatalf("reopened session should have ended_at cleared, got %v", *reopened.EndedAt)
+	}
+	if reopened.ID != sess.ID {
+		t.Fatalf("reopen created a new row: %d then %d", sess.ID, reopened.ID)
+	}
+	if !reopened.StartedAt.Equal(sess.StartedAt) {
+		t.Fatalf("reopen moved started_at: %v then %v", sess.StartedAt, reopened.StartedAt)
+	}
+	if !reopened.LastSeenAt.After(sess.LastSeenAt) {
+		t.Fatalf("reopen did not bump last_seen_at: %v then %v", sess.LastSeenAt, reopened.LastSeenAt)
+	}
+
+	var events int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM events WHERE type = 'agent_session.started'`,
+	).Scan(&events); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if events != 1 {
+		t.Fatalf("agent_session.started events: got %d, want 1 (reopen must not emit a new start event)", events)
+	}
+}
