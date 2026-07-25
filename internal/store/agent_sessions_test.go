@@ -292,6 +292,27 @@ func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
 	}
 }
 
+func TestEndAgentSessionRejectsMalformedCostAmount(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	garbage := "abc"
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{CostAmount: &garbage}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("garbage amount: got %v, want ErrInvalidInput", err)
+	}
+
+	overPrecision := "9999999999999"
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{CostAmount: &overPrecision}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("over-precision amount: got %v, want ErrInvalidInput", err)
+	}
+}
+
 func TestEndAgentSessionRepeatCloseWithoutReopenIsNotFound(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()

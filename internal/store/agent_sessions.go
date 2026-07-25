@@ -44,6 +44,11 @@ var validAgents = map[string]bool{
 // currencyRE mirrors the cost_currency CHECK constraint (ISO 4217).
 var currencyRE = regexp.MustCompile(`^[A-Z]{3}$`)
 
+// costAmountRE mirrors the cost_amount column type, numeric(12,6): at most 6
+// integer digits and at most 6 fractional digits, no sign — a cost is never
+// negative.
+var costAmountRE = regexp.MustCompile(`^\d{1,6}(\.\d{1,6})?$`)
+
 // defaultCurrency is applied when a caller reports a cost amount without a
 // currency. The column DEFAULT cannot do this: cost arrives by UPDATE, and a
 // column default only fires on INSERT.
@@ -246,6 +251,9 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 	}
 	if !currencyRE.MatchString(currency) {
 		return fmt.Errorf("cost currency %q is not an ISO 4217 code: %w", usage.CostCurrency, ErrInvalidInput)
+	}
+	if usage.CostAmount != nil && !costAmountRE.MatchString(*usage.CostAmount) {
+		return fmt.Errorf("cost amount %q is not a valid numeric(12,6) value: %w", *usage.CostAmount, ErrInvalidInput)
 	}
 
 	lease, err := s.heldLease(ctx, taskID, actorID)
