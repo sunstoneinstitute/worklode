@@ -305,21 +305,12 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		if err := store.CloseActiveLease(tx, now, taskID); err != nil {
 			return err
 		}
-		// Record the PR's shas as task commits; the resolver advances the
-		// task once (and if) they appear on main via a push event.
-		if gh.Head.SHA != "" {
-			if err := store.InsertTaskCommit(tx, store.TaskCommit{
-				TaskID: taskID, Repo: repo, SHA: gh.Head.SHA, Source: "pr", SeenAt: now,
-			}); err != nil {
-				return err
-			}
+		taskState, err := store.TaskState(tx, taskID)
+		if err != nil {
+			return err
 		}
-		if gh.MergeCommitSHA != nil && *gh.MergeCommitSHA != "" {
-			if err := store.InsertTaskCommit(tx, store.TaskCommit{
-				TaskID: taskID, Repo: repo, SHA: *gh.MergeCommitSHA, Source: "pr", SeenAt: now,
-			}); err != nil {
-				return err
-			}
+		if taskState == "in_review" {
+			return store.Transition(tx, now, taskID, "in_review", "merged", eventID)
 		}
 		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
 	}

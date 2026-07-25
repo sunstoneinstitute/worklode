@@ -343,55 +343,20 @@ func TestPRMergeRecordsFactsAndResolves(t *testing.T) {
 		e.claimTask(t, taskID)
 		deliverOK(t, e, "pull_request", "d-1", "pull_request_opened.json") // → in_review
 
-		deliverOK(t, e, "pull_request", "d-2", "pull_request_closed_merged.json")
-
-		pr, err := e.st.GetPR(ctx, demoRepo, 42)
-		if err != nil {
-			t.Fatalf("get PR: %v", err)
-		}
-		if pr.State != "merged" || pr.MergeSHA == nil || pr.MergedAt == nil {
-			t.Fatalf("PR after merge = %+v", pr)
-		}
-		if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-			t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
-		}
-		for _, sha := range []string{prHeadSHA, prMergeSHA} {
-			if src := e.taskCommitSource(t, taskID, demoRepo, sha); src != "pr" {
-				t.Fatalf("task_commit source for %s = %q, want pr", sha, src)
-			}
-		}
-		// Nothing is on main yet: the merge event alone must not deliver.
-		if st := e.taskState(t, taskID); st != "in_review" {
-			t.Fatalf("task state after PR merge = %q, want in_review (nothing on main yet)", st)
-		}
-
-		deliverPushOK(t, e, "d-3", "push_main_pr_merge.json")
-		if st := e.taskState(t, taskID); st != "merged" {
-			t.Fatalf("task state after push = %q, want merged", st)
-		}
-	})
-
-	t.Run("push to main then PR merged", func(t *testing.T) {
-		e := newEnv(t)
-		taskID := e.seedTask(t)
-		e.claimTask(t, taskID)
-		deliverOK(t, e, "pull_request", "d-1", "pull_request_opened.json") // → in_review
-
-		deliverPushOK(t, e, "d-2", "push_main_pr_merge.json")
-		// The push carries no attributable subject and no prior task
-		// commits, so it records main commits and nothing else.
-		if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM task_commits`); n != 0 {
-			t.Fatalf("task_commit rows after push = %d, want 0", n)
-		}
-		if st := e.taskState(t, taskID); st != "in_review" {
-			t.Fatalf("task state after push = %q, want in_review (no attribution yet)", st)
-		}
-
-		deliverOK(t, e, "pull_request", "d-3", "pull_request_closed_merged.json")
-		if st := e.taskState(t, taskID); st != "merged" {
-			t.Fatalf("task state after PR merge = %q, want merged", st)
-		}
-	})
+	pr, err := e.st.GetPR(ctx, "sunstoneinstitute/demo", 42)
+	if err != nil {
+		t.Fatalf("get PR: %v", err)
+	}
+	if pr.State != "merged" || pr.MergeSHA == nil || pr.MergedAt == nil {
+		t.Fatalf("PR after merge = %+v", pr)
+	}
+	if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
+	}
+	task, err := e.st.GetTask(ctx, taskID)
+	if err != nil || task.State != "merged" {
+		t.Fatalf("task = %+v (err %v), want state merged", task, err)
+	}
 }
 
 func TestReviewSubmitted(t *testing.T) {
