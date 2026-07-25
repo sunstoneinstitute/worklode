@@ -37,6 +37,11 @@ type Config struct {
 	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
 	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
+	// BranchPrefix (LODE_BRANCH_PREFIX) is the task-branch prefix the server
+	// hands out and correlates pushes by; empty means "lode/". The legacy
+	// "wl/" prefix stays recognized for correlation regardless.
+	BranchPrefix string
+
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
@@ -56,12 +61,46 @@ type Config struct {
 	// granted admin via GitHub (the team-membership check simply 404s).
 	GitHubAdminTeam string
 	TokenEncKey     string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+
+	// GitHub App installation auth, used to discover a newly mapped repo's
+	// delivery profile (see discoverDoneState). Independent of the login flow
+	// above and optional: with either field empty, discovery is skipped and a
+	// repo mapping keeps its default done_state. GitHubAppPrivateKey is secret
+	// PEM — like the other secrets here it is only ever consumed, never logged
+	// and never served.
+	GitHubAppID         string // LODE_GITHUB_APP_ID
+	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
+}
+
+// githubAPIBase is the public GitHub REST endpoint. Tests point AppAuth at a
+// local server by building it directly.
+const githubAPIBase = "https://api.github.com"
+
+// newAppAuth builds the GitHub App client used for repo discovery, or nil when
+// the app id and key are not both configured. An unusable key is a startup
+// error, matching how NewServer treats every other secret: unset means the
+// feature is off, malformed means the operator meant to enable it and the
+// server must not start half-configured (cf. LODE_TOKEN_ENC_KEY, LODE_OIDC_*).
+// Degrading here would look like a repo with no environments.
+func newAppAuth(cfg Config) (*githubauth.AppAuth, error) {
+	if cfg.GitHubAppID == "" || cfg.GitHubAppPrivateKey == "" {
+		return nil, nil
+	}
+	key, err := githubauth.ParseAppPrivateKey([]byte(cfg.GitHubAppPrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("LODE_GITHUB_APP_PRIVATE_KEY: %w", err)
+	}
+	return &githubauth.AppAuth{AppID: cfg.GitHubAppID, Key: key, BaseURL: githubAPIBase}, nil
 }
 
 type server struct {
 	st  *store.Store
 	cfg Config
 	log *slog.Logger
+
+	// branchPrefix is cfg.BranchPrefix normalized to its default; the server
+	// is the authority on branch names handed to clients.
+	branchPrefix string
 
 	// oidc is nil unless OIDC is configured (issuer + client id set). All SSO
 	// routes 404 when it is nil.
@@ -71,6 +110,10 @@ type server struct {
 	// /auth/github/* routes 404 when gh is nil.
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
+
+	// appAuth is nil unless the GitHub App id and private key are configured;
+	// when nil, addRepo skips done_state discovery.
+	appAuth *githubauth.AppAuth
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
@@ -113,6 +156,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		tmplProject: parseWebTemplates("project.html"),
 	}
 	s.cliCodes = newCLICodeStore(st.Now)
+
+	store.SetBranchPrefix(cfg.BranchPrefix)
+	s.branchPrefix = store.BranchPrefix()
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {
@@ -157,6 +203,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubOrg, cfg.GitHubAdminTeam)
 		s.tokenCipher = tc
 	}
+
+	appAuth, err := newAppAuth(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.appAuth = appAuth
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
@@ -234,6 +286,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
 	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
 	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
+	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))
 
 	mux.Handle("POST /api/v1/actors", s.auth(requireAdmin(s.createActor)))
 	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(requireAdmin(s.createToken)))

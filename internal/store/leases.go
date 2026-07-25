@@ -105,7 +105,7 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     already holds an active lease on another task (the leases_active and
 //     leases_active_worktree unique indexes are the backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task.
-//   - ErrBadTransition: the task is not in state ready (draft, done, ...).
+//   - ErrBadTransition: the task is not in state ready (draft, merged, ...).
 //   - ErrNotFound: the task or actor does not exist.
 //
 // ttl <= 0 means DefaultLeaseTTL.

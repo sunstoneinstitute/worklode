@@ -117,6 +117,27 @@ func deliverBody(t *testing.T, h http.Handler, event, deliveryID string, body []
 	return rr
 }
 
+// deliverOK posts a fixture and requires a clean "ok" — an apply that errors
+// rolls its whole transaction back, which otherwise looks indistinguishable
+// from "the handler correctly did nothing".
+func deliverOK(t *testing.T, e *env, event, deliveryID, fixtureFile string) {
+	t.Helper()
+	rr := deliver(t, e.h, event, deliveryID, fixtureFile)
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("deliver %s %s (%s): code=%d body=%s",
+			event, fixtureFile, deliveryID, rr.Code, rr.Body.String())
+	}
+}
+
+// setDoneState overrides the repo mapping's terminal delivery state.
+func (e *env) setDoneState(t *testing.T, repo, doneState string) {
+	t.Helper()
+	if _, err := e.st.DBForTests().Exec(
+		`UPDATE project_repos SET done_state = $1 WHERE repo = $2`, doneState, repo); err != nil {
+		t.Fatalf("set done_state %s for %s: %v", doneState, repo, err)
+	}
+}
+
 func status(t *testing.T, rr *httptest.ResponseRecorder) string {
 	t.Helper()
 	var m map[string]string
@@ -301,52 +322,76 @@ func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 	}
 }
 
-func TestPRMergedNonGatedMovesToDone(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	taskID := e.seedTask(t)
-	e.claimTask(t, taskID)
-	deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json") // → in_review
+// prHeadSHA and prMergeSHA are the shas in pull_request_closed_merged.json;
+// push_main_pr_merge.json lands exactly those two on main. Its merge subject
+// ("... from contributor/patch-1") deliberately names no task branch, so the
+// push contributes no attribution of its own: whatever advances the task in
+// these tests came from the PR facts.
+const (
+	prHeadSHA  = "abc1230000000000000000000000000000000000"
+	prMergeSHA = "def4560000000000000000000000000000000000"
+)
 
-	rr := deliver(t, e.h, "pull_request", "d-2", "pull_request_closed_merged.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
-		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
-	}
+// TestPRMergeRecordsFactsAndResolves: a merged PR records its head and merge
+// shas as task commits; the task reaches merged only once those shas are
+// known to be on main. Both arrival orders must end in the same state.
+func TestPRMergeRecordsFactsAndResolves(t *testing.T) {
+	t.Run("PR merged then push to main", func(t *testing.T) {
+		e := newEnv(t)
+		ctx := context.Background()
+		taskID := e.seedTask(t)
+		e.claimTask(t, taskID)
+		deliverOK(t, e, "pull_request", "d-1", "pull_request_opened.json") // → in_review
 
-	pr, err := e.st.GetPR(ctx, "sunstoneinstitute/demo", 42)
-	if err != nil {
-		t.Fatalf("get PR: %v", err)
-	}
-	if pr.State != "merged" || pr.MergeSHA == nil || pr.MergedAt == nil {
-		t.Fatalf("PR after merge = %+v", pr)
-	}
-	if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
-	}
-	task, err := e.st.GetTask(ctx, taskID)
-	if err != nil || task.State != "done" {
-		t.Fatalf("task = %+v (err %v), want state done", task, err)
-	}
-}
+		deliverOK(t, e, "pull_request", "d-2", "pull_request_closed_merged.json")
 
-func TestPRMergedDeployGatedStaysInReview(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	if err := e.st.SetDeployGated(ctx, "demo", true); err != nil {
-		t.Fatalf("set deploy gated: %v", err)
-	}
-	taskID := e.seedTask(t)
-	e.claimTask(t, taskID)
-	deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
-	deliver(t, e.h, "pull_request", "d-2", "pull_request_closed_merged.json")
+		pr, err := e.st.GetPR(ctx, demoRepo, 42)
+		if err != nil {
+			t.Fatalf("get PR: %v", err)
+		}
+		if pr.State != "merged" || pr.MergeSHA == nil || pr.MergedAt == nil {
+			t.Fatalf("PR after merge = %+v", pr)
+		}
+		if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
+		}
+		for _, sha := range []string{prHeadSHA, prMergeSHA} {
+			if src := e.taskCommitSource(t, taskID, demoRepo, sha); src != "pr" {
+				t.Fatalf("task_commit source for %s = %q, want pr", sha, src)
+			}
+		}
+		// Nothing is on main yet: the merge event alone must not deliver.
+		if st := e.taskState(t, taskID); st != "in_review" {
+			t.Fatalf("task state after PR merge = %q, want in_review (nothing on main yet)", st)
+		}
 
-	if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
-	}
-	task, err := e.st.GetTask(ctx, taskID)
-	if err != nil || task.State != "in_review" {
-		t.Fatalf("task = %+v (err %v), want state in_review", task, err)
-	}
+		deliverPushOK(t, e, "d-3", "push_main_pr_merge.json")
+		if st := e.taskState(t, taskID); st != "merged" {
+			t.Fatalf("task state after push = %q, want merged", st)
+		}
+	})
+
+	t.Run("push to main then PR merged", func(t *testing.T) {
+		e := newEnv(t)
+		taskID := e.seedTask(t)
+		e.claimTask(t, taskID)
+		deliverOK(t, e, "pull_request", "d-1", "pull_request_opened.json") // → in_review
+
+		deliverPushOK(t, e, "d-2", "push_main_pr_merge.json")
+		// The push carries no attributable subject and no prior task
+		// commits, so it records main commits and nothing else.
+		if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM task_commits`); n != 0 {
+			t.Fatalf("task_commit rows after push = %d, want 0", n)
+		}
+		if st := e.taskState(t, taskID); st != "in_review" {
+			t.Fatalf("task state after push = %q, want in_review (no attribution yet)", st)
+		}
+
+		deliverOK(t, e, "pull_request", "d-3", "pull_request_closed_merged.json")
+		if st := e.taskState(t, taskID); st != "merged" {
+			t.Fatalf("task state after PR merge = %q, want merged", st)
+		}
+	})
 }
 
 func TestReviewSubmitted(t *testing.T) {
@@ -399,6 +444,114 @@ func TestReleasePublished(t *testing.T) {
 	if a.Kind != "git_tag" || a.Name != "sunstoneinstitute/demo" || a.Version != "v1.2.3" ||
 		a.Repo != "sunstoneinstitute/demo" || a.BuiltAt.IsZero() {
 		t.Fatalf("artifact = %+v", a)
+	}
+	// No main commit has ever been seen for the repo: there is nothing for
+	// the release to cover, so no frontier is recorded.
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 0 {
+		t.Fatalf("release_frontiers rows = %d, want 0", n)
+	}
+}
+
+// TestReleaseSetsFrontier: for a release-based repo, a published release
+// covers every main commit seen so far and takes landed tasks to released.
+func TestReleaseSetsFrontier(t *testing.T) {
+	e := newEnv(t)
+	e.setDoneState(t, demoRepo, "released")
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverPushOK(t, e, "d-1", "push_branch.json")
+	deliverPushOK(t, e, "d-2", "push_main_merge.json")
+	if st := e.taskState(t, taskID); st != "merged" {
+		t.Fatalf("task state before release = %q, want merged", st)
+	}
+
+	deliverOK(t, e, "release", "d-3", "release_published.json")
+
+	if st := e.taskState(t, taskID); st != "released" {
+		t.Fatalf("task state = %q, want released", st)
+	}
+	head := e.mainCommitID(t, "3333333333333333333333333333333333333333")
+	got := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.3'`, demoRepo)
+	if got != head {
+		t.Fatalf("release_frontiers main_id = %d, want %d (head of main)", got, head)
+	}
+}
+
+// releaseBody builds a release.published payload for an explicit tag and
+// target commitish.
+func releaseBody(tag, targetCommitish string) []byte {
+	return []byte(`{
+		"action": "published",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"release": {
+			"tag_name": "` + tag + `",
+			"target_commitish": "` + targetCommitish + `",
+			"published_at": "2026-07-19T12:00:00Z"
+		}
+	}`)
+}
+
+// TestReleaseFrontierNarrowsToTaggedCommit: a release whose target_commitish
+// resolves to a known main commit covers only up to that commit, so a task
+// that landed after it stays put until a later release reaches it.
+func TestReleaseFrontierNarrowsToTaggedCommit(t *testing.T) {
+	e := newEnv(t)
+	e.setDoneState(t, demoRepo, "released")
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverPushOK(t, e, "d-1", "push_branch.json")
+	deliverPushOK(t, e, "d-2", "push_main_merge.json")
+
+	// Backport tag cut from the first commit on main; the task's work landed
+	// at the third.
+	const oldSHA = "1111111111111111111111111111111111111111"
+	const headSHA = "3333333333333333333333333333333333333333"
+	rr := deliverBody(t, e.h, "release", "d-3", releaseBody("v0.9.0", oldSHA))
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("backport release: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got, want := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v0.9.0'`, demoRepo),
+		e.mainCommitID(t, oldSHA); got != want {
+		t.Fatalf("backport frontier main_id = %d, want %d (the tagged commit)", got, want)
+	}
+	if st := e.taskState(t, taskID); st != "merged" {
+		t.Fatalf("task state after backport release = %q, want merged (not covered by the tag)", st)
+	}
+
+	// A release that does reach the task's commit delivers it.
+	rr = deliverBody(t, e.h, "release", "d-4", releaseBody("v1.0.0", headSHA))
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("head release: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if st := e.taskState(t, taskID); st != "released" {
+		t.Fatalf("task state after head release = %q, want released", st)
+	}
+}
+
+// TestReleaseDoesNotAdvanceNonReleaseRepo pins the done_state gate at the
+// handler level: a release still records its frontier, but only a repo whose
+// done_state is "released" lets tasks reach the released state.
+func TestReleaseDoesNotAdvanceNonReleaseRepo(t *testing.T) {
+	for _, doneState := range []string{"merged", "deployed_prod"} {
+		t.Run(doneState, func(t *testing.T) {
+			e := newEnv(t)
+			e.setDoneState(t, demoRepo, doneState)
+			taskID := e.seedTask(t)
+			e.claimTask(t, taskID)
+			deliverPushOK(t, e, "d-1", "push_branch.json")
+			deliverPushOK(t, e, "d-2", "push_main_merge.json")
+
+			deliverOK(t, e, "release", "d-3", "release_published.json")
+
+			if st := e.taskState(t, taskID); st != "merged" {
+				t.Fatalf("task state = %q, want merged (released gated on done_state)", st)
+			}
+			if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 1 {
+				t.Fatalf("release_frontiers rows = %d, want 1 (frontier is recorded regardless)", n)
+			}
+		})
 	}
 }
 

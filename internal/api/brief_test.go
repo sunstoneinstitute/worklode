@@ -35,8 +35,8 @@ func TestTaskBrief(t *testing.T) {
 	if !ok || task["id"] != "WL-1" {
 		t.Fatalf("task = %v, want id WL-1", got["task"])
 	}
-	if got["branch"] != "wl/WL-1-fix-the-thing" {
-		t.Fatalf("branch = %v, want wl/WL-1-fix-the-thing", got["branch"])
+	if got["branch"] != "lode/WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want lode/WL-1-fix-the-thing", got["branch"])
 	}
 	if _, ok := got["body"]; !ok {
 		t.Fatalf("body key missing: %v", got)

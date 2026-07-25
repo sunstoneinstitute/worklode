@@ -47,7 +47,8 @@ func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger) http.Han
 type envelope struct {
 	Action     string `json:"action"`
 	Repository struct {
-		FullName string `json:"full_name"`
+		FullName      string `json:"full_name"`
+		DefaultBranch string `json:"default_branch"`
 	} `json:"repository"`
 }
 
@@ -122,11 +123,12 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve the repo → project mapping before recording, so an unmapped
-	// repo's event is stored with a ".ignored" type and an empty apply.
-	var project *store.Project
+	// repo's event is stored with a ".ignored" type and an empty apply. Only
+	// the existence of the mapping matters here; the handlers work from the
+	// repo name.
 	ignored := false
 	if repo := env.Repository.FullName; repo != "" {
-		project, err = h.st.ProjectForRepo(r.Context(), repo)
+		_, err = h.st.ProjectForRepo(r.Context(), repo)
 		if errors.Is(err, store.ErrNotFound) {
 			ignored = true
 		} else if err != nil {
@@ -140,7 +142,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ignored {
 		typ += ".ignored"
 	} else {
-		apply = h.applyFunc(event, env, project, body)
+		apply = h.applyFunc(event, env, body)
 	}
 
 	_, inserted, err := h.st.RecordEvent(r.Context(), "github", delivery, typ, body, apply)
@@ -162,16 +164,24 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // applyFunc routes a mapped-repo event to its per-event apply callback.
 // Unknown events (and unhandled actions) get a nil apply: the event is still
 // recorded, with no typed-table effect.
-func (h *githubHandler) applyFunc(event string, env envelope, project *store.Project, body []byte) func(tx *sql.Tx, eventID int64) error {
+func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(tx *sql.Tx, eventID int64) error {
 	repo := env.Repository.FullName
 	switch event {
 	case "issues":
 		return func(tx *sql.Tx, _ int64) error {
 			return applyIssue(tx, repo, body)
 		}
+	case "push":
+		return func(tx *sql.Tx, eventID int64) error {
+			return h.applyPush(tx, eventID, repo, env.Repository.DefaultBranch, body)
+		}
 	case "pull_request":
 		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyPullRequest(tx, eventID, repo, env.Action, project, body)
+			return h.applyPullRequest(tx, eventID, repo, env.Action, body)
+		}
+	case "deployment_status":
+		return func(tx *sql.Tx, eventID int64) error {
+			return h.applyDeploymentStatus(tx, eventID, repo, body)
 		}
 	case "pull_request_review":
 		if env.Action != "submitted" {
@@ -188,8 +198,8 @@ func (h *githubHandler) applyFunc(event string, env envelope, project *store.Pro
 		if env.Action != "published" {
 			return nil
 		}
-		return func(tx *sql.Tx, _ int64) error {
-			return h.applyRelease(tx, repo, body)
+		return func(tx *sql.Tx, eventID int64) error {
+			return h.applyRelease(tx, eventID, repo, body)
 		}
 	default:
 		return nil
@@ -217,7 +227,7 @@ func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 	})
 }
 
-func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action string, project *store.Project, body []byte) error {
+func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
 	var p struct {
 		PullRequest struct {
 			Number         int64      `json:"number"`
@@ -277,10 +287,12 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 	}
 	taskID := *pr.TaskID
 
+	// in_review is not a delivery milestone, so it transitions here; every
+	// delivery state is decided by store.ResolveDelivery from recorded facts.
 	switch {
 	case action == "opened" || action == "ready_for_review":
 		// A PR on a claimed task means the work went to review. Any other
-		// task state (ready, done, ...) is left alone — a correlation must
+		// task state (ready, merged, ...) is left alone — a correlation must
 		// never fail the delivery.
 		taskState, err := store.TaskState(tx, taskID)
 		if err != nil {
@@ -293,17 +305,23 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		if err := store.CloseActiveLease(tx, now, taskID); err != nil {
 			return err
 		}
-		// Deploy-gated projects hold the task in in_review until a verified
-		// deployment; otherwise the merge completes it.
-		if project != nil && !project.DeployGated {
-			taskState, err := store.TaskState(tx, taskID)
-			if err != nil {
+		// Record the PR's shas as task commits; the resolver advances the
+		// task once (and if) they appear on main via a push event.
+		if gh.Head.SHA != "" {
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: taskID, Repo: repo, SHA: gh.Head.SHA, Source: "pr", SeenAt: now,
+			}); err != nil {
 				return err
 			}
-			if taskState == "in_review" {
-				return store.Transition(tx, now, taskID, "in_review", "done", eventID)
+		}
+		if gh.MergeCommitSHA != nil && *gh.MergeCommitSHA != "" {
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: taskID, Repo: repo, SHA: *gh.MergeCommitSHA, Source: "pr", SeenAt: now,
+			}); err != nil {
+				return err
 			}
 		}
+		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
 	}
 	return nil
 }
@@ -379,7 +397,7 @@ func (h *githubHandler) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) e
 	})
 }
 
-func (h *githubHandler) applyRelease(tx *sql.Tx, repo string, body []byte) error {
+func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte) error {
 	var p struct {
 		Release struct {
 			TagName         string    `json:"tag_name"`
@@ -390,13 +408,50 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, repo string, body []byte) error
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse release payload: %w", err)
 	}
-	_, err := store.CreateArtifact(tx, store.Artifact{
+	if _, err := store.CreateArtifact(tx, store.Artifact{
 		Kind:      "git_tag",
 		Name:      repo,
 		Version:   p.Release.TagName,
 		Repo:      repo,
 		SourceSHA: p.Release.TargetCommitish,
 		BuiltAt:   p.Release.PublishedAt,
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+
+	now := h.st.Now()
+	publishedAt := p.Release.PublishedAt
+	if publishedAt.IsZero() {
+		publishedAt = now
+	}
+	// Record the release frontier. Prefer the tagged commit itself, so a
+	// backport tag covers only what it actually contains. target_commitish
+	// is often a branch name (UI-created tags) rather than a sha, which
+	// resolves to nil; the release then covers main's head as of this
+	// webhook's arrival, which is right for release-on-merge.
+	frontier, err := store.MainIDForSHA(tx, repo, p.Release.TargetCommitish)
+	if err != nil {
+		return err
+	}
+	if frontier == nil {
+		if frontier, err = store.LatestMainID(tx, repo); err != nil {
+			return err
+		}
+	}
+	if frontier == nil {
+		return nil
+	}
+	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *frontier, publishedAt); err != nil {
+		return err
+	}
+	tasks, err := store.TasksBelowFrontier(tx, repo, *frontier)
+	if err != nil {
+		return err
+	}
+	for _, taskID := range tasks {
+		if err := store.ResolveDelivery(tx, now, taskID, repo, eventID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

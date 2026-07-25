@@ -56,7 +56,7 @@ func prefixedTaskColumns(alias string) string {
 
 // readyCandidates returns every task eligible for pickup: state ready, not
 // needs_decomposition, unleased, and not blocked by an open 'blocks' edge
-// from a task that is not done or abandoned. An empty projectID matches
+// from a task that is not in a closed state. An empty projectID matches
 // every project.
 func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, error) {
 	rows, err := s.db.QueryContext(ctx, `

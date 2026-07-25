@@ -17,7 +17,7 @@ func TestDirName(t *testing.T) {
 }
 
 func TestBranchName(t *testing.T) {
-	if got, want := worktree.BranchName("WL-7", "fix-the-thing"), "wl/WL-7-fix-the-thing"; got != want {
+	if got, want := worktree.BranchName("lode/", "WL-7", "fix-the-thing"), "lode/WL-7-fix-the-thing"; got != want {
 		t.Fatalf("BranchName = %q, want %q", got, want)
 	}
 }

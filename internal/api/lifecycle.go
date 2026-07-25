@@ -102,7 +102,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lease":  toLeaseJSON(lease),
-		"branch": "wl/" + id + "-" + SlugifyTitle(t.Title),
+		"branch": s.branchPrefix + id + "-" + SlugifyTitle(t.Title),
 	})
 }
 
@@ -118,6 +118,7 @@ type leasePickJSON struct {
 type taskPickJSON struct {
 	ID       string         `json:"id"`
 	Slug     string         `json:"slug"`
+	Branch   string         `json:"branch"`
 	Concern  string         `json:"concern"`
 	Priority string         `json:"priority"`
 	FanOut   int            `json:"fan_out"`
@@ -127,10 +128,11 @@ type taskPickJSON struct {
 
 // toTaskPickJSON builds a claim-next response task, including a lease shard
 // only when lease is non-nil (dry-run and no-ready-task responses have none).
-func toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
+func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
 	pick := taskPickJSON{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
+		Branch:   s.branchPrefix + t.ID + "-" + SlugifyTitle(t.Title),
 		Concern:  t.Concern,
 		Priority: t.Priority,
 		FanOut:   fanOut,
@@ -189,13 +191,13 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"claimed": false,
 			"dry_run": true,
-			"task":    toTaskPickJSON(res.Task, res.FanOut, nil),
+			"task":    s.toTaskPickJSON(res.Task, res.FanOut, nil),
 		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"claimed": true,
-		"task":    toTaskPickJSON(res.Task, res.FanOut, res.Lease),
+		"task":    s.toTaskPickJSON(res.Task, res.FanOut, res.Lease),
 	})
 }
 
@@ -269,12 +271,12 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 	writeJSON(w, http.StatusOK, toTaskJSON(t))
 }
 
-// doneTask handles POST /api/v1/tasks/{id}/done: in_review -> done, closing
+// doneTask handles POST /api/v1/tasks/{id}/done: in_review -> merged, closing
 // any active lease in the same transaction.
 func (s *server) doneTask(w http.ResponseWriter, r *http.Request) {
 	s.finishTask(w, r, "task.done",
 		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
-			return store.Transition(tx, now, taskID, "in_review", "done", eventID)
+			return store.Transition(tx, now, taskID, "in_review", "merged", eventID)
 		})
 }
 
@@ -293,15 +295,21 @@ func (s *server) abandonTask(w http.ResponseWriter, r *http.Request) {
 		})
 }
 
-// reopenTask handles POST /api/v1/tasks/{id}/reopen: done|abandoned -> ready
+// reopenTask handles POST /api/v1/tasks/{id}/reopen: any delivered state
+// (merged, deployed_dev, deployed_prod, released) or abandoned -> ready
 // (422 from any other state), closing any active lease in the same
-// transaction as a belt-and-suspenders measure (done/abandoned tasks should
-// not hold one). The from-state is read inside the transaction so a
-// concurrent change cannot be raced. Reopen always lands on ready, never
+// transaction as a belt-and-suspenders measure (such tasks should not hold
+// one). The from-state is read inside the transaction so a concurrent
+// change cannot be raced. Reopen always lands on ready, never
 // in_progress, so re-entry always goes through a fresh claim; "ready" is
 // deliberately not read off legalTransitions here, since ready is also the
 // target of unrelated transitions (draft's publish, in_progress's
 // release/expiry) that must not be reachable through this endpoint.
+//
+// Reopening also clears the task's commit attribution, in the same
+// transaction: the prior delivery no longer counts, and leaving it in place
+// would let the next webhook resolve the task straight back to its former
+// delivered state (see store.ClearTaskCommits).
 func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 	s.finishTask(w, r, "task.reopened",
 		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
@@ -309,10 +317,15 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			if cur != "done" && cur != "abandoned" {
-				return fmt.Errorf("task %s is in state %s, not done or abandoned: %w",
+			reopenable := map[string]bool{"merged": true, "deployed_dev": true,
+				"deployed_prod": true, "released": true, "abandoned": true}
+			if !reopenable[cur] {
+				return fmt.Errorf("task %s is in state %s, not reopenable: %w",
 					taskID, cur, store.ErrBadTransition)
 			}
-			return store.Transition(tx, now, taskID, cur, "ready", eventID)
+			if err := store.Transition(tx, now, taskID, cur, "ready", eventID); err != nil {
+				return err
+			}
+			return store.ClearTaskCommits(tx, taskID)
 		})
 }
