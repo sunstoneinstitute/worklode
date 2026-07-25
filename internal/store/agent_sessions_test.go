@@ -246,6 +246,9 @@ func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
 	if sess.InputTokens == nil || *sess.InputTokens != in {
 		t.Fatalf("input_tokens: got %v, want %d", sess.InputTokens, in)
 	}
+	if sess.OutputTokens == nil || *sess.OutputTokens != out {
+		t.Fatalf("output_tokens: got %v, want %d", sess.OutputTokens, out)
+	}
 	// An amount reported without a currency lands as USD: the column DEFAULT
 	// does not fire on the UPDATE path.
 	if sess.CostCurrency != "USD" {
@@ -286,6 +289,99 @@ func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
 	err = s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "nope", SessionUsage{})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown session: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestEndAgentSessionRepeatCloseWithoutReopenIsNotFound(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
+		t.Fatalf("first end: %v", err)
+	}
+
+	err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("repeat close without reopen: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestEndAgentSessionCurrencyOnlyLeavesCostAmountNil(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{CostCurrency: "EUR"}); err != nil {
+		t.Fatalf("currency-only end: %v", err)
+	}
+
+	sess, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if sess.CostAmount != nil {
+		t.Fatalf("cost_amount: got %v, want nil (no amount was reported)", *sess.CostAmount)
+	}
+}
+
+func TestEndAgentSessionAfterReopenStoresSecondClose(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt/one")
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	firstIn := int64(100)
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{InputTokens: &firstIn}); err != nil {
+		t.Fatalf("first end: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+		t.Fatalf("reopen touch: %v", err)
+	}
+
+	*now = now.Add(time.Hour)
+	secondIn := int64(500)
+	amount := "3.000000"
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
+		SessionUsage{InputTokens: &secondIn, CostAmount: &amount}); err != nil {
+		t.Fatalf("second end: %v", err)
+	}
+
+	sess, err := s.AgentSession(ctx, lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if sess.EndedAt == nil {
+		t.Fatal("ended_at was not stamped on second close")
+	}
+	if sess.InputTokens == nil || *sess.InputTokens != secondIn {
+		t.Fatalf("input_tokens after second close: got %v, want %d", sess.InputTokens, secondIn)
+	}
+	if sess.CostAmount == nil || *sess.CostAmount != amount {
+		t.Fatalf("cost_amount after second close: got %v, want %s", sess.CostAmount, amount)
+	}
+
+	var endedEvents int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM events WHERE type = 'agent_session.ended'`,
+	).Scan(&endedEvents); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if endedEvents != 2 {
+		t.Fatalf("agent_session.ended events: got %d, want 2 (one per actual close)", endedEvents)
 	}
 }
 

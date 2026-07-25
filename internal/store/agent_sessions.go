@@ -116,10 +116,10 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // heldLease check above.
 //
 // A heartbeat on a closed row (ended_at set by EndAgentSession) reopens it:
-// the caller working the lease again is still that same session. This is
-// safe because heldLease already fails once the lease is released, so a
-// heartbeat can only ever reopen a row on a lease the caller still actively
-// holds.
+// the caller working the lease again is still that same session. Since
+// heldLease is read outside any transaction, it cannot rule out a release
+// landing between that check and the UPDATE below; the UPDATE's own
+// "lease still unreleased" EXISTS clause is what actually guards the reopen.
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
@@ -171,7 +171,8 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	if !inserted {
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE agent_sessions SET last_seen_at = $1, ended_at = NULL
-			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4`,
+			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4
+			    AND EXISTS (SELECT 1 FROM leases WHERE id = $2 AND released_at IS NULL)`,
 			now, lease.ID, agent, sessionID,
 		); err != nil {
 			return nil, fmt.Errorf("bump agent session last_seen_at: %w", err)
@@ -196,7 +197,17 @@ type SessionUsage struct {
 // lease, stamping ended_at and writing whatever usage the caller supplied.
 // Only the lease holder may end a session (ErrNotFound otherwise); an unknown
 // or already-closed session is ErrNotFound. A cost amount without a currency
-// is stored as USD.
+// is stored as USD. A currency with no amount is accepted and stored, but
+// leaves cost_amount untouched — cost_amount IS NULL is what means "no cost
+// recorded yet", not the presence of a currency.
+//
+// Because a session can be closed, reopened by a later heartbeat, and closed
+// again, the ended event's external id is minted fresh per call (like
+// Claim/Renew/Release), not derived from the session's natural key.
+// Idempotency instead comes from the UPDATE's own "AND ended_at IS NULL":
+// a repeat close matches zero rows, apply returns ErrNotFound, and the
+// whole transaction — including the event insert — rolls back, so a repeat
+// close never leaves a duplicate agent_session.ended event.
 func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, sessionID string, usage SessionUsage) error {
 	if !validAgents[agent] {
 		return fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
@@ -217,7 +228,10 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 		return err
 	}
 	now := s.nowFn().UTC().Truncate(time.Second)
-	extID := fmt.Sprintf("agent-session-ended-%d-%s-%s", lease.ID, agent, sessionID)
+	extID, err := randomExternalID()
+	if err != nil {
+		return err
+	}
 
 	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", nil,
 		func(tx *sql.Tx, eventID int64) error {
