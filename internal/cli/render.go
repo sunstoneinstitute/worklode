@@ -47,7 +47,8 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 		fmt.Fprintf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, localTime(t.Lease.ExpiresAt))
 	}
 	if t.Body != "" {
-		fmt.Fprintf(w, "\n%s\n", t.Body)
+		fmt.Fprintln(w)
+		Markdown(w, t.Body)
 	}
 	if len(t.Edges.Out) > 0 || len(t.Edges.In) > 0 {
 		fmt.Fprintln(w, "\nedges:")
