@@ -113,9 +113,13 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // already-recorded path and emit no further events, and apply is not called —
 // so the in-transaction lease re-check below only ever runs on the inserting
 // call. Every later heartbeat is authorized solely by the non-transactional
-// heldLease check above, and kept from resurrecting a session already closed
-// by closeLease/CloseActiveLease by the UPDATE's own "AND ended_at IS NULL" —
-// that predicate is load-bearing, not redundant.
+// heldLease check above.
+//
+// A heartbeat on a closed row (ended_at set by EndAgentSession) reopens it:
+// the caller working the lease again is still that same session. This is
+// safe because heldLease already fails once the lease is released, so a
+// heartbeat can only ever reopen a row on a lease the caller still actively
+// holds.
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
@@ -166,9 +170,8 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	// on an existing row needs the UPDATE.
 	if !inserted {
 		if _, err := s.db.ExecContext(ctx,
-			`UPDATE agent_sessions SET last_seen_at = $1
-			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4
-			    AND ended_at IS NULL`,
+			`UPDATE agent_sessions SET last_seen_at = $1, ended_at = NULL
+			  WHERE lease_id = $2 AND agent = $3 AND external_session_id = $4`,
 			now, lease.ID, agent, sessionID,
 		); err != nil {
 			return nil, fmt.Errorf("bump agent session last_seen_at: %w", err)
@@ -176,6 +179,73 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	}
 
 	return s.AgentSession(ctx, lease.ID, agent, sessionID)
+}
+
+// SessionUsage carries the optional accounting a caller can report when
+// ending a session. A nil field leaves the stored value untouched.
+// CostAmount is a decimal string (not float64) so numeric(12,6) round-trips
+// exactly. CostCurrency "" means defaultCurrency.
+type SessionUsage struct {
+	InputTokens  *int64
+	OutputTokens *int64
+	CostAmount   *string
+	CostCurrency string
+}
+
+// EndAgentSession closes the open session agent/sessionID on taskID's active
+// lease, stamping ended_at and writing whatever usage the caller supplied.
+// Only the lease holder may end a session (ErrNotFound otherwise); an unknown
+// or already-closed session is ErrNotFound. A cost amount without a currency
+// is stored as USD.
+func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, sessionID string, usage SessionUsage) error {
+	if !validAgents[agent] {
+		return fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
+	}
+	if sessionID == "" {
+		return fmt.Errorf("session id is required: %w", ErrInvalidInput)
+	}
+	currency := usage.CostCurrency
+	if currency == "" {
+		currency = defaultCurrency
+	}
+	if !currencyRE.MatchString(currency) {
+		return fmt.Errorf("cost currency %q is not an ISO 4217 code: %w", usage.CostCurrency, ErrInvalidInput)
+	}
+
+	lease, err := s.heldLease(ctx, taskID, actorID)
+	if err != nil {
+		return err
+	}
+	now := s.nowFn().UTC().Truncate(time.Second)
+	extID := fmt.Sprintf("agent-session-ended-%d-%s-%s", lease.ID, agent, sessionID)
+
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			res, err := tx.Exec(
+				`UPDATE agent_sessions
+				    SET ended_at      = $1,
+				        input_tokens  = COALESCE($2, input_tokens),
+				        output_tokens = COALESCE($3, output_tokens),
+				        cost_amount   = COALESCE($4, cost_amount),
+				        cost_currency = CASE WHEN $4 IS NULL THEN cost_currency ELSE $5 END
+				  WHERE lease_id = $6 AND agent = $7 AND external_session_id = $8
+				    AND ended_at IS NULL`,
+				now, usage.InputTokens, usage.OutputTokens, usage.CostAmount, currency,
+				lease.ID, agent, sessionID)
+			if err != nil {
+				return fmt.Errorf("end agent session %s/%s: %w", agent, sessionID, err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("end agent session %s/%s: %w", agent, sessionID, err)
+			}
+			if n == 0 {
+				return fmt.Errorf("no open agent session %s/%s on task %s: %w",
+					agent, sessionID, taskID, ErrNotFound)
+			}
+			return nil
+		})
+	return err
 }
 
 // AgentSession returns one session row by its natural key, or ErrNotFound.
