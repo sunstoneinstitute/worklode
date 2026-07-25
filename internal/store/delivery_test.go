@@ -101,3 +101,88 @@ func TestLandedMainIDNoCommits(t *testing.T) {
 		t.Fatalf("got %v, %v; want nil, nil", landed, err)
 	}
 }
+
+func TestEnvDeployFrontier(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, _ := s.db.Begin()
+	defer tx.Rollback()
+
+	id1, _ := AppendMainCommit(tx, "acme/app", "m1", now)
+	id2, _ := AppendMainCommit(tx, "acme/app", "m2", now)
+
+	// No row yet: frontier nil.
+	f, err := ConfirmedFrontier(tx, "acme/app", "dev")
+	if err != nil || f != nil {
+		t.Fatalf("empty frontier = %v, %v", f, err)
+	}
+
+	// GH-only (flux never seen): GH signal alone confirms (bootstrap fallback).
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id2); err != nil {
+		t.Fatal(err)
+	}
+	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
+	if f == nil || *f != id2 {
+		t.Fatalf("gh-only frontier = %v, want %d", f, id2)
+	}
+
+	// First flux signal latches dual-gating: frontier = min(gh, flux).
+	if err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id1); err != nil {
+		t.Fatal(err)
+	}
+	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
+	if f == nil || *f != id1 {
+		t.Fatalf("dual frontier = %v, want min %d", f, id1)
+	}
+
+	// Watermarks are forward-only.
+	if err := BumpEnvDeployFlux(tx, now, "acme/app", "dev", id2); err != nil {
+		t.Fatal(err)
+	}
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", id1); err != nil { // stale, ignored
+		t.Fatal(err)
+	}
+	f, _ = ConfirmedFrontier(tx, "acme/app", "dev")
+	if f == nil || *f != id2 {
+		t.Fatalf("forward-only frontier = %v, want %d", f, id2)
+	}
+}
+
+func TestReleaseFrontier(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, _ := s.db.Begin()
+	defer tx.Rollback()
+
+	f, err := ReleaseFrontier(tx, "acme/app")
+	if err != nil || f != nil {
+		t.Fatalf("empty release frontier = %v, %v", f, err)
+	}
+	id1, _ := AppendMainCommit(tx, "acme/app", "m1", now)
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+		t.Fatal(err)
+	}
+	// redelivery: same tag again is a no-op
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+		t.Fatal(err)
+	}
+	f, _ = ReleaseFrontier(tx, "acme/app")
+	if f == nil || *f != id1 {
+		t.Fatalf("release frontier = %v, want %d", f, id1)
+	}
+}
+
+func TestNormalizeEnvironment(t *testing.T) {
+	cases := map[string]string{
+		"dev": "dev", "test": "dev", "development": "dev", "staging": "dev",
+		"prod": "prod", "production": "prod", "Production": "prod",
+		"copilot": "", "github-pages": "", "pypi": "", "dev-apply": "",
+	}
+	for in, want := range cases {
+		if got := NormalizeEnvironment(in); got != want {
+			t.Errorf("NormalizeEnvironment(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
