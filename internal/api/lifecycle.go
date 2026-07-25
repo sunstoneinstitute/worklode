@@ -305,6 +305,11 @@ func (s *server) abandonTask(w http.ResponseWriter, r *http.Request) {
 // deliberately not read off legalTransitions here, since ready is also the
 // target of unrelated transitions (draft's publish, in_progress's
 // release/expiry) that must not be reachable through this endpoint.
+//
+// Reopening also clears the task's commit attribution, in the same
+// transaction: the prior delivery no longer counts, and leaving it in place
+// would let the next webhook resolve the task straight back to its former
+// delivered state (see store.ClearTaskCommits).
 func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 	s.finishTask(w, r, "task.reopened",
 		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
@@ -318,6 +323,9 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 				return fmt.Errorf("task %s is in state %s, not reopenable: %w",
 					taskID, cur, store.ErrBadTransition)
 			}
-			return store.Transition(tx, now, taskID, cur, "ready", eventID)
+			if err := store.Transition(tx, now, taskID, cur, "ready", eventID); err != nil {
+				return err
+			}
+			return store.ClearTaskCommits(tx, taskID)
 		})
 }
