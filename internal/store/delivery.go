@@ -47,6 +47,31 @@ func InsertTaskCommit(tx *sql.Tx, tc TaskCommit) error {
 	return nil
 }
 
+// TaskIDsForSHA returns the ids of tasks already attributed to sha in repo,
+// from any source (branch push, PR correlation, merge message, marker),
+// ordered for deterministic iteration.
+func TaskIDsForSHA(tx *sql.Tx, repo, sha string) ([]string, error) {
+	rows, err := tx.Query(
+		`SELECT DISTINCT task_id FROM task_commits WHERE repo = $1 AND sha = $2
+		 ORDER BY task_id`, repo, sha)
+	if err != nil {
+		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan task for sha %s %s: %w", repo, sha, err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
+	}
+	return out, nil
+}
+
 // ClearTaskCommits drops every commit attributed to taskID. Reopening a task
 // voids its previous delivery: the old commits are still on main, so without
 // this the next webhook to touch the repo would find the task below the

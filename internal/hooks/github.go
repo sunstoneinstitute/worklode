@@ -47,7 +47,8 @@ func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger) http.Han
 type envelope struct {
 	Action     string `json:"action"`
 	Repository struct {
-		FullName string `json:"full_name"`
+		FullName      string `json:"full_name"`
+		DefaultBranch string `json:"default_branch"`
 	} `json:"repository"`
 }
 
@@ -168,6 +169,10 @@ func (h *githubHandler) applyFunc(event string, env envelope, project *store.Pro
 	case "issues":
 		return func(tx *sql.Tx, _ int64) error {
 			return applyIssue(tx, repo, body)
+		}
+	case "push":
+		return func(tx *sql.Tx, eventID int64) error {
+			return h.applyPush(tx, eventID, repo, env.Repository.DefaultBranch, body)
 		}
 	case "pull_request":
 		return func(tx *sql.Tx, eventID int64) error {
