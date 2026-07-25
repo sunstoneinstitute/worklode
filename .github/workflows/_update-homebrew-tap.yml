@@ -1,0 +1,90 @@
+name: update-homebrew-tap
+
+# Points the worklode formula in sunstoneinstitute/homebrew-tap at a v* tag of
+# this repo. The formula builds cmd/lode from the tag's source tarball, so the
+# only per-release facts are the tarball URL and its sha256.
+#
+# Requires TAP_GITHUB_TOKEN in the `release` environment: a token with
+# contents:write on sunstoneinstitute/homebrew-tap. Environment secrets resolve
+# inside the called workflow, so callers pass no secrets — but the environment's
+# deployment policy must permit the caller's ref.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Git tag to publish (e.g. v0.1.3)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    steps:
+      - name: Compute source tarball sha256
+        id: tarball
+        env:
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
+          # --retry covers the window where a freshly pushed tag is not yet
+          # servable by codeload.
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o tarball.tgz "$URL"
+          {
+            echo "url=${URL}"
+            echo "sha256=$(sha256sum tarball.tgz | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update formula in the tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          URL: ${{ steps.tarball.outputs.url }}
+          SHA256: ${{ steps.tarball.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_TOKEN}@github.com/sunstoneinstitute/homebrew-tap.git" \
+            "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap"
+
+          FORMULA=Formula/worklode.rb
+          sed -i -E \
+            -e "s|^  url \".*\"$|  url \"${URL}\"|" \
+            -e "s|^  sha256 \"[0-9a-f]{64}\"$|  sha256 \"${SHA256}\"|" \
+            "$FORMULA"
+
+          # A sed that matched nothing is silent; without these the workflow
+          # would report success having left the formula on the old release.
+          grep -qF "  url \"${URL}\"" "$FORMULA"
+          grep -qF "  sha256 \"${SHA256}\"" "$FORMULA"
+
+          if git diff --quiet; then
+            echo "::notice::Formula already points at ${TAG} — nothing to push."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update worklode to ${TAG}"
+          git push
+
+      - name: Output summary
+        env:
+          TAG: ${{ inputs.tag }}
+          SHA256: ${{ steps.tarball.outputs.sha256 }}
+        run: |
+          {
+            echo "### Homebrew tap updated"
+            echo ""
+            echo "**Tag:** \`${TAG}\`"
+            echo "**Tarball sha256:** \`${SHA256}\`"
+            echo "**Formula:** sunstoneinstitute/homebrew-tap \`Formula/worklode.rb\`"
+          } >> "$GITHUB_STEP_SUMMARY"
