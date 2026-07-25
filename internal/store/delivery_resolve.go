@@ -47,11 +47,14 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan task below frontier %s/%d: %w", repo, frontier, err)
 		}
 		out = append(out, id)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("tasks below frontier %s/%d: %w", repo, frontier, err)
+	}
+	return out, nil
 }
 
 // ResolveDelivery advances taskID to the furthest delivery milestone the
@@ -64,7 +67,14 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // repo follows merged → deployed_dev → released and ignores prod deploys:
 // deployed_prod → released is not a legal transition, so advancing on a prod
 // deploy would strand the task one hop short of its done_state forever.
-// Every other repo follows merged → deployed_dev → deployed_prod.
+// Every other repo follows merged → deployed_dev → deployed_prod. The
+// asymmetry is deliberate: a done_state of "merged" still advances past
+// merged when deploy facts exist, because "merged" is also the default for
+// repos discovery has not profiled yet — real deploy signals outrank it.
+//
+// Reopening a task clears its commit attribution (ClearTaskCommits), so a
+// reopened task has no landed commit here and is left alone until new work
+// lands.
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
 	landed, err := LandedMainID(tx, taskID, repo)
 	if err != nil {

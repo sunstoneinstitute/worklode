@@ -47,6 +47,18 @@ func InsertTaskCommit(tx *sql.Tx, tc TaskCommit) error {
 	return nil
 }
 
+// ClearTaskCommits drops every commit attributed to taskID. Reopening a task
+// voids its previous delivery: the old commits are still on main, so without
+// this the next webhook to touch the repo would find the task below the
+// deployed frontier and snap it straight back to its former delivered state
+// — closing the fresh lease of whoever re-claimed it. New work must re-land.
+func ClearTaskCommits(tx *sql.Tx, taskID string) error {
+	if _, err := tx.Exec(`DELETE FROM task_commits WHERE task_id = $1`, taskID); err != nil {
+		return fmt.Errorf("clear task_commits for %s: %w", taskID, err)
+	}
+	return nil
+}
+
 // AppendMainCommit records one default-branch commit and returns its id
 // (the per-repo ordering "seq"). Re-appending an existing sha returns the
 // original id.
