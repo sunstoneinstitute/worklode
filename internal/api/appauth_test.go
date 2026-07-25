@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -179,6 +180,42 @@ func TestAddRepoDiscoveryFailureStillMapsRepo(t *testing.T) {
 	}
 	if f.count() == 0 {
 		t.Error("discovery was never attempted")
+	}
+}
+
+// A GitHub that never answers must not hold the addRepo response open:
+// discoveryTimeout bounds the round trips. The ceiling is hardcoded so raising
+// discoveryTimeout fails this test instead of moving it, and sits below
+// githubauth's own 10s per-request client timeout so that outer bound cannot
+// stand in for this one.
+func TestAddRepoDiscoveryTimeoutBoundsHang(t *testing.T) {
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-block:
+		case <-r.Context().Done():
+		}
+	}))
+	// Cleanups run LIFO: unblock the handler before Close waits on it.
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(block) })
+
+	st, post := addRepoServer(t, &githubauth.AppAuth{
+		AppID: "12345", Key: appTestKey(), BaseURL: srv.URL})
+
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- post(map[string]any{"repo": "acme/widgets"}) }()
+
+	select {
+	case rr := <-done:
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201; body %s", rr.Code, rr.Body.String())
+		}
+		if got := storedDoneState(t, st, "acme/widgets"); got != store.DefaultDoneState {
+			t.Fatalf("stored done_state = %q, want %s", got, store.DefaultDoneState)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("addRepo did not return while GitHub hung; discovery is not bounded")
 	}
 }
 
