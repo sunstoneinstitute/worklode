@@ -254,3 +254,18 @@ NNNN_name.down.sql
 ```
 
 where `NNNN` is the next sequence number.
+
+### CI gate (who may run PR checks)
+
+`pr-checks.yml` opens with a cheap `gate` job; the lint/test/build/kustomize
+jobs `needs: gate` and run only when `gate.outputs.run == 'true'`. A PR runs
+the checks when its author is the repo owner, an org member, or an invited
+collaborator (GitHub's `author_association`), or when a maintainer has applied
+the `can-be-tested` label. Applying labels needs Triage+ on the repo, so an
+outside contributor cannot self-authorise; the workflow listens for the
+`labeled` PR event so adding the label re-triggers the run.
+
+The gate also skips the checks for **docs-only PRs** — every changed file
+markdown (`*.md`) or under `docs/`. The `can-be-tested` label overrides this.
+Jobs skipped via `if:` count as satisfied for branch-protection required
+checks, so a skipped run does not block merging.

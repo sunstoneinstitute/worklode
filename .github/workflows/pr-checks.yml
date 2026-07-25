@@ -3,9 +3,15 @@ name: PR Checks
 on:
   pull_request:
     branches: [main]
+    # `labeled` is included so that applying `can-be-tested` to a PR from an
+    # outside contributor re-triggers the checks (the gate job below
+    # re-evaluates and lets it through). opened/synchronize/reopened are the
+    # normal triggers.
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
+  pull-requests: read
   # _build-image.yml declares packages: write; a called reusable workflow may
   # not request more than the caller grants, or GitHub fails the run at startup.
   packages: write
@@ -15,18 +21,87 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decide whether this PR may consume CI. The checks run only when the author
+  # is trusted (repo owner, org member, or invited collaborator — GitHub
+  # computes `author_association`, it is not attacker-controlled) or a
+  # maintainer has applied the `can-be-tested` label. This keeps fork /
+  # drive-by PRs from auto-running the build on a public repo. Applying labels
+  # needs Triage+ on the repo, so a PR author cannot self-authorise.
+  #
+  # Docs-only PRs also skip the checks: a diff touching only markdown and
+  # docs/ cannot change what they verify. GitHub treats jobs skipped via `if:`
+  # as satisfied for branch-protection required checks, so a skipped job does
+  # not block merging. The `can-be-tested` label overrides the docs-only skip —
+  # a maintainer can apply it to force a full run.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide whether to run checks
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # A trusted collaborator applied the opt-in label. This both
+          # authorises an untrusted author AND forces a run on a docs-only PR,
+          # so it is checked before the docs-only skip.
+          if ${{ contains(github.event.pull_request.labels.*.name, 'can-be-tested') }}; then
+            echo "PR carries the 'can-be-tested' label — running checks."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Docs-only skip: if every changed file is markdown or under docs/,
+          # there is nothing for the checks to verify. On an API failure
+          # CHANGED comes back empty and we fall through to the trust check —
+          # failing open towards running, never towards a wrong skip.
+          CHANGED=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[].filename' 2>/dev/null || true)
+          if [ -n "$CHANGED" ] && ! echo "$CHANGED" | grep -qvE '(^docs/|\.md$)'; then
+            echo "::notice::PR touches only docs/ and markdown files — skipping the checks. Apply the 'can-be-tested' label to force a full run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          case "$ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Author $AUTHOR is $ASSOCIATION — running checks."
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          echo "::notice::Author '$AUTHOR' ($ASSOCIATION) is not a member or collaborator and the PR lacks the 'can-be-tested' label — skipping the checks. A maintainer can add that label to authorise CI."
+          echo "run=false" >> "$GITHUB_OUTPUT"
+
   lint:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_lint.yml
 
   test:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_test.yml
 
   build-image:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_build-image.yml
     with:
       push: false
 
   validate-kustomize:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
