@@ -109,6 +109,27 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 	}
 }
 
+// WorktreeCreate and WorktreeRemove are delegation hooks, not notifications:
+// registering one makes it *the* worktree creator and disables Claude Code's
+// built-in `git worktree add`, so EnterWorktree fails outright unless the hook
+// prints the path it created. Worklode only observes, so binding them broke
+// EnterWorktree in every repo that ran `lode claude install`.
+func TestClaudeInstallDoesNotBindDelegationHooks(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".claude", "settings.local.json")
+
+	if err := installClaudeHooks(path); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	settings := readSettings(t, path)
+	for _, event := range []string{"WorktreeCreate", "WorktreeRemove"} {
+		if got := commandsFor(t, settings, event); len(got) != 0 {
+			t.Errorf("%s must stay unbound (Worklode would become the worktree creator), got %v", event, got)
+		}
+	}
+}
+
 func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".claude")

@@ -241,9 +241,14 @@ Claude Code bindings:
 | `session-start` | `SessionStart` |
 | `heartbeat` | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
 | `worktree-enter` | `PostToolUse` matcher `EnterWorktree` |
-| `worktree-create` | `WorktreeCreate` |
-| `worktree-remove` | `WorktreeRemove` |
 | `session-end` | `SessionEnd` |
+
+`worktree-create` and `worktree-remove` are not bound to Claude Code.
+`WorktreeCreate`/`WorktreeRemove` are delegation hooks: binding one makes it
+*the* worktree creator, replacing Claude Code's built-in `git worktree add`, and
+`EnterWorktree` then fails unless the hook prints the path it created. Both
+events stay available for scripts that do create Worklode's `wt/<task-id>`
+worktrees; invoke them as `lode hook worktree-create` / `worktree-remove`.
 
 Install these bindings into a repo with:
 
