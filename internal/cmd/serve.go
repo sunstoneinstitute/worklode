@@ -64,6 +64,8 @@ func newServeCmd() *cobra.Command {
 				GitHubOrg:           os.Getenv("LODE_GITHUB_ORG"),
 				GitHubAdminTeam:     os.Getenv("LODE_GITHUB_ADMIN_TEAM"),
 				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
+				GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
+				GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
 			})
 			if err != nil {
 				return err

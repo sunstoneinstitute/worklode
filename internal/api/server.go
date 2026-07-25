@@ -61,6 +61,34 @@ type Config struct {
 	// granted admin via GitHub (the team-membership check simply 404s).
 	GitHubAdminTeam string
 	TokenEncKey     string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+
+	// GitHub App installation auth, used to discover a newly mapped repo's
+	// delivery profile (see discoverDoneState). Independent of the login flow
+	// above and optional: with either field empty, discovery is skipped and a
+	// repo mapping keeps its default done_state. GitHubAppPrivateKey is secret
+	// PEM — like the other secrets here it is only ever consumed, never logged
+	// and never served.
+	GitHubAppID         string // LODE_GITHUB_APP_ID
+	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
+}
+
+// githubAPIBase is the public GitHub REST endpoint. Tests point AppAuth at a
+// local server by building it directly.
+const githubAPIBase = "https://api.github.com"
+
+// newAppAuth builds the GitHub App client used for repo discovery, or nil when
+// the app id and key are not both configured. An unusable key is a startup
+// error: silently disabling discovery would look like a repo with no
+// environments.
+func newAppAuth(cfg Config) (*githubauth.AppAuth, error) {
+	if cfg.GitHubAppID == "" || cfg.GitHubAppPrivateKey == "" {
+		return nil, nil
+	}
+	key, err := githubauth.ParseAppPrivateKey([]byte(cfg.GitHubAppPrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("LODE_GITHUB_APP_PRIVATE_KEY: %w", err)
+	}
+	return &githubauth.AppAuth{AppID: cfg.GitHubAppID, Key: key, BaseURL: githubAPIBase}, nil
 }
 
 type server struct {
@@ -80,6 +108,10 @@ type server struct {
 	// /auth/github/* routes 404 when gh is nil.
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
+
+	// appAuth is nil unless the GitHub App id and private key are configured;
+	// addRepo then skips done_state discovery.
+	appAuth *githubauth.AppAuth
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
@@ -169,6 +201,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubOrg, cfg.GitHubAdminTeam)
 		s.tokenCipher = tc
 	}
+
+	appAuth, err := newAppAuth(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.appAuth = appAuth
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
