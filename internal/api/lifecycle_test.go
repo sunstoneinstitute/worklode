@@ -77,7 +77,9 @@ func TestSlugifyTitle(t *testing.T) {
 }
 
 // TestClaimBranchPrefix checks Config.BranchPrefix (LODE_BRANCH_PREFIX)
-// reaches the branch the claim response hands out.
+// reaches the branch both claim endpoints hand out. The claim-next leg is
+// what pins the wire field down: under a default-prefix server the CLI's
+// fallback reconstruction is indistinguishable from the server's branch.
 func TestClaimBranchPrefix(t *testing.T) {
 	t.Cleanup(func() { store.SetBranchPrefix("") })
 	st := newTestStore(t)
@@ -104,6 +106,23 @@ func TestClaimBranchPrefix(t *testing.T) {
 	}
 	if got := decodeMap(t, rr)["branch"]; got != "team/WL-1-fix-the-thing" {
 		t.Fatalf("branch = %v, want team/WL-1-fix-the-thing", got)
+	}
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ship the other thing", "priority": "high", "kind": "bug",
+	})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "worktree": "host:/wt-2",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	pick, ok := decodeMap(t, rr)["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("claim-next task missing: %s", rr.Body.String())
+	}
+	if pick["branch"] != "team/WL-2-ship-the-other-thing" {
+		t.Fatalf("claim-next branch = %v, want team/WL-2-ship-the-other-thing", pick["branch"])
 	}
 }
 
