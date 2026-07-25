@@ -175,13 +175,6 @@ on the server (default `lode/`); the legacy `wl/` prefix stays recognized for PR
 and push correlation regardless. The server is the authority: `lode next` and
 `lode task claim` use the branch the claim response returns.
 
-## Task branches
-
-Task branches are `<prefix><task-id>-<slug>`. The prefix is `LODE_BRANCH_PREFIX`
-on the server (default `lode/`); the legacy `wl/` prefix stays recognized for PR
-and push correlation regardless. The server is the authority: `lode next` and
-`lode task claim` use the branch the claim response returns.
-
 ## SSO (optional)
 
 Human login via the org Keycloak is off unless both `LODE_OIDC_ISSUER` and
