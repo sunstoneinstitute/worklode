@@ -122,9 +122,20 @@ external_id)` uniqueness. The `last_seen_at` bump is a plain `UPDATE` issued
 path and skips apply entirely — and because a heartbeat is not an event worth
 keeping.
 
+That bump also clears `ended_at` (see Lifecycle) and is guarded, in the same
+statement, on the lease still being unreleased. The holder check that precedes
+it runs on a plain connection, so it cannot see a release that lands while the
+call is in flight; without the guard a heartbeat could leave a permanently
+open session on a released lease, which nothing would ever close.
+
 **`EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)`** — records
 an `agent_session.ended` event, sets `ended_at`, and writes any token/cost
-values supplied by the caller.
+values supplied by the caller. Its event id is random, not derived from the
+session: a session can legitimately be closed more than once on one lease
+(exit, re-enter, exit again). Idempotency comes instead from the `ended_at IS
+NULL` predicate — a repeat close matches no rows, which fails apply and rolls
+the event back, so there is exactly one `agent_session.ended` event per real
+close.
 
 HTTP surface, in the existing lifecycle group:
 
