@@ -21,7 +21,8 @@ import (
 )
 
 // allEvents is the guarded event set (unknown events are handled separately).
-var allEvents = []string{"session-start", "session-end", "pre-commit", "worktree-create", "worktree-remove"}
+var allEvents = []string{"session-start", "session-end", "pre-commit",
+	"worktree-create", "worktree-remove", "heartbeat", "worktree-enter", "worktree-exit"}
 
 // recordingServer stands in for the backbone and flags ANY inbound request.
 // The guard-NOP tests assert it is never hit.
@@ -70,6 +71,18 @@ func (p *pathRecorder) hitAny(substr string) bool {
 		}
 	}
 	return false
+}
+
+func (p *pathRecorder) count(substr string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, s := range p.paths {
+		if strings.Contains(s, substr) {
+			n++
+		}
+	}
+	return n
 }
 
 // newRealServer starts a real store-backed API server (admin actor "alice")
@@ -137,11 +150,15 @@ func initGitRepo(t *testing.T) string {
 
 // setupLeasedWorktree creates a project, a task, its wt/<id>-<slug> worktree,
 // and a lease bound to that worktree's real identity (mirroring `lode next`).
+// Creating the project is idempotent so a test can call this more than once
+// against the same server to put several tasks under one project.
 func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskID, wtDir, identity string) {
 	t.Helper()
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
-		t.Fatalf("create project: %v", err)
+	if _, err := c.GetProject(ctx, "proj"); err != nil {
+		if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+			t.Fatalf("create project: %v", err)
+		}
 	}
 	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
 	if err != nil {
@@ -360,7 +377,7 @@ func TestSessionEndRemovesMarker(t *testing.T) {
 	root := initGitRepo(t)
 	_, wtDir, _ := setupLeasedWorktree(t, c, root, "End me")
 
-	if err := writeSessionMarker(wtDir, "s-end"); err != nil {
+	if err := writeSessionMarker(wtDir, "s-end", time.Now()); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 	if !sessionMarkerFresh(wtDir) {
@@ -456,5 +473,320 @@ func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
 	}
 	if after.State != "in_progress" || after.Lease == nil {
 		t.Fatalf("task after auto-resume = state %q lease %+v, want in_progress/non-nil", after.State, after.Lease)
+	}
+}
+
+func TestSessionMarkerHeartbeat(t *testing.T) {
+	root := initGitRepo(t)
+	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+
+	if err := writeSessionMarker(root, "sess-1", base); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	id, ok := markerSessionID(root)
+	if !ok || id != "sess-1" {
+		t.Fatalf("markerSessionID: got %q, %v", id, ok)
+	}
+
+	// writeSessionMarker leaves LastHeartbeatAt empty (only a heartbeat that
+	// actually reached the backbone should stamp it), so a heartbeat is due
+	// immediately, even moments after the marker was written.
+	if !heartbeatDue(root, base.Add(1*time.Second)) {
+		t.Fatal("heartbeat not due with no recorded heartbeat yet")
+	}
+
+	// Record the first heartbeat.
+	if err := recordHeartbeat(root, base); err != nil {
+		t.Fatalf("record heartbeat: %v", err)
+	}
+
+	// Within the debounce window of the recorded heartbeat: not due.
+	if heartbeatDue(root, base.Add(30*time.Second)) {
+		t.Fatal("heartbeat due 30s after the last one; want debounced")
+	}
+	// Past the window: due again.
+	if !heartbeatDue(root, base.Add(2*time.Minute)) {
+		t.Fatal("heartbeat not due 2m after the last one")
+	}
+
+	// Recording a heartbeat moves the window without disturbing the session id.
+	if err := recordHeartbeat(root, base.Add(2*time.Minute)); err != nil {
+		t.Fatalf("record heartbeat: %v", err)
+	}
+	if heartbeatDue(root, base.Add(2*time.Minute+30*time.Second)) {
+		t.Fatal("heartbeat due 30s after a recorded heartbeat; want debounced")
+	}
+	if id, ok := markerSessionID(root); !ok || id != "sess-1" {
+		t.Fatalf("session id after heartbeat: got %q, %v", id, ok)
+	}
+
+	// No marker at all: nothing to heartbeat, and no session id.
+	empty := initGitRepo(t)
+	if heartbeatDue(empty, base) {
+		t.Fatal("heartbeat due with no marker file")
+	}
+	if _, ok := markerSessionID(empty); ok {
+		t.Fatal("markerSessionID found an id with no marker file")
+	}
+}
+
+// runHook drives one hook invocation the way the existing tests do inline,
+// and fails the test on a non-zero exit code.
+func runHook(t *testing.T, event string, p Payload) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  event,
+		Stdin:  bytes.NewReader(payloadJSON(t, p)),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("%s exit code = %d, want 0 (stderr: %s)", event, code, stderr.String())
+	}
+}
+
+func TestHeartbeatReportsAgentSession(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Heartbeat task")
+
+	// session-start opens the session and writes the marker.
+	runHook(t, "session-start", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if !rec.hitAny("/agent-session") {
+		t.Fatal("session-start did not report the agent session")
+	}
+
+	// A heartbeat inside the debounce window makes no backbone call.
+	before := rec.count("/agent-session")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if rec.count("/agent-session") != before {
+		t.Fatal("heartbeat inside the debounce window still called the backbone")
+	}
+
+	// The session is recorded against the task's lease.
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	sess, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session: %v", err)
+	}
+	if sess.EndedAt != nil {
+		t.Fatal("session should still be open")
+	}
+
+	// session-end closes it.
+	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	sess, err = st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session after end: %v", err)
+	}
+	if sess.EndedAt == nil {
+		t.Fatal("session-end did not close the session")
+	}
+}
+
+func TestHeartbeatOutsideWorktreeIsNOP(t *testing.T) {
+	rec := newRecordingServer(t)
+	runHook(t, "heartbeat", Payload{Cwd: t.TempDir(), SessionID: "sess-1"})
+	if rec.hit() {
+		t.Fatal("heartbeat outside a Worklode worktree called the backbone")
+	}
+}
+
+// TestHeartbeatSelfHealsMissingMarker: a worktree that has lost its marker
+// (e.g. it was never written, or was deleted) must not go silent forever —
+// heartbeatDue is false with no marker, so without self-healing nothing would
+// ever create one again. A heartbeat carrying a session id in the payload
+// writes the marker and reports immediately.
+func TestHeartbeatSelfHealsMissingMarker(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	_, wtDir, _ := setupLeasedWorktree(t, c, root, "Self heal")
+
+	if _, ok := readSessionMarker(wtDir); ok {
+		t.Fatal("precondition: no marker should exist yet")
+	}
+
+	before := rec.count("/agent-session")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if rec.count("/agent-session") != before+1 {
+		t.Fatal("heartbeat with no marker and a payload session id did not report")
+	}
+	id, ok := markerSessionID(wtDir)
+	if !ok || id != "sess-1" {
+		t.Fatalf("marker not self-healed: id=%q ok=%v", id, ok)
+	}
+}
+
+// TestHeartbeatUpdatesStaleMarkerID: when the payload's session id differs
+// from the one recorded in the marker (e.g. after a /clear starts a new
+// session in the same worktree), the marker must be brought up to date —
+// otherwise a later marker-only report (pre-commit) would keep reporting the
+// stale, no-longer-live session.
+func TestHeartbeatUpdatesStaleMarkerID(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	_, wtDir, _ := setupLeasedWorktree(t, c, root, "Stale marker id")
+
+	runHook(t, "session-start", Payload{Cwd: wtDir, SessionID: "sess-old"})
+
+	before := rec.count("/agent-session")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-new"})
+	if rec.count("/agent-session") != before+1 {
+		t.Fatal("heartbeat with a differing session id did not report")
+	}
+	id, ok := markerSessionID(wtDir)
+	if !ok || id != "sess-new" {
+		t.Fatalf("marker id after drift = %q, %v, want sess-new, true", id, ok)
+	}
+}
+
+// TestWorktreeExitWithoutExplicitPathIsNOP mirrors Claude Code's real
+// ExitWorktree tool_input, which is {action, discard_changes} — no path key.
+// handleWorktreeExit must not fall back to the payload cwd: by the time
+// PostToolUse fires, ExitWorktree has already restored cwd to the worktree
+// being returned TO, not the one being left, so a cwd fallback would end and
+// delete the marker of the wrong worktree.
+func TestWorktreeExitWithoutExplicitPathIsNOP(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "No explicit exit path")
+
+	runHook(t, "session-start", Payload{Cwd: wtDir, SessionID: "sess-1"})
+
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	before, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session before exit: %v", err)
+	}
+	if before.EndedAt != nil {
+		t.Fatal("precondition: session should be open before the exit attempt")
+	}
+	markerBefore, okBefore := readSessionMarker(wtDir)
+	if !okBefore {
+		t.Fatal("precondition: marker should exist after session-start")
+	}
+	beforeCount := rec.count("/agent-session")
+
+	// The real ExitWorktree tool_input: no path key.
+	toolInput, _ := json.Marshal(map[string]string{"action": "keep"})
+	runHook(t, "worktree-exit", Payload{Cwd: wtDir, SessionID: "sess-1", ToolInput: toolInput})
+
+	if rec.count("/agent-session") != beforeCount {
+		t.Fatal("worktree-exit without an explicit path called the backbone")
+	}
+	markerAfter, okAfter := readSessionMarker(wtDir)
+	if !okAfter || markerAfter != markerBefore {
+		t.Fatalf("marker changed by a path-less worktree-exit: before=%+v after=%+v (ok=%v)",
+			markerBefore, markerAfter, okAfter)
+	}
+	after, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session after exit: %v", err)
+	}
+	if after.EndedAt != nil {
+		t.Fatal("session ended by a path-less worktree-exit")
+	}
+}
+
+// TestWorktreeEnterExitSwitchesLease drives one session across two leased
+// worktrees: entering the second opens a row under its lease with the same
+// session id, and exiting stamps ended_at on that row while the first
+// worktree's row stays open.
+func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskA, wtDirA, _ := setupLeasedWorktree(t, c, root, "Task A")
+	taskB, wtDirB, _ := setupLeasedWorktree(t, c, root, "Task B")
+
+	// Start a session in the first worktree.
+	runHook(t, "session-start", Payload{Cwd: wtDirA, SessionID: "sess-1"})
+
+	leaseA, err := st.ActiveLease(t.Context(), taskA)
+	if err != nil {
+		t.Fatalf("active lease A: %v", err)
+	}
+	sessA, err := st.AgentSession(t.Context(), leaseA.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session A: %v", err)
+	}
+	if sessA.EndedAt != nil {
+		t.Fatal("session A should still be open before entering B")
+	}
+
+	// Enter the second worktree: a new row opens under B's lease.
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDirB})
+	runHook(t, "worktree-enter", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
+
+	leaseB, err := st.ActiveLease(t.Context(), taskB)
+	if err != nil {
+		t.Fatalf("active lease B: %v", err)
+	}
+	sessB, err := st.AgentSession(t.Context(), leaseB.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session B: %v", err)
+	}
+	if sessB.EndedAt != nil {
+		t.Fatal("session B should be open after worktree-enter")
+	}
+
+	// worktree-enter must also write B's marker — symmetric with
+	// session-start — or heartbeats there debounce off forever and B looks
+	// abandoned to offerScan/handleWorktreeCreate.
+	if id, ok := markerSessionID(wtDirB); !ok || id != "sess-1" {
+		t.Fatalf("markerSessionID(B) after enter = %q, %v, want sess-1, true", id, ok)
+	}
+	if !sessionMarkerFresh(wtDirB) {
+		t.Fatal("worktree B marker not fresh after worktree-enter")
+	}
+
+	// A heartbeat past the debounce window in the entered worktree reaches
+	// the backbone (proving the marker written above is actually usable).
+	before := rec.count("/agent-session")
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "heartbeat",
+		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDirB, SessionID: "sess-1"})),
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Now:    func() time.Time { return time.Now().Add(2 * time.Minute) },
+	})
+	if code != 0 {
+		t.Fatalf("heartbeat in entered worktree exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if rec.count("/agent-session") != before+1 {
+		t.Fatalf("heartbeat in entered worktree did not reach the backbone: count before=%d after=%d",
+			before, rec.count("/agent-session"))
+	}
+
+	// Exit the second worktree: B's row closes, A's stays open.
+	runHook(t, "worktree-exit", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
+
+	sessB, err = st.AgentSession(t.Context(), leaseB.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session B after exit: %v", err)
+	}
+	if sessB.EndedAt == nil {
+		t.Fatal("worktree-exit did not close session B")
+	}
+
+	sessA, err = st.AgentSession(t.Context(), leaseA.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session A after exit: %v", err)
+	}
+	if sessA.EndedAt != nil {
+		t.Fatal("session A should remain open after exiting B")
+	}
+
+	// worktree-exit must remove B's marker — symmetric with session-end.
+	if _, ok := markerSessionID(wtDirB); ok {
+		t.Fatal("worktree B marker still present after worktree-exit")
 	}
 }

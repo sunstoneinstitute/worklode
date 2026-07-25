@@ -67,6 +67,27 @@ func scanLease(row rowScanner) (*Lease, error) {
 func activeLeaseTx(tx *sql.Tx, taskID string) (*Lease, error) {
 	row := tx.QueryRow(
 		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID)
+	return scanActiveLeaseRow(row, taskID)
+}
+
+// activeLeaseTxForShare is activeLeaseTx with a FOR SHARE row lock, for a
+// caller about to insert or update a row keyed on the lease that must not be
+// left orphaned by a lease closing underneath it. The lease's own foreign
+// keys don't serialize this: an insert referencing lease_id takes FOR KEY
+// SHARE (via the FK), but closing a lease only writes released_at, which
+// lives in a partial index rather than a key column, so the closing UPDATE
+// takes FOR NO KEY UPDATE — a mode that does not conflict with FOR KEY SHARE.
+// Taking FOR SHARE here explicitly closes that gap: it blocks a concurrent
+// close until this transaction commits, and if the close wins the race
+// first, the WHERE released_at IS NULL predicate is re-checked on wakeup and
+// correctly returns no rows.
+func activeLeaseTxForShare(tx *sql.Tx, taskID string) (*Lease, error) {
+	row := tx.QueryRow(
+		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL FOR SHARE`, taskID)
+	return scanActiveLeaseRow(row, taskID)
+}
+
+func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 	l, err := scanLease(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no active lease on task %s: %w", taskID, ErrNotFound)
@@ -308,6 +329,9 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 	); err != nil {
 		return fmt.Errorf("close lease %d: %w", leaseID, err)
 	}
+	if err := endOpenAgentSessionsOnLease(tx, now, leaseID); err != nil {
+		return err
+	}
 	var state string
 	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state); err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
@@ -323,13 +347,18 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // a no-op. Unlike closeLease it never touches task state — callers (done,
 // abandon, merge) set the task's state themselves in the same transaction.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
-	if _, err := tx.Exec(
-		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL`,
+	var leaseID int64
+	err := tx.QueryRow(
+		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL RETURNING id`,
 		now.UTC(), taskID,
-	); err != nil {
+	).Scan(&leaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("close active lease on %s: %w", taskID, err)
 	}
-	return nil
+	return endOpenAgentSessionsOnLease(tx, now, leaseID)
 }
 
 // ActiveLease returns the active (unreleased) lease on taskID, or

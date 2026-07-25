@@ -206,6 +206,52 @@ Run `lode install-git-hooks` inside a repo to install a pre-commit heartbeat
 hook (it renews the current task's lease on every commit). It chains any
 pre-commit hook already installed, and is idempotent — safe to re-run.
 
+### Agent session tracking
+
+`lode hook` reports which coding-agent session is working a task, so the
+backbone can show what is running right now. Sessions are recorded against the
+task's lease; a lease outlives many sessions (restarts, `/clear`, resuming the
+next day), and one session can span several leases as it moves between
+worktrees.
+
+The reporting agent comes from `LODE_AGENT`, defaulting to `claude-code`.
+Accepted values: `claude-code`, `codex`, `cursor`, `aider`, `opencode`, `pi`,
+`amp`, `other`.
+
+Claude Code bindings:
+
+| `lode hook` event | Claude Code event |
+|---|---|
+| `session-start` | `SessionStart` |
+| `heartbeat` | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
+| `worktree-enter` | `PostToolUse` matcher `EnterWorktree` |
+| `worktree-create` | `WorktreeCreate` |
+| `worktree-remove` | `WorktreeRemove` |
+| `session-end` | `SessionEnd` |
+
+Install these bindings into a repo with:
+
+```
+lode claude install                    # .claude/settings.local.json
+lode claude install --scope project    # .claude/settings.json
+```
+
+`lode claude uninstall` (same `--scope` flag) removes them again. Both are
+idempotent and only touch entries whose command starts with `lode hook`, so
+third-party hooks on the same events are left alone.
+
+Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
+cheap even in a fast conversation. Every hook stays inside the 2s backbone
+timeout and never fails the event that triggered it.
+
+`worktree-exit` has no Claude Code binding: `ExitWorktree` reports no path, and
+by the time the hook fires the session's directory has already been restored to
+the one being returned to — so acting on it would close the wrong session. It
+requires an explicit path in `tool_input` and is a NOP without one. A session
+that leaves a worktree ages out instead: its `last_seen_at` stops advancing, and
+the row is closed for good when the lease is released, expires, or the task
+completes.
+
 The Claude Code plugin (`lode` plugin, `plugins/lode/` in the
 `sunstoneinstitute/claude-plugins` repo, installable from the Sunstone
 plugins marketplace) provides a `/lode:*` slash-command flow for agents

@@ -40,11 +40,17 @@ CREATE TABLE agent_sessions (
     output_tokens       bigint,
     cost_amount         numeric(12,6),
     cost_currency       text NOT NULL DEFAULT 'USD'
+                          CONSTRAINT agent_sessions_cost_currency_format
                           CHECK (cost_currency ~ '^[A-Z]{3}$'),
-    UNIQUE (lease_id, agent, external_session_id)
+    CONSTRAINT agent_sessions_lease_session_unique
+      UNIQUE (lease_id, agent, external_session_id)
 );
-CREATE INDEX agent_sessions_lease ON agent_sessions (lease_id);
 ```
+
+No separate index on `lease_id`: the unique constraint's index already leads
+with that column, so it serves every by-lease lookup, including the foreign key
+check. Constraints are named rather than left to Postgres, so store code and
+tests can refer to them.
 
 Why a child table rather than columns on `leases`: a lease routinely outlives a
 single agent session. `handleSessionStart` renews or re-acquires an existing
@@ -68,6 +74,10 @@ agents in one directory; it is harmless and not worth a constraint.
 Token and cost columns ship nullable and unpopulated. Nothing computes them in
 this cut; they are in the migration so the table is shaped right.
 
+`agent_version` is likewise reserved: it is plumbed through every layer, but
+the Claude Code hook payload carries no version, so it is always empty today.
+It is there for agents that do report one.
+
 Cost is an amount plus an ISO 4217 currency code, never a bare USD number: not
 every vendor bills in dollars (Mistral bills EUR). The currency defaults to
 `USD` and is NOT NULL, so an amount can never sit there without a currency to
@@ -85,6 +95,11 @@ with a date — out of scope here; the table records what the vendor charged.
 
 - A row is created on the first heartbeat from a session and belongs to
   whichever lease was active at that moment.
+- A heartbeat on a row that is already closed re-opens it: `ended_at` goes back
+  to NULL. A session that leaves a worktree and returns to it later is working
+  that lease again, and must not stay closed. The row then spans first touch to
+  last, without recording the gap — per-visit granularity is not something the
+  design promises.
 - `last_seen_at` is bumped on every heartbeat. Running sessions are
   `ended_at IS NULL AND last_seen_at > now() - interval '30 minutes'`. The
   staleness window is a read-side constant only; nothing writes or enforces it,
@@ -92,7 +107,11 @@ with a date — out of scope here; the table records what the vendor charged.
 - `ended_at` is stamped by the session-end hook, **and** by `closeLease` /
   `CloseActiveLease` for any session still open on the lease being closed. A
   swept, released, or completed task therefore never leaves a session that
-  looks live, and "what is running now" stays a single-table query.
+  looks live, and "what is running now" stays a single-table query. A close by
+  this route stamps `ended_at` without emitting an `agent_session.ended` event:
+  the lease's own `lease.released` / `lease.expired` event already records the
+  transition, so `started`/`ended` pairs in the event stream are deliberately
+  unbalanced.
 
 ## Store and API
 
@@ -111,14 +130,50 @@ external_id)` uniqueness. The `last_seen_at` bump is a plain `UPDATE` issued
 path and skips apply entirely — and because a heartbeat is not an event worth
 keeping.
 
+That bump also clears `ended_at` (see Lifecycle), and runs in its own
+transaction that first takes a locking read on the lease
+(`SELECT … FOR SHARE`), skipping the write when the lease has been released.
+The holder check that precedes it runs on a plain connection and cannot see a
+release landing mid-call; without the lock a heartbeat could leave a
+permanently open session on a released lease, which nothing would ever close.
+
+A plain `EXISTS (SELECT … FROM leases …)` in the `UPDATE` does **not** achieve
+this. It is uncorrelated, so it is evaluated once against the statement
+snapshot, and READ COMMITTED's row re-check covers only the target row's own
+predicates — the update still lands after the closing transaction commits.
+
+The session **insert** needs the same lock, for the same reason and with a
+worse failure mode: the foreign key does not serialize it, because an insert
+takes `FOR KEY SHARE` on the lease row while `UPDATE leases SET released_at`
+takes only `FOR NO KEY UPDATE` (`released_at` appears solely in partial
+indexes, which are not key attributes). Without the lock a session can be
+created *after* the close has already swept the lease's open sessions, and
+nothing will ever close it — not `closeLease`, whose lease is gone; not
+`EndAgentSession`, which requires an active held lease; not the sweeper, which
+walks only unreleased leases.
+
+All four paths that touch both tables — session insert, heartbeat,
+`closeLease`, `CloseActiveLease` — lock `leases` before `agent_sessions`, so
+they cannot deadlock against each other.
+
 **`EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)`** — records
 an `agent_session.ended` event, sets `ended_at`, and writes any token/cost
-values supplied by the caller.
+values supplied by the caller. Its event id is random, not derived from the
+session: a session can legitimately be closed more than once on one lease
+(exit, re-enter, exit again). Idempotency comes instead from the `ended_at IS
+NULL` predicate — a repeat close matches no rows, which fails apply and rolls
+the event back, so there is exactly one `agent_session.ended` event per real
+close.
 
 HTTP surface, in the existing lifecycle group:
 
 - `POST /api/v1/tasks/{id}/agent-session` — body `{agent, agent_version, session_id}`
 - `POST /api/v1/tasks/{id}/agent-session/end` — body `{agent, session_id, input_tokens?, output_tokens?, cost_amount?, cost_currency?}`
+
+`cost_amount` crosses the wire as a decimal **string**, so `numeric(12,6)`
+round-trips exactly. It is validated in Go against the column's shape, like
+`cost_currency` — letting Postgres do the parsing turns a client typo into a
+500 and a spurious error-log entry.
 
 Everything is named `agent-session`, never `session`: `internal/api/session.go`
 already owns "session" for web and CLI auth.
@@ -134,7 +189,7 @@ a backbone call it does not make today:
 | `session-start` | `TouchAgentSession` after `ensureLease` | payload | `SessionStart` |
 | `heartbeat` | `TouchAgentSession` | payload | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
 | `worktree-enter` | `TouchAgentSession` on the entered worktree's lease | payload | `PostToolUse` matcher `EnterWorktree` |
-| `worktree-exit` | `EndAgentSession` for the exited lease's row | payload | `PostToolUse` matcher `ExitWorktree` |
+| `worktree-exit` | `EndAgentSession` for the exited lease's row | payload | *(none — see below)* |
 | `pre-commit` | `TouchAgentSession` alongside the existing `RenewLease` | marker file | git `pre-commit` |
 | `session-end` | `EndAgentSession` before removing the marker | payload | `SessionEnd` |
 
@@ -161,6 +216,28 @@ stamps `ended_at` on the row it leaves. A row therefore reads as "this session
 worked this lease, from here to here" — which is also what makes per-task cost
 attribution possible later for a session that spanned tasks.
 
+Entering and exiting a worktree also moves the session marker, symmetrically
+with session start and end: `worktree-enter` writes it, `worktree-exit` removes
+it. The marker is "which session is live in this worktree", and `heartbeatDue`
+reads it — without one, heartbeats in an entered worktree would be debounced
+off permanently.
+
+**`worktree-exit` has no Claude Code binding.** `ExitWorktree`'s tool input is
+`{action, discard_changes}` — no path — and by the time `PostToolUse` fires the
+session's cwd has already been restored to the directory being returned *to*.
+Falling back to cwd would therefore close the session on the wrong worktree:
+a session that entered B from A would, on exiting B, end A's row while still
+working A. So `worktree-exit` requires an explicit path in `tool_input` and is
+a NOP without one. `worktree-enter` keeps the cwd fallback, where it is correct
+— `EnterWorktree` switches cwd to the entered worktree before the hook fires,
+and supplies no path at all when creating a worktree by name.
+
+A session that leaves a worktree therefore leaves its row open. That is
+acceptable: `last_seen_at` stops advancing, so the row drops out of the
+30-minute running window, and the row is closed for good when the lease is
+released, expires, or the task completes. The event exists for agents that can
+report an exit path, and for explicit invocation.
+
 **Volume control.** These bindings fire more often than `Stop` alone, so the
 heartbeat is debounced client-side: `worklode-session.json` gains a
 `last_heartbeat_at` field, and a heartbeat within 60s of the recorded one is
@@ -172,8 +249,7 @@ debounced — they carry a lease change, not just liveness.
 - `PostToolUse` *unmatched*, and `PostToolBatch` — hundreds of firings per
   session against a 10s default timeout, for no signal `Stop` lacks. Matched
   `PostToolUse` is a different matter and is used above: the matcher is a tool
-  name, so binding `EnterWorktree` / `ExitWorktree` costs nothing per ordinary
-  tool call.
+  name, so binding `EnterWorktree` costs nothing per ordinary tool call.
 - `UserPromptSubmit` — a strict subset of `Stop`, missing autonomous turns.
 - `WorktreeCreate` / `WorktreeRemove` — already handled. `handleWorktreeCreate`
   runs before any session exists in that worktree, and `handleWorktreeRemove`
@@ -242,3 +318,10 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
   `Stop` and `SessionEnd` payloads both carry `transcript_path`, so the hooks
   wired here are already standing where that work will go.
 - A `lode sessions` listing command and any web UI surface.
+- Fixing the session marker's pid. `writeSessionMarker` records
+  `os.Getpid()` — the pid of the short-lived `lode hook` process, which is dead
+  the moment the hook exits — so `sessionMarkerFresh` is effectively always
+  false in production, and `offerScan` reads any expired-lease worktree as
+  abandoned even when a session is live in it. This predates agent sessions and
+  is untouched here; the backbone's own `last_seen_at` is now the better
+  liveness signal anyway.
