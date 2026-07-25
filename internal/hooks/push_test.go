@@ -29,15 +29,10 @@ func (e *env) taskCommitSource(t *testing.T, taskID, repo, sha string) string {
 	return src
 }
 
-// deliverPushOK posts a push fixture and requires a clean "ok" — an apply
-// that errors rolls its whole transaction back, which otherwise looks
-// indistinguishable from "the handler correctly did nothing".
+// deliverPushOK posts a push fixture and requires a clean "ok".
 func deliverPushOK(t *testing.T, e *env, deliveryID, fixtureFile string) {
 	t.Helper()
-	rr := deliver(t, e.h, "push", deliveryID, fixtureFile)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
-		t.Fatalf("deliver %s (%s): code=%d body=%s", fixtureFile, deliveryID, rr.Code, rr.Body.String())
-	}
+	deliverOK(t, e, "push", deliveryID, fixtureFile)
 }
 
 // mainCommitID returns the per-repo ordering id recorded for sha.

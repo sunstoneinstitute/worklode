@@ -40,11 +40,7 @@ func (h *githubHandler) applyDeploymentStatus(tx *sql.Tx, eventID int64, repo st
 		// The deployed sha has no main commit to anchor the watermark to, so
 		// v1 drops this fact rather than queueing it. It self-heals: the next
 		// deploy of this repo carries a sha we have seen and re-establishes
-		// the frontier, which covers this one too. Logged because a repo that
-		// drops every deploy is otherwise indistinguishable from one that
-		// never deploys.
-		h.log.Info("deployment_status dropped: unknown sha",
-			"repo", repo, "environment", env, "sha", p.Deployment.SHA)
+		// the frontier, which covers this one too.
 		return nil
 	}
 	now := h.st.Now()
