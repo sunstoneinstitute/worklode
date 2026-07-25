@@ -67,15 +67,15 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
 
-	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL", DeployGated: true})
+	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if p.ID != "proj" || p.Name != "Project" || !p.DeployGated {
+	if p.ID != "proj" || p.Name != "Project" || p.Key != "WL" {
 		t.Fatalf("CreateProject result = %+v", p)
 	}
 
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 
@@ -83,8 +83,38 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
-	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != "acme/widgets" {
+	want := cli.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
+	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != want {
 		t.Fatalf("ListProjects result = %+v", list.Projects)
+	}
+
+	if _, err := c.SetRepoDoneState(ctx, "acme/widgets", "released"); err != nil {
+		t.Fatalf("SetRepoDoneState: %v", err)
+	}
+	list, _, err = c.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects after SetRepoDoneState: %v", err)
+	}
+	if got := list.Projects[0].Repos[0].DoneState; got != "released" {
+		t.Fatalf("done_state after SetRepoDoneState = %q, want released", got)
+	}
+
+	// Anything that is not two non-empty segments is rejected client-side and
+	// never sent — one case per disjunct of the guard.
+	for _, repo := range []string{"widgets", "acme/", "/widgets", ""} {
+		t.Run("reject "+repo, func(t *testing.T) {
+			_, err := c.SetRepoDoneState(ctx, repo, "released")
+			if err == nil {
+				t.Fatalf("SetRepoDoneState(%q): want error, got nil", repo)
+			}
+			var clientErr *cli.ClientError
+			if errors.As(err, &clientErr) {
+				t.Fatalf("SetRepoDoneState(%q) reached the server: %v", repo, err)
+			}
+			if !strings.Contains(err.Error(), "owner/name") {
+				t.Fatalf("SetRepoDoneState(%q): error = %v, want it to mention owner/name", repo, err)
+			}
+		})
 	}
 }
 
@@ -165,7 +195,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
-	if !strings.HasPrefix(claim.Branch, "wl/WL-1-") {
+	if !strings.HasPrefix(claim.Branch, "lode/WL-1-") {
 		t.Fatalf("claim branch = %q", claim.Branch)
 	}
 	if claim.Lease.ActorID != "alice" || claim.Lease.Worktree != "host:/wt-1" {
@@ -239,7 +269,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DoneTask: %v", err)
 	}
-	if done.State != "done" {
+	if done.State != "merged" {
 		t.Fatalf("DoneTask result = %+v", done)
 	}
 
@@ -382,8 +412,8 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief (no lease): %v", err)
 	}
-	if brief.Task.ID != task.ID || brief.Branch != "wl/"+task.ID+"-fix-the-thing" {
-		t.Fatalf("Brief = %+v, want task %s branch wl/%s-fix-the-thing", brief, task.ID, task.ID)
+	if brief.Task.ID != task.ID || brief.Branch != "lode/"+task.ID+"-fix-the-thing" {
+		t.Fatalf("Brief = %+v, want task %s branch lode/%s-fix-the-thing", brief, task.ID, task.ID)
 	}
 	if brief.Lease != nil {
 		t.Fatalf("Brief.Lease = %+v, want nil", brief.Lease)
@@ -425,7 +455,7 @@ func TestClientInboxFlow(t *testing.T) {
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 

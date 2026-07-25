@@ -131,6 +131,23 @@ func setupProject(t *testing.T, c *cli.Client) {
 
 // --- lode next --------------------------------------------------------
 
+func TestSlugFromBranch(t *testing.T) {
+	cases := []struct{ branch, id, want string }{
+		{"lode/WL-7-fix-thing", "WL-7", "fix-thing"},
+		{"team/WL-7-fix-thing", "WL-7", "fix-thing"},
+		{"wl/WL-7-fix-thing", "WL-7", "fix-thing"},
+		// A slug repeating the task id must stay intact: the prefix-adjacent
+		// occurrence is the separator, not the last one.
+		{"lode/WL-7-fix-WL-7-bug", "WL-7", "fix-WL-7-bug"},
+		{"main", "WL-7", "main"}, // no id: caller keeps the branch as-is
+	}
+	for _, c := range cases {
+		if got := slugFromBranch(c.branch, c.id); got != c.want {
+			t.Errorf("slugFromBranch(%q, %q) = %q, want %q", c.branch, c.id, got, c.want)
+		}
+	}
+}
+
 func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -156,7 +173,7 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true (output %s)", out)
 	}
-	wantBranch := "wl/" + task.ID + "-fix-the-thing"
+	wantBranch := "lode/" + task.ID + "-fix-the-thing"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
@@ -205,7 +222,7 @@ func TestNextClaimsTopRankedWithNoID(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true")
 	}
-	wantBranch := "wl/" + task.ID + "-only-ready-task"
+	wantBranch := "lode/" + task.ID + "-only-ready-task"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
@@ -372,7 +389,7 @@ func TestResumeErrorsWhenLeasedElsewhere(t *testing.T) {
 
 	root := initGitRepo(t)
 	dir := filepath.Join(root, "wt", task.ID+"-held-elsewhere")
-	branch := "wl/" + task.ID + "-held-elsewhere"
+	branch := "lode/" + task.ID + "-held-elsewhere"
 	c2 := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", branch)
 	if out, err := c2.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
@@ -422,8 +439,8 @@ func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task: %v", err)
 	}
-	if detail.State != "done" {
-		t.Fatalf("task state = %q, want done", detail.State)
+	if detail.State != "merged" {
+		t.Fatalf("task state = %q, want merged", detail.State)
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after done = %+v, want nil", detail.Lease)
@@ -603,7 +620,7 @@ func TestTaskBriefCmd(t *testing.T) {
 	if b.Task.ID != task.ID {
 		t.Fatalf("brief.Task.ID = %q, want %q", b.Task.ID, task.ID)
 	}
-	if b.Branch != "wl/"+task.ID+"-brief-me" {
-		t.Fatalf("brief.Branch = %q, want wl/%s-brief-me", b.Branch, task.ID)
+	if b.Branch != "lode/"+task.ID+"-brief-me" {
+		t.Fatalf("brief.Branch = %q, want lode/%s-brief-me", b.Branch, task.ID)
 	}
 }

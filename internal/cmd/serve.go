@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,9 +20,14 @@ import (
 
 // parseClusterEnvMap parses "cluster1=dev,cluster2=prod" into a map. Entries
 // without '=' are ignored. Empty input returns nil.
-func parseClusterEnvMap(s string) map[string]string {
+//
+// Values must be dev or prod. Anything else is rejected at boot rather than
+// accepted: env_deploys only holds those two stages, so a cluster mapped to
+// e.g. "staging" would record deployments rows and then silently never
+// advance a task.
+func parseClusterEnvMap(s string) (map[string]string, error) {
 	if s == "" {
-		return nil
+		return nil, nil
 	}
 	m := map[string]string{}
 	for _, pair := range strings.Split(s, ",") {
@@ -29,9 +35,13 @@ func parseClusterEnvMap(s string) map[string]string {
 		if !ok || k == "" {
 			continue
 		}
+		if v != "dev" && v != "prod" {
+			return nil, fmt.Errorf(
+				"LODE_CLUSTER_ENV_MAP: cluster %q maps to %q, want dev or prod", k, v)
+		}
 		m[k] = v
 	}
-	return m
+	return m, nil
 }
 
 func newServeCmd() *cobra.Command {
@@ -43,6 +53,10 @@ func newServeCmd() *cobra.Command {
 			if dsn == "" {
 				return errors.New("no DSN: set --dsn or LODE_DSN")
 			}
+			clusterEnv, err := parseClusterEnvMap(os.Getenv("LODE_CLUSTER_ENV_MAP"))
+			if err != nil {
+				return err
+			}
 			st, err := store.Open(dsn)
 			if err != nil {
 				return err
@@ -53,7 +67,8 @@ func newServeCmd() *cobra.Command {
 				BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
 				GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
-				ClusterEnvMap:       parseClusterEnvMap(os.Getenv("LODE_CLUSTER_ENV_MAP")),
+				ClusterEnvMap:       clusterEnv,
+				BranchPrefix:        os.Getenv("LODE_BRANCH_PREFIX"),
 				OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
 				OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
 				PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
@@ -63,6 +78,8 @@ func newServeCmd() *cobra.Command {
 				GitHubOrg:           os.Getenv("LODE_GITHUB_ORG"),
 				GitHubAdminTeam:     os.Getenv("LODE_GITHUB_ADMIN_TEAM"),
 				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
+				GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
+				GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
 			})
 			if err != nil {
 				return err

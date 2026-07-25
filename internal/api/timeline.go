@@ -12,7 +12,8 @@ import (
 
 // timelineEntry pairs an entry's sort key with its wire object. Entries are
 // appended source-by-source (state, pr, ci, review, artifact, deployment,
-// runtime) and stably sorted by time, so equal timestamps keep that order.
+// runtime, delivery) and stably sorted by time, so equal timestamps keep that
+// order.
 type timelineEntry struct {
 	at  time.Time
 	obj map[string]any
@@ -21,7 +22,8 @@ type timelineEntry struct {
 // taskTimeline handles GET /api/v1/tasks/{id}/timeline: one ascending
 // time-ordered array merging the task's state changes, its linked PRs, CI
 // runs and reviews on those PRs, artifacts built from the PRs' merge SHAs,
-// and deployments and runtime events referencing those artifacts.
+// deployments and runtime events referencing those artifacts, and the
+// delivery milestones its commits reached.
 func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 	t, entries, err := s.assembleTimeline(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -40,8 +42,8 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 
 // assembleTimeline returns a task and its full timeline — state changes,
 // linked PRs, CI runs and reviews on those PRs, artifacts built from the
-// PRs' merge SHAs, and deployments and runtime events referencing those
-// artifacts — ascending by time. Shared by the JSON
+// PRs' merge SHAs, deployments and runtime events referencing those
+// artifacts, and delivery milestones — ascending by time. Shared by the JSON
 // /api/v1/tasks/{id}/timeline handler and the GET /tasks/{id} web page.
 func (s *server) assembleTimeline(ctx context.Context, id string) (*store.Task, []timelineEntry, error) {
 	t, err := s.st.GetTask(ctx, id)
@@ -92,6 +94,12 @@ func (s *server) assembleTimeline(ctx context.Context, id string) (*store.Task, 
 		return nil, nil, err
 	}
 	entries = append(entries, rte...)
+
+	dle, err := s.deliveryEntries(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries = append(entries, dle...)
 
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
 	return t, entries, nil
@@ -226,6 +234,33 @@ func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifa
 				"environment": d.Environment,
 				"target_name": d.TargetName,
 				"status":      d.Status,
+			}})
+		}
+	}
+	return out, nil
+}
+
+// deliveryEntries reports the task's delivery milestones: where its work
+// landed, which environments have confirmably received it, and the release
+// that shipped it — one set per repo the task landed commits in.
+func (s *server) deliveryEntries(ctx context.Context, taskID string) ([]timelineEntry, error) {
+	facts, err := s.st.DeliveryFactsForTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	var out []timelineEntry
+	for _, f := range facts {
+		out = append(out, timelineEntry{at: f.LandedAt, obj: map[string]any{
+			"at": f.LandedAt, "type": "landed", "repo": f.Repo, "sha": f.LandedSHA,
+		}})
+		for _, d := range f.Deployed {
+			out = append(out, timelineEntry{at: d.At, obj: map[string]any{
+				"at": d.At, "type": "deployed", "repo": f.Repo, "environment": d.Environment,
+			}})
+		}
+		if f.ReleaseTag != "" {
+			out = append(out, timelineEntry{at: f.ReleasedAt, obj: map[string]any{
+				"at": f.ReleasedAt, "type": "released", "repo": f.Repo, "tag": f.ReleaseTag,
 			}})
 		}
 	}

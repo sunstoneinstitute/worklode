@@ -148,10 +148,10 @@ func TestClaimRequiresReady(t *testing.T) {
 		t.Fatalf("claim draft task: want ErrBadTransition, got %v", err)
 	}
 
-	done := createTask(t, s, leaseTestNow, defaultTaskInput())
-	walkTo(t, s, done.ID, "done")
-	if _, err := s.Claim(ctx, done.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrBadTransition) {
-		t.Fatalf("claim done task: want ErrBadTransition, got %v", err)
+	merged := createTask(t, s, leaseTestNow, defaultTaskInput())
+	walkTo(t, s, merged.ID, "merged")
+	if _, err := s.Claim(ctx, merged.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("claim merged task: want ErrBadTransition, got %v", err)
 	}
 
 	blocker := createTask(t, s, leaseTestNow, defaultTaskInput()) // stays ready
@@ -164,7 +164,7 @@ func TestClaimRequiresReady(t *testing.T) {
 	}
 
 	// Failed claims leave no lease rows behind.
-	for _, id := range []string{draft.ID, done.ID, blocked.ID} {
+	for _, id := range []string{draft.ID, merged.ID, blocked.ID} {
 		if _, total := countLeases(t, s, id); total != 0 {
 			t.Fatalf("task %s: %d lease rows after failed claim, want 0", id, total)
 		}

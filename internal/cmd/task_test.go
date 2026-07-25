@@ -64,9 +64,9 @@ func TestTaskListStatusFiltering(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"default hides done and abandoned", nil, sorted(ready.ID, doing.ID)},
-		{"status done", []string{"--status", "done"}, sorted(done.ID)},
-		{"status repeatable", []string{"--status", "done", "--status", "abandoned"}, sorted(done.ID, abandoned.ID)},
+		{"default hides merged and abandoned", nil, sorted(ready.ID, doing.ID)},
+		{"status merged", []string{"--status", "merged"}, sorted(done.ID)},
+		{"status repeatable", []string{"--status", "merged", "--status", "abandoned"}, sorted(done.ID, abandoned.ID)},
 		{"status all", []string{"--status", "all"}, sorted(ready.ID, doing.ID, done.ID, abandoned.ID)},
 	}
 	for _, tc := range cases {

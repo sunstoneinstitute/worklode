@@ -48,7 +48,8 @@ type TaskFilter struct {
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
-// blocked until A is done or abandoned; "A child_of B" makes B an epic.
+// blocked until A reaches a closed state (see closedStates); "A child_of B"
+// makes B an epic.
 type Edge struct {
 	FromTask string
 	ToTask   string
@@ -56,24 +57,35 @@ type Edge struct {
 }
 
 // legalTransitions is the complete task state machine: draft → ready →
-// in_progress → in_review → done, with backward moves in_progress → ready and
-// in_review → in_progress, and abandoned reachable from every non-terminal
-// state. done and abandoned are not strictly terminal: reopen returns either
-// to ready (a fresh claim is then required; no task is ever in_progress
-// without a live lease).
+// in_progress → in_review → merged → deployed_dev → deployed_prod, with
+// released as the terminal for release-based repos, backward moves
+// in_progress → ready and in_review → in_progress, direct-to-main jumps
+// ready|in_progress → merged, and abandoned reachable from every
+// pre-merged state. Terminal-ish states are not strictly terminal: reopen
+// returns to ready (a fresh claim is then required).
 var legalTransitions = map[[2]string]bool{
-	{"draft", "ready"}:           true,
-	{"ready", "in_progress"}:     true,
-	{"in_progress", "in_review"}: true,
-	{"in_progress", "ready"}:     true,
-	{"in_review", "done"}:        true,
-	{"in_review", "in_progress"}: true,
-	{"draft", "abandoned"}:       true,
-	{"ready", "abandoned"}:       true,
-	{"in_progress", "abandoned"}: true,
-	{"in_review", "abandoned"}:   true,
-	{"done", "ready"}:            true,
-	{"abandoned", "ready"}:       true,
+	{"draft", "ready"}:                true,
+	{"ready", "in_progress"}:          true,
+	{"in_progress", "in_review"}:      true,
+	{"in_progress", "ready"}:          true,
+	{"in_review", "in_progress"}:      true,
+	{"ready", "merged"}:               true,
+	{"in_progress", "merged"}:         true,
+	{"in_review", "merged"}:           true,
+	{"merged", "deployed_dev"}:        true,
+	{"merged", "deployed_prod"}:       true,
+	{"merged", "released"}:            true,
+	{"deployed_dev", "deployed_prod"}: true,
+	{"deployed_dev", "released"}:      true,
+	{"draft", "abandoned"}:            true,
+	{"ready", "abandoned"}:            true,
+	{"in_progress", "abandoned"}:      true,
+	{"in_review", "abandoned"}:        true,
+	{"merged", "ready"}:               true,
+	{"deployed_dev", "ready"}:         true,
+	{"deployed_prod", "ready"}:        true,
+	{"released", "ready"}:             true,
+	{"abandoned", "ready"}:            true,
 }
 
 // CreateTask allocates the next <KEY>-<n> id from the project's counter and
@@ -307,9 +319,10 @@ func SlugifyTitle(title string) string {
 	return s
 }
 
-// BranchFor returns the conventional git branch for a task: wl/<id>-<slug>.
+// BranchFor returns the conventional git branch for a task:
+// <prefix><id>-<slug>, with the prefix from SetBranchPrefix.
 func BranchFor(t *Task) string {
-	return "wl/" + t.ID + "-" + SlugifyTitle(t.Title)
+	return BranchPrefix() + t.ID + "-" + SlugifyTitle(t.Title)
 }
 
 // GetTask looks up a task by id. Returns ErrNotFound if it does not exist.
@@ -519,15 +532,19 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
+// closedStates is the SQL tuple of task states that no longer block
+// dependents: everything from merged onward, plus abandoned.
+const closedStates = `('merged', 'deployed_dev', 'deployed_prod', 'released', 'abandoned')`
+
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
 // open, i.e. the edge currently blocks its to_task.
 const blockedCondition = `e.type = 'blocks'
 	 AND EXISTS (SELECT 1 FROM tasks b
 	             WHERE b.id = e.from_task
-	               AND b.state NOT IN ('done', 'abandoned'))`
+	               AND b.state NOT IN ` + closedStates + `)`
 
 // BlockedTaskIDs returns the ids of tasks that have at least one open
-// 'blocks' edge pointing at them (the blocker is not done or abandoned).
+// 'blocks' edge pointing at them (the blocker is not in a closed state).
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition)

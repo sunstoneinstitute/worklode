@@ -152,11 +152,7 @@ func TestTaskTimeline(t *testing.T) {
 		e := raw.(map[string]any)
 		typ, _ := e["type"].(string)
 		types = append(types, typ)
-		atStr, _ := e["at"].(string)
-		ts, err := time.Parse(time.RFC3339, atStr)
-		if err != nil {
-			t.Fatalf("entry %d: bad at %q: %v", i, atStr, err)
-		}
+		ts := entryAt(t, i, e)
 		if ts.Before(prev) {
 			t.Fatalf("timeline not ascending at entry %d: %v < %v", i, ts, prev)
 		}
@@ -217,6 +213,169 @@ func TestTaskTimeline(t *testing.T) {
 		runtime["workload"] != "app" || runtime["message"] != "CrashLoopBackOff" {
 		t.Fatalf("runtime entry = %v", runtime)
 	}
+}
+
+// TestTimelineDeliveryEntries covers the delivery facts a task picks up once
+// its work lands: one "landed" entry per repo (not one per commit),
+// "deployed" entries only for environments whose confirmed frontier covers
+// the landed commit, and the earliest release covering it.
+func TestTimelineDeliveryEntries(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ship it", "priority": "high", "kind": "feature",
+	})
+
+	base := time.Now().UTC().Truncate(time.Second)
+	at := func(min int) time.Time { return base.Add(time.Duration(min) * time.Minute) }
+
+	const (
+		repoA = "org/app"
+		repoB = "org/lib"
+	)
+
+	seedEvent(t, st, "delivery", func(tx *sql.Tx, _ int64) error {
+		// repoA: the task landed a1 and a2; a3 is unrelated later work.
+		a1, err := store.AppendMainCommit(tx, repoA, "a1", at(1))
+		if err != nil {
+			return err
+		}
+		a2, err := store.AppendMainCommit(tx, repoA, "a2", at(2))
+		if err != nil {
+			return err
+		}
+		a3, err := store.AppendMainCommit(tx, repoA, "a3", at(3))
+		if err != nil {
+			return err
+		}
+		for _, sha := range []string{"a1", "a2"} {
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: "WL-1", Repo: repoA, SHA: sha, Source: "pr", SeenAt: at(1),
+			}); err != nil {
+				return err
+			}
+		}
+		// dev is past the landed commit; prod is still behind it.
+		if err := store.BumpEnvDeployGH(tx, at(5), repoA, "dev", a3); err != nil {
+			return err
+		}
+		if err := store.BumpEnvDeployGH(tx, at(6), repoA, "prod", a1); err != nil {
+			return err
+		}
+		// Three releases: one below the landed commit, two covering it. The
+		// earliest covering one is the release that shipped the work.
+		if err := store.SetReleaseFrontier(tx, repoA, "v0.9.0", a1, at(7)); err != nil {
+			return err
+		}
+		if err := store.SetReleaseFrontier(tx, repoA, "v1.0.0", a2, at(8)); err != nil {
+			return err
+		}
+		if err := store.SetReleaseFrontier(tx, repoA, "v2.0.0", a3, at(9)); err != nil {
+			return err
+		}
+
+		// repoB: the task also landed b1. dev's GitHub watermark is past it but
+		// Flux has only confirmed b0, so min(gh, flux) does not cover it.
+		b0, err := store.AppendMainCommit(tx, repoB, "b0", at(1))
+		if err != nil {
+			return err
+		}
+		if _, err := store.AppendMainCommit(tx, repoB, "b1", at(2)); err != nil {
+			return err
+		}
+		b2, err := store.AppendMainCommit(tx, repoB, "b2", at(3))
+		if err != nil {
+			return err
+		}
+		if err := store.InsertTaskCommit(tx, store.TaskCommit{
+			TaskID: "WL-1", Repo: repoB, SHA: "b1", Source: "pr", SeenAt: at(1),
+		}); err != nil {
+			return err
+		}
+		if err := store.BumpEnvDeployGH(tx, at(5), repoB, "dev", b2); err != nil {
+			return err
+		}
+		_, err = store.BumpEnvDeployFlux(tx, at(5), repoB, "dev", b0)
+		return err
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-1/timeline", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("timeline status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	timeline, ok := got["timeline"].([]any)
+	if !ok {
+		t.Fatalf("timeline not an array: %s", rr.Body.String())
+	}
+
+	var entries []map[string]any
+	var prev time.Time
+	for i, raw := range timeline {
+		e := raw.(map[string]any)
+		ts := entryAt(t, i, e)
+		if ts.Before(prev) {
+			t.Fatalf("timeline not ascending at entry %d: %v < %v", i, ts, prev)
+		}
+		prev = ts
+		entries = append(entries, e)
+	}
+	// Exactly the four covered facts: no prod deploy (frontier behind), no
+	// repoB deploy (Flux behind), no second landed entry for repoA's two
+	// commits, no extra release.
+	if len(entries) != 4 {
+		t.Fatalf("timeline = %v, want 4 delivery entries", entries)
+	}
+
+	byType := map[string][]map[string]any{}
+	for _, e := range entries {
+		typ, _ := e["type"].(string)
+		byType[typ] = append(byType[typ], e)
+	}
+
+	landed := byType["landed"]
+	if len(landed) != 2 {
+		t.Fatalf("landed entries = %v, want one per repo", landed)
+	}
+	landedByRepo := map[string]map[string]any{}
+	for _, e := range landed {
+		landedByRepo[e["repo"].(string)] = e
+	}
+	if e := landedByRepo[repoA]; e == nil || e["sha"] != "a2" {
+		t.Fatalf("repoA landed entry = %v, want newest sha a2", e)
+	} else if ts := entryAt(t, 0, e); !ts.Equal(at(2)) {
+		t.Fatalf("repoA landed at = %v, want %v", ts, at(2))
+	}
+	if e := landedByRepo[repoB]; e == nil || e["sha"] != "b1" {
+		t.Fatalf("repoB landed entry = %v, want sha b1", e)
+	}
+
+	deployed := byType["deployed"]
+	if len(deployed) != 1 || deployed[0]["repo"] != repoA || deployed[0]["environment"] != "dev" {
+		t.Fatalf("deployed entries = %v, want only %s dev", deployed, repoA)
+	}
+	if ts := entryAt(t, 0, deployed[0]); !ts.Equal(at(5)) {
+		t.Fatalf("deployed at = %v, want %v", ts, at(5))
+	}
+
+	released := byType["released"]
+	if len(released) != 1 || released[0]["repo"] != repoA || released[0]["tag"] != "v1.0.0" {
+		t.Fatalf("released entries = %v, want only %s v1.0.0", released, repoA)
+	}
+	if ts := entryAt(t, 0, released[0]); !ts.Equal(at(8)) {
+		t.Fatalf("released at = %v, want %v", ts, at(8))
+	}
+}
+
+// entryAt parses a timeline entry's "at" field.
+func entryAt(t *testing.T, i int, e map[string]any) time.Time {
+	t.Helper()
+	atStr, _ := e["at"].(string)
+	ts, err := time.Parse(time.RFC3339, atStr)
+	if err != nil {
+		t.Fatalf("entry %d: bad at %q: %v", i, atStr, err)
+	}
+	return ts
 }
 
 func TestTaskTimelineEmpty(t *testing.T) {

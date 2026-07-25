@@ -1,5 +1,5 @@
 // Package worktree maps Worklode task identity onto git worktrees: the
-// deterministic wt/<id>-<slug> directory name, its wl/<id>-<slug> branch,
+// deterministic wt/<id>-<slug> directory name, its <prefix><id>-<slug> branch,
 // and the lease identity string the backbone stores.
 package worktree
 
@@ -20,8 +20,10 @@ var dirRe = regexp.MustCompile(`^([A-Z][A-Z0-9]*-\d+)(?:-[a-z0-9-]+)?$`)
 // DirName returns the deterministic worktree directory name for a task.
 func DirName(taskID, slug string) string { return "wt/" + taskID + "-" + slug }
 
-// BranchName returns the branch name for a task's worktree.
-func BranchName(taskID, slug string) string { return "wl/" + taskID + "-" + slug }
+// BranchName returns the branch name for a task's worktree. The prefix is
+// server-configured (LODE_BRANCH_PREFIX); callers with a server response
+// should use the branch it carries instead of rebuilding one here.
+func BranchName(prefix, taskID, slug string) string { return prefix + taskID + "-" + slug }
 
 // ParseDir returns the task id when path's last two segments are
 // wt/<WL-n>-<slug>. This is the uniform hook guard: ok=false ⇒ NOP.

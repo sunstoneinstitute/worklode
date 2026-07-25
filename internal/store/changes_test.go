@@ -84,6 +84,54 @@ func TestTaskIDFromRef(t *testing.T) {
 	}
 }
 
+func TestTaskIDFromRefPrefixes(t *testing.T) {
+	SetBranchPrefix("lode/")
+	t.Cleanup(func() { SetBranchPrefix("lode/") })
+	cases := map[string]string{
+		"lode/WL-7-fix-thing": "WL-7",
+		"lode/WL-7":           "WL-7",
+		"wl/WL-7-fix-thing":   "WL-7", // legacy prefix still recognized
+		"main":                "",
+		"lode/wl-7-lower":     "",
+	}
+	for ref, want := range cases {
+		if got := TaskIDFromRef(ref); got != want {
+			t.Errorf("TaskIDFromRef(%q) = %q, want %q", ref, got, want)
+		}
+	}
+	SetBranchPrefix("team/")
+	if got := TaskIDFromRef("team/AB-3-x"); got != "AB-3" {
+		t.Errorf("custom prefix: got %q, want AB-3", got)
+	}
+	if got := TaskIDFromRef("wl/AB-3-x"); got != "AB-3" {
+		t.Errorf("legacy prefix under custom prefix: got %q, want AB-3", got)
+	}
+	if got := BranchFor(&Task{ID: "AB-3", Title: "Fix the thing"}); got != "team/AB-3-fix-the-thing" {
+		t.Errorf("BranchFor = %q, want team/AB-3-fix-the-thing", got)
+	}
+}
+
+// TestSetBranchPrefixNormalizes covers the separator guard: a prefix with no
+// trailing "/" or "-" would otherwise yield branches like "lodeWL-7-slug".
+func TestSetBranchPrefixNormalizes(t *testing.T) {
+	t.Cleanup(func() { SetBranchPrefix("") })
+	cases := map[string]string{
+		"":      "lode/",
+		"lode":  "lode/",
+		"team/": "team/",
+		"team-": "team-",
+	}
+	for in, want := range cases {
+		SetBranchPrefix(in)
+		if got := BranchPrefix(); got != want {
+			t.Errorf("SetBranchPrefix(%q) -> BranchPrefix() = %q, want %q", in, got, want)
+		}
+		if got := TaskIDFromRef(want + "WL-7-slug"); got != "WL-7" {
+			t.Errorf("SetBranchPrefix(%q): TaskIDFromRef(%q) = %q, want WL-7", in, want+"WL-7-slug", got)
+		}
+	}
+}
+
 func TestTaskIDFromBody(t *testing.T) {
 	cases := []struct {
 		body string

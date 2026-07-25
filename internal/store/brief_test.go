@@ -22,11 +22,14 @@ func TestBrief(t *testing.T) {
 	if err := addEdge(t, s, openBlocker.ID, task.ID, "blocks"); err != nil {
 		t.Fatalf("add open blocks edge: %v", err)
 	}
-	// A done blocker no longer blocks, so it must not appear in the brief.
-	doneBlocker := createTask(t, s, leaseTestNow, defaultTaskInput())
-	walkTo(t, s, doneBlocker.ID, "done")
-	if err := addEdge(t, s, doneBlocker.ID, task.ID, "blocks"); err != nil {
-		t.Fatalf("add done blocks edge: %v", err)
+	// Blockers in a closed state (see closedStates) no longer block, so they
+	// must not appear in the brief -- merged and everything past it.
+	for _, state := range []string{"merged", "deployed_dev", "deployed_prod", "released"} {
+		closedBlocker := createTask(t, s, leaseTestNow, defaultTaskInput())
+		walkTo(t, s, closedBlocker.ID, state)
+		if err := addEdge(t, s, closedBlocker.ID, task.ID, "blocks"); err != nil {
+			t.Fatalf("add %s blocks edge: %v", state, err)
+		}
 	}
 
 	b, err := s.Brief(ctx, task.ID)
@@ -36,7 +39,7 @@ func TestBrief(t *testing.T) {
 	if b.Task.ID != task.ID || b.Body != task.Body {
 		t.Fatalf("brief task = %+v, want id=%s body=%q", b.Task, task.ID, task.Body)
 	}
-	if want := "wl/" + task.ID + "-a-task"; b.Branch != want {
+	if want := "lode/" + task.ID + "-a-task"; b.Branch != want {
 		t.Fatalf("branch = %q, want %q", b.Branch, want)
 	}
 	if len(b.OpenBlockers) != 1 || b.OpenBlockers[0].ID != openBlocker.ID {

@@ -4,7 +4,7 @@
 
 <h2>Repos</h2>
 {{if .Repos}}
-<ul>{{range .Repos}}<li>{{.}}</li>{{end}}</ul>
+<ul>{{range .Repos}}<li>{{.Repo}} <span class="muted">(done at {{.DoneState}})</span></li>{{end}}</ul>
 {{else}}<p class="muted">No repos mapped.</p>{{end}}
 
 <h2>In progress</h2>
@@ -28,7 +28,7 @@
 <table>
   <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
   {{range .Project.InReview}}
-  <tr><td><span class="badge state-in_review">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+  <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}

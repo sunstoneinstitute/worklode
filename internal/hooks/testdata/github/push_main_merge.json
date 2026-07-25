@@ -1,0 +1,10 @@
+{
+  "ref": "refs/heads/main",
+  "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
+  "commits": [
+    {"id": "1111111111111111111111111111111111111111", "message": "Add widget"},
+    {"id": "2222222222222222222222222222222222222222", "message": "Widget tests"},
+    {"id": "3333333333333333333333333333333333333333", "message": "Merge branch 'lode/WL-1-add-widget'"}
+  ],
+  "head_commit": {"id": "3333333333333333333333333333333333333333", "message": "Merge branch 'lode/WL-1-add-widget'"}
+}

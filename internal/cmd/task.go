@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -88,7 +89,7 @@ func newTaskListCmd() *cobra.Command {
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List tasks (done and abandoned are hidden unless requested with --status)",
+		Short: "List tasks (delivered and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			states := resolveStatusFilter(statuses)
 			c, cfg, err := newAPIClientWithConfig()
@@ -110,14 +111,15 @@ func newTaskListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "filter by project id"+projectFlagUsage+"; pass --project= for all projects")
-	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, done, abandoned, or all (repeatable; default hides done and abandoned)")
+	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	return cmd
 }
 
 // resolveStatusFilter turns `lode task list --status` values into the state
-// filter sent to the server: no flag hides terminal states (done, abandoned),
-// "all" disables filtering entirely.
+// filter sent to the server: no flag hides the delivered states (merged,
+// deployed_dev, deployed_prod, released) and abandoned; "all" disables
+// filtering entirely.
 func resolveStatusFilter(statuses []string) []string {
 	if len(statuses) == 0 {
 		return []string{"draft", "ready", "in_progress", "in_review"}
@@ -235,7 +237,7 @@ func newTaskReadyCmd() *cobra.Command {
 func newTaskReopenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reopen <id>",
-		Short: "Reopen a done or abandoned task (done|abandoned -> ready; a fresh claim is then required)",
+		Short: "Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -362,7 +364,12 @@ func newTaskClaimCmd() *cobra.Command {
 				fmt.Fprintln(out, "no ready task")
 				return nil
 			}
-			branch := "wl/" + resp.Task.ID + "-" + resp.Task.Slug
+			// The server is the authority on the branch name; the fallback
+			// only covers a server too old to send one.
+			branch := resp.Task.Branch
+			if branch == "" {
+				branch = store.DefaultBranchPrefix + resp.Task.ID + "-" + resp.Task.Slug
+			}
 			if resp.DryRun {
 				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
 				return nil
@@ -436,7 +443,7 @@ func newTaskReleaseCmd() *cobra.Command {
 func newTaskDoneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "done <id>",
-		Short: "Mark a task done (in_review -> done)",
+		Short: "Mark a task merged (in_review -> merged)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

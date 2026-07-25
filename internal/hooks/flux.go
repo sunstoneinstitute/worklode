@@ -114,8 +114,8 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ignored {
 		typ += ".ignored"
 	} else {
-		apply = func(tx *sql.Tx, _ int64) error {
-			return h.apply(tx, ev)
+		apply = func(tx *sql.Tx, eventID int64) error {
+			return h.apply(tx, eventID, ev)
 		}
 	}
 
@@ -175,11 +175,46 @@ func revisionSHA(revision string) string {
 	return revision
 }
 
+// confirmFluxDelivery advances the Flux side of the deploy frontier for
+// environment when the reconciled revision maps to a repo we track, then
+// resolves the tasks the new frontier covers.
+func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment, revision string, eventID int64) error {
+	// clusterEnv is unvalidated operator config (LODE_CLUSTER_ENV_MAP), so
+	// environment can be anything; env_deploys only accepts dev|prod and a
+	// CHECK violation would abort the whole delivery.
+	if environment != "dev" && environment != "prod" {
+		return nil
+	}
+	sha := revisionSHA(revision)
+	if sha == "" {
+		return nil
+	}
+	repo, mainID, err := store.MainIDForSHAAnyRepo(tx, sha)
+	if err != nil {
+		return err
+	}
+	if mainID == nil {
+		// A revision we cannot correlate must not latch flux_seen: that would
+		// gate the repo/env permanently on a signal we can never confirm.
+		return nil
+	}
+	latched, err := store.BumpEnvDeployFlux(tx, now, repo, environment, *mainID)
+	if err != nil {
+		return err
+	}
+	if latched {
+		// Permanent switch to dual-signal gating; if the correlation is wrong
+		// (shared history between tracked repos) this line is the only trace.
+		h.log.Info("flux delivery gating latched", "repo", repo, "environment", environment, "revision", revision)
+	}
+	return resolveFrontier(tx, now, repo, environment, eventID)
+}
+
 // apply resolves the target deployment and records its effect: a status
 // update, and for failures/recoveries a runtime event. It must run inside
 // the same transaction as the event insert (via RecordEvent) so a delivery
 // is all-or-nothing.
-func (h *fluxHandler) apply(tx *sql.Tx, ev fluxEvent) error {
+func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 	cluster := ev.Metadata["cluster"]
 	environment := resolveEnvironment(cluster, h.clusterEnv)
 	targetName := ev.InvolvedObject.Namespace + "/" + ev.InvolvedObject.Name
@@ -237,6 +272,9 @@ func (h *fluxHandler) apply(tx *sql.Tx, ev fluxEvent) error {
 			TargetName:  targetName,
 			Status:      "deployed",
 		}); err != nil {
+			return err
+		}
+		if err := h.confirmFluxDelivery(tx, now, environment, ev.Metadata["revision"], eventID); err != nil {
 			return err
 		}
 		if priorStatus != "failed" {

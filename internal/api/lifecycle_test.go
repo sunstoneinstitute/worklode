@@ -39,6 +39,19 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 	}
 }
 
+// moveTo drives one legal transition on taskID directly through the store,
+// for states the HTTP API has no endpoint for (the delivery states).
+func moveTo(t *testing.T, st *store.Store, taskID, from, to string) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "github", "to-"+to+"-"+taskID, "task.transition", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.Transition(tx, st.Now(), taskID, from, to, eventID)
+		})
+	if err != nil {
+		t.Fatalf("move %s %s -> %s: %v", taskID, from, to, err)
+	}
+}
+
 func TestSlugifyTitle(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -63,6 +76,56 @@ func TestSlugifyTitle(t *testing.T) {
 	}
 }
 
+// TestClaimBranchPrefix checks Config.BranchPrefix (LODE_BRANCH_PREFIX)
+// reaches the branch both claim endpoints hand out. The claim-next leg is
+// what pins the wire field down: under a default-prefix server the CLI's
+// fallback reconstruction is indistinguishable from the server's branch.
+func TestClaimBranchPrefix(t *testing.T) {
+	t.Cleanup(func() { store.SetBranchPrefix("") })
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, _, err := api.NewServer(st, api.Config{BranchPrefix: "team/"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Fix the: Thing!!", "priority": "high", "kind": "bug",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["branch"]; got != "team/WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want team/WL-1-fix-the-thing", got)
+	}
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ship the other thing", "priority": "high", "kind": "bug",
+	})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "worktree": "host:/wt-2",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	pick, ok := decodeMap(t, rr)["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("claim-next task missing: %s", rr.Body.String())
+	}
+	if pick["branch"] != "team/WL-2-ship-the-other-thing" {
+		t.Fatalf("claim-next branch = %v, want team/WL-2-ship-the-other-thing", pick["branch"])
+	}
+}
+
 func TestClaim(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -75,8 +138,8 @@ func TestClaim(t *testing.T) {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	if got["branch"] != "wl/WL-1-fix-the-thing" {
-		t.Fatalf("branch = %v, want wl/WL-1-fix-the-thing", got["branch"])
+	if got["branch"] != "lode/WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want lode/WL-1-fix-the-thing", got["branch"])
 	}
 	lease, ok := got["lease"].(map[string]any)
 	if !ok {
@@ -222,8 +285,8 @@ func TestDone(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	if got := decodeMap(t, rr); got["state"] != "done" {
-		t.Fatalf("state = %v, want done", got["state"])
+	if got := decodeMap(t, rr); got["state"] != "merged" {
+		t.Fatalf("state = %v, want merged", got["state"])
 	}
 
 	// The active lease was auto-released in the same transaction.
@@ -290,7 +353,7 @@ func TestAbandon(t *testing.T) {
 		t.Fatalf("active lease after abandon: err = %v, want ErrNotFound", err)
 	}
 
-	// From done (terminal): 422.
+	// From merged (already delivered): 422.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-3"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
@@ -302,7 +365,7 @@ func TestAbandon(t *testing.T) {
 	}
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/abandon", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("abandon from done status = %d, want 422; body %s", rr.Code, rr.Body.String())
+		t.Fatalf("abandon from merged status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 
 	// Unknown task: 404.
@@ -447,7 +510,7 @@ func TestReopen(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Done then reopened", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Abandoned then reopened", "priority": "low", "kind": "chore"})
 
-	// From done: 200, lands on ready, task.reopened event + state_log row.
+	// From merged: 200, lands on ready, task.reopened event + state_log row.
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
@@ -459,13 +522,13 @@ func TestReopen(t *testing.T) {
 	}
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("reopen from done status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("reopen from merged status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	if got := decodeMap(t, rr); got["state"] != "ready" {
-		t.Fatalf("state after reopen from done = %v, want ready", got["state"])
+		t.Fatalf("state after reopen from merged = %v, want ready", got["state"])
 	}
 	if typ := lastEventType(t, st); typ != "task.reopened" {
-		t.Fatalf("event type after reopen from done = %q, want task.reopened", typ)
+		t.Fatalf("event type after reopen from merged = %q, want task.reopened", typ)
 	}
 	entries, err := st.StateLogForEntity(context.Background(), "task", "WL-1")
 	if err != nil {
@@ -476,8 +539,8 @@ func TestReopen(t *testing.T) {
 	if err := json.Unmarshal([]byte(last.Change), &change); err != nil {
 		t.Fatalf("unmarshal state_log change %q: %v", last.Change, err)
 	}
-	if change["field"] != "state" || change["old"] != "done" || change["new"] != "ready" {
-		t.Fatalf("last state_log change = %+v, want field=state old=done new=ready", change)
+	if change["field"] != "state" || change["old"] != "merged" || change["new"] != "ready" {
+		t.Fatalf("last state_log change = %+v, want field=state old=merged new=ready", change)
 	}
 
 	// From abandoned: 200, lands on ready, task.reopened event.
@@ -496,7 +559,7 @@ func TestReopen(t *testing.T) {
 		t.Fatalf("event type after reopen from abandoned = %q, want task.reopened", typ)
 	}
 
-	// Illegal reopen: task is now ready, not done or abandoned.
+	// Illegal reopen: task is now ready, which is not reopenable.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/reopen", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("reopen from ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
@@ -516,5 +579,126 @@ func TestReopen(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/reopen", token, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("reopen unknown task status = %d, want 404", rr.Code)
+	}
+}
+
+// TestReopenFromDeliveryStates pins the rest of the reopenable set in
+// reopenTask: every state past merged reopens to ready. The delivery states
+// have no HTTP endpoint yet, so the task is walked there through the store.
+func TestReopenFromDeliveryStates(t *testing.T) {
+	paths := map[string][][2]string{
+		"deployed_dev":  {{"merged", "deployed_dev"}},
+		"deployed_prod": {{"merged", "deployed_dev"}, {"deployed_dev", "deployed_prod"}},
+		"released":      {{"merged", "released"}},
+	}
+	for state, steps := range paths {
+		t.Run(state, func(t *testing.T) {
+			st, h, token := newTestServer(t)
+			createProject(t, st, "proj")
+			createTaskViaAPI(t, h, token, map[string]any{
+				"project": "proj", "title": "Delivered", "priority": "high", "kind": "feature"})
+
+			rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+			if rr.Code != http.StatusOK {
+				t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+			}
+			moveToReview(t, st, "WL-1")
+			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
+			}
+			for _, step := range steps {
+				moveTo(t, st, "WL-1", step[0], step[1])
+			}
+
+			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("reopen from %s status = %d, body %s", state, rr.Code, rr.Body.String())
+			}
+			if got := decodeMap(t, rr); got["state"] != "ready" {
+				t.Fatalf("state after reopen from %s = %v, want ready", state, got["state"])
+			}
+			if typ := lastEventType(t, st); typ != "task.reopened" {
+				t.Fatalf("event type after reopen from %s = %q, want task.reopened", state, typ)
+			}
+		})
+	}
+}
+
+// TestReopenVoidsDelivery is the regression behind store.ClearTaskCommits:
+// the commits that delivered a task are still on main after a reopen, so
+// unless reopen clears the task's attribution the next webhook resolves the
+// task straight back to deployed_prod — and closes the fresh lease of
+// whoever re-claimed it.
+func TestReopenVoidsDelivery(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Delivered then reopened", "priority": "high", "kind": "feature"})
+	ctx := context.Background()
+
+	// Deliver WL-1 to deployed_prod through the resolver.
+	var mainID int64
+	_, _, err := st.RecordEvent(ctx, "github", "deliver-WL-1", "push", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := st.Now()
+			if err := store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: "WL-1", Repo: "acme/app", SHA: "c1", Source: "pr", SeenAt: now}); err != nil {
+				return err
+			}
+			id, err := store.AppendMainCommit(tx, "acme/app", "c1", now)
+			if err != nil {
+				return err
+			}
+			mainID = id
+			if err := store.BumpEnvDeployGH(tx, now, "acme/app", "prod", id); err != nil {
+				return err
+			}
+			return store.ResolveDelivery(tx, now, "WL-1", "acme/app", eventID)
+		})
+	if err != nil {
+		t.Fatalf("deliver WL-1: %v", err)
+	}
+	if got, err := st.GetTask(ctx, "WL-1"); err != nil || got.State != "deployed_prod" {
+		t.Fatalf("state before reopen = %v, %v; want deployed_prod", got.State, err)
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/reopen", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "ready" {
+		t.Fatalf("state after reopen = %v, want ready", got["state"])
+	}
+
+	// Someone re-claims the reopened task.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	// The next webhook for the repo must leave the task and its lease alone.
+	_, _, err = st.RecordEvent(ctx, "github", "redeploy-acme-app", "deployment_status", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			ids, err := store.TasksBelowFrontier(tx, "acme/app", mainID)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				if err := store.ResolveDelivery(tx, st.Now(), id, "acme/app", eventID); err != nil {
+					return err
+				}
+			}
+			// Even a direct resolve of the reopened task is a no-op.
+			return store.ResolveDelivery(tx, st.Now(), "WL-1", "acme/app", eventID)
+		})
+	if err != nil {
+		t.Fatalf("re-resolve: %v", err)
+	}
+	if got, err := st.GetTask(ctx, "WL-1"); err != nil || got.State != "in_progress" {
+		t.Fatalf("state after re-resolve = %v, %v; want in_progress", got.State, err)
+	}
+	if _, err := st.ActiveLease(ctx, "WL-1"); err != nil {
+		t.Fatalf("active lease after re-resolve: %v, want the fresh claim intact", err)
 	}
 }
