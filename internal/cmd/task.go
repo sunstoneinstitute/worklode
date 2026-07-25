@@ -560,7 +560,8 @@ func printBrief(cmd *cobra.Command, b cli.Brief) {
 		}
 	}
 	if b.Body != "" {
-		fmt.Fprintf(out, "\n%s\n", b.Body)
+		fmt.Fprintln(out)
+		cli.Markdown(out, b.Body)
 	}
 }
 
