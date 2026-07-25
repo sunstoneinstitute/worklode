@@ -326,18 +326,18 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // a no-op. Unlike closeLease it never touches task state — callers (done,
 // abandon, merge) set the task's state themselves in the same transaction.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
-	// Before released_at is written: the lookup below matches only unreleased
-	// leases.
-	if err := endOpenAgentSessionsOnTask(tx, now, taskID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(
-		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL`,
+	var leaseID int64
+	err := tx.QueryRow(
+		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL RETURNING id`,
 		now.UTC(), taskID,
-	); err != nil {
+	).Scan(&leaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("close active lease on %s: %w", taskID, err)
 	}
-	return nil
+	return endOpenAgentSessionsOnLease(tx, now, leaseID)
 }
 
 // ActiveLease returns the active (unreleased) lease on taskID, or
