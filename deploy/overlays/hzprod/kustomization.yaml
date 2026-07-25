@@ -33,4 +33,5 @@ patches:
         value: worklode.hzprod.sunstoneinstitute.ai
 images:
   - name: ghcr.io/sunstoneinstitute/worklode
-    newTag: latest
+    newTag: v0.2.0
+    newName: ghcr.io/sunstoneinstitute/worklode
