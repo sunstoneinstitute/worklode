@@ -368,7 +368,7 @@ func newTaskClaimCmd() *cobra.Command {
 			// only covers a server too old to send one.
 			branch := resp.Task.Branch
 			if branch == "" {
-				branch = store.DefaultBranchPrefix + resp.Task.ID + "-" + resp.Task.Slug
+				branch = defaultBranchPrefix + resp.Task.ID + "-" + resp.Task.Slug
 			}
 			if resp.DryRun {
 				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)
