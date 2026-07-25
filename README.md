@@ -229,6 +229,17 @@ Claude Code bindings:
 | `worktree-remove` | `WorktreeRemove` |
 | `session-end` | `SessionEnd` |
 
+Install these bindings into a repo with:
+
+```
+lode claude install                    # .claude/settings.local.json
+lode claude install --scope project    # .claude/settings.json
+```
+
+`lode claude uninstall` (same `--scope` flag) removes them again. Both are
+idempotent and only touch entries whose command starts with `lode hook`, so
+third-party hooks on the same events are left alone.
+
 Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
 cheap even in a fast conversation. Every hook stays inside the 2s backbone
 timeout and never fails the event that triggered it.
