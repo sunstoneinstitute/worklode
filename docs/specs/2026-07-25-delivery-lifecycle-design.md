@@ -123,7 +123,9 @@ All handlers use the existing HMAC/idempotency plumbing in `internal/hooks`.
   branch → append `main_commits`, set landed seqs; `last-deploy/<env>` →
   record deploy-branch-SHA → main-seq mapping from `main-sha:` trailers.
 - **`deployment_status`** (new): normalize environment, resolve deployment
-  SHA to a main seq, upsert `env_deploys.gh_status`.
+  SHA to a main seq, upsert `env_deploys.gh_status`. A SHA that is not yet
+  known on main is dropped in v1 (no pending-facts store); the next deploy of
+  that repo re-establishes a frontier that covers it.
 - **Flux handler** (extended): also resolve revision SHA to `(repo, main
   seq)` and update `env_deploys.flux_status`. Existing `deployments`-table
   behavior unchanged.

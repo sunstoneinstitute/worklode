@@ -245,6 +245,48 @@ func TestReleaseFrontier(t *testing.T) {
 	}
 }
 
+// TestSetReleaseFrontierIsForwardOnly: re-cutting a tag onto a newer commit
+// advances that tag's row; a stale re-publish never moves it back.
+func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
+	s := OpenTestStore(t)
+	seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	id1, err := AppendMainCommit(tx, "acme/app", "m1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2, err := AppendMainCommit(tx, "acme/app", "m2", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+		t.Fatal(err)
+	}
+	// Tag re-cut onto a newer commit: the row advances.
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id2, now); err != nil {
+		t.Fatal(err)
+	}
+	f, err := ReleaseFrontier(tx, "acme/app")
+	if err != nil || f == nil || *f != id2 {
+		t.Fatalf("frontier after re-cut = %v, %v, want %d", f, err, id2)
+	}
+	// Stale re-publish of the same tag: the row must not move back.
+	if err := SetReleaseFrontier(tx, "acme/app", "v1.0.0", id1, now); err != nil {
+		t.Fatal(err)
+	}
+	f, err = ReleaseFrontier(tx, "acme/app")
+	if err != nil || f == nil || *f != id2 {
+		t.Fatalf("frontier after stale re-publish = %v, %v, want %d", f, err, id2)
+	}
+}
+
 func TestNormalizeEnvironment(t *testing.T) {
 	cases := map[string]string{
 		"dev": "dev", "test": "dev", "development": "dev", "staging": "dev",

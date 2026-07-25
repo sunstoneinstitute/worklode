@@ -1,0 +1,9 @@
+{
+  "action": "created",
+  "deployment_status": {"state": "success"},
+  "deployment": {
+    "environment": "dev",
+    "sha": "3333333333333333333333333333333333333333"
+  },
+  "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"}
+}

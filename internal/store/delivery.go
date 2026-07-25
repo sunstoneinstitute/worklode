@@ -103,6 +103,21 @@ func AppendMainCommit(tx *sql.Tx, repo, sha string, pushedAt time.Time) (int64, 
 	return id, nil
 }
 
+// LatestMainID returns the id of the newest default-branch commit recorded
+// for repo, or nil if none has been seen. A release tags main's head, so
+// this is what a published release covers.
+func LatestMainID(tx *sql.Tx, repo string) (*int64, error) {
+	var id sql.NullInt64
+	if err := tx.QueryRow(`SELECT max(id) FROM main_commits WHERE repo = $1`,
+		repo).Scan(&id); err != nil {
+		return nil, fmt.Errorf("latest main commit for %s: %w", repo, err)
+	}
+	if !id.Valid {
+		return nil, nil
+	}
+	return &id.Int64, nil
+}
+
 // MapDeploySHA maps a deploy-branch commit to the main commit its
 // main-sha: trailer names; duplicates are no-ops.
 func MapDeploySHA(tx *sql.Tx, repo, sha string, mainID int64) error {
@@ -243,11 +258,16 @@ func ConfirmedFrontier(tx *sql.Tx, repo, env string) (*int64, error) {
 }
 
 // SetReleaseFrontier records the newest main commit covered by a published
-// release; redelivery of the same tag is a no-op.
+// release. Forward-only per tag, like every other watermark here: re-cutting
+// a tag onto a newer commit advances it, a stale re-publish (or a plain
+// redelivery) never moves it back.
 func SetReleaseFrontier(tx *sql.Tx, repo, tag string, mainID int64, publishedAt time.Time) error {
 	_, err := tx.Exec(
 		`INSERT INTO release_frontiers (repo, tag, main_id, published_at)
-		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (repo, tag) DO UPDATE SET
+		   main_id = greatest(release_frontiers.main_id, excluded.main_id),
+		   published_at = excluded.published_at`,
 		repo, tag, mainID, publishedAt.UTC())
 	if err != nil {
 		return fmt.Errorf("set release frontier %s %s: %w", repo, tag, err)
