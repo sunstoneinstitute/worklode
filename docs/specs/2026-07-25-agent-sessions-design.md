@@ -202,6 +202,15 @@ stamps `ended_at` on the row it leaves. A row therefore reads as "this session
 worked this lease, from here to here" — which is also what makes per-task cost
 attribution possible later for a session that spanned tasks.
 
+Entering and exiting a worktree also moves the session marker, symmetrically
+with session start and end: `worktree-enter` writes it, `worktree-exit` removes
+it. The marker is "which session is live in this worktree", and two other
+mechanisms read it — `heartbeatDue`, which would otherwise debounce heartbeats
+off permanently in an entered worktree, and `sessionMarkerFresh`, which
+`offerScan` uses to decide a worktree is abandoned. Without the marker, a
+worktree a session had just moved into would be offered up for adoption while
+it was actively being worked.
+
 **Volume control.** These bindings fire more often than `Stop` alone, so the
 heartbeat is debounced client-side: `worklode-session.json` gains a
 `last_heartbeat_at` field, and a heartbeat within 60s of the recorded one is
