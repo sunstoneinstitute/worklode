@@ -1,12 +1,15 @@
 # Spec 007 — Drift & overview
 
-**Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:** D5, D6,
-D12 (design record `../2026-07-21-worklode-platform-graph-design.md`).
+**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source decisions:** D5, D6,
+D12 (design record `003-platform-graph-design.md`).
+**Amended by:** 014 (design docs as graph objects), 015 (runtime layer)
 
 > **Dependency note:** the entity model, `ls:` vocabulary, and IRI scheme this spec queries are
-> owned by **spec 03 — knowledge graph**, which is not yet written. Where a predicate or IRI is
-> load-bearing here it is taken from the design record (D4) and marked *(03 confirms)*. If 03
-> lands a different name, the query sketches below adopt it verbatim.
+> owned by **spec 006 — knowledge graph**, which has since been written and confirms the
+> predicates/IRIs this spec relies on. Load-bearing predicates or IRIs taken from the design
+> record (D4) are marked *(006)*.
+
+> **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:`.
 
 ## Purpose & scope
 
@@ -123,6 +126,8 @@ components:
   (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). D6: most of
   layers 2–3 are already ingested → this is **projection, not new build**.
 - **Output:** observed `Artifact` / `Deployment` / `Environment` nodes and their edges to the
+> **Amended by 015.** This deriver's output vocabulary, IRI grammar and per-node v1/v2 status are specified in 015 §2–§6 — including which nodes have no v1 source.
+
   Deliverable reconciliation point (Deliverable model owned by 006/D7).
 - **Output graph:** `observed/deploy`.
 - v1 stops at projecting what the hooks record; auto-*confirming* a Deliverable by probing prod is
@@ -223,9 +228,9 @@ SELECT ?t WHERE {
 > **Authority caveat (important).** The `blocks`/`child_of` edges that gate pickup live on the
 > **execution backbone** (Postgres, D2), and the *atomic* `claim --next` transaction must read them
 > there — it cannot depend on the eventually-consistent KG projection. So the **authoritative**
-> ready frontier is computed on the backbone (01/02); the query above is the **read-only overview**
+> ready frontier is computed on the backbone (004/005); the query above is the **read-only overview**
 > version for humans and dashboards. Both must agree; the KG copy is derived from the backbone
-> projection. This spec does **not** supply the atomic ordering — 02 computes that on the backbone;
+> projection. This spec does **not** supply the atomic ordering — 005 computes that on the backbone;
 > below is only the read-only overview mirror.
 
 **Overview frontier (mirror of 005's ordering).** The overview frontier is presented pre-sorted by
@@ -283,6 +288,8 @@ Everything is a read; nothing here mutates the graph. All commands honor D14 det
 (Oxigraph, per 009): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
 status** view (drifted/unimplemented/accepted), a **critical-path** view, and the **ready
 frontier**. Read-only by construction — the only ways to change the graph are authoring design
+> **Amended by 014 §10.** `lode drift --docs` joins this table, the `lode doc …` family is added, and the read-only web view gains per-section coverage badges and version history.
+
 (asserted, via 008) and running derivers (observed); there is no mutation affordance in these views.
 
 ---

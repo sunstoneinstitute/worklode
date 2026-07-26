@@ -2,8 +2,12 @@
 
 **Status:** approved design
 **Date:** 2026-07-19
+**Umbrella:** `000-umbrella-architecture.md`
+**Amended by:** 002 (GitHub App auth, additional provider); CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`
 
 ## Why
+
+> **Amended by 002.** Keycloak is no longer the only front door; GitHub App login is an additional provider alongside it, and this spec is otherwise unchanged.
 
 Tokens are currently minted only by an admin (or the bootstrap env var).
 Humans should instead authenticate against the org Keycloak
@@ -74,6 +78,8 @@ OIDC is unconfigured.
 
 When OIDC is enabled, the web UI routes (`/`, `/tasks/{id}`,
 `/projects/{id}`) require a valid session cookie; otherwise they 302 to
+> **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path.
+
 `/auth/login`. `/healthz` and `/metrics` stay open. When OIDC is
 unconfigured the UI stays open as today.
 

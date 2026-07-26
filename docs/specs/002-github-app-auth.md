@@ -2,6 +2,8 @@
 
 **Date:** 2026-07-20
 **Status:** Design — approved shape, pending spec review
+**Umbrella:** `000-umbrella-architecture.md`
+**Amended by:** CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`
 
 ## Summary
 

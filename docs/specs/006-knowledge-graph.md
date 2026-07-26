@@ -1,8 +1,9 @@
 # Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
 
-**Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:**
-`../2026-07-21-worklode-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 01
-(backbone) · **Consumed by:** 04 (drift/query), 06 (data-platform hosts the IRIs defined here).
+**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source decisions:**
+`003-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 004
+(backbone) · **Consumed by:** 007 (drift/query), 009 (data-platform hosts the IRIs defined here).
+**Amended by:** 014 (design docs as graph objects), 015 (runtime layer)
 
 ## Purpose & scope
 
@@ -38,6 +39,8 @@ supply-chain term — a TRAP; software `ls:Component` is minted fresh.
 
 ## The `ls:` vocabulary
 
+> **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/wl/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
+
 `ls` is a **shared, cross-cutting** ontology (platform infrastructure, not a research domain),
 so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 
@@ -58,6 +61,10 @@ so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 ```
 
 ### Reuse vs mint
+
+> **Amended by 014.** `wl:Plan` and `wl:supersededSection` leave the mint set; `wl:Section` and `wl:lastRevisedIn` join it, and `wl:status` widens to Sections.
+
+> **Amended by 015.** Six runtime classes (`wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`, `wl:RuntimeEvent`), four SKOS schemes and seven properties join the mint set.
 
 Standards-first: reuse a community term wherever one carries the intended meaning; mint only
 where nothing does.
@@ -99,6 +106,8 @@ Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not 
 
 ```turtle
 ls:Component  a owl:Class ;
+> **Amended by 014 §2.** `wl:Plan` is removed and `wl:Section` added; both disjointness axioms change accordingly, and 015 §2 adds a third for the runtime classes.
+
     rdfs:comment "A software component — the atomic unit of the platform graph. "
                  "Repo/project (doap:Project) is a coarser grouping via dct:hasPart." .
 
@@ -257,6 +266,8 @@ time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec
 
 ```turtle
 # Decomposition (D4): Spec ⊃ Plan ⊃ Task
+> **Amended by 014 §5.** `implemented` leaves the enum — the order is `draft → proposed → accepted → superseded` — and implementation becomes a derived coverage query.
+
 lsid:doc/spec-worklode-006 dct:hasPart lsid:doc/plan-006-projection .
 lsid:doc/plan-006-projection dct:hasPart lsid:task/01H8XZ... .
 
@@ -283,6 +294,8 @@ to the tier that can use it.
 | **Runtime** | `graph-server` / Oxigraph (ADR-0005) | SPARQL 1.1 — **no OWL/RDFS reasoner** | **property paths** (`?t ls:dependsOn+ ?x` reachability), `?c ls:layer lsc:intent` classification |
 | **CI · OWL 2 RL** | `owlrl` in tests (ADR-0004 pattern; Jena `infer` is RDFS-only) | classification, disjointness & transitive closure — proof, not publish | `owl:AllDisjointClasses`, `owl:TransitiveProperty`, `owl:FunctionalProperty`, `owl:unionOf`, `owl:inverseOf` |
 | **CI · SHACL gate** | Jena `shacl` over `rdf/shapes/ls-shapes.ttl` (ADR-0003) | closed-world **constraints** (required, cardinality) | node shapes below |
+> **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike`, matching the widened `tasks.kind` constraint.
+
 
 **The load-bearing split.** OWL is open-world with no unique-names → it **never** flags a missing
 required field or a duplicate. So **OWL classifies and checks consistency; SHACL enforces
@@ -312,6 +325,8 @@ authored there (see Projection).
 
 | Node | Class | v1/v2 | Origin |
 |---|---|---|---|
+> **Obsolete (014 §2).** There is no Plan node: a Spec decomposes straight into an ordered task subtree in the backbone.
+
 | Component | `ls:Component` | v1 | authored (per-repo manifest declares boundaries, D5) |
 | DesignDoc | `ls:ADR`/`ls:Spec`/`ls:Plan` | v1 | authored |
 | Deliverable | `ls:Deliverable` | v1 | authored (declared definition-of-done) |
@@ -382,6 +397,8 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
 commitment** that spec 009 references (item 3) and that the data-platform must host.
 
+> **Amended by 015 §7.** WorkflowRun is dropped (subsumed by `wl:Build`) and Commit is promoted to v1 as `wl:Commit`.
+
 **Base:** `https://worklode.io/ns/`
 
 | Purpose | Namespace | Prefix |
@@ -397,6 +414,8 @@ carrying a git branch or version:
 |---|---|---|
 | Component | `id/component/<slug>` (manifest slug; default = repo coords) | `…/id/component/github.com/sunstoneinstitute/worklode` |
 | — multi-component repo | `id/component/<repo-coords>/<sub>` | `…/id/component/github.com/sunstoneinstitute/research-stack/pfas` |
+> **Superseded by 015 §2 and §6.** Artifact/Deployment/Environment get real PROV-anchored classes there, `wl:Commit` joins v1, and §6 states which nodes actually have a v1 projection source.
+
 | DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-worklode-006` |
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
 | Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
@@ -481,6 +500,10 @@ lsid:doc/adr-0012 dct:replaces lsid:doc/adr-0004 .
   annotation to report which sections are stale.
 
 `ls:supersededSection` is a **domain-free annotation predicate** (ADR-0001 caveat: an annotation
+> **Artifact IRI superseded by 015 §5.** The pattern is kind-first — `id/artifact/<kind>/<name>/<version>` — and 015 adds Deployment, Environment, Commit and Build patterns.
+
+> **Base amended by 014 §1 and §4.** The base gains a `wl/` segment, and design documents additionally carry immutable versioned sibling IRIs (`…/doc/<slug>/v3`) used only in pinned claims.
+
 predicate must not declare an `rdfs:domain` of an endpoint class, or a reasoner mis-types the
 triple term). Range is a literal section reference (`"§4.2"`, a heading string) — deliberately
 **not** a section IRI.
@@ -563,6 +586,8 @@ lsid:deviation/pfas-reads-ingest-cache
 5. ~~RDF-1.2 publish blocker~~ — **RESOLVED:** rdf-registry publishes 1.2 alongside 1.1
    (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
 6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
+> **Superseded by 014 §3.** Sections are addressable `wlid:section/<doc-slug>/<anchor>` nodes; partial supersession is `dct:isReplacedBy` between sections, and `wl:supersededSection` is retired.
+
 
 ## Acceptance criteria
 
@@ -583,7 +608,10 @@ lsid:deviation/pfas-reads-ingest-cache
 5. Decomposition (`Spec ⊃ Plan ⊃ Task` via `dct:hasPart`), dependency (`dct:requires`),
    full supersession (`dct:replaces`), and **partial** supersession (annotated triple term
    with `ls:supersededSection`) each validate against the vocabulary and are distinguishable by a
-   drift query (spec 04).
+   drift query (spec 007).
+
+> **Superseded by 014 acceptance criteria 2 and 5.** Decomposition is Spec → task subtree, and partial supersession is tested at section-IRI granularity, not via a triple-term annotation.
+
 6. A Deliverable declares its definition-of-done (`dct:description` + declared
    Artifact/Environment `dct:relation` targets) and links to the realising Task via
    `ls:implements`.
@@ -606,3 +634,6 @@ lsid:deviation/pfas-reads-ingest-cache
     against Oxigraph with **no** reasoner; (c) `rdf/shapes/ls-shapes.ttl` (Jena `shacl`, ADR-0003)
     rejects a Task missing `ls:taskKind` or with two, and a Deliverable missing its `dct:relation`
     target; (d) closure is **not** present in published `dist/`.
+
+> **Amended by 014 and 015.** The mint set loses `Plan` and `supersededSection`, gains `Section`/`lastRevisedIn`, and gains the six runtime classes plus their schemes and properties.
+
