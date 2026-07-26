@@ -155,13 +155,6 @@ code {
   text-align: center;
 }
 
-.hero-mark {
-  display: block;
-  margin: 0 auto 28px;
-  width: clamp(76px, 9vw, 112px);
-  height: auto;
-}
-
 .eyebrow {
   margin: 0 0 22px;
   font-size: .78rem;
