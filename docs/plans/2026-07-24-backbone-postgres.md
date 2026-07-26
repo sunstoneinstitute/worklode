@@ -1,17 +1,17 @@
-# Execution Backbone on Postgres (spec 01) Implementation Plan
+# Execution Backbone on Postgres (spec 004) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Port the backbone from single-writer SQLite to Postgres (pgx v5), rebind leases from `session_id` to git-worktree identity, and rename the CLI `wl` → `lode` — implementing `docs/specs/worklode/01-execution-backbone.md`.
+**Goal:** Port the backbone from single-writer SQLite to Postgres (pgx v5), rebind leases from `session_id` to git-worktree identity, and rename the CLI `wl` → `lode` — implementing `docs/specs/004-execution-backbone.md`.
 
 **Architecture:** The store keeps its shape (`internal/store`, `*sql.Tx`-typed functions, `RecordEvent` as sole write entry point) but runs on Postgres via `github.com/jackc/pgx/v5/stdlib` (`database/sql` driver name `"pgx"`), with a real connection pool replacing `SetMaxOpenConns(1)`. Claim correctness moves from global single-writer to `SELECT … FOR UPDATE` row locks + the `leases_active` unique-index backstop (READ COMMITTED). A fresh Postgres migration baseline replaces the SQLite migrations. Leases carry a `worktree` identity string (canonical form `<hostname>:<abs-worktree-root>`), no `session_id` anywhere.
 
 **Tech Stack:** Go 1.26, pgx v5 (`stdlib`), golang-migrate (`database/pgx/v5` driver), Postgres 17 (docker-compose service locally, service container in CI, CNPG in-cluster).
 
 **Settled decisions (do not re-litigate during execution):**
-- Task IDs stay `WL-<n>`; PR-branch prefix stays `wl/<id>-<slug>`. The spec's `WT-<n>` mentions are stale branding (repo-wide WT→WL rename already happened). Worktree *directories* `wt/<id>-<slug>` arrive in the spec-05 plan, not here.
+- Task IDs stay `WL-<n>`; PR-branch prefix stays `wl/<id>-<slug>`. The spec's `WT-<n>` mentions are stale branding (repo-wide WT→WL rename already happened). Worktree *directories* `wt/<id>-<slug>` arrive in the spec-008 plan, not here.
 - CLI binary renames to `lode`; env vars rename `WL_*` → `LODE_*` with **no** fallback (only hzdev dev is deployed; coordinate the deploy overlay in the same PR). Config path `~/.config/worklode/config.toml` unchanged.
-- Worktree identity: opaque string, canonical form `<hostname>:<abs-worktree-root>` (spec 01 recommendation). Backbone never parses it.
+- Worktree identity: opaque string, canonical form `<hostname>:<abs-worktree-root>` (spec 004 recommendation). Backbone never parses it.
 - Isolation: READ COMMITTED + `FOR UPDATE` + unique-index backstop (spec open Q3 → confirmed).
 - Sweeper under multiple replicas: gate with `pg_try_advisory_lock` (spec open Q4 → advisory lock).
 - Litestream (SQLite replication) is deleted — CNPG owns backups.
@@ -41,7 +41,7 @@ Pure mechanical rename, one commit, before any Postgres work so all later diffs 
 
 ### Task 2: Postgres migration baseline
 
-Replace the three SQLite migrations with one fresh Postgres baseline implementing the spec-01 schema. Load `golang-migrate:authoring` and `golang-migrate:test-roundtrip` skills first.
+Replace the three SQLite migrations with one fresh Postgres baseline implementing the spec-004 schema. Load `golang-migrate:authoring` and `golang-migrate:test-roundtrip` skills first.
 
 **Files:**
 - Delete: `deploy/base/migrations/0001_init.{up,down}.sql`, `0002_actor_admin.{up,down}.sql`, `0003_github_user_tokens.{up,down}.sql`
@@ -49,8 +49,8 @@ Replace the three SQLite migrations with one fresh Postgres baseline implementin
 
 **Steps:**
 
-- [x] **Step 1: Read the three old SQLite migrations** end to end — every table they create must exist in the new baseline (backbone tables per spec 01 §Data model; observed/auth tables carried over: `projects`, `project_repos`, `actors` (+ `admin` boolean from 0002), `tokens`, `github_user_tokens` (from 0003), `issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`, `runtime_events`, `task_seq`).
-- [x] **Step 2: Write `0001_baseline.up.sql`.** Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (where the SQLite schema had autoincrement ids), `timestamptz` for every timestamp, `boolean` for flags (`actors.admin`, `projects.deploy_gated`), `jsonb` for `events.payload` / `state_log.change` / any other JSON-text column, FKs as in the old schema. The backbone tables exactly per spec 01:
+- [x] **Step 1: Read the three old SQLite migrations** end to end — every table they create must exist in the new baseline (backbone tables per spec 004 §Data model; observed/auth tables carried over: `projects`, `project_repos`, `actors` (+ `admin` boolean from 0002), `tokens`, `github_user_tokens` (from 0003), `issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`, `runtime_events`, `task_seq`).
+- [x] **Step 2: Write `0001_baseline.up.sql`.** Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (where the SQLite schema had autoincrement ids), `timestamptz` for every timestamp, `boolean` for flags (`actors.admin`, `projects.deploy_gated`), `jsonb` for `events.payload` / `state_log.change` / any other JSON-text column, FKs as in the old schema. The backbone tables exactly per spec 004:
 
 ```sql
 CREATE TABLE tasks (
@@ -114,7 +114,7 @@ INSERT INTO task_seq (id, next) VALUES (1, 1);
 Carry the remaining tables over from the SQLite schema translated to the same conventions (keep every column and index; translate `TEXT` timestamps → `timestamptz`, JSON text → `jsonb`, int flags → `boolean`).
 - [x] **Step 3: Write `0001_baseline.down.sql`** — `DROP TABLE … CASCADE` in reverse-dependency order (or a single `DROP TABLE a, b, c … CASCADE`).
 - [x] **Step 4: Round-trip.** Per `golang-migrate:test-roundtrip`: against a scratch Postgres (`docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5499:5432 postgres:17`), run migrate up → down → up cleanly with the golang-migrate CLI (or a tiny Go test if the CLI isn't installed; Task 3's roundtrip test will also cover this permanently).
-- [x] **Step 5: Commit** `git commit -m "Replace SQLite migrations with Postgres baseline (spec 01 schema)"` (build is expected red between Tasks 2–4 only if code references removed files — it doesn't; migrations are data, code still compiles).
+- [x] **Step 5: Commit** `git commit -m "Replace SQLite migrations with Postgres baseline (spec 004 schema)"` (build is expected red between Tasks 2–4 only if code references removed files — it doesn't; migrations are data, code still compiles).
 
 ### Task 3: Store on pgx — `Open`, `Migrate`, test infrastructure
 
@@ -252,7 +252,7 @@ err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID).S
 // sql.ErrNoRows -> ErrNotFound
 ```
 
-Then actor check, active-lease check (`ErrLeased`), `IsBlocked` (`ErrBlocked`), `Transition(tx, now, taskID, "ready", "in_progress", eventID)`, lease INSERT with `isUniqueViolation` → `ErrLeased` backstop. (Order per spec 01 §The claim transaction.)
+Then actor check, active-lease check (`ErrLeased`), `IsBlocked` (`ErrBlocked`), `Transition(tx, now, taskID, "ready", "in_progress", eventID)`, lease INSERT with `isUniqueViolation` → `ErrLeased` backstop. (Order per spec 004 §The claim transaction.)
 - [x] **Step 3: Store tests.** Update existing lease tests for `Worktree`; add:
 
 ```go
@@ -285,7 +285,7 @@ func WorktreeIdentity(dir string) (string, error) {
 
 **Steps:**
 
-- [x] **Step 1: Write the test** (spec 01 acceptance 4):
+- [x] **Step 1: Write the test** (spec 004 acceptance 4):
 
 ```go
 // TestClaimRace fires N concurrent Claims at one ready task: exactly one
@@ -380,6 +380,6 @@ Load the `kubernetes` (CNPG section) and `golang-migrate:k8s-job` skills before 
 
 ---
 
-## Acceptance criteria mapping (spec 01)
+## Acceptance criteria mapping (spec 004)
 
 1. pgx + pool, suite on ephemeral Postgres → Tasks 3–4. 2. Baseline migration + round-trip → Tasks 2–3. 3. Worktree-bound leases, no session_id → Task 5. 4. Claim race → Task 6. 5. Claim takes caller-supplied candidate, no ranking → unchanged contract (Task 5). 6. Reopen → Task 7. 7. Event/provenance/idempotent sweep → Tasks 4, 8. 8. blocks gate + child_of cycles → ported as-is (Task 4); existing tests keep covering them.

@@ -1,24 +1,24 @@
-# Spec 09 — Runtime layer: artifacts, builds, deployments & environments
+# Spec 015 — Runtime layer: artifacts, builds, deployments & environments
 
-**Status:** draft · **Umbrella:** `00-umbrella-architecture.md` · **Depends on:** 03 (knowledge
-graph — amends it), 04 (drift & overview — supplies the vocabulary its deploy deriver emits),
-08 (prefix rename) · **Amends:** 03, 04.
+**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 006 (knowledge
+graph — amends it), 007 (drift & overview — supplies the vocabulary its deploy deriver emits),
+014 (prefix rename) · **Amends:** 006, 007.
 
 ## Purpose & scope
 
-Spec 03 lists Artifact, Deployment and Environment as **v1 projected nodes** in its Layer 3 table
+Spec 006 lists Artifact, Deployment and Environment as **v1 projected nodes** in its Layer 3 table
 and gives them instance IRIs — but never assigns them a class. They exist in the IRI grammar and as
-`dct:relation` targets of a `wl:Deliverable`, and nowhere else: the mint list in 03's acceptance
+`dct:relation` targets of a `wl:Deliverable`, and nowhere else: the mint list in 006's acceptance
 criterion 2 contains no runtime term at all. A Deliverable therefore declares its definition-of-done
-by pointing at untyped IRIs, and 04's `observed/deploy` deriver has no vocabulary to emit.
+by pointing at untyped IRIs, and 007's `observed/deploy` deriver has no vocabulary to emit.
 
-Two things have also moved since 03's source decisions (2026-07-21):
+Two things have also moved since 006's source decisions (2026-07-21):
 
-- The **delivery-lifecycle design** (`../2026-07-25-delivery-lifecycle-design.md`) made the runtime
+- **Spec 011 — delivery lifecycle** (`011-delivery-lifecycle.md`) made the runtime
   layer load-bearing for task state — `deployed_dev`, `deployed_prod`, `released` — and added
-  `main_commits`, `env_deploys` and `release_frontiers`. Commit, which 03 defers to v2, is now on
+  `main_commits`, `env_deploys` and `release_frontiers`. Commit, which 006 defers to v2, is now on
   the critical path of the state machine.
-- **Spec 08** renamed `ls:` → `wl:`. This spec is written in `wl:` throughout and lands with 08 or
+- **Spec 014** renamed `ls:` → `wl:`. This spec is written in `wl:` throughout and lands with 014 or
   after it, never before.
 
 This spec covers, and only covers:
@@ -28,14 +28,14 @@ This spec covers, and only covers:
 - The **classes**: `wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`,
   `wl:RuntimeEvent`, all anchored on PROV-O.
 - The **SKOS schemes** for the four runtime enums.
-- The **natural-key IRI grammar**, replacing 03's docker-only Artifact pattern.
+- The **natural-key IRI grammar**, replacing 006's docker-only Artifact pattern.
 - The **projection table** — which relational table feeds each node, and which nodes have no source
   yet.
 
 Out of scope (reference, do not duplicate): the delivery resolver and its frontier arithmetic
-(delivery-lifecycle design — this spec models the *facts* it reads, not the state machine); drift
-queries and the deriver contract (04); Deliverable auto-confirmation (v2, 03 §Deliverable); the
-`wl:` rename itself (08).
+(Spec 011 — delivery lifecycle — this spec models the *facts* it reads, not the state machine); drift
+queries and the deriver contract (007); Deliverable auto-confirmation (v2, 006 §Deliverable); the
+`wl:` rename itself (014).
 
 ---
 
@@ -94,14 +94,14 @@ wl:Environment a owl:Class ;
                  "handlers already enforce." .
 
 wl:Commit a owl:Class ; rdfs:subClassOf prov:Entity ;
-    rdfs:comment "One commit on a repository's default branch. Promoted from v2 (03) because "
+    rdfs:comment "One commit on a repository's default branch. Promoted from v2 (006) because "
                  "delivery resolution is defined in terms of commit coverage." .
 
 wl:RuntimeEvent a owl:Class ; rdfs:subClassOf prov:Activity ;
     rdfs:comment "An observed runtime incident affecting a deployed Artifact — a crashloop, an "
                  "OOM kill, a Flux reconciliation failure or recovery." .
 
-# Every runtime term is tagged, per 03's convention:
+# Every runtime term is tagged, per 006's convention:
 wl:Artifact wl:layer wlc:runtime .    wl:Build        wl:layer wlc:runtime .
 wl:Deployment wl:layer wlc:runtime .  wl:Environment  wl:layer wlc:runtime .
 wl:Commit wl:layer wlc:runtime .      wl:RuntimeEvent wl:layer wlc:runtime .
@@ -110,7 +110,7 @@ wl:Commit wl:layer wlc:runtime .      wl:RuntimeEvent wl:layer wlc:runtime .
    owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .
 ```
 
-**Why `wl:Artifact` has no subclasses.** Spec 03 mints real subclasses for `wl:DesignDoc` because
+**Why `wl:Artifact` has no subclasses.** Spec 006 mints real subclasses for `wl:DesignDoc` because
 ADR and Spec play different structural roles, and uses a SKOS scheme for `wl:taskKind` because kind
 is a mere attribute there. Artifact kind is the latter case: a `docker_image` and a `pypi` package
 carry identical edges and differ only in how their coordinates are spelled. One class plus
@@ -224,7 +224,7 @@ wl:covers a owl:ObjectProperty ;
 | event / publication time | `dct:date` | `runtime_events.occurred_at`, `release_frontiers.published_at` |
 | version string | `owl:versionInfo` | `artifacts.version` |
 | name, target name, commit sha | `dct:identifier` | the coordinate, also encoded in the IRI |
-| repository grouping | `doap:Project` + `dct:hasPart` | as 03 already establishes |
+| repository grouping | `doap:Project` + `dct:hasPart` | as 006 already establishes |
 | human label | `dct:title` | |
 
 **A modelling tension, stated plainly.** `deployments` is a mutable current-state row (unique per
@@ -238,14 +238,14 @@ shows current state only; per-rollout history needs a second node type and is v2
 ## 5. IRI grammar
 
 **Principle: an instance IRI mirrors the relational natural key.** Projection is then a pure
-function of the row, which is what makes 04's deriver contract (deterministic, idempotent,
+function of the row, which is what makes 007's deriver contract (deterministic, idempotent,
 full-replace) satisfiable without a side table mapping rows to IRIs.
 
-Spec 03's Artifact pattern — `id/artifact/<registry>/<repo>/<tag-or-digest>` — is container-shaped
+Spec 006's Artifact pattern — `id/artifact/<registry>/<repo>/<tag-or-digest>` — is container-shaped
 and cannot spell a PyPI package or a binary release, though the `artifacts` table has allowed all
 four kinds since the baseline migration. It is replaced by a kind-first grammar matching
 `UNIQUE (kind, name, version)` exactly. Nothing is published yet, so the change is free now and
-breaking once the rdf-registry PR lands — the same argument spec 08 makes for the prefix rename.
+breaking once the rdf-registry PR lands — the same argument spec 014 makes for the prefix rename.
 
 | Type | Pattern | Natural key | Example |
 |---|---|---|---|
@@ -258,13 +258,13 @@ breaking once the rdf-registry PR lands — the same argument spec 08 makes for 
 | Build | `id/build/<host>/<org>/<repo>/<run-id>` | — | reserved; no v1 source |
 | RuntimeEvent | — | **none** | see Open question 1 |
 
-Slashes inside a local id remain permissible (slash namespace, opaque path), as 03 establishes.
+Slashes inside a local id remain permissible (slash namespace, opaque path), as 006 establishes.
 
 ---
 
 ## 6. Projection
 
-Feeds 04's `observed/deploy` named graph. Authority is unchanged: the backbone and ingest own every
+Feeds 007's `observed/deploy` named graph. Authority is unchanged: the backbone and ingest own every
 runtime fact, the graph mirrors them read-only.
 
 | Node / edge | Source | v1? | Trigger |
@@ -279,7 +279,7 @@ runtime fact, the graph mirrors them read-only.
 | environment frontier → commit | `env_deploys` | **v2** | grain mismatch; see below |
 | `wl:RuntimeEvent` | `runtime_events` | **v2** | blocked on Open question 1 |
 | `wl:Build` | — | **v2** | no source; needs workflow-run ingest |
-| Deliverable auto-confirmation | derived | **v2** | 03 §Deliverable, 04 |
+| Deliverable auto-confirmation | derived | **v2** | 006 §Deliverable, 007 |
 
 **What the ingest actually produces today.** `store.CreateArtifact` has exactly one call site,
 `applyRelease` in `internal/hooks/github.go`, which writes `kind = 'git_tag'`. Nothing creates
@@ -309,8 +309,8 @@ before a query wants it. Deferred to v2; the delivery resolver reads `env_deploy
 the meantime and loses nothing.
 
 **Guarding the `wl:Commit` edge.** `applyRelease` populates `source_sha` from the release's
-`target_commitish`, which is frequently a *branch name* rather than a sha (UI-created tags — the
-delivery-lifecycle design already handles this by falling back to main's head). The projector must
+`target_commitish`, which is frequently a *branch name* rather than a sha (UI-created tags —
+Spec 011 — delivery lifecycle — already handles this by falling back to main's head). The projector must
 therefore emit `prov:wasDerivedFrom` only when `source_sha` resolves to a known `main_commits` row,
 and drop it otherwise. Minting `wlid:commit/…/main` from a branch name would produce a plausible,
 permanently wrong node. An artifact whose `repo` is set but whose `source_sha` is null or
@@ -341,11 +341,11 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 
 ## Dependencies
 
-- **Spec 03** — the vocabulary this extends; the `wl:layer` convention, the SHACL gate and the
+- **Spec 006** — the vocabulary this extends; the `wl:layer` convention, the SHACL gate and the
   `owlrl` closure test all widen to the new terms.
-- **Spec 04** — the deriver contract and the `observed/deploy` named graph these nodes land in.
-- **Spec 08** — the `wl:` rename. This spec is written in `wl:` and must not land before 08.
-- **Delivery-lifecycle design** (`../2026-07-25-delivery-lifecycle-design.md`) — owns the state
+- **Spec 007** — the deriver contract and the `observed/deploy` named graph these nodes land in.
+- **Spec 014** — the `wl:` rename. This spec is written in `wl:` and must not land before 014.
+- **Spec 011 — delivery lifecycle** (`011-delivery-lifecycle.md`) — owns the state
   machine and frontier arithmetic; this spec models the facts it reads.
 - **`internal/hooks/`** (`flux.go`, `github.go`, `deployment.go`) and `internal/store/artifacts.go`
   — the ingest whose rows project into these nodes.
@@ -354,7 +354,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 ## Open questions
 
 1. **`wl:RuntimeEvent` has no natural key.** `runtime_events` has only a surrogate id, so no
-   deterministic IRI can be derived from a row and 04's idempotent full-replace contract cannot be
+   deterministic IRI can be derived from a row and 007's idempotent full-replace contract cannot be
    met. Options: add a natural key to the table (`(cluster, kind, workload, occurred_at)` is
    plausibly unique), hash the tuple into the local id, or leave the class declared and unprojected.
    Projection stays v2 until this is settled.
@@ -390,7 +390,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
    practice today (§6), so this criterion tests the vocabulary, and closing the ingest gap is
    tracked separately as Open question 5.
 5. A `wl:Deliverable` whose `dct:relation` names an artifact IRI and `wlid:environment/prod`
-   resolves both to typed nodes (03's Deliverable example round-trips against this vocabulary).
+   resolves both to typed nodes (006's Deliverable example round-trips against this vocabulary).
 6. The SHACL gate rejects: an Artifact with two `wl:artifactKind` values or none; a Deployment
    missing `wl:toEnvironment`; an Environment outside `{dev, prod}`.
 7. An `owlrl` pass over the TBox plus a seeded ABox flags a node typed both `wl:Artifact` and

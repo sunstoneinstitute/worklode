@@ -1,4 +1,4 @@
-# Spec 06 — Data-platform requirements for the Worklode KG
+# Spec 009 — Data-platform requirements for the Worklode KG
 
 **Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `00-umbrella-architecture.md`
 
@@ -25,13 +25,17 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
 3. **A stable, documented IRI scheme** for Worklode entities, aligned with rdf-registry ADR-0006
    (branch-free term IRIs; `/id/…` for instances). Worklode mints IRIs for `Component`,
    `DesignDoc`, `Task`; the host/namespace grammar must be fixed and agreed. (Canonical scheme is
-   authored in Worklode **spec 03**; this item is the data-platform-side commitment to host it.)
+   authored in Worklode **spec 006**; this item is the data-platform-side commitment to host it.)
    **Base = `https://worklode.io/ns/`** (decided): the `ls:` ontology stays in rdf-registry but its
    pipeline **publishes under the `worklode.io/ns/` base**, not `sunstone.institute/rdf/`. This needs
    a **base-URL override** for the `ls` ontology in rdf-registry (ADR-0006's implicit "repo path =
    host path" mapping doesn't hold for a foreign domain) — a required rdf-registry change.
 4. **External-service write auth confirmed.** Worklode's projector is a Go service authenticating
    via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs. The atomic
+
+   > **Amended by 014 §1.** The sources are `rdf/wl/` and the published base is
+   > `https://worklode.io/ns/wl/`; the base-URL override applies to the `wl` ontology.
+
    per-branch write exists; verify the client-credentials path works end-to-end for an external caller.
 5. **A writable, fixed branch** for the work graph (project = property, not branch — sibling
    branches are invisible to each other, which would hide cross-project edges). Branch-create +

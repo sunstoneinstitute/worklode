@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the delivery lifecycle from `docs/specs/2026-07-25-delivery-lifecycle-design.md`: rename `done` → `merged`, add `deployed_dev`/`deployed_prod`/`released` states, and advance tasks automatically from GitHub `push`/`deployment_status`/`release` events plus Flux reconciliation confirmations.
+**Goal:** Implement the delivery lifecycle from `docs/specs/011-delivery-lifecycle.md`: rename `done` → `merged`, add `deployed_dev`/`deployed_prod`/`released` states, and advance tasks automatically from GitHub `push`/`deployment_status`/`release` events plus Flux reconciliation confirmations.
 
 **Architecture:** Webhook handlers record *facts* (task↔commit attribution, main-commit ordering, per-environment deploy watermarks, release frontiers) inside the same `RecordEvent` transaction as today, then call one shared resolver (`store.ResolveDelivery`) that advances the task to the furthest milestone the facts support. Forward-only, idempotent, arrival-order independent.
 
 **Tech Stack:** Go 1.26, Postgres (golang-migrate SQL files), net/http mux, go-jose (GitHub App JWT). Tests need Postgres from `docker-compose.yml` (`store.OpenTestStore` skips if unreachable).
 
-**Read first:** `docs/specs/2026-07-25-delivery-lifecycle-design.md` (the spec), `internal/hooks/github.go` (handler pattern), `internal/store/events.go:34` (`RecordEvent`), `internal/store/tasks.go:58-77` (`legalTransitions`).
+**Read first:** `docs/specs/011-delivery-lifecycle.md` (the spec), `internal/hooks/github.go` (handler pattern), `internal/store/events.go:34` (`RecordEvent`), `internal/store/tasks.go:58-77` (`legalTransitions`).
 
 **Conventions:** run `go test ./internal/...` for tests; commit after every task; commit messages in imperative mood without any Co-authored-by/advertising trailers.
 
@@ -26,7 +26,7 @@
 `deploy/base/migrations/0004_delivery.up.sql`:
 
 ```sql
--- Delivery lifecycle (docs/specs/2026-07-25-delivery-lifecycle-design.md):
+-- Delivery lifecycle (docs/specs/011-delivery-lifecycle.md):
 -- rename done -> merged, add delivery states, fact tables, per-repo done_state.
 
 ALTER TABLE tasks DROP CONSTRAINT tasks_state_check;
@@ -495,7 +495,7 @@ Expected: FAIL — undefined types/functions.
 
 ```go
 // Delivery-lifecycle fact tables and resolver
-// (docs/specs/2026-07-25-delivery-lifecycle-design.md). Handlers record
+// (docs/specs/011-delivery-lifecycle.md). Handlers record
 // facts inside a RecordEvent transaction, then call ResolveDelivery, which
 // advances the task to the furthest milestone the facts support.
 package store
@@ -1786,7 +1786,7 @@ Write it out fully following the file's existing test style.
 
 ```go
 // validDoneStates are the terminal states a repo mapping may declare as
-// "fully delivered" (docs/specs/2026-07-25-delivery-lifecycle-design.md).
+// "fully delivered" (docs/specs/011-delivery-lifecycle.md).
 var validDoneStates = map[string]bool{"merged": true, "deployed_prod": true, "released": true}
 
 // SetRepoDoneState sets the delivery terminal state for a mapped repo.
@@ -2187,7 +2187,7 @@ git commit -m "Show delivery facts in the task timeline"
 
 - [ ] **Step 1: Update `docs/spec.md`**
 
-- Line ~64 state machine: `draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod` plus `released` (release-based repos) and `abandoned`; point to `docs/specs/2026-07-25-delivery-lifecycle-design.md` for delivery semantics.
+- Line ~64 state machine: `draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod` plus `released` (release-based repos) and `abandoned`; point to `docs/specs/011-delivery-lifecycle.md` for delivery semantics.
 - Line ~68 `pull_requests` correlation: branch prefix now configurable (`LODE_BRANCH_PREFIX`, default `lode/`).
 - Line ~78 GitHub webhook handler list: add `push → task_commits/main_commits/deploy_shas; deployment_status → env_deploys`; replace the deploy-gating sentence with the resolver summary (facts + `ResolveDelivery`, done_state per repo).
 

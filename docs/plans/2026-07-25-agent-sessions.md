@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.x, Postgres (database/sql + pgx stdlib), golang-migrate, cobra, net/http `ServeMux`.
 
-**Spec:** `docs/specs/2026-07-25-agent-sessions-design.md`
+**Spec:** `docs/specs/012-agent-sessions.md`
 
 **Prerequisite:** store tests need Postgres. Run `docker compose up -d postgres` once before starting; tests skip (not fail) if it is unreachable and `CI` is unset.
 

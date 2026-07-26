@@ -1,4 +1,4 @@
-# Worklode Plugin (spec 05) Implementation Plan
+# Worklode Plugin (spec 008) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +6,7 @@
 
 **Architecture:** Two repos. Go machinery lands in **worklode** (`~/git/sunstone/worklode`): new `internal/worktree` package (worktree naming/parse/identity), `lode hook <event>` subcommands (the compiled hook binary *is* the CLI), lifecycle commands, and a `brief` endpoint + lease-rebind endpoint server-side. The Claude Code plugin lands in **claude-plugins** (`~/git/sunstone/claude-plugins`) as `plugins/lode/` — thin skills invoking `lode … --json`, hooks.json wiring editor events to `lode hook …` via a guard script. Hooks are NOPs outside a `wt/<id>-<slug>` worktree.
 
-**Tech Stack:** Go (worklode repo), Claude Code plugin format (skills/agents/hooks.json). Requires plans 01 and 02 merged.
+**Tech Stack:** Go (worklode repo), Claude Code plugin format (skills/agents/hooks.json). Requires plans 004 and 005 merged.
 
 **Verified Claude Code facts this plan relies on (do not re-research):**
 - Hook events: `SessionStart`, `SessionEnd`, `PreToolUse`, `WorktreeCreate`, `WorktreeRemove` exist. **`EnterWorktree`/`ExitWorktree` do NOT exist** — the spec's EnterWorktree auto-resume maps to `SessionStart` (fires in the session's cwd) + `WorktreeCreate`; ExitWorktree release maps to `WorktreeRemove` + `SessionEnd`.
@@ -16,13 +16,13 @@
 - Skill dynamic context: `` !`command` `` runs before the model sees the skill; `$ARGUMENTS`/`$1` substitution; `disable-model-invocation: true` for user-only commands.
 
 **Settled decisions:**
-- Worktree directory: `<repo-root>/wt/<WL-n>-<slug>`; branch: `wl/<WL-n>-<slug>` (keeps existing PR correlation). Worktree lease identity string: `<hostname>:<abs-worktree-path>` (plan 01 helper).
+- Worktree directory: `<repo-root>/wt/<WL-n>-<slug>`; branch: `wl/<WL-n>-<slug>` (keeps existing PR correlation). Worktree lease identity string: `<hostname>:<abs-worktree-path>` (plan 004 helper).
 - Claim-then-bind: `claim --next` can't know the worktree path pre-claim, so `lode next` claims with a temporary identity `<hostname>:<repo-root>#pending-<8hex>`, creates the worktree, then rebinds via a new endpoint. Failure between claim and rebind → release.
-- Session liveness (spec Q05.3): marker file `worklode-session.json` (`{"session_id","pid","started_at"}`) in the worktree's private git dir (`git rev-parse --git-dir` → `.git/worktrees/<name>/`); stale when the pid is dead. No backbone change.
+- Session liveness (spec Q008.3): marker file `worklode-session.json` (`{"session_id","pid","started_at"}`) in the worktree's private git dir (`git rev-parse --git-dir` → `.git/worktrees/<name>/`); stale when the pid is dead. No backbone change.
 - `SessionEnd` does **not** release the lease (the lease lives with the worktree across sessions — spec §Hold); it only removes the session marker. Release fires on `WorktreeRemove` and on explicit `done`/`block`. This resolves the spec's hook-table/Hold tension in favor of Hold.
 - `/lode-*` slash commands become **`/lode:next`, `/lode:resume`, `/lode:done`, `/lode:block`, `/lode:status`** (plugin namespacing is `/plugin:skill`; a `lode-next` skill would render as `/lode:lode-next`).
-- `lode done` does not remove the worktree (spec Q05.1): it marks done + releases + prints the cleanup command; `WorktreeRemove` auto-release covers whoever deletes it.
-- **Deferred, out of scope here:** `/lode:spec`, `authoring-design-as-graph`, `architectural-review` skills (all require the spec-03 knowledge graph), and the Task↔GitHub-Issue mirror (Q05.4). Brief fields `governing_design` and `affected_components` are emitted as `null` with the shape reserved.
+- `lode done` does not remove the worktree (spec Q008.1): it marks done + releases + prints the cleanup command; `WorktreeRemove` auto-release covers whoever deletes it.
+- **Deferred, out of scope here:** `/lode:spec`, `authoring-design-as-graph`, `architectural-review` skills (all require the spec-006 knowledge graph), and the Task↔GitHub-Issue mirror (Q008.4). Brief fields `governing_design` and `affected_components` are emitted as `null` with the shape reserved.
 - The 24/7 `lode-worker` agent ships as a minimal agent definition (optional in v1 per spec).
 
 ---
@@ -73,7 +73,7 @@ func Root(dir string) (string, bool)
 func GitDir(root string) (string, error)
 ```
 
-Move/reuse `WorktreeIdentity` from plan 01 (`internal/cli/worktree.go`) into this package; update its callers.
+Move/reuse `WorktreeIdentity` from plan 004 (`internal/cli/worktree.go`) into this package; update its callers.
 - [x] **Step 3:** `go test ./internal/worktree/` green. Commit.
 
 ### Task A2: Server — `GET /tasks/{id}/brief` + lease rebind
@@ -94,9 +94,9 @@ type Brief struct {
 	Branch            string   // wl/<id>-<slug>
 	OpenBlockers      []Task   // blocks edges still open (id+title+state)
 	Lease             *Lease   // active lease or nil
-	GoverningDesign   *string  // reserved: spec 03 (null in v1)
-	AffectedComponents []string // reserved: spec 03 (nil in v1)
-	DefinitionOfDone  *string  // reserved: Deliverable, spec 03 (null in v1)
+	GoverningDesign   *string  // reserved: spec 006 (null in v1)
+	AffectedComponents []string // reserved: spec 006 (nil in v1)
+	DefinitionOfDone  *string  // reserved: Deliverable, spec 006 (null in v1)
 }
 
 func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error)
@@ -111,7 +111,7 @@ One bounded payload — task row, branch from `SlugifyTitle`, open blockers via 
 
 **Files:**
 - Create: `internal/cmd/lifecycle.go` (+ `lifecycle_test.go`)
-- Modify: `internal/cmd/task.go` (add `brief` subcommand), `internal/cli/client.go` (Brief, ClaimNext already from plan 02, Rebind)
+- Modify: `internal/cmd/task.go` (add `brief` subcommand), `internal/cli/client.go` (Brief, ClaimNext already from plan 005, Rebind)
 
 **Steps:**
 
@@ -386,17 +386,17 @@ applies only when you fan out.
 
 **Steps:**
 
-- [x] **Step 1:** Script the spec-05 acceptance list against a local server (`docker compose up`) and record results in the worklode PR description:
+- [x] **Step 1:** Script the spec-008 acceptance list against a local server (`docker compose up`) and record results in the worklode PR description:
   1. `/lode:next` → `wt/<id>-<slug>` worktree + bound lease + injected brief; plain-checkout session untouched (criteria 1).
   2. `git worktree remove` → lease released; `git commit` in the worktree renews; neither fires outside (criteria 2, via `lode status` before/after).
   3. Sweeper-expired lease re-acquired by `/lode:resume` and by auto-resume, no new claim (criteria 3; shrink TTL via claim `ttl` to test).
   4. `lode install-git-hooks` chaining + idempotency (criteria 4 — also covered by Go tests in A5).
   5. `lode task brief` bounded payload (criteria 5 — Go tests in A2).
   6. Daisy-chain `--next` (criteria 6 — Go tests in A4).
-  7. Skills judgment-only, no renewal logic (criteria 7 — `working-under-worklode` explicitly excludes heartbeats; graph-fed skills deferred to spec 03, noted in PR).
+  7. Skills judgment-only, no renewal logic (criteria 7 — `working-under-worklode` explicitly excludes heartbeats; graph-fed skills deferred to spec 006, noted in PR).
 
 ---
 
-## Acceptance criteria mapping (spec 05)
+## Acceptance criteria mapping (spec 008)
 
-All seven criteria → Task B4's walkthrough, backed by: 1→A3/B1/B2, 2→A4, 3→A3/A4, 4→A5, 5→A2, 6→A4, 7→B3 (partial: two graph-fed skills deferred until spec 03 exists).
+All seven criteria → Task B4's walkthrough, backed by: 1→A3/B1/B2, 2→A4, 3→A3/A4, 4→A5, 5→A2, 6→A4, 7→B3 (partial: two graph-fed skills deferred until spec 006 exists).

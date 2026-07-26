@@ -1,6 +1,6 @@
 # worklode — spec
 
-**Status:** superseded — see `docs/specs/worklode/` (spec 01 moved the backbone to
+**Status:** superseded — see `docs/specs/` (spec 004 moved the backbone to
 Postgres with worktree-bound leases; storage/lease details below describe the v1
 SQLite design and are historical)
 **Date:** 2026-07-19
@@ -66,13 +66,15 @@ not built in v1.
 - `leases` — task_id (unique among active), actor_id, session_id, acquired_at, renewed_at, expires_at, released_at. Claim = one transaction: verify no active lease, insert lease, transition task to `in_progress`. Default TTL 2h, renewable. A sweeper expires stale leases: task reverts to `ready`, expiry recorded as an event.
 - `issues` (inbox) — repo, number, title, state (github state), triage_state (`new`|`promoted`|`dismissed`), task_id (when promoted), applies_to_versions (JSON, set at triage), url.
 - `pull_requests` — repo, number, title, state (`open`|`merged`|`closed`), task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at. Correlated to a task by branch name `<prefix><task-id>-<slug>` (`LODE_BRANCH_PREFIX`, default `lode/`; legacy `wl/` also recognized) or a `WL-Task: <id>` line in the PR body.
+
+  > **Superseded by spec 004.** Leases are keyed by worktree identity, not `session_id`; see also spec 012 for the agent-session rows hanging off a lease.
 - `ci_runs` — repo, head_sha, workflow, status, conclusion, url, started_at, completed_at.
 - `reviews` — repo, pr number, reviewer, state (`approved`|`changes_requested`|`commented`), submitted_at.
 - `artifacts` — id, kind (`docker_image`|`pypi`|`git_tag`|`binary`), name, version, digest, repo, source_sha, built_at. Correlated to PRs via source_sha.
 - `deployments` — id, artifact_id, environment (`dev`|`prod`|…), target_kind (`flux_kustomization`|`pypi`|`manual`), target_name, status (`pending`|`reconciling`|`deployed`|`failed`), first_seen, last_update.
 - `runtime_events` — id, cluster, kind (`crashloop`|`oom`|`flux_failure`|`flux_recovery`), workload, image, artifact_id (nullable, resolved by image), message, occurred_at.
 - `state_log` — entity_kind, entity_id, change (JSON: field, old, new), event_id, at. Generic audit of typed-table changes.
-- Delivery facts — `task_commits`, `main_commits`, `deploy_shas`, `env_deploys`, `release_frontiers`. Written by the push/deployment_status/release/flux handlers; read by the resolver. Columns and semantics in `docs/specs/2026-07-25-delivery-lifecycle-design.md`.
+- Delivery facts — `task_commits`, `main_commits`, `deploy_shas`, `env_deploys`, `release_frontiers`. Written by the push/deployment_status/release/flux handlers; read by the resolver. Columns and semantics in `docs/specs/011-delivery-lifecycle.md`.
 
 ## Ingestion
 

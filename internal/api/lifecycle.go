@@ -114,7 +114,7 @@ type leasePickJSON struct {
 
 // taskPickJSON is the wire form of a claim-next candidate/claimed task: a
 // slimmer projection than taskJSON, matching the ranking-relevant fields
-// (spec 02) rather than the full task record.
+// (spec 005) rather than the full task record.
 type taskPickJSON struct {
 	ID       string         `json:"id"`
 	Slug     string         `json:"slug"`

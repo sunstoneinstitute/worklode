@@ -10,7 +10,7 @@ import (
 
 // TestClaimRace fires n concurrent Claims at one ready task: exactly one
 // wins; every loser gets ErrLeased; the task ends in_progress with exactly
-// one active lease. (spec 01 acceptance criterion 4)
+// one active lease. (spec 004 acceptance criterion 4)
 func TestClaimRace(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()

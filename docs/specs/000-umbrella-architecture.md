@@ -1,4 +1,4 @@
-# Worklode v1 — architecture & spec map (umbrella)
+# Spec 000 — Worklode architecture & spec map (umbrella)
 
 **Date:** 2026-07-21 · **Status:** spec · **Source:** graduated from the approved design
 record `../2026-07-21-worklode-platform-graph-design.md` (D1–D15; full rationale there).
@@ -69,48 +69,49 @@ single context. Each is an independent spec → plan → implementation cycle.
 - **Naming:** product = Worklode; CLI = `lode` (D13).
 - **Vocabulary (D4):** standards-first — `dct:requires`/`hasPart`/`replaces`, `foaf:Agent`,
   `prov:*`, `doap:Project`, SKOS for status/enums. **Mint `ls:` sparingly** — the full minted set
-  is defined in **spec 03**. **No gtio.** The `ls:` ontology ships as a PR to **rdf-registry**.
+  is defined in **spec 006**. **No gtio.** The `ls:` ontology ships as a PR to **rdf-registry**.
 - **IRI (D-KG):** rdf-registry ADR-0006 grammar — branch-free term IRIs, `/id/…` for instances.
-  Canonical scheme defined in **spec 03**; consumed by **06**.
+  Canonical scheme defined in **spec 006**; consumed by **009**.
 - **Review:** design docs reviewed via **crit**; `proposed → accepted` gated on crit resolution.
 - **Determinism lens (D14):** push coordination into deterministic, token-free machinery
   (compiled hooks, CLI+`--json`, server-side selection); spend model tokens only on judgment.
 
 ## Decision index (record → owning spec)
 
-D1–D3 authority split → 00/01/03 · D4 vocabulary/entity model → 03 · D5 two-layer/drift → 04 ·
-D6 three layers → 00/03/04 · D7 Deliverable → 03 · D8 lease/heartbeat/claim-next → 01/02/05 ·
-D9 ranking → 02 · D10 concern → 02 · D11 Task-as-bridge → 01/03 · D12 estimate-free → 02 ·
-D13 naming → 00 · D14 plugin → 05 · D15 task sizing → 02/05.
+D1–D3 authority split → 000/004/006 · D4 vocabulary/entity model → 006 · D5 two-layer/drift → 007 ·
+D6 three layers → 000/006/007 · D7 Deliverable → 006 · D8 lease/heartbeat/claim-next → 004/005/008 ·
+D9 ranking → 005 · D10 concern → 005 · D11 Task-as-bridge → 004/006 · D12 estimate-free → 005 ·
+D13 naming → 000 · D14 plugin → 008 · D15 task sizing → 005/008.
 
 ---
 
 ## Open questions across specs (to resolve before implementation)
 
 **Cross-cutting / blockers (decide first):**
-- _None open._ The last cross-cutting blocker — [04] drift suppression — is resolved below.
+- _None open._ The last cross-cutting blocker — [007] drift suppression — is resolved below.
 
 **Resolved:**
-- **[04] Drift suppression → resolved.** An intentional observed-but-unasserted edge is marked
-  accepted via an asserted-layer `ls:AcceptedDeviation` node (spec 03 §Accepted deviations): it
+- **[007] Drift suppression → resolved.** An intentional observed-but-unasserted edge is marked
+  accepted via an asserted-layer `ls:AcceptedDeviation` node (spec 006 §Accepted deviations): it
   names the tolerated edge with RDF reification (un-asserted), is `ls:sanctionedBy` an ADR, and may
-  expire (`dct:valid`). Spec 04's 4.1 violation query subtracts un-expired deviations
+  expire (`dct:valid`). Spec 007's 4.1 violation query subtracts un-expired deviations
   (`observed − asserted − acknowledged`). Crit-reviewed and provenanced like any asserted edge —
   not a backbone allowlist.
-- **[03] RDF namespace → `ls:` / `/rdf/ls/`** (Worklode), not `wt:`.
-- **[03] RDF-1.2 publishing → resolved.** rdf-registry now publishes 1.2 alongside 1.1 (1.1 as
+- **[006] RDF namespace → `ls:` / `/rdf/ls/`** (Worklode), not `wt:`.
+  **Superseded by 014 §1:** the namespace is `wl:` under `rdf/wl/`, not `ls:` under `rdf/ls/`.
+- **[006] RDF-1.2 publishing → resolved.** rdf-registry now publishes 1.2 alongside 1.1 (1.1 as
   `/rdf/ls/ontology.ttl`, 1.2 as `/rdf/ls/ontology.1-2.ttl`), so partial-supersession triple-term
   annotations ship natively — no interim workaround, no rdf-registry #14 dependency.
-- **[05] `EnterWorktree` cross-editor → accepted for v1** (Claude Code gets auto-resume; other
+- **[008] `EnterWorktree` cross-editor → accepted for v1** (Claude Code gets auto-resume; other
   editors get renewal via git hooks only).
-- **[02] Flag name → `--strict-focus`.**
-- **[01] Reopen target → `done → ready`** (forces a fresh claim).
-- **[04] PR→Task join → GitHub-native `Closes #N`** (via bidirectional Task↔Issue mirror); frontier
+- **[005] Flag name → `--strict-focus`.**
+- **[004] Reopen target → `done → ready`** (forces a fresh claim).
+- **[007] PR→Task join → GitHub-native `Closes #N`** (via bidirectional Task↔Issue mirror); frontier
   `is_critical`/`fan_out` are computed as a query, **not** cached.
 
 **Per-spec, lower stakes:**
-- **[02]** persistent per-project strict mode; should `concern` become required; cross-project
+- **[005]** persistent per-project strict mode; should `concern` become required; cross-project
   `fan_out` weighting.
-- **[04]** projection-lag between authoritative (backbone) and overview (KG) frontier — acceptable?
-- **[01]** isolation level (READ COMMITTED + `FOR UPDATE` vs SERIALIZABLE); sweeper correctness
-  under multiple server replicas; Task↔GitHub-Issue mirror lifecycle (spec 01 Q5 / 05 Q05.4).
+- **[007]** projection-lag between authoritative (backbone) and overview (KG) frontier — acceptable?
+- **[004]** isolation level (READ COMMITTED + `FOR UPDATE` vs SERIALIZABLE); sweeper correctness
+  under multiple server replicas; Task↔GitHub-Issue mirror lifecycle (spec 004 Q5 / 008 Q008.4).
