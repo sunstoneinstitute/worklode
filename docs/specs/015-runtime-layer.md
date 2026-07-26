@@ -50,7 +50,7 @@ clean mint.
 |---|---|---|
 | **PROV-O** | `prov:Entity`, `prov:Activity`, `prov:used`, `prov:wasGeneratedBy`, `prov:wasDerivedFrom`, timing properties | **REUSE as the anchor.** Exactly the right shape for "an activity produced an artifact from a source". Carries no version, digest or registry-coordinate term — those are ours. |
 | **SPDX 3.0.1** | A real, fetchable OWL model with `Build/Build` and `Software/Package` | **Reference only.** The Build profile is one class bolted onto Core's `Element`/`Relationship` scaffolding: adopting it imports ~46 classes to get one class of payload, with no supported way to cherry-pick a profile. The RDF is generated from a Markdown-authored spec, tooling consumes the JSON-LD, and there is **no PROV-O alignment** to inherit. Cite it with `rdfs:seeAlso`; do not import it. |
-| **DOAP** | `doap:Version`, `doap:release`, `doap:revision` | **Rejected for artifacts.** `doap:Version` is "version information of a project release" — a changelog entry hanging off `doap:Project`, with no digest, no registry coordinate and no artifact-kind discrimination. Effectively dormant since 2022. 03's existing use of `doap:Project` for **repository** grouping is unaffected and stays. |
+| **DOAP** | `doap:Version`, `doap:release`, `doap:revision` | **Rejected for artifacts.** `doap:Version` is "version information of a project release" — a changelog entry hanging off `doap:Project`, with no digest, no registry coordinate and no artifact-kind discrimination. Effectively dormant since 2022. 006's existing use of `doap:Project` for **repository** grouping is unaffected and stays. |
 | **DCAT v3** | `dcat:Distribution`, `dcat:downloadURL`, `spdx:checksum` | **Rejected.** DCAT scopes `Distribution` to "an accessible form of *a dataset*" and explicitly directs implementers to subclass `dcat:Resource` for other artifacts, naming them out of scope. Reusing it would contradict the spec's own guidance. |
 | **schema.org** | `SoftwareApplication`, `softwareVersion`, `downloadUrl` | **Rejected.** Describes a software *product*; `softwareVersion` is a bare string. No build, deployment or environment concept exists. |
 | **OSLC Automation** | `AutomationPlan` / `Request` / `Result`, CI-shaped state enums | **Rejected.** Conceptually apt but frozen at Project Specification Draft 01 (2021) with adoption confined to Eclipse Lyo and IBM ELM. Not a standard mainstream CI recognises. |
@@ -82,10 +82,12 @@ wl:Build a owl:Class ; rdfs:subClassOf prov:Activity ;
                  "prov:wasGeneratedBy without a later breaking change." .
 
 wl:Deployment a owl:Class ; rdfs:subClassOf prov:Activity ;
-    rdfs:comment "The rollout of an Artifact to one target in one Environment — a Flux "
-                 "Kustomization, a PyPI publish, or a manually tracked target. Mirrors current "
-                 "state, one node per (environment, target kind, target name); rollout history "
-                 "is v2." .
+    rdfs:comment "The rollout of an Artifact OR a Commit to one target in one Environment — a Flux "
+                 "Kustomization, a PyPI publish, or a manually tracked target. prov:used binds an "
+                 "Artifact for built units and a Commit for IaC/GitOps repos, which ship nothing "
+                 "and reconcile a git revision instead (the wl:Effect case, 006 §Deliverable). "
+                 "Mirrors current state, one node per (environment, target kind, target name); "
+                 "rollout history is v2." .
 
 wl:Environment a owl:Class ;
     rdfs:comment "A deployment stage. Deliberately parentless: no surveyed vocabulary models a "
@@ -145,7 +147,8 @@ wlc:pending      a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:pref
 wlc:reconciling  a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "reconciling" ;
     skos:definition "Rollout in progress." .
 wlc:deployed     a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "deployed" ;
-    skos:definition "Reconciliation succeeded; the artifact is live on this target." .
+    skos:definition "Reconciliation succeeded; what the deployment used — an artifact, or a "
+                    "commit for IaC/GitOps targets — is live on this target." .
 wlc:failed       a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "failed" ;
     skos:definition "Reconciliation failed; the target is not serving the intended artifact." .
 
@@ -322,8 +325,8 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 
 | Spec | Change |
 |---|---|
-| 03 | Add the six runtime classes, four SKOS schemes and seven properties to the mint list in acceptance criterion 2; replace the Artifact IRI pattern with the kind-first grammar (§5) and add Deployment/Commit/Build patterns; move Commit from v2 to v1 in the Layer 3 table; **drop `WorkflowRun` from the v2 Layer 2 list** — `wl:Build` subsumes it; extend the `owl:AllDisjointClasses` axiom set; note that a Deliverable's `dct:relation` targets are now typed |
-| 04 | The `observed/deploy` deriver emits the vocabulary in §2–§4 and the IRIs in §5; its output is the projection table in §6 |
+| 006 | Add the six runtime classes, four SKOS schemes and seven properties to the mint list in acceptance criterion 2; replace the Artifact IRI pattern with the kind-first grammar (§5) and add Deployment/Commit/Build patterns; move Commit from v2 to v1 in the Layer 3 table; **drop `WorkflowRun` from the v2 Layer 2 list** — `wl:Build` subsumes it; extend the `owl:AllDisjointClasses` axiom set; note that a Deliverable's `dct:relation` targets are now typed; (006 mints `wl:deliveredBy`, Deliverable→Component, to close the Component→Section → Deliverable → Environment join, since `wl:Build` has no v1 projection source to derive it from; 006 also mints `wl:Effect` ⊂ `wl:Deliverable` for artifact-free IaC/GitOps delivery, whose witness is a Commit rather than an Artifact) |
+| 007 | The `observed/deploy` deriver emits the vocabulary in §2–§4 and the IRIs in §5; its output is the projection table in §6 |
 | Migration | None. This spec adds no column and changes no constraint; every enum mirrors a `CHECK` that already exists |
 | rdf-registry | `rdf/wl/ontology.ttl` and `rdf/wl/concept.ttl` gain these terms; `rdf/shapes/wl-shapes.ttl` gains the node shapes below |
 
