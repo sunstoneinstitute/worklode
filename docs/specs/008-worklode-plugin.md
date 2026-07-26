@@ -1,7 +1,10 @@
 # Spec 008 — Worklode plugin (Claude Code integration)
 
-**Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source:** D13, D14, D15 ·
-**Depends on:** 01 (execution backbone, worktree-bound leases), 02 (`claim --next`, `concern`/`focus`)
+**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source:** D13, D14, D15 ·
+**Depends on:** 004 (execution backbone, worktree-bound leases), 005 (`claim --next`, `concern`/`focus`)
+**Amended by:** 014 (design docs as graph objects)
+
+> **Prefix renamed by 014 §1.** Read `ls:governs` / `ls:affects` below as `wl:governs` / `wl:affects`.
 
 ## Purpose & scope
 
@@ -108,6 +111,8 @@ Notes:
 
 ## `lode task brief <id> --json`
 
+> **Amended by 014.** The brief carries the governing **Spec section** (a `wl:Section` node, bounded by construction), not a Spec/Plan excerpt.
+
 **Deterministic context assembly — the biggest single token win.** One bounded, machine-assembled
 payload replaces the model spelunking through files to reconstruct what a task is about. Consumed from
 005/006; this spec specifies what the plugin injects and when.
@@ -136,10 +141,14 @@ decomposition (D15), not that the agent should go reading the repo.
 | `/lode-status` | Show the current worktree's task, lease state, and heartbeat freshness (read-only). |
 | `/lode-spec` | Enter graduated design authoring (D15) — produce only the artifacts the task warrants; see *authoring-design-as-graph*. |
 
+> **Amended by 014.** `/lode-spec` produces {ADR, Spec, task subtree} — never a Plan document.
+
 Renewal has **no** slash command — it's hook-enforced (heartbeat). Commands are thin wrappers over
 `lode … --json`; the judgment lives in the skills, not the commands.
 
 ## Skills (judgment only)
+
+> **Amended by 014 §2.** There is no Plan artifact: the graduated output is {nothing, task subtree, Spec/ADR}, and durable rationale is promoted into a Spec or ADR before the tasks close.
 
 Skills carry only what needs model judgment; anything deterministic is a hook or CLI call.
 
@@ -219,6 +228,9 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 5. `lode task brief <id> --json` returns one bounded payload (task + concern/priority + governing
    Spec/Plan excerpt + affected components + definition-of-done + branch) sufficient to start work
    without reading repo files.
+
+> **Amended by 014.** The criterion reads "governing Spec **section**"; there is no Plan excerpt to assemble.
+
 6. Hooks are compiled binaries that daisy-chain via `--next`; a downstream hook still runs after
    Worklode's.
 7. The three skills exist and carry judgment only (no renewal logic in `working-under-worklode`;

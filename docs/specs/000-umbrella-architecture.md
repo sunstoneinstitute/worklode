@@ -1,7 +1,12 @@
 # Spec 000 — Worklode architecture & spec map (umbrella)
 
 **Date:** 2026-07-21 · **Status:** spec · **Source:** graduated from the approved design
-record `../2026-07-21-worklode-platform-graph-design.md` (D1–D15; full rationale there).
+record `003-platform-graph-design.md` (D1–D15; full rationale there).
+
+**Amended by:** 014, 015
+
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`015`);
+cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
 architecture system — the successor scope of the original `wl` work tracker.
@@ -36,6 +41,9 @@ observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are re
 ---
 
 ## v1 / v2 scope
+
+> **Amended by 014 §2 and 015 §7.** Plan is no longer a DesignDoc subclass (plan-shaped work is a
+> task subtree), and Commit moves from v2 to v1.
 
 **v1:** Component-grained graph; DesignDoc (ADR/Spec/Plan) with `dct:hasPart` decomposition;
 Task/Issue/PR/Artifact/Deployment/Environment projected from what Worklode already ingests;
@@ -75,6 +83,9 @@ single context. Each is an independent spec → plan → implementation cycle.
 - **Review:** design docs reviewed via **crit**; `proposed → accepted` gated on crit resolution.
 - **Determinism lens (D14):** push coordination into deterministic, token-free machinery
   (compiled hooks, CLI+`--json`, server-side selection); spend model tokens only on judgment.
+> **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`;
+> rdf-registry sources move `rdf/ls/` → `rdf/wl/`.
+
 
 ## Decision index (record → owning spec)
 

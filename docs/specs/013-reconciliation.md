@@ -2,6 +2,7 @@
 
 **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 004 (execution
 backbone), the delivery lifecycle already shipped in `internal/store/delivery_resolve.go`.
+**Amended by:** 014 (design docs as graph objects — supersedes engine 3 and `task_docs`)
 
 ## Purpose & scope
 
@@ -17,6 +18,8 @@ This spec covers, and only covers:
   anyone goes hunting for missing tasks.
 - **`lode doctor`** — telling a developer why their own setup misbehaves.
 - The **`task_docs`** link and the **`events.applied_at`** marker the above require.
+
+> **Amended by 014 §6.** Only `events.applied_at` remains in scope; the `task_docs` link and the spec-drift engine are superseded. Engines 1 and 2 are untouched.
 
 Out of scope (reference, do not duplicate): architectural drift between asserted and observed
 graph layers (04 — a different diff over different entities, blocked on 03); promoting *untracked*
@@ -164,6 +167,8 @@ lines already present in task bodies.
 
 **`events.applied_at timestamptz`** — nullable; set when an event's apply completes, by either path.
 
+> **Superseded by 014 §6.** `task_docs` gives way to `.worklode/implements.yaml`; only `events.applied_at` survives from this section.
+
 The down migration drops both; the repo's `migrate up`/`down` round-trip check covers it.
 
 ---
@@ -227,6 +232,9 @@ No dependency on 006, 007, or 009.
    single-instance election (004, open Q4)?
 
 ## Acceptance criteria
+
+> **Closed by 014 §10.** Per-project configuration, not convention — and temporary, since documents move into the graph.
+
 
 - **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
   exactly the typed-table and `state_log` result a live delivery would have; the resulting
