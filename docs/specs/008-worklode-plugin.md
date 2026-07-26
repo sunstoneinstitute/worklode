@@ -191,9 +191,9 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 
 - **Spec 004** — worktree-bound lease model (bind/expire/sweeper/release), task state machine, events.
   This spec assumes the backbone can record a worktree→lease binding and expire it.
-- **Spec 02** — `lode task claim --next` (atomic rank+lease), `concern`/`focus`, `--strict-focus`,
+- **Spec 005** — `lode task claim --next` (atomic rank+lease), `concern`/`focus`, `--strict-focus`,
   `needs-decomposition` sizing and the ~100k budget.
-- **Spec 03** — `lode task brief` content (`ls:governs`/`ls:affects` edges, Deliverable/definition-of-done)
+- **Spec 006** — `lode task brief` content (`ls:governs`/`ls:affects` edges, Deliverable/definition-of-done)
   and the asserted-layer edges the authoring skill writes.
 - **External** — Claude Code hook events (`EnterWorktree`, `SessionStart`, `SessionEnd`, `ExitWorktree`,
   `PreToolUse`), the `--next`/`execve` daisy-chain contract, and (optionally) the `pre-commit` framework.

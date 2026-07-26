@@ -147,6 +147,8 @@ Shortlist considered:
 
 ## D14 — Claude Code integration: the Worklode plugin
 
+> **Amended by 008 and 011.** The worktree directory is `wt/<id>-<slug>`; the *branch* carries the configurable prefix (`LODE_BRANCH_PREFIX`, default `lode/`). `wl/` is legacy-recognised only.
+
 **Design lens: push coordination into deterministic, token-free machinery; spend model tokens
 only on judgment.** CLI over MCP, hooks over prompts, server-side selection over agent reasoning.
 
@@ -207,10 +209,10 @@ definition-of-done + branch. No file spelunking.
 
 ## D15 — Task sizing & graduated decomposition
 
-- **Not every task needs the same artifacts.** Most need a **Plan**; some need a **Spec/ADR**;
-  many need neither. `/lode-spec` and the authoring skill are graduated — produce only what the
 > **Amended by 014 §2.** There is no Plan document: plan-shaped work is an ordered task subtree, so graduation now runs {nothing → task subtree → Spec/ADR}.
 
+- **Not every task needs the same artifacts.** Most need a **Plan**; some need a **Spec/ADR**;
+  many need neither. `/lode-spec` and the authoring skill are graduated — produce only what the
   task's complexity warrants; don't ceremony-tax small tasks.
 - **`needs-decomposition`** — a task label meaning scope is too big to fit the context window's
   **"smart zone"** (the effective-reasoning region, well below the hard limit). Such a task is

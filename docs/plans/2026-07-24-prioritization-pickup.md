@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement `docs/specs/worklode/02-prioritization-and-pickup.md`: `concern`, `project.focus`, `needs_decomposition`, the ranking function, and atomic `lode task claim --next`.
+**Goal:** Implement `docs/specs/005-prioritization-and-pickup.md`: `concern`, `project.focus`, `needs_decomposition`, the ranking function, and atomic `lode task claim --next`.
 
 **Architecture:** Ranking is computed server-side in Go, not SQL: one query fetches the candidate ready set (ready + unblocked + unclaimed + not needs-decomposition), one recursive-CTE query computes `blocking_fan_out` for all candidates, Go sorts by the spec key, then attempts the spec-004 atomic `Claim` on each candidate in rank order — a lost race (`ErrLeased`/`ErrBlocked`/`ErrBadTransition`) just advances to the next candidate. No list→pick→claim window exists for callers; atomicity lives entirely in `Claim`.
 
@@ -190,7 +190,7 @@ or `{"claimed": false, "reason": "no-ready-task"}` (HTTP 200 — an empty ready 
 
 **Steps:**
 
-- [x] **Step 1: `lode task claim [<id>] --next --project <p> --strict-focus --dry-run`.** `--next` and a positional id are mutually exclusive (error if both). `--next` posts to claim-next with worktree from `WorktreeIdentity(".")` (plan 01); `--json` prints the server response verbatim; human output prints `claimed WL-7 (fix-the-thing) — branch wl/WL-7-fix-the-thing` or `no ready task`. Exit 0 in both claimed and none-ready cases; non-zero only on real errors (spec acceptance 6).
+- [x] **Step 1: `lode task claim [<id>] --next --project <p> --strict-focus --dry-run`.** `--next` and a positional id are mutually exclusive (error if both). `--next` posts to claim-next with worktree from `WorktreeIdentity(".")` (plan 004); `--json` prints the server response verbatim; human output prints `claimed WL-7 (fix-the-thing) — branch wl/WL-7-fix-the-thing` or `no ready task`. Exit 0 in both claimed and none-ready cases; non-zero only on real errors (spec acceptance 6).
 - [x] **Step 2: `lode task add --concern <c>`** and new **`lode task edit <id> [--concern <c|none>] [--priority <p>] [--needs-decomposition=<bool>]`** hitting PATCH.
 - [x] **Step 3: `lode project focus <id> [<concern> ...]`** — no concerns prints current focus; with args sets the ordered list; `--clear` empties. 
 - [x] **Step 4: CLI tests** following existing `internal/cmd`/`internal/cli` test patterns (httptest server). Include: `--next --json` none-ready prints `{"claimed":false,...}` and exits 0. Green, commit.

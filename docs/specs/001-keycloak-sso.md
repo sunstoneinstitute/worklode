@@ -20,12 +20,14 @@ the same OAuth2 login. Agent/service token issuance is unchanged.
 | Decision | Choice |
 |---|---|
 | Credential model | Unchanged: opaque `wl_` tokens remain the only API credential. SSO is a front door for minting them. |
-| CLI login | `wl login`: auth-code + PKCE against Keycloak with localhost redirect (kubelogin shape). Benefits transparently from macOS Platform SSO when that lands. |
+| CLI login | `lode login`: auth-code + PKCE against Keycloak with localhost redirect (kubelogin shape). Benefits transparently from macOS Platform SSO when that lands. |
 | Token exchange | New unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wl_` token. |
 | Web UI gating | Native OIDC sessions in the server (auth-code + PKCE redirect, signed cookie). Not oauth2-proxy — no k8s deployment exists yet, and native works the same in compose and k8s. |
 | Authorization | Keycloak client `worklode` with client roles `user` and `admin`, delivered in the `groups` claim (org-standard `client-roles-as-groups` mapper). `user` required to log in; `admin` maps to `Actor.Admin`, re-synced on every login. |
 | Actor provisioning | Auto-provision `human` actors on first login: id = `preferred_username`, display name = `name` claim. |
-| Feature flag | All of this is off unless `WL_OIDC_ISSUER` + `WL_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
+| Feature flag | All of this is off unless `LODE_OIDC_ISSUER` + `LODE_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
+
+> **Authorization amended by 002 §D.** Keycloak client roles govern only Keycloak-authenticated actors; GitHub-authenticated actors derive `user`/`admin` from org and team membership.
 
 ## Keycloak configuration (admin-cluster repo)
 
@@ -51,10 +53,10 @@ New env (all optional; feature disabled when issuer/client unset):
 
 | Var | Meaning |
 |---|---|
-| `WL_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
-| `WL_OIDC_CLIENT_ID` | e.g. `worklode` |
-| `WL_PUBLIC_URL` | External base URL, for the web callback redirect URI |
-| `WL_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
+| `LODE_OIDC_ISSUER` | e.g. `https://auth.sunstoneinstitute.ai/realms/sunstone` |
+| `LODE_OIDC_CLIENT_ID` | e.g. `worklode` |
+| `LODE_PUBLIC_URL` | External base URL, for the web callback redirect URI |
+| `LODE_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
 
 ID-token verification uses `github.com/coreos/go-oidc/v3` (JWKS fetch +
 cache; checks signature, `iss`, `aud`, `exp`). Shared by both flows below.
@@ -76,10 +78,10 @@ OIDC is unconfigured.
 
 ### Web UI sessions
 
-When OIDC is enabled, the web UI routes (`/`, `/tasks/{id}`,
-`/projects/{id}`) require a valid session cookie; otherwise they 302 to
 > **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path.
 
+When OIDC is enabled, the web UI routes (`/`, `/tasks/{id}`,
+`/projects/{id}`) require a valid session cookie; otherwise they 302 to
 `/auth/login`. `/healthz` and `/metrics` stay open. When OIDC is
 unconfigured the UI stays open as today.
 
@@ -89,18 +91,20 @@ unconfigured the UI stays open as today.
   token, require `user` role, upsert actor (same logic as token exchange),
   set session cookie, 302 to the originally requested page.
 - Session cookie: HMAC-SHA256-signed `{username, expiry}` under
-  `WL_SESSION_SECRET`; ~12 h lifetime; `HttpOnly`, `Secure`,
+  `LODE_SESSION_SECRET`; ~12 h lifetime; `HttpOnly`, `Secure`,
   `SameSite=Lax`. No server-side session state. No logout endpoint —
   cookies expire.
 
-## CLI: `wl login`
+## CLI: `lode login`
+
+> **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). The CLI no longer speaks OIDC; it opens the server's `/auth/cli/login` and redeems a one-time code at `/auth/cli/token`.
 
 1. Start a localhost callback listener on port 8000 (fallback 18000).
 2. Open the browser to the Keycloak authorize URL (auth-code + PKCE).
 3. Redeem the code directly against Keycloak's token endpoint for an ID
    token.
 4. `POST /auth/oidc/token` to the worklode server (`--server` /
-   `WL_SERVER` / config file, as today).
+   `LODE_SERVER` / config file, as today).
 5. Write the returned `wl_` token to `~/.config/worklode/config.toml` and print
    the actor id and token expiry.
 
@@ -116,6 +120,6 @@ unconfigured the UI stays open as today.
 
 ## Out of scope
 
-- Refresh tokens (re-run `wl login`), logout, device flow (not enabled in
+- Refresh tokens (re-run `lode login`), logout, device flow (not enabled in
   this Keycloak), web-UI write actions, per-user authz beyond the existing
   `Admin` bool, and any change to agent/service token issuance.
