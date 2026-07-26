@@ -1,4 +1,4 @@
--- Delivery lifecycle (docs/specs/2026-07-25-delivery-lifecycle-design.md):
+-- Delivery lifecycle (docs/specs/011-delivery-lifecycle.md):
 -- rename done -> merged, add delivery states, fact tables, per-repo done_state.
 
 ALTER TABLE tasks DROP CONSTRAINT tasks_state_check;

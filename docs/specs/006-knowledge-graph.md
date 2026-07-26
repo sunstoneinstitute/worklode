@@ -1,4 +1,4 @@
-# Spec 03 — Knowledge graph: the `ls:` vocabulary, entity model & projection
+# Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:**
 `../2026-07-21-worklode-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 01
@@ -8,7 +8,7 @@
 
 Defines the *knowledge* half of Worklode: the `ls:` RDF vocabulary, the entity model across
 the three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, and the
-backbone→graph projection. This is the model that spec 04 queries for drift and overview.
+backbone→graph projection. This is the model that spec 007 queries for drift and overview.
 
 The vocabulary ships as a **PR to `rdf-registry`** as three files (per ADR-0007 file naming):
 `rdf/ls/ontology.ttl` (RDF 1.1 — classes + plain properties), `rdf/ls/ontology.1-2.ttl` (RDF 1.2 —
@@ -22,13 +22,13 @@ SHACL gate + the RDF-1.2 round-trip), but the published IRI base is **`https://w
 not `sunstone.institute/rdf/`. rdf-registry's pipeline emits the `worklode.io/ns/` base for the
 `rdf/ls/` sources. This breaks ADR-0006's implicit "repo path = host path" mapping (`rdf/ls/` ↔
 `sunstone.institute/rdf/ls/`); rdf-registry owns closing that wrinkle (a base-URL override for the
-`ls` ontology) — tracked in spec 06.
+`ls` ontology) — tracked in spec 009.
 
 **In scope:** the `ls:` terms (reuse vs mint), entity model with v1/v2 marks, Deliverable as
 declared definition-of-done, the IRI grammar, backbone→graph projection, partial supersession.
-**Out of scope (referenced):** backbone tables/lease (01), ranking (02), observed-layer derivers
-& query implementation (04 — this spec defines the *model* it reads), data-platform ops (06 —
-this spec defines the IRI scheme, they host it), plugin (05).
+**Out of scope (referenced):** backbone tables/lease (004), ranking (005), observed-layer derivers
+& query implementation (007 — this spec defines the *model* it reads), data-platform ops (009 —
+this spec defines the IRI scheme, they host it), plugin (008).
 
 **Binding conventions (umbrella):** standards-first; **mint `ls:` sparingly**; **no gtio
 ontologies at all** (research-scoped/experimental). The physical `gtio-sc:Component` is a
@@ -144,7 +144,7 @@ ls:governs a owl:ObjectProperty ;                 # intent → component (assert
 ls:implements a owl:ObjectProperty ;              # execution → intent
     rdfs:range [ a owl:Class ; owl:unionOf ( ls:DesignDoc ls:Deliverable ls:Component ) ] ;
     rdfs:comment "A Task/PullRequest/Issue realises a DesignDoc, Deliverable, or Component. "
-                 "Asserted when authored; observed when derived (spec 04). Union range is "
+                 "Asserted when authored; observed when derived (spec 007). Union range is "
                  "machine-readable; SHACL (ls-shapes.ttl) enforces presence." .
 
 ls:affects a owl:ObjectProperty ;                 # execution → component (observed)
@@ -174,7 +174,7 @@ ls:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;   # Task → Task
 ls:blocks a owl:ObjectProperty, owl:TransitiveProperty ;      # Task → Task (inverse sense of dependsOn)
     owl:inverseOf ls:dependsOn ;
     rdfs:domain ls:Task ; rdfs:range ls:Task ;
-    rdfs:comment "This task blocks that task (backbone-authoritative, spec 01). Transitive." .
+    rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
 ls:inWorkstream a owl:ObjectProperty ;            # Task → Workstream (named-graph anchor membership)
     rdfs:domain ls:Task ; rdfs:range ls:Workstream ;
     rdfs:comment "Membership of a Task in a Workstream. Split from dct:isPartOf so the "
@@ -195,7 +195,7 @@ ls:layer a owl:AnnotationProperty ;               # tags a class/property with i
 ```
 
 Note `ls:status` domain is `ls:DesignDoc`, inherited by all three subclasses. **Task
-execution-state is NOT `ls:status`** — the task state machine is backbone-owned (spec 01); the
+execution-state is NOT `ls:status`** — the task state machine is backbone-owned (spec 004); the
 graph mirrors it as a projected literal, it does not fork the enum (Open Q3).
 
 ### Status SKOS scheme (D4)
@@ -222,7 +222,7 @@ lsc:DesignDocStatusOrder a skos:OrderedCollection ;
 
 `proposed → accepted` is gated on crit-review resolution (umbrella convention). The **order** is
 now data (the `skos:memberList` above), but RDF still doesn't *enforce* legal transitions — the
-transition rules (which move is allowed from where) live with the authoring skill (spec 05).
+transition rules (which move is allowed from where) live with the authoring skill (spec 008).
 
 ### Task-kind & model-layer SKOS schemes
 
@@ -251,24 +251,24 @@ lsc:runtime   a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "ru
 Every minted class/property carries an `ls:layer` tag (e.g. `ls:Component ls:layer lsc:intent`,
 `ls:Task ls:layer lsc:execution`, `ls:Deliverable ls:layer lsc:intent`) so the model is queryable
 by layer. `ls:taskKind` is backbone-projected like the rest of the Task node; `lsc:spike` is the
-time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 02), not free text.
+time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 005), not free text.
 
 ### Decomposition & dependency
 
 ```turtle
 # Decomposition (D4): Spec ⊃ Plan ⊃ Task
-lsid:doc/spec-worklode-03 dct:hasPart lsid:doc/plan-03-projection .
-lsid:doc/plan-03-projection dct:hasPart lsid:task/01H8XZ... .
+lsid:doc/spec-worklode-006 dct:hasPart lsid:doc/plan-006-projection .
+lsid:doc/plan-006-projection dct:hasPart lsid:task/01H8XZ... .
 
 # Dependency
-lsid:doc/spec-worklode-04 dct:requires lsid:doc/spec-worklode-03 .
+lsid:doc/spec-worklode-007 dct:requires lsid:doc/spec-worklode-006 .
 ```
 
-Task-level `child_of` / `blocks` edges are **backbone-authoritative** (spec 01); they surface in
+Task-level `child_of` / `blocks` edges are **backbone-authoritative** (spec 004); they surface in
 the graph as projected `dct:isPartOf` (child_of) and **`ls:blocks` / `ls:dependsOn`** (dependency)
 mirrors keyed by IRI. `ls:dependsOn`/`ls:blocks` are Task→Task and **transitive**, so overview
 reachability (`?t ls:dependsOn+ ?dep`) runs in SPARQL without a reasoner and the critical-path
-closure (spec 04) is expressible as property paths. Task→Workstream membership is `ls:inWorkstream`
+closure (spec 007) is expressible as property paths. Task→Workstream membership is `ls:inWorkstream`
 (kept separate so the Task→Task closure stays type-homogeneous).
 
 ---
@@ -366,21 +366,21 @@ lsid:deliverable/worklode-graph-live
                      lsid:environment/prod .
 
 # A Spec scopes the deliverable; a Task realises it:
-lsid:doc/spec-worklode-06 dct:hasPart lsid:deliverable/worklode-graph-live .
+lsid:doc/spec-worklode-009 dct:hasPart lsid:deliverable/worklode-graph-live .
 lsid:task/01H8XZ...       ls:implements    lsid:deliverable/worklode-graph-live .
 ```
 
 Acceptance criteria are `dct:description` (human-readable) plus declared `dct:relation`
 links to the target Artifact/Environment IRIs. **Auto-confirmation** — probing whether the
 artifact was actually pushed / the deployment is actually live, flipping the Deliverable to
-satisfied — is **v2** and belongs to the observed-layer derivers (spec 04).
+satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 
 ---
 
 ## Canonical IRI scheme (rdf-registry ADR-0006)
 
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
-commitment** that spec 06 references (item 3) and that the data-platform must host.
+commitment** that spec 009 references (item 3) and that the data-platform must host.
 
 **Base:** `https://worklode.io/ns/`
 
@@ -397,7 +397,7 @@ carrying a git branch or version:
 |---|---|---|
 | Component | `id/component/<slug>` (manifest slug; default = repo coords) | `…/id/component/github.com/sunstoneinstitute/worklode` |
 | — multi-component repo | `id/component/<repo-coords>/<sub>` | `…/id/component/github.com/sunstoneinstitute/research-stack/pfas` |
-| DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-worklode-03` |
+| DesignDoc | `id/doc/<slug>` (design-file identity) | `…/id/doc/adr-0007-file-naming` , `…/id/doc/spec-worklode-006` |
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
 | Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
 | Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/worklode/42` |
@@ -406,7 +406,7 @@ carrying a git branch or version:
 
 The per-repo **component manifest** (D5) fixes each component's slug so the IRI is stable even
 when directory layout shifts. Component IRIs are **branch-free**: the work graph lives on one
-fixed graph-server branch (project is a *property*, not a branch — D1/spec 06 item 5).
+fixed graph-server branch (project is a *property*, not a branch — D1/spec 009 item 5).
 
 Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
@@ -422,7 +422,7 @@ read-only into the graph. Design nodes are authored graph-side and are **never**
 the backbone.
 
 **Mechanism.** A single Go **projector** service consumes the backbone's provenance/outbox event
-stream and writes projected quads to `graph-server` over GSP (spec 06 items 2, 4, 5), on the
+stream and writes projected quads to `graph-server` over GSP (spec 009 items 2, 4, 5), on the
 fixed work-graph branch, authenticating via Keycloak client-credentials (`dataplatform-svc`).
 Projection named graphs are **anchored per Workstream** (Open Q4): a Task's quads live in the
 named graph of **each** Workstream it `ls:inWorkstream`, so a Task in several Workstreams appears
@@ -430,8 +430,8 @@ in several graphs (a triple in N graphs = N distinct quads; no conflict). Becaus
 many tasks, the projector maintains a task by a **per-subject replace** — `DELETE` the task IRI's
 existing quads then `INSERT` the new ones, scoped to each of its Workstream graphs — rather than a
 whole-graph `PUT`. **Keyed by subject IRI** → idempotent per (task, graph). A single projector +
-per-branch write lock makes If-Match CAS unnecessary for v1 (spec 06 item 6). (The asserted/&lt;doc&gt;
-and observed/&lt;source&gt; graph families of spec 04 are orthogonal to these Workstream graphs.)
+per-branch write lock makes If-Match CAS unnecessary for v1 (spec 009 item 6). (The asserted/&lt;doc&gt;
+and observed/&lt;source&gt; graph families of spec 007 are orthogonal to these Workstream graphs.)
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
@@ -450,8 +450,8 @@ and observed/&lt;source&gt; graph families of spec 04 are orthogonal to these Wo
 
 Task execution-state is projected as a **literal** (e.g. `ls:taskState "in_progress"`) mirroring
 the backbone enum; it is not modelled as `ls:status` and does not fork the backbone state machine
-(Open Q3). Reads (drift, overview) run against the graph via the SPARQL path (spec 06 item 2 /
-spec 04).
+(Open Q3). Reads (drift, overview) run against the graph via the SPARQL path (spec 009 item 2 /
+spec 007).
 
 ---
 
@@ -477,7 +477,7 @@ lsid:doc/adr-0012 dct:replaces lsid:doc/adr-0004 .
 - `dct:replaces` **with no** `ls:supersededSection` → full supersession (the superseded doc
   moves to `lsc:superseded`).
 - `dct:replaces` **with** one or more `ls:supersededSection` → partial; only those sections
-  are stale. The superseded doc stays `lsc:accepted`; drift queries (spec 04) read the
+  are stale. The superseded doc stays `lsc:accepted`; drift queries (spec 007) read the
   annotation to report which sections are stale.
 
 `ls:supersededSection` is a **domain-free annotation predicate** (ADR-0001 caveat: an annotation
@@ -492,10 +492,10 @@ triple term). Range is a literal section reference (`"§4.2"`, a heading string)
 
 ---
 
-## Accepted deviations — drift suppression (resolves spec 04 Open Q3)
+## Accepted deviations — drift suppression (resolves spec 007 Open Q3)
 
 Some observed-but-unasserted edges are **intentional** — a sanctioned coupling the architecture
-tolerates but never elevated to intent. Without suppression, spec 04's violation query reports them
+tolerates but never elevated to intent. Without suppression, spec 007's violation query reports them
 forever. An accepted deviation is modelled as an **asserted-layer fact** so it is crit-reviewed,
 provenanced, and expirable like any other asserted edge — **not** a backbone allowlist.
 
@@ -522,22 +522,22 @@ lsid:deviation/pfas-reads-ingest-cache
 ```
 
 - **Home graph.** Authored into the **asserted named graph of the sanctioning ADR**
-  (`…/graph/asserted/<adr-id>`, spec 04), under the same crit gate (`proposed → accepted`) as any
+  (`…/graph/asserted/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
   asserted edge. Superseding or removing that ADR removes the suppression. No new authorisation
   mechanism: whoever may author intent may author a deviation.
 - **Expiry.** Optional `dct:valid` (an `xsd:date`). Past it, the deviation stops suppressing and
-  the violation re-surfaces (spec 04) — a suppression cannot silently outlive its reason. No expiry
+  the violation re-surfaces (spec 007) — a suppression cannot silently outlive its reason. No expiry
   = indefinite, but every deviation stays listable (`lode drift --acknowledged`), never invisible.
-- **Scope.** Predicate-general (names any `s/p/o`); in v1 only spec 04's 4.1 `dct:requires`
+- **Scope.** Predicate-general (names any `s/p/o`); in v1 only spec 007's 4.1 `dct:requires`
   violation query consumes it.
 
 ## Dependencies
 
-- **Spec 01 (backbone):** owns Task state, leases, `blocks`/`child_of`; emits the event/outbox
+- **Spec 004 (backbone):** owns Task state, leases, `blocks`/`child_of`; emits the event/outbox
   stream the projector consumes.
-- **Spec 04 (drift/query):** consumes this model — reads the two-layer diff; owns observed-layer
+- **Spec 007 (drift/query):** consumes this model — reads the two-layer diff; owns observed-layer
   derivers and Deliverable auto-confirmation (v2).
-- **Spec 06 (data-platform):** hosts the IRI scheme defined here; must ship prod `graph-server`,
+- **Spec 009 (data-platform):** hosts the IRI scheme defined here; must ship prod `graph-server`,
   a SPARQL read path (Oxigraph + outbox materializer), external write auth, and a fixed writable
   branch.
 - **rdf-registry:** the `ls:` PR must satisfy ADR-0006 (IRI), ADR-0007 (filenames), ADR-0001
@@ -553,13 +553,13 @@ lsid:deviation/pfas-reads-ingest-cache
 2. ~~`ls:supersededSection` vs. a standard~~ — **CONFIRMED:** mint the domain-free annotation
    predicate.
 3. ~~Task-state representation~~ — **CONFIRMED:** projected as a literal mirror; does not fork the
-   backbone-owned state machine (01).
+   backbone-owned state machine (004).
 4. ~~Named-graph granularity~~ — **RESOLVED.** Projection named graphs are anchored on
    **Workstreams** (`ls:Project`/`ls:OngoingMaintenance`, parent `ls:Workstream`). A Task
    `ls:inWorkstream` ≥1 Workstream and its quads live in each such graph (a triple in N graphs =
    N distinct quads; RDF has no exclusivity constraint). The projector maintains a task by a
    per-subject `DELETE`/`INSERT` within each of its Workstream graphs (see Projection). Separate
-   from the asserted/&lt;doc&gt; and observed/&lt;source&gt; graph families (spec 04).
+   from the asserted/&lt;doc&gt; and observed/&lt;source&gt; graph families (spec 007).
 5. ~~RDF-1.2 publish blocker~~ — **RESOLVED:** rdf-registry publishes 1.2 alongside 1.1
    (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
 6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
@@ -577,7 +577,7 @@ lsid:deviation/pfas-reads-ingest-cache
    `lsc:TaskKind`, `lsc:ModelLayer`; everything else reuses
    `dcterms`/`foaf`/`prov`/`doap`/`skos`/`rdf`/`owl`. **No gtio term appears.**
 3. The IRI grammar for Component / DesignDoc / Task / Deliverable / Issue / PR / Artifact /
-   Deployment / Environment is documented and branch-free (ADR-0006 §3); spec 06 can host it.
+   Deployment / Environment is documented and branch-free (ADR-0006 §3); spec 009 can host it.
 4. The projector can `PUT` a Task's named graph (keyed by its `lsid:task/…` IRI) to the fixed
    work-graph branch on a backbone lifecycle event, idempotently, and a SPARQL read returns it.
 5. Decomposition (`Spec ⊃ Plan ⊃ Task` via `dct:hasPart`), dependency (`dct:requires`),
@@ -590,7 +590,7 @@ lsid:deviation/pfas-reads-ingest-cache
 7. An `ls:AcceptedDeviation` names a `dct:requires` edge via `rdf:subject`/`predicate`/`object`
    **without** asserting it (the edge is absent from the asserted layer), carries `ls:sanctionedBy`
    → an ADR and an optional `dct:valid` expiry, and is distinguishable by a drift query
-   (spec 04) as suppressing vs. expired.
+   (spec 007) as suppressing vs. expired.
 8. **Workstream named graphs:** a Task belonging to two Workstreams (`ls:inWorkstream`) has its
    quads present in **both** Workstream named graphs; a per-subject re-projection updates the task
    in each without disturbing other tasks in those graphs.

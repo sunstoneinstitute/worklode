@@ -1,18 +1,18 @@
-# Spec 08 — Design documents as graph objects
+# Spec 014 — Design documents as graph objects
 
-**Status:** draft · **Umbrella:** `00-umbrella-architecture.md` · **Depends on:** 03 (knowledge
-graph — amends it), 04 (drift & overview — supplies a new deriver), 01 (execution backbone) ·
-**Amends:** 03, 04, 05, 07, and rdf-registry ADR-0006.
+**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 006 (knowledge
+graph — amends it), 007 (drift & overview — supplies a new deriver), 004 (execution backbone) ·
+**Amends:** 006, 007, 008, 013, and rdf-registry ADR-0006.
 
 ## Purpose & scope
 
-Spec 03 already decided that design documents are **graph-authored, never projected** — a Spec or
+Spec 006 already decided that design documents are **graph-authored, never projected** — a Spec or
 ADR is an intent-layer object, not a file. The implementation never caught up: superpowers writes
-`docs/superpowers/{specs,plans}/`, spec 07 models a spec as `task_docs(repo, path)`, and this
-repo keeps `docs/specs/worklode/`. This spec closes that gap and makes design documents durable
-enough to link against.
+`docs/superpowers/{specs,plans}/`, spec 013 models a spec as `task_docs(repo, path)`, and this
+repo keeps design documents as flat files in `docs/specs/`. This spec closes that gap and makes
+design documents durable enough to link against.
 
-The organising problem: **an in-repo file must be able to say "this code satisfies §4.2 of spec 03,
+The organising problem: **an in-repo file must be able to say "this code satisfies §4.2 of spec 006,
 as validated against version 3" and still be correct a year later.** That single requirement drives
 everything below — addressable sections, immutable accepted content, document versioning, and
 derived (never declared) implementation coverage.
@@ -28,10 +28,10 @@ This spec covers, and only covers:
 - **Demoting Plans** out of the document model into the execution backbone.
 - The **authoring, review and publication surfaces**.
 
-Out of scope (reference, do not duplicate): the two-layer drift model and the other derivers (04);
-task ranking (02); the lease lifecycle (01); reconciliation of *ingestion* gaps (07 — a different
+Out of scope (reference, do not duplicate): the two-layer drift model and the other derivers (007);
+task ranking (005); the lease lifecycle (004); reconciliation of *ingestion* gaps (013 — a different
 diff over different entities); and **adoption** — importing an existing GitHub project's issues,
-documents and repos into this model is candidate spec 09, not this spec (see *Adoption is out of
+documents and repos into this model is candidate spec 015, not this spec (see *Adoption is out of
 scope*).
 
 ---
@@ -41,7 +41,7 @@ scope*).
 `ls:` predates the rename from *lodespar* to *Worklode*. No occurrence survives outside
 documentation (187 occurrences across 11 Markdown files; zero in Go, SQL or YAML), and the `ls:`
 ontology has not yet been opened as a PR against rdf-registry. The rename is therefore free now and
-becomes a breaking change the moment that PR lands. **It must happen before spec 03 ships.**
+becomes a breaking change the moment that PR lands. **It must happen before spec 006 ships.**
 
 | Role | Old | New | Namespace |
 |---|---|---|---|
@@ -62,8 +62,8 @@ as one product.
 
 ### Plans are demoted
 
-Spec 03 places `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That is wrong, and
-spec 05 already contradicts it:
+Spec 006 places `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That is wrong, and
+spec 008 already contradicts it:
 
 > Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `brainstorming`,
 > `subagent-driven-development`), **re-emitting the results as `lode` tasks** with `concern` +
@@ -113,7 +113,7 @@ wl:Section a owl:Class ;               # §3
 [] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .   # was ( ADR Spec Plan )
 ```
 
-`wl:Section` joins the top-level disjointness axiom in 03 alongside `wl:Component`, `wl:DesignDoc`,
+`wl:Section` joins the top-level disjointness axiom in 006 alongside `wl:Component`, `wl:DesignDoc`,
 `wl:Task`, `wl:Deliverable` and `wl:Workstream`.
 
 ---
@@ -123,14 +123,14 @@ wl:Section a owl:Class ;               # §3
 Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
 is one requirement: **sections must be addressable nodes.**
 
-Spec 03 explicitly declined this, and was right to for the requirement it had:
+Spec 006 explicitly declined this, and was right to for the requirement it had:
 
 > Range is a literal section reference (`"§4.2"`, a heading string) — deliberately **not** a section
 > IRI. […] recommended over minting section sub-IRIs (lighter; no addressable-section namespace to
 > maintain).
 
 That trade-off inverts here. A maintained addressable-section namespace is precisely what makes an
-external link durable, so the cost 03 avoided is now the feature. This spec supersedes that choice
+external link durable, so the cost 006 avoided is now the feature. This spec supersedes that choice
 and, with it, retires `wl:supersededSection`.
 
 ### Anchors
@@ -144,10 +144,10 @@ therefore explicit, author-visible, and portable to any Pandoc-compatible render
 …as described in [Section 2.1](#sec-2.1).
 ```
 
-The IRI follows 03's `id/<type>/<localid>` grammar without a new shape:
+The IRI follows 006's `id/<type>/<localid>` grammar without a new shape:
 
 ```
-wlid:section/<doc-slug>/<anchor>      e.g.  wlid:section/spec-worklode-08/sec-3
+wlid:section/<doc-slug>/<anchor>      e.g.  wlid:section/spec-worklode-014/sec-3
 ```
 
 The anchor is **assigned once, at first publication, and recorded in the document source**. The
@@ -212,24 +212,24 @@ Every design document has a **version-free canonical IRI** that always denotes t
 and one **immutable versioned IRI** per published version:
 
 ```
-wlid:doc/spec-worklode-08         # canonical — always the current version
-wlid:doc/spec-worklode-08/v3      # immutable snapshot
+wlid:doc/spec-worklode-014         # canonical — always the current version
+wlid:doc/spec-worklode-014/v3      # immutable snapshot
 ```
 
 Reuse rather than mint — DCAT 3 (W3C Recommendation) standardises exactly this pattern:
 
 ```turtle
-wlid:doc/spec-worklode-08
+wlid:doc/spec-worklode-014
     a wl:Spec ;
-    dcat:hasCurrentVersion wlid:doc/spec-worklode-08/v3 ;
-    dcat:hasVersion        wlid:doc/spec-worklode-08/v1 ,
-                           wlid:doc/spec-worklode-08/v2 ,
-                           wlid:doc/spec-worklode-08/v3 .
+    dcat:hasCurrentVersion wlid:doc/spec-worklode-014/v3 ;
+    dcat:hasVersion        wlid:doc/spec-worklode-014/v1 ,
+                           wlid:doc/spec-worklode-014/v2 ,
+                           wlid:doc/spec-worklode-014/v3 .
 
-wlid:doc/spec-worklode-08/v3
+wlid:doc/spec-worklode-014/v3
     dcat:version        "3" ;
-    dcat:previousVersion wlid:doc/spec-worklode-08/v2 ;
-    prov:wasRevisionOf   wlid:doc/spec-worklode-08/v2 ;
+    dcat:previousVersion wlid:doc/spec-worklode-014/v2 ;
+    prov:wasRevisionOf   wlid:doc/spec-worklode-014/v2 ;
     prov:wasAttributedTo wlid:agent/stig ;
     dct:issued "2026-07-26"^^xsd:date .
 ```
@@ -240,7 +240,7 @@ wlid:doc/spec-worklode-08/v3
 
 ### Relationship to ADR-0006
 
-ADR-0006 requires version-free instance IRIs, and spec 03 restates this ("`<localid>` opaque &
+ADR-0006 requires version-free instance IRIs, and spec 006 restates this ("`<localid>` opaque &
 stable, **never** carrying a git branch or version"). Versioned IRIs are compatible with that
 requirement but the reconciliation must be explicit, because it is not self-evident:
 
@@ -289,7 +289,7 @@ precision, one property.
 
 ### `implemented` leaves the status enum
 
-Spec 03's `lsc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
+Spec 006's `lsc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
 implemented`, which asserts that *superseded* precedes *implemented* — incoherent on its face. The
 deeper problem is that implementation is per-section and derived (§6), so a document-level
 `implemented` status is a hand-maintained, lossy summary of something computable, and it will
@@ -319,7 +319,7 @@ for a spec:
    `…/v(n+1)` with status `wlc:proposed`.
 2. The accepted version remains current and authoritative throughout. Readers and drift queries are
    unaffected.
-3. The revision is reviewed with **crit** (as 03 already requires for `proposed → accepted`).
+3. The revision is reviewed with **crit** (as 006 already requires for `proposed → accepted`).
 4. On resolution, publication runs the §4 single transaction and the §7 constraint check together.
    Either both succeed or the revision does not land.
 
@@ -349,17 +349,17 @@ replaying history is both expensive and unreliable.
 
 ### `.worklode/implements.yaml`
 
-Spec 04 already establishes `.worklode/components.yaml` (path globs → Component IRIs). Its natural
+Spec 007 already establishes `.worklode/components.yaml` (path globs → Component IRIs). Its natural
 sibling declares which intent the repository satisfies:
 
 ```yaml
 # .worklode/implements.yaml
 implements:
-  - section: wlid:section/spec-worklode-01/sec-4
-    pinned:  wlid:doc/spec-worklode-01/v2     # version validated against
+  - section: wlid:section/spec-worklode-004/sec-4
+    pinned:  wlid:doc/spec-worklode-004/v2     # version validated against
     by:      [internal/store/lease.go, internal/store/sweeper.go]
-  - section: wlid:section/spec-worklode-07/sec-3.1
-    pinned:  wlid:doc/spec-worklode-07/v1
+  - section: wlid:section/spec-worklode-013/sec-3.1
+    pinned:  wlid:doc/spec-worklode-013/v1
     by:      [internal/hooks/apply.go]
 ```
 
@@ -372,7 +372,7 @@ A claim is made **by a Component**, not by a repository: a repository is a packa
 whereas a component is the unit the architecture is actually described in.
 
 Note what the manifest above does *not* contain: a `component:` field. The claiming component is
-**derived from the `by:` paths** through `components.yaml`'s existing first-match-wins mapping (04).
+**derived from the `by:` paths** through `components.yaml`'s existing first-match-wins mapping (007).
 This follows the principle running through the whole spec — derive, never declare — and removes an
 entire class of drift, since a declared component can disagree with the files listed beside it while
 a derived one cannot.
@@ -383,15 +383,15 @@ Consequences:
   the same version independently. This is not a degenerate case but the correct reading: components
   advance against a spec at their own pace, and two components implementing the same section is
   exactly what the graph should record.
-- **A path matching no component is a publication error**, naming the offending path. Spec 04
+- **A path matching no component is a publication error**, naming the offending path. Spec 007
   already reports unmatched paths as a gap; here it is fatal, because a claim that cannot be
   attributed is a claim that cannot be checked.
 
 ### Single-component repositories
 
 Most repositories hold one component, and they should never have to say so. The clean model already
-exists in 03, which defines the Component IRI as `id/component/<slug>` where the slug is *"manifest
-slug; default = repo coords"*, and in 04, which grants a single-component repo *"a trivial
+exists in 006, which defines the Component IRI as `id/component/<slug>` where the slug is *"manifest
+slug; default = repo coords"*, and in 007, which grants a single-component repo *"a trivial
 whole-repo manifest (or a default)"*.
 
 Made explicit: **every mapped repository has at least one component.** Where `components.yaml` is
@@ -412,7 +412,7 @@ already maintains. The implicit component is promoted to an explicit one the mom
 ### Deriver: `observed/repo-implements`
 
 The manifest is a hand-maintained *claim about code*, so it enters the **observed** layer under
-spec 04's existing deriver contract — idempotent, full-replace, confined to its own named graph:
+spec 007's existing deriver contract — idempotent, full-replace, confined to its own named graph:
 
 - **Input:** every mapped repo's `.worklode/implements.yaml` at the default branch head.
 - **Output:** `<component> wl:implements <section>` into `…/graph/observed/repo-implements`, plus
@@ -431,11 +431,13 @@ machinery:
 
 ### This replaces spec 07's engine 3
 
-Spec 07 engine 3 detects spec drift by comparing a document file's last commit date against a
+### This replaces spec 013's engine 3
+
+Spec 013 engine 3 detects spec drift by comparing a document file's last commit date against a
 task's closure time — a git-mtime heuristic that fires on typo fixes and misses semantic changes to
 a section nobody claimed. The stale-claim query above is exact and section-scoped. **Engine 3 is
-superseded by this spec** and should be removed from 07 rather than built; 07's `task_docs` table
-likewise gives way to the manifest. Engines 1 and 2 of spec 07 are untouched — they diagnose missed
+superseded by this spec** and should be removed from 013 rather than built; 013's `task_docs` table
+likewise gives way to the manifest. Engines 1 and 2 of spec 013 are untouched — they diagnose missed
 *ingestion*, an unrelated problem.
 
 ---
@@ -484,7 +486,7 @@ have already published, which constraint 1 forbids outright. Therefore:
 
 This makes the setting one-way-safe by construction, rather than relying on operator discipline.
 
-These extend `rdf/shapes/wl-shapes.ttl` (03) under the existing SHACL gate (ADR-0003).
+These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR-0003).
 
 ---
 
@@ -493,7 +495,7 @@ These extend `rdf/shapes/wl-shapes.ttl` (03) under the existing SHACL gate (ADR-
 Two enumerations exist today and disagree:
 
 - `deploy/base/migrations/0001_baseline.up.sql:53` → `('feature','bug','chore','spec')`
-- Spec 03 `lsc:TaskKind` → `feature / bug / chore / review / spike`
+- Spec 006 `lsc:TaskKind` → `feature / bug / chore / review / spike`
 
 `spec` is absent from the SKOS scheme; `review` and `spike` are absent from the database. This is a
 live inconsistency independent of everything else in this spec.
@@ -518,7 +520,7 @@ No kind is added for plans, planning, speccing, or reconciliation:
 
 ```turtle
 wl:Task rdfs:subClassOf prov:Activity .
-wlid:doc/spec-worklode-08 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
+wlid:doc/spec-worklode-014 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
 ```
 
 Zero mints, and it cleanly separates authoring from executing — the same task graph can now answer
@@ -535,19 +537,19 @@ Zero mints, and it cleanly separates authoring from executing — the same task 
 | `lode doc revise <slug>` | Open a proposed revision (§5) |
 | `lode doc publish <slug>` | Run §7 constraints, then the §4 transaction |
 | `lode doc anchors <slug>` | List anchors with depth and addressability; the lint an author runs before publishing |
-| `lode drift --docs` | Stale and orphaned claims (§6), alongside 04's other drift |
+| `lode drift --docs` | Stale and orphaned claims (§6), alongside 007's other drift |
 | Read-only web view | Rendered document, per-section coverage badges, version history |
 
 Anchor depth (§7.1) is a **server setting**, surfaced through the existing admin configuration
 path rather than a per-repo file — it governs what claims are expressible across the whole
 installation, so it cannot be a per-repository decision.
 
-Review is **crit**, as 03 already specifies for `proposed → accepted`; sections give crit comments a
+Review is **crit**, as 006 already specifies for `proposed → accepted`; sections give crit comments a
 natural anchor, so a review comment and an implementation claim address the same node. The web view
-extends spec 04's read-only overview surface rather than introducing a new application.
+extends spec 007's read-only overview surface rather than introducing a new application.
 
 The on-disk path of a document ceases to be its identity. Until documents move into the graph,
-tracked paths stay per-project configuration — which is spec 07's open question 2, now answered:
+tracked paths stay per-project configuration — which is spec 013's open question 2, now answered:
 configuration, not convention, and temporary either way.
 
 ---
@@ -565,26 +567,26 @@ configuration, not convention, and temporary either way.
 
 ## Dependencies
 
-- **Spec 03** — the vocabulary this amends; the SHACL gate and `owlrl` closure tests extend to the
+- **Spec 006** — the vocabulary this amends; the SHACL gate and `owlrl` closure tests extend to the
   new terms.
-- **Spec 04** — the deriver contract, named-graph partitioning, and the overview surface.
-- **Spec 01** — task subtrees, which now carry what plans used to.
+- **Spec 007** — the deriver contract, named-graph partitioning, and the overview surface.
+- **Spec 004** — task subtrees, which now carry what plans used to.
 - **rdf-registry** — ADR-0006 amendment; ADR-0003 SHACL gate; the `wl:` rename lands in the same PR
-  as the 03 ontology, never after it.
+  as the 006 ontology, never after it.
 - **crit** — review of proposed revisions.
 
 ## Adoption is out of scope
 
 The constraints in §7 bind **from a document's first publication onward**. Markdown that has never
 been published is unconstrained, so this spec can ship without touching a single existing file, and
-`docs/specs/worklode/00`–`07` keep working exactly as they do today until someone deliberately
-publishes them.
+every existing file in `docs/specs/` keeps working exactly as it does today until someone
+deliberately publishes it.
 
 Two pieces of work follow from this spec without belonging to it:
 
 - **Dogfooding Worklode within Worklode** — a task, not a spec. It is how this design earns
   confidence, and it should not be smuggled in as a migration section.
-- **Onboarding existing projects** — a candidate **spec 09**. Importing an existing GitHub project
+- **Onboarding existing projects** — a candidate **spec 015**. Importing an existing GitHub project
   wholesale (issues → Tasks, `docs/specs/**` and `docs/adr/**` → published documents at v1, repos →
   Components, GitHub projects → Workstreams) is a substantial design in its own right, with real
   questions this spec should not prejudge: what anchors get assigned to a corpus that never had
@@ -599,7 +601,7 @@ Two pieces of work follow from this spec without belonging to it:
 2. ~~Granularity of a section~~ — **RESOLVED:** server-configurable, default 3, governing
    addressability rather than authoring; raising is safe, lowering is constrained (§7).
 3. ~~Migrating the existing corpus~~ — **RESOLVED:** out of scope; constraints bind from first
-   publication. Dogfooding is a task; onboarding is candidate spec 09 (above).
+   publication. Dogfooding is a task; onboarding is candidate spec 015 (above).
 4. ~~Does a Component pin, or a repository~~ — **RESOLVED:** the Component pins, derived from the
    claim's paths rather than declared, with an implicit repo-coords Component for single-component
    repositories (§6).

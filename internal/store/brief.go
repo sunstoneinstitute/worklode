@@ -13,7 +13,7 @@ import (
 // predictable read.
 //
 // GoverningDesign, AffectedComponents, and DefinitionOfDone are reserved for
-// spec 03 (Deliverable/design links) and stay nil in v1; the shape is fixed
+// spec 006 (Deliverable/design links) and stay nil in v1; the shape is fixed
 // now so the wire contract does not change when they are populated.
 type Brief struct {
 	Task               Task     // the task row
@@ -21,9 +21,9 @@ type Brief struct {
 	Branch             string   // <prefix><id>-<slug>
 	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
 	Lease              *Lease   // active lease, or nil
-	GoverningDesign    *string  // reserved: spec 03 (nil in v1)
-	AffectedComponents []string // reserved: spec 03 (nil in v1)
-	DefinitionOfDone   *string  // reserved: spec 03 Deliverable (nil in v1)
+	GoverningDesign    *string  // reserved: spec 006 (nil in v1)
+	AffectedComponents []string // reserved: spec 006 (nil in v1)
+	DefinitionOfDone   *string  // reserved: spec 006 Deliverable (nil in v1)
 }
 
 // Brief assembles the brief for taskID: the task row, its branch, its open

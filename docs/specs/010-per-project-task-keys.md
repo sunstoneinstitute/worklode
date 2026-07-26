@@ -1,7 +1,8 @@
-# Per-project task keys (Jira-style IDs)
+# Spec 010 — Per-project task keys (Jira-style IDs)
 
 **Date:** 2026-07-24 · **Status:** design · **Task:** WL-12 ·
-**Area:** spec 01 (execution backbone — task identity)
+**Umbrella:** `000-umbrella-architecture.md`
+**Area:** spec 004 (execution backbone — task identity)
 
 ## Why
 

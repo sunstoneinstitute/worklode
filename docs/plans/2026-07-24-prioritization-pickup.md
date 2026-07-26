@@ -1,12 +1,12 @@
-# Prioritization & Pickup (spec 02) Implementation Plan
+# Prioritization & Pickup (spec 005) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement `docs/specs/worklode/02-prioritization-and-pickup.md`: `concern`, `project.focus`, `needs_decomposition`, the ranking function, and atomic `lode task claim --next`.
 
-**Architecture:** Ranking is computed server-side in Go, not SQL: one query fetches the candidate ready set (ready + unblocked + unclaimed + not needs-decomposition), one recursive-CTE query computes `blocking_fan_out` for all candidates, Go sorts by the spec key, then attempts the spec-01 atomic `Claim` on each candidate in rank order — a lost race (`ErrLeased`/`ErrBlocked`/`ErrBadTransition`) just advances to the next candidate. No list→pick→claim window exists for callers; atomicity lives entirely in `Claim`.
+**Architecture:** Ranking is computed server-side in Go, not SQL: one query fetches the candidate ready set (ready + unblocked + unclaimed + not needs-decomposition), one recursive-CTE query computes `blocking_fan_out` for all candidates, Go sorts by the spec key, then attempts the spec-004 atomic `Claim` on each candidate in rank order — a lost race (`ErrLeased`/`ErrBlocked`/`ErrBadTransition`) just advances to the next candidate. No list→pick→claim window exists for callers; atomicity lives entirely in `Claim`.
 
-**Tech Stack:** As plan 01 (Go, Postgres/pgx). Builds directly on the plan-01 codebase — do not start this plan until plan 01 is merged.
+**Tech Stack:** As plan 004 (Go, Postgres/pgx). Builds directly on the plan-004 codebase — do not start this plan until plan 004 is merged.
 
 **Settled decisions:**
 - `projects.focus` is `jsonb` (ordered array of concern strings), default `'[]'`.
@@ -110,7 +110,7 @@ type rankInput struct {
 	FanOut  int
 }
 
-// rankTasks orders candidates by the spec-02 key:
+// rankTasks orders candidates by the spec-005 key:
 // default:      (is_critical desc, concern_rank asc, priority asc, fan_out desc)
 // strict-focus: (concern_rank asc, priority asc, fan_out desc)
 // tiebreak: created_at asc, then numeric id asc.
@@ -171,7 +171,7 @@ Focus `[security, completeness]`; T1 high/completeness/5, T2 high/security/1, T3
 {"project": "", "strict_focus": false, "dry_run": false, "worktree": "h:/path", "ttl_seconds": 0}
 ```
 
-`worktree` required unless `dry_run`. Response (spec 02 shape):
+`worktree` required unless `dry_run`. Response (spec 005 shape):
 
 ```json
 {"claimed": true, "task": {"id": "WL-7", "slug": "fix-the-thing", "concern": "security",
@@ -206,6 +206,6 @@ or `{"claimed": false, "reason": "no-ready-task"}` (HTTP 200 — an empty ready 
 
 ---
 
-## Acceptance criteria mapping (spec 02)
+## Acceptance criteria mapping (spec 005)
 
 1. No-collision under contention → Task 5. 2. Worked example (T3 default / T2 strict, full order) → Task 4 steps 4–5. 3. Soft focus never idles → Task 4 step 5(b). 4. Critical bypass + `--strict-focus` opt-out → Task 4 (orders differ exactly by `is_critical`). 5. Decomposition gate → Task 4 step 5(c) (+ children claimable = normal ready tasks, covered by fixture). 6. Stable `--json`, none-ready exit 0 → Tasks 6–7. 7. Determinism/stable tiebreak → `rankTasks` unit tests (add a repeated-run assertion in Task 4 step 4).

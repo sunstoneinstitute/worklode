@@ -1,4 +1,4 @@
-# GitHub App authentication for worklode
+# Spec 002 — GitHub App authentication for worklode
 
 **Date:** 2026-07-20
 **Status:** Design — approved shape, pending spec review

@@ -1,4 +1,4 @@
-# worklode → platform knowledge graph — design record
+# Spec 003 — worklode → platform knowledge graph design record
 
 **Date:** 2026-07-21 · **Status:** brainstorming (grill in progress) · **Nothing implemented**
 

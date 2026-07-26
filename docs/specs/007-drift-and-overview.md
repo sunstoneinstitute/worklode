@@ -1,4 +1,4 @@
-# Spec 04 — Drift & overview
+# Spec 007 — Drift & overview
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source decisions:** D5, D6,
 D12 (design record `../2026-07-21-worklode-platform-graph-design.md`).
@@ -20,19 +20,19 @@ This spec covers, and only covers:
 - **Critical path v1** — estimate-free criticality (D12).
 - **The overview surface** — how all of the above is exposed (`lode` subcommands + read-only web).
 
-Out of scope (reference, do not duplicate): the vocabulary/entity model/projection (03); the
-`claim --next` ranking function itself (02 — we supply the *ready-frontier ordering* it consumes);
-the execution backbone (01); the plugin (05); the data-platform deploy of the query path (06).
+Out of scope (reference, do not duplicate): the vocabulary/entity model/projection (006); the
+`claim --next` ranking function itself (005 — we supply the *ready-frontier ordering* it consumes);
+the execution backbone (004); the plugin (008); the data-platform deploy of the query path (009).
 
 ---
 
 ## The two-layer model
 
-Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliverables from 03):
+Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliverables from 006):
 
 - **Asserted layer (intent).** Authored *with* a design doc, crit-reviewed, `proposed → accepted`
   gated on crit resolution. These are the edges a human/agent claims are true: "component A
-  *should* depend on B", "this Spec *governs* component C". Written by the design-authoring skill (05).
+  *should* depend on B", "this Spec *governs* component C". Written by the design-authoring skill (008).
 - **Observed layer (reality).** Derived mechanically by the derivers below from code, PRs, and
   deploys. No human authors these; they are recomputed and overwritten on every run.
 
@@ -46,13 +46,13 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 06):
 
 | Named graph | Layer | Written by |
 |---|---|---|
-| `…/graph/asserted/<designdoc-id>` | asserted | design-authoring skill (05), one graph per design doc |
+| `…/graph/asserted/<designdoc-id>` | asserted | design-authoring skill (008), one graph per design doc |
 | `…/graph/observed/go-imports` | observed | Go/package-import deriver |
 | `…/graph/observed/repo-layout` | observed | component-boundary deriver |
 | `…/graph/observed/pr-affects` | observed | PR-path deriver |
 | `…/graph/observed/deploy` | observed | deploy/runtime projection from `internal/hooks/` |
 
-Concrete IRI grammar for the graph names is owned by 03/06 (branch-free term IRIs, ADR-0006);
+Concrete IRI grammar for the graph names is owned by 006/009 (branch-free term IRIs, ADR-0006);
 the `asserted` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
 its writes to its own `observed/*` graph, so a bad run can never corrupt asserted intent.
 
@@ -66,7 +66,7 @@ with a `ls:layer` — heavier to query and to replace atomically than one graph 
 All derivers share a contract:
 - **Idempotent & full-replace.** A run computes the complete edge set for its source and `PUT`s
   its whole `observed/*` graph. No incremental deltas; no stale edges survive a run.
-- **Deterministic.** Same inputs → same triples (stable IRI minting via 03's scheme).
+- **Deterministic.** Same inputs → same triples (stable IRI minting via 006's scheme).
 - **Cheap to re-run.** Triggered on a schedule (CI/cron) and/or by the relevant hook; a content
   hash of the inputs short-circuits a no-op `PUT`.
 - **Confined** to its own named graph (above).
@@ -77,7 +77,7 @@ All derivers share a contract:
   `go.mod` module paths. Other stacks: `package.json`, `pyproject.toml`/import scan, etc.
 - **Map** each source package/module → the owning **Component** via the component-boundary
   manifest (deriver 2). Import edges *within* a component are dropped; edges *between* components
-  become `<componentA> dct:requires <componentB>` *(03 confirms `dct:requires`)*.
+  become `<componentA> dct:requires <componentB>` *(006)*.
 - **Output graph:** `observed/go-imports`.
 - This layer is the ground truth that architectural-drift queries compare asserted intent against.
 
@@ -88,7 +88,7 @@ All derivers share a contract:
   because one repo can hold many components (e.g. **research-stack**); a repo with a single
   component gets a trivial whole-repo manifest (or a default).
 - **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer, D4) to
-  each Component *(03 confirms the repo↔component predicate; `dct:hasPart`/`isPartOf` proposed)*.
+  each Component *(006)*.
 - **Output graph:** `observed/repo-layout`.
 - The manifest is also the **path→component index** consumed by derivers 1 and 3; it is the single
   place component boundaries are declared.
@@ -98,7 +98,7 @@ All derivers share a contract:
 # .worklode/components.yaml
 repo: <doap:Project IRI or short name>
 components:
-  - iri: <component IRI>          # minted per 03 scheme
+  - iri: <component IRI>          # minted per 006 scheme
     name: ingest
     paths: ["cmd/ingest/**", "internal/ingest/**"]
   - iri: <component IRI>
@@ -113,7 +113,7 @@ components:
 - **Join PR → Task:** via the deterministic worktree/branch name `wt/<id>-<slug>` (D14) or an
   explicit task ref in the PR body. *(Open question below — confirm the join is always present.)*
 - **Map** each changed path → Component via the manifest, then emit `<task> ls:affects <component>`
-  *(03 mints `ls:affects`)*.
+  *(006)*.
 - **Output graph:** `observed/pr-affects`.
 - Feeds unimplemented/drifted-spec queries (a Task that touched a component the Spec governs).
 
@@ -123,7 +123,7 @@ components:
   (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). D6: most of
   layers 2–3 are already ingested → this is **projection, not new build**.
 - **Output:** observed `Artifact` / `Deployment` / `Environment` nodes and their edges to the
-  Deliverable reconciliation point (Deliverable model owned by 03/D7).
+  Deliverable reconciliation point (Deliverable model owned by 006/D7).
 - **Output graph:** `observed/deploy`.
 - v1 stops at projecting what the hooks record; auto-*confirming* a Deliverable by probing prod is
   v2 (D7).
@@ -133,7 +133,7 @@ components:
 ## Standing queries
 
 Each is a SPARQL-shaped read over the graph. Sketches use `ls:` for vocabulary, `g:` for the graph
-names above, and elide the IRI prefix boilerplate 03 defines. Layer comparison is expressed with
+names above, and elide the IRI prefix boilerplate 006 defines. Layer comparison is expressed with
 `GRAPH` clauses; `UNION` across sibling `observed/*` graphs is implied where written as one graph.
 
 ### 4.1 Architectural drift
@@ -141,12 +141,12 @@ names above, and elide the IRI prefix boilerplate 03 defines. Layer comparison i
 Two directions, both surfaced:
 
 **Violation — observed dependency absent from asserted** (undocumented coupling; code did
-something the architecture never sanctioned), **minus sanctioned accepted deviations** (03):
+something the architecture never sanctioned), **minus sanctioned accepted deviations** (006):
 ```sparql
 SELECT ?from ?to WHERE {
   GRAPH g:observed { ?from dct:requires ?to . }
   FILTER NOT EXISTS { GRAPH g:asserted { ?from dct:requires ?to . } }
-  # suppress un-expired accepted deviations (ls:AcceptedDeviation, spec 03):
+  # suppress un-expired accepted deviations (ls:AcceptedDeviation, spec 006):
   FILTER NOT EXISTS {
     ?dev a ls:AcceptedDeviation ;
          rdf:subject ?from ; rdf:predicate dct:requires ; rdf:object ?to .
@@ -157,7 +157,7 @@ SELECT ?from ?to WHERE {
 ```
 Drift is thus **`observed − asserted − acknowledged`**, where *acknowledged* = un-expired
 `ls:AcceptedDeviation`s. The deviation names the tolerated edge via RDF reification and never
-asserts it (03), so suppression does **not** leak into the asserted layer and the *stale-intent*
+asserts it (006), so suppression does **not** leak into the asserted layer and the *stale-intent*
 query below is unaffected. `xsd:date(NOW())` casts the query clock to match `dct:valid`
 (`xsd:date`); a runtime that lacks `NOW()` binds today's date from `lode` instead. Expired
 deviations re-surface here automatically; all deviations (active + expired) are listable via
@@ -206,7 +206,7 @@ SELECT ?doc WHERE {
 
 ### 4.5 The ready frontier — ready + unblocked tasks
 
-The set that feeds `claim --next` (02). "Frontier" = the **leading edge of actionable work** — the
+The set that feeds `claim --next` (005). "Frontier" = the **leading edge of actionable work** — the
 tasks right at the boundary between done/blocked and not-yet-startable. A Task is on the frontier
 when it is `ready` and no dependency/blocker is unresolved:
 ```sparql
@@ -228,9 +228,9 @@ SELECT ?t WHERE {
 > projection. This spec does **not** supply the atomic ordering — 02 computes that on the backbone;
 > below is only the read-only overview mirror.
 
-**Overview frontier (mirror of 02's ordering).** The overview frontier is presented pre-sorted by
-the same D9 key `(is_critical, concern_rank, priority, blocking_fan_out)` that **02 computes
-authoritatively on the backbone**. For *human overview only*, 04 additionally offers an enriched
+**Overview frontier (mirror of 005's ordering).** The overview frontier is presented pre-sorted by
+the same D9 key `(is_critical, concern_rank, priority, blocking_fan_out)` that **005 computes
+authoritatively on the backbone**. For *human overview only*, 007 additionally offers an enriched
 cross-store **critical path** (below) over `blocks` + `dct:requires`; this enriched metric is
 **not** used by the atomic `claim --next`.
 
@@ -280,24 +280,24 @@ Everything is a read; nothing here mutates the graph. All commands honor D14 det
 | `lode critical-path [--task <t>]` | critical path, `depth`, `fanout`; flags cycles |
 
 **Read-only web views.** Worklode serves a small read-only dashboard backed by the SPARQL endpoint
-(Oxigraph, per 06): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
+(Oxigraph, per 009): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
 status** view (drifted/unimplemented/accepted), a **critical-path** view, and the **ready
 frontier**. Read-only by construction — the only ways to change the graph are authoring design
-(asserted, via 05) and running derivers (observed); there is no mutation affordance in these views.
+(asserted, via 008) and running derivers (observed); there is no mutation affordance in these views.
 
 ---
 
 ## Dependencies
 
-- **03 — knowledge graph** *(not yet written)*: entity model, `ls:` vocabulary
+- **006 — knowledge graph**: entity model, `ls:` vocabulary
   (`Component`/`DesignDoc`/`Task`/`governs`/`implements`/`affects`), Deliverable, `ls:status` SKOS
   scheme, and the IRI/graph-name grammar every query and deriver above binds to. **Hard blocker.**
-- **06 — data-platform KG requirements**: the SPARQL read path (Oxigraph + outbox materializer),
+- **009 — data-platform KG requirements**: the SPARQL read path (Oxigraph + outbox materializer),
   prod `graph-server`, the fixed writable branch, and external-service write auth the derivers
   `PUT` through. **Hard blocker for the observed-layer writes and every query.**
-- **01 — execution backbone**: `blocks`/`child_of` edges and task status the ready frontier and
+- **004 — execution backbone**: `blocks`/`child_of` edges and task status the ready frontier and
   critical path read; the backbone→KG projection that mirrors them.
-- **02 — prioritization & pickup**: consumes the ready-frontier ordering and `is_critical` /
+- **005 — prioritization & pickup**: consumes the ready-frontier ordering and `is_critical` /
   `blocking-fan-out` this spec produces.
 - **`internal/hooks/`** (`flux.go`, `github.go`): existing ingestion the deploy and PR-affects
   derivers project from.
@@ -305,15 +305,15 @@ frontier**. Read-only by construction — the only ways to change the graph are 
 ## Open questions
 
 1. ~~PR → Task join reliability~~ — **RESOLVED.** Tasks mirror **bidirectionally** to GitHub
-   Issues (`ls:mirrors`, spec 03); a PR joins its Task the GitHub-native way — `Closes #N` in the
+   Issues (`ls:mirrors`, spec 006); a PR joins its Task the GitHub-native way — `Closes #N` in the
    PR body closes the mirrored Issue, and the `pr-affects` deriver resolves PR → Issue → Task
    through it. No bespoke branch-name parse or enforced PR-body task ref needed; we piggyback on
-   how GitHub already models it. (Task↔Issue mirroring is a new requirement on 01/05.)
+   how GitHub already models it. (Task↔Issue mirroring is a new requirement on 004/008.)
 2. **Layer partition mechanism — confirm named graphs.** This spec commits to one named graph per
-   source over RDF-1.2 edge annotation. 03/06 should ratify (or override) before implementation.
-   (03 confirms these asserted/observed source graphs are **orthogonal** to its per-Workstream
+   source over RDF-1.2 edge annotation. 006/009 should ratify (or override) before implementation.
+   (006 confirms these asserted/observed source graphs are **orthogonal** to its per-Workstream
    projection graphs.)
-3. ~~**Drift acknowledgement / suppression.**~~ — **RESOLVED (spec 03 §Accepted deviations).**
+3. ~~**Drift acknowledgement / suppression.**~~ — **RESOLVED (spec 006 §Accepted deviations).**
    An intentional observed-but-unasserted edge is marked accepted with an asserted-layer
    `ls:AcceptedDeviation` node that names the edge via RDF reification (un-asserted), is
    `ls:sanctionedBy` an ADR, and optionally expires (`dct:valid`). Lives in the sanctioning
