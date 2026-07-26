@@ -33,7 +33,8 @@ The org-unique skill name is the frontmatter `name`; a name collision across sou
 an ingest error (first-ingested wins, collision surfaced in `lode doctor`).
 
 **Sync:** webhook push → ingest changed skill dirs; `lode reconcile` polls as fallback — the
-spec-013 pattern for GitHub facts.
+spec-013 pattern for GitHub facts. Until 013 ships, the fallback is manual:
+`lode skills sync` (admin) triggers a full resync via `POST /api/v1/skills/sync`.
 
 **Schema (backbone, Postgres):**
 
@@ -61,6 +62,7 @@ CREATE TABLE skill_versions (
     git_commit    text NOT NULL,
     content_hash  text NOT NULL,       -- sha256 over the canonicalized skill dir
     frontmatter   jsonb NOT NULL,
+    skill_md      text NOT NULL,       -- SKILL.md body, inlined for briefs + embedding
     archive       bytea NOT NULL,      -- tar of the skill dir (skills are KB-scale)
     created_at    timestamptz NOT NULL,
     UNIQUE (skill_id, content_hash)
@@ -88,7 +90,8 @@ identity, not blobs (authority split, D1–D3).
   demands). Re-embed on content change; the corpus is dozens–hundreds of skills, cost
   negligible. Changing provider/model invalidates all embeddings (dimension/space mismatch)
   → full re-embed on config change.
-- **Endpoint:** `POST /api/skills/recommend` `{task_id | doc_iri | text, limit}` → server
+- **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri` joins
+  when spec 014 lands) → server
   assembles query text (task: title + description + governing-spec excerpt — the brief's own
   material), embeds it, cosine top-k above a server-side score floor. Returns
   `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
@@ -113,7 +116,7 @@ identity, not blobs (authority split, D1–D3).
   `~/.worklode/skills/<name>` symlinks into the store. Concurrent worktrees can hold
   different versions without clobbering; hash match makes re-fetch a no-op.
 - **Lazy fetch:** at brief time the compiled hook fetches whatever the brief lists that is
-  missing locally (`GET /api/skills/<name>/archive/<hash>`). No background sync, no full
+  missing locally (`GET /api/v1/skills/<name>/archive/<hash>`). No background sync, no full
   mirror; a sandbox gets exactly what its task needs.
 - **Manual:** `lode skills install <name>[@<hash>]`, `lode skills list`, `lode skills search`
   for humans, scripts, and sandbox provisioning.
