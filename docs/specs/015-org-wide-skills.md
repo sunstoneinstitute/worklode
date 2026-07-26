@@ -1,0 +1,171 @@
+# Spec 015 — Org-wide agent skills
+
+**Date:** 2026-07-27 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
+**Depends on:** 004 (execution backbone), 008 (worklode plugin, `lode task brief`),
+006 (knowledge graph), 014 (design documents as graph objects, draft)
+
+## Purpose & scope
+
+Org-wide coding-agent skills become a Worklode-distributed, Worklode-recommended resource.
+Discovery moves from "every session pre-ingests every skill description" to **server-side
+selection** (embeddings + pins) with **deterministic delivery** (task brief + local files).
+This is D14 applied to skills: machinery finds and fetches; the model only judges "is this
+offered skill relevant?"
+
+Agent-neutral by construction: skills are **never registered in any native skill registry**
+(no Claude plugin/marketplace entry, no per-skill description cost in session context). Any
+agent that can read a file participates — activation is "read
+`~/.worklode/skills/<name>/SKILL.md`", nothing more.
+
+**v1:** git sync, embeddings + recommendation endpoint, pins, `lode skills` CLI, brief
+integration. **v2:** usage feedback loop (which sessions read which skills → ranking signal,
+joined via `agent_sessions`), federation beyond a simple repo list, non-skill plugin assets.
+
+## Registry & git sync
+
+**Source of truth stays git.** Server config lists skill source repos (e.g. `claude-plugins`)
+with a ref and path globs (`plugins/*/skills/*/SKILL.md`, `skills/*/SKILL.md`). Authoring and
+review stay PR-based; Worklode is an index + distributor.
+
+**Format:** the existing SKILL.md convention — frontmatter `name`/`description` + body, plus
+optional sibling files (`references/`, scripts). No new format; existing skills ingest as-is.
+The org-unique skill name is the frontmatter `name`; a name collision across source repos is
+an ingest error (first-ingested wins, collision surfaced in `lode doctor`).
+
+**Sync:** webhook push → ingest changed skill dirs; `lode reconcile` polls as fallback — the
+spec-013 pattern for GitHub facts.
+
+**Schema (backbone, Postgres):**
+
+```sql
+CREATE TABLE skills (
+    id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name          text NOT NULL UNIQUE,
+    description   text NOT NULL,
+    source_repo   text NOT NULL,
+    source_path   text NOT NULL,
+    latest_version_id bigint,          -- FK to skill_versions, set post-insert
+    embedding     vector,              -- pgvector; latest version only; NULL if no provider
+    deleted_at    timestamptz          -- soft delete when removed from git
+);
+
+CREATE TABLE skill_versions (
+    id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    skill_id      bigint NOT NULL REFERENCES skills(id) ON DELETE RESTRICT,
+    git_commit    text NOT NULL,
+    content_hash  text NOT NULL,       -- sha256 over the canonicalized skill dir
+    frontmatter   jsonb NOT NULL,
+    archive       bytea NOT NULL,      -- tar of the skill dir (skills are KB-scale)
+    created_at    timestamptz NOT NULL,
+    UNIQUE (skill_id, content_hash)
+);
+```
+
+**Versioning: git is the version.** "Latest on the source ref" is what gets recommended and
+installed; the content hash pins exactness. No semver.
+
+**Graph projection:** an `ls:Skill` node per skill (name, description, source-repo IRI) so
+design docs can assert pin edges. Content and versions stay in the backbone — the graph gets
+identity, not blobs (authority split, D1–D3).
+
+## Embeddings & recommendation
+
+- **Provider interface:** `Embed(texts) → vectors` behind config — default an
+  OpenAI-compatible HTTP endpoint (URL, model, key via env/SOPS); dimension fixed per
+  instance. Local-model providers implement the same interface later. Only the server holds
+  embedding credentials.
+- **Storage:** pgvector on `skills` (latest version only). Embedded text = description +
+  SKILL.md body, truncated to the model limit. Re-embed on content change; the corpus is
+  dozens–hundreds of skills, cost negligible. Changing provider/model invalidates all
+  embeddings (dimension/space mismatch) → full re-embed on config change.
+- **Endpoint:** `POST /api/skills/recommend` `{task_id | doc_iri | text, limit}` → server
+  assembles query text (task: title + description + governing-spec excerpt — the brief's own
+  material), embeds it, cosine top-k above a server-side score floor. Returns
+  `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
+  duplicated into matches.
+- **CLI:** `lode skills recommend [--task <id> | --file <path> | --text <s>] --json` — the
+  one generic surface. v1 wires recommendations into `lode task brief`; other stages
+  (`/lode-spec`, architectural-review) call the same CLI with no per-stage server work.
+
+## Pins
+
+- **Task pins:** a `skills` name list on the Task (backbone field, settable at
+  create/update).
+- **Design-doc pins:** `skills: [name, …]` in doc frontmatter, asserted as
+  `ls:recommendsSkill` edges when the doc is ingested (rides spec 014).
+- **Brief resolution:** task pins ∪ governing-design pins. A pin naming an unknown skill is a
+  brief warning, never a failure.
+
+## Distribution & local install
+
+- **Layout:** content-addressed store + name symlink —
+  `~/.worklode/skills/.store/<hash>/` holds the unpacked skill dir;
+  `~/.worklode/skills/<name>` symlinks into the store. Concurrent worktrees can hold
+  different versions without clobbering; hash match makes re-fetch a no-op.
+- **Lazy fetch:** at brief time the compiled hook fetches whatever the brief lists that is
+  missing locally (`GET /api/skills/<name>/archive/<hash>`). No background sync, no full
+  mirror; a sandbox gets exactly what its task needs.
+- **Manual:** `lode skills install <name>[@<hash>]`, `lode skills list`, `lode skills search`
+  for humans, scripts, and sandbox provisioning.
+
+## Brief integration & activation
+
+`lode task brief` gains a `skills` section:
+
+- **`pinned`** — full SKILL.md body **inline** (served from the backbone blob, so pins
+  survive local-fetch failure), plus the local path for sibling files.
+- **`recommended`** — name + one-line description + score + local path only. The brief
+  instructs: *"read `<path>/SKILL.md` if relevant to this task."* The relevance call is the
+  model's (D14: fuzzy signal → judgment, never auto-trust).
+
+Pinned bodies count toward the brief's bounded budget; pins alone blowing the budget is a
+`needs-decomposition`-style signal surfaced in the brief (D15). Injection happens wherever
+the brief is injected (spec 008 hooks for Claude Code); any agent that renders the brief gets
+identical behavior.
+
+## Degradation
+
+| Condition | Behavior |
+|---|---|
+| No embedding provider configured | Endpoint returns pins + empty matches + `provider: none`. Pins-only mode is fully functional. |
+| Provider down at recommend time | Same as unconfigured: pins + warning; never blocks a claim. |
+| Archive fetch fails | Recommended skills still listed with an install hint (`lode skills install <name>`); pinned content unaffected (inline). |
+| Skill removed from git | Soft-deleted: never recommended; existing pins resolve with a `deprecated` warning, briefs don't break. |
+
+## Dependencies
+
+- **004 (backbone)** — new tables, pgvector extension (aligns with the backbone-postgres
+  plan), webhook ingest path.
+- **008 (plugin)** — brief payload extension; hook-side lazy fetch before brief injection.
+- **006 (graph)** — `ls:Skill` minting and projection; `ls:recommendsSkill` edge.
+- **014 (design docs as graph objects, draft)** — frontmatter-pin ingestion. Task pins work
+  without it; doc pins land when 014 does.
+- **External** — an embedding API for the default provider; GitHub webhook/API access to the
+  skill source repos (existing app auth).
+
+## Open questions
+
+- **Q15.1 — Score floor tuning.** Start conservative (few, high-confidence matches); revisit
+  once the v2 usage signal exists.
+- **Q15.2 — Mid-task free-text recommend.** Should agents call
+  `lode skills recommend --text` mid-session as things come up? Cheap to allow (same
+  endpoint); decide whether the working-under-worklode skill mentions it.
+- **Q15.3 — Embedding of tasks/docs.** v1 embeds the query at recommend time. If briefs get
+  hot, cache task embeddings keyed by content hash — optimization only, not semantics.
+
+## Acceptance criteria
+
+1. A push to a configured skills repo makes the skill appear in `lode skills list` with a
+   fresh embedding; deleting its dir soft-deletes it; `lode reconcile` catches a dropped
+   webhook.
+2. `lode skills recommend --text …` returns top-k above the floor; a pinned skill never
+   appears in `matches`.
+3. A brief for a task with one pin and ≥1 match injects the pin's SKILL.md inline and lists
+   matches as name + description + path; the hook leaves `~/.worklode/skills/` correct
+   (hash store + symlink) and a re-run is a no-op.
+4. An instance with no embedding provider serves pins-only briefs and recommendations
+   without error.
+5. Two worktrees briefed against different hashes of the same skill both resolve valid local
+   paths simultaneously.
+6. No Worklode-distributed skill appears in any native agent skill registry; session context
+   contains zero per-skill descriptions beyond what the brief carries.
