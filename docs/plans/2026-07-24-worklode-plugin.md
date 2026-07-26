@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement `docs/specs/worklode/05-worklode-plugin.md`: the worktree-bound pickup lifecycle (`lode next`/`resume`/`done`/`block`/`status`), `lode task brief`, compiled `lode hook` handlers with `--next` daisy-chaining, `lode install-git-hooks`, and the `lode` Claude Code plugin (slash-command skills, `working-under-worklode` skill, `lode-worker` agent, hooks.json).
+**Goal:** Implement `docs/specs/008-worklode-plugin.md`: the worktree-bound pickup lifecycle (`lode next`/`resume`/`done`/`block`/`status`), `lode task brief`, compiled `lode hook` handlers with `--next` daisy-chaining, `lode install-git-hooks`, and the `lode` Claude Code plugin (slash-command skills, `working-under-worklode` skill, `lode-worker` agent, hooks.json).
 
 **Architecture:** Two repos. Go machinery lands in **worklode** (`~/git/sunstone/worklode`): new `internal/worktree` package (worktree naming/parse/identity), `lode hook <event>` subcommands (the compiled hook binary *is* the CLI), lifecycle commands, and a `brief` endpoint + lease-rebind endpoint server-side. The Claude Code plugin lands in **claude-plugins** (`~/git/sunstone/claude-plugins`) as `plugins/lode/` — thin skills invoking `lode … --json`, hooks.json wiring editor events to `lode hook …` via a guard script. Hooks are NOPs outside a `wt/<id>-<slug>` worktree.
 

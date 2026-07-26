@@ -129,7 +129,6 @@ concern, though still ahead of nothing by priority within its rank.
 
 ```
 lode task claim --next [--project <id>] [--strict-focus] [--dry-run] [--json]
-   (alias: wt task claim --next …)
 ```
 
 **Behaviour — one atomic step:** the server, in a **single serialized transaction** (mechanics in

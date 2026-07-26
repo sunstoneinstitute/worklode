@@ -20,13 +20,13 @@ planning through review, build, deployment, and runtime.
 | Scope | Org-wide (all Sunstone repos) from day one |
 | Language | Go (single binary, several subcommands) |
 | Storage | SQLite, single writer; litestream for replication/backup |
-| Migrations | golang-migrate, SQL files in `deploy/base/migrations/`, applied explicitly via `wl migrate --migrations-path` (compose service / k8s initContainer) — not embedded, not applied on `serve` startup |
+| Migrations | golang-migrate, SQL files in `deploy/base/migrations/`, applied explicitly via `lode migrate --migrations-path` (compose service / k8s initContainer) — not embedded, not applied on `serve` startup |
 | Data model | Append-only event log + typed current-state tables, updated in the same transaction |
 | Source of truth | The tracker. GitHub issues are an *inbox*: triage promotes them into tasks. No bidirectional sync. |
 | GitHub ingest | One org-installed GitHub App delivering webhooks (issues, PRs, reviews, CI, releases, deployment status) |
 | Flux ingest | flux notification-controller `Provider` (generic webhook + HMAC) + `Alert` resources |
-| Pod-level ingest | `wl watch`: small watcher (client-go) reporting crash loops / OOMKills resolved to image tags. Runs in-cluster later; locally against `~/.kube/config` now. |
-| Agent interface | `wl` CLI + a Claude Code skill (in claude-plugins) teaching the claim → work → report → complete loop |
+| Pod-level ingest | `lode watch`: small watcher (client-go) reporting crash loops / OOMKills resolved to image tags. Runs in-cluster later; locally against `~/.kube/config` now. |
+| Agent interface | `lode` CLI + a Claude Code skill (in claude-plugins) teaching the claim → work → report → complete loop |
 | Views | CLI queries + read-only server-rendered web pages |
 | Local dev | docker-compose.yml runs the server; k8s deployment comes later |
 
@@ -42,12 +42,12 @@ itself stays small.
 
 ## Components
 
-One Go module, one binary `wl`, subcommands:
+One Go module, one binary `lode`, subcommands:
 
-- `wl serve` — HTTP API, webhook receivers, read-only web UI.
-- `wl migrate --dsn <postgres-dsn> --migrations-path <dir>` — apply golang-migrate migrations from a directory of `*.up.sql`/`*.down.sql` files. Not applied automatically on `serve` startup; run this first (compose `migrate` service / k8s initContainer).
-- `wl watch` — cluster watcher; posts runtime events to the server API. `--kubeconfig` for local use, in-cluster config when deployed.
-- `wl <noun> <verb>` — CLI client commands (see CLI section). Config from `~/.config/worklode/config.toml` (server URL, token) overridable by `WL_SERVER` / `WL_TOKEN`.
+- `lode serve` — HTTP API, webhook receivers, read-only web UI.
+- `lode migrate --dsn <postgres-dsn> --migrations-path <dir>` — apply golang-migrate migrations from a directory of `*.up.sql`/`*.down.sql` files. Not applied automatically on `serve` startup; run this first (compose `migrate` service / k8s initContainer).
+- `lode watch` — cluster watcher; posts runtime events to the server API. `--kubeconfig` for local use, in-cluster config when deployed.
+- `lode <noun> <verb>` — CLI client commands (see CLI section). Config from `~/.config/worklode/config.toml` (server URL, token) overridable by `LODE_SERVER` / `LODE_TOKEN`.
 
 ## Data model
 
@@ -63,7 +63,7 @@ not built in v1.
 - `tokens` — token_hash, actor_id, description, created_at, expires_at, revoked_at. Bearer auth for API; webhooks use HMAC instead.
 - `projects` — id (slug), name. `project_repos` — project_id, repo (`owner/name`); a project can span repos, a repo maps to exactly one project.
 - `tasks` — id (`WL-<n>`, global sequence), project_id, title, body (markdown), priority (`critical`|`high`|`medium`|`low`), kind (`feature`|`bug`|`chore`|`spec`), state, created_by, created_at, updated_at.
-  - State machine: `draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod`, with `released` in place of `deployed_prod` for release-based repos, plus `abandoned` (terminal, pre-`merged` only). States past `merged` are driven by delivery facts, not by the CLI; each repo mapping carries the `done_state` that counts as delivered for it. See `docs/specs/2026-07-25-delivery-lifecycle-design.md` for the delivery semantics. "Blocked" is derived from open `blocks` edges, not a state. `wl task add` and inbox promotion create tasks in `ready`; `--draft` creates in `draft` (not claimable).
+  - State machine: `draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod`, with `released` in place of `deployed_prod` for release-based repos, plus `abandoned` (terminal, pre-`merged` only). States past `merged` are driven by delivery facts, not by the CLI; each repo mapping carries the `done_state` that counts as delivered for it. See `docs/specs/011-delivery-lifecycle.md` for the delivery semantics. "Blocked" is derived from open `blocks` edges, not a state. `lode task add` and inbox promotion create tasks in `ready`; `--draft` creates in `draft` (not claimable).
 - `task_edges` — from_task, to_task, type (`child_of`|`blocks`), created_at. (`A blocks B`; `A child_of B` makes B an epic.)
 - `leases` — task_id (unique among active), actor_id, session_id, acquired_at, renewed_at, expires_at, released_at. Claim = one transaction: verify no active lease, insert lease, transition task to `in_progress`. Default TTL 2h, renewable. A sweeper expires stale leases: task reverts to `ready`, expiry recorded as an event.
 
@@ -82,7 +82,7 @@ not built in v1.
 
 - **GitHub** (`POST /hooks/github`): HMAC-verified App webhooks. Handlers: issues → inbox; pull_request → `pull_requests` + task correlation; pull_request_review → `reviews`; workflow_run → `ci_runs`; release → `artifacts` + `release_frontiers`; push → `task_commits` / `main_commits` / `deploy_shas`; deployment_status → `env_deploys`. Not ingested: `check_suite`, and `registry_package` (tracked in `docs/follow-ups.md`). Handlers only record facts. Task transitions past `in_review` come from `store.ResolveDelivery`, which reads those facts and advances the task forward-only up to its repo's `done_state`. PR opened → `in_review` stays a handler transition; `projects.deploy_gated` is retired.
 - **Flux** (`POST /hooks/flux`): HMAC-verified notification-controller alerts. Kustomization/HelmRelease reconcile events → `deployments` status and the Flux side of `env_deploys`; failures also recorded as `runtime_events` (`flux_failure`). `LODE_CLUSTER_ENV_MAP` maps cluster → environment and accepts only `dev`/`prod`.
-- **Watcher** (`wl watch`): watches pods across namespaces; on CrashLoopBackOff / OOMKilled, resolves the owning workload's image, posts to `POST /api/v1/runtime-events` with bearer token.
+- **Watcher** (`lode watch`): watches pods across namespaces; on CrashLoopBackOff / OOMKilled, resolves the owning workload's image, posts to `POST /api/v1/runtime-events` with bearer token.
 - Idempotency: every webhook delivery id / watcher event key is unique per source in `events`; replays are no-ops.
 
 ## API (v1, JSON, `/api/v1`)
@@ -96,12 +96,12 @@ not built in v1.
 
 ## CLI
 
-`wl task add|list|show|claim|renew|release|done|abandon|block|unblock`,
-`wl inbox list|promote|dismiss`, `wl project add|list`,
-`wl timeline <task>`, `wl board [project]` (org/project overview),
-`wl actor add`, `wl token create|revoke`.
+`lode task add|list|show|claim|renew|release|done|abandon|block|unblock`,
+`lode inbox list|promote|dismiss`, `lode project add|list`,
+`lode timeline <task>`, `lode board [project]` (org/project overview),
+`lode actor add`, `lode token create|revoke`.
 
-`wl task claim` prints the branch name (`<prefix><id>-<slug>`) so agents and humans
+`lode task claim` prints the branch name (`<prefix><id>-<slug>`) so agents and humans
 correlate PRs automatically.
 
 ## Web view (read-only)
@@ -113,19 +113,19 @@ Server-rendered (`html/template`), no JS build step:
 
 ## Auth
 
-- CLI/watcher → server: bearer tokens (`tokens` table, hash stored). Bootstrap: `wl token create` locally against the DB, or `WL_BOOTSTRAP_TOKEN` env on first run.
+- CLI/watcher → server: bearer tokens (`tokens` table, hash stored). Bootstrap: `lode token create` locally against the DB, or `LODE_BOOTSTRAP_TOKEN` env on first run.
 - GitHub webhooks: App webhook secret (HMAC SHA-256).
 - Flux webhooks: notification-controller HMAC.
 
 ## Local dev / deployment
 
 - `docker-compose.yml`: `tracker` service (multi-stage Dockerfile, CGO-free build using `modernc.org/sqlite`), volume-mounted `/data` for the DB, port 8080. Litestream as an optional compose profile.
-- `wl watch --kubeconfig ~/.kube/config` runs locally against any cluster now; in-cluster Deployment + flux manifests come later.
+- `lode watch --kubeconfig ~/.kube/config` runs locally against any cluster now; in-cluster Deployment + flux manifests come later.
 - Webhooks during local testing: `gh webhook forward` or smee.io relay (documented in README, not part of the system).
 
 ## Migration from TASKS.md
 
-`wl import horndb-tasks` (one-off command, can live outside v1 core): parse
+`lode import horndb-tasks` (one-off command, can live outside v1 core): parse
 TASKS.md + `gh issue list` → projects/tasks/edges with provenance events.
 HornDB is the first onboarded project; the model is org-wide from the start.
 
