@@ -62,17 +62,29 @@ single context. Each is an independent spec → plan → implementation cycle.
 
 | Spec | Scope | Depends on |
 |---|---|---|
-| **01 — Execution backbone** | Postgres schema baseline; task state machine; **worktree-bound leases**; events; blocks/child_of. The foundation. | — |
-| **02 — Prioritization & pickup** | `concern` enum; `project.focus`; ranking; atomic `claim --next`; `--strict-focus`; `needs-decomposition` sizing. | 01 |
-| **03 — Knowledge graph** | `ls:` vocabulary (rdf-registry PR); IRI scheme; entity model (incl. Deliverable/Milestone); backbone→graph projection. | 01 |
-| **04 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 03 |
-| **05 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 01, 02 |
-| **06 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
-| **07 — Reconciliation & setup diagnosis** | `lode reconcile` (replay dropped events, poll GitHub, spec-doc drift); `lode project doctor`; `lode doctor`. Recovers activity the webhook path missed. | 01 |
+| **000 — Umbrella architecture** | Architecture overview and spec map (this document); shared conventions binding on all sub-specs. | — |
+| **001 — Keycloak SSO** | SSO login for humans via org Keycloak, gating the web UI the same way; agent/service token issuance unchanged. | — |
+| **002 — GitHub App auth** | GitHub App as an additional identity provider (hzdev scope) alongside Keycloak OIDC; per-user token for GitHub API calls attributed to the user. | 001 |
+| **003 — Platform graph design record** | Foundational design record (D1–D15): two-store split, ambition-reconciliation thesis; source rationale for 004–009. | — |
+| **004 — Execution backbone** | Postgres schema baseline; task state machine; **worktree-bound leases**; events; blocks/child_of. The foundation. | — |
+| **005 — Prioritization & pickup** | `concern` enum; `project.focus`; ranking; atomic `claim --next`; `--strict-focus`; `needs-decomposition` sizing. | 004 |
+| **006 — Knowledge graph** | `ls:` vocabulary (rdf-registry PR); IRI scheme; entity model (incl. Deliverable/Milestone); backbone→graph projection. | 004 |
+| **007 — Drift & overview** | Observed-layer derivers; the two-layer diff; standing queries (drift, doc gaps, unimplemented specs, ready frontier). | 006 |
+| **008 — Worklode plugin** | Worktree lease lifecycle; compiled Go hooks + daisy-chain; slash commands; skills (working-under-worklode, authoring-design-as-graph, architectural-review). | 004, 005 |
+| **009 — Data-platform KG requirements** | Must-haves the data-platform must ship for the KG side (prod deploy, query path, IRI scheme, write auth, writable branch). | — (cross-repo) |
+| **010 — Per-project task keys** | Jira-style per-project task IDs (`WL-1…`, `SW-1…`) replacing the single global counter. | 004 |
+| **011 — Delivery lifecycle** | Extends the task state machine past `merged` to `delivered` (dev/prod deploy for services, release for libraries). | 004 |
+| **012 — Agent sessions** | Tracks which coding-agent session holds a task's lease, beyond the local worktree marker file. | 004 |
+| **013 — Reconciliation & setup diagnosis** | `lode reconcile` (replay dropped events, poll GitHub, spec-doc drift); `lode project doctor`; `lode doctor`. Recovers activity the webhook path missed. | 004, 011 |
+| **014 — Design documents as graph objects** | Design docs as graph-authored, never-projected intent objects; closes the gap between 006's model and today's file-based specs. | 004, 006, 007 |
+| **015 — Runtime layer** | Types Artifact, Deployment and Environment as graph objects for the deploy deriver and Deliverable definition-of-done. | 006, 007, 014 |
 
 ---
 
 ## Shared conventions (binding on all sub-specs)
+
+> **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`;
+> rdf-registry sources move `rdf/ls/` → `rdf/wl/`.
 
 - **Naming:** product = Worklode; CLI = `lode` (D13).
 - **Vocabulary (D4):** standards-first — `dct:requires`/`hasPart`/`replaces`, `foaf:Agent`,
@@ -83,9 +95,6 @@ single context. Each is an independent spec → plan → implementation cycle.
 - **Review:** design docs reviewed via **crit**; `proposed → accepted` gated on crit resolution.
 - **Determinism lens (D14):** push coordination into deterministic, token-free machinery
   (compiled hooks, CLI+`--json`, server-side selection); spend model tokens only on judgment.
-> **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`;
-> rdf-registry sources move `rdf/ls/` → `rdf/wl/`.
-
 
 ## Decision index (record → owning spec)
 

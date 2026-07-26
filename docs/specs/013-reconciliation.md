@@ -22,8 +22,8 @@ This spec covers, and only covers:
 > **Amended by 014 §6.** Only `events.applied_at` remains in scope; the `task_docs` link and the spec-drift engine are superseded. Engines 1 and 2 are untouched.
 
 Out of scope (reference, do not duplicate): architectural drift between asserted and observed
-graph layers (04 — a different diff over different entities, blocked on 03); promoting *untracked*
-GitHub work into new tasks (that is `lode inbox`, already shipped); the KG projection (03).
+graph layers (007 — a different diff over different entities, blocked on 006); promoting *untracked*
+GitHub work into new tasks (that is `lode inbox`, already shipped); the KG projection (006).
 
 **Relationship to 007.** Spec 007's `lode drift` compares *asserted architecture* against *observed
 code*. This spec compares *what the backbone recorded* against *what GitHub actually did*. Both

@@ -11,10 +11,10 @@ once an instance is running (dogfooding); until then this file is the list.
 - **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
 - **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
-- **`wl import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
-  (spec §Migration).
+- **`lode import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
+  (`docs/spec.md` §Migration).
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
-  for `wl watch` in-cluster.
+  for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
   claim → work → report → complete loop.
 - **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s

@@ -85,7 +85,7 @@ that carries the lock.
 
 **Therefore:** `wl:Plan` is dropped. Plan-shaped work is an ordered task subtree in the execution
 backbone — which is what a plan already is: a bundle of tasks with instructions attached. The
-instructions live in task bodies and reach the agent through `lode task brief` (05).
+instructions live in task bodies and reach the agent through `lode task brief` (008).
 
 **Durable rationale is promoted, not preserved.** Where a plan contains reasoning worth keeping
 ("we did it this way because X"), that paragraph is promoted into the governing Spec or a new ADR
@@ -590,9 +590,9 @@ Two pieces of work follow from this spec without belonging to it:
   wholesale (issues → Tasks, `docs/specs/**` and `docs/adr/**` → published documents at v1, repos →
   Components, GitHub projects → Workstreams) is a substantial design in its own right, with real
   questions this spec should not prejudge: what anchors get assigned to a corpus that never had
-  them, how imported issues reconcile with the already-shipped `lode inbox` promotion path (07), and
-  whether a first publication of legacy prose should be `accepted` or `draft`. Spec 08 defines the
-  target state; spec 09 would define how an existing project reaches it.
+  them, how imported issues reconcile with the already-shipped `lode inbox` promotion path (013), and
+  whether a first publication of legacy prose should be `accepted` or `draft`. Spec 014 defines the
+  target state; spec 015 would define how an existing project reaches it.
 
 ## Open questions
 
