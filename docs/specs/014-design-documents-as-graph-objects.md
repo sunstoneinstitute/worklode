@@ -428,6 +428,7 @@ machinery:
 | Coverage of a document | implemented sections ÷ non-superseded sections |
 | **Stale claim** | claim pinned at vN where `section wl:lastRevisedIn > vN` |
 | Orphaned claim | claim naming an anchor absent from the current version |
+| **Delivered coverage** | implemented sections whose Deliverable is deployed to a given Environment |
 
 ### This replaces spec 07's engine 3
 
@@ -445,6 +446,12 @@ likewise gives way to the manifest. Engines 1 and 2 of spec 013 are untouched �
 ## 7. Constraints on accepted documents
 
 Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
+The same argument retires **spec 007 §4.3**, which is the identical heuristic one substrate up:
+`dct:modified` on a DesignDoc compared against the closure time of the last Task that implemented
+it. No timestamp comparison determines whether intent has been satisfied — only a pinned claim
+does. 007 §4.4 keeps its question but re-points its join, since coverage reads the Component→Section
+edge rather than asking whether any Task ever pointed at the document.
+
 graphs:
 
 1. **Anchors are append-only.** Every `wl:Section` IRI in version N appears in version N+1. Removal
@@ -558,10 +565,10 @@ configuration, not convention, and temporary either way.
 
 | Spec | Change |
 |---|---|
-| 03 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5 |
-| 04 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries |
-| 05 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
-| 07 | Remove engine 3 and `task_docs`; close open question 2 |
+| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected) |
+| 007 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries; **supersede §4.3** — the stale-claim query replaces its `dct:modified`-vs-task-closure heuristic — and re-point §4.4's Task-join at the Component→Section edge |
+| 008 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
+| 013 | Remove engine 3 and `task_docs`; close open question 2 |
 | Migration | Widen the `tasks.kind` CHECK constraint (§8) |
 | ADR-0006 | Permit the versioned sibling IRI under a named exception (§4) |
 
