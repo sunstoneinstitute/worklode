@@ -8,7 +8,8 @@ dependencies. The directory is published as-is.
 | `index.html` | The whole site: one page, seven sections |
 | `styles.css` | All styling. Light theme only, by design |
 | `app.js` | Reveal-on-scroll only; the page is fully readable without it |
-| `logo.svg` | The mark — nav, hero, footer and tab icon. Not square: 1340×1150 |
+| `logo.svg` | Mark used in the header and footer |
+| `favicon.svg` | Browser-tab icon |
 | `CNAME` | Custom domain for GitHub Pages — do not delete |
 
 ## Preview locally
@@ -47,16 +48,14 @@ drift model — update both.
 
 ## Logo
 
-`logo.svg` is the mark: a faceted lodestone crystal between two magnetic field
-lines. Its viewBox is 1340×1150, so it is *not* square — set `width` and
-`height` at a 1.165:1 ratio (35×30 in the nav, 30×26 in the footer) or it
-distorts. It is also the tab icon, so there is exactly one logo file.
+`logo.svg` is a hand-drawn placeholder: a faceted lodestone crystal between two
+magnetic field lines. It is real SVG and scales cleanly, so it is fine to ship
+as-is.
 
-### Regenerating the mark
-
-The prompts below are written for Gemini "Nano Banana 2" and produced the
-current mark. Generate at high resolution, then trace to SVG — ship vector,
-since the mark renders at 26–30 px in the nav and footer.
+To generate a richer mark with an image model, the prompts below are written for
+Gemini "Nano Banana 2". Generate at high resolution, then trace to SVG (or keep
+a PNG at 2× and add `logo.png` alongside) — ship vector for the header, since
+the mark renders at 26–30 px.
 
 **Prompt A — the mark, on its own**
 
