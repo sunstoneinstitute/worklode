@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Worklode">
+  <title>Worklode</title>
+  <defs>
+    <linearGradient id="stone" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- field lines: work drawn into alignment -->
+  <g fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" opacity=".75">
+    <path d="M9.5 12.5Q3.5 24 9.5 35.5"/>
+    <path d="M38.5 12.5Q44.5 24 38.5 35.5"/>
+  </g>
+
+  <!-- the lodestone: a faceted magnetite crystal -->
+  <path fill="url(#stone)" d="M24 10.5 36 17.5v13L24 37.5 12 30.5v-13z"/>
+  <g fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" opacity=".72">
+    <path d="M12 17.5 24 24l12-6.5M24 24v13.5"/>
+  </g>
+</svg>
