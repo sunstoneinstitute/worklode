@@ -430,7 +430,12 @@ machinery:
 | Orphaned claim | claim naming an anchor absent from the current version |
 | **Delivered coverage** | implemented sections whose Deliverable is deployed to a given Environment |
 
-### This replaces spec 07's engine 3
+The last row is where a claim stops being a claim. A `wl:implements` edge says a component's code
+*asserts* it satisfies a section; it says nothing about whether that code is running anywhere. Joined
+through the component's Deliverable to a `wl:Deployment` (015), the full statement is **"Component A
+implemented Section B by deploying Deliverable C to Environment D"** — so coverage is reported per
+environment rather than as one boolean. The join runs through `wl:deliveredBy`
+(Deliverable→Component), minted in 006 §Properties.
 
 ### This replaces spec 013's engine 3
 
@@ -441,17 +446,17 @@ superseded by this spec** and should be removed from 013 rather than built; 013'
 likewise gives way to the manifest. Engines 1 and 2 of spec 013 are untouched — they diagnose missed
 *ingestion*, an unrelated problem.
 
----
-
-## 7. Constraints on accepted documents
-
-Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
 The same argument retires **spec 007 §4.3**, which is the identical heuristic one substrate up:
 `dct:modified` on a DesignDoc compared against the closure time of the last Task that implemented
 it. No timestamp comparison determines whether intent has been satisfied — only a pinned claim
 does. 007 §4.4 keeps its question but re-points its join, since coverage reads the Component→Section
 edge rather than asking whether any Task ever pointed at the document.
 
+---
+
+## 7. Constraints on accepted documents
+
+Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
 graphs:
 
 1. **Anchors are append-only.** Every `wl:Section` IRI in version N appears in version N+1. Removal
