@@ -129,6 +129,8 @@ the scheduled case.
 
 ### Engine 3 — spec-doc drift
 
+> **Superseded by 014 §6.** The git-mtime heuristic is replaced by the exact, section-scoped stale-claim query over `.worklode/implements.yaml`; engine 3 should be removed rather than built.
+
 Report-only; there is nothing to write. For each `spec`-kind task with a linked doc, compare the
 last commit touching that path on the default branch against the task's closure time from
 `state_log`:
@@ -165,9 +167,9 @@ CREATE TABLE task_docs (
 Populated by `lode task add --doc <path>` (repeatable). Backfilled by parsing the `Source: …`
 lines already present in task bodies.
 
-**`events.applied_at timestamptz`** — nullable; set when an event's apply completes, by either path.
-
 > **Superseded by 014 §6.** `task_docs` gives way to `.worklode/implements.yaml`; only `events.applied_at` survives from this section.
+
+**`events.applied_at timestamptz`** — nullable; set when an event's apply completes, by either path.
 
 The down migration drops both; the repo's `migrate up`/`down` round-trip check covers it.
 
@@ -205,6 +207,9 @@ a token belongs to.
   convergence.
 - **Spec drift:** seeded `task_docs` and a fake commit history — a doc modified after closure
   reports, one modified before does not.
+
+> **Obsolete with engine 3 (014 §6).** There is no `task_docs` table and no mtime comparison to test.
+
 - **Both doctors:** table-driven over broken-setup fixtures, asserting exit code and that each
   failure names its fix.
 - `store` tests run against ephemeral Postgres, as the rest of the suite does.
@@ -227,14 +232,14 @@ No dependency on 006, 007, or 009.
    `--since` is optional.
 2. **Tracked doc paths for engine 3's third finding** ("doc with no spec task"). Per-project
    configuration, or a convention like `docs/specs/**` and `docs/adr/**`?
+
+> **Closed by 014 §10.** Per-project configuration, not convention — and temporary, since documents move into the graph.
+
 3. **Scheduled invocation.** Out of scope here (the command is on-demand), but if reconcile proves
    it should run continuously, does it become a server loop — and does that need the sweeper's
    single-instance election (004, open Q4)?
 
 ## Acceptance criteria
-
-> **Closed by 014 §10.** Per-project configuration, not convention — and temporary, since documents move into the graph.
-
 
 - **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
   exactly the typed-table and `state_log` result a live delivery would have; the resulting
@@ -244,6 +249,9 @@ No dependency on 006, 007, or 009.
   second run is a no-op. `--dry-run` reports the same repair and writes nothing.
 - **Spec drift:** a spec task whose doc changed after closure is reported; one whose doc changed
   before is not; a spec task with an unresolvable doc path is reported.
+
+> **Obsolete with engine 3 (014 §6).** Replaced by 014's stale-claim and orphaned-claim criteria (its acceptance criterion 8).
+
 - **`lode project doctor`** identifies a mapped repo with no App installation, a repo whose last
   webhook predates its mapping, and a repo sending events that maps to no project.
 - **`lode doctor`** exits non-zero and names the fix for each of: missing config, unreachable

@@ -44,8 +44,10 @@ Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliv
 
 ### Representation: named graphs per source
 
-The KG is a named-graph quad store (06). We partition by source so each layer is independently
-recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 06):
+> **Amended by 014 §6.** The table gains `…/graph/observed/repo-implements`, written by the implements-manifest deriver.
+
+The KG is a named-graph quad store (009). We partition by source so each layer is independently
+recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 009):
 
 | Named graph | Layer | Written by |
 |---|---|---|
@@ -65,6 +67,8 @@ with a `ls:layer` — heavier to query and to replace atomically than one graph 
 ---
 
 ## Observed-layer derivers
+
+> **Amended by 014 §6.** A fifth deriver, `observed/repo-implements`, reads `.worklode/implements.yaml` and emits `<component> wl:implements <section>` under this same contract.
 
 All derivers share a contract:
 - **Idempotent & full-replace.** A run computes the complete edge set for its source and `PUT`s
@@ -122,12 +126,12 @@ components:
 
 ### 4. deploy / runtime — existing Worklode hooks
 
+> **Amended by 015.** This deriver's output vocabulary, IRI grammar and per-node v1/v2 status are specified in 015 §2–§6 — including which nodes have no v1 source.
+
 - **Input:** the already-ingested relational tables behind `internal/hooks/flux.go`
   (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). D6: most of
   layers 2–3 are already ingested → this is **projection, not new build**.
 - **Output:** observed `Artifact` / `Deployment` / `Environment` nodes and their edges to the
-> **Amended by 015.** This deriver's output vocabulary, IRI grammar and per-node v1/v2 status are specified in 015 §2–§6 — including which nodes have no v1 source.
-
   Deliverable reconciliation point (Deliverable model owned by 006/D7).
 - **Output graph:** `observed/deploy`.
 - v1 stops at projecting what the hooks record; auto-*confirming* a Deliverable by probing prod is
@@ -136,6 +140,11 @@ components:
 ---
 
 ## Standing queries
+
+> **Amended by 014 §6.** Two standing queries arrive over the implements manifest: document
+> coverage, and claims pinned at a version the section has since outgrown. The stale-claim query
+> **replaces 4.3** rather than joining it; 4.4's Task-join is likewise re-pointed at the
+> Component→Section edge.
 
 Each is a SPARQL-shaped read over the graph. Sketches use `ls:` for vocabulary, `g:` for the graph
 names above, and elide the IRI prefix boilerplate 006 defines. Layer comparison is expressed with
@@ -189,6 +198,12 @@ Also reports repo paths matched to no component (from deriver 2) as coverage gap
 
 ### 4.3 Drifted specs — DesignDoc modified after its last implementing Task
 
+> **Superseded by 014 §6 (stale-claim query).** The `dct:modified`-vs-task-closure comparison below
+> is an mtime heuristic: it fires on typo fixes and misses semantic changes to a section nobody
+> claimed. Its replacement is exact and section-scoped — a claim pinned at `vN` is stale when
+> `section wl:lastRevisedIn > vN` — and it reads the Component→Section `wl:implements` edge derived
+> from `.worklode/implements.yaml`, not the Task→DesignDoc edge joined below.
+
 The design intent moved after the code that implemented it — the spec and the code have diverged:
 ```sparql
 SELECT ?doc ?docMod (MAX(?done) AS ?lastImpl) WHERE {
@@ -200,6 +215,10 @@ HAVING (?docMod > MAX(?done))
 ```
 
 ### 4.4 Unimplemented specs — accepted DesignDoc with no implementing Task/PR
+
+> **Amended by 014 §5–§6.** The status enum ends at `superseded`; "unimplemented" is a per-section
+> coverage query over the Component→Section `wl:implements` edge, not a doc-level status or the
+> absence of the Task→DesignDoc join written below.
 
 ```sparql
 SELECT ?doc WHERE {
@@ -269,6 +288,8 @@ Weighted critical path stays **v2** (optional, low priority — D12).
 
 ## Overview / CLI surface
 
+> **Amended by 014 §10.** `lode drift --docs` joins this table, the `lode doc …` family is added, and the read-only web view gains per-section coverage badges and version history.
+
 Everything is a read; nothing here mutates the graph. All commands honor D14 determinism:
 `--json` gives greppable, stable output; the compiled `lode` binary is the only dependency.
 
@@ -288,8 +309,6 @@ Everything is a read; nothing here mutates the graph. All commands honor D14 det
 (Oxigraph, per 009): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
 status** view (drifted/unimplemented/accepted), a **critical-path** view, and the **ready
 frontier**. Read-only by construction — the only ways to change the graph are authoring design
-> **Amended by 014 §10.** `lode drift --docs` joins this table, the `lode doc …` family is added, and the read-only web view gains per-section coverage badges and version history.
-
 (asserted, via 008) and running derivers (observed); there is no mutation affordance in these views.
 
 ---
