@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
 (shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
-`../2026-07-21-worklode-platform-graph-design.md`.
+`003-platform-graph-design.md`.
+**Amended by:** 010 (task keys), 011 (delivery states), 012 (agent sessions), 014 (task kinds)
 
 ---
 
@@ -42,6 +43,8 @@ flags; partial unique indexes and `CHECK` constraints.
 
 ### tasks
 
+> **Task identity superseded by spec 010.** `task_seq` is dropped; ids are `<PROJECT-KEY>-<n>` from a per-project `projects.next_task_num` counter (migration 0003).
+
 ```sql
 CREATE TABLE tasks (
     id         text PRIMARY KEY,                    -- WT-<n>
@@ -58,12 +61,16 @@ CREATE TABLE tasks (
 );
 ```
 
+> **Amended by 014 §8 (not yet migrated).** The kind enum widens to `feature, bug, chore, spec, review, spike` to match `wlc:TaskKind`.
+
 `task_seq` (single-row counter) is retained verbatim: `UPDATE task_seq SET next =
 next + 1 WHERE id = 1 RETURNING next - 1` is valid Postgres and preserves the gapless
 `WT-<n>` allocation semantics. (A bare `SEQUENCE` was rejected: it gaps on rollback
 and complicates the `WT-` prefix. Keeping the table is a zero-behavior-change carry.)
 
 ### Task state machine
+
+> **Superseded by spec 011.** `done` is renamed `merged` and the machine continues to `deployed_dev`/`deployed_prod`/`released`, driven by delivery facts up to each repo's `done_state`.
 
 ```
 draft ──▶ ready ──▶ in_progress ──▶ in_review ──▶ done
@@ -199,6 +206,8 @@ marshal via `encoding/json`.
 
 ## Lease lifecycle
 
+> **Amended by spec 012.** Closing a lease (release, expiry sweep, completion) also stamps `ended_at` on every open `agent_sessions` row for it, without its own event.
+
 1. **Acquire** — via the claim transaction (below). Sets `acquired_at = renewed_at =
    now`, `expires_at = now + ttl`, binds `actor_id` + `worktree`.
 2. **Renew** (heartbeat) — `renew(taskID, actor)` sets `renewed_at = now`, `expires_at
@@ -271,6 +280,8 @@ agnostic to how the candidate was chosen.)
 
 ## Postgres schema & data layer
 
+> **Amended by spec 011.** `projects.deploy_gated` is dropped; delivery gating is per-repo `done_state` plus the fact tables.
+
 The backbone is built directly on Postgres — a fresh schema baseline.
 
 **Driver & connection.** `github.com/jackc/pgx/v5`, registered as a `database/sql` driver
@@ -303,6 +314,8 @@ double-sweeps; if a single sweeper is wanted, gate it with a Postgres advisory l
 ---
 
 ## CLI / API surface touched
+
+> **Amended by spec 011.** Claim and claim-next responses also carry a server-derived `branch`; the CLI only falls back to `lode/` against an older server.
 
 - `POST /api/v1/tasks/{id}/claim` — request field `session_id` → **`worktree`**
   (`ttl` unchanged); response `Lease.session_id` → `Lease.worktree`.

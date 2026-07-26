@@ -1,6 +1,8 @@
 # Spec 009 — Data-platform requirements for the Worklode KG
 
-**Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `00-umbrella-architecture.md`
+**Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `000-umbrella-architecture.md`
+
+**Amended by:** 014
 
 Worklode's **knowledge graph** (the asserted architecture graph + the projected work graph)
 lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**
@@ -30,12 +32,12 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
    pipeline **publishes under the `worklode.io/ns/` base**, not `sunstone.institute/rdf/`. This needs
    a **base-URL override** for the `ls` ontology in rdf-registry (ADR-0006's implicit "repo path =
    host path" mapping doesn't hold for a foreign domain) — a required rdf-registry change.
-4. **External-service write auth confirmed.** Worklode's projector is a Go service authenticating
-   via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs. The atomic
 
    > **Amended by 014 §1.** The sources are `rdf/wl/` and the published base is
    > `https://worklode.io/ns/wl/`; the base-URL override applies to the `wl` ontology.
 
+4. **External-service write auth confirmed.** Worklode's projector is a Go service authenticating
+   via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs. The atomic
    per-branch write exists; verify the client-credentials path works end-to-end for an external caller.
 5. **A writable, fixed branch** for the work graph (project = property, not branch — sibling
    branches are invisible to each other, which would hide cross-project edges). Branch-create +

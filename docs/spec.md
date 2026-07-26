@@ -30,6 +30,8 @@ planning through review, build, deployment, and runtime.
 | Views | CLI queries + read-only server-rendered web pages |
 | Local dev | docker-compose.yml runs the server; k8s deployment comes later |
 
+> **Storage superseded by spec 004.** The backbone runs on Postgres (pgx v5, CNPG); the single-writer SQLite design and its lock-manager consequence are historical.
+
 Key architectural consequence: the server is the **single writer**, so it is
 also the lock manager. Claims, lease renewals, and state transitions are
 serialized SQLite transactions — no distributed locking.
@@ -64,10 +66,10 @@ not built in v1.
   - State machine: `draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod`, with `released` in place of `deployed_prod` for release-based repos, plus `abandoned` (terminal, pre-`merged` only). States past `merged` are driven by delivery facts, not by the CLI; each repo mapping carries the `done_state` that counts as delivered for it. See `docs/specs/2026-07-25-delivery-lifecycle-design.md` for the delivery semantics. "Blocked" is derived from open `blocks` edges, not a state. `wl task add` and inbox promotion create tasks in `ready`; `--draft` creates in `draft` (not claimable).
 - `task_edges` — from_task, to_task, type (`child_of`|`blocks`), created_at. (`A blocks B`; `A child_of B` makes B an epic.)
 - `leases` — task_id (unique among active), actor_id, session_id, acquired_at, renewed_at, expires_at, released_at. Claim = one transaction: verify no active lease, insert lease, transition task to `in_progress`. Default TTL 2h, renewable. A sweeper expires stale leases: task reverts to `ready`, expiry recorded as an event.
-- `issues` (inbox) — repo, number, title, state (github state), triage_state (`new`|`promoted`|`dismissed`), task_id (when promoted), applies_to_versions (JSON, set at triage), url.
-- `pull_requests` — repo, number, title, state (`open`|`merged`|`closed`), task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at. Correlated to a task by branch name `<prefix><task-id>-<slug>` (`LODE_BRANCH_PREFIX`, default `lode/`; legacy `wl/` also recognized) or a `WL-Task: <id>` line in the PR body.
 
   > **Superseded by spec 004.** Leases are keyed by worktree identity, not `session_id`; see also spec 012 for the agent-session rows hanging off a lease.
+- `issues` (inbox) — repo, number, title, state (github state), triage_state (`new`|`promoted`|`dismissed`), task_id (when promoted), applies_to_versions (JSON, set at triage), url.
+- `pull_requests` — repo, number, title, state (`open`|`merged`|`closed`), task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at. Correlated to a task by branch name `<prefix><task-id>-<slug>` (`LODE_BRANCH_PREFIX`, default `lode/`; legacy `wl/` also recognized) or a `WL-Task: <id>` line in the PR body.
 - `ci_runs` — repo, head_sha, workflow, status, conclusion, url, started_at, completed_at.
 - `reviews` — repo, pr number, reviewer, state (`approved`|`changes_requested`|`commented`), submitted_at.
 - `artifacts` — id, kind (`docker_image`|`pypi`|`git_tag`|`binary`), name, version, digest, repo, source_sha, built_at. Correlated to PRs via source_sha.

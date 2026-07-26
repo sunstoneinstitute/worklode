@@ -1,6 +1,15 @@
 # Spec 003 — worklode → platform knowledge graph design record
 
-**Date:** 2026-07-21 · **Status:** brainstorming (grill in progress) · **Nothing implemented**
+**Date:** 2026-07-21 · **Status:** design record (graduated into specs 000, 004–009) · **partially implemented**
+**Umbrella:** `000-umbrella-architecture.md`
+**Amended by:** 008, 011, 014, 015
+
+> **Status corrected.** D1–D15 are no longer unimplemented: the backbone, ranking, per-project task keys, delivery lifecycle and agent sessions all shipped (migrations 0001–0005).
+
+> **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`.
+
+This design record holds decisions D1–D15. Specs `000-umbrella-architecture.md`
+and `004`–`009` graduated out of it; D-ids are not renumbered.
 
 Thesis: **development work as ambition reconciliation.** Intent is *asserted*; reality
 is *observed*; every gap between them — architectural drift, an unimplemented spec, a
@@ -28,6 +37,9 @@ joined by IRI.
   would hide cross-project edges, the exact thing we need).
 
 **D4 — Component-grained entity model, standards-first vocabulary.**
+
+> **Amended by 014.** Prefix is `wl:`; `Plan` is dropped from DesignDoc; partial supersession uses addressable section IRIs, not the annotated edge; `implemented` leaves the status enum.
+
 - Atomic unit = **Component** (repo/project are coarser groupings). No Capability/Requirement (YAGNI).
 - **`ls:DesignDoc`** with real subclasses `ls:ADR` / `ls:Spec` / `ls:Plan`; `ls:status`
   domain `DesignDoc` (SKOS scheme: draft→proposed→accepted→superseded→implemented).
@@ -50,6 +62,9 @@ joined by IRI.
   (needed where one repo holds many components, e.g. research-stack).
 
 **D6 — Three layers, v1/v2 scoped.**
+
+> **Amended by 015 §7.** Commit is v1 (delivery resolution needs it) and WorkflowRun is gone — `wl:Build` subsumes it.
+
 - Layer 1 Intent (asserted): Component, DesignDoc, [Milestone v2], Deliverable.
 - Layer 2 Execution/VCS (observed): Task, Issue, PullRequest; [Branch, Commit, WorkflowRun, Event v2].
 - Layer 3 Runtime/Deploy (observed): Artifact, Deployment, Environment; [Cluster, Namespace, Flux* v2].
@@ -194,6 +209,8 @@ definition-of-done + branch. No file spelunking.
 
 - **Not every task needs the same artifacts.** Most need a **Plan**; some need a **Spec/ADR**;
   many need neither. `/lode-spec` and the authoring skill are graduated — produce only what the
+> **Amended by 014 §2.** There is no Plan document: plan-shaped work is an ordered task subtree, so graduation now runs {nothing → task subtree → Spec/ADR}.
+
   task's complexity warrants; don't ceremony-tax small tasks.
 - **`needs-decomposition`** — a task label meaning scope is too big to fit the context window's
   **"smart zone"** (the effective-reasoning region, well below the hard limit). Such a task is
