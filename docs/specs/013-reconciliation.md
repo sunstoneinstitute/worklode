@@ -1,6 +1,6 @@
-# Spec 07 — Reconciliation & setup diagnosis
+# Spec 013 — Reconciliation & setup diagnosis
 
-**Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Depends on:** 01 (execution
+**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 004 (execution
 backbone), the delivery lifecycle already shipped in `internal/store/delivery_resolve.go`.
 
 ## Purpose & scope
@@ -22,7 +22,7 @@ Out of scope (reference, do not duplicate): architectural drift between asserted
 graph layers (04 — a different diff over different entities, blocked on 03); promoting *untracked*
 GitHub work into new tasks (that is `lode inbox`, already shipped); the KG projection (03).
 
-**Relationship to 04.** Spec 04's `lode drift` compares *asserted architecture* against *observed
+**Relationship to 007.** Spec 007's `lode drift` compares *asserted architecture* against *observed
 code*. This spec compares *what the backbone recorded* against *what GitHub actually did*. Both
 reconcile intent with reality; they share no entities, no store, and no dependencies. The names
 must stay distinct.
@@ -137,7 +137,7 @@ last commit touching that path on the default branch against the task's closure 
 Specs are already first-class here: `kind='spec'` is a task kind
 (`deploy/base/migrations/0001_baseline.up.sql:53`) and WL-1…WL-7 are exactly that. No knowledge
 graph is required. What is missing is the structured link — today a spec task names its file only
-in prose (`Source: docs/specs/worklode/04-drift-and-overview.md` in the body).
+in prose (`Source: docs/specs/007-drift-and-overview.md` in the body).
 
 ### Output
 
@@ -208,12 +208,12 @@ a token belongs to.
 
 ## Dependencies
 
-- **01 — execution backbone:** tasks, events, `state_log`, `Transition`.
+- **004 — execution backbone:** tasks, events, `state_log`, `Transition`.
 - **`internal/hooks/`:** the apply routing engine 1 extracts and reuses.
 - **`internal/githubauth`:** installation tokens for engine 2. Already built.
 - **`internal/store/delivery_resolve.go`:** `ResolveDelivery`, unchanged.
 
-No dependency on 03, 04, or 06.
+No dependency on 006, 007, or 009.
 
 ## Open questions
 
@@ -224,7 +224,7 @@ No dependency on 03, 04, or 06.
    configuration, or a convention like `docs/specs/**` and `docs/adr/**`?
 3. **Scheduled invocation.** Out of scope here (the command is on-demand), but if reconcile proves
    it should run continuously, does it become a server loop — and does that need the sweeper's
-   single-instance election (01, open Q4)?
+   single-instance election (004, open Q4)?
 
 ## Acceptance criteria
 

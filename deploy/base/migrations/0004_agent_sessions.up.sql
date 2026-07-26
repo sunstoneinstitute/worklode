@@ -1,5 +1,5 @@
 -- One row per coding-agent session working a leased task. See
--- docs/specs/2026-07-25-agent-sessions-design.md.
+-- docs/specs/012-agent-sessions.md.
 
 CREATE TABLE agent_sessions (
     id                  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

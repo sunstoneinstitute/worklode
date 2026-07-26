@@ -1,4 +1,4 @@
-# Keycloak SSO for worklode — design
+# Spec 001 — Keycloak SSO for worklode
 
 **Status:** approved design
 **Date:** 2026-07-19

@@ -381,7 +381,7 @@ func newTaskClaimCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
-	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 02 ranking)")
+	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
 	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project"+projectFlagUsage)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")

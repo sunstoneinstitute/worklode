@@ -1,6 +1,6 @@
-# Worklode spec 01 — Execution backbone
+# Spec 004 — Execution backbone
 
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `00-umbrella-architecture.md`
+**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
 (shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
 `../2026-07-21-worklode-platform-graph-design.md`.
 
@@ -24,12 +24,12 @@ the two gating edges with cycle detection.
 
 **Out of scope (reference by title, do not duplicate):**
 `claim --next` **ranking**, `concern`, `focus`, `--strict-focus`, `needs-decomposition`
-→ **spec 02 (Prioritization & pickup)**. RDF vocabulary, IRI scheme, backbone→graph
-projection → **spec 03 (Knowledge graph)**. Observed-layer derivers and drift queries
-→ **spec 04 (Drift & overview)**. Hooks, slash commands, worktree naming/creation,
-auto-resume → **spec 05 (Worklode plugin)**. The observed/projection tables in the same
+→ **spec 005 (Prioritization & pickup)**. RDF vocabulary, IRI scheme, backbone→graph
+projection → **spec 006 (Knowledge graph)**. Observed-layer derivers and drift queries
+→ **spec 007 (Drift & overview)**. Hooks, slash commands, worktree naming/creation,
+auto-resume → **spec 008 (Worklode plugin)**. The observed/projection tables in the same
 database (`issues`, `pull_requests`, `ci_runs`, `reviews`, `artifacts`, `deployments`,
-`runtime_events`) have their **semantics** owned by 03/04; this spec only guarantees
+`runtime_events`) have their **semantics** owned by 006/007; this spec only guarantees
 they exist in the Postgres schema.
 
 ---
@@ -128,7 +128,7 @@ CREATE UNIQUE INDEX leases_active_worktree ON leases (worktree) WHERE released_a
 `worktree` is an **opaque, stable identity string** the plugin supplies; the backbone
 never parses it. Recommended canonical form `<host>:<abs-worktree-root>` (deterministic
 worktree name `wt/<id>-<slug>` from D14 makes `/lode-resume`'s lookup trivial). Exact
-composition is fixed in **spec 05**; the backbone only requires it be stable for a
+composition is fixed in **spec 008**; the backbone only requires it be stable for a
 worktree's lifetime and unique per live worktree. *(Open Q2.)*
 
 `DefaultLeaseTTL = 2h` (unchanged). Renewal is a **commit-cadence heartbeat**
@@ -209,7 +209,7 @@ marshal via `encoding/json`.
 3. **Release** — `release(taskID, actor)` sets `released_at = now`; if the task is
    still `in_progress`, transitions it back to `ready` (`closeLease`). If it already
    moved on (e.g. `in_review`), only the lease closes. Non-holder → `ErrNotFound`.
-   Triggered by `ExitWorktree`/worktree removal (spec 05) — **the lease dies with the
+   Triggered by `ExitWorktree`/worktree removal (spec 008) — **the lease dies with the
    worktree.**
 4. **Expiry sweep** — `ExpireLeases(now)` closes every active lease with `expires_at <
    now` and reverts each still-`in_progress` task to `ready`, one `system`
@@ -256,14 +256,14 @@ All six steps + the event insert + the `state_log` row commit atomically or not 
 / `ErrNotFound`. Unique-violation detection uses `pgconn.PgError.Code == "23505"` on the
 `leases_active` / `task_edges` unique indexes.
 
-**Accepting a pre-ranked candidate.** `claim --next` (spec 02) does **not** re-implement
-this transaction; it *supplies the candidate id* to it. Spec 02's ranker selects the
+**Accepting a pre-ranked candidate.** `claim --next` (spec 005) does **not** re-implement
+this transaction; it *supplies the candidate id* to it. Spec 005's ranker selects the
 top-ranked `ready`, unblocked, unleased task and calls `Claim` with that id. Because
 `Claim` is atomic and self-verifying, a lost race surfaces as `ErrLeased`/`ErrBlocked`/
-`ErrBadTransition`, and spec 02's loop simply re-ranks and retries the next candidate —
-there is no list→pick→claim window to race. This spec's contract to 02: **`Claim` is a
+`ErrBadTransition`, and spec 005's loop simply re-ranks and retries the next candidate —
+there is no list→pick→claim window to race. This spec's contract to 005: **`Claim` is a
 total, atomic function of one candidate id; ranking, candidate-set construction, and
-retry policy live in 02.** (Spec 02 may build its candidate scan on `FOR UPDATE SKIP
+retry policy live in 005.** (Spec 005 may build its candidate scan on `FOR UPDATE SKIP
 LOCKED` to skip already-contended rows; the atomic primitive here is per-candidate and
 agnostic to how the candidate was chosen.)
 
@@ -309,11 +309,11 @@ double-sweeps; if a single sweeper is wanted, gate it with a Postgres advisory l
 - `POST /api/v1/tasks/{id}/renew`, `POST /api/v1/tasks/{id}/release` — unchanged shape;
   holder identity is `(actor, worktree)`.
 - `lode task claim|renew|release` — a `--worktree` value replaces the
-  session flag; hooks (spec 05) supply it. `--json` output carries `worktree`.
+  session flag; hooks (spec 008) supply it. `--json` output carries `worktree`.
 - **New reopen path** — `lode task reopen <id>` → `done|abandoned → ready`
   (`task.reopened` event).
 - `claim --next` endpoint/flags (`--project`, `--strict-focus`) are **defined in spec
-  02**; this spec only guarantees the atomic `Claim` primitive it calls.
+  005**; this spec only guarantees the atomic `Claim` primitive it calls.
 
 No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in context.
 
@@ -324,8 +324,8 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
 - **Upstream:** none — this is the foundation spec. External: pgx v5, golang-migrate
   Postgres driver, a running Postgres (CNPG). Sunstone skills:
   `kubernetes` (CNPG), `golang-migrate:*` (author/lint/k8s-job/round-trip).
-- **Downstream (depend on 01):** 02 (ranking calls `Claim`; `concern`/`focus` columns
-  extend `tasks`), 03 (projects Task/edges/events into the graph via IRI), 05 (hooks
+- **Downstream (depend on 004):** 005 (ranking calls `Claim`; `concern`/`focus` columns
+  extend `tasks`), 006 (projects Task/edges/events into the graph via IRI), 008 (hooks
   drive claim/renew/release and supply `worktree`).
 
 ---
@@ -336,14 +336,14 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
    invariant "no `in_progress` without a live lease").
 2. **Worktree identity canonical form** — `<host>:<abs-path>` vs git worktree UUID vs
    the deterministic `wt/<id>-<slug>` name. Cross-host reclaim implications. The backbone
-   treats it opaque; exact form is fixed in spec 05.
+   treats it opaque; exact form is fixed in spec 008.
 3. **Isolation level** — confirm READ COMMITTED + `FOR UPDATE` + unique-index backstop
    (vs SERIALIZABLE).
 4. **Sweeper under multiple replicas** — rely on event idempotency alone, or gate the
    sweep with a Postgres advisory lock to elect a single sweeper?
-5. **Task ↔ GitHub Issue mirror** *(new; from 04 review).* A backbone Task mirrors bidirectionally
+5. **Task ↔ GitHub Issue mirror** *(new; from 007 review).* A backbone Task mirrors bidirectionally
    to a GitHub Issue so PRs can join it the native way (`Closes #N`). The backbone owns the Task and
-   the mirror link (projected to the graph as `ls:mirrors`, spec 03); the plugin (05) creates and
+   the mirror link (projected to the graph as `ls:mirrors`, spec 006); the plugin (008) creates and
    syncs the Issue. Open: create-on-task-create vs. lazy; who wins on divergent edits
    (backbone-authoritative?); handling tasks with no mirror yet.
 
@@ -366,7 +366,7 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
    that fires N parallel `Claim`s at a single `ready` task. Blocked/unblocked and
    non-`ready` cases return `ErrBlocked` / `ErrBadTransition`.
 5. `Claim` accepts a caller-supplied candidate id and returns typed errors on loss,
-   with **no ranking logic** in the backbone (ranking is spec 02).
+   with **no ranking logic** in the backbone (ranking is spec 005).
 6. State machine enforces the table above including reopen; `done→ready` and
    `abandoned→ready` produce a `task.reopened` event and `state_log` row; every illegal
    transition is `ErrBadTransition`.

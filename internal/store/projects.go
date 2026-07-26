@@ -181,7 +181,7 @@ type RepoMapping struct {
 const DefaultDoneState = "merged"
 
 // validDoneStates are the terminal states a repo mapping may declare as
-// "fully delivered" (docs/specs/2026-07-25-delivery-lifecycle-design.md).
+// "fully delivered" (docs/specs/011-delivery-lifecycle.md).
 var validDoneStates = map[string]bool{"merged": true, "deployed_prod": true, "released": true}
 
 // ValidDoneState reports whether state is an accepted repo done_state.

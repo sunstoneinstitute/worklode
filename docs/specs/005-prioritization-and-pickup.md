@@ -1,8 +1,8 @@
-# Spec 02 — Prioritization & pickup
+# Spec 005 — Prioritization & pickup
 
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `00-umbrella-architecture.md`
-**Design record:** `../2026-07-21-worklode-platform-graph-design.md` (D8, D9, D10, D12, D15)
-**Depends on:** 01 (execution backbone — task state machine, worktree-bound leases, `blocks`/`child_of` edges, the `claim` transaction).
+**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
+**Design record:** `003-platform-graph-design.md` (D8, D9, D10, D12, D15)
+**Depends on:** 004 (execution backbone — task state machine, worktree-bound leases, `blocks`/`child_of` edges, the `claim` transaction).
 
 ## Purpose & scope
 
@@ -21,9 +21,9 @@ possible on a well-spec'd project.
 **In scope:** the selection predicate, the sort key, the CLI surface and its `--json` output, the
 focus/strict-focus semantics, and the decomposition gate.
 **Out of scope (referenced, not duplicated):** the lease/claim *transaction internals* and Postgres
-mechanics (**01**); the graph vocabulary and IRI scheme (**03**); the drift queries and the
-read-only overview frontier (**04**); plugin slash commands and hooks (**05**). Note: `claim --next`
-computes its ranking **authoritatively on the backbone** (01 data) — 04's frontier is the
+mechanics (**004**); the graph vocabulary and IRI scheme (**006**); the drift queries and the
+read-only overview frontier (**007**); plugin slash commands and hooks (**008**). Note: `claim --next`
+computes its ranking **authoritatively on the backbone** (004 data) — 007's frontier is the
 eventually-consistent **overview mirror**, never the atomic source.
 
 ## `concern` & `priority` model (D10)
@@ -71,7 +71,7 @@ listed** in `focus`, and a null concern, share the worst rank (sort last, stable
 
 ## The ranking function (D9, D12)
 
-`claim --next` selects from the **ready set** — tasks that are, per spec 01/04:
+`claim --next` selects from the **ready set** — tasks that are, per spec 004/007:
 **ready** (all `blocks` dependencies satisfied) **AND unblocked** (no open blocker) **AND
 unclaimed** (no live lease) **AND claimable** (not labelled `needs-decomposition`).
 
@@ -88,8 +88,8 @@ Over that set it applies the **default sort key**, descending priority of signal
 4. **`blocking_fan_out`** — **how many tasks/deliverables the task transitively unblocks.** Higher
    first. This is the **estimate-free criticality proxy** (D12): with no effort estimates in v1,
    unit-weight transitive fan-out over the `blocks` edge stands in for "how much is waiting on
-   this." Computed on the backbone's `blocks` graph (01/02) — backbone-only, so the atomic claim needs
-   no KG read. (04's richer cross-store critical path is a separate, overview-only metric.)
+   this." Computed on the backbone's `blocks` graph (004/005) — backbone-only, so the atomic claim needs
+   no KG read. (007's richer cross-store critical path is a separate, overview-only metric.)
 
 Ties after all four keys resolve by a **stable deterministic tiebreak** (oldest `created_at`, then
 task id) so ordering is reproducible and starvation-free.
@@ -133,7 +133,7 @@ lode task claim --next [--project <id>] [--strict-focus] [--dry-run] [--json]
 ```
 
 **Behaviour — one atomic step:** the server, in a **single serialized transaction** (mechanics in
-01), evaluates the selection predicate + sort key over the ready set, takes the top-ranked
+004), evaluates the selection predicate + sort key over the ready set, takes the top-ranked
 **ready + unblocked + unclaimed + claimable** task, and **leases it to the calling worktree**
 before returning. There is **no list → pick → claim window**, therefore **no collision**: two
 concurrent `claim --next` calls are serialized and get **different** tasks (or one gets a task and
@@ -151,14 +151,14 @@ the other gets "none ready"). This is the property that enables safe 24/7 parall
 **Outcomes:**
 - **Claimed:** exit 0; `--json` emits `{ "claimed": true, "task": { id, slug, concern, priority,
   fan_out, project, lease: { worktree, expires_at } } }`. The deterministic `slug`/`id` feed the
-  worktree name `wt/<id>-<slug>` (05).
+  worktree name `wt/<id>-<slug>` (008).
 - **None ready:** exit 0, `{ "claimed": false, "reason": "no-ready-task" }` — an **empty ready set
   is normal**, not an error (the 24/7 loop polls). Distinct exit-0 reasons let the loop back off vs.
   stop.
 - **Error** (no project, auth, backbone down): non-zero exit, `{ "error": … }`.
 
 The lease binds to the **git worktree, not the session** (D14); its lifecycle, renewal
-(commit-cadence heartbeat), and expiry/sweep are **01**.
+(commit-cadence heartbeat), and expiry/sweep are **004**.
 
 ## `--strict-focus` (D9)
 
@@ -186,7 +186,7 @@ limit.
   **never** select it. It is not "ready work an agent can drift to"; it is **not claimable at all**
   until split.
 - Such a task **routes to decomposition first**: produce a Spec/Plan that splits it into child
-  tasks (via `child_of`, spec 01/03). **Decomposing a big task is itself a Worklode task** — a
+  tasks (via `child_of`, spec 004/006). **Decomposing a big task is itself a Worklode task** — a
   normal, claimable one with its own `concern`/`priority`.
 - **The "too big" call is agentic, made at review (crit)** — not a static pre-filter. A reviewer
   (human or agent) sets the label when the task's **projected context** (brief + governing
@@ -200,14 +200,14 @@ limit.
 
 ## Dependencies
 
-- **01 — Execution backbone:** task state machine, `concern`/`priority`/label storage, the `blocks`
+- **004 — Execution backbone:** task state machine, `concern`/`priority`/label storage, the `blocks`
   and `child_of` edges, the atomic lease transaction, worktree-bound lease lifecycle & heartbeat.
-- **04 — Drift & overview:** the **read-only overview** frontier that *mirrors* this spec's ranking
-  (02 is authoritative and computes on the backbone), plus the richer cross-store critical path used
+- **007 — Drift & overview:** the **read-only overview** frontier that *mirrors* this spec's ranking
+  (005 is authoritative and computes on the backbone), plus the richer cross-store critical path used
   only for human overview — never by the atomic `claim --next`.
-- **03 — Knowledge graph:** projection of Task (with `concern`) into the graph; `child_of` /
+- **006 — Knowledge graph:** projection of Task (with `concern`) into the graph; `child_of` /
   `hasPart` decomposition modelling.
-- **05 — Plugin:** `/lode-next`, `/lode-status`, and the worktree that receives the lease consume
+- **008 — Plugin:** `/lode-next`, `/lode-status`, and the worktree that receives the lease consume
   this command surface.
 
 ## Open questions

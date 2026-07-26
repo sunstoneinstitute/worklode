@@ -1,7 +1,8 @@
-# Agent sessions — design
+# Spec 012 — Agent sessions
 
 **Date**: 2026-07-25
 **Status**: Approved design, pending implementation plan
+**Umbrella**: `000-umbrella-architecture.md`
 
 ## Problem
 

@@ -1,5 +1,5 @@
 // Delivery-lifecycle fact tables
-// (docs/specs/2026-07-25-delivery-lifecycle-design.md). Handlers record
+// (docs/specs/011-delivery-lifecycle.md). Handlers record
 // facts inside a RecordEvent transaction, then call ResolveDelivery
 // (delivery_resolve.go), which advances the task to the furthest milestone
 // the facts support.

@@ -1,6 +1,6 @@
-# Worklode plugin — acceptance walkthrough (spec 05)
+# Worklode plugin — acceptance walkthrough (spec 008)
 
-Scripted verification of the seven spec-05 acceptance criteria. Items marked
+Scripted verification of the seven spec-008 acceptance criteria. Items marked
 **auto** are already proven by the Go test suite (`go test ./... -count=1` and
 `go test -tags e2e ./e2e/`); items marked **human** need a live server plus the
 `lode` plugin installed in Claude Code and are left for the user to run.
@@ -64,7 +64,7 @@ repo with no lode server running.
 Covered by A2 store/handler tests: the Brief carries task + concern/priority +
 branch + open blockers + active lease, with `governing_design`,
 `affected_components`, and `definition_of_done` present in the shape (reserved
-as null/empty until spec 03). No file contents, no unbounded lists.
+as null/empty until spec 006). No file contents, no unbounded lists.
 
 ## 6 — compiled hooks daisy-chain via `--next` (auto)
 
@@ -76,10 +76,10 @@ still runs the downstream command; `install-git-hooks` composes the chain.
 `working-under-worklode` (B3) contains the done/block/release judgment loop and
 explicitly excludes heartbeats/renewal/TTLs. Partial per plan scope: the two
 graph-fed skills (`architectural-review`, `authoring-design-as-graph`) are
-deferred until spec 03 exists — noted as out of scope in the plan header.
+deferred until spec 006 exists — noted as out of scope in the plan header.
 
 ## Deferred / not covered here
 
 - `/lode:spec`, `authoring-design-as-graph`, `architectural-review` (need the
-  spec-03 knowledge graph).
-- Task ↔ GitHub-Issue mirror (Q05.4).
+  spec-006 knowledge graph).
+- Task ↔ GitHub-Issue mirror (Q008.4).

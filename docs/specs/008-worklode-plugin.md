@@ -1,4 +1,4 @@
-# Spec 05 — Worklode plugin (Claude Code integration)
+# Spec 008 — Worklode plugin (Claude Code integration)
 
 **Status:** spec · **Umbrella:** `00-umbrella-architecture.md` · **Source:** D13, D14, D15 ·
 **Depends on:** 01 (execution backbone, worktree-bound leases), 02 (`claim --next`, `concern`/`focus`)
@@ -12,7 +12,7 @@ hook binaries, `lode task brief`, the slash commands, the judgment skills, and t
 subagent.
 
 **Out of scope (consumed, not defined here):** the ranking function and `claim --next` internals
-(02), the lease transaction and Postgres schema (01), the graph model and projection (03). This spec
+(005), the lease transaction and Postgres schema (004), the graph model and projection (006). This spec
 *calls* `lode task claim --next` and `lode task brief`; it does not implement them.
 
 ## Design lens (D14)
@@ -25,7 +25,7 @@ Three applications, in force throughout:
 - **Hooks over prompts** — lease renewal, resume, and release are compiled hooks firing on editor
   events, not instructions the model must remember to follow.
 - **Server-side selection over agent reasoning** — `claim --next` ranks and leases in one
-  transaction (02); the agent never lists-picks-claims. The user can still pick a **specific**
+  transaction (005); the agent never lists-picks-claims. The user can still pick a **specific**
   task — `lode task claim <id>` (or `/lode-next <id>`) claims that one directly; `--next` is just
   the default when no id is given.
 
@@ -50,13 +50,13 @@ the task, so any hook can map worktree ↔ task ↔ lease with a path parse, no 
 
 Lifecycle:
 
-1. **Acquire** — `/lode-next` → atomic `claim --next` (02) returns the leased task → create worktree
+1. **Acquire** — `/lode-next` → atomic `claim --next` (005) returns the leased task → create worktree
    `wt/<id>-<slug>` → **bind the lease to that worktree** (backbone records the worktree path/id on the
    lease) → inject `lode task brief`.
 2. **Hold** — the lease lives and dies with the worktree, *not* the session. Sessions open and close;
    the lease persists while the worktree exists. Renewal is the commit-cadence heartbeat (below), not
    a timer the session must service.
-3. **Resume** — a lease can **expire** (the sweeper reclaims a stalled worktree per 01). Because the
+3. **Resume** — a lease can **expire** (the sweeper reclaims a stalled worktree per 004). Because the
    worktree still exists and its name is deterministic, `/lode-resume` (or the `EnterWorktree` /
    `SessionStart` hooks) re-acquires *that same task's* expired lease trivially. Re-acquiring your own
    stalled worktree is safe and distinct from auto-*claim*, which stays opt-in.
@@ -110,14 +110,14 @@ Notes:
 
 **Deterministic context assembly — the biggest single token win.** One bounded, machine-assembled
 payload replaces the model spelunking through files to reconstruct what a task is about. Consumed from
-02/03; this spec specifies what the plugin injects and when.
+005/006; this spec specifies what the plugin injects and when.
 
 Payload (bounded, JSON):
 
 - **Task** — id, title, `concern`, `priority`, `needs-decomposition` flag, current status.
-- **Governing design** — the excerpt of the governing **Spec/Plan** (via `ls:governs`, 03), not the
+- **Governing design** — the excerpt of the governing **Spec/Plan** (via `ls:governs`, 006), not the
   whole doc.
-- **Affected components** — the `ls:affects` component set (03).
+- **Affected components** — the `ls:affects` component set (006).
 - **Definition-of-done** — the declared Deliverable target (D7).
 - **Branch** — the worktree's branch / `wt/<id>-<slug>` name.
 
@@ -150,10 +150,10 @@ Skills carry only what needs model judgment; anything deterministic is a hook or
 - **`authoring-design-as-graph`** — graduated to task complexity (D15): most tasks need only a **Plan**,
   some need a **Spec/ADR**, many need neither; do not ceremony-tax small tasks. Get **crit** review;
   assert the **asserted-layer** edges (`ls:governs`, `ls:affects`, `dct:requires`/`hasPart`) into
-  the graph (03). Sets `needs-decomposition` when projected context would blow the ~100k budget (D15),
+  the graph (006). Sets `needs-decomposition` when projected context would blow the ~100k budget (D15),
   routing to decomposition-as-a-Worklode-task.
 - **`architectural-review`** — reads the **knowledge graph** (existing ADRs/Specs/Components and their
-  edges, 03) to review a new design against the *existing* architecture: pushes back to keep the new
+  edges, 006) to review a new design against the *existing* architecture: pushes back to keep the new
   work aligned, or surfaces when the architecture itself must change. **Modeled on the `grill-with-docs`
   skill pattern** (challenge a plan against the documented domain model + decisions, sharpen terms,
   update docs as decisions crystallise) — but **fed from the graph, not loose files**: the glossary and
@@ -180,7 +180,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 
 ## Dependencies
 
-- **Spec 01** — worktree-bound lease model (bind/expire/sweeper/release), task state machine, events.
+- **Spec 004** — worktree-bound lease model (bind/expire/sweeper/release), task state machine, events.
   This spec assumes the backbone can record a worktree→lease binding and expire it.
 - **Spec 02** — `lode task claim --next` (atomic rank+lease), `concern`/`focus`, `--strict-focus`,
   `needs-decomposition` sizing and the ~100k budget.
@@ -191,18 +191,18 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 
 ## Open questions
 
-- **Q05.1 — Worktree removal vs. `/lode-done` ordering.** When a session `/lode-done`s, does the plugin
+- **Q008.1 — Worktree removal vs. `/lode-done` ordering.** When a session `/lode-done`s, does the plugin
   remove `wt/<id>-<slug>` itself, or leave removal to the human/finishing-a-branch flow? Auto-release
   fires on removal either way, but *who removes* affects whether a done-but-unmerged worktree lingers.
-- **Q05.2 — `EnterWorktree` availability across editors — RESOLVED: acceptable for v1.** Auto-resume
+- **Q008.2 — `EnterWorktree` availability across editors — RESOLVED: acceptable for v1.** Auto-resume
   is Claude-Code-only; non–Claude-Code editors and the plain-`git` path get the `install-git-hooks`
   heartbeat (renewal) but not auto-resume. Degraded coverage is accepted for v1.
-- **Q05.3 — "No already-running session" detection.** Auto-resume and offer-to-resume both need to know
-  whether a worktree already has a live session. Confirm the backbone (01) exposes a cheap liveness signal
+- **Q008.3 — "No already-running session" detection.** Auto-resume and offer-to-resume both need to know
+  whether a worktree already has a live session. Confirm the backbone (004) exposes a cheap liveness signal
   (e.g. a session-holds-worktree marker) the compiled hook can read without a model call.
-- **Q05.4 — Task ↔ GitHub Issue mirror** *(new; from 04 review).* The plugin creates and keeps the
+- **Q008.4 — Task ↔ GitHub Issue mirror** *(new; from 007 review).* The plugin creates and keeps the
   GitHub Issue mirroring a backbone Task in sync (backbone-authoritative), so a PR's native `Closes #N`
-  drives the PR→Task join (spec 04). Open: create the Issue on task-create or on first PR; how the
+  drives the PR→Task join (spec 007). Open: create the Issue on task-create or on first PR; how the
   hook authenticates to the GitHub API; reconciling manual Issue edits.
 
 ## Acceptance criteria
