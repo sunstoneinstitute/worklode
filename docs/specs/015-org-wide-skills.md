@@ -45,8 +45,14 @@ CREATE TABLE skills (
     source_repo   text NOT NULL,
     source_path   text NOT NULL,
     latest_version_id bigint,          -- FK to skill_versions, set post-insert
-    embedding     vector,              -- pgvector; latest version only; NULL if no provider
     deleted_at    timestamptz          -- soft delete when removed from git
+);
+
+CREATE TABLE skill_embeddings (        -- latest version only; empty if no provider
+    skill_id      bigint NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    chunk_index   int NOT NULL,
+    embedding     vector NOT NULL,     -- pgvector
+    PRIMARY KEY (skill_id, chunk_index)
 );
 
 CREATE TABLE skill_versions (
@@ -74,10 +80,14 @@ identity, not blobs (authority split, D1–D3).
   OpenAI-compatible HTTP endpoint (URL, model, key via env/SOPS); dimension fixed per
   instance. Local-model providers implement the same interface later. Only the server holds
   embedding credentials.
-- **Storage:** pgvector on `skills` (latest version only). Embedded text = description +
-  SKILL.md body, truncated to the model limit. Re-embed on content change; the corpus is
-  dozens–hundreds of skills, cost negligible. Changing provider/model invalidates all
-  embeddings (dimension/space mismatch) → full re-embed on config change.
+- **Storage:** `skill_embeddings` (pgvector), latest version only, **chunked**: description +
+  SKILL.md body split into overlapping chunks sized to the model window, one vector per chunk.
+  A skill's match score = max cosine over its chunks. Only SKILL.md is embedded — sibling
+  files (`references/`, scripts) are not, so SKILL.md itself must carry the text that should
+  match tasks/designs (same discipline the frontmatter-description convention already
+  demands). Re-embed on content change; the corpus is dozens–hundreds of skills, cost
+  negligible. Changing provider/model invalidates all embeddings (dimension/space mismatch)
+  → full re-embed on config change.
 - **Endpoint:** `POST /api/skills/recommend` `{task_id | doc_iri | text, limit}` → server
   assembles query text (task: title + description + governing-spec excerpt — the brief's own
   material), embeds it, cosine top-k above a server-side score floor. Returns
