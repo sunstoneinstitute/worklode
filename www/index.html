@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worklode — make the gap between intent and reality queryable</title>
+<meta name="description" content="Worklode is an open-source platform work and architecture system. Intent is asserted, reality is observed, and every gap between them — architectural drift, an unimplemented spec, a deliverable not yet in prod — is a query over the diff.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Worklode — make the gap between intent and reality queryable">
+<meta property="og:description" content="Development work as ambition reconciliation. Intent is asserted, reality is observed, drift is the diff.">
+<meta property="og:url" content="https://worklode.io/">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">
+      <img src="logo.svg" alt="" width="30" height="30">
+      <span>Worklode</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#idea">The idea</a>
+      <a href="#layers">Layers</a>
+      <a href="#drift">Drift</a>
+      <a href="#stores">Architecture</a>
+      <a href="#agents">For agents</a>
+      <a class="nav-cta" href="https://github.com/sunstoneinstitute/worklode">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="field" aria-hidden="true">
+      <svg viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--pull)" stop-opacity=".55"/>
+            <stop offset="100%" stop-color="var(--pull)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g fill="none" stroke="url(#fade)" stroke-width="1.1">
+          <path d="M600 300 C 380 300 300 170 120 120"/>
+          <path d="M600 300 C 380 300 300 210 90 220"/>
+          <path d="M600 300 C 390 300 320 300 60 330"/>
+          <path d="M600 300 C 380 300 300 390 90 440"/>
+          <path d="M600 300 C 380 300 300 430 160 520"/>
+          <path d="M600 300 C 820 300 900 170 1080 120"/>
+          <path d="M600 300 C 820 300 900 210 1110 220"/>
+          <path d="M600 300 C 810 300 880 300 1140 330"/>
+          <path d="M600 300 C 820 300 900 390 1110 440"/>
+          <path d="M600 300 C 820 300 900 430 1040 520"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="wrap hero-inner">
+      <p class="eyebrow">Open source · Sunstone Institute</p>
+      <h1>Intent is asserted.<br>Reality is observed.<br><em>The gap is a query.</em></h1>
+      <p class="lede">
+        Worklode is a platform work and architecture system. It records what your team
+        <strong>says</strong> it will build, derives what your repos and clusters
+        <strong>actually did</strong>, and turns every gap between the two into something you
+        can query — architectural drift, an unimplemented spec, a deliverable that never
+        reached production.
+      </p>
+      <p class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sunstoneinstitute/worklode">View on GitHub</a>
+        <a class="btn btn-ghost" href="#idea">How it works</a>
+      </p>
+      <p class="hero-meta">Single Go binary <code>lode</code> · PostgreSQL · RDF knowledge graph · MIT licensed</p>
+    </div>
+  </section>
+
+  <!-- ── The idea ─────────────────────────────────────────────────────── -->
+  <section id="idea" class="band">
+    <div class="wrap">
+      <p class="kicker">The thesis</p>
+      <h2>Development work as ambition reconciliation</h2>
+      <p class="section-lede">
+        Most trackers store one version of the truth and ask humans to keep it honest. Worklode
+        stores two — what was intended and what happened — and treats the difference as the
+        product.
+      </p>
+
+      <ol class="beats">
+        <li class="beat reveal">
+          <span class="beat-n">01</span>
+          <h3>Assert</h3>
+          <p>
+            Design documents, specs and ADRs declare intent: which components exist, what
+            depends on what, and what <em>done</em> means. They are authored into the graph and
+            reviewed like code — not filed away as prose nobody reads again.
+          </p>
+        </li>
+        <li class="beat reveal">
+          <span class="beat-n">02</span>
+          <h3>Observe</h3>
+          <p>
+            Derivers read ground truth: commits, pull requests, reviews, CI runs, artifacts,
+            deployments and environments. Nobody hand-maintains this layer, so nobody can
+            forget to.
+          </p>
+        </li>
+        <li class="beat reveal">
+          <span class="beat-n">03</span>
+          <h3>Reconcile</h3>
+          <p>
+            Drift, documentation gaps, unimplemented specs and the ready frontier stop being
+            standing meetings. They are all reads over the difference between the two layers.
+          </p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── Three layers ─────────────────────────────────────────────────── -->
+  <section id="layers" class="band band-mist">
+    <div class="wrap">
+      <p class="kicker">The model</p>
+      <h2>Three layers on one graph</h2>
+      <p class="section-lede">
+        One layer is asserted by people. Two are observed by machines. <strong>Deliverable</strong>
+        is the vertical reconciliation point — where a declared definition-of-done meets what is
+        actually running in production.
+      </p>
+
+      <figure class="diagram reveal">
+        <svg viewBox="0 0 880 380" role="img" aria-labelledby="layers-title">
+          <title id="layers-title">Three layers: Intent asserted, Execution and Runtime observed, joined vertically by Deliverable</title>
+
+          <!-- Intent -->
+          <g class="lyr lyr-intent">
+            <rect x="40" y="26" width="800" height="86" rx="10"/>
+            <text class="lyr-name" x="66" y="60">Intent</text>
+            <text class="lyr-tag" x="66" y="86">asserted · authored &amp; reviewed</text>
+            <text class="lyr-items" x="806" y="60" text-anchor="end">Design doc · Spec · ADR</text>
+            <text class="lyr-items" x="806" y="86" text-anchor="end">Component · Deliverable</text>
+          </g>
+
+          <!-- Execution -->
+          <g class="lyr lyr-obs">
+            <rect x="40" y="146" width="800" height="86" rx="10"/>
+            <text class="lyr-name" x="66" y="180">Execution · VCS</text>
+            <text class="lyr-tag" x="66" y="206">observed · derived from your repos</text>
+            <text class="lyr-items" x="806" y="180" text-anchor="end">Task · Issue · Pull request</text>
+            <text class="lyr-items" x="806" y="206" text-anchor="end">Commit · Review · CI run</text>
+          </g>
+
+          <!-- Runtime -->
+          <g class="lyr lyr-obs">
+            <rect x="40" y="266" width="800" height="86" rx="10"/>
+            <text class="lyr-name" x="66" y="300">Runtime · Deploy</text>
+            <text class="lyr-tag" x="66" y="326">observed · derived from your clusters</text>
+            <text class="lyr-items" x="806" y="300" text-anchor="end">Artifact · Deployment</text>
+            <text class="lyr-items" x="806" y="326" text-anchor="end">Environment · Release</text>
+          </g>
+
+          <!-- Deliverable spine -->
+          <g class="spine">
+            <line x1="440" y1="112" x2="440" y2="146"/>
+            <line x1="440" y1="232" x2="440" y2="266"/>
+            <circle cx="440" cy="112" r="4.5"/>
+            <circle cx="440" cy="146" r="4.5"/>
+            <circle cx="440" cy="232" r="4.5"/>
+            <circle cx="440" cy="266" r="4.5"/>
+          </g>
+        </svg>
+        <figcaption>
+          Execution facts flow up into the graph as a projection; design facts flow back down as
+          references. The work graph lives on one branch — project is a property, not a silo.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ── Drift ────────────────────────────────────────────────────────── -->
+  <section id="drift" class="band">
+    <div class="wrap">
+      <p class="kicker">The payoff</p>
+      <h2>Drift is a diff, not a meeting</h2>
+      <p class="section-lede">
+        Every architectural relationship exists twice: as an <strong>asserted edge</strong> someone
+        authored alongside a design document, and as an <strong>observed edge</strong> derived from
+        code, pull requests and deploys. Compare them and drift falls out.
+      </p>
+
+      <div class="formula reveal">
+        <span class="term term-obs">observed</span>
+        <span class="op">−</span>
+        <span class="term term-int">asserted</span>
+        <span class="op">−</span>
+        <span class="term term-ack">acknowledged</span>
+        <span class="op eq">=</span>
+        <span class="term term-drift">drift</span>
+      </div>
+      <p class="formula-note">
+        A deviation you meant to keep is not a violation. Mark it accepted with a node that names
+        the tolerated edge, is sanctioned by an ADR, and can be set to expire — reviewed and
+        provenanced like any other assertion, never a hidden allowlist.
+      </p>
+
+      <div class="grid-4">
+        <div class="card reveal">
+          <h3>Architectural drift</h3>
+          <p>A component depends on something your design never said it could.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Documentation gaps</h3>
+          <p>Code that exists in the observed layer with no design document behind it.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Unimplemented specs</h3>
+          <p>Intent that was written down, accepted, and then never showed up in a repo.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Ready frontier</h3>
+          <p>What is genuinely unblocked right now, computed from the graph — never cached stale.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Two stores ───────────────────────────────────────────────────── -->
+  <section id="stores" class="band band-mist">
+    <div class="wrap">
+      <p class="kicker">The architecture</p>
+      <h2>Two stores. No fact has two owners.</h2>
+      <p class="section-lede">
+        Transactional work needs locks and ACID guarantees. Architectural knowledge needs
+        versioning, branches and time travel. Those are different jobs, so Worklode uses
+        different stores and splits authority cleanly between them.
+      </p>
+
+      <div class="stores reveal">
+        <div class="store">
+          <p class="store-kind">Execution backbone</p>
+          <h3>PostgreSQL</h3>
+          <p>
+            Task state, worktree-bound leases, an append-only provenance event for every state
+            change, and the <code>blocks</code> / <code>child_of</code> edges that gate pickup.
+            Claiming a task is one ACID transaction.
+          </p>
+        </div>
+        <div class="join" aria-hidden="true">
+          <span class="join-line"></span>
+          <span class="join-label">IRI is the join</span>
+          <span class="join-line"></span>
+        </div>
+        <div class="store">
+          <p class="store-kind">Knowledge graph</p>
+          <h3>RDF quad store</h3>
+          <p>
+            Named graphs, versioning, time travel and branches. Components, design documents,
+            architectural relationships and drift. Standards-first vocabulary — Dublin Core,
+            PROV, DOAP, SKOS — with new terms minted sparingly.
+          </p>
+        </div>
+      </div>
+
+      <p class="section-note">
+        Work arrives on its own: a GitHub App feeds issues, pull requests, reviews, CI runs and
+        releases; a Flux webhook reports deployments; a Kubernetes watcher reports crash loops and
+        OOM kills. Reconciliation replays anything a webhook missed.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── For agents ───────────────────────────────────────────────────── -->
+  <section id="agents" class="band">
+    <div class="wrap">
+      <p class="kicker">Built for agent-driven teams</p>
+      <h2>Coordination should not cost tokens</h2>
+
+      <blockquote class="pull reveal">
+        Push coordination into deterministic, token-free machinery — compiled hooks, a CLI with
+        <code>--json</code>, server-side selection. Spend model tokens only on judgment.
+      </blockquote>
+
+      <div class="grid-2">
+        <div class="card reveal">
+          <h3>Atomic pickup</h3>
+          <p>
+            <code>claim --next</code> ranks and takes the next ready task in a single
+            transaction, server-side. Two agents starting at once cannot land on the same task,
+            and no model has to reason about which one to pick.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Worktree-bound leases</h3>
+          <p>
+            A lease belongs to a git worktree, not a chat session. It survives restarts and
+            context clears, renews from a compiled pre-commit hook, and expires on its own when
+            work is genuinely abandoned.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Session visibility</h3>
+          <p>
+            The backbone knows which coding-agent session holds which lease right now — across
+            Claude Code, Codex, Cursor, Aider and others — so “what is running?” has an answer.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Ranking that fits people</h3>
+          <p>
+            A <code>concern</code> dimension and a per-project <code>focus</code> steer what comes
+            next, with a strict mode when a project needs undivided attention. No story points.
+          </p>
+        </div>
+      </div>
+
+      <div class="term-block reveal">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">agent picking up work</span></div>
+<pre><code><span class="c">// claim the next ready task, create its worktree, bind the lease</span>
+<span class="p">/lode:next</span>
+<span class="c">// re-acquire the task already bound to this worktree</span>
+<span class="p">/lode:resume</span>
+<span class="c">// record a real blocker and release the lease</span>
+<span class="p">/lode:block</span> --on WL-42
+<span class="c">// finish, release, clean up</span>
+<span class="p">/lode:done</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Quickstart ───────────────────────────────────────────────────── -->
+  <section id="start" class="band band-deep">
+    <div class="wrap">
+      <p class="kicker kicker-light">Get started</p>
+      <h2>Up in a few commands</h2>
+      <p class="section-lede section-lede-light">
+        Docker Compose brings up Postgres, applies migrations and starts the server. Then install
+        the CLI and claim something.
+      </p>
+
+      <div class="term-block term-dark reveal">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">shell</span></div>
+<pre><code><span class="c"># start the stack</span>
+export LODE_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)
+docker compose up -d
+
+<span class="c"># install the CLI</span>
+go install ./cmd/lode
+
+<span class="c"># create a project, map a repo, add work, claim it</span>
+lode project add sunstone-web --name <span class="s">"Sunstone Web"</span>
+lode project add-repo sunstone-web sunstoneinstitute/sunstone-web
+lode task add --title <span class="s">"Fix the footer link"</span>
+lode task claim --next</code></pre>
+      </div>
+
+      <p class="cta-row">
+        <a class="btn btn-invert" href="https://github.com/sunstoneinstitute/worklode">Read the docs on GitHub</a>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <img src="logo.svg" alt="" width="26" height="26">
+      <span>Worklode</span>
+    </div>
+    <nav class="foot-links">
+      <a href="https://github.com/sunstoneinstitute/worklode">GitHub</a>
+      <a href="https://github.com/sunstoneinstitute/worklode/blob/main/LICENSE">MIT licence</a>
+      <a href="https://sunstoneinstitute.ai">Sunstone Institute</a>
+    </nav>
+    <p class="foot-note">Built at Sunstone Institute. Open source under the MIT licence.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
