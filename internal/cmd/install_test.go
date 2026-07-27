@@ -226,7 +226,12 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 	}
 }
 
-func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
+// TestInstallHooksJSONOmitsSkippedIntegration checks the installResult struct
+// tag directly: json.Marshal on a skipped integration's nil field must omit
+// the key entirely. This proves the struct is shaped right, not that the
+// command actually emits it — see TestInstallCmdJSONOmitsSkippedIntegration
+// below for the real end-to-end check.
+func TestInstallHooksJSONOmitsSkippedIntegration(t *testing.T) {
 	root := initGitRepo(t)
 	res, err := installHooks(root, hookTargets{vcs: vcsGit}, scopeLocal)
 	if err != nil {
@@ -368,5 +373,235 @@ func TestReportUninstallUnknownVCSActionIsHonest(t *testing.T) {
 	}
 	if strings.Contains(got, "no Worklode pre-commit hook") {
 		t.Fatalf("output = %q, an unknown action must not be reported as the no-op message", got)
+	}
+}
+
+// --- ISSUE 2: uninstall no longer claims to remove hooks that were never there --
+
+// TestUninstallCmdReportsHonestNoOpForBothIntegrations reproduces the
+// reviewer's repro directly: `lode uninstall` in a repo with nothing
+// installed must report a genuine no-op on both integrations, not "removed"
+// for a settings file that was never written.
+func TestUninstallCmdReportsHonestNoOpForBothIntegrations(t *testing.T) {
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "uninstall")
+	if err != nil {
+		t.Fatalf("uninstall on a repo with nothing installed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "git: no Worklode pre-commit hook in") {
+		t.Fatalf("output missing the VCS no-op line: %q", out)
+	}
+	if !strings.Contains(out, "claude-code: no Worklode hooks in") {
+		t.Fatalf("output missing the agent no-op line: %q", out)
+	}
+	if strings.Contains(out, "removed") {
+		t.Fatalf("output claims something was removed on a repo with nothing installed: %q", out)
+	}
+	settingsPath := filepath.Join(root, ".claude", "settings.local.json")
+	if fileExists(settingsPath) {
+		t.Fatalf("uninstall created a settings file at %s that never existed", settingsPath)
+	}
+}
+
+// --- ISSUE 3: reportInstall/reportUninstall coverage ------------------------
+
+func TestReportInstallLinesWithChainTarget(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	res := installResult{
+		VCS:   &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks", ChainedTo: "/repo/.git/hooks/pre-commit.pre-lode"},
+		Agent: &agentInstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json"},
+	}
+	if err := reportInstall(cmd, res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	want := "git: installed pre-commit hook in /repo/.git/hooks\n" +
+		"git: chains to /repo/.git/hooks/pre-commit.pre-lode\n" +
+		"claude-code: installed hooks in /repo/.claude/settings.local.json\n"
+	if buf.String() != want {
+		t.Fatalf("output = %q, want %q", buf.String(), want)
+	}
+}
+
+func TestReportInstallNoChainLineWhenNothingToChainTo(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	res := installResult{VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks"}}
+	if err := reportInstall(cmd, res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	want := "git: installed pre-commit hook in /repo/.git/hooks\n"
+	if buf.String() != want {
+		t.Fatalf("output = %q, want %q (no \"chains to\" line)", buf.String(), want)
+	}
+}
+
+func TestReportUninstallVCSActions(t *testing.T) {
+	for _, tc := range []struct {
+		name, action, want string
+	}{
+		{"removed", hookActionRemoved, "git: removed pre-commit hook from /repo/.git/hooks\n"},
+		{"restored", hookActionRestored, "git: removed pre-commit hook from /repo/.git/hooks and restored the previous one\n"},
+		{"none", hookActionNone, "git: no Worklode pre-commit hook in /repo/.git/hooks\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			res := uninstallResult{VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks", Action: tc.action}}
+			if err := reportUninstall(cmd, res); err != nil {
+				t.Fatalf("reportUninstall: %v", err)
+			}
+			if buf.String() != tc.want {
+				t.Fatalf("output = %q, want %q", buf.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestReportUninstallAgentActions(t *testing.T) {
+	for _, tc := range []struct {
+		name, action, want string
+	}{
+		{"removed", hookActionRemoved, "claude-code: removed hooks from /repo/.claude/settings.local.json\n"},
+		{"none", hookActionNone, "claude-code: no Worklode hooks in /repo/.claude/settings.local.json\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			res := uninstallResult{Agent: &agentUninstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tc.action}}
+			if err := reportUninstall(cmd, res); err != nil {
+				t.Fatalf("reportUninstall: %v", err)
+			}
+			if buf.String() != tc.want {
+				t.Fatalf("output = %q, want %q", buf.String(), tc.want)
+			}
+		})
+	}
+}
+
+// jsonCmd builds a bare *cobra.Command carrying a local --json flag (the real
+// commands rely on the persistent one declared on rootCmd, which a standalone
+// test command doesn't have), set to true, with output captured in buf.
+func jsonCmd(buf *bytes.Buffer) *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("json", false, "")
+	cmd.Flags().Set("json", "true")
+	cmd.SetOut(buf)
+	return cmd
+}
+
+func TestReportInstallJSON(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := jsonCmd(&buf)
+	res := installResult{VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks"}}
+	if err := reportInstall(cmd, res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s: %v", buf.String(), err)
+	}
+	if _, ok := decoded["vcs"]; !ok {
+		t.Fatalf("JSON missing vcs key: %s", buf.String())
+	}
+	if _, ok := decoded["agent"]; ok {
+		t.Fatalf("JSON has an agent key for a skipped integration: %s", buf.String())
+	}
+}
+
+func TestReportUninstallJSON(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := jsonCmd(&buf)
+	res := uninstallResult{
+		VCS:   &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks", Action: hookActionRemoved},
+		Agent: &agentUninstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: hookActionNone},
+	}
+	if err := reportUninstall(cmd, res); err != nil {
+		t.Fatalf("reportUninstall: %v", err)
+	}
+	var decoded struct {
+		VCS   struct{ Action string } `json:"vcs"`
+		Agent struct{ Action string } `json:"agent"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s: %v", buf.String(), err)
+	}
+	if decoded.VCS.Action != hookActionRemoved {
+		t.Fatalf("vcs.action = %q, want %q", decoded.VCS.Action, hookActionRemoved)
+	}
+	if decoded.Agent.Action != hookActionNone {
+		t.Fatalf("agent.action = %q, want %q", decoded.Agent.Action, hookActionNone)
+	}
+}
+
+// --- ISSUE 4: real end-to-end --json coverage --------------------------------
+
+// TestInstallCmdJSONOmitsSkippedIntegration runs the actual install command
+// (not just the installResult struct) and decodes its stdout, so a bug in
+// reportInstall's JSON path — not just the struct tags — would fail this.
+func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	var buf bytes.Buffer
+	cmd := newInstallCmd()
+	cmd.Flags().Bool("json", false, "")
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--json", "--no-agent"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute install --json --no-agent: %v\noutput: %s", err, buf.String())
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s: %v", buf.String(), err)
+	}
+	if _, ok := decoded["vcs"]; !ok {
+		t.Fatalf("JSON missing the vcs key: %s", buf.String())
+	}
+	if _, ok := decoded["agent"]; ok {
+		t.Fatalf("JSON has an agent key for a skipped integration: %s", buf.String())
+	}
+}
+
+// TestUninstallCmdJSONIncludesActionOnBothSides mirrors the install e2e test
+// for uninstall: both integrations must carry an "action" key in real --json
+// output, not just in the struct.
+func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
+	root := initGitRepo(t)
+	if _, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+	t.Chdir(root)
+
+	var buf bytes.Buffer
+	cmd := newUninstallCmd()
+	cmd.Flags().Bool("json", false, "")
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute uninstall --json: %v\noutput: %s", err, buf.String())
+	}
+
+	var decoded struct {
+		VCS   struct{ Action string } `json:"vcs"`
+		Agent struct{ Action string } `json:"agent"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s: %v", buf.String(), err)
+	}
+	if decoded.VCS.Action != hookActionRemoved {
+		t.Fatalf("vcs.action = %q, want %q", decoded.VCS.Action, hookActionRemoved)
+	}
+	if decoded.Agent.Action != hookActionRemoved {
+		t.Fatalf("agent.action = %q, want %q", decoded.Agent.Action, hookActionRemoved)
 	}
 }

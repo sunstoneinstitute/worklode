@@ -127,7 +127,7 @@ func installClaudeHooks(path string) error {
 	if err != nil {
 		return err
 	}
-	hooks := stripLodeHooks(settingsHooks(settings))
+	hooks, _ := stripLodeHooks(settingsHooks(settings))
 	for _, b := range claudeBindings {
 		hooks[b.Event] = appendBinding(hooks[b.Event], b)
 	}
@@ -136,22 +136,31 @@ func installClaudeHooks(path string) error {
 }
 
 // uninstallClaudeHooks removes Worklode's bindings from the settings file at
-// path. A missing file is a no-op: there is nothing to uninstall.
-func uninstallClaudeHooks(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil
+// path, reporting hookActionNone or hookActionRemoved (the same vocabulary
+// uninstallGitHooks uses). A missing file, or one with no `lode hook` entries
+// to strip, is hookActionNone and leaves the file untouched — a no-op must
+// not reformat someone's settings JSON or bump its mtime.
+func uninstallClaudeHooks(path string) (action string, err error) {
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return hookActionNone, nil
 	}
 	settings, err := readSettingsFile(path)
 	if err != nil {
-		return err
+		return "", err
 	}
-	hooks := stripLodeHooks(settingsHooks(settings))
+	hooks, changed := stripLodeHooks(settingsHooks(settings))
+	if !changed {
+		return hookActionNone, nil
+	}
 	if len(hooks) == 0 {
 		delete(settings, "hooks")
 	} else {
 		settings["hooks"] = hooks
 	}
-	return writeSettingsFile(path, settings)
+	if err := writeSettingsFile(path, settings); err != nil {
+		return "", err
+	}
+	return hookActionRemoved, nil
 }
 
 // settingsHooks returns the settings' "hooks" object, or an empty one when it
@@ -179,9 +188,11 @@ func appendBinding(existing any, b claudeBinding) []any {
 
 // stripLodeHooks removes every `lode hook` entry from a hooks object, dropping
 // groups and events that end up empty so an uninstall leaves no residue. Any
-// third-party hook sharing an event is preserved.
-func stripLodeHooks(hooks map[string]any) map[string]any {
-	out := map[string]any{}
+// third-party hook sharing an event is preserved. changed reports whether any
+// entry was actually removed, so a caller can tell a genuine removal from a
+// no-op and skip rewriting the file for the latter.
+func stripLodeHooks(hooks map[string]any) (out map[string]any, changed bool) {
+	out = map[string]any{}
 	for event, raw := range hooks {
 		groups, ok := raw.([]any)
 		if !ok {
@@ -204,6 +215,7 @@ func stripLodeHooks(hooks map[string]any) map[string]any {
 			var keptEntries []any
 			for _, e := range entries {
 				if isLodeHookEntry(e) {
+					changed = true
 					continue
 				}
 				keptEntries = append(keptEntries, e)
@@ -219,7 +231,7 @@ func stripLodeHooks(hooks map[string]any) map[string]any {
 		}
 		out[event] = kept
 	}
-	return out
+	return out, changed
 }
 
 // isLodeHookEntry reports whether one hook entry runs a `lode hook` command.

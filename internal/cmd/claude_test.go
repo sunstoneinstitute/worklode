@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // readSettings reads a settings file as generic JSON, failing the test if it
@@ -174,8 +175,12 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 		t.Fatalf("Stop commands: %v, want the foreign hook plus ours", stop)
 	}
 
-	if err := uninstallClaudeHooks(path); err != nil {
+	action, err := uninstallClaudeHooks(path)
+	if err != nil {
 		t.Fatalf("uninstall: %v", err)
+	}
+	if action != hookActionRemoved {
+		t.Fatalf("uninstall action = %q, want %q", action, hookActionRemoved)
 	}
 	settings = readSettings(t, path)
 	if _, ok := settings["permissions"]; !ok {
@@ -191,10 +196,64 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 
 func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := uninstallClaudeHooks(path); err != nil {
+	action, err := uninstallClaudeHooks(path)
+	if err != nil {
 		t.Fatalf("uninstall with no settings file: %v, want nil", err)
+	}
+	if action != hookActionNone {
+		t.Fatalf("action = %q, want %q", action, hookActionNone)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("uninstall created a settings file")
+	}
+}
+
+// TestClaudeUninstallNoopLeavesFileUntouched covers the case where the
+// settings file exists but has no `lode hook` entries to strip: the action
+// must be hookActionNone (not the false "removed"), and the file must not be
+// rewritten at all — a no-op uninstall reformatting someone's hand-edited
+// JSON or bumping its mtime would be its own kind of lie.
+func TestClaudeUninstallNoopLeavesFileUntouched(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, "settings.local.json")
+	content := []byte(`{
+  "permissions": {"allow": ["Bash(go test:*)"]},
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "my-own-tool --report"}]}]
+  }
+}
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+	past := time.Now().Add(-1 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(path, past, past); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	action, err := uninstallClaudeHooks(path)
+	if err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if action != hookActionNone {
+		t.Fatalf("action = %q, want %q (no lode hooks were present)", action, hookActionNone)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after uninstall: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("no-op uninstall rewrote file content:\nbefore: %s\nafter:  %s", content, got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after uninstall: %v", err)
+	}
+	if !info.ModTime().Equal(past) {
+		t.Fatalf("no-op uninstall updated mtime: got %v, want unchanged %v", info.ModTime(), past)
 	}
 }

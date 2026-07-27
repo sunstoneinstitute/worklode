@@ -99,8 +99,9 @@ type vcsUninstall struct {
 }
 
 type agentUninstall struct {
-	Agent string `json:"agent"`
-	Path  string `json:"path"`
+	Agent  string `json:"agent"`
+	Path   string `json:"path"`
+	Action string `json:"action"`
 }
 
 // installHooks installs every selected integration for the repo containing
@@ -147,10 +148,11 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		if err != nil {
 			return res, err
 		}
-		if err := uninstallClaudeHooks(path); err != nil {
+		action, err := uninstallClaudeHooks(path)
+		if err != nil {
 			return res, err
 		}
-		res.Agent = &agentUninstall{Agent: targets.agent, Path: path}
+		res.Agent = &agentUninstall{Agent: targets.agent, Path: path, Action: action}
 	}
 	return res, nil
 }
@@ -279,7 +281,14 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 		}
 	}
 	if res.Agent != nil {
-		fmt.Fprintf(out, "%s: removed hooks from %s\n", res.Agent.Agent, res.Agent.Path)
+		switch res.Agent.Action {
+		case hookActionRemoved:
+			fmt.Fprintf(out, "%s: removed hooks from %s\n", res.Agent.Agent, res.Agent.Path)
+		case hookActionNone:
+			fmt.Fprintf(out, "%s: no Worklode hooks in %s\n", res.Agent.Agent, res.Agent.Path)
+		default:
+			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.Agent.Agent, res.Agent.Action, res.Agent.Path)
+		}
 	}
 	return nil
 }
