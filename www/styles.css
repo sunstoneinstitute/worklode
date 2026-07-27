@@ -287,6 +287,11 @@ h2 {
 
 .band-deep h2 { color: var(--white); }
 
+h2 em {
+  font-style: normal;
+  color: var(--lode);
+}
+
 h3 {
   margin: 0 0 8px;
   font-size: 1.06rem;
