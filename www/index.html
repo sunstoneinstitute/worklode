@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Worklode — make the gap between intent and reality queryable</title>
-<meta name="description" content="Worklode is an open-source platform work and architecture system. Intent is asserted, reality is observed, and every gap between them — architectural drift, an unimplemented spec, a deliverable not yet in prod — is a query over the diff.">
+<title>Worklode — the coordination layer for multi-player, multi-agent work</title>
+<meta name="description" content="Worklode is an open-source coordination layer for multi-player, multi-agent work. Many people, many agents and many repos share one graph, holding both what the team intended and what actually happened.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Worklode — make the gap between intent and reality queryable">
-<meta property="og:description" content="Development work as ambition reconciliation. Intent is asserted, reality is observed, drift is the diff.">
+<meta property="og:title" content="Worklode — the coordination layer for multi-player, multi-agent work">
+<meta property="og:description" content="Many people. Many agents. One shared graph. The coordination layer for multi-player, multi-agent work.">
 <meta property="og:url" content="https://worklode.io/">
 </head>
 <body>
@@ -27,7 +27,7 @@
       <a href="#layers">Layers</a>
       <a href="#drift">Drift</a>
       <a href="#stores">Architecture</a>
-      <a href="#agents">For agents</a>
+      <a href="#coordination">Coordination</a>
       <a class="nav-cta" href="https://github.com/sunstoneinstitute/worklode">GitHub</a>
     </nav>
   </div>
@@ -63,13 +63,11 @@
     <div class="wrap hero-inner">
       <img class="hero-mark" src="logo.svg" alt="" width="112" height="96">
       <p class="eyebrow">Open source · Sunstone Institute</p>
-      <h1>Intent is asserted.<br>Reality is observed.<br><em>The gap is a query.</em></h1>
+      <h1>Many people. Many agents.<br><em>One shared graph.</em></h1>
       <p class="lede">
-        Worklode is a platform work and architecture system. It records what your team
-        <strong>says</strong> it will build, derives what your repos and clusters
-        <strong>actually did</strong>, and turns every gap between the two into something you
-        can query — architectural drift, an unimplemented spec, a deliverable that never
-        reached production.
+        Worklode is the coordination layer for <strong>multi-player, multi-agent</strong> work.
+        Most agentic tooling still assumes one human and one agent in one repo. Worklode assumes
+        a crowd, and gives everyone in it the same state to read and write.
       </p>
       <p class="cta-row">
         <a class="btn btn-primary" href="https://github.com/sunstoneinstitute/worklode">View on GitHub</a>
@@ -83,21 +81,22 @@
   <section id="idea" class="band">
     <div class="wrap">
       <p class="kicker">The thesis</p>
-      <h2>Development work as ambition reconciliation</h2>
+      <h2>Intent is declared.<br>Reality is observed.<br><em>The gap is a query.</em></h2>
       <p class="section-lede">
-        Most trackers store one version of the truth and ask humans to keep it honest. Worklode
-        stores two — what was intended and what happened — and treats the difference as the
-        product.
+        Development work as ambition reconciliation. Coordination only works if the state
+        everyone shares is actually true — so Worklode stores two versions of it: what the team
+        <strong>said</strong> it would build, and what the repos and clusters
+        <strong>actually did</strong>. The difference is the product.
       </p>
 
       <ol class="beats">
         <li class="beat reveal">
           <span class="beat-n">01</span>
-          <h3>Assert</h3>
+          <h3>Declare</h3>
           <p>
             Design documents, specs and ADRs declare intent: which components exist, what
             depends on what, and what <em>done</em> means. They are authored into the graph and
-            reviewed like code — not filed away as prose nobody reads again.
+            reviewed like code, so they stay live objects the rest of the system reads.
           </p>
         </li>
         <li class="beat reveal">
@@ -127,20 +126,20 @@
       <p class="kicker">The model</p>
       <h2>Three layers on one graph</h2>
       <p class="section-lede">
-        One layer is asserted by people. Two are observed by machines. <strong>Deliverable</strong>
+        One layer is declared by people. Two are observed by machines. <strong>Deliverable</strong>
         is the vertical reconciliation point — where a declared definition-of-done meets what is
         actually running in production.
       </p>
 
       <figure class="diagram reveal">
         <svg viewBox="0 0 880 380" role="img" aria-labelledby="layers-title">
-          <title id="layers-title">Three layers: Intent asserted, Execution and Runtime observed, joined vertically by Deliverable</title>
+          <title id="layers-title">Three layers: Intent declared, Execution and Runtime observed, joined vertically by Deliverable</title>
 
           <!-- Intent -->
           <g class="lyr lyr-intent">
             <rect x="40" y="26" width="800" height="86" rx="10"/>
             <text class="lyr-name" x="66" y="60">Intent</text>
-            <text class="lyr-tag" x="66" y="86">asserted · authored &amp; reviewed</text>
+            <text class="lyr-tag" x="66" y="86">declared · authored &amp; reviewed</text>
             <text class="lyr-items" x="806" y="60" text-anchor="end">Design doc · Spec · ADR</text>
             <text class="lyr-items" x="806" y="86" text-anchor="end">Component · Deliverable</text>
           </g>
@@ -175,7 +174,8 @@
         </svg>
         <figcaption>
           Execution facts flow up into the graph as a projection; design facts flow back down as
-          references. The work graph lives on one branch — project is a property, not a silo.
+          references. The work graph lives on one branch, with project as an ordinary property of
+          the work.
         </figcaption>
       </figure>
     </div>
@@ -187,7 +187,7 @@
       <p class="kicker">The payoff</p>
       <h2>Drift is a diff, not a meeting</h2>
       <p class="section-lede">
-        Every architectural relationship exists twice: as an <strong>asserted edge</strong> someone
+        Every architectural relationship exists twice: as a <strong>declared edge</strong> someone
         authored alongside a design document, and as an <strong>observed edge</strong> derived from
         code, pull requests and deploys. Compare them and drift falls out.
       </p>
@@ -195,7 +195,7 @@
       <div class="formula reveal">
         <span class="term term-obs">observed</span>
         <span class="op">−</span>
-        <span class="term term-int">asserted</span>
+        <span class="term term-int">declared</span>
         <span class="op">−</span>
         <span class="term term-ack">acknowledged</span>
         <span class="op eq">=</span>
@@ -204,7 +204,7 @@
       <p class="formula-note">
         A deviation you meant to keep is not a violation. Mark it accepted with a node that names
         the tolerated edge, is sanctioned by an ADR, and can be set to expire — reviewed and
-        provenanced like any other assertion, never a hidden allowlist.
+        provenanced like any other declaration.
       </p>
 
       <div class="grid-4">
@@ -274,10 +274,16 @@
   </section>
 
   <!-- ── For agents ───────────────────────────────────────────────────── -->
-  <section id="agents" class="band">
+  <section id="coordination" class="band">
     <div class="wrap">
-      <p class="kicker">Built for agent-driven teams</p>
+      <p class="kicker">Multi-player by default</p>
       <h2>Coordination should not cost tokens</h2>
+      <p class="section-lede">
+        Everything below exists because more than one worker is in the repo at once. Atomic
+        pickup matters when two agents start simultaneously. Leases matter when a human takes
+        over what an agent left half-done. Session visibility matters once you can no longer see
+        everyone who is working.
+      </p>
 
       <blockquote class="pull reveal">
         Push coordination into deterministic, token-free machinery — compiled hooks, a CLI with
@@ -296,9 +302,9 @@
         <div class="card reveal">
           <h3>Worktree-bound leases</h3>
           <p>
-            A lease belongs to a git worktree, not a chat session. It survives restarts and
-            context clears, renews from a compiled pre-commit hook, and expires on its own when
-            work is genuinely abandoned.
+            A lease is bound to a git worktree. It survives restarts and context clears, renews
+            from a compiled pre-commit hook, and expires on its own when work is genuinely
+            abandoned.
           </p>
         </div>
         <div class="card reveal">
