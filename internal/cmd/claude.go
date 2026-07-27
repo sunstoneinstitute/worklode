@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -58,95 +56,6 @@ var claudeBindings = []claudeBinding{
 	{Event: "SubagentStop", Command: "lode hook heartbeat"},
 	{Event: "Notification", Command: "lode hook heartbeat"},
 	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
-}
-
-func init() {
-	rootCmd.AddCommand(newClaudeCmd())
-}
-
-func newClaudeCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "claude",
-		Short: "Manage Worklode's Claude Code integration",
-	}
-	cmd.AddCommand(newClaudeInstallCmd(), newClaudeUninstallCmd())
-	return cmd
-}
-
-func newClaudeInstallCmd() *cobra.Command {
-	var scope string
-	cmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install Worklode's hooks into this repo's Claude Code settings",
-		Long: "Writes Worklode's lifecycle hook bindings (session start/end, heartbeat, " +
-			"worktree enter) into the repo's Claude Code settings file. " +
-			"Safe to re-run: it replaces Worklode's own entries and leaves every other " +
-			"setting untouched.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
-			}
-			path, err := settingsPathForScope(cwd, scope)
-			if err != nil {
-				return err
-			}
-			if err := installClaudeHooks(path); err != nil {
-				return err
-			}
-			return reportClaudeCmd(cmd, "installed", path)
-		},
-	}
-	cmd.Flags().StringVar(&scope, "scope", scopeLocal,
-		"which settings file to write: local (settings.local.json) or project (settings.json)")
-	return cmd
-}
-
-func newClaudeUninstallCmd() *cobra.Command {
-	var scope string
-	cmd := &cobra.Command{
-		Use:   "uninstall",
-		Short: "Remove Worklode's hooks from this repo's Claude Code settings",
-		Long: "Removes every `lode hook` binding from the repo's Claude Code settings file, " +
-			"leaving all other settings — including third-party hooks on the same events — " +
-			"in place. A missing settings file is not an error.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
-			}
-			path, err := settingsPathForScope(cwd, scope)
-			if err != nil {
-				return err
-			}
-			if err := uninstallClaudeHooks(path); err != nil {
-				return err
-			}
-			return reportClaudeCmd(cmd, "uninstalled", path)
-		},
-	}
-	cmd.Flags().StringVar(&scope, "scope", scopeLocal,
-		"which settings file to write: local (settings.local.json) or project (settings.json)")
-	return cmd
-}
-
-// reportClaudeCmd prints the outcome in whichever form the caller asked for.
-func reportClaudeCmd(cmd *cobra.Command, action, path string) error {
-	if jsonOut(cmd) {
-		b, err := json.Marshal(struct {
-			Action string `json:"action"`
-			Path   string `json:"path"`
-		}{Action: action, Path: path})
-		if err != nil {
-			return err
-		}
-		printRaw(cmd, b)
-		return nil
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "%s Worklode hooks in %s\n", action, path)
-	return nil
 }
 
 // settingsPathForScope resolves the settings file for scope, relative to the
