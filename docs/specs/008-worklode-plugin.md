@@ -158,7 +158,7 @@ Skills carry only what needs model judgment; anything deterministic is a hook or
   to think about heartbeats.
 - **`authoring-design-as-graph`** — graduated to task complexity (D15): most tasks need only a **Plan**,
   some need a **Spec/ADR**, many need neither; do not ceremony-tax small tasks. Get **crit** review;
-  assert the **asserted-layer** edges (`ls:governs`, `ls:affects`, `dct:requires`/`hasPart`) into
+  write the **declared-layer** edges (`ls:governs`, `ls:affects`, `dct:requires`/`hasPart`) into
   the graph (006). Sets `needs-decomposition` when projected context would blow the ~100k budget (D15),
   routing to decomposition-as-a-Worklode-task.
 - **`architectural-review`** — reads the **knowledge graph** (existing ADRs/Specs/Components and their
@@ -194,7 +194,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 - **Spec 005** — `lode task claim --next` (atomic rank+lease), `concern`/`focus`, `--strict-focus`,
   `needs-decomposition` sizing and the ~100k budget.
 - **Spec 006** — `lode task brief` content (`ls:governs`/`ls:affects` edges, Deliverable/definition-of-done)
-  and the asserted-layer edges the authoring skill writes.
+  and the declared-layer edges the authoring skill writes.
 - **External** — Claude Code hook events (`EnterWorktree`, `SessionStart`, `SessionEnd`, `ExitWorktree`,
   `PreToolUse`), the `--next`/`execve` daisy-chain contract, and (optionally) the `pre-commit` framework.
 

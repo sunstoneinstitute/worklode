@@ -167,12 +167,12 @@ optional and additive (Open Q).
 > **"Component A implemented Section B by deploying Deliverable C to Environment D."**
 >
 > It is a **query, not a node** — each clause already exists, and the sentence is true exactly where
-> the asserted and observed halves join:
+> the declared and observed halves join:
 >
 > ```sparql
 > ?component   wl:implements ?section .                    # 014 §6 manifest — observed
-> ?deliverable wl:deliveredBy ?component ;                 # 006 §Properties — asserted
->              dct:relation ?artifact , ?env .             # 006 §Deliverable — asserted
+> ?deliverable wl:deliveredBy ?component ;                 # 006 §Properties — declared
+>              dct:relation ?artifact , ?env .             # 006 §Deliverable — declared
 > ?deployment  prov:used ?artifact ;                       # 015 — observed
 >              wl:toEnvironment ?env .
 > ```
@@ -190,14 +190,14 @@ optional and additive (Open Q).
 > coarse — one Spec scopes many deliverables and many components. It is *declared*, not derived,
 > because the derivable route (Artifact → Build → Commit → paths → Component) is closed in v1: 015
 > declares `wl:Build` with **no v1 projection source**. Declaring suits a node 006 already treats as
-> asserted-only.
+> declared-only.
 
 ```turtle
-ls:governs a owl:ObjectProperty ;                 # intent → component (asserted)
+ls:governs a owl:ObjectProperty ;                 # intent → component (declared)
     rdfs:domain ls:DesignDoc ; rdfs:range ls:Component ;
     rdfs:comment "This design doc governs the architecture of that component." .
 
-ls:deliveredBy a owl:ObjectProperty ;             # deliverable → component (asserted)
+ls:deliveredBy a owl:ObjectProperty ;             # deliverable → component (declared)
     rdfs:domain ls:Deliverable ; rdfs:range ls:Component ;
     rdfs:comment "The component that delivers this deliverable. Deliberately NOT functional: a "
                  "deliverable may be delivered by several components, each advancing at its own "
@@ -210,7 +210,7 @@ ls:deliveredBy a owl:ObjectProperty ;             # deliverable → component (a
 ls:implements a owl:ObjectProperty ;              # execution → intent
     rdfs:range [ a owl:Class ; owl:unionOf ( ls:DesignDoc ls:Deliverable ls:Component ) ] ;
     rdfs:comment "A Task/PullRequest/Issue realises a DesignDoc, Deliverable, or Component. "
-                 "Asserted when authored; observed when derived (spec 007). Union range is "
+                 "Declared when authored; observed when derived (spec 007). Union range is "
                  "machine-readable; SHACL (ls-shapes.ttl) enforces presence." .
 
 ls:affects a owl:ObjectProperty ;                 # execution → component (observed)
@@ -311,7 +311,7 @@ lsc:spike   a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "spike"
 
 lsc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
 lsc:intent    a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "intent" ;
-    skos:definition "Asserted design layer — what should be true." .
+    skos:definition "Declared design layer — what should be true." .
 lsc:execution a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "execution" ;
     skos:definition "Observed execution/VCS layer — tasks, issues, PRs." .
 lsc:runtime   a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "runtime" ;
@@ -370,7 +370,7 @@ SHACL shapes catch *0*.
 - **AcceptedDeviation** — `rdf:subject`/`predicate`/`object` + `ls:sanctionedBy` (optional `dct:valid`).
 - **DesignDoc** — exactly one `ls:status` drawn from `lsc:DesignDocStatus`.
 
-**Closure is not published** (ADR-0004): the pipeline ships asserted edges + TBox only. The
+**Closure is not published** (ADR-0004): the pipeline ships declared edges + TBox only. The
 transitive/disjointness entailments are materialized by `owlrl` in CI to *prove* the axioms, and
 re-derived live via SPARQL property paths — never baked into `dist/`.
 
@@ -382,7 +382,7 @@ Three layers, joined vertically at **Deliverable**. `[v2]` = deferred. "Projecte
 already exists relationally in the Worklode backbone / ingest and is mirrored into the graph, not
 authored there (see Projection).
 
-### Layer 1 — Intent (asserted; authored graph-side, crit-reviewed)
+### Layer 1 — Intent (declared; authored graph-side, crit-reviewed)
 
 | Node | Class | v1/v2 | Origin |
 |---|---|---|---|
@@ -438,9 +438,9 @@ confirmation of Deliverables by probing artifacts/deployments is **v2** (D7).
 > Component→Section → Deliverable → Environment join. The `ls:task … ls:implements … deliverable` line below is the
 > superseded Task→intent form; the Deliverable's own `dct:hasPart` from its Spec is unaffected.
 
-A `ls:Deliverable` is the **asserted target** that reconciles intent with prod reality: the
+A `ls:Deliverable` is the **declared target** that reconciles intent with prod reality: the
 vertical join point where a Spec's ambition meets a running system. In v1 it is **declared
-only** — its acceptance criteria are asserted, not auto-confirmed.
+only** — its acceptance criteria are declared, not auto-confirmed.
 
 ```turtle
 lsid:deliverable/worklode-graph-live
@@ -627,8 +627,8 @@ triple term). Range is a literal section reference (`"§4.2"`, a heading string)
 
 Some observed-but-unasserted edges are **intentional** — a sanctioned coupling the architecture
 tolerates but never elevated to intent. Without suppression, spec 007's violation query reports them
-forever. An accepted deviation is modelled as an **asserted-layer fact** so it is crit-reviewed,
-provenanced, and expirable like any other asserted edge — **not** a backbone allowlist.
+forever. An accepted deviation is modelled as a **declared-layer fact** so it is crit-reviewed,
+provenanced, and expirable like any other declared edge — **not** a backbone allowlist.
 
 **Why a separate node, not a triple-term annotation.** The tolerated edge must **not** be asserted:
 asserting `A dct:requires B` would make it sanctioned intent, and it would then report as
@@ -654,7 +654,7 @@ lsid:deviation/pfas-reads-ingest-cache
 
 - **Home graph.** Authored into the **asserted named graph of the sanctioning ADR**
   (`…/graph/asserted/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
-  asserted edge. Superseding or removing that ADR removes the suppression. No new authorisation
+  declared edge. Superseding or removing that ADR removes the suppression. No new authorisation
   mechanism: whoever may author intent may author a deviation.
 - **Expiry.** Optional `dct:valid` (an `xsd:date`). Past it, the deviation stops suppressing and
   the violation re-surfaces (spec 007) — a suppression cannot silently outlive its reason. No expiry
@@ -730,7 +730,7 @@ lsid:deviation/pfas-reads-ingest-cache
    target instead, and is witnessed by that Deployment reaching `wlc:deployed` over a Commit on
    the delivering component's default branch. A round-trip proves both forms.
 7. An `ls:AcceptedDeviation` names a `dct:requires` edge via `rdf:subject`/`predicate`/`object`
-   **without** asserting it (the edge is absent from the asserted layer), carries `ls:sanctionedBy`
+   **without** asserting it (the edge is absent from the declared layer), carries `ls:sanctionedBy`
    → an ADR and an optional `dct:valid` expiry, and is distinguishable by a drift query
    (spec 007) as suppressing vs. expired.
 8. **Workstream named graphs:** a Task belonging to two Workstreams (`ls:inWorkstream`) has its
