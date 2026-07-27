@@ -11,7 +11,7 @@
 This design record holds decisions D1–D15. Specs `000-umbrella-architecture.md`
 and `004`–`009` graduated out of it; D-ids are not renumbered.
 
-Thesis: **development work as ambition reconciliation.** Intent is *asserted*; reality
+Thesis: **development work as ambition reconciliation.** Intent is *declared*; reality
 is *observed*; every gap between them — architectural drift, an unimplemented spec, a
 deliverable not yet in prod — is a query over the diff.
 
@@ -54,7 +54,7 @@ joined by IRI.
 - DesignDocs reviewed via **crit**; the `ls:` vocabulary lands as a PR to **rdf-registry**.
 
 **D5 — Two-layer graph; drift = the diff.**
-- **Asserted layer** (intent): authored with the design doc, crit-reviewed.
+- **Declared layer** (intent): authored with the design doc, crit-reviewed.
 - **Observed layer** (reality): derived by ingestors (Go imports, repo structure, PR paths, deploy/runtime hooks).
 - Struggle-list becomes standing queries: drift, missing ADRs, drifted specs,
   unimplemented specs, doc gaps — all reads over the diff.
@@ -65,12 +65,12 @@ joined by IRI.
 
 > **Amended by 015 §7.** Commit is v1 (delivery resolution needs it) and WorkflowRun is gone — `wl:Build` subsumes it.
 
-- Layer 1 Intent (asserted): Component, DesignDoc, [Milestone v2], Deliverable.
+- Layer 1 Intent (declared): Component, DesignDoc, [Milestone v2], Deliverable.
 - Layer 2 Execution/VCS (observed): Task, Issue, PullRequest; [Branch, Commit, WorkflowRun, Event v2].
 - Layer 3 Runtime/Deploy (observed): Artifact, Deployment, Environment; [Cluster, Namespace, Flux* v2].
 - Most of layers 2–3 already ingested relationally → projection, not new build.
 
-**D7 — Deliverable in v1 = declared definition-of-done** (the asserted target, e.g.
+**D7 — Deliverable in v1 = declared definition-of-done** (the intent-layer target, e.g.
 "image `foo:tag` pushed", "service live in prod"). Auto-confirming it by probing
 artifacts/deployments is v2.
 
@@ -196,7 +196,7 @@ definition-of-done + branch. No file spelunking.
 **Skills (judgment only):**
 - *Working under Worklode* — done/block/release judgment (renewal is hook-enforced).
 - *Authoring design as graph* — graduated to task complexity (D15): write only the design
-  artifacts a task actually needs, get crit review, assert asserted-layer edges.
+  artifacts a task actually needs, get crit review, write declared-layer edges.
 - *Architectural review* — uses the knowledge graph (existing ADRs/specs/components) to review a
   new spec/design for alignment with the overall architecture: pushes back to keep things aligned,
   or surfaces when the architecture itself needs to change. A first real payoff of ADRs/specs

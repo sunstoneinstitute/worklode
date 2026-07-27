@@ -4,7 +4,7 @@
 
 **Amended by:** 014
 
-Worklode's **knowledge graph** (the asserted architecture graph + the projected work graph)
+Worklode's **knowledge graph** (the declared architecture graph + the projected work graph)
 lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**
 (tasks, leases, events) stays in Worklode's own Postgres — so the data-platform only has to host
 the *knowledge* half. This spec is the minimum the data-platform must ship for that.
