@@ -14,6 +14,13 @@ import (
 // tell "already ours, rewrite in place" from "third-party, preserve it".
 const hookMarker = "# worklode-hook"
 
+// What an uninstall did to the pre-commit hook.
+const (
+	hookActionNone     = "none"     // nothing of ours was there to remove
+	hookActionRemoved  = "removed"  // our hook was removed, nothing to put back
+	hookActionRestored = "restored" // our hook was removed and the preserved original put back
+)
+
 // installGitHooks writes (or rewrites) Worklode's pre-commit hook into
 // repoDir's shared hooks directory. It returns the resolved hooks directory
 // and what the installed hook chains to ("" for nothing).
@@ -83,6 +90,49 @@ func installGitHooks(repoDir string) (hooksDir, chainedTo string, err error) {
 	return hooksDir, chainedTo, nil
 }
 
+// uninstallGitHooks removes Worklode's pre-commit hook from repoDir's shared
+// hooks directory and restores whatever install preserved. It returns the
+// resolved hooks directory and one of the hookAction constants.
+//
+// It only ever removes a pre-commit carrying hookMarker: a hook it does not
+// recognize as its own belongs to someone else and is left untouched, mirroring
+// install's refusal to clobber third-party hooks. Uninstalling twice, or in a
+// repo that never installed, is a no-op rather than an error. For the same
+// reason a pre-commit.pre-lode with no hook of ours in front of it is left
+// alone: only external meddling produces one, and restoring it blindly could
+// bury a newer third-party hook.
+func uninstallGitHooks(repoDir string) (hooksDir, action string, err error) {
+	hooksDir, err = resolveHooksDir(repoDir)
+	if err != nil {
+		return "", "", err
+	}
+
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
+
+	existing, readErr := os.ReadFile(preCommitPath)
+	if os.IsNotExist(readErr) {
+		return hooksDir, hookActionNone, nil
+	}
+	if readErr != nil {
+		return "", "", fmt.Errorf("read %s: %w", preCommitPath, readErr)
+	}
+	if !strings.Contains(string(existing), hookMarker) {
+		return hooksDir, hookActionNone, nil
+	}
+
+	if err := os.Remove(preCommitPath); err != nil {
+		return "", "", fmt.Errorf("remove %s: %w", preCommitPath, err)
+	}
+	if !fileExists(preLodePath) {
+		return hooksDir, hookActionRemoved, nil
+	}
+	if err := os.Rename(preLodePath, preCommitPath); err != nil {
+		return "", "", fmt.Errorf("restore %s: %w", preCommitPath, err)
+	}
+	return hooksDir, hookActionRestored, nil
+}
+
 // resolveHooksDir resolves repoDir's shared hooks directory via
 // `git -C repoDir rev-parse --git-path hooks`, which honors core.hooksPath,
 // and makes the result absolute (git reports it relative to repoDir).
@@ -129,7 +179,9 @@ func renderHookScript(chainedTo string) string {
 }
 
 // shellSingleQuote wraps s in single quotes for safe use as one POSIX shell
-// word, escaping any embedded single quote as the standard '\” sequence.
+// word, escaping each embedded single quote as:
+//
+//	'\''
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
