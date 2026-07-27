@@ -101,7 +101,7 @@ Notes:
 - **Daisy-chain, don't terminate.** Each hook takes `--next <cmd> [argv…]`; instead of `exit(0)` it
   `execve`s the next command, passing the hook payload through. This lets Worklode's hook compose with
   whatever hooks a repo already has rather than owning the event.
-- **`lode install-git-hooks`** wires the commit-cadence heartbeat for **editor-agnostic** use (plain
+- **`lode install`** wires the commit-cadence heartbeat for **editor-agnostic** use (plain
   `git`, not just Claude Code). It **must coexist — chain existing hooks, never clobber them** (Q14.2):
   an existing `.git/hooks/pre-commit` is preserved and invoked via the `--next`/`execve` chain.
 - **Sensible default:** if `.pre-commit-config.yaml` exists in the repo root, **always chain
@@ -204,7 +204,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
   remove `wt/<id>-<slug>` itself, or leave removal to the human/finishing-a-branch flow? Auto-release
   fires on removal either way, but *who removes* affects whether a done-but-unmerged worktree lingers.
 - **Q008.2 — `EnterWorktree` availability across editors — RESOLVED: acceptable for v1.** Auto-resume
-  is Claude-Code-only; non–Claude-Code editors and the plain-`git` path get the `install-git-hooks`
+  is Claude-Code-only; non–Claude-Code editors and the plain-`git` path get the `install`
   heartbeat (renewal) but not auto-resume. Degraded coverage is accepted for v1.
 - **Q008.3 — "No already-running session" detection.** Auto-resume and offer-to-resume both need to know
   whether a worktree already has a live session. Confirm the backbone (004) exposes a cheap liveness signal
@@ -222,7 +222,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
    renews it; neither fires outside a Worklode worktree.
 3. A worktree whose lease the sweeper expired is re-acquired by `/lode-resume` (and by `EnterWorktree`
    auto-resume) with no new claim and no collision.
-4. `lode install-git-hooks` in a repo with an existing `pre-commit` hook installs the Worklode heartbeat
+4. `lode install` in a repo with an existing `pre-commit` hook installs the Worklode heartbeat
    **and** still runs the pre-existing hook (and chains `pre-commit` when `.pre-commit-config.yaml` is
    present); re-running is idempotent.
 5. `lode task brief <id> --json` returns one bounded payload (task + concern/priority + governing

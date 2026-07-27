@@ -182,7 +182,7 @@ untouched. You enter Worklode mode only by claiming, which spins up a worktree.
 **CLI, not MCP (Q14.1 resolved: no MCP in v1).** Agents drive `lode --json`: no per-tool schema
 tokens in context, deterministic greppable output.
 
-**git hooks too, but must coexist (Q14.2 resolved: both).** `lode install-git-hooks` wires the
+**git hooks too, but must coexist (Q14.2 resolved: both).** `lode install` wires the
 heartbeat for editor-agnostic use and must **chain with existing hooks, never clobber them** (via
 the `--next`/`execve` daisy-chain above). **Sensible default:** if a `.pre-commit-config.yaml`
 exists in the repo root, always chain with pre-commit.
