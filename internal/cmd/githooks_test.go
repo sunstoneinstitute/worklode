@@ -11,7 +11,7 @@ import (
 )
 
 // repoRoot returns this module's root, derived from this test file's own
-// location (internal/cmd/installhooks_test.go) so it works regardless of
+// location (internal/cmd/githooks_test.go) so it works regardless of
 // `go test`'s working directory.
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -72,7 +72,7 @@ func TestInstallGitHooksFreshInstall(t *testing.T) {
 	if !strings.Contains(content, hookMarker) {
 		t.Fatalf("pre-commit missing marker %q: %q", hookMarker, content)
 	}
-	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install-git-hooks`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
+	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
 	if content != want {
 		t.Fatalf("pre-commit content = %q, want %q", content, want)
 	}

@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -16,53 +13,6 @@ import (
 // hookMarker identifies a pre-commit file as Worklode's own, so a re-run can
 // tell "already ours, rewrite in place" from "third-party, preserve it".
 const hookMarker = "# worklode-hook"
-
-func init() {
-	rootCmd.AddCommand(newInstallHooksCmd())
-}
-
-func newInstallHooksCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "install-git-hooks",
-		Short: "Install Worklode's pre-commit hook into the current repo",
-		Long: "Writes a pre-commit hook (into the repo's shared hooks directory, honoring " +
-			"core.hooksPath) that invokes `lode hook pre-commit`. If a third-party pre-commit " +
-			"hook is already present, it is preserved as pre-commit.pre-lode and chained to; " +
-			"otherwise, if .pre-commit-config.yaml exists, it chains to the pre-commit framework. " +
-			"Safe to re-run: it converges rather than accumulating renamed hooks.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
-			}
-			hooksDir, chainedTo, err := installGitHooks(cwd)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				b, err := json.Marshal(struct {
-					HooksDir  string `json:"hooks_dir"`
-					ChainedTo string `json:"chained_to"`
-				}{HooksDir: hooksDir, ChainedTo: chainedTo})
-				if err != nil {
-					return err
-				}
-				printRaw(cmd, b)
-				return nil
-			}
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "installed pre-commit hook in %s\n", hooksDir)
-			if chainedTo != "" {
-				fmt.Fprintf(out, "chains to: %s\n", chainedTo)
-			} else {
-				fmt.Fprintln(out, "no existing hook to chain to")
-			}
-			return nil
-		},
-	}
-	return cmd
-}
 
 // installGitHooks writes (or rewrites) Worklode's pre-commit hook into
 // repoDir's shared hooks directory. It returns the resolved hooks directory
@@ -171,7 +121,7 @@ func fileExists(path string) bool {
 // path containing spaces (common on macOS) is not word-split by /bin/sh before
 // lode runs, which would silently drop the chained hook.
 func renderHookScript(chainedTo string) string {
-	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install-git-hooks`; do not edit.\n"
+	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install`; do not edit.\n"
 	if chainedTo == "" {
 		return header + `exec lode hook pre-commit "$@"` + "\n"
 	}
