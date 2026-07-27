@@ -84,7 +84,11 @@ func newClaudeInstallCmd() *cobra.Command {
 			"setting untouched.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := settingsPathForScope(scope)
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("determine working directory: %w", err)
+			}
+			path, err := settingsPathForScope(cwd, scope)
 			if err != nil {
 				return err
 			}
@@ -109,7 +113,11 @@ func newClaudeUninstallCmd() *cobra.Command {
 			"in place. A missing settings file is not an error.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := settingsPathForScope(scope)
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("determine working directory: %w", err)
+			}
+			path, err := settingsPathForScope(cwd, scope)
 			if err != nil {
 				return err
 			}
@@ -142,15 +150,11 @@ func reportClaudeCmd(cmd *cobra.Command, action, path string) error {
 }
 
 // settingsPathForScope resolves the settings file for scope, relative to the
-// git worktree root of the current directory.
-func settingsPathForScope(scope string) (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("determine working directory: %w", err)
-	}
-	root, ok := worktree.Root(cwd)
+// git worktree root containing dir.
+func settingsPathForScope(dir, scope string) (string, error) {
+	root, ok := worktree.Root(dir)
 	if !ok {
-		return "", fmt.Errorf("not inside a git repository: %s", cwd)
+		return "", fmt.Errorf("not inside a git repository: %s", dir)
 	}
 	return claudeSettingsPath(root, scope)
 }
