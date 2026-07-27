@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -243,5 +245,128 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 	}
 	if _, ok := decoded["agent"]; ok {
 		t.Fatalf("JSON has an agent key for a skipped integration: %s", b)
+	}
+}
+
+// --- ISSUE 1: partial failure still reports what already landed -----------
+
+// writeCorruptSettings seeds root's local Claude settings file with invalid
+// JSON, so installClaudeHooks/uninstallClaudeHooks fail on the agent step
+// while leaving any prior VCS step's result standing.
+func writeCorruptSettings(t *testing.T, root string) {
+	t.Helper()
+	dir := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	path := filepath.Join(dir, "settings.local.json")
+	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
+		t.Fatalf("seed corrupt settings: %v", err)
+	}
+}
+
+func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
+	root := initGitRepo(t)
+	writeCorruptSettings(t, root)
+
+	res, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	if err == nil {
+		t.Fatal("installHooks with corrupt settings: err = nil, want a parse error")
+	}
+	if res.VCS == nil {
+		t.Fatal("partial result missing VCS: the git hook step already succeeded")
+	}
+	if !fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
+		t.Fatal("pre-commit not written despite the VCS step succeeding")
+	}
+	if res.Agent != nil {
+		t.Fatalf("agent result = %+v, want nil: the agent step failed", res.Agent)
+	}
+}
+
+func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
+	root := initGitRepo(t)
+	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
+	if _, err := installHooks(root, targets, scopeLocal); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+	writeCorruptSettings(t, root)
+
+	res, err := uninstallHooks(root, targets, scopeLocal)
+	if err == nil {
+		t.Fatal("uninstallHooks with corrupt settings: err = nil, want a parse error")
+	}
+	if res.VCS == nil || res.VCS.Action != hookActionRemoved {
+		t.Fatalf("partial result VCS = %+v, want action %q: the git hook step already succeeded", res.VCS, hookActionRemoved)
+	}
+	if fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
+		t.Fatal("pre-commit still present: the VCS uninstall step should have removed it")
+	}
+	if res.Agent != nil {
+		t.Fatalf("agent result = %+v, want nil: the agent step failed", res.Agent)
+	}
+}
+
+func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
+	root := initGitRepo(t)
+	writeCorruptSettings(t, root)
+	t.Chdir(root)
+
+	out, err := runLode(t, "install")
+	if err == nil {
+		t.Fatal("install with corrupt settings: err = nil, want a parse error")
+	}
+	hooksDir, herr := resolveHooksDir(root)
+	if herr != nil {
+		t.Fatalf("resolveHooksDir: %v", herr)
+	}
+	if !fileExists(filepath.Join(hooksDir, "pre-commit")) {
+		t.Fatal("pre-commit was not installed despite the VCS step succeeding")
+	}
+	if !strings.Contains(out, "git: installed pre-commit hook in "+hooksDir) {
+		t.Fatalf("output missing the partial VCS report before the failure: %q", out)
+	}
+}
+
+func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
+	root := initGitRepo(t)
+	if _, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+	writeCorruptSettings(t, root)
+	t.Chdir(root)
+
+	out, err := runLode(t, "uninstall")
+	if err == nil {
+		t.Fatal("uninstall with corrupt settings: err = nil, want a parse error")
+	}
+	hooksDir, herr := resolveHooksDir(root)
+	if herr != nil {
+		t.Fatalf("resolveHooksDir: %v", herr)
+	}
+	if fileExists(filepath.Join(hooksDir, "pre-commit")) {
+		t.Fatal("pre-commit still present: the VCS uninstall step should have removed it despite the later agent failure")
+	}
+	if !strings.Contains(out, "git: removed pre-commit hook from "+hooksDir) {
+		t.Fatalf("output missing the partial VCS report before the failure: %q", out)
+	}
+}
+
+// --- ISSUE 5: an unrecognized uninstall action is reported honestly --------
+
+func TestReportUninstallUnknownVCSActionIsHonest(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	res := uninstallResult{VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks", Action: "bogus"}}
+	if err := reportUninstall(cmd, res); err != nil {
+		t.Fatalf("reportUninstall: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, `"bogus"`) || !strings.Contains(got, "unexpected") {
+		t.Fatalf("output = %q, want it to name the unexpected action honestly", got)
+	}
+	if strings.Contains(got, "no Worklode pre-commit hook") {
+		t.Fatalf("output = %q, an unknown action must not be reported as the no-op message", got)
 	}
 }

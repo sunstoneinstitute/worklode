@@ -103,46 +103,52 @@ type agentUninstall struct {
 	Path  string `json:"path"`
 }
 
-// installHooks installs every selected integration for the repo containing dir.
+// installHooks installs every selected integration for the repo containing
+// dir. On error it still returns whatever integrations succeeded before the
+// failing one, so the caller can report what actually landed rather than
+// discarding it.
 func installHooks(dir string, targets hookTargets, scope string) (installResult, error) {
 	var res installResult
 	if targets.vcs != "" {
 		hooksDir, chainedTo, err := installGitHooks(dir)
 		if err != nil {
-			return installResult{}, err
+			return res, err
 		}
 		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, ChainedTo: chainedTo}
 	}
 	if targets.agent != "" {
 		path, err := settingsPathForScope(dir, scope)
 		if err != nil {
-			return installResult{}, err
+			return res, err
 		}
 		if err := installClaudeHooks(path); err != nil {
-			return installResult{}, err
+			return res, err
 		}
 		res.Agent = &agentInstall{Agent: targets.agent, Path: path}
 	}
 	return res, nil
 }
 
-// uninstallHooks removes every selected integration from the repo containing dir.
+// uninstallHooks removes every selected integration from the repo containing
+// dir. On error it still returns whatever integrations were already removed
+// before the failing one: uninstall is destructive, so silently dropping a
+// partial result here is worse than for install.
 func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallResult, error) {
 	var res uninstallResult
 	if targets.vcs != "" {
 		hooksDir, action, err := uninstallGitHooks(dir)
 		if err != nil {
-			return uninstallResult{}, err
+			return res, err
 		}
 		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Action: action}
 	}
 	if targets.agent != "" {
 		path, err := settingsPathForScope(dir, scope)
 		if err != nil {
-			return uninstallResult{}, err
+			return res, err
 		}
 		if err := uninstallClaudeHooks(path); err != nil {
-			return uninstallResult{}, err
+			return res, err
 		}
 		res.Agent = &agentUninstall{Agent: targets.agent, Path: path}
 	}
@@ -172,6 +178,12 @@ func newInstallCmd() *cobra.Command {
 			}
 			res, err := installHooks(cwd, targets, scope)
 			if err != nil {
+				// Report whatever succeeded before failing: install is not
+				// atomic, and silently dropping that leaves the user thinking
+				// nothing happened when part of the repo already changed.
+				if reportErr := reportInstall(cmd, res); reportErr != nil {
+					return reportErr
+				}
 				return err
 			}
 			return reportInstall(cmd, res)
@@ -204,6 +216,12 @@ func newUninstallCmd() *cobra.Command {
 			}
 			res, err := uninstallHooks(cwd, targets, scope)
 			if err != nil {
+				// Uninstall is destructive: a failed agent step after the
+				// VCS hook was already removed must not be reported as if
+				// nothing happened.
+				if reportErr := reportUninstall(cmd, res); reportErr != nil {
+					return reportErr
+				}
 				return err
 			}
 			return reportUninstall(cmd, res)
@@ -254,8 +272,10 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 				res.VCS.VCS, res.VCS.HooksDir)
 		case hookActionRemoved:
 			fmt.Fprintf(out, "%s: removed pre-commit hook from %s\n", res.VCS.VCS, res.VCS.HooksDir)
-		default:
+		case hookActionNone:
 			fmt.Fprintf(out, "%s: no Worklode pre-commit hook in %s\n", res.VCS.VCS, res.VCS.HooksDir)
+		default:
+			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.VCS.VCS, res.VCS.Action, res.VCS.HooksDir)
 		}
 	}
 	if res.Agent != nil {
