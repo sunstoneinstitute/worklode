@@ -11,7 +11,13 @@ cross-spec references below use those numbers.
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
 architecture system — the successor scope of the original `wl` work tracker.
 
-**Thesis: development work as ambition reconciliation.** Intent is *asserted*; reality is
+**Positioning: the coordination layer for multi-player, multi-agent work.** Most agentic tooling
+assumes one human and one agent in one repo. Worklode assumes a crowd — many people and many
+agents across many repos — and gives all of them one shared graph to read and write, so
+coordination lives in state that outlives any participant's context window.
+
+**Thesis: development work as ambition reconciliation.** Coordination only works if the shared
+state is true, so Worklode holds two versions of it. Intent is *declared*; reality is
 *observed*; every gap between them — architectural drift, an unimplemented spec, a deliverable
 not yet in prod — is a query over the diff.
 
@@ -32,10 +38,10 @@ Visual model: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d
 - **IRI is the join.** Execution facts flow backbone → graph (projection); design facts flow
   graph → backbone as references. The work graph lives on one branch; project is a *property*.
 
-**Three layers on the graph:** Intent (asserted) / Execution·VCS (observed) / Runtime·Deploy
+**Three layers on the graph:** Intent (declared) / Execution·VCS (observed) / Runtime·Deploy
 (observed). **Deliverable** is the vertical reconciliation point where intent meets prod reality.
 
-**Drift = the two-layer diff.** Asserted edges (authored with design docs, crit-reviewed) vs.
+**Drift = the two-layer diff.** Declared edges (authored with design docs, crit-reviewed) vs.
 observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are reads over the diff.
 
 ---
@@ -112,10 +118,10 @@ D13 naming → 000 · D14 plugin → 008 · D15 task sizing → 005/008.
 
 **Resolved:**
 - **[007] Drift suppression → resolved.** An intentional observed-but-unasserted edge is marked
-  accepted via an asserted-layer `ls:AcceptedDeviation` node (spec 006 §Accepted deviations): it
+  accepted via a declared-layer `ls:AcceptedDeviation` node (spec 006 §Accepted deviations): it
   names the tolerated edge with RDF reification (un-asserted), is `ls:sanctionedBy` an ADR, and may
   expire (`dct:valid`). Spec 007's 4.1 violation query subtracts un-expired deviations
-  (`observed − asserted − acknowledged`). Crit-reviewed and provenanced like any asserted edge —
+  (`observed − declared − acknowledged`). Crit-reviewed and provenanced like any declared edge —
   not a backbone allowlist.
 - **[006] RDF namespace → `ls:` / `/rdf/ls/`** (Worklode), not `wt:`.
   **Superseded by 014 §1:** the namespace is `wl:` under `rdf/wl/`, not `ls:` under `rdf/ls/`.

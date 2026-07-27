@@ -104,7 +104,7 @@ identity, not blobs (authority split, D1–D3).
 
 - **Task pins:** a `skills` name list on the Task (backbone field, settable at
   create/update).
-- **Design-doc pins:** `skills: [name, …]` in doc frontmatter, asserted as
+- **Design-doc pins:** `skills: [name, …]` in doc frontmatter, declared as
   `ls:recommendsSkill` edges when the doc is ingested (rides spec 014).
 - **Brief resolution:** task pins ∪ governing-design pins. A pin naming an unknown skill is a
   brief warning, never a failure.

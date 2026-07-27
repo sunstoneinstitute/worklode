@@ -14,10 +14,12 @@ D12 (design record `003-platform-graph-design.md`).
 ## Purpose & scope
 
 This is the payoff of the whole design (D5): **development work as ambition reconciliation.**
-Intent is *asserted*; reality is *observed*; every gap between them is a query over the diff.
+Intent is *declared*; reality is *observed*; every gap between them is a query over the diff.
+With many people and many agents committing in parallel, that diff is the only view of the
+system that stays current while nobody maintains it by hand.
 
 This spec covers, and only covers:
-- **The two-layer model** — how asserted vs. observed edges are represented so that *drift = the diff*.
+- **The two-layer model** — how declared vs. observed edges are represented so that *drift = the diff*.
 - **Observed-layer derivers** — the concrete jobs that materialize the reality layer.
 - **Standing queries** — drift, doc gaps, drifted specs, unimplemented specs, the ready frontier.
 - **Critical path v1** — estimate-free criticality (D12).
@@ -33,7 +35,7 @@ the execution backbone (004); the plugin (008); the data-platform deploy of the 
 
 Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliverables from 006):
 
-- **Asserted layer (intent).** Authored *with* a design doc, crit-reviewed, `proposed → accepted`
+- **Declared layer (intent).** Authored *with* a design doc, crit-reviewed, `proposed → accepted`
   gated on crit resolution. These are the edges a human/agent claims are true: "component A
   *should* depend on B", "this Spec *governs* component C". Written by the design-authoring skill (008).
 - **Observed layer (reality).** Derived mechanically by the derivers below from code, PRs, and
@@ -51,7 +53,7 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 009):
 
 | Named graph | Layer | Written by |
 |---|---|---|
-| `…/graph/asserted/<designdoc-id>` | asserted | design-authoring skill (008), one graph per design doc |
+| `…/graph/asserted/<designdoc-id>` | declared | design-authoring skill (008), one graph per design doc |
 | `…/graph/observed/go-imports` | observed | Go/package-import deriver |
 | `…/graph/observed/repo-layout` | observed | component-boundary deriver |
 | `…/graph/observed/pr-affects` | observed | PR-path deriver |
@@ -59,7 +61,7 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 009):
 
 Concrete IRI grammar for the graph names is owned by 006/009 (branch-free term IRIs, ADR-0006);
 the `asserted` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
-its writes to its own `observed/*` graph, so a bad run can never corrupt asserted intent.
+its writes to its own `observed/*` graph, so a bad run can never corrupt declared intent.
 
 *(Alternative considered and rejected for v1: RDF-1.2 triple-term annotation tagging each edge
 with a `ls:layer` — heavier to query and to replace atomically than one graph per source.)*
@@ -86,7 +88,7 @@ All derivers share a contract:
   manifest (deriver 2). Import edges *within* a component are dropped; edges *between* components
   become `<componentA> dct:requires <componentB>` *(006)*.
 - **Output graph:** `observed/go-imports`.
-- This layer is the ground truth that architectural-drift queries compare asserted intent against.
+- This layer is the ground truth that architectural-drift queries compare declared intent against.
 
 ### 2. `component lives-in repo` — filesystem + component-boundary manifest
 
@@ -154,7 +156,7 @@ names above, and elide the IRI prefix boilerplate 006 defines. Layer comparison 
 
 Two directions, both surfaced:
 
-**Violation — observed dependency absent from asserted** (undocumented coupling; code did
+**Violation — observed dependency absent from declared** (undocumented coupling; code did
 something the architecture never sanctioned), **minus sanctioned accepted deviations** (006):
 ```sparql
 SELECT ?from ?to WHERE {
@@ -169,15 +171,15 @@ SELECT ?from ?to WHERE {
   }
 }
 ```
-Drift is thus **`observed − asserted − acknowledged`**, where *acknowledged* = un-expired
+Drift is thus **`observed − declared − acknowledged`**, where *acknowledged* = un-expired
 `ls:AcceptedDeviation`s. The deviation names the tolerated edge via RDF reification and never
-asserts it (006), so suppression does **not** leak into the asserted layer and the *stale-intent*
+asserts it (006), so suppression does **not** leak into the declared layer and the *stale-intent*
 query below is unaffected. `xsd:date(NOW())` casts the query clock to match `dct:valid`
 (`xsd:date`); a runtime that lacks `NOW()` binds today's date from `lode` instead. Expired
 deviations re-surface here automatically; all deviations (active + expired) are listable via
 `lode drift --acknowledged`.
 
-**Stale intent — asserted dependency absent from observed** (documented but no longer real; the
+**Stale intent — declared dependency absent from observed** (documented but no longer real; the
 edge the architecture claims but code has abandoned):
 ```sparql
 SELECT ?from ?to WHERE {
@@ -309,7 +311,7 @@ Everything is a read; nothing here mutates the graph. All commands honor D14 det
 (Oxigraph, per 009): a **drift board** (violations + stale intent), a **doc-gap** list, a **spec
 status** view (drifted/unimplemented/accepted), a **critical-path** view, and the **ready
 frontier**. Read-only by construction — the only ways to change the graph are authoring design
-(asserted, via 008) and running derivers (observed); there is no mutation affordance in these views.
+(declared, via 008) and running derivers (observed); there is no mutation affordance in these views.
 
 ---
 
@@ -340,11 +342,11 @@ frontier**. Read-only by construction — the only ways to change the graph are 
    (006 confirms these asserted/observed source graphs are **orthogonal** to its per-Workstream
    projection graphs.)
 3. ~~**Drift acknowledgement / suppression.**~~ — **RESOLVED (spec 006 §Accepted deviations).**
-   An intentional observed-but-unasserted edge is marked accepted with an asserted-layer
+   An intentional observed-but-unasserted edge is marked accepted with a declared-layer
    `ls:AcceptedDeviation` node that names the edge via RDF reification (un-asserted), is
    `ls:sanctionedBy` an ADR, and optionally expires (`dct:valid`). Lives in the sanctioning
    ADR's asserted graph → crit-reviewed and provenanced, not a backbone allowlist. The 4.1 query above
-   subtracts un-expired deviations (`observed − asserted − acknowledged`).
+   subtracts un-expired deviations (`observed − declared − acknowledged`).
 4. ~~Ready-frontier duality~~ — **RESOLVED (yes).** Authoritative frontier on the backbone (atomic
    `claim --next`); KG frontier is read-only overview only. Brief inconsistency under projection
    lag is accepted.
@@ -356,14 +358,14 @@ frontier**. Read-only by construction — the only ways to change the graph are 
 ## Acceptance criteria
 
 - **Two-layer wiring:** asserted and `observed/*` named graphs exist and are populated; a deriver
-  re-run fully replaces its own graph and touches no other. A planted asserted edge and a planted
+  re-run fully replaces its own graph and touches no other. A planted declared edge and a planted
   observed edge round-trip.
 - **Derivers:** all four run idempotently and confine writes to their graph. The component-boundary
   manifest format is defined and a **multi-component repo (research-stack)** resolves each path to
   the right Component; unmatched paths are reported.
 - **Standing queries:** 4.1–4.5 each return correct results on a seeded graph. Architectural drift
-  correctly reports **both** a planted violation (observed-not-asserted) and a planted stale-intent
-  edge (asserted-not-observed).
+  correctly reports **both** a planted violation (observed-not-declared) and a planted stale-intent
+  edge (declared-not-observed).
 - **Drift suppression:** a planted `ls:AcceptedDeviation` (sanctioned by an ADR) removes its edge
   from 4.1 violations while leaving the stale-intent query unchanged; the edge appears under
   `lode drift --acknowledged`; a deviation whose `dct:valid` is in the past re-surfaces as a
