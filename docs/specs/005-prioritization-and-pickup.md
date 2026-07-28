@@ -12,6 +12,12 @@ priority signal (`concern`, `priority`), the per-project steering knob (`project
 surface, the **`--strict-focus`** modifier, and the **`needs-decomposition`** sizing gate that
 keeps oversized tasks out of the pickup loop.
 
+**Multi-player framing (000).** Pickup is where the coordination layer earns its keep. With one
+human and one agent in one repo, choosing the next task is a private decision and any consistent
+ordering works. Worklode assumes a crowd — many people and many agents against one backbone — so
+selection is itself shared state, and both the ranking and the claim have to stay correct under
+contention.
+
 The whole point (D8): today `claim` needs a task id, so an agent must **list → pick → claim**,
 which races other agents → work is hand-kicked to dodge collisions → throughput is capped.
 `claim --next` closes that window: the server **ranks and leases in one transaction**, so no two
@@ -36,7 +42,7 @@ grow only by explicit schema change (same discipline as today's `priority`).
 
 | concern | meaning |
 |---|---|
-| `completeness` | close a gap between asserted intent and observed reality (missing feature/spec) |
+| `completeness` | close a gap between declared intent and observed reality (missing feature/spec) |
 | `performance` | make existing behaviour faster / cheaper |
 | `usability` | improve the experience of an existing capability |
 | `security` | close a vulnerability or harden a surface |
