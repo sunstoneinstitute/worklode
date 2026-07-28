@@ -52,7 +52,7 @@ order, each reporting pass/fail **and the fix for that failure**:
 2. `server` set and reachable.
 3. Token present (OS keychain or `LODE_TOKEN`) and accepted — via `GET /api/v1/whoami`.
 4. `current_project` set, and the project exists.
-5. Git hooks installed in this repo (`lode install-git-hooks`).
+5. Git hooks installed in this repo (`lode install`).
 6. When run inside a worktree: does it map to a task, and does that task hold a live lease.
 
 Exits non-zero if any check fails, so it is usable from a hook or CI step.

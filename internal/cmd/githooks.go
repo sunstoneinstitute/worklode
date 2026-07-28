@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -17,52 +14,12 @@ import (
 // tell "already ours, rewrite in place" from "third-party, preserve it".
 const hookMarker = "# worklode-hook"
 
-func init() {
-	rootCmd.AddCommand(newInstallHooksCmd())
-}
-
-func newInstallHooksCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "install-git-hooks",
-		Short: "Install Worklode's pre-commit hook into the current repo",
-		Long: "Writes a pre-commit hook (into the repo's shared hooks directory, honoring " +
-			"core.hooksPath) that invokes `lode hook pre-commit`. If a third-party pre-commit " +
-			"hook is already present, it is preserved as pre-commit.pre-lode and chained to; " +
-			"otherwise, if .pre-commit-config.yaml exists, it chains to the pre-commit framework. " +
-			"Safe to re-run: it converges rather than accumulating renamed hooks.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
-			}
-			hooksDir, chainedTo, err := installGitHooks(cwd)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				b, err := json.Marshal(struct {
-					HooksDir  string `json:"hooks_dir"`
-					ChainedTo string `json:"chained_to"`
-				}{HooksDir: hooksDir, ChainedTo: chainedTo})
-				if err != nil {
-					return err
-				}
-				printRaw(cmd, b)
-				return nil
-			}
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "installed pre-commit hook in %s\n", hooksDir)
-			if chainedTo != "" {
-				fmt.Fprintf(out, "chains to: %s\n", chainedTo)
-			} else {
-				fmt.Fprintln(out, "no existing hook to chain to")
-			}
-			return nil
-		},
-	}
-	return cmd
-}
+// What an uninstall did to the pre-commit hook.
+const (
+	hookActionNone     = "none"     // nothing of ours was there to remove
+	hookActionRemoved  = "removed"  // our hook was removed, nothing to put back
+	hookActionRestored = "restored" // our hook was removed and the preserved original put back
+)
 
 // installGitHooks writes (or rewrites) Worklode's pre-commit hook into
 // repoDir's shared hooks directory. It returns the resolved hooks directory
@@ -133,6 +90,49 @@ func installGitHooks(repoDir string) (hooksDir, chainedTo string, err error) {
 	return hooksDir, chainedTo, nil
 }
 
+// uninstallGitHooks removes Worklode's pre-commit hook from repoDir's shared
+// hooks directory and restores whatever install preserved. It returns the
+// resolved hooks directory and one of the hookAction constants.
+//
+// It only ever removes a pre-commit carrying hookMarker: a hook it does not
+// recognize as its own belongs to someone else and is left untouched, mirroring
+// install's refusal to clobber third-party hooks. Uninstalling twice, or in a
+// repo that never installed, is a no-op rather than an error. For the same
+// reason a pre-commit.pre-lode with no hook of ours in front of it is left
+// alone: only external meddling produces one, and restoring it blindly could
+// bury a newer third-party hook.
+func uninstallGitHooks(repoDir string) (hooksDir, action string, err error) {
+	hooksDir, err = resolveHooksDir(repoDir)
+	if err != nil {
+		return "", "", err
+	}
+
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
+
+	existing, readErr := os.ReadFile(preCommitPath)
+	if os.IsNotExist(readErr) {
+		return hooksDir, hookActionNone, nil
+	}
+	if readErr != nil {
+		return "", "", fmt.Errorf("read %s: %w", preCommitPath, readErr)
+	}
+	if !strings.Contains(string(existing), hookMarker) {
+		return hooksDir, hookActionNone, nil
+	}
+
+	if err := os.Remove(preCommitPath); err != nil {
+		return "", "", fmt.Errorf("remove %s: %w", preCommitPath, err)
+	}
+	if !fileExists(preLodePath) {
+		return hooksDir, hookActionRemoved, nil
+	}
+	if err := os.Rename(preLodePath, preCommitPath); err != nil {
+		return "", "", fmt.Errorf("restore %s: %w", preCommitPath, err)
+	}
+	return hooksDir, hookActionRestored, nil
+}
+
 // resolveHooksDir resolves repoDir's shared hooks directory via
 // `git -C repoDir rev-parse --git-path hooks`, which honors core.hooksPath,
 // and makes the result absolute (git reports it relative to repoDir).
@@ -171,7 +171,7 @@ func fileExists(path string) bool {
 // path containing spaces (common on macOS) is not word-split by /bin/sh before
 // lode runs, which would silently drop the chained hook.
 func renderHookScript(chainedTo string) string {
-	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install-git-hooks`; do not edit.\n"
+	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install`; do not edit.\n"
 	if chainedTo == "" {
 		return header + `exec lode hook pre-commit "$@"` + "\n"
 	}
@@ -179,7 +179,9 @@ func renderHookScript(chainedTo string) string {
 }
 
 // shellSingleQuote wraps s in single quotes for safe use as one POSIX shell
-// word, escaping any embedded single quote as the standard '\” sequence.
+// word, escaping each embedded single quote as:
+//
+//	'\''
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

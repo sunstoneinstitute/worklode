@@ -11,7 +11,7 @@ import (
 )
 
 // repoRoot returns this module's root, derived from this test file's own
-// location (internal/cmd/installhooks_test.go) so it works regardless of
+// location (internal/cmd/githooks_test.go) so it works regardless of
 // `go test`'s working directory.
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -72,7 +72,7 @@ func TestInstallGitHooksFreshInstall(t *testing.T) {
 	if !strings.Contains(content, hookMarker) {
 		t.Fatalf("pre-commit missing marker %q: %q", hookMarker, content)
 	}
-	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install-git-hooks`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
+	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
 	if content != want {
 		t.Fatalf("pre-commit content = %q, want %q", content, want)
 	}
@@ -394,5 +394,101 @@ func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
 	}
 	if got := readFile(t, preLodePath); got != original {
 		t.Fatalf("pre-commit.pre-lode was modified: %q, want %q", got, original)
+	}
+}
+
+// --- uninstall ---------------------------------------------------------------
+
+func TestUninstallGitHooksRemovesOurHook(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, _, err := installGitHooks(root)
+	if err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+
+	gotDir, action, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("uninstallGitHooks: %v", err)
+	}
+	if gotDir != hooksDir {
+		t.Fatalf("hooksDir = %q, want %q", gotDir, hooksDir)
+	}
+	if action != hookActionRemoved {
+		t.Fatalf("action = %q, want %q", action, hookActionRemoved)
+	}
+	if fileExists(filepath.Join(hooksDir, "pre-commit")) {
+		t.Fatal("pre-commit still present after uninstall")
+	}
+
+	// Re-running on an already-clean repo is a no-op, not an error.
+	_, action2, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("second uninstallGitHooks: %v", err)
+	}
+	if action2 != hookActionNone {
+		t.Fatalf("second run action = %q, want %q", action2, hookActionNone)
+	}
+}
+
+func TestUninstallGitHooksRestoresPreservedHook(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, err := resolveHooksDir(root)
+	if err != nil {
+		t.Fatalf("resolveHooksDir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+	thirdParty := "#!/bin/sh\necho third-party\n"
+	if err := os.WriteFile(preCommitPath, []byte(thirdParty), 0o755); err != nil {
+		t.Fatalf("write third-party pre-commit: %v", err)
+	}
+	if _, _, err := installGitHooks(root); err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+
+	_, action, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("uninstallGitHooks: %v", err)
+	}
+	if action != hookActionRestored {
+		t.Fatalf("action = %q, want %q", action, hookActionRestored)
+	}
+	if got := readFile(t, preCommitPath); got != thirdParty {
+		t.Fatalf("pre-commit after uninstall = %q, want the original third-party hook %q", got, thirdParty)
+	}
+	if fileExists(filepath.Join(hooksDir, "pre-commit.pre-lode")) {
+		t.Fatal("pre-commit.pre-lode still present after restore")
+	}
+	if mode := fileMode(t, preCommitPath); mode.Perm() != 0o755 {
+		t.Fatalf("restored pre-commit mode = %v, want 0755", mode.Perm())
+	}
+}
+
+func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, err := resolveHooksDir(root)
+	if err != nil {
+		t.Fatalf("resolveHooksDir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	preCommitPath := filepath.Join(hooksDir, "pre-commit")
+	foreign := "#!/bin/sh\necho not ours\n"
+	if err := os.WriteFile(preCommitPath, []byte(foreign), 0o755); err != nil {
+		t.Fatalf("write foreign pre-commit: %v", err)
+	}
+
+	_, action, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("uninstallGitHooks: %v", err)
+	}
+	if action != hookActionNone {
+		t.Fatalf("action = %q, want %q", action, hookActionNone)
+	}
+	if got := readFile(t, preCommitPath); got != foreign {
+		t.Fatalf("foreign pre-commit was modified: %q", got)
 	}
 }
