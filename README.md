@@ -218,9 +218,20 @@ no backup mechanism of its own.
 Installing the `lode` CLI is covered in Quickstart above; this section covers
 the agent-facing pickup workflow built on top of it.
 
-Run `lode install-git-hooks` inside a repo to install a pre-commit heartbeat
-hook (it renews the current task's lease on every commit). It chains any
-pre-commit hook already installed, and is idempotent — safe to re-run.
+Run `lode install` inside a repo to install both integrations at once: a
+pre-commit heartbeat hook (it renews the current task's lease on every commit,
+chaining any pre-commit hook already installed) and the Claude Code hook
+bindings described below. It is idempotent — safe to re-run.
+
+```bash
+lode install                     # git pre-commit hook + Claude Code bindings
+lode install --no-agent          # git pre-commit hook only
+lode install --no-vcs            # Claude Code bindings only
+```
+
+`--vcs` defaults to `git` and `--agent` to `claude-code`; those are the only
+supported values today, and the flags exist so another VCS or agent can be added
+without changing the CLI shape.
 
 ### Agent session tracking
 
@@ -253,13 +264,16 @@ worktrees; invoke them as `lode hook worktree-create` / `worktree-remove`.
 Install these bindings into a repo with:
 
 ```
-lode claude install                    # .claude/settings.local.json
-lode claude install --scope project    # .claude/settings.json
+lode install                           # .claude/settings.local.json
+lode install --scope project           # .claude/settings.json
 ```
 
-`lode claude uninstall` (same `--scope` flag) removes them again. Both are
-idempotent and only touch entries whose command starts with `lode hook`, so
-third-party hooks on the same events are left alone.
+`lode uninstall` (same flags) removes both integrations again: it restores
+whatever pre-commit hook Worklode preserved and strips every `lode hook` entry
+from the settings file. Both commands are idempotent, the VCS side never touches
+a pre-commit hook it does not recognize as its own, and the agent side only
+touches entries whose command starts with `lode hook`, so third-party hooks on
+the same events are left alone.
 
 Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
 cheap even in a fast conversation. Every hook stays inside the 2s backbone
