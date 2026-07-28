@@ -114,7 +114,7 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 // registering one makes it *the* worktree creator and disables Claude Code's
 // built-in `git worktree add`, so EnterWorktree fails outright unless the hook
 // prints the path it created. Worklode only observes, so binding them broke
-// EnterWorktree in every repo that ran `lode claude install`.
+// EnterWorktree in every repo that ran `lode install`.
 func TestClaudeInstallDoesNotBindDelegationHooks(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, ".claude", "settings.local.json")
