@@ -53,14 +53,14 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 009):
 
 | Named graph | Layer | Written by |
 |---|---|---|
-| `…/graph/asserted/<designdoc-id>` | declared | design-authoring skill (008), one graph per design doc |
+| `…/graph/declared/<designdoc-id>` | declared | design-authoring skill (008), one graph per design doc |
 | `…/graph/observed/go-imports` | observed | Go/package-import deriver |
 | `…/graph/observed/repo-layout` | observed | component-boundary deriver |
 | `…/graph/observed/pr-affects` | observed | PR-path deriver |
 | `…/graph/observed/deploy` | observed | deploy/runtime projection from `internal/hooks/` |
 
 Concrete IRI grammar for the graph names is owned by 006/009 (branch-free term IRIs, ADR-0006);
-the `asserted` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
+the `declared` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
 its writes to its own `observed/*` graph, so a bad run can never corrupt declared intent.
 
 *(Alternative considered and rejected for v1: RDF-1.2 triple-term annotation tagging each edge
@@ -161,7 +161,7 @@ something the architecture never sanctioned), **minus sanctioned accepted deviat
 ```sparql
 SELECT ?from ?to WHERE {
   GRAPH g:observed { ?from dct:requires ?to . }
-  FILTER NOT EXISTS { GRAPH g:asserted { ?from dct:requires ?to . } }
+  FILTER NOT EXISTS { GRAPH g:declared { ?from dct:requires ?to . } }
   # suppress un-expired accepted deviations (ls:AcceptedDeviation, spec 006):
   FILTER NOT EXISTS {
     ?dev a ls:AcceptedDeviation ;
@@ -183,7 +183,7 @@ deviations re-surface here automatically; all deviations (active + expired) are 
 edge the architecture claims but code has abandoned):
 ```sparql
 SELECT ?from ?to WHERE {
-  GRAPH g:asserted { ?from dct:requires ?to . }
+  GRAPH g:declared { ?from dct:requires ?to . }
   FILTER NOT EXISTS { GRAPH g:observed { ?from dct:requires ?to . } }
 }
 ```
@@ -339,13 +339,13 @@ frontier**. Read-only by construction — the only ways to change the graph are 
    how GitHub already models it. (Task↔Issue mirroring is a new requirement on 004/008.)
 2. **Layer partition mechanism — confirm named graphs.** This spec commits to one named graph per
    source over RDF-1.2 edge annotation. 006/009 should ratify (or override) before implementation.
-   (006 confirms these asserted/observed source graphs are **orthogonal** to its per-Workstream
+   (006 confirms these declared/observed source graphs are **orthogonal** to its per-Workstream
    projection graphs.)
 3. ~~**Drift acknowledgement / suppression.**~~ — **RESOLVED (spec 006 §Accepted deviations).**
    An intentional observed-but-unasserted edge is marked accepted with a declared-layer
    `ls:AcceptedDeviation` node that names the edge via RDF reification (un-asserted), is
    `ls:sanctionedBy` an ADR, and optionally expires (`dct:valid`). Lives in the sanctioning
-   ADR's asserted graph → crit-reviewed and provenanced, not a backbone allowlist. The 4.1 query above
+   ADR's declared graph → crit-reviewed and provenanced, not a backbone allowlist. The 4.1 query above
    subtracts un-expired deviations (`observed − declared − acknowledged`).
 4. ~~Ready-frontier duality~~ — **RESOLVED (yes).** Authoritative frontier on the backbone (atomic
    `claim --next`); KG frontier is read-only overview only. Brief inconsistency under projection
@@ -357,7 +357,7 @@ frontier**. Read-only by construction — the only ways to change the graph are 
 
 ## Acceptance criteria
 
-- **Two-layer wiring:** asserted and `observed/*` named graphs exist and are populated; a deriver
+- **Two-layer wiring:** declared and `observed/*` named graphs exist and are populated; a deriver
   re-run fully replaces its own graph and touches no other. A planted declared edge and a planted
   observed edge round-trip.
 - **Derivers:** all four run idempotently and confine writes to their graph. The component-boundary

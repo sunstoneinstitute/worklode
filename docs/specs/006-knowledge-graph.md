@@ -555,7 +555,7 @@ in several graphs (a triple in N graphs = N distinct quads; no conflict). Becaus
 many tasks, the projector maintains a task by a **per-subject replace** — `DELETE` the task IRI's
 existing quads then `INSERT` the new ones, scoped to each of its Workstream graphs — rather than a
 whole-graph `PUT`. **Keyed by subject IRI** → idempotent per (task, graph). A single projector +
-per-branch write lock makes If-Match CAS unnecessary for v1 (spec 009 item 6). (The asserted/&lt;doc&gt;
+per-branch write lock makes If-Match CAS unnecessary for v1 (spec 009 item 6). (The declared/&lt;doc&gt;
 and observed/&lt;source&gt; graph families of spec 007 are orthogonal to these Workstream graphs.)
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
@@ -652,8 +652,8 @@ lsid:deviation/pfas-reads-ingest-cache
     dct:valid   "2026-12-31"^^xsd:date .       # OPTIONAL expiry; absent = indefinite
 ```
 
-- **Home graph.** Authored into the **asserted named graph of the sanctioning ADR**
-  (`…/graph/asserted/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
+- **Home graph.** Authored into the **declared named graph of the sanctioning ADR**
+  (`…/graph/declared/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
   declared edge. Superseding or removing that ADR removes the suppression. No new authorisation
   mechanism: whoever may author intent may author a deviation.
 - **Expiry.** Optional `dct:valid` (an `xsd:date`). Past it, the deviation stops suppressing and
@@ -690,7 +690,7 @@ lsid:deviation/pfas-reads-ingest-cache
    `ls:inWorkstream` ≥1 Workstream and its quads live in each such graph (a triple in N graphs =
    N distinct quads; RDF has no exclusivity constraint). The projector maintains a task by a
    per-subject `DELETE`/`INSERT` within each of its Workstream graphs (see Projection). Separate
-   from the asserted/&lt;doc&gt; and observed/&lt;source&gt; graph families (spec 007).
+   from the declared/&lt;doc&gt; and observed/&lt;source&gt; graph families (spec 007).
 5. ~~RDF-1.2 publish blocker~~ — **RESOLVED:** rdf-registry publishes 1.2 alongside 1.1
    (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
 6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
