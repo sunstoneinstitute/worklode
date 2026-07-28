@@ -257,8 +257,8 @@ mutable graph holding little more than the current-version pointer:
 
 | Named graph | Mutability | Holds |
 |---|---|---|
-| `…/graph/asserted/<doc>` | mutable, tiny | canonical node, `dcat:hasCurrentVersion`, version list |
-| `…/graph/asserted/<doc>/v3` | **immutable once written** | the full section set and content of v3 |
+| `…/graph/declared/<doc>` | mutable, tiny | canonical node, `dcat:hasCurrentVersion`, version list |
+| `…/graph/declared/<doc>/v3` | **immutable once written** | the full section set and content of v3 |
 
 Publishing v4 is therefore a single SPARQL Update — `INSERT` the new version graph, retarget one
 `dcat:hasCurrentVersion` triple — which Oxigraph applies atomically. No reader ever observes a
