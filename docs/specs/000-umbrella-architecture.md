@@ -5,7 +5,7 @@ record `003-platform-graph-design.md` (D1–D15; full rationale there).
 
 **Amended by:** 014, 015
 
-**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`015`);
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`017`);
 cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
@@ -84,6 +84,8 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **013 — Reconciliation & setup diagnosis** | `lode reconcile` (replay dropped events, poll GitHub, spec-doc drift); `lode project doctor`; `lode doctor`. Recovers activity the webhook path missed. | 004, 011 |
 | **014 — Design documents as graph objects** | Design docs as graph-authored, never-projected intent objects; closes the gap between 006's model and today's file-based specs. | 004, 006, 007 |
 | **015 — Runtime layer** | Types Artifact, Deployment and Environment as graph objects for the deploy deriver and Deliverable definition-of-done. | 006, 007, 014 |
+| **016 — Org-wide agent skills** | Git-synced org skill registry in the backbone; embeddings + recommendation endpoint; task/doc pins; brief delivery and content-addressed local install. | 004, 006, 008, 014 |
+| **017 — Task-declared secrets** | Tasks declare org-catalog secret names; a claim-time `op run` ceremony materializes values into the OS keystore for unattended `lode secrets exec`. | 004, 008, 016 |
 
 ---
 

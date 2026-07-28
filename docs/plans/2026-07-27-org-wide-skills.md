@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement spec 015 (`docs/specs/015-org-wide-skills.md`): a git-synced org skill registry in the backbone with chunked pgvector embeddings, a recommendation endpoint, task pins, a `lode skills` CLI group, content-addressed local install under `~/.worklode/skills`, and brief integration.
+**Goal:** Implement spec 016 (`docs/specs/016-org-wide-skills.md`): a git-synced org skill registry in the backbone with chunked pgvector embeddings, a recommendation endpoint, task pins, a `lode skills` CLI group, content-addressed local install under `~/.worklode/skills`, and brief integration.
 
 **Architecture:** Skills sync from configured GitHub repos (webhook push + manual `lode skills sync`) into three new Postgres tables; an embedding provider (OpenAI-compatible HTTP, optional) turns SKILL.md into chunk vectors; `POST /api/v1/skills/recommend` does cosine top-k; `lode task brief` inlines pinned SKILL.md bodies and offers embedding matches; the session-start hook lazily fetches archives into a content-addressed local store.
 
@@ -49,7 +49,7 @@ Expected: FAIL — missing tables.
 ```sql
 -- Org-wide agent skills: registry synced from git source repos, chunked
 -- pgvector embeddings for recommendation, and per-task skill pins.
--- See docs/specs/015-org-wide-skills.md.
+-- See docs/specs/016-org-wide-skills.md.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
