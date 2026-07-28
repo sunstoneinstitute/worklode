@@ -1,4 +1,4 @@
-# Spec 015 — Org-wide agent skills
+# Spec 016 — Org-wide agent skills
 
 **Date:** 2026-07-27 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
 **Depends on:** 004 (execution backbone), 008 (worklode plugin, `lode task brief`),
