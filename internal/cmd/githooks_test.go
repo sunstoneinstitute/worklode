@@ -7,8 +7,19 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
+
+// TestMain removes the shared lode binary's temp dir, which outlives any
+// single test's t.TempDir().
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if lodeBinary.path != "" {
+		os.RemoveAll(filepath.Dir(lodeBinary.path))
+	}
+	os.Exit(code)
+}
 
 // repoRoot returns this module's root, derived from this test file's own
 // location (internal/cmd/githooks_test.go) so it works regardless of
@@ -22,18 +33,39 @@ func repoRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..")
 }
 
-// buildLodeBinary builds the lode CLI (cmd/lode) into a fresh temp dir and
-// returns the path to the binary.
+// lodeBinary caches the built CLI for the whole package run. Go caches
+// compilation but never the link step, so each build costs seconds — and
+// every test here only execs the binary, so one copy serves them all.
+var lodeBinary struct {
+	once sync.Once
+	path string
+	err  error
+	out  []byte
+}
+
+// buildLodeBinary builds the lode CLI (cmd/lode) once per package run and
+// returns the path to the binary. Debug symbols are stripped: nothing here
+// debugs the child, and stripping cuts the link time several-fold.
 func buildLodeBinary(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "lode")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/lode")
-	build.Dir = repoRoot(t)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build lode: %v\n%s", err, out)
+	lodeBinary.once.Do(func() {
+		dir, err := os.MkdirTemp("", "lode-bin")
+		if err != nil {
+			lodeBinary.err = err
+			return
+		}
+		bin := filepath.Join(dir, "lode")
+		build := exec.Command("go", "build", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
+		build.Dir = repoRoot(t)
+		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
+		if lodeBinary.err == nil {
+			lodeBinary.path = bin
+		}
+	})
+	if lodeBinary.err != nil {
+		t.Fatalf("go build lode: %v\n%s", lodeBinary.err, lodeBinary.out)
 	}
-	return bin
+	return lodeBinary.path
 }
 
 func readFile(t *testing.T, path string) string {
@@ -237,7 +269,7 @@ func TestInstallGitHooksCommitSucceedsWithoutServer(t *testing.T) {
 		t.Fatalf("git add: %v\n%s", err, out)
 	}
 
-	commit := exec.Command("git", "-C", root, "commit", "-m", "add file.txt")
+	commit := exec.Command("git", "-C", root, "-c", "commit.gpgsign=false", "commit", "-m", "add file.txt")
 	commit.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
@@ -264,7 +296,9 @@ func initGitRepoInDir(t *testing.T, dir string) string {
 	}
 	run := func(args ...string) {
 		t.Helper()
-		c := exec.Command("git", args...)
+		// commit.gpgsign=false: the developer's global config may enable
+		// signing, which a temp-repo test commit must not depend on.
+		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
 		c.Dir = dir
 		c.Env = append(os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
@@ -332,7 +366,7 @@ func TestInstallGitHooksQuotesChainTargetWithSpaces(t *testing.T) {
 	if out, err := exec.Command("git", "-C", root, "add", "file.txt").CombinedOutput(); err != nil {
 		t.Fatalf("git add: %v\n%s", err, out)
 	}
-	commit := exec.Command("git", "-C", root, "commit", "-m", "add file.txt")
+	commit := exec.Command("git", "-C", root, "-c", "commit.gpgsign=false", "commit", "-m", "add file.txt")
 	commit.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
