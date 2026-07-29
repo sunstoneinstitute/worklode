@@ -23,32 +23,38 @@ var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true,
 }
 
-// taskJSON is the wire form of a task.
+// taskJSON is the wire form of a task: every store.Task field, so a client
+// reading JSON sees the same record the server holds. Concern is "" when the
+// task has none.
 type taskJSON struct {
-	ID        string    `json:"id"`
-	Project   string    `json:"project"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Priority  string    `json:"priority"`
-	Kind      string    `json:"kind"`
-	State     string    `json:"state"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Project            string    `json:"project"`
+	Title              string    `json:"title"`
+	Body               string    `json:"body"`
+	Priority           string    `json:"priority"`
+	Kind               string    `json:"kind"`
+	State              string    `json:"state"`
+	Concern            string    `json:"concern"`
+	NeedsDecomposition bool      `json:"needs_decomposition"`
+	CreatedBy          string    `json:"created_by"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 func toTaskJSON(t *store.Task) taskJSON {
 	return taskJSON{
-		ID:        t.ID,
-		Project:   t.ProjectID,
-		Title:     t.Title,
-		Body:      t.Body,
-		Priority:  t.Priority,
-		Kind:      t.Kind,
-		State:     t.State,
-		CreatedBy: t.CreatedBy,
-		CreatedAt: t.CreatedAt,
-		UpdatedAt: t.UpdatedAt,
+		ID:                 t.ID,
+		Project:            t.ProjectID,
+		Title:              t.Title,
+		Body:               t.Body,
+		Priority:           t.Priority,
+		Kind:               t.Kind,
+		State:              t.State,
+		Concern:            t.Concern,
+		NeedsDecomposition: t.NeedsDecomposition,
+		CreatedBy:          t.CreatedBy,
+		CreatedAt:          t.CreatedAt,
+		UpdatedAt:          t.UpdatedAt,
 	}
 }
 
