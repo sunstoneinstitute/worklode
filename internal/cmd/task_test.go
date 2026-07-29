@@ -34,20 +34,67 @@ func taskListIDs(t *testing.T, args ...string) []string {
 	return ids
 }
 
-// taskBody returns the stored body of a task via `lode task show --json`.
-func taskBody(t *testing.T, id string) string {
+// taskTitleBody returns the stored title and body of a task via
+// `lode task show --json`.
+func taskTitleBody(t *testing.T, id string) (string, string) {
 	t.Helper()
 	out, err := runLode(t, "task", "show", "--json", id)
 	if err != nil {
 		t.Fatalf("lode task show: %v\noutput: %s", err, out)
 	}
 	var task struct {
-		Body string `json:"body"`
+		Title string `json:"title"`
+		Body  string `json:"body"`
 	}
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
-	return task.Body
+	return task.Title, task.Body
+}
+
+// taskBody returns just the stored body of a task.
+func taskBody(t *testing.T, id string) string {
+	t.Helper()
+	_, body := taskTitleBody(t, id)
+	return body
+}
+
+func TestTaskEditTitle(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Original title")
+
+	if _, err := runLode(t, "task", "edit", task.ID, "--title", "Renamed"); err != nil {
+		t.Fatalf("edit --title: %v", err)
+	}
+	if got, _ := taskTitleBody(t, task.ID); got != "Renamed" {
+		t.Fatalf("title after --title = %q, want %q", got, "Renamed")
+	}
+
+	// Title and body in one edit.
+	if _, err := runLode(t, "task", "edit", task.ID, "--title", "Both", "--body", "new body"); err != nil {
+		t.Fatalf("edit --title --body: %v", err)
+	}
+	title, body := taskTitleBody(t, task.ID)
+	if title != "Both" || body != "new body" {
+		t.Fatalf("title, body = %q, %q; want %q, %q", title, body, "Both", "new body")
+	}
+
+	// An unrelated edit leaves the title alone.
+	if _, err := runLode(t, "task", "edit", task.ID, "--priority", "low"); err != nil {
+		t.Fatalf("edit --priority: %v", err)
+	}
+	if got, _ := taskTitleBody(t, task.ID); got != "Both" {
+		t.Fatalf("title after unrelated edit = %q, want %q", got, "Both")
+	}
+
+	// A blank title is refused, and the stored title survives.
+	if _, err := runLode(t, "task", "edit", task.ID, "--title", "   "); err == nil {
+		t.Fatal("--title with blank value: want error, got nil")
+	}
+	if got, _ := taskTitleBody(t, task.ID); got != "Both" {
+		t.Fatalf("title after rejected edit = %q, want %q", got, "Both")
+	}
 }
 
 func TestTaskEditBody(t *testing.T) {

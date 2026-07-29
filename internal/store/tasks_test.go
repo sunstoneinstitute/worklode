@@ -756,3 +756,36 @@ func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
 		t.Fatalf("update with invalid concern: want ErrInvalidInput, got %v", err)
 	}
 }
+
+// TestUpdateTaskFieldsRejectsBlankTitle pins the invariant CreateTask already
+// enforces: a task carries a title for its whole life, so an update must not
+// be able to blank one out.
+func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	task := createTask(t, s, taskTestNow, in)
+
+	for _, blank := range []string{"", "   ", "\n\t"} {
+		err := updateTaskFields(t, s, taskTestNow, task.ID, strPtr(blank), nil, nil, nil, nil)
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("update with title %q: want ErrInvalidInput, got %v", blank, err)
+		}
+	}
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Title != in.Title {
+		t.Fatalf("title after rejected updates = %q, want %q", got.Title, in.Title)
+	}
+
+	// A non-blank title still goes through.
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, strPtr("Renamed"), nil, nil, nil, nil); err != nil {
+		t.Fatalf("update with valid title: %v", err)
+	}
+	if got, err = s.GetTask(t.Context(), task.ID); err != nil {
+		t.Fatalf("GetTask: %v", err)
+	} else if got.Title != "Renamed" {
+		t.Fatalf("title = %q, want Renamed", got.Title)
+	}
+}
