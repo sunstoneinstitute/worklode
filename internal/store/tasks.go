@@ -215,8 +215,12 @@ func ValidConcern(s string) bool {
 // transaction and bumps updated_at. Returns ErrNotFound if the task does not
 // exist. A nil field is left unchanged; all-nil is a no-op (existence is
 // still checked). concern follows special clearing rules: "" or "none" clears
-// it to NULL; any other value must be a valid concern.
+// it to NULL; any other value must be a valid concern. A blank title is
+// rejected, mirroring CreateTask: every task keeps a title for its whole life.
 func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, needsDecomposition *bool) error {
+	if title != nil && strings.TrimSpace(*title) == "" {
+		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
+	}
 	if priority != nil && !validPriorities[*priority] {
 		return fmt.Errorf("unknown priority %q: %w", *priority, ErrInvalidInput)
 	}

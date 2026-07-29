@@ -258,6 +258,10 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "title must not be blank")
+		return
+	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
 		return

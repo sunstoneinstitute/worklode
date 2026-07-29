@@ -167,14 +167,17 @@ func newTaskShowCmd() *cobra.Command {
 }
 
 func newTaskEditCmd() *cobra.Command {
-	var body, bodyFile, concern, priority string
+	var title, body, bodyFile, concern, priority string
 	var needsDecomposition bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a task's body, concern, priority, or needs-decomposition flag",
+		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in cli.EditTaskInput
+			if cmd.Flags().Changed("title") {
+				in.Title = &title
+			}
 			switch {
 			case cmd.Flags().Changed("body") && cmd.Flags().Changed("body-file"):
 				return fmt.Errorf("--body and --body-file are mutually exclusive")
@@ -196,8 +199,8 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("needs-decomposition") {
 				in.NeedsDecomposition = &needsDecomposition
 			}
-			if in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
-				return fmt.Errorf("nothing to edit: set --body, --body-file, --concern, --priority, or --needs-decomposition")
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, or --needs-decomposition")
 			}
 
 			c, err := newAPIClient()
@@ -216,6 +219,7 @@ func newTaskEditCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&title, "title", "", "replace the task title (must not be blank)")
 	cmd.Flags().StringVar(&body, "body", "", "replace the task body with this text")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "replace the task body with the contents of this file (- for stdin)")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")

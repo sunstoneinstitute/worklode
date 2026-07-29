@@ -242,6 +242,18 @@ func TestPatchTask(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("bad priority status = %d, want 422", rr.Code)
 	}
+	// Blank title: createTask requires one, so PATCH must not be able to take
+	// it away again. The stored title survives the rejected patch.
+	for _, blank := range []string{"", "   "} {
+		rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"title": blank})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("blank title %q status = %d, want 422; body %s", blank, rr.Code, rr.Body.String())
+		}
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
+	if got = decodeMap(t, rr); got["title"] != "New title" {
+		t.Fatalf("title after rejected blank patch = %v, want %q", got["title"], "New title")
+	}
 	// Empty patch.
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{})
 	if rr.Code != http.StatusUnprocessableEntity {
