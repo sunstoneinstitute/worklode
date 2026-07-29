@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -29,6 +32,76 @@ func taskListIDs(t *testing.T, args ...string) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// taskBody returns the stored body of a task via `lode task show --json`.
+func taskBody(t *testing.T, id string) string {
+	t.Helper()
+	out, err := runLode(t, "task", "show", "--json", id)
+	if err != nil {
+		t.Fatalf("lode task show: %v\noutput: %s", err, out)
+	}
+	var task struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(out), &task); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	return task.Body
+}
+
+func TestTaskEditBody(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Body task")
+
+	if _, err := runLode(t, "task", "edit", task.ID, "--body", "from flag"); err != nil {
+		t.Fatalf("edit --body: %v", err)
+	}
+	if got := taskBody(t, task.ID); got != "from flag" {
+		t.Fatalf("body after --body = %q, want %q", got, "from flag")
+	}
+
+	path := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(path, []byte("# From file\n\nmulti\nline\n"), 0o644); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", path); err != nil {
+		t.Fatalf("edit --body-file: %v", err)
+	}
+	if got := taskBody(t, task.ID); got != "# From file\n\nmulti\nline\n" {
+		t.Fatalf("body after --body-file = %q", got)
+	}
+
+	rootCmd.SetIn(strings.NewReader("from stdin"))
+	t.Cleanup(func() { rootCmd.SetIn(nil) })
+	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", "-"); err != nil {
+		t.Fatalf("edit --body-file -: %v", err)
+	}
+	if got := taskBody(t, task.ID); got != "from stdin" {
+		t.Fatalf("body after --body-file - = %q, want %q", got, "from stdin")
+	}
+
+	// Editing another field leaves the body alone.
+	if _, err := runLode(t, "task", "edit", task.ID, "--priority", "low"); err != nil {
+		t.Fatalf("edit --priority: %v", err)
+	}
+	if got := taskBody(t, task.ID); got != "from stdin" {
+		t.Fatalf("body after unrelated edit = %q, want %q", got, "from stdin")
+	}
+}
+
+func TestTaskEditBodyErrors(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Body error task")
+
+	if _, err := runLode(t, "task", "edit", task.ID, "--body", "x", "--body-file", "y"); err == nil {
+		t.Fatal("--body with --body-file: want error, got nil")
+	}
+	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", filepath.Join(t.TempDir(), "missing.md")); err == nil {
+		t.Fatal("--body-file with missing file: want error, got nil")
+	}
 }
 
 func TestTaskListStatusFiltering(t *testing.T) {

@@ -681,6 +681,7 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in EndAgentSess
 // EditTaskInput carries the optional fields of a task edit; nil means leave
 // the field unchanged. Concern "" or "none" clears the concern.
 type EditTaskInput struct {
+	Body               *string
 	Concern            *string
 	Priority           *string
 	NeedsDecomposition *bool
@@ -689,6 +690,9 @@ type EditTaskInput struct {
 // EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
 func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (Task, []byte, error) {
 	body := map[string]any{}
+	if in.Body != nil {
+		body["body"] = *in.Body
+	}
 	if in.Concern != nil {
 		body["concern"] = *in.Concern
 	}
