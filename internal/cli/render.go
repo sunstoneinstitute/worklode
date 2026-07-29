@@ -40,6 +40,12 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
 	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
 	fmt.Fprintf(w, "  state:    %s\n", t.State)
+	if t.Concern != "" {
+		fmt.Fprintf(w, "  concern:  %s\n", t.Concern)
+	}
+	if t.NeedsDecomposition {
+		fmt.Fprintf(w, "  needs decomposition: yes\n")
+	}
 	if t.Blocked {
 		fmt.Fprintf(w, "  blocked:  yes\n")
 	}

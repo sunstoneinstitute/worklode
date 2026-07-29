@@ -125,7 +125,9 @@ func initGitRepo(t *testing.T) string {
 	dir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
-		c := exec.Command("git", args...)
+		// commit.gpgsign=false: the developer's global config may enable
+		// signing, which a temp-repo test commit must not depend on.
+		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
 		c.Dir = dir
 		c.Env = append(os.Environ(),
 			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",

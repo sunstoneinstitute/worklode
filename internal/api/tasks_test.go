@@ -79,13 +79,19 @@ func TestCreateTaskDraft(t *testing.T) {
 }
 
 // TestCreateTaskWithConcern verifies the concern field round-trips into the
-// store (taskJSON deliberately does not expose concern, see patchTask).
+// store and back out through taskJSON.
 func TestCreateTaskWithConcern(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	createTaskViaAPI(t, h, token, map[string]any{
+	got := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Concerned", "priority": "high", "kind": "bug", "concern": "security",
 	})
+	if got["concern"] != "security" {
+		t.Errorf("response concern = %v, want security", got["concern"])
+	}
+	if got["needs_decomposition"] != false {
+		t.Errorf("response needs_decomposition = %v, want false", got["needs_decomposition"])
+	}
 	task, err := st.GetTask(context.Background(), "WL-1")
 	if err != nil {
 		t.Fatalf("get task: %v", err)
@@ -254,8 +260,7 @@ func TestPatchTask(t *testing.T) {
 }
 
 // TestPatchTaskConcern covers the concern/needs_decomposition PATCH
-// extension. taskJSON does not expose either field, so the effect is
-// verified by reading the store directly.
+// extension, checking both the response body and the stored row.
 func TestPatchTaskConcern(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -274,6 +279,11 @@ func TestPatchTaskConcern(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("valid patch status = %d, body %s", rr.Code, rr.Body.String())
 	}
+	patched := decodeMap(t, rr)
+	if patched["concern"] != "usability" || patched["needs_decomposition"] != true {
+		t.Errorf("patch response concern/needs_decomposition = %v/%v, want usability/true",
+			patched["concern"], patched["needs_decomposition"])
+	}
 	task, err := st.GetTask(context.Background(), "WL-1")
 	if err != nil {
 		t.Fatalf("get task: %v", err)
@@ -289,6 +299,9 @@ func TestPatchTaskConcern(t *testing.T) {
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"concern": "none"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("clear concern status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if cleared := decodeMap(t, rr); cleared["concern"] != "" {
+		t.Errorf("patch response concern after clear = %v, want empty", cleared["concern"])
 	}
 	task, err = st.GetTask(context.Background(), "WL-1")
 	if err != nil {

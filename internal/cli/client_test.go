@@ -609,7 +609,9 @@ func TestClientCreateTaskWithConcern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	// taskJSON does not expose concern, so verify via the store handle.
+	if created.Concern != "usability" {
+		t.Errorf("created task concern = %q, want %q", created.Concern, "usability")
+	}
 	stored, err := st.GetTask(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("store.GetTask: %v", err)
@@ -643,6 +645,10 @@ func TestClientEditTask(t *testing.T) {
 	}
 	if edited.Priority != "critical" {
 		t.Fatalf("edited.Priority = %q, want critical", edited.Priority)
+	}
+	if edited.Concern != "security" || !edited.NeedsDecomposition {
+		t.Errorf("edited task concern/needs_decomposition = %q/%v, want security/true",
+			edited.Concern, edited.NeedsDecomposition)
 	}
 	stored, err := st.GetTask(ctx, created.ID)
 	if err != nil {
