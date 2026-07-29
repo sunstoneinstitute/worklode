@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -47,21 +50,43 @@ func lifecycleTestServer(t *testing.T) (*store.Store, *cli.Client) {
 	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token})
 }
 
-// runLode executes rootCmd with args and returns its captured stdout. It
-// resets the persistent --json flag to false first: pflag only calls Set on
-// a flag present in args, so a prior test's --json=true would otherwise leak
-// into a later Execute() call that doesn't pass --json at all.
+// runLode executes rootCmd with args and returns its captured stdout. rootCmd
+// is a package-level singleton built once in init(), so every flag it owns
+// keeps its value and Changed state between calls; resetFlags scrubs both so a
+// prior test's `--json` or `--body` does not leak into a later Execute().
 func runLode(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	if err := rootCmd.PersistentFlags().Set("json", "false"); err != nil {
-		t.Fatalf("reset --json: %v", err)
-	}
+	resetFlags(t, rootCmd)
 	buf := &bytes.Buffer{}
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs(args)
 	err := rootCmd.Execute()
 	return buf.String(), err
+}
+
+// resetFlags restores every flag in cmd's tree to its declared default and
+// clears Changed, so commands that branch on Flags().Changed(...) see only the
+// flags of the current invocation.
+func resetFlags(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	reset := func(f *pflag.Flag) {
+		f.Changed = false
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			if err := sv.Replace(nil); err != nil {
+				t.Fatalf("reset --%s: %v", f.Name, err)
+			}
+			return
+		}
+		if err := f.Value.Set(f.DefValue); err != nil {
+			t.Fatalf("reset --%s: %v", f.Name, err)
+		}
+	}
+	cmd.Flags().VisitAll(reset)
+	cmd.PersistentFlags().VisitAll(reset)
+	for _, sub := range cmd.Commands() {
+		resetFlags(t, sub)
+	}
 }
 
 // initGitRepo creates a fresh git repo with one commit (so `git worktree add

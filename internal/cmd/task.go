@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -166,14 +167,26 @@ func newTaskShowCmd() *cobra.Command {
 }
 
 func newTaskEditCmd() *cobra.Command {
-	var concern, priority string
+	var body, bodyFile, concern, priority string
 	var needsDecomposition bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a task's concern, priority, or needs-decomposition flag",
+		Short: "Edit a task's body, concern, priority, or needs-decomposition flag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in cli.EditTaskInput
+			switch {
+			case cmd.Flags().Changed("body") && cmd.Flags().Changed("body-file"):
+				return fmt.Errorf("--body and --body-file are mutually exclusive")
+			case cmd.Flags().Changed("body"):
+				in.Body = &body
+			case cmd.Flags().Changed("body-file"):
+				text, err := readBodyFile(cmd, bodyFile)
+				if err != nil {
+					return err
+				}
+				in.Body = &text
+			}
 			if cmd.Flags().Changed("concern") {
 				in.Concern = &concern
 			}
@@ -183,8 +196,8 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("needs-decomposition") {
 				in.NeedsDecomposition = &needsDecomposition
 			}
-			if in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
-				return fmt.Errorf("nothing to edit: set --concern, --priority, or --needs-decomposition")
+			if in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
+				return fmt.Errorf("nothing to edit: set --body, --body-file, --concern, --priority, or --needs-decomposition")
 			}
 
 			c, err := newAPIClient()
@@ -203,10 +216,30 @@ func newTaskEditCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&body, "body", "", "replace the task body with this text")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "", "replace the task body with the contents of this file (- for stdin)")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	return cmd
+}
+
+// readBodyFile reads a task body from path, or from the command's stdin when
+// path is "-". Multi-line markdown bodies are awkward to pass as a flag value,
+// so `lode task edit --body-file -` is the pipe-friendly form.
+func readBodyFile(cmd *cobra.Command, path string) (string, error) {
+	if path == "-" {
+		text, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return "", fmt.Errorf("read body from stdin: %w", err)
+		}
+		return string(text), nil
+	}
+	text, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(text), nil
 }
 
 func newTaskReadyCmd() *cobra.Command {
