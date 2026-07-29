@@ -19,6 +19,12 @@ type agentSessionJSON struct {
 	StartedAt    time.Time  `json:"started_at"`
 	LastSeenAt   time.Time  `json:"last_seen_at"`
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
+	// Usage is whatever a previous end reported; null until one does. Cost
+	// is a decimal string for the same reason the end request takes one.
+	InputTokens  *int64  `json:"input_tokens"`
+	OutputTokens *int64  `json:"output_tokens"`
+	CostAmount   *string `json:"cost_amount"`
+	CostCurrency string  `json:"cost_currency"`
 }
 
 func toAgentSessionJSON(a *store.AgentSession) agentSessionJSON {
@@ -30,6 +36,10 @@ func toAgentSessionJSON(a *store.AgentSession) agentSessionJSON {
 		StartedAt:    a.StartedAt,
 		LastSeenAt:   a.LastSeenAt,
 		EndedAt:      a.EndedAt,
+		InputTokens:  a.InputTokens,
+		OutputTokens: a.OutputTokens,
+		CostAmount:   a.CostAmount,
+		CostCurrency: a.CostCurrency,
 	}
 }
 

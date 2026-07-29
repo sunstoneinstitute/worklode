@@ -351,16 +351,18 @@ func withQuery(path string, q url.Values) string {
 
 // Task is the wire form of a task, matching internal/api's taskJSON.
 type Task struct {
-	ID        string    `json:"id"`
-	Project   string    `json:"project"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Priority  string    `json:"priority"`
-	Kind      string    `json:"kind"`
-	State     string    `json:"state"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Project            string    `json:"project"`
+	Title              string    `json:"title"`
+	Body               string    `json:"body"`
+	Priority           string    `json:"priority"`
+	Kind               string    `json:"kind"`
+	State              string    `json:"state"`
+	Concern            string    `json:"concern"`
+	NeedsDecomposition bool      `json:"needs_decomposition"`
+	CreatedBy          string    `json:"created_by"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // Lease is the wire form of a lease.
@@ -623,6 +625,10 @@ type AgentSession struct {
 	StartedAt    time.Time  `json:"started_at"`
 	LastSeenAt   time.Time  `json:"last_seen_at"`
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
+	InputTokens  *int64     `json:"input_tokens"`
+	OutputTokens *int64     `json:"output_tokens"`
+	CostAmount   *string    `json:"cost_amount"`
+	CostCurrency string     `json:"cost_currency"`
 }
 
 // TouchAgentSession calls POST /api/v1/tasks/{id}/agent-session: report that
