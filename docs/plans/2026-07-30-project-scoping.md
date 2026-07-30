@@ -1103,13 +1103,16 @@ git commit -m "Read the origin remote URL for scope resolution"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/cli/client_test.go`:
+Append to `internal/cli/client_test.go`. That file is `package cli_test`
+(external), so it reaches `loadConfigFrom` through the existing
+`cli.LoadConfigFromForTest` export in `internal/cli/export_test.go`. Do not
+set `LODE_SERVER`: leaving `ServerURL` empty keeps `loadConfigFrom` away from
+the OS keychain.
 
 ```go
 func TestCurrentProjectPathRecordsSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("LODE_SERVER", "http://example.test")
 
 	userDir := filepath.Join(home, ".config", "worklode")
 	if err := os.MkdirAll(userDir, 0o755); err != nil {
@@ -1120,7 +1123,7 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 		t.Fatalf("write user config: %v", err)
 	}
 
-	cfg, err := loadConfigFrom(home)
+	cfg, err := cli.LoadConfigFromForTest(home)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -1138,7 +1141,7 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 		t.Fatalf("write repo config: %v", err)
 	}
 
-	cfg, err = loadConfigFrom(repo)
+	cfg, err = cli.LoadConfigFromForTest(repo)
 	if err != nil {
 		t.Fatalf("load from repo: %v", err)
 	}
