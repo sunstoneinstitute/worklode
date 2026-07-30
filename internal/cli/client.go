@@ -399,8 +399,28 @@ type TaskEdgeIn struct {
 	Type string `json:"type"`
 }
 
+// TaskParent is the one-hop-up projection of a task's parent epic.
+type TaskParent struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	State string `json:"state"`
+}
+
+// TaskProgress is an epic's derived roll-up: closed of total direct children.
+type TaskProgress struct {
+	Closed int `json:"closed"`
+	Total  int `json:"total"`
+}
+
+// TaskHierarchy is the hierarchy block on a task detail: the parent (nil for a
+// root task) and the derived child progress.
+type TaskHierarchy struct {
+	Parent   *TaskParent  `json:"parent"`
+	Progress TaskProgress `json:"progress"`
+}
+
 // TaskDetail is the wire form of GET /api/v1/tasks/{id}: a Task plus its
-// blocked status, edges, and (when active) lease.
+// blocked status, edges, hierarchy, and (when active) lease.
 type TaskDetail struct {
 	Task
 	Blocked bool `json:"blocked"`
@@ -408,7 +428,8 @@ type TaskDetail struct {
 		Out []TaskEdgeOut `json:"out"`
 		In  []TaskEdgeIn  `json:"in"`
 	} `json:"edges"`
-	Lease *Lease `json:"lease,omitempty"`
+	Lease     *Lease        `json:"lease,omitempty"`
+	Hierarchy TaskHierarchy `json:"hierarchy"`
 }
 
 // CreateTaskInput is the request body for CreateTask.
@@ -420,6 +441,9 @@ type CreateTaskInput struct {
 	Kind     string `json:"kind"`
 	Concern  string `json:"concern,omitempty"`
 	Draft    bool   `json:"draft"`
+	// Parent, when set, files the new task under this epic in the same
+	// request instead of a separate edge call.
+	Parent string `json:"parent,omitempty"`
 }
 
 // CreateTask calls POST /api/v1/tasks.
@@ -440,6 +464,9 @@ type TaskListFilter struct {
 	Project  string
 	States   []string
 	Priority string
+	Kind     string
+	// Parent narrows to the direct children of this task id.
+	Parent string
 }
 
 // TaskListResponse is the response body of ListTasks.
@@ -458,6 +485,12 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListRespo
 	}
 	if f.Priority != "" {
 		q.Set("priority", f.Priority)
+	}
+	if f.Kind != "" {
+		q.Set("kind", f.Kind)
+	}
+	if f.Parent != "" {
+		q.Set("parent", f.Parent)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
@@ -599,6 +632,8 @@ type Brief struct {
 	GoverningDesign    *string        `json:"governing_design"`
 	AffectedComponents []string       `json:"affected_components"`
 	DefinitionOfDone   *string        `json:"definition_of_done"`
+	// Parent is the task's epic, one hop up; nil for a root task.
+	Parent *TaskParent `json:"parent"`
 }
 
 // Brief calls GET /api/v1/tasks/{id}/brief.
@@ -848,6 +883,40 @@ func (c *Client) Block(ctx context.Context, id, by string) ([]byte, error) {
 // Unblock calls DELETE /api/v1/tasks/{id}/edges to remove the "by blocks id" edge.
 func (c *Client) Unblock(ctx context.Context, id, by string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", edgeBody{From: &by, Type: "blocks"})
+}
+
+// Parent calls POST /api/v1/tasks/{id}/edges to file id under an epic.
+func (c *Client) Parent(ctx context.Context, id, epic string) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		edgeBody{To: &epic, Type: "child_of"})
+}
+
+// Unparent calls DELETE /api/v1/tasks/{id}/edges to detach id from its epic.
+func (c *Client) Unparent(ctx context.Context, id, epic string) ([]byte, error) {
+	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		edgeBody{To: &epic, Type: "child_of"})
+}
+
+// DecomposeResponse is the wire form of POST /api/v1/tasks/{id}/decompose:
+// the converted epic, keeping its id, and the children it now tracks.
+type DecomposeResponse struct {
+	Epic     Task   `json:"epic"`
+	Children []Task `json:"children"`
+}
+
+// Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
+// epic and files titles as new children under it.
+func (c *Client) Decompose(ctx context.Context, id string, titles []string) (DecomposeResponse, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose",
+		map[string]any{"into": titles})
+	if err != nil {
+		return DecomposeResponse{}, nil, err
+	}
+	var resp DecomposeResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return DecomposeResponse{}, nil, fmt.Errorf("decode decompose response: %w", err)
+	}
+	return resp, raw, nil
 }
 
 // --- inbox ------------------------------------------------------------
