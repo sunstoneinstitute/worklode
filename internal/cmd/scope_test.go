@@ -16,6 +16,69 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
+func TestBareTaskNumberResolves(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "By number")
+	setupRepoConfig(t, "proj")
+
+	number := task.ID[strings.LastIndex(task.ID, "-")+1:]
+	title, _ := taskTitleBody(t, number)
+	if title != "By number" {
+		t.Fatalf("task show %s = %q; want the task %s", number, title, task.ID)
+	}
+}
+
+func TestFullTaskIDStillWorks(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "By full id")
+	setupRepoConfig(t, "proj")
+
+	if title, _ := taskTitleBody(t, task.ID); title != "By full id" {
+		t.Fatalf("task show %s = %q; want By full id", task.ID, title)
+	}
+}
+
+func TestBareTaskNumberWithoutProjectFails(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createTestTask(t, c, "Unreachable by number")
+	setupGitRepo(t, "") // no config, no remote
+
+	out, err := runLode(t, "task", "show", "1")
+	if err == nil {
+		t.Fatalf("bare number with no project succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(err.Error(), "task number") {
+		t.Fatalf("error = %v; want it to explain that 1 is a task number", err)
+	}
+}
+
+func TestBareTaskNumberResolvesInTimeline(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Timeline by number")
+	setupRepoConfig(t, "proj")
+
+	number := task.ID[strings.LastIndex(task.ID, "-")+1:]
+	out, err := runLode(t, "timeline", number, "--json")
+	if err != nil {
+		t.Fatalf("lode timeline %s: %v\noutput: %s", number, err, out)
+	}
+	var resp struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if resp.Task.ID != task.ID {
+		t.Fatalf("timeline %s task = %q; want %s", number, resp.Task.ID, task.ID)
+	}
+}
+
 // setupGitRepo creates a fake $HOME containing a git repo with the given
 // origin remote and no .worklode config, chdirs into it, and returns its path.
 func setupGitRepo(t *testing.T, origin string) string {

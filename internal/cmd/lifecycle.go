@@ -133,6 +133,13 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 	}
 	ctx := cmd.Context()
 
+	if id != "" {
+		id, err = resolveTaskID(ctx, id, c, cfg)
+		if err != nil {
+			return err
+		}
+	}
+
 	root, ok := worktree.Root(".")
 	if !ok {
 		return fmt.Errorf("not inside a git repository")
@@ -333,7 +340,7 @@ func newBlockCmd() *cobra.Command {
 		Short: "Record that another task blocks the current worktree's task, and release its lease",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
@@ -342,6 +349,10 @@ func newBlockCmd() *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
+			on, err = resolveTaskID(ctx, on, c, cfg)
+			if err != nil {
+				return err
+			}
 			raw, err := c.Block(ctx, taskID, on)
 			if err != nil {
 				return err
