@@ -382,7 +382,7 @@ func TestFullChain(t *testing.T) {
 			"html_url": "https://github.com/" + repo + "/issues/7",
 		},
 	})
-	issues, _, err := agent.ListIssues(ctx, "new")
+	issues, _, err := agent.ListIssues(ctx, "new", "")
 	if err != nil {
 		t.Fatalf("list inbox: %v", err)
 	}

@@ -42,11 +42,20 @@ Taken here with rationale, pending sign-off.
 | Cross-project children | Rejected in v1 |
 | Child ordering | Out of scope |
 | Blocker inheritance | Out of scope — hierarchy and blocking stay orthogonal |
+| Parent kind | Must already be `kind = 'epic'`; `AddEdge` rejects any other parent (422) |
+| Direct claim of an epic | Rejected in `Claim` as well as excluded from the ready set |
 
 **Why declared rather than inferred from "has children":** inference means one
 `AddEdge` call silently changes whether a task can be claimed and what a live
 lease on it means. Declaring makes conversion an explicit act that can validate
 its preconditions, and the ready-set exclusion becomes a column predicate.
+
+**Why the parent must already be an epic:** it is what makes "declared" real.
+`ready -> in_progress` is a legal epic transition — it is the roll-up trigger —
+so excluding epics from the ready set alone would still let `lode task claim
+<epic-id>` through; `Claim` carries the same guard. Two supported ways to get
+an epic: create one (`lode task add --kind epic`) or convert in place (`lode
+task decompose`). There is no `lode task edit --kind`.
 
 **Why a depth cap:** the brief is a bounded-payload contract (`brief.go:9-19`)
 and the tree walks that feed roll-up and breadcrumbs are unbounded without one.
@@ -96,7 +105,7 @@ as a kind-aware guard rather than by a second table.
 | From | To | Trigger |
 |---|---|---|
 | `draft` | `ready` | manual (`lode task ready`) |
-| `ready` | `in_progress` | first child enters `in_progress` |
+| `ready` | `in_progress` | any child started or closed, including abandoned |
 | `in_progress` | `merged` | every child closed, at least one delivered |
 | `in_progress` | `abandoned` | every child abandoned, or manual `lode task abandon` |
 | `merged` | `ready` | existing reopen path, when a child reopens |
@@ -232,13 +241,12 @@ every reference to it.
 - **Epic-level estimates or burndown.** Progress is a count of children.
 - **Graph projection.** The `wl:` vocabulary for hierarchy belongs to spec 006.
 
-## Open questions
+## Resolved
 
-- **Q018.1 — Does an epic need wrap-up work?** Auto-close assumes the epic is
-  complete when its children are. If epics routinely carry a final integration
-  or documentation step, that step should be a child task rather than a reason
-  to make closure manual. Confirm against real usage before locking the
-  resolver.
+- **Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a
+  final integration or documentation step is a child task rather than a reason
+  to make closure manual. Revisit if real usage contradicts it.
 - **Q018.2 — Should `lode task done` on an epic be an error or a manual
-  override?** An error is consistent with "state is derived"; an override is a
-  useful escape hatch when a child is stuck in a wrong state.
+  override?** An error. `done` is `in_review -> merged` and `in_review` is
+  forbidden for epics, so the kind guard in `Transition` rejects it with a
+  message naming the roll-up rule. There is no override.
