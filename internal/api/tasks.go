@@ -80,6 +80,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
+	req.Parent = strings.TrimSpace(req.Parent)
 	if strings.TrimSpace(req.Title) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title is required")
 		return
@@ -100,6 +101,17 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	if req.Parent != "" {
+		// Named 404 here, ahead of the transaction: AddEdge's own lookup
+		// inside RecordEvent stays the authority for everything else (same
+		// project, parent is an epic, no cycle, one parent per task), but its
+		// ErrNotFound would otherwise collide with GetProject's and be
+		// reported as an anonymous 404.
+		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)
+			return
+		}
+	}
 
 	extID, err := randomExternalID()
 	if err != nil {
@@ -112,11 +124,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := actorFrom(r)
+	now := s.st.Now()
 
 	var created *store.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.created", payload,
 		func(tx *sql.Tx, eventID int64) error {
-			t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
+			t, err := store.CreateTask(tx, now, store.TaskInput{
 				ProjectID: req.Project,
 				Title:     req.Title,
 				Body:      req.Body,
@@ -133,7 +146,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
-				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of"); err != nil {
+				if err := store.AddEdge(tx, now, t.ID, req.Parent, "child_of"); err != nil {
 					return err
 				}
 			}
