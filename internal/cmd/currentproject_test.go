@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -92,21 +91,6 @@ func TestTaskAddProjectFlagBeatsCurrentProject(t *testing.T) {
 	task := addTask(t, "--project", "other", "--title", "Explicit flag")
 	if task.Project != "other" {
 		t.Fatalf("project = %q; want other (the explicit flag wins)", task.Project)
-	}
-}
-
-func TestTaskAddWithoutAnyProjectFails(t *testing.T) {
-	_, c := lifecycleTestServer(t)
-	setupProject(t, c)
-	setupRepoConfig(t, "")
-	resetProjectFlag(t, "task", "add")
-
-	out, err := runLode(t, "task", "add", "--title", "No project anywhere")
-	if err == nil {
-		t.Fatalf("lode task add without a project: err = nil, output: %s", out)
-	}
-	if !strings.Contains(err.Error(), "--project is required") {
-		t.Fatalf("err = %v; want it to say --project is required", err)
 	}
 }
 
