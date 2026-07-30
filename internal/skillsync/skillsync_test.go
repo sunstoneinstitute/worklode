@@ -574,6 +574,37 @@ func TestSyncAllProviderChangeReembeds(t *testing.T) {
 	}
 }
 
+// The change is worth logging even when it finds nothing to clear: an
+// operator debugging empty recommendations needs the record of the swap, and
+// a corpus can be empty because every embed call had been failing. Only the
+// true first boot — no id recorded, nothing stored — stays silent.
+func TestSyncAllProviderChangeWithoutStoredVectorsLogs(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	var logbuf bytes.Buffer
+	sy, src := skillSyncer(t, st, &logbuf)
+
+	// Every embed fails, so the id is recorded with no vectors behind it.
+	sy.Embed = &fakeEmbed{id: "fake:a", fails: 99}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	if log := logbuf.String(); strings.Contains(log, "embedding provider changed") {
+		t.Fatalf("first boot should record the id in silence, got: %s", log)
+	}
+	logbuf.Reset()
+
+	sy.Embed = &fakeEmbed{id: "fake:b", fails: 99}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	log := logbuf.String()
+	if !strings.Contains(log, "embedding provider changed") ||
+		!strings.Contains(log, "fake:a") || !strings.Contains(log, "fake:b") {
+		t.Fatalf("want the swap logged with both provider ids, got: %s", log)
+	}
+}
+
 // The same provider must not trigger a clear: re-embedding the whole corpus
 // on every sync would be a needless bill and a needless outage window.
 func TestSyncAllUnchangedProviderKeepsEmbeddings(t *testing.T) {
