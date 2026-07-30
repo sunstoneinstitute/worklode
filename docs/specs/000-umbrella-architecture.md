@@ -91,8 +91,9 @@ single context. Each is an independent spec → plan → implementation cycle.
 
 ## Shared conventions (binding on all sub-specs)
 
-> **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`;
-> rdf-registry sources move `rdf/ls/` → `rdf/wl/`.
+> **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/`;
+> rdf-registry sources move `rdf/ls/` → `rdf/wl/`. The published base carries no
+> ontology-name segment — the source directory name does not appear in the IRI.
 
 - **Naming:** product = Worklode; CLI = `lode` (D13).
 - **Vocabulary (D4):** standards-first — `dct:requires`/`hasPart`/`replaces`, `foaf:Agent`,

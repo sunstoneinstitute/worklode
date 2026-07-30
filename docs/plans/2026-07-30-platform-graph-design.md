@@ -24,7 +24,7 @@ graph-server.
 
 **Spec:** `docs/specs/003-platform-graph-design.md` — read with its
 amendments: `docs/specs/014-design-documents-as-graph-objects.md` §1 (prefix
-`wl:`/`wlc:`/`wlid:` under `https://worklode.io/ns/wl/`) and
+`wl:`/`wlc:`/`wlid:` under `https://worklode.io/ns/`) and
 `docs/specs/015-runtime-layer.md` §5 (kind-first runtime IRI grammar).
 
 ---
@@ -103,7 +103,7 @@ this plan's build scope.
 - Test: `internal/kg/iri/iri_test.go`
 
 The grammar is fixed by spec 006 §Canonical IRI scheme, with the base from
-014 §1 (`https://worklode.io/ns/wl/`) and the runtime patterns from 015 §5
+014 §1 (`https://worklode.io/ns/`) and the runtime patterns from 015 §5
 (kind-first Artifact; Deployment/Environment/Commit mirror their tables'
 natural keys). Instance IRIs are branch-free and version-free; slashes inside
 a local id are permissible (slash namespace, opaque path).
@@ -121,7 +121,7 @@ import (
 )
 
 func TestNamespaces(t *testing.T) {
-	if iri.Base != "https://worklode.io/ns/wl/" {
+	if iri.Base != "https://worklode.io/ns/" {
 		t.Fatalf("Base = %q; want the 014 §1 wl base", iri.Base)
 	}
 	if iri.Ontology != iri.Base+"ontology#" || iri.Concept != iri.Base+"concept/" {
@@ -130,7 +130,7 @@ func TestNamespaces(t *testing.T) {
 }
 
 func TestInstanceIRIs(t *testing.T) {
-	const b = "https://worklode.io/ns/wl/id/"
+	const b = "https://worklode.io/ns/id/"
 	cases := []struct {
 		name string
 		got  func() (string, error)
@@ -241,7 +241,7 @@ import (
 // The wl namespaces (014 §1): schema is a hash namespace, concepts and
 // instances are slash namespaces.
 const (
-	Base     = "https://worklode.io/ns/wl/"
+	Base     = "https://worklode.io/ns/"
 	Ontology = Base + "ontology#"
 	Concept  = Base + "concept/"
 	instance = Base + "id/"
@@ -363,10 +363,10 @@ import (
 const twoComponents = `
 repo: github.com/sunstoneinstitute/research-stack
 components:
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest
     name: ingest
     paths: ["cmd/ingest/**", "internal/ingest/**"]
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/pfas
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/pfas
     name: pfas
     paths: ["internal/**"]
 `
@@ -425,7 +425,7 @@ func TestGlobSemantics(t *testing.T) {
 		m := mustParse(t, `
 repo: r
 components:
-  - iri: https://worklode.io/ns/wl/id/component/r/c
+  - iri: https://worklode.io/ns/id/component/r/c
     name: c
     paths: ["`+tc.pattern+`"]
 `)
@@ -691,7 +691,7 @@ Create `.worklode/components.yaml`:
 # spec 003 D5). Worklode is a single-component repo: the whole-repo form.
 repo: github.com/sunstoneinstitute/worklode
 components:
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode
     name: worklode
     paths: ["**"]
 ```
