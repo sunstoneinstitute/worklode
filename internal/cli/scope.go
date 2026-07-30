@@ -49,7 +49,7 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 	if c == nil || dir == "" {
 		return Scope{Source: ScopeNone}
 	}
-	remote := gitRemoteURL(dir)
+	remote := gitRemoteURL(ctx, dir)
 	if remote == "" {
 		return Scope{Source: ScopeNone}
 	}
@@ -96,11 +96,11 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 
 // ForgetRemote drops c's cached answer for the repo containing dir, so the
 // next resolution re-queries. Backs `lode project resolve --refresh`.
-func ForgetRemote(c *Client, dir string) {
+func ForgetRemote(ctx context.Context, c *Client, dir string) {
 	if c == nil {
 		return
 	}
-	remote := gitRemoteURL(dir)
+	remote := gitRemoteURL(ctx, dir)
 	if remote == "" {
 		return
 	}

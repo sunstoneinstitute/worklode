@@ -239,7 +239,7 @@ func newProjectResolveCmd() *cobra.Command {
 				return fmt.Errorf("get working directory: %w", err)
 			}
 			if refresh {
-				cli.ForgetRemote(c, wd)
+				cli.ForgetRemote(cmd.Context(), c, wd)
 			}
 			sc := cli.ResolveScope(cmd.Context(), c, cfg, wd)
 			if sc.Project != "" && sc.Key == "" {
