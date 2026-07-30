@@ -24,16 +24,21 @@ func init() {
 }
 
 func newInboxListCmd() *cobra.Command {
+	var scope scopeFlags
 	var state string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List inbox issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.ListIssues(cmd.Context(), state, "")
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.ListIssues(cmd.Context(), state, sc.Project)
 			if err != nil {
 				return err
 			}
@@ -45,6 +50,7 @@ func newInboxListCmd() *cobra.Command {
 			return nil
 		},
 	}
+	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&state, "state", "new", `triage state to list: "new", "promoted", "dismissed", or "" for all`)
 	return cmd
 }
