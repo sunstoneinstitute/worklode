@@ -80,6 +80,11 @@ func newServeCmd() *cobra.Command {
 				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
 				GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
 				GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
+				SkillSources:        os.Getenv("LODE_SKILL_SOURCES"),
+				EmbeddingURL:        os.Getenv("LODE_EMBEDDING_URL"),
+				EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
+				EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
+				SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
 			})
 			if err != nil {
 				return err
