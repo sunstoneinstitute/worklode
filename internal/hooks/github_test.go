@@ -247,7 +247,7 @@ func TestIssuesOpenedThenClosed(t *testing.T) {
 	ctx := context.Background()
 
 	deliver(t, e.h, "issues", "d-1", "issues_opened.json")
-	issues, err := e.st.ListIssues(ctx, "")
+	issues, err := e.st.ListIssues(ctx, "", "")
 	if err != nil || len(issues) != 1 {
 		t.Fatalf("issues = %v, err = %v, want 1 row", issues, err)
 	}
@@ -262,7 +262,7 @@ func TestIssuesOpenedThenClosed(t *testing.T) {
 	}
 
 	deliver(t, e.h, "issues", "d-2", "issues_closed.json")
-	issues, err = e.st.ListIssues(ctx, "")
+	issues, err = e.st.ListIssues(ctx, "", "")
 	if err != nil || len(issues) != 1 {
 		t.Fatalf("issues = %v, err = %v, want 1 row", issues, err)
 	}

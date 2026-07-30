@@ -93,7 +93,7 @@ func (s *server) boardPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	issues, err := s.st.ListIssues(ctx, "new")
+	issues, err := s.st.ListIssues(ctx, "new", "")
 	if err != nil {
 		s.webStoreErr(w, err)
 		return

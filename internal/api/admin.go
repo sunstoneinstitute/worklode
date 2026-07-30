@@ -391,9 +391,10 @@ func toIssueJSON(is *store.Issue) issueJSON {
 	return out
 }
 
-// listInbox handles GET /api/v1/inbox?state=new.
+// listInbox handles GET /api/v1/inbox?state=new&project=worklode.
 func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
-	issues, err := s.st.ListIssues(r.Context(), r.URL.Query().Get("state"))
+	issues, err := s.st.ListIssues(r.Context(),
+		r.URL.Query().Get("state"), r.URL.Query().Get("project"))
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
