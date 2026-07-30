@@ -571,8 +571,10 @@ func TestEpicTarget(t *testing.T) {
 		{"no children", nil, ""},
 		{"all draft or ready", []string{"draft", "ready"}, "ready"},
 		{"one started", []string{"ready", "in_progress"}, "in_progress"},
+		{"one in review", []string{"ready", "in_review"}, "in_progress"},
 		{"one landed, one open", []string{"merged", "ready"}, "in_progress"},
 		{"all closed, one delivered", []string{"merged", "abandoned"}, "merged"},
+		{"all closed via deploy", []string{"deployed_dev", "released"}, "merged"},
 		{"all abandoned", []string{"abandoned", "abandoned"}, "abandoned"},
 		{"all delivered", []string{"merged", "deployed_prod"}, "merged"},
 	}
@@ -622,7 +624,8 @@ func TestRollUpForward(t *testing.T) {
 		t.Fatalf("epic = %s, want in_progress", got)
 	}
 
-	// walkTo starts from ready, so child 0 finishes its walk step by step.
+	// child 0 is already in in_progress and walkTo always restarts from ready,
+	// so step it manually.
 	if err := transition(t, s, taskTestNow, kids[0].ID, "in_progress", "in_review"); err != nil {
 		t.Fatalf("review child 0: %v", err)
 	}
