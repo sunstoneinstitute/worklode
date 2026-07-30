@@ -168,7 +168,8 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 // ErrNotFound). An epic is additionally barred from every delivery state
 // (see epicForbiddenStates), since its state is driven entirely by its
 // children. It bumps updated_at and appends a state_log row attributed to
-// eventID.
+// eventID. A task with a parent rolls that parent up in the same transaction
+// (see resolveParent).
 func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int64) error {
 	if !legalTransitions[[2]string{from, to}] {
 		return fmt.Errorf("task %s: %s -> %s: %w", taskID, from, to, ErrBadTransition)
@@ -197,8 +198,11 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	if err != nil {
 		return fmt.Errorf("update task %s state: %w", taskID, err)
 	}
-	return LogChange(tx, "task", taskID, eventID,
-		map[string]string{"field": "state", "old": from, "new": to})
+	if err := LogChange(tx, "task", taskID, eventID,
+		map[string]string{"field": "state", "old": from, "new": to}); err != nil {
+		return err
+	}
+	return resolveParent(tx, now, taskID, eventID)
 }
 
 // TaskState returns the current state of a task inside the given transaction
