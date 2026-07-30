@@ -120,3 +120,31 @@ func TestBriefNotFound(t *testing.T) {
 		t.Fatalf("Brief unknown task: err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestBriefParent(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+
+	b, err := s.Brief(t.Context(), child.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if b.Parent == nil || b.Parent.ID != epic.ID || b.Parent.Title != epic.Title {
+		t.Fatalf("parent = %+v, want %s", b.Parent, epic.ID)
+	}
+	if b.Parent.Body != "" {
+		t.Fatalf("parent body = %q, want empty (one hop carries id, title, state only)", b.Parent.Body)
+	}
+
+	root, err := s.Brief(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("Brief root: %v", err)
+	}
+	if root.Parent != nil {
+		t.Fatalf("parent of a root task = %+v, want nil", root.Parent)
+	}
+}
