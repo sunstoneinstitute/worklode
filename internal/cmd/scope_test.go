@@ -324,3 +324,71 @@ func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
 		t.Fatalf("seed issue %s#%d: %v", repo, number, err)
 	}
 }
+
+func TestProjectResolveReportsSource(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	mapProjectRepo(t, c, "proj", "acme/proj")
+	setupGitRepo(t, "git@github.com:acme/proj.git")
+
+	out, err := runLode(t, "project", "resolve", "--json")
+	if err != nil {
+		t.Fatalf("lode project resolve: %v\noutput: %s", err, out)
+	}
+	var got struct {
+		Project string `json:"project"`
+		Key     string `json:"key"`
+		Source  string `json:"source"`
+		Remote  string `json:"remote"`
+		Cached  bool   `json:"cached"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if got.Project != "proj" || got.Key != "PROJ" {
+		t.Fatalf("resolve = %+v; want project proj", got)
+	}
+	if got.Source != "git remote" || got.Remote != "git@github.com:acme/proj.git" {
+		t.Fatalf("resolve = %+v; want the git-remote source", got)
+	}
+	if got.Cached {
+		t.Fatalf("first resolve reported cached = true")
+	}
+
+	// Second run is cached; --refresh re-queries.
+	out, err = runLode(t, "project", "resolve", "--json")
+	if err != nil {
+		t.Fatalf("second resolve: %v\noutput: %s", err, out)
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Cached {
+		t.Fatalf("second resolve reported cached = false")
+	}
+
+	out, err = runLode(t, "project", "resolve", "--json", "--refresh")
+	if err != nil {
+		t.Fatalf("resolve --refresh: %v\noutput: %s", err, out)
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Cached {
+		t.Fatalf("--refresh reported cached = true")
+	}
+}
+
+func TestProjectResolveUnscoped(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	setupGitRepo(t, "")
+
+	out, err := runLode(t, "project", "resolve")
+	if err != nil {
+		t.Fatalf("lode project resolve: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "no current project") {
+		t.Fatalf("output = %q; want it to say there is no current project", out)
+	}
+}
