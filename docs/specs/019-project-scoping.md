@@ -142,20 +142,28 @@ cache is `~/.cache/worklode/remotes.json`, mode 0600, written atomically
 
 ```json
 {
-  "remotes": {
-    "git@github.com:sunstoneinstitute/worklode.git": {
-      "project": "worklode", "at": "2026-07-30T12:00:00Z"
-    },
-    "https://github.com/acme/unmapped": {
-      "project": "", "at": "2026-07-30T12:01:00Z"
+  "servers": {
+    "https://wl.example.com": {
+      "remotes": {
+        "git@github.com:sunstoneinstitute/worklode.git": {
+          "project": "worklode", "at": "2026-07-30T12:00:00Z"
+        },
+        "https://github.com/acme/unmapped": {
+          "project": "", "at": "2026-07-30T12:01:00Z"
+        }
+      },
+      "keys": {
+        "worklode": { "key": "WL", "at": "2026-07-30T12:00:00Z" }
+      }
     }
-  },
-  "keys": {
-    "worklode": { "key": "WL", "at": "2026-07-30T12:00:00Z" }
   }
 }
 ```
 
+- **`servers`** is keyed by the client's base URL. A repo→project mapping is
+  the answer of one server, and `LODE_SERVER` lets one machine talk to
+  several, so a local test server's `wl-dev` must never be served to the team
+  server. Each command reads and writes only its own server's section.
 - **`remotes`** is keyed by the raw string `git remote get-url origin`
   returned, unmodified. The server normalizes, so two spellings of one repo
   get two entries — harmless, and it keeps normalization in one place.

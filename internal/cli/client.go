@@ -303,6 +303,10 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+// ServerURL returns the base URL this client talks to. Callers key
+// server-specific local state (such as the remote cache) by it.
+func (c *Client) ServerURL() string { return c.baseURL }
+
 // do sends one request and returns the raw response body. body, if non-nil,
 // is JSON-encoded as the request body. A non-2xx response is returned as a
 // *ClientError, never masked by a generic error.
