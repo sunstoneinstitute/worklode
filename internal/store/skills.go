@@ -189,6 +189,34 @@ func (s *Store) ListSkills(ctx context.Context, includeDeleted bool) ([]Skill, e
 	return out, nil
 }
 
+// SkillsMissingEmbeddings returns live skills with no stored vectors at all,
+// ordered by name — the set a sync must embed to converge, whether they were
+// never embedded, lost their vectors to a provider change, or failed a
+// transient embed call. Description and SkillMD come along so the caller can
+// embed without a second query.
+func (s *Store) SkillsMissingEmbeddings(ctx context.Context) ([]Skill, error) {
+	rows, err := s.db.QueryContext(ctx, skillSelect+`
+		WHERE s.deleted_at IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM skill_embeddings e WHERE e.skill_id = s.id)
+		ORDER BY s.name`)
+	if err != nil {
+		return nil, fmt.Errorf("skills missing embeddings: %w", err)
+	}
+	defer rows.Close()
+	var out []Skill
+	for rows.Next() {
+		sk, err := scanSkill(rows)
+		if err != nil {
+			return nil, fmt.Errorf("skills missing embeddings: %w", err)
+		}
+		out = append(out, *sk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("skills missing embeddings: %w", err)
+	}
+	return out, nil
+}
+
 // SkillsByNames returns the named skills (deleted included, so brief pins can
 // warn rather than vanish), ordered as asked and deduped to first occurrence;
 // missing names are simply absent.

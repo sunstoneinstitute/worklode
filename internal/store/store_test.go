@@ -26,6 +26,7 @@ var wantTables = []string{
 	"skills",
 	"skill_versions",
 	"skill_embeddings",
+	"embedding_config",
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {

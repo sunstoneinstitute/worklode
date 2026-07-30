@@ -1,4 +1,5 @@
 ALTER TABLE tasks DROP COLUMN skills;
+DROP TABLE embedding_config;
 DROP TABLE skill_embeddings;
 ALTER TABLE skills DROP CONSTRAINT skills_latest_version_fk;
 DROP TABLE skill_versions;

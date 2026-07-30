@@ -70,6 +70,22 @@ func (s *Store) ReplaceSkillEmbeddings(ctx context.Context, skillID int64, vecs 
 	return tx.Commit()
 }
 
+// ClearAllSkillEmbeddings deletes every stored chunk vector, returning how
+// many rows went. Used when the embedding provider changes: vectors from a
+// different provider or model are not comparable with the new ones, and
+// mixed dimensions break cosine queries outright.
+func (s *Store) ClearAllSkillEmbeddings(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM skill_embeddings`)
+	if err != nil {
+		return 0, fmt.Errorf("clear all skill embeddings: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear all skill embeddings rows affected: %w", err)
+	}
+	return n, nil
+}
+
 // RecommendSkills returns live skills scored by max cosine similarity over
 // their chunks against query, best-first, at or above floor.
 func (s *Store) RecommendSkills(ctx context.Context, query []float32, limit int, floor float64) ([]SkillMatch, error) {
