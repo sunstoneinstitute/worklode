@@ -381,6 +381,16 @@ type statusResult struct {
 	Lease         *cli.Lease         `json:"lease,omitempty"`
 	OpenBlockers  []cli.BriefBlocker `json:"open_blockers"`
 	SessionMarker bool               `json:"session_marker"`
+	Project       string             `json:"project,omitempty"`
+	ProjectSource string             `json:"project_source"`
+}
+
+// orNone renders an empty scope as "-" rather than a blank column.
+func orNone(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // leaseState classifies lease relative to identity (this worktree) and now.
@@ -415,7 +425,7 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show the current worktree's task, lease, and session-marker state (read-only)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
@@ -435,6 +445,12 @@ func newStatusCmd() *cobra.Command {
 			sessionPresent := hasSessionMarker(root)
 			state := leaseState(brief.Lease, identity, time.Now())
 
+			wd, err := os.Getwd()
+			if err != nil {
+				wd = ""
+			}
+			scope := cli.ResolveScope(cmd.Context(), c, cfg, wd)
+
 			if jsonOut(cmd) {
 				b, err := json.Marshal(statusResult{
 					Worktree:      root,
@@ -443,6 +459,8 @@ func newStatusCmd() *cobra.Command {
 					Lease:         brief.Lease,
 					OpenBlockers:  brief.OpenBlockers,
 					SessionMarker: sessionPresent,
+					Project:       scope.Project,
+					ProjectSource: string(scope.Source),
 				})
 				if err != nil {
 					return fmt.Errorf("encode result: %w", err)
@@ -453,6 +471,7 @@ func newStatusCmd() *cobra.Command {
 
 			o := cmd.OutOrStdout()
 			fmt.Fprintf(o, "worktree: %s\n", root)
+			fmt.Fprintf(o, "project:  %s (%s)\n", orNone(scope.Project), scope.Source)
 			fmt.Fprintf(o, "task: %s — %s\n", brief.Task.ID, brief.Task.Title)
 			fmt.Fprintf(o, "state: %s   priority: %s\n", brief.Task.State, brief.Task.Priority)
 			switch state {
