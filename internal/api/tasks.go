@@ -43,9 +43,14 @@ type taskJSON struct {
 	CreatedBy          string    `json:"created_by"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
+	Skills             []string  `json:"skills"`
 }
 
 func toTaskJSON(t *store.Task) taskJSON {
+	skills := t.Skills
+	if skills == nil {
+		skills = []string{}
+	}
 	return taskJSON{
 		ID:                 t.ID,
 		Project:            t.ProjectID,
@@ -59,18 +64,19 @@ func toTaskJSON(t *store.Task) taskJSON {
 		CreatedBy:          t.CreatedBy,
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,
+		Skills:             skills,
 	}
 }
 
 type createTaskRequest struct {
-	Project  string `json:"project"`
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Priority string `json:"priority"`
-	Kind     string `json:"kind"`
-	Concern  string `json:"concern"`
-	Draft    bool   `json:"draft"`
-	Parent   string `json:"parent"`
+	Project  string   `json:"project"`
+	Title    string   `json:"title"`
+	Body     string   `json:"body"`
+	Priority string   `json:"priority"`
+	Kind     string   `json:"kind"`
+	Concern  string   `json:"concern"`
+	Draft    bool     `json:"draft"`
+	Skills   []string `json:"skills"`
 }
 
 // createTask handles POST /api/v1/tasks.
@@ -138,6 +144,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				Concern:   req.Concern,
 				CreatedBy: actor.ID,
 				Draft:     req.Draft,
+				Skills:    req.Skills,
 			})
 			if err != nil {
 				return err
@@ -490,4 +497,44 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type setSkillsRequest struct {
+	Skills []string `json:"skills"`
+}
+
+// setTaskSkills handles PUT /api/v1/tasks/{id}/skills: replaces the task's
+// pinned skill names, always surfaced in a recommendation regardless of
+// embedding similarity.
+func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req setSkillsRequest
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+
+	extID, err := randomExternalID()
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.skills_set", payload,
+		func(tx *sql.Tx, _ int64) error {
+			return store.SetTaskSkills(tx, id, req.Skills)
+		})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	skills := req.Skills
+	if skills == nil {
+		skills = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
 }
