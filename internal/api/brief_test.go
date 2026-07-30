@@ -85,6 +85,46 @@ func TestTaskBriefNoLease(t *testing.T) {
 	}
 }
 
+func TestTaskBriefParent(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	epic := createEpic(t, h, token, "proj", "Delivery lifecycle")
+	child := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
+		"parent": epic,
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+child["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	parent, ok := got["parent"].(map[string]any)
+	if !ok {
+		t.Fatalf("parent = %v, want an object", got["parent"])
+	}
+	if parent["id"] != epic || parent["title"] != "Delivery lifecycle" || parent["state"] != "ready" {
+		t.Fatalf("parent = %v, want id %s title Delivery lifecycle state ready", parent, epic)
+	}
+}
+
+func TestTaskBriefNoParent(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Root", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-1/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if v, present := got["parent"]; !present || v != nil {
+		t.Fatalf("parent = %v (present=%v), want JSON null", v, present)
+	}
+}
+
 func TestTaskBriefNotFound(t *testing.T) {
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-99/brief", token, nil)

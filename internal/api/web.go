@@ -184,12 +184,16 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	progress, err := s.st.ChildProgress(ctx, id)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
+	// Leaves can never have children, so skip the query — template only
+	// reads Progress inside the {{if .Children}} branch anyway.
+	if len(data.Children) > 0 {
+		progress, err := s.st.ChildProgress(ctx, id)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		data.Progress = progress
 	}
-	data.Progress = progress
 
 	data.Timeline = make([]webTimelineRow, 0, len(entries))
 	for _, e := range entries {
