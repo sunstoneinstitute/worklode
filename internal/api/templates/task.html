@@ -20,7 +20,7 @@
   <li>Blocks: {{if .Blocks}}{{range .Blocks}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
   <li>Blocked by: {{if .BlockedBy}}{{range .BlockedBy}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
   <li>Parent: {{if .Parent}}<a href="/tasks/{{.Parent}}">{{.Parent}}</a>{{else}}<span class="muted">none</span>{{end}}</li>
-  <li>Children: {{if .Children}}{{range .Children}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}{{else}}<span class="muted">none</span>{{end}}</li>
+  <li>Children: {{if .Children}}{{range .Children}}<a href="/tasks/{{.}}">{{.}}</a> {{end}}<span class="muted">({{.Progress.Closed}}/{{.Progress.Total}} closed)</span>{{else}}<span class="muted">none</span>{{end}}</li>
 </ul>
 
 <h2>Timeline</h2>
