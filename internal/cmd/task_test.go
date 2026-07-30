@@ -203,3 +203,66 @@ func TestTaskListStatusFiltering(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskHierarchyCommands(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	epic, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+		Project: "proj", Title: "Container", Priority: "high", Kind: "epic",
+	})
+	if err != nil {
+		t.Fatalf("create epic: %v", err)
+	}
+
+	// add --parent files the new task under the epic in one round trip.
+	out, err := runLode(t, "task", "add", "--json", "--project", "proj",
+		"--title", "Piece", "--parent", epic.ID)
+	if err != nil {
+		t.Fatalf("task add --parent: %v\noutput: %s", err, out)
+	}
+	var child cli.Task
+	if err := json.Unmarshal([]byte(out), &child); err != nil {
+		t.Fatalf("decode add output %q: %v", out, err)
+	}
+
+	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 1 || got[0] != child.ID {
+		t.Fatalf("list --parent = %v, want [%s]", got, child.ID)
+	}
+
+	show, err := runLode(t, "task", "show", child.ID)
+	if err != nil {
+		t.Fatalf("task show: %v", err)
+	}
+	if !strings.Contains(show, "parent:") || !strings.Contains(show, epic.ID) {
+		t.Fatalf("show has no parent line:\n%s", show)
+	}
+
+	tree, err := runLode(t, "task", "tree", "--project", "proj")
+	if err != nil {
+		t.Fatalf("task tree: %v", err)
+	}
+	if !strings.Contains(tree, epic.ID) || !strings.Contains(tree, child.ID) {
+		t.Fatalf("tree missing epic or child:\n%s", tree)
+	}
+
+	if _, err := runLode(t, "task", "unparent", child.ID); err != nil {
+		t.Fatalf("task unparent: %v", err)
+	}
+	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 0 {
+		t.Fatalf("list --parent after unparent = %v, want []", got)
+	}
+
+	// decompose converts a task in place and creates its children as drafts.
+	big := createTestTask(t, c, "Too big")
+	out, err = runLode(t, "task", "decompose", big.ID, "--into", "A", "--into", "B")
+	if err != nil {
+		t.Fatalf("task decompose: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "is now an epic") {
+		t.Fatalf("decompose output:\n%s", out)
+	}
+	if got := taskListIDs(t, "--parent", big.ID); len(got) != 2 {
+		t.Fatalf("children of %s = %v, want 2", big.ID, got)
+	}
+}
