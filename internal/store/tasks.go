@@ -91,6 +91,19 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:            true,
 }
 
+// kindEpic is the tasks.kind value for a declared container task (spec 018):
+// its own state and delivery are driven by its children, never entered
+// directly.
+const kindEpic = "epic"
+
+// epicForbiddenStates are the delivery states an epic can never occupy. They
+// are earned by observed deploy facts about a specific commit (spec 011) and
+// an epic has no commit. Checked on both ends of a transition so `lode task
+// done` on an epic reports the roll-up rule instead of a from-state mismatch.
+var epicForbiddenStates = map[string]bool{
+	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
+}
+
 // CreateTask allocates the next <KEY>-<n> id from the project's counter and
 // inserts the task inside the given transaction. It is meant to be called
 // from a RecordEvent apply callback with the store's clock as now.
@@ -149,14 +162,6 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	}, nil
 }
 
-// epicForbiddenStates are the delivery states an epic can never occupy. They
-// are earned by observed deploy facts about a specific commit (spec 011) and
-// an epic has no commit. Checked on both ends of a transition so `lode task
-// done` on an epic reports the roll-up rule instead of a from-state mismatch.
-var epicForbiddenStates = map[string]bool{
-	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
-}
-
 // Transition moves a task from one state to another inside the given
 // transaction. The move must be in legalTransitions and the task's current
 // state must equal from (otherwise ErrBadTransition; unknown task is
@@ -177,8 +182,8 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	if err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
 	}
-	if kind == "epic" && (epicForbiddenStates[from] || epicForbiddenStates[to]) {
-		return fmt.Errorf("task %s is an epic: its state follows its children, so it cannot move %s -> %s: %w",
+	if kind == kindEpic && (epicForbiddenStates[from] || epicForbiddenStates[to]) {
+		return fmt.Errorf("task %s is an epic: its state follows its children, so it cannot move %s -> %s (close its children instead): %w",
 			taskID, from, to, ErrBadTransition)
 	}
 	if current != from {

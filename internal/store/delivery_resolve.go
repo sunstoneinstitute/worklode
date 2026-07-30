@@ -78,15 +78,16 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
 	// An epic has no commit, and an unknown task id is a correlation miss
 	// that must not fail the delivery (InsertTaskCommit's contract); both
-	// return nil here rather than an error.
-	var kind string
-	if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, taskID).Scan(&kind); err != nil {
+	// return nil here rather than an error. state is read alongside kind so
+	// this same lookup also serves the switch below, at no extra query cost.
+	var state, kind string
+	if err := tx.QueryRow(`SELECT state, kind FROM tasks WHERE id = $1`, taskID).Scan(&state, &kind); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
-		return fmt.Errorf("get task %s kind: %w", taskID, err)
+		return fmt.Errorf("get task %s state: %w", taskID, err)
 	}
-	if kind == "epic" {
+	if kind == kindEpic {
 		return nil
 	}
 
@@ -96,11 +97,6 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	}
 	if landed == nil {
 		return nil
-	}
-
-	state, err := TaskState(tx, taskID)
-	if err != nil {
-		return err
 	}
 
 	switch state {

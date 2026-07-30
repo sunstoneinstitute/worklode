@@ -561,19 +561,3 @@ func TestResolveDeliveryIgnoresEpics(t *testing.T) {
 		t.Fatalf("state = %s, want ready (an epic has no commit)", got.State)
 	}
 }
-
-// TestResolveDeliveryIgnoresUnknownTask checks the other half of the
-// existence check added for epics: a task id that resolves to no row at all
-// (a stale or mistyped commit-message correlation, e.g. push.go's
-// merge-message parsing) is a no-op, not an error, per InsertTaskCommit's
-// contract that a correlation miss must never fail a delivery.
-func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
-	s := openTaskStore(t)
-	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "delivery", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			return ResolveDelivery(tx, taskTestNow, "HDB-999", "o/r", eventID)
-		})
-	if err != nil {
-		t.Fatalf("ResolveDelivery: %v", err)
-	}
-}

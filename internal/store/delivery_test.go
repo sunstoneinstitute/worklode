@@ -750,6 +750,25 @@ func TestResolveDeliveryArrivalOrder(t *testing.T) {
 	}
 }
 
+// TestResolveDeliveryIgnoresUnknownTask pins the tolerance for a task id
+// that resolves to no row at all (a stale or mistyped commit-message
+// correlation, e.g. push.go's merge-message parsing): ResolveDelivery must
+// treat it as a no-op, not an error, per InsertTaskCommit's contract that a
+// correlation miss must never fail a delivery.
+func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
+	s := OpenTestStore(t)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+	if err := ResolveDelivery(tx, now, "P1-999", "acme/app", ev); err != nil {
+		t.Fatalf("ResolveDelivery: %v", err)
+	}
+}
+
 func TestRepoDoneState(t *testing.T) {
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
