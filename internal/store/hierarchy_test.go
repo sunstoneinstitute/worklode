@@ -561,3 +561,208 @@ func TestResolveDeliveryIgnoresEpics(t *testing.T) {
 		t.Fatalf("state = %s, want ready (an epic has no commit)", got.State)
 	}
 }
+
+func TestEpicTarget(t *testing.T) {
+	cases := []struct {
+		name   string
+		states []string
+		want   string
+	}{
+		{"no children", nil, ""},
+		{"all draft or ready", []string{"draft", "ready"}, "ready"},
+		{"one started", []string{"ready", "in_progress"}, "in_progress"},
+		{"one landed, one open", []string{"merged", "ready"}, "in_progress"},
+		{"all closed, one delivered", []string{"merged", "abandoned"}, "merged"},
+		{"all abandoned", []string{"abandoned", "abandoned"}, "abandoned"},
+		{"all delivered", []string{"merged", "deployed_prod"}, "merged"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := epicTarget(tc.states); got != tc.want {
+				t.Fatalf("epicTarget(%v) = %q, want %q", tc.states, got, tc.want)
+			}
+		})
+	}
+}
+
+// epicWithChildren builds an epic with n ready children and returns both.
+func epicWithChildren(t *testing.T, s *Store, n int) (*Task, []*Task) {
+	t.Helper()
+	epic := createTask(t, s, taskTestNow, epicInput())
+	var kids []*Task
+	for i := 0; i < n; i++ {
+		k := createTask(t, s, taskTestNow, defaultTaskInput())
+		if err := addEdge(t, s, k.ID, epic.ID, "child_of"); err != nil {
+			t.Fatalf("child %d: %v", i, err)
+		}
+		kids = append(kids, k)
+	}
+	return epic, kids
+}
+
+func stateOf(t *testing.T, s *Store, id string) string {
+	t.Helper()
+	task, err := s.GetTask(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetTask %s: %v", id, err)
+	}
+	return task.State
+}
+
+// TestRollUpForward: the first child to start moves the epic off ready, and
+// the last child to close moves it to merged.
+func TestRollUpForward(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 2)
+
+	if err := transition(t, s, taskTestNow, kids[0].ID, "ready", "in_progress"); err != nil {
+		t.Fatalf("start child 0: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "in_progress" {
+		t.Fatalf("epic = %s, want in_progress", got)
+	}
+
+	// walkTo starts from ready, so child 0 finishes its walk step by step.
+	if err := transition(t, s, taskTestNow, kids[0].ID, "in_progress", "in_review"); err != nil {
+		t.Fatalf("review child 0: %v", err)
+	}
+	if err := transition(t, s, taskTestNow, kids[0].ID, "in_review", "merged"); err != nil {
+		t.Fatalf("merge child 0: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "in_progress" {
+		t.Fatalf("epic = %s, want in_progress with one child still open", got)
+	}
+	walkTo(t, s, kids[1].ID, "merged")
+	if got := stateOf(t, s, epic.ID); got != "merged" {
+		t.Fatalf("epic = %s, want merged", got)
+	}
+}
+
+// TestRollUpZeroChildren: an epic with no children never moves. It is a
+// modelling mistake, not a completed epic.
+func TestRollUpZeroChildren(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "rollup", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ResolveHierarchy(tx, taskTestNow, epic.ID, eventID)
+		})
+	if err != nil {
+		t.Fatalf("ResolveHierarchy: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "ready" {
+		t.Fatalf("epic = %s, want ready", got)
+	}
+}
+
+func TestRollUpAllAbandoned(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 2)
+	for _, k := range kids {
+		if err := transition(t, s, taskTestNow, k.ID, "ready", "abandoned"); err != nil {
+			t.Fatalf("abandon %s: %v", k.ID, err)
+		}
+	}
+	if got := stateOf(t, s, epic.ID); got != "abandoned" {
+		t.Fatalf("epic = %s, want abandoned", got)
+	}
+}
+
+func TestRollUpMixedAbandonedAndDelivered(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 2)
+	walkTo(t, s, kids[0].ID, "merged")
+	if err := transition(t, s, taskTestNow, kids[1].ID, "ready", "abandoned"); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "merged" {
+		t.Fatalf("epic = %s, want merged (some of the epic landed)", got)
+	}
+}
+
+// TestRollUpReopen: a child returning to ready puts a closed epic back to
+// ready. Asymmetric roll-up produces boards that lie.
+func TestRollUpReopen(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 1)
+	walkTo(t, s, kids[0].ID, "merged")
+	if got := stateOf(t, s, epic.ID); got != "merged" {
+		t.Fatalf("epic = %s, want merged", got)
+	}
+	if err := transition(t, s, taskTestNow, kids[0].ID, "merged", "ready"); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "ready" {
+		t.Fatalf("epic = %s, want ready", got)
+	}
+}
+
+// TestRollUpAttribution: the parent's state_log row carries the child's event
+// id, so the timeline explains itself with no synthetic event.
+func TestRollUpAttribution(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 1)
+
+	var eventID int64
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
+		func(tx *sql.Tx, id int64) error {
+			eventID = id
+			return Transition(tx, taskTestNow, kids[0].ID, "ready", "in_progress", id)
+		})
+	if err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+
+	var got int64
+	if err := s.DBForTests().QueryRow(
+		`SELECT event_id FROM state_log WHERE entity_id = $1 ORDER BY id DESC LIMIT 1`,
+		epic.ID).Scan(&got); err != nil {
+		t.Fatalf("read epic state_log: %v", err)
+	}
+	if got != eventID {
+		t.Fatalf("epic state_log event_id = %d, want the child's %d", got, eventID)
+	}
+}
+
+// TestRollUpDepth2Recursion: a subtask closing resolves its task, which
+// resolves the epic, in one transaction.
+func TestRollUpDepth2Recursion(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	mid := createTask(t, s, taskTestNow, epicInput())
+	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("mid under epic: %v", err)
+	}
+	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
+		t.Fatalf("leaf under mid: %v", err)
+	}
+
+	walkTo(t, s, leaf.ID, "merged")
+	if got := stateOf(t, s, mid.ID); got != "merged" {
+		t.Fatalf("mid = %s, want merged", got)
+	}
+	if got := stateOf(t, s, epic.ID); got != "merged" {
+		t.Fatalf("epic = %s, want merged", got)
+	}
+}
+
+// TestRollUpReopenRoutesThroughReady: merged -> in_progress is not a legal
+// edge, so a merged epic whose child reopens while another stays closed
+// routes through ready, the only edge out of a closed state.
+func TestRollUpReopenRoutesThroughReady(t *testing.T) {
+	s := openTaskStore(t)
+	epic, kids := epicWithChildren(t, s, 2)
+	walkTo(t, s, kids[0].ID, "merged")
+	walkTo(t, s, kids[1].ID, "abandoned")
+	if got := stateOf(t, s, epic.ID); got != "merged" {
+		t.Fatalf("epic = %s, want merged", got)
+	}
+
+	if err := transition(t, s, taskTestNow, kids[0].ID, "merged", "ready"); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := stateOf(t, s, epic.ID); got != "in_progress" {
+		t.Fatalf("epic = %s, want in_progress (one child reopened, one still closed)", got)
+	}
+}
