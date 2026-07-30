@@ -108,18 +108,39 @@ func tarballOf(t *testing.T, root string, files map[string]string) []byte {
 
 const skillMD = "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\nUse TDD always."
 
-type fakeEmbed struct{ calls int }
+// fakeEmbed returns one fixed vector per chunk. id and vec identify the
+// embedding space, so two of them stand in for a provider swap; fails makes
+// that many leading calls return an error, standing in for a transient 429.
+type fakeEmbed struct {
+	calls int
+	id    string
+	vec   []float32
+	fails int
+}
 
 func (f *fakeEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	f.calls++
+	if f.fails > 0 {
+		f.fails--
+		return nil, errors.New("embed unavailable")
+	}
+	v := f.vec
+	if v == nil {
+		v = []float32{1, 0, 0}
+	}
 	out := make([][]float32, len(texts))
 	for i := range texts {
-		out[i] = []float32{1, 0, 0}
+		out[i] = v
 	}
 	return out, nil
 }
 
-func (f *fakeEmbed) ID() string { return "fake" }
+func (f *fakeEmbed) ID() string {
+	if f.id == "" {
+		return "fake"
+	}
+	return f.id
+}
 
 func TestSyncAll(t *testing.T) {
 	st := store.OpenTestStore(t)
@@ -476,5 +497,163 @@ func TestMatchesPush(t *testing.T) {
 	}
 	if MatchesPush(src, "acme/p", "dev") || MatchesPush(src, "acme/q", "main") {
 		t.Fatalf("want no match")
+	}
+}
+
+// skillSyncer wires a syncer over a fixed one-skill source. Callers set
+// sy.Embed themselves — the embedding provider is what these tests vary.
+func skillSyncer(t *testing.T, st *store.Store, logbuf *bytes.Buffer) (*Syncer, []Source) {
+	t.Helper()
+	tb := tarballOf(t, "acme-p-aaa111", map[string]string{"skills/tdd/SKILL.md": skillMD})
+	sy := &Syncer{
+		Store: st,
+		Fetch: func(ctx context.Context, repo, ref string) ([]byte, error) { return tb, nil },
+	}
+	if logbuf != nil {
+		sy.Log = slog.New(slog.NewTextHandler(logbuf, nil))
+	}
+	return sy, []Source{testSource}
+}
+
+// The embedding space the stored vectors belong to is recorded, so a later
+// sync can tell whether they are still comparable.
+func TestSyncAllRecordsEmbeddingProvider(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sy, src := skillSyncer(t, st, nil)
+	sy.Embed = &fakeEmbed{id: "fake:a"}
+
+	sum, err := sy.SyncAll(ctx, src)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	// The skill was embedded as it changed, so convergence found nothing left.
+	if sum.Embedded != 0 {
+		t.Fatalf("summary: %+v", sum)
+	}
+	got, err := st.EmbeddingProviderID(ctx)
+	if err != nil || got != "fake:a" {
+		t.Fatalf("provider id = %q err=%v, want fake:a", got, err)
+	}
+}
+
+// A provider change invalidates every stored vector — they are not comparable
+// with the new model's — so the corpus is cleared and re-embedded even though
+// no skill content changed.
+func TestSyncAllProviderChangeReembeds(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	var logbuf bytes.Buffer
+	sy, src := skillSyncer(t, st, &logbuf)
+
+	sy.Embed = &fakeEmbed{id: "fake:a", vec: []float32{1, 0, 0}}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	sy.Embed = &fakeEmbed{id: "fake:b", vec: []float32{0, 1, 0}}
+	sum, err := sy.SyncAll(ctx, src)
+	if err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if sum.Embedded != 1 {
+		t.Fatalf("summary: %+v", sum)
+	}
+	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != "fake:b" {
+		t.Fatalf("provider id = %q err=%v, want fake:b", id, err)
+	}
+	if got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); err != nil || len(got) != 0 {
+		t.Fatalf("old-space vectors survived: %+v err=%v", got, err)
+	}
+	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
+	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+		t.Fatalf("new-space recommend: %+v err=%v", got, err)
+	}
+	if log := logbuf.String(); !strings.Contains(log, "fake:a") || !strings.Contains(log, "fake:b") {
+		t.Fatalf("want a log naming both provider ids, got: %s", log)
+	}
+}
+
+// The same provider must not trigger a clear: re-embedding the whole corpus
+// on every sync would be a needless bill and a needless outage window.
+func TestSyncAllUnchangedProviderKeepsEmbeddings(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sy, src := skillSyncer(t, st, nil)
+	emb := &fakeEmbed{id: "fake:a"}
+	sy.Embed = emb
+
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	sum, err := sy.SyncAll(ctx, src)
+	if err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if emb.calls != 1 || sum.Embedded != 0 {
+		t.Fatalf("re-embedded unchanged corpus: calls=%d summary=%+v", emb.calls, sum)
+	}
+	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("embeddings lost: %+v err=%v", got, err)
+	}
+}
+
+// A transient embed failure at upsert time would otherwise un-search the
+// skill forever: its content hash matches from then on, so it is never
+// re-embedded. The convergence pass retries it on the next sync.
+func TestSyncAllRetriesFailedEmbed(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sy, src := skillSyncer(t, st, nil)
+	// Two failures: the upsert-time embed and the first convergence attempt.
+	sy.Embed = &fakeEmbed{id: "fake:a", fails: 2}
+
+	sum, err := sy.SyncAll(ctx, src)
+	if err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	if sum.Synced != 1 || sum.Embedded != 0 {
+		t.Fatalf("first summary: %+v", sum)
+	}
+	if got, _ := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); len(got) != 0 {
+		t.Fatalf("embedded despite failure: %+v", got)
+	}
+
+	sum, err = sy.SyncAll(ctx, src)
+	if err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if sum.Changed != 0 || sum.Embedded != 1 {
+		t.Fatalf("second summary: %+v", sum)
+	}
+	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+		t.Fatalf("convergence did not embed: %+v err=%v", got, err)
+	}
+}
+
+// With no provider configured nothing recommends, so stored vectors are
+// inert rather than wrong — and wiping them would destroy data an operator
+// may be about to re-enable.
+func TestSyncAllWithoutProviderLeavesEmbeddings(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sy, src := skillSyncer(t, st, nil)
+	sy.Embed = &fakeEmbed{id: "fake:a"}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	sy.Embed = nil
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("sync without provider: %v", err)
+	}
+	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != "fake:a" {
+		t.Fatalf("provider id = %q err=%v, want fake:a", id, err)
+	}
+	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("embeddings cleared without a provider: %+v err=%v", got, err)
 	}
 }

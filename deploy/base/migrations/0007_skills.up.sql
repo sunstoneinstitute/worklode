@@ -42,5 +42,12 @@ CREATE TABLE skill_embeddings (
     PRIMARY KEY (skill_id, chunk_index)
 );
 
+-- The embedding space the stored vectors belong to. Vectors from different
+-- providers/models are not comparable, so a change invalidates all of them.
+CREATE TABLE embedding_config (
+    singleton   boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    provider_id text NOT NULL
+);
+
 -- Task pins: skill names the task author wants injected into the brief.
 ALTER TABLE tasks ADD COLUMN skills jsonb NOT NULL DEFAULT '[]';
