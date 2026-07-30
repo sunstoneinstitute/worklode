@@ -9,7 +9,7 @@ read-back.
 
 **Architecture:** The `wl:` ontology/SKOS/SHACL sources are authored under
 `rdf/wl/` (staged for the rdf-registry PR) and parse-gated by loading them into
-Oxigraph in tests. A new `internal/iri` package fixes the IRI grammar, a new
+Oxigraph in tests. A new `internal/kg/iri` package fixes the IRI grammar, a new
 `internal/graph` package turns a backbone task row into triples and renders
 per-subject-replace SPARQL updates, and a new `internal/projector` polls the
 existing `state_log` outbox (checkpointed in a new `graph_projection` table)
@@ -73,7 +73,7 @@ backbone:
 
 Spec 014 §1 says the `ls:`→`wl:` rename "must happen before spec 006 ships",
 so everything here uses `wl:`/`wlc:`/`wlid:` under
-`https://worklode.io/ns/wl/`. Also honored: no `wl:Plan` (014 §2), no
+`https://worklode.io/ns/`. Also honored: no `wl:Plan` (014 §2), no
 `wl:supersededSection` (014 §3), status enum without `implemented` (014 §5),
 six-value TaskKind including `spec` (014 §8, matching today's `tasks.kind`
 CHECK plus the two values 014 adds). `wl:Section`, `wl:lastRevisedIn` and the
@@ -89,7 +89,7 @@ Three things 006 requires but never names — decided here, flagged for the spec
    projection-only mirrors that never fork the backbone enums (Open Q3).
 2. **Workstream IRIs.** The IRI grammar has no workstream pattern. This plan
    fixes `id/workstream/<project-id>` for the instance and
-   `https://worklode.io/ns/wl/graph/workstream/<project-id>` for its
+   `https://worklode.io/ns/graph/workstream/<project-id>` for its
    projection named graph (following spec 007's `declared/…`, `observed/…`
    graph-family style).
 3. **One workstream per task in v1.** The backbone gives a task exactly one
@@ -107,8 +107,8 @@ Three things 006 requires but never names — decided here, flagged for the spec
 
 | Path | Responsibility |
 |---|---|
-| `internal/iri/iri.go` | the canonical IRI grammar: namespaces + constructors, pure functions |
-| `internal/iri/iri_test.go` | table test over every pattern |
+| `internal/kg/iri/iri.go` | the canonical IRI grammar: namespaces + constructors, pure functions |
+| `internal/kg/iri/iri_test.go` | table test over every pattern |
 | `rdf/doc.go` | package stub so the vocabulary sources carry a Go test |
 | `rdf/vocab_test.go` | mint-set presence + retired/forbidden-term checks over the `.ttl` files |
 | `rdf/wl/ontology.ttl` | `wl:` classes and properties (RDF 1.1) |
@@ -131,6 +131,10 @@ Three things 006 requires but never names — decided here, flagged for the spec
 | `internal/projector/projector_test.go` | real store + fake SPARQL endpoint; idempotence; edge fan-out; error retry |
 | `internal/projector/e2e_oxigraph_test.go` | full slice vs. Oxigraph incl. `wl:dependsOn+` property path (criterion 10b) |
 
+Migration id `0008` is provisional: ids are assigned sequentially at execution
+time by the migration-id script, with `0008` the current next-free (0001–0005
+on main; 0006/0007 claimed by in-flight worktrees).
+
 **Modified files**
 
 | Path | Change |
@@ -146,7 +150,7 @@ Three things 006 requires but never names — decided here, flagged for the spec
 
 **Test commands**
 
-- Pure packages: `go test ./internal/iri/... ./rdf/...`
+- Pure packages: `go test ./internal/kg/iri/... ./rdf/...`
 - Graph package (unit tests run anywhere; integration needs Oxigraph):
   `docker compose up -d oxigraph && go test ./internal/graph/...`
 - Postgres-backed (skip if unreachable outside CI):
@@ -157,9 +161,20 @@ Three things 006 requires but never names — decided here, flagged for the spec
 
 ## Task 1: The IRI grammar package
 
+`internal/kg/iri` is the single owner of the IRI grammar; the
+platform-graph-design plan's Task 1 also creates this package, with
+error-returning, validated constructors (`func(...) (string, error)`) rather
+than the plain-string ones below. If that plan's Task 1 lands first: it
+already defines `Component`, `Task`, `Doc`, `Deliverable`, `Issue`, `PR` and
+`Environment` with that signature, so reconcile rather than redefine them —
+add this task's `Term`, `Concept`, `Workstream`, `WorkstreamGraph` and
+`Agent` to the existing package (matching its `(string, error)` signature),
+and change every call site below of the seven overlapping names to match
+`internal/kg/iri`'s existing versions instead of recreating `iri.go`.
+
 **Files:**
-- Create: `internal/iri/iri.go`
-- Test: `internal/iri/iri_test.go`
+- Create: `internal/kg/iri/iri.go`
+- Test: `internal/kg/iri/iri_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -169,11 +184,11 @@ package iri_test
 import (
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
 func TestGrammar(t *testing.T) {
-	const base = "https://worklode.io/ns/wl/"
+	const base = "https://worklode.io/ns/"
 	cases := []struct{ name, got, want string }{
 		{"term", iri.Term("Task"), base + "ontology#Task"},
 		{"concept", iri.Concept("feature"), base + "concept/feature"},
@@ -203,8 +218,8 @@ func TestGrammar(t *testing.T) {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/iri/...`
-Expected: FAIL — `no required module provides package .../internal/iri`
+Run: `go test ./internal/kg/iri/...`
+Expected: FAIL — `no required module provides package .../internal/kg/iri`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -222,7 +237,7 @@ import "fmt"
 
 const (
 	// Base is the published namespace root (spec 009 item 3).
-	Base = "https://worklode.io/ns/wl/"
+	Base = "https://worklode.io/ns/"
 	// Ontology is the wl: schema namespace (hash namespace).
 	Ontology = Base + "ontology#"
 	// ConceptNS is the wlc: SKOS concept namespace.
@@ -282,13 +297,13 @@ func Agent(actorID string) string { return IDNS + "agent/" + actorID }
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `go test ./internal/iri/...`
+Run: `go test ./internal/kg/iri/...`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/iri
+git add internal/kg/iri
 git commit -m "Add the canonical wl IRI grammar"
 ```
 
@@ -435,8 +450,8 @@ Expected: FAIL — `read wl/ontology.ttl: ... no such file or directory`
 - [ ] **Step 3: Write `rdf/wl/ontology.ttl`**
 
 ```turtle
-@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -444,7 +459,7 @@ Expected: FAIL — `read wl/ontology.ttl: ... no such file or directory`
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 
-<https://worklode.io/ns/wl/ontology> a owl:Ontology ;
+<https://worklode.io/ns/ontology> a owl:Ontology ;
     dct:title "Worklode wl: ontology" ;
     rdfs:comment "The Worklode knowledge-graph vocabulary (spec 006, prefixes per spec 014). Standards-first: dcterms/foaf/prov/doap/skos are reused; only the terms below are minted." .
 
@@ -554,7 +569,7 @@ wl:concern a owl:DatatypeProperty ; wl:layer wlc:execution ;
 - [ ] **Step 4: Write `rdf/wl/concept.ttl`**
 
 ```turtle
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 # DesignDoc lifecycle (D4). Order draft -> proposed -> accepted -> superseded;
@@ -603,8 +618,8 @@ wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runt
 
 ```turtle
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
-@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
-@prefix wlsh: <https://worklode.io/ns/wl/shapes#> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlsh: <https://worklode.io/ns/shapes#> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -657,6 +672,10 @@ git commit -m "Author the wl vocabulary sources for the rdf-registry PR"
 
 ## Task 3: Triples and SPARQL Update rendering
 
+Per-subject `ReplaceSubject` (not a whole-graph PUT) is required because a
+Workstream graph holds many tasks; this depends on graph-server's SPARQL
+Update surface alongside GSP.
+
 **Files:**
 - Create: `internal/graph/triple.go`
 - Test: `internal/graph/triple_test.go`
@@ -674,8 +693,8 @@ func TestTermRendering(t *testing.T) {
 		term Term
 		want string
 	}{
-		{"iri", IRIRef("https://worklode.io/ns/wl/id/task/WL-1"),
-			"<https://worklode.io/ns/wl/id/task/WL-1>"},
+		{"iri", IRIRef("https://worklode.io/ns/id/task/WL-1"),
+			"<https://worklode.io/ns/id/task/WL-1>"},
 		{"plain literal", Text("fix login"), `"fix login"`},
 		{"quote escaped", Text(`say "hi"`), `"say \"hi\""`},
 		{"backslash escaped", Text(`a\b`), `"a\\b"`},
@@ -831,7 +850,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -911,7 +930,7 @@ package graph
 import (
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -1328,7 +1347,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
 // Endpoint returns the SPARQL base URL tests run against. Default matches
@@ -1379,7 +1398,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
 	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -1924,7 +1943,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -2094,7 +2113,7 @@ import (
 	"fmt"
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -2198,7 +2217,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
 	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )

@@ -74,12 +74,16 @@ authorship triples, §10 server surfaces and web view, all §2–§5 vocabulary
 
 ## File Structure
 
+Migration id `0008` is provisional — ids are assigned sequentially at
+execution time by the migration-id script, so this plan may land under a
+different number depending on execution order.
+
 **New files**
 
 | Path | Responsibility |
 |---|---|
-| `deploy/base/migrations/0006_task_kinds.up.sql` | widen `tasks.kind` CHECK to six kinds |
-| `deploy/base/migrations/0006_task_kinds.down.sql` | remap `review`/`spike` to `chore`, restore the four-kind CHECK |
+| `deploy/base/migrations/0008_task_kinds.up.sql` | widen `tasks.kind` CHECK to six kinds |
+| `deploy/base/migrations/0008_task_kinds.down.sql` | remap `review`/`spike` to `chore`, restore the four-kind CHECK |
 | `internal/kg/section/section.go` | parse Markdown headings + Pandoc `{#…}` anchors into `Section`/`Doc`; content hashing |
 | `internal/kg/section/section_test.go` | parsing: fences, attributes, numbers, bodies |
 | `internal/kg/section/lint.go` | §3/§7 authoring rules: anchor grammar, number agreement, duplicates, depth limit |
@@ -117,7 +121,7 @@ authorship triples, §10 server surfaces and web view, all §2–§5 vocabulary
 ## Task 1: Widen `tasks.kind` to six kinds (§8, AC11 backbone half)
 
 **Files:**
-- Create: `deploy/base/migrations/0006_task_kinds.up.sql`, `deploy/base/migrations/0006_task_kinds.down.sql`
+- Create: `deploy/base/migrations/0008_task_kinds.up.sql`, `deploy/base/migrations/0008_task_kinds.down.sql`
 - Modify: `internal/api/tasks.go:18-20` (`validKinds`), `:87` (message); `internal/api/admin.go:440` (message); `internal/cmd/task.go:85`, `internal/cmd/inbox.go:104` (flag help)
 - Test: `internal/api/tasks_test.go` (append)
 
@@ -149,7 +153,7 @@ Expected: FAIL — 422 `invalid kind` on `review`.
 
 - [ ] **Step 3: Write the migration**
 
-`deploy/base/migrations/0006_task_kinds.up.sql`:
+`deploy/base/migrations/0008_task_kinds.up.sql`:
 
 ```sql
 -- Spec 014 §8: reconcile tasks.kind with wlc:TaskKind by widening to the
@@ -159,7 +163,7 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_kind_check
     CHECK (kind IN ('feature','bug','chore','spec','review','spike'));
 ```
 
-`deploy/base/migrations/0006_task_kinds.down.sql`:
+`deploy/base/migrations/0008_task_kinds.down.sql`:
 
 ```sql
 -- Remap the widened kinds so the restored constraint validates.
@@ -202,7 +206,7 @@ already exercises the new pair down and up.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add deploy/base/migrations/0006_task_kinds.up.sql deploy/base/migrations/0006_task_kinds.down.sql internal/api internal/cmd/task.go internal/cmd/inbox.go
+git add deploy/base/migrations/0008_task_kinds.up.sql deploy/base/migrations/0008_task_kinds.down.sql internal/api internal/cmd/task.go internal/cmd/inbox.go
 git commit -m "Widen tasks.kind to the six-kind union of spec 014 §8"
 ```
 
@@ -1263,10 +1267,10 @@ func TestParseSpecExample(t *testing.T) {
 	}
 	e := f.Implements[0]
 	// The wlid: CURIE expands to the full instance IRI.
-	if e.Section != "https://worklode.io/ns/wl/id/section/spec-worklode-004/sec-4" {
+	if e.Section != "https://worklode.io/ns/id/section/spec-worklode-004/sec-4" {
 		t.Fatalf("section = %q", e.Section)
 	}
-	if e.Pinned != "https://worklode.io/ns/wl/id/doc/spec-worklode-004/v2" {
+	if e.Pinned != "https://worklode.io/ns/id/doc/spec-worklode-004/v2" {
 		t.Fatalf("pinned = %q", e.Pinned)
 	}
 	if len(e.By) != 2 || e.By[0] != "internal/store/lease.go" {
@@ -1277,14 +1281,14 @@ func TestParseSpecExample(t *testing.T) {
 func TestParseAcceptsFullIRIs(t *testing.T) {
 	f, err := implements.Parse([]byte(`
 implements:
-  - section: https://worklode.io/ns/wl/id/section/spec-worklode-014/sec-3
-    pinned:  https://worklode.io/ns/wl/id/doc/spec-worklode-014/v1
+  - section: https://worklode.io/ns/id/section/spec-worklode-014/sec-3
+    pinned:  https://worklode.io/ns/id/doc/spec-worklode-014/v1
     by:      [internal/kg/section/section.go]
 `))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if f.Implements[0].Section != "https://worklode.io/ns/wl/id/section/spec-worklode-014/sec-3" {
+	if f.Implements[0].Section != "https://worklode.io/ns/id/section/spec-worklode-014/sec-3" {
 		t.Fatalf("section = %q", f.Implements[0].Section)
 	}
 }
@@ -1347,7 +1351,7 @@ import (
 )
 
 const (
-	idPrefix      = "https://worklode.io/ns/wl/id/"
+	idPrefix      = "https://worklode.io/ns/id/"
 	sectionPrefix = idPrefix + "section/"
 	docPrefix     = idPrefix + "doc/"
 )
@@ -1501,10 +1505,10 @@ import (
 const twoComponentManifest = `
 repo: github.com/sunstoneinstitute/research-stack
 components:
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest
     name: ingest
     paths: ["internal/ingest/**"]
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/pfas
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/pfas
     name: pfas
     paths: ["internal/pfas/**"]
 `
@@ -1539,8 +1543,8 @@ implements:
 		t.Fatalf("claims = %+v; want 2 (one per component)", claims)
 	}
 	for _, c := range claims {
-		if c.Section != "https://worklode.io/ns/wl/id/section/spec-worklode-004/sec-4" ||
-			c.Pinned != "https://worklode.io/ns/wl/id/doc/spec-worklode-004/v2" {
+		if c.Section != "https://worklode.io/ns/id/section/spec-worklode-004/sec-4" ||
+			c.Pinned != "https://worklode.io/ns/id/doc/spec-worklode-004/v2" {
 			t.Fatalf("claim %+v carries the wrong section/pin", c)
 		}
 	}
@@ -1578,7 +1582,7 @@ implements:
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	want := "https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode"
+	want := "https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode"
 	if len(claims) != 1 || claims[0].Component != want {
 		t.Fatalf("claims = %+v; want one from %s", claims, want)
 	}
@@ -1758,23 +1762,23 @@ import (
 func TestTriples(t *testing.T) {
 	claims := []implements.Claim{
 		{
-			Component: "https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode",
-			Section:   "https://worklode.io/ns/wl/id/section/spec-worklode-004/sec-4",
-			Pinned:    "https://worklode.io/ns/wl/id/doc/spec-worklode-004/v2",
+			Component: "https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode",
+			Section:   "https://worklode.io/ns/id/section/spec-worklode-004/sec-4",
+			Pinned:    "https://worklode.io/ns/id/doc/spec-worklode-004/v2",
 		},
 		{
-			Component: "https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode",
-			Section:   "https://worklode.io/ns/wl/id/section/spec-worklode-013/sec-3.1",
-			Pinned:    "https://worklode.io/ns/wl/id/doc/spec-worklode-013/v1",
+			Component: "https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode",
+			Section:   "https://worklode.io/ns/id/section/spec-worklode-013/sec-3.1",
+			Pinned:    "https://worklode.io/ns/id/doc/spec-worklode-013/v1",
 		},
 	}
 	got := string(graphproj.Render(implements.Triples(claims)))
-	want := "<https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode> " +
-		"<https://worklode.io/ns/wl/ontology#implements> " +
-		"<https://worklode.io/ns/wl/id/section/spec-worklode-004/sec-4> .\n" +
-		"<https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/worklode> " +
-		"<https://worklode.io/ns/wl/ontology#implements> " +
-		"<https://worklode.io/ns/wl/id/section/spec-worklode-013/sec-3.1> .\n"
+	want := "<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode> " +
+		"<https://worklode.io/ns/ontology#implements> " +
+		"<https://worklode.io/ns/id/section/spec-worklode-004/sec-4> .\n" +
+		"<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode> " +
+		"<https://worklode.io/ns/ontology#implements> " +
+		"<https://worklode.io/ns/id/section/spec-worklode-013/sec-3.1> .\n"
 	if got != want {
 		t.Fatalf("Render = %q\nwant %q", got, want)
 	}
@@ -1788,7 +1792,7 @@ func TestTriplesEdgeIsPinFree(t *testing.T) {
 		{Component: "https://x/c", Section: "https://x/s", Pinned: "https://x/d/v2"},
 	}
 	got := string(graphproj.Render(implements.Triples(claims)))
-	if want := "<https://x/c> <https://worklode.io/ns/wl/ontology#implements> <https://x/s> .\n"; got != want {
+	if want := "<https://x/c> <https://worklode.io/ns/ontology#implements> <https://x/s> .\n"; got != want {
 		t.Fatalf("Render = %q; want the single deduplicated edge %q", got, want)
 	}
 }
@@ -1901,21 +1905,18 @@ Deferred table below, so nobody mistakes it for a gap.
 | Versioned named graphs, the single-transaction publication, `lode doc list/show/coverage/revise/publish`, `lode drift --docs`, the web view, crit-gated revisions, the server-side depth-limit setting | blocked on the graph server (spec 009, cross-repo) and 007's overview surface |
 | The `observed/repo-implements` deriver (fetch manifests at branch head, named-graph PUT, push/schedule triggers) and the coverage/stale/orphan standing queries | spec 007's plan, consuming this plan's `implements` package |
 | `prov:wasGeneratedBy` authorship projection (§9) | 006 projection work |
-| Onboarding the existing `docs/specs/` corpus | candidate spec 015-successor ("spec 015" in 014's text, already taken by the runtime layer — the umbrella will need to assign the next free number); explicitly out of scope per 014 §Adoption |
+| Onboarding the existing `docs/specs/` corpus | candidate spec 020 (014's text said "spec 015", already taken by the runtime layer; renumbered in 014); explicitly out of scope per 014 §Adoption |
 
 ## Overlaps and open questions
 
-1. **`internal/kg/iri` vs `internal/graphproj` duplicate the runtime IRI
-   grammar.** The platform-graph-design plan's `iri` package and the
-   runtime-layer plan's `graphproj/iri.go` both mint
-   artifact/deployment/environment/commit IRIs under the same base, with
-   different behavior on bad input (`iri` validates and errors;
-   `graphproj` percent-escapes). Two implementations of one published
-   identifier scheme will drift. This plan stays out of the collision — it
-   takes doc/section IRIs from `iri` and only `Triple`/`Render` from
-   `graphproj` — but whichever plan lands second should consolidate to a
-   single minting path (suggestion: `graphproj` re-exporting `iri`, keeping
-   its escaping at the boundary).
+1. **The runtime IRI grammar duplication is resolved.** The
+   platform-graph-design plan's `internal/kg/iri` is the single owner of the
+   minting grammar, on its validating `(string, error)` signature. The
+   runtime-layer plan no longer creates `graphproj/iri.go`;
+   `internal/graphproj` keeps its N-Triples rendering and row→triple
+   projection role and imports `internal/kg/iri` instead of minting. This
+   plan is unaffected — it takes doc/section IRIs from `internal/kg/iri` and
+   only `Triple`/`Render` from `graphproj`.
 2. **The pin has no graph encoding.** 014 §6 requires the deriver to emit
    "the pinned version for staleness testing" but mints no predicate for it,
    and §Amendments forbids a coverage-flavored predicate. 006 publishes RDF
@@ -1933,7 +1934,7 @@ Deferred table below, so nobody mistakes it for a gap.
    installation-wide. `lode doc anchors --depth-limit` is an interim
    authoring aid only; the publication path must read the server value, and
    the flag should then become an override-for-preview or be removed.
-5. **Spec numbering collision.** 014 names "candidate spec 015" for
-   onboarding, but 015 is already the runtime layer (and 016/017/018/019
-   exist). Purely editorial; noting it so the next umbrella update assigns
-   the real number.
+5. **Spec numbering collision — resolved.** 014 named "candidate spec 015"
+   for onboarding, but 015 is already the runtime layer (and 016/017/018/019
+   exist). Renumbered to candidate spec 020 in 014; the genuine `wl:Deployment`
+   (015) reference there is unaffected.

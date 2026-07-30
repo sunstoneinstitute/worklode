@@ -39,7 +39,7 @@ supply-chain term — a TRAP; software `ls:Component` is minted fresh.
 
 ## The `ls:` vocabulary
 
-> **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/wl/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
+> **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
 
 `ls` is a **shared, cross-cutting** ontology (platform infrastructure, not a research domain),
 so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
@@ -502,7 +502,7 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 
 > **Artifact IRI superseded by 015 §5.** The pattern is kind-first — `id/artifact/<kind>/<name>/<version>` — and 015 adds Deployment, Environment, Commit and Build patterns.
 
-> **Base amended by 014 §1 and §4.** The base gains a `wl/` segment, and design documents additionally carry immutable versioned sibling IRIs (`…/doc/<slug>/v3`) used only in pinned claims.
+> **Base clarified by 014 §1, amended by §4.** The published base carries no ontology-name segment — read the `…/ls/…` rows below as `…/ontology#`, `…/concept/` and `…/id/`. Design documents additionally carry immutable versioned sibling IRIs (`…/doc/<slug>/v3`) used only in pinned claims.
 
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
 commitment** that spec 009 references (item 3) and that the data-platform must host.

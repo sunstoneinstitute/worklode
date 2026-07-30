@@ -83,14 +83,20 @@ Design calls this plan makes (record here, not re-litigated in tasks):
 
 ---
 
+**Migration number:** provisional. Ids are assigned sequentially at execution
+time, in the order plans are actually executed, by the migration-id script on
+main. `0008` is the current next-free (`0001`–`0005` on main; `0006` and `0007`
+claimed by the in-flight `task-hierarchy` and `skills-task3` worktrees), so the
+steps below use it and expect renumbering.
+
 ## File Structure
 
 **New files**
 
 | Path | Responsibility |
 |---|---|
-| `deploy/base/migrations/0006_reconciliation.up.sql` | `events.applied_at`, `project_repos.mapped_at`, backfills, partial index |
-| `deploy/base/migrations/0006_reconciliation.down.sql` | drop both columns and the index |
+| `deploy/base/migrations/0008_reconciliation.up.sql` | `events.applied_at`, `project_repos.mapped_at`, backfills, partial index |
+| `deploy/base/migrations/0008_reconciliation.down.sql` | drop both columns and the index |
 | `internal/store/reconcile.go` | `MarkEventApplied`, `UnappliedGitHubEvents`, `RepoIngestionHealth`, `UnmappedSenders`, `PollCandidates`, `UnlandedTaskCommits` |
 | `internal/store/reconcile_test.go` | the above against ephemeral Postgres |
 | `internal/hooks/apply.go` | `applier` — the transport-independent apply router (moved off `githubHandler`) |
@@ -127,17 +133,17 @@ Design calls this plan makes (record here, not re-litigated in tasks):
 
 ---
 
-## Task 1: Migration 0006 and the event-marker store functions
+## Task 1: Migration 0008 and the event-marker store functions
 
 **Files:**
-- Create: `deploy/base/migrations/0006_reconciliation.up.sql`
-- Create: `deploy/base/migrations/0006_reconciliation.down.sql`
+- Create: `deploy/base/migrations/0008_reconciliation.up.sql`
+- Create: `deploy/base/migrations/0008_reconciliation.down.sql`
 - Create: `internal/store/reconcile.go`
 - Test: `internal/store/reconcile_test.go`
 
 - [ ] **Step 1: Write the migration**
 
-`deploy/base/migrations/0006_reconciliation.up.sql`:
+`deploy/base/migrations/0008_reconciliation.up.sql`:
 
 ```sql
 -- Reconciliation (docs/specs/013-reconciliation.md, amended by 014 §6):
@@ -159,7 +165,7 @@ ALTER TABLE project_repos ADD COLUMN mapped_at timestamptz NOT NULL DEFAULT now(
 UPDATE project_repos SET mapped_at = to_timestamp(0);
 ```
 
-`deploy/base/migrations/0006_reconciliation.down.sql`:
+`deploy/base/migrations/0008_reconciliation.down.sql`:
 
 ```sql
 DROP INDEX events_unapplied;
@@ -342,8 +348,8 @@ migration pair (the spec's own testing note).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add deploy/base/migrations/0006_reconciliation.up.sql \
-        deploy/base/migrations/0006_reconciliation.down.sql \
+git add deploy/base/migrations/0008_reconciliation.up.sql \
+        deploy/base/migrations/0008_reconciliation.down.sql \
         internal/store/reconcile.go internal/store/reconcile_test.go
 git commit -m "Add events.applied_at and project_repos.mapped_at"
 ```

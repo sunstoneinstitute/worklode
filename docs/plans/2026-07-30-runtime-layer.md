@@ -11,10 +11,11 @@ emit, satisfying spec 015's nine acceptance criteria.
 (`rdf/wl/ontology.ttl`, `rdf/wl/concept.ttl`, `rdf/shapes/wl-shapes.ttl`),
 validated by that repo's existing pytest harness (rdflib + pyshacl + owlrl).
 The projection side lands in **worklode** as a new pure package
-`internal/graphproj`: natural-key IRI constructors and row→N-Triples
-functions over `internal/store` types, no I/O, so re-projecting an unchanged
-row is provably a byte-identical no-op. Nothing talks to a graph server yet —
-that is 007's deriver, out of scope here.
+`internal/graphproj`: row→N-Triples functions over `internal/store` types, no
+I/O, so re-projecting an unchanged row is provably a byte-identical no-op.
+Natural-key IRI minting is not this package's own — it imports the shared
+`internal/kg/iri` grammar (owned by the platform-graph-design plan). Nothing
+talks to a graph server yet — that is 007's deriver, out of scope here.
 
 **Tech Stack:** Turtle/SHACL/SKOS/PROV-O; Python 3.11+ with `uv`, pytest,
 rdflib, pyshacl, owlrl (rdf-registry harness); Go with standard-library
@@ -106,14 +107,15 @@ runtime terms.
 
 | Path | Responsibility |
 |---|---|
-| `internal/graphproj/iri.go` | §5 natural-key IRI grammar + segment escaping; package doc |
-| `internal/graphproj/iri_test.go` | the §5 example IRIs verbatim; distinctness; escaping |
+| `internal/graphproj/iri_test.go` | §5 example IRIs verbatim, minted via `internal/kg/iri`; distinctness |
 | `internal/graphproj/triple.go` | `Triple` + deterministic sorted N-Triples `Render` |
 | `internal/graphproj/triple_test.go` | ordering, dedupe, literal escaping, datatypes |
-| `internal/graphproj/runtime.go` | row→triples for Artifact/Deployment/Environment/Commit/covers with §6 guards |
+| `internal/graphproj/runtime.go` | row→triples for Artifact/Deployment/Environment/Commit/covers with §6 guards; `GitHubHost`, `splitRepo` |
 | `internal/graphproj/runtime_test.go` | AC3 byte-identical no-op; AC8 branch-name guard; `pypi`→`pypi_target` |
 
-**Modified files — worklode:** none.
+**Modified files — worklode:** none. **External dependency — worklode:**
+`internal/kg/iri` (platform-graph-design plan's Task 1); this plan's Task 5
+only compiles once that package exists.
 
 **Test commands**
 
@@ -158,9 +160,9 @@ Record the pass/skip counts so later failures are attributable to this work.
 - Test: `tests/test_wl_runtime.py`
 
 Namespaces (spec 014 §1, already reflected in 006): `wl:` =
-`https://worklode.io/ns/wl/ontology#`, `wlc:` =
-`https://worklode.io/ns/wl/concept/`, instances under
-`https://worklode.io/ns/wl/id/`. Note: instance IRIs contain `/` in the
+`https://worklode.io/ns/ontology#`, `wlc:` =
+`https://worklode.io/ns/concept/`, instances under
+`https://worklode.io/ns/id/`. Note: instance IRIs contain `/` in the
 local part, which Turtle prefixed names cannot express — fixtures and shapes
 write instances as full `<…>` IRIs throughout.
 
@@ -181,9 +183,9 @@ from rdflib import Graph, Namespace, URIRef
 from rdflib.collection import Collection
 from rdflib.namespace import OWL, RDF, RDFS, SKOS
 
-WL = Namespace("https://worklode.io/ns/wl/ontology#")
-WLC = Namespace("https://worklode.io/ns/wl/concept/")
-WLID = "https://worklode.io/ns/wl/id/"
+WL = Namespace("https://worklode.io/ns/ontology#")
+WLC = Namespace("https://worklode.io/ns/concept/")
+WLID = "https://worklode.io/ns/id/"
 
 WL_DIR = Path(__file__).parent.parent / "rdf" / "wl"
 ONTOLOGY = WL_DIR / "ontology.ttl"
@@ -297,8 +299,8 @@ added per rdf-registry template conventions and the layer tag on properties
 as AC1 requires:
 
 ```turtle
-@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
@@ -306,7 +308,7 @@ as AC1 requires:
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 
-<https://worklode.io/ns/wl/ontology> a owl:Ontology ;
+<https://worklode.io/ns/ontology> a owl:Ontology ;
     dct:title "Worklode ontology (wl)"@en ;
     rdfs:comment "Currently the runtime-layer slice (worklode spec 015) plus minimal shared scaffolding. Worklode spec 006 owns the full mint set and extends this file."@en .
 
@@ -415,7 +417,7 @@ wl:covers a owl:ObjectProperty ;
 Spec 015 §3 verbatim, plus the `wlc:ModelLayer` scaffolding:
 
 ```turtle
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 # --- Scaffolding owned by spec 006: the model-layer scheme, minimally. ---
@@ -557,9 +559,9 @@ The four node shapes from spec 015 §7. Instance IRIs are written in full —
 
 ```turtle
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
-@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
-@prefix wlsh: <https://worklode.io/ns/wl/shapes#> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix wlsh: <https://worklode.io/ns/shapes#> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
@@ -581,8 +583,8 @@ wlsh:DeploymentShape a sh:NodeShape ; sh:targetClass wl:Deployment ;
 
 # Environment: the instance set is closed to dev and prod (015 §2, Open Q3).
 wlsh:EnvironmentShape a sh:NodeShape ; sh:targetClass wl:Environment ;
-    sh:in (<https://worklode.io/ns/wl/id/environment/dev>
-           <https://worklode.io/ns/wl/id/environment/prod>) .
+    sh:in (<https://worklode.io/ns/id/environment/dev>
+           <https://worklode.io/ns/id/environment/prod>) .
 
 wlsh:CommitShape a sh:NodeShape ; sh:targetClass wl:Commit ;
     sh:property [ sh:path dct:identifier ; sh:minCount 1 ; sh:maxCount 1 ] .
@@ -596,22 +598,22 @@ closed environment pair, a commit, a deployed prod deployment using the
 docker artifact, and 006's Deliverable example rewritten in `wl:`.
 
 ```turtle
-@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 
-<https://worklode.io/ns/wl/id/environment/dev>
+<https://worklode.io/ns/id/environment/dev>
     a wl:Environment ; dct:identifier "dev" .
-<https://worklode.io/ns/wl/id/environment/prod>
+<https://worklode.io/ns/id/environment/prod>
     a wl:Environment ; dct:identifier "prod" .
 
-<https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7>
+<https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7>
     a wl:Commit ; dct:identifier "a16c2a7" .
 
-<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1>
+<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1>
     a wl:Artifact ;
     wl:artifactKind wlc:docker_image ;
     owl:versionInfo "v1" ;
@@ -619,43 +621,43 @@ docker artifact, and 006's Deliverable example rewritten in `wl:`.
     wl:digest "sha256:8f3c1a2b00000000000000000000000000000000000000000000000000000000" ;
     prov:generatedAtTime "2026-07-28T12:00:00Z"^^xsd:dateTime .
 
-<https://worklode.io/ns/wl/id/artifact/pypi/sunstone-py/0.4.1>
+<https://worklode.io/ns/id/artifact/pypi/sunstone-py/0.4.1>
     a wl:Artifact ;
     wl:artifactKind wlc:pypi ;
     owl:versionInfo "0.4.1" ;
     dct:identifier "sunstone-py" .
 
-<https://worklode.io/ns/wl/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4>
+<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4>
     a wl:Artifact ;
     wl:artifactKind wlc:git_tag ;
     owl:versionInfo "v0.4" ;
     dct:identifier "github.com/sunstoneinstitute/worklode" ;
-    prov:wasDerivedFrom <https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> ;
-    wl:covers <https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .
+    prov:wasDerivedFrom <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> ;
+    wl:covers <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .
 
-<https://worklode.io/ns/wl/id/artifact/binary/lode/v0.4.0>
+<https://worklode.io/ns/id/artifact/binary/lode/v0.4.0>
     a wl:Artifact ;
     wl:artifactKind wlc:binary ;
     owl:versionInfo "v0.4.0" ;
     dct:identifier "lode" .
 
-<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server>
+<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server>
     a wl:Deployment ;
-    wl:toEnvironment <https://worklode.io/ns/wl/id/environment/prod> ;
+    wl:toEnvironment <https://worklode.io/ns/id/environment/prod> ;
     wl:targetKind wlc:flux_kustomization ;
     wl:deploymentStatus wlc:deployed ;
     dct:identifier "graph-server" ;
-    prov:used <https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> ;
+    prov:used <https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> ;
     prov:startedAtTime "2026-07-28T12:05:00Z"^^xsd:dateTime ;
     dct:modified "2026-07-29T09:00:00Z"^^xsd:dateTime .
 
 # AC5: 006 §Deliverable example, typed against this vocabulary.
-<https://worklode.io/ns/wl/id/deliverable/worklode-graph-live>
+<https://worklode.io/ns/id/deliverable/worklode-graph-live>
     a wl:Deliverable ;
     dct:title "Worklode KG live in prod" ;
     dct:relation
-        <https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> ,
-        <https://worklode.io/ns/wl/id/environment/prod> .
+        <https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> ,
+        <https://worklode.io/ns/id/environment/prod> .
 ```
 
 - [ ] **Step 5: Write the four rejection fixtures**
@@ -663,12 +665,12 @@ docker artifact, and 006's Deliverable example rewritten in `wl:`.
 `tests/fixtures/wl/shacl/artifact-two-kinds.ttl`:
 
 ```turtle
-@prefix wl:  <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc: <https://worklode.io/ns/wl/concept/> .
+@prefix wl:  <https://worklode.io/ns/ontology#> .
+@prefix wlc: <https://worklode.io/ns/concept/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
-<https://worklode.io/ns/wl/id/artifact/docker_image/bad/two-kinds>
+<https://worklode.io/ns/id/artifact/docker_image/bad/two-kinds>
     a wl:Artifact ;
     wl:artifactKind wlc:docker_image , wlc:pypi ;
     owl:versionInfo "v1" ; dct:identifier "bad" .
@@ -677,22 +679,22 @@ docker artifact, and 006's Deliverable example rewritten in `wl:`.
 `tests/fixtures/wl/shacl/artifact-no-kind.ttl`:
 
 ```turtle
-@prefix wl:  <https://worklode.io/ns/wl/ontology#> .
+@prefix wl:  <https://worklode.io/ns/ontology#> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
-<https://worklode.io/ns/wl/id/artifact/docker_image/bad/no-kind>
+<https://worklode.io/ns/id/artifact/docker_image/bad/no-kind>
     a wl:Artifact ; owl:versionInfo "v1" ; dct:identifier "bad" .
 ```
 
 `tests/fixtures/wl/shacl/deployment-no-environment.ttl`:
 
 ```turtle
-@prefix wl:  <https://worklode.io/ns/wl/ontology#> .
-@prefix wlc: <https://worklode.io/ns/wl/concept/> .
+@prefix wl:  <https://worklode.io/ns/ontology#> .
+@prefix wlc: <https://worklode.io/ns/concept/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 
-<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/bad>
+<https://worklode.io/ns/id/deployment/prod/flux_kustomization/bad>
     a wl:Deployment ;
     wl:targetKind wlc:flux_kustomization ;
     wl:deploymentStatus wlc:deployed ;
@@ -702,10 +704,10 @@ docker artifact, and 006's Deliverable example rewritten in `wl:`.
 `tests/fixtures/wl/shacl/environment-staging.ttl`:
 
 ```turtle
-@prefix wl:  <https://worklode.io/ns/wl/ontology#> .
+@prefix wl:  <https://worklode.io/ns/ontology#> .
 @prefix dct: <http://purl.org/dc/terms/> .
 
-<https://worklode.io/ns/wl/id/environment/staging>
+<https://worklode.io/ns/id/environment/staging>
     a wl:Environment ; dct:identifier "staging" .
 ```
 
@@ -824,13 +826,13 @@ def seeded(vocab) -> Graph:
 
 def test_ac4_artifact_live_in_prod_for_target(seeded):
     rows = list(seeded.query("""
-        PREFIX wl:  <https://worklode.io/ns/wl/ontology#>
-        PREFIX wlc: <https://worklode.io/ns/wl/concept/>
+        PREFIX wl:  <https://worklode.io/ns/ontology#>
+        PREFIX wlc: <https://worklode.io/ns/concept/>
         PREFIX dct: <http://purl.org/dc/terms/>
         PREFIX prov: <http://www.w3.org/ns/prov#>
         SELECT ?artifact WHERE {
             ?d a wl:Deployment ;
-               wl:toEnvironment <https://worklode.io/ns/wl/id/environment/prod> ;
+               wl:toEnvironment <https://worklode.io/ns/id/environment/prod> ;
                dct:identifier "graph-server" ;
                wl:deploymentStatus wlc:deployed ;
                prov:used ?artifact .
@@ -889,9 +891,9 @@ def test_ac7_dual_typed_node_is_inconsistent():
 Create `tests/fixtures/wl/inconsistent-abox.ttl`:
 
 ```turtle
-@prefix wl: <https://worklode.io/ns/wl/ontology#> .
+@prefix wl: <https://worklode.io/ns/ontology#> .
 
-<https://worklode.io/ns/wl/id/fixture/artifact-and-deployment>
+<https://worklode.io/ns/id/fixture/artifact-and-deployment>
     a wl:Artifact , wl:Deployment .
 ```
 
@@ -926,13 +928,21 @@ principle. No graph-server client, no named-graph management — only what
 AC3 and AC8 require. Package `internal/graphproj` depends on
 `internal/store` types only (no DB), so its tests need no Postgres.
 
-### Task 5: IRI grammar (AC3, first half)
+### Task 5: Depend on the shared IRI grammar (AC3, first half)
 
 **Working directory:** `/Users/stig/git/sunstone/worklode` (module
 `github.com/sunstoneinstitute/worklode`)
 
+The IRI grammar is owned by `internal/kg/iri` (the platform-graph-design
+plan's Task 1), not by this package: `internal/graphproj` imports it instead
+of minting its own instance IRIs. That package's `Artifact`, `Deployment`,
+`Environment` and `Commit` constructors validate their natural-key parts and
+return `(string, error)`, rather than escaping — the signature this plan and
+the platform-graph-design plan converge on. `Commit` takes four parts,
+`(host, owner, repo, sha string)`, not the three-part `(host, "owner/repo",
+sha)` shape this plan originally sketched.
+
 **Files:**
-- Create: `internal/graphproj/iri.go`
 - Test: `internal/graphproj/iri_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -940,40 +950,49 @@ AC3 and AC8 require. Package `internal/graphproj` depends on
 ```go
 package graphproj
 
-import "testing"
+import (
+	"testing"
 
-// The expected strings are spec 015 §5's examples verbatim.
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
+)
+
+// The expected strings are spec 015 §5's examples verbatim, minted by the
+// shared internal/kg/iri package this package depends on.
 func TestIRIGrammar(t *testing.T) {
 	cases := []struct {
 		name string
-		got  string
+		got  func() (string, error)
 		want string
 	}{
-		{"docker image",
-			ArtifactIRI("docker_image", "ghcr.io/sunstoneinstitute/graph-server", "v1"),
-			"https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1"},
-		{"pypi",
-			ArtifactIRI("pypi", "sunstone-py", "0.4.1"),
-			"https://worklode.io/ns/wl/id/artifact/pypi/sunstone-py/0.4.1"},
-		{"git tag",
-			ArtifactIRI("git_tag", "github.com/sunstoneinstitute/worklode", "v0.4"),
-			"https://worklode.io/ns/wl/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4"},
-		{"binary",
-			ArtifactIRI("binary", "lode", "v0.4.0"),
-			"https://worklode.io/ns/wl/id/artifact/binary/lode/v0.4.0"},
-		{"deployment",
-			DeploymentIRI("prod", "flux_kustomization", "graph-server"),
-			"https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server"},
-		{"environment",
-			EnvironmentIRI("prod"),
-			"https://worklode.io/ns/wl/id/environment/prod"},
-		{"commit",
-			CommitIRI(GitHubHost, "sunstoneinstitute/worklode", "a16c2a7"),
-			"https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
+		{"docker image", func() (string, error) {
+			return iri.Artifact("docker_image", "ghcr.io/sunstoneinstitute/graph-server", "v1")
+		}, "https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1"},
+		{"pypi", func() (string, error) {
+			return iri.Artifact("pypi", "sunstone-py", "0.4.1")
+		}, "https://worklode.io/ns/id/artifact/pypi/sunstone-py/0.4.1"},
+		{"git tag", func() (string, error) {
+			return iri.Artifact("git_tag", "github.com/sunstoneinstitute/worklode", "v0.4")
+		}, "https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4"},
+		{"binary", func() (string, error) {
+			return iri.Artifact("binary", "lode", "v0.4.0")
+		}, "https://worklode.io/ns/id/artifact/binary/lode/v0.4.0"},
+		{"deployment", func() (string, error) {
+			return iri.Deployment("prod", "flux_kustomization", "graph-server")
+		}, "https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server"},
+		{"environment", func() (string, error) {
+			return iri.Environment("prod")
+		}, "https://worklode.io/ns/id/environment/prod"},
+		{"commit", func() (string, error) {
+			return iri.Commit(GitHubHost, "sunstoneinstitute", "worklode", "a16c2a7")
+		}, "https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
 	}
 	for _, tc := range cases {
-		if tc.got != tc.want {
-			t.Errorf("%s = %q; want %q", tc.name, tc.got, tc.want)
+		got, err := tc.got()
+		if err != nil {
+			t.Fatalf("%s: mint: %v", tc.name, err)
+		}
+		if got != tc.want {
+			t.Errorf("%s = %q; want %q", tc.name, got, tc.want)
 		}
 	}
 }
@@ -981,27 +1000,14 @@ func TestIRIGrammar(t *testing.T) {
 func TestArtifactIRIsDistinctAcrossKinds(t *testing.T) {
 	seen := map[string]string{}
 	for _, kind := range []string{"docker_image", "pypi", "git_tag", "binary"} {
-		iri := ArtifactIRI(kind, "same-name", "v1")
-		if prev, dup := seen[iri]; dup {
-			t.Fatalf("kinds %s and %s collide on %s", prev, kind, iri)
+		got, err := iri.Artifact(kind, "same-name", "v1")
+		if err != nil {
+			t.Fatalf("mint %s: %v", kind, err)
 		}
-		seen[iri] = kind
-	}
-}
-
-func TestEscapeSegment(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"graph-server", "graph-server"},
-		{"ghcr.io/sunstoneinstitute/graph-server", "ghcr.io/sunstoneinstitute/graph-server"}, // slashes verbatim
-		{"a b", "a%20b"},
-		{"a%b", "a%25b"},
-		{"a`b", "a%60b"},
-		{`a"b`, "a%22b"},
-	}
-	for _, tc := range cases {
-		if got := escapeSegment(tc.in); got != tc.want {
-			t.Errorf("escapeSegment(%q) = %q; want %q", tc.in, got, tc.want)
+		if prev, dup := seen[got]; dup {
+			t.Fatalf("kinds %s and %s collide on %s", prev, kind, got)
 		}
+		seen[got] = kind
 	}
 }
 ```
@@ -1009,93 +1015,28 @@ func TestEscapeSegment(t *testing.T) {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/graphproj/...`
-Expected: FAIL — the package does not exist.
+Expected: FAIL — `no required module provides package .../internal/kg/iri`
+until the platform-graph-design plan's Task 1 has landed; once it has, this
+test needs no graphproj-side implementation and passes as soon as `GitHubHost`
+exists (Task 7).
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 3: Add the dependency**
 
-```go
-// Package graphproj projects execution-backbone rows into the wl: runtime
-// layer (spec 015): pure functions from relational natural keys to instance
-// IRIs and triples. Projection is a function of the row — deterministic and
-// idempotent — which is what makes 007's observed/deploy deriver contract
-// (full-replace, no row→IRI side table) satisfiable. This package does no
-// I/O; the deriver that talks to the graph server is spec 007's and does
-// not exist yet.
-package graphproj
-
-import (
-	"fmt"
-	"strings"
-)
-
-// Namespaces per spec 014 §1 / 006 §IRI.
-const (
-	nsOntology = "https://worklode.io/ns/wl/ontology#"
-	nsConcept  = "https://worklode.io/ns/wl/concept/"
-	nsID       = "https://worklode.io/ns/wl/id/"
-
-	// GitHubHost qualifies repo-derived local ids. The backbone stores
-	// repos as "owner/name" (GitHub full_name); the IRI grammar wants
-	// host-qualified coordinates.
-	GitHubHost = "github.com"
-)
-
-// ArtifactIRI mirrors artifacts' natural key UNIQUE (kind, name, version) —
-// spec 015 §5, kind-first.
-func ArtifactIRI(kind, name, version string) string {
-	return nsID + "artifact/" + escapeSegment(kind) + "/" +
-		escapeSegment(name) + "/" + escapeSegment(version)
-}
-
-// DeploymentIRI mirrors deployments' natural key
-// UNIQUE (environment, target_kind, target_name).
-func DeploymentIRI(environment, targetKind, targetName string) string {
-	return nsID + "deployment/" + escapeSegment(environment) + "/" +
-		escapeSegment(targetKind) + "/" + escapeSegment(targetName)
-}
-
-// EnvironmentIRI names a deployment stage; the instance set is closed to
-// dev and prod by SHACL.
-func EnvironmentIRI(name string) string {
-	return nsID + "environment/" + escapeSegment(name)
-}
-
-// CommitIRI mirrors main_commits' natural key UNIQUE (repo, sha), with the
-// host prefixed ("owner/name" → "github.com/owner/name").
-func CommitIRI(host, repo, sha string) string {
-	return nsID + "commit/" + escapeSegment(host) + "/" +
-		escapeSegment(repo) + "/" + escapeSegment(sha)
-}
-
-// escapeSegment percent-encodes characters that cannot appear raw in an IRI
-// path. Slashes stay verbatim: local ids are slash namespaces with opaque
-// paths (006 §IRI, 015 §5).
-func escapeSegment(s string) string {
-	const forbidden = "<>\"{}|\\^`%?#"
-	var b strings.Builder
-	for _, r := range s {
-		if r <= 0x20 || strings.ContainsRune(forbidden, r) {
-			for _, c := range []byte(string(r)) {
-				fmt.Fprintf(&b, "%%%02X", c)
-			}
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-```
+No new implementation file: `internal/graphproj` imports `internal/kg/iri`
+directly in `runtime.go` (Task 7). `GitHubHost` moves there too — it is a
+graphproj-level convention (how the projector host-qualifies repo-derived
+local ids before minting), not part of the shared IRI grammar.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `go test ./internal/graphproj/ -v`
-Expected: PASS (3 tests).
+Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add internal/graphproj
-git commit -m "Add the runtime-layer IRI grammar (spec 015 §5)"
+git commit -m "Depend on the shared wl IRI grammar (internal/kg/iri)"
 ```
 
 ### Task 6: Deterministic triple rendering (AC3, second half)
@@ -1245,6 +1186,11 @@ Store types being projected: `store.Artifact` and `store.Deployment`
 stores `pypi` (`0001_baseline.up.sql:153`) but the SKOS concept is
 `wlc:pypi_target` (015 §3) — the projector owns that mapping.
 
+IRI minting goes through `internal/kg/iri` (Task 5); its constructors return
+`(string, error)`, so the row→triple functions below do too. `GitHubHost` and
+`splitRepo` live here — repos are stored as GitHub's "owner/name" full_name,
+but `iri.Commit` wants the parts separately.
+
 - [ ] **Step 1: Write the failing test**
 
 ```go
@@ -1272,16 +1218,27 @@ func testArtifact() store.Artifact {
 	}
 }
 
+// renderOK fails the test on a mint error, otherwise renders. Every
+// constructor below can only fail on malformed input, which none of these
+// fixtures are — a failure here is a test bug, not an assertion.
+func renderOK(t *testing.T, ts []Triple, err error) string {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	return string(Render(ts))
+}
+
 func TestArtifactTriples(t *testing.T) {
-	got := string(Render(ArtifactTriples(testArtifact(), func(string) bool { return true })))
+	got := renderOK(t, ArtifactTriples(testArtifact(), func(string) bool { return true }))
 	want := []string{
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Artifact> .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/wl/ontology#artifactKind> <https://worklode.io/ns/wl/concept/docker_image> .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/2002/07/owl#versionInfo> "v1" .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://purl.org/dc/terms/identifier> "ghcr.io/sunstoneinstitute/graph-server" .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/wl/ontology#digest> "sha256:8f3c1a2b" .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/ns/prov#generatedAtTime> "2026-07-28T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
-		`<https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/graph-server/a16c2a7> .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Artifact> .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/ontology#artifactKind> <https://worklode.io/ns/concept/docker_image> .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/2002/07/owl#versionInfo> "v1" .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://purl.org/dc/terms/identifier> "ghcr.io/sunstoneinstitute/graph-server" .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/ontology#digest> "sha256:8f3c1a2b" .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/ns/prov#generatedAtTime> "2026-07-28T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/graph-server/a16c2a7> .`,
 	}
 	for _, line := range want {
 		if !strings.Contains(got, line+"\n") {
@@ -1296,9 +1253,15 @@ func TestArtifactTriples(t *testing.T) {
 // AC3: re-projecting an unchanged row is a byte-identical no-op.
 func TestArtifactProjectionIsIdempotent(t *testing.T) {
 	known := func(string) bool { return true }
-	first := Render(ArtifactTriples(testArtifact(), known))
-	second := Render(ArtifactTriples(testArtifact(), known))
-	if !bytes.Equal(first, second) {
+	first, err := ArtifactTriples(testArtifact(), known)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	second, err := ArtifactTriples(testArtifact(), known)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if !bytes.Equal(Render(first), Render(second)) {
 		t.Fatal("re-projecting an unchanged artifact row changed bytes")
 	}
 }
@@ -1310,12 +1273,12 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 	a.Kind = "git_tag"
 	a.Name = "sunstoneinstitute/worklode"
 	a.SourceSHA = "main" // UI-created release: branch name, not a sha
-	got := string(Render(ArtifactTriples(a, func(string) bool { return false })))
+	got := renderOK(t, ArtifactTriples(a, func(string) bool { return false }))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatalf("branch-name source_sha minted a commit edge:\n%s", got)
 	}
 	// The git_tag coordinate is host-qualified (015 §5 example).
-	if !strings.Contains(got, "<https://worklode.io/ns/wl/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v1>") {
+	if !strings.Contains(got, "<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v1>") {
 		t.Fatalf("git_tag artifact IRI not host-qualified:\n%s", got)
 	}
 }
@@ -1323,7 +1286,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 func TestArtifactWithoutRepoProjectsNoCommitEdge(t *testing.T) {
 	a := testArtifact()
 	a.Repo = ""
-	got := string(Render(ArtifactTriples(a, func(string) bool { return true })))
+	got := renderOK(t, ArtifactTriples(a, func(string) bool { return true }))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatal("artifact without a repo projected a commit edge")
 	}
@@ -1341,16 +1304,16 @@ func TestDeploymentTriples(t *testing.T) {
 		LastUpdate:  time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC),
 	}
 	a := testArtifact()
-	got := string(Render(DeploymentTriples(d, &a)))
+	got := renderOK(t, DeploymentTriples(d, &a))
 	want := []string{
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Deployment> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/wl/ontology#toEnvironment> <https://worklode.io/ns/wl/id/environment/prod> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/wl/ontology#targetKind> <https://worklode.io/ns/wl/concept/flux_kustomization> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/wl/ontology#deploymentStatus> <https://worklode.io/ns/wl/concept/deployed> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <http://purl.org/dc/terms/identifier> "graph-server" .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/ns/prov#startedAtTime> "2026-07-28T12:05:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <http://purl.org/dc/terms/modified> "2026-07-29T09:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
-		`<https://worklode.io/ns/wl/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/ns/prov#used> <https://worklode.io/ns/wl/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Deployment> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/ontology#toEnvironment> <https://worklode.io/ns/id/environment/prod> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/ontology#targetKind> <https://worklode.io/ns/concept/flux_kustomization> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/ontology#deploymentStatus> <https://worklode.io/ns/concept/deployed> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://purl.org/dc/terms/identifier> "graph-server" .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/ns/prov#startedAtTime> "2026-07-28T12:05:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://purl.org/dc/terms/modified> "2026-07-29T09:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/ns/prov#used> <https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> .`,
 	}
 	for _, line := range want {
 		if !strings.Contains(got, line+"\n") {
@@ -1367,7 +1330,7 @@ func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 		Status:    "pending",
 		FirstSeen: time.Unix(0, 0).UTC(), LastUpdate: time.Unix(0, 0).UTC(),
 	}
-	if got := string(Render(DeploymentTriples(d, nil))); strings.Contains(got, "prov#used") {
+	if got := renderOK(t, DeploymentTriples(d, nil)); strings.Contains(got, "prov#used") {
 		t.Fatalf("deployment without artifact projected prov:used:\n%s", got)
 	}
 }
@@ -1379,27 +1342,27 @@ func TestPyPITargetKindConcept(t *testing.T) {
 		Status:    "deployed",
 		FirstSeen: time.Unix(0, 0).UTC(), LastUpdate: time.Unix(0, 0).UTC(),
 	}
-	got := string(Render(DeploymentTriples(d, nil)))
-	if !strings.Contains(got, "<https://worklode.io/ns/wl/concept/pypi_target>") {
+	got := renderOK(t, DeploymentTriples(d, nil))
+	if !strings.Contains(got, "<https://worklode.io/ns/concept/pypi_target>") {
 		t.Fatalf("target kind pypi not mapped to wlc:pypi_target:\n%s", got)
 	}
 }
 
 func TestEnvironmentAndCommitTriples(t *testing.T) {
-	envs := string(Render(EnvironmentTriples()))
+	envs := renderOK(t, EnvironmentTriples())
 	for _, line := range []string{
-		`<https://worklode.io/ns/wl/id/environment/dev> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Environment> .`,
-		`<https://worklode.io/ns/wl/id/environment/prod> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Environment> .`,
+		`<https://worklode.io/ns/id/environment/dev> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Environment> .`,
+		`<https://worklode.io/ns/id/environment/prod> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Environment> .`,
 	} {
 		if !strings.Contains(envs, line+"\n") {
 			t.Errorf("missing line:\n%s\ngot:\n%s", line, envs)
 		}
 	}
 
-	got := string(Render(CommitTriples(GitHubHost, "sunstoneinstitute/worklode", "a16c2a7")))
+	got := renderOK(t, CommitTriples(GitHubHost, "sunstoneinstitute/worklode", "a16c2a7"))
 	for _, line := range []string{
-		`<https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Commit> .`,
-		`<https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://purl.org/dc/terms/identifier> "a16c2a7" .`,
+		`<https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Commit> .`,
+		`<https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://purl.org/dc/terms/identifier> "a16c2a7" .`,
 	} {
 		if !strings.Contains(got, line+"\n") {
 			t.Errorf("missing line:\n%s\ngot:\n%s", line, got)
@@ -1410,8 +1373,8 @@ func TestEnvironmentAndCommitTriples(t *testing.T) {
 // AC8, first half: a release_frontiers row projects as wl:covers from the
 // git_tag artifact to the frontier commit.
 func TestReleaseCoversTriples(t *testing.T) {
-	got := string(Render(ReleaseCoversTriples("sunstoneinstitute/worklode", "v0.4", "a16c2a7")))
-	want := `<https://worklode.io/ns/wl/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4> <https://worklode.io/ns/wl/ontology#covers> <https://worklode.io/ns/wl/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .` + "\n"
+	got := renderOK(t, ReleaseCoversTriples("sunstoneinstitute/worklode", "v0.4", "a16c2a7"))
+	want := `<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4> <https://worklode.io/ns/ontology#covers> <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .` + "\n"
 	if got != want {
 		t.Fatalf("ReleaseCoversTriples = %q; want %q", got, want)
 	}
@@ -1429,10 +1392,18 @@ Expected: FAIL — `undefined: ArtifactTriples` (and the other new functions).
 package graphproj
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// GitHubHost qualifies repo-derived local ids passed to internal/kg/iri. The
+// backbone stores repos as "owner/name" (GitHub full_name); the shared IRI
+// grammar wants host-qualified, owner/repo-split coordinates.
+const GitHubHost = "github.com"
 
 // External vocabulary terms the projection reuses (015 §4 table).
 const (
@@ -1451,97 +1422,152 @@ const (
 // artifact's repo (store.MainIDForSHA != nil, in the caller's transaction).
 type CommitKnown func(sha string) bool
 
+// splitRepo splits a GitHub "owner/name" full_name into its two parts, as
+// internal/kg/iri.Commit wants them. The backbone always stores repos in
+// this form; ok is false only for malformed input.
+func splitRepo(full string) (owner, name string, ok bool) {
+	i := strings.IndexByte(full, '/')
+	if i <= 0 || i == len(full)-1 {
+		return "", "", false
+	}
+	return full[:i], full[i+1:], true
+}
+
 // artifactCoordinate returns the (name, IRI) coordinate for an artifact row.
 // git_tag names are stored as bare "owner/name" (applyRelease,
 // internal/hooks/github.go:411-418) and are host-qualified here to match the
 // §5 grammar; the other kinds carry their registry coordinate already.
-func artifactCoordinate(a store.Artifact) (name, iri string) {
+func artifactCoordinate(a store.Artifact) (name, artifactIRI string, err error) {
 	name = a.Name
 	if a.Kind == "git_tag" {
 		name = GitHubHost + "/" + name
 	}
-	return name, ArtifactIRI(a.Kind, name, a.Version)
+	artifactIRI, err = iri.Artifact(a.Kind, name, a.Version)
+	return name, artifactIRI, err
 }
 
 // ArtifactTriples projects one artifacts row (015 §6). The commit edge is
 // guarded: target_commitish is frequently a branch name, and minting a
 // commit IRI from one would create a plausible, permanently wrong node —
 // emit prov:wasDerivedFrom only when source_sha resolves via known. An
-// artifact with no repo projects no commit edge at all: a repository alone
-// does not identify a commit.
-func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
-	name, s := artifactCoordinate(a)
+// artifact with no repo, or a malformed one, projects no commit edge at
+// all: a repository alone does not identify a commit.
+func ArtifactTriples(a store.Artifact, known CommitKnown) ([]Triple, error) {
+	name, s, err := artifactCoordinate(a)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: artifact %s/%s: %w", a.Kind, a.Name, err)
+	}
 	ts := []Triple{
-		{S: s, P: rdfType, O: nsOntology + "Artifact"},
-		{S: s, P: nsOntology + "artifactKind", O: nsConcept + a.Kind},
+		{S: s, P: rdfType, O: iri.Ontology + "Artifact"},
+		{S: s, P: iri.Ontology + "artifactKind", O: iri.Concept + a.Kind},
 		{S: s, P: owlVersionInfo, O: a.Version, Lit: true},
 		{S: s, P: dctIdentifier, O: name, Lit: true},
 	}
 	if a.Digest != nil {
-		ts = append(ts, Triple{S: s, P: nsOntology + "digest", O: *a.Digest, Lit: true})
+		ts = append(ts, Triple{S: s, P: iri.Ontology + "digest", O: *a.Digest, Lit: true})
 	}
 	if !a.BuiltAt.IsZero() {
 		ts = append(ts, Triple{S: s, P: provGeneratedAtTime, O: xsdTime(a.BuiltAt), Lit: true, DT: xsdDateTime})
 	}
 	if a.Repo != "" && a.SourceSHA != "" && known != nil && known(a.SourceSHA) {
-		ts = append(ts, Triple{S: s, P: provWasDerivedFrom, O: CommitIRI(GitHubHost, a.Repo, a.SourceSHA)})
+		if owner, repo, ok := splitRepo(a.Repo); ok {
+			commitIRI, err := iri.Commit(GitHubHost, owner, repo, a.SourceSHA)
+			if err != nil {
+				return nil, fmt.Errorf("graphproj: artifact %s commit: %w", s, err)
+			}
+			ts = append(ts, Triple{S: s, P: provWasDerivedFrom, O: commitIRI})
+		}
 	}
-	return ts
+	return ts, nil
 }
 
 // DeploymentTriples projects one deployments row. artifact is the row
 // deployments.artifact_id resolves to, nil when unset — null in practice
 // today (015 §6, Open Q5), so prov:used is simply absent.
-func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
-	s := DeploymentIRI(d.Environment, d.TargetKind, d.TargetName)
+func DeploymentTriples(d store.Deployment, artifact *store.Artifact) ([]Triple, error) {
+	s, err := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: deployment %s/%s/%s: %w", d.Environment, d.TargetKind, d.TargetName, err)
+	}
+	envIRI, err := iri.Environment(d.Environment)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: deployment environment %s: %w", d.Environment, err)
+	}
 	ts := []Triple{
-		{S: s, P: rdfType, O: nsOntology + "Deployment"},
-		{S: s, P: nsOntology + "toEnvironment", O: EnvironmentIRI(d.Environment)},
-		{S: s, P: nsOntology + "targetKind", O: nsConcept + targetKindConcept(d.TargetKind)},
-		{S: s, P: nsOntology + "deploymentStatus", O: nsConcept + d.Status},
+		{S: s, P: rdfType, O: iri.Ontology + "Deployment"},
+		{S: s, P: iri.Ontology + "toEnvironment", O: envIRI},
+		{S: s, P: iri.Ontology + "targetKind", O: iri.Concept + targetKindConcept(d.TargetKind)},
+		{S: s, P: iri.Ontology + "deploymentStatus", O: iri.Concept + d.Status},
 		{S: s, P: dctIdentifier, O: d.TargetName, Lit: true},
 		{S: s, P: provStartedAtTime, O: xsdTime(d.FirstSeen), Lit: true, DT: xsdDateTime},
 		{S: s, P: dctModified, O: xsdTime(d.LastUpdate), Lit: true, DT: xsdDateTime},
 	}
 	if artifact != nil {
-		_, iri := artifactCoordinate(*artifact)
-		ts = append(ts, Triple{S: s, P: provUsed, O: iri})
+		_, artifactIRI, err := artifactCoordinate(*artifact)
+		if err != nil {
+			return nil, fmt.Errorf("graphproj: deployment %s used artifact: %w", s, err)
+		}
+		ts = append(ts, Triple{S: s, P: provUsed, O: artifactIRI})
 	}
-	return ts
+	return ts, nil
 }
 
 // EnvironmentTriples projects the fixed instance set {dev, prod} — static,
 // matching the SHACL closure and store.NormalizeEnvironment.
-func EnvironmentTriples() []Triple {
+func EnvironmentTriples() ([]Triple, error) {
 	var ts []Triple
 	for _, name := range []string{"dev", "prod"} {
-		s := EnvironmentIRI(name)
+		s, err := iri.Environment(name)
+		if err != nil {
+			return nil, fmt.Errorf("graphproj: environment %s: %w", name, err)
+		}
 		ts = append(ts,
-			Triple{S: s, P: rdfType, O: nsOntology + "Environment"},
+			Triple{S: s, P: rdfType, O: iri.Ontology + "Environment"},
 			Triple{S: s, P: dctIdentifier, O: name, Lit: true},
 		)
 	}
-	return ts
+	return ts, nil
 }
 
-// CommitTriples projects one main_commits row.
-func CommitTriples(host, repo, sha string) []Triple {
-	s := CommitIRI(host, repo, sha)
-	return []Triple{
-		{S: s, P: rdfType, O: nsOntology + "Commit"},
-		{S: s, P: dctIdentifier, O: sha, Lit: true},
+// CommitTriples projects one main_commits row. repo is "owner/name"
+// (GitHub full_name); internal/kg/iri.Commit wants the parts split.
+func CommitTriples(host, repo, sha string) ([]Triple, error) {
+	owner, name, ok := splitRepo(repo)
+	if !ok {
+		return nil, fmt.Errorf("graphproj: commit repo %q is not owner/name", repo)
 	}
+	s, err := iri.Commit(host, owner, name, sha)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: commit %s/%s@%s: %w", owner, name, sha, err)
+	}
+	return []Triple{
+		{S: s, P: rdfType, O: iri.Ontology + "Commit"},
+		{S: s, P: dctIdentifier, O: sha, Lit: true},
+	}, nil
 }
 
 // ReleaseCoversTriples projects one release_frontiers row joined to its
 // main_commits sha: the release's git_tag artifact wl:covers the frontier
-// commit (015 §6 — release_frontiers projects as an edge, not a node).
-func ReleaseCoversTriples(repo, tag, sha string) []Triple {
+// commit (015 §6 — release_frontiers projects as an edge, not a node). repo
+// is "owner/name" (GitHub full_name).
+func ReleaseCoversTriples(repo, tag, sha string) ([]Triple, error) {
+	artifactIRI, err := iri.Artifact("git_tag", GitHubHost+"/"+repo, tag)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: release covers artifact %s@%s: %w", repo, tag, err)
+	}
+	owner, name, ok := splitRepo(repo)
+	if !ok {
+		return nil, fmt.Errorf("graphproj: release covers repo %q is not owner/name", repo)
+	}
+	commitIRI, err := iri.Commit(GitHubHost, owner, name, sha)
+	if err != nil {
+		return nil, fmt.Errorf("graphproj: release covers commit %s@%s: %w", repo, sha, err)
+	}
 	return []Triple{{
-		S: ArtifactIRI("git_tag", GitHubHost+"/"+repo, tag),
-		P: nsOntology + "covers",
-		O: CommitIRI(GitHubHost, repo, sha),
-	}}
+		S: artifactIRI,
+		P: iri.Ontology + "covers",
+		O: commitIRI,
+	}}, nil
 }
 
 // targetKindConcept maps a deployments.target_kind DB value to its concept

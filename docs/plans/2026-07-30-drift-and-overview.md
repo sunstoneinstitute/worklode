@@ -40,8 +40,8 @@ none of their packages; it only calls them.
 
 | Plan | Provides (consumed here) |
 |---|---|
-| `docs/plans/2026-07-30-knowledge-graph.md` | `internal/iri` (IRI grammar, `GraphNS`), `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`, projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
-| `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2), Worklode's own manifest |
+| `docs/plans/2026-07-30-knowledge-graph.md` | `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`, projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
+| `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/iri` (IRI grammar, `GraphNS`), `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2), Worklode's own manifest |
 | `docs/plans/2026-07-30-runtime-layer.md` | `internal/graphproj` (`Triple`, `Render`, `ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCoversTriples`, `CommitKnown`) — exactly the row→triple functions 015 says "007's observed/deploy deriver will emit" |
 | `docs/plans/2026-07-30-reconciliation.md` | nothing consumed directly; noted because it owns `lode doctor` and `internal/reconcile`, which this plan must not touch |
 | `docs/plans/2026-07-30-design-documents-as-graph-objects.md` | nothing consumed; owns everything this plan defers to "the 014 plan" — `internal/kg/implements`, the `observed/repo-implements` deriver, sections, `lode doc` |
@@ -113,20 +113,20 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 
 ## Design calls this plan makes
 
-1. **IRI package: `internal/iri`** (knowledge-graph plan). The sibling plans
-   disagree on where the grammar lives (see Overlaps below); this plan binds
-   to `internal/iri` because it ships together with the `internal/graph`
-   client and `graphtest` harness every task here needs. Runtime-node IRIs
-   come via `internal/graphproj` (which the runtime plan pairs with the
-   row→triple functions), not re-minted.
+1. **IRI package: `internal/kg/iri`** (platform-graph-design plan). The
+   sibling plans previously disagreed on where the grammar lives; that is
+   now resolved in favor of `internal/kg/iri` (see Overlaps below), so this
+   plan takes it as a prerequisite rather than binding to the
+   knowledge-graph plan's own package. Runtime-node IRIs come via
+   `internal/graphproj` (which the runtime plan pairs with the row→triple
+   functions), not re-minted.
 2. **No migration.** The deriver no-op short circuit stores the input hash as
    a triple inside the deriver's own graph
    (`<graphIRI> dct:identifier "sha256:…"`), read back with a SELECT before
    each PUT. Nothing else needs Postgres schema. If a checkpoint table ever
-   becomes necessary, this plan reserves migration number **0009**
-   (0006 is claimed by three plans — org-wide-skills, task-hierarchy,
-   reconciliation — 0008 by knowledge-graph; renumber at execution time if
-   the gap bothers you, collide with none of those).
+   becomes necessary, it takes whatever id is next free when this plan
+   actually executes — migration ids are provisional, assigned sequentially
+   at execution time by the migration-id script.
 3. **Serialization: N-Triples via `graphproj.Render`** for every deriver
    (deterministic sorted+deduped output; GSP PUT with
    `Content-Type: application/n-triples`). One renderer, no new one.
@@ -137,7 +137,7 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 5. **go-imports v1 emits intra-repo cross-component edges only.** Cross-repo
    edges need a module-path→component index spanning all manifests; that is
    an open question below, not silently half-built.
-6. **Repo instance IRIs**: `internal/iri` has no repo pattern; this plan adds
+6. **Repo instance IRIs**: `internal/kg/iri` has no repo pattern; this plan adds
    `iri.Repo(host, owner, name)` → `id/repo/<host>/<owner>/<name>` (flagged
    for spec 006).
 7. **`wl:unmatchedPath` is minted** (one DatatypeProperty appended to
@@ -183,7 +183,7 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 
 | Path | Change |
 |---|---|
-| `internal/iri/iri.go` | add `DeclaredGraph`, `ObservedGraph`, `Repo` |
+| `internal/kg/iri/iri.go` | add `DeclaredGraph`, `ObservedGraph`, `Repo` |
 | `internal/graph/client.go` | add `Replace` (GSP `PUT`) next to `Load` |
 | `rdf/wl/ontology.ttl` | append `wl:unmatchedPath` |
 | `rdf/vocab_test.go` | add `wl:unmatchedPath` to the mint-set check |
@@ -200,7 +200,7 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 
 **Test commands**
 
-- Pure packages (no services): `go test ./internal/derive/... ./internal/overview/... ./internal/iri/... ./internal/graph/ ./rdf/...`
+- Pure packages (no services): `go test ./internal/derive/... ./internal/overview/... ./internal/kg/iri/... ./internal/graph/ ./rdf/...`
 - Postgres-backed: `docker compose up -d postgres && go test ./internal/store/... ./internal/api/... ./internal/cmd/...`
 - Oxigraph-backed (skip when `TEST_SPARQL_URL` unset, per `graphtest`):
   `docker compose up -d oxigraph && go test ./internal/overview/... ./internal/derive/...`
@@ -211,12 +211,12 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 ## Task 1: Layer graph names and the repo IRI
 
 **Files:**
-- Modify: `internal/iri/iri.go`
-- Test: `internal/iri/iri_test.go` (append)
+- Modify: `internal/kg/iri/iri.go`
+- Test: `internal/kg/iri/iri_test.go` (append)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to the `cases` table in `TestGrammar` (`internal/iri/iri_test.go`):
+Append to the `cases` table in `TestGrammar` (`internal/kg/iri/iri_test.go`):
 
 ```go
 		{"declared graph", iri.DeclaredGraph("adr-worklode-0007"),
@@ -229,12 +229,12 @@ Append to the `cases` table in `TestGrammar` (`internal/iri/iri_test.go`):
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/iri/...`
+Run: `go test ./internal/kg/iri/...`
 Expected: FAIL — `undefined: iri.DeclaredGraph`
 
 - [ ] **Step 3: Write the implementation**
 
-Append to `internal/iri/iri.go`:
+Append to `internal/kg/iri/iri.go`:
 
 ```go
 // DeclaredGraph returns the named graph holding one design doc's declared
@@ -257,13 +257,13 @@ func Repo(host, owner, name string) string {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `go test ./internal/iri/...`
+Run: `go test ./internal/kg/iri/...`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/iri
+git add internal/kg/iri
 git commit -m "Add declared/observed graph names and the repo IRI"
 ```
 
@@ -574,10 +574,10 @@ import (
 const importsManifest = `
 repo: github.com/sunstoneinstitute/research-stack
 components:
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest
     name: ingest
     paths: ["cmd/ingest/**", "internal/ingest/**"]
-  - iri: https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/graphsrv
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/graphsrv
     name: graphsrv
     paths: ["cmd/graph-server/**", "internal/graph/**"]
 `
@@ -607,9 +607,9 @@ func TestImportsTriples(t *testing.T) {
 		t.Fatalf("ImportsTriples: %v", err)
 	}
 	got := string(doc)
-	want := "<https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest> " +
+	want := "<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest> " +
 		"<http://purl.org/dc/terms/requires> " +
-		"<https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/graphsrv> .\n"
+		"<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/graphsrv> .\n"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant exactly the one cross-component edge:\n%s", got, want)
 	}
@@ -818,13 +818,13 @@ func TestLayoutTriplesMultiComponent(t *testing.T) {
 		t.Fatalf("LayoutTriples: %v", err)
 	}
 	got := string(doc)
-	repo := "<https://worklode.io/ns/wl/id/repo/github.com/sunstoneinstitute/research-stack>"
+	repo := "<https://worklode.io/ns/id/repo/github.com/sunstoneinstitute/research-stack>"
 	for _, line := range []string{
-		repo + " <http://purl.org/dc/terms/hasPart> <https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest> .",
-		repo + " <http://purl.org/dc/terms/hasPart> <https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/graphsrv> .",
-		"<https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/research-stack/ingest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/wl/ontology#Component> .",
-		repo + ` <https://worklode.io/ns/wl/ontology#unmatchedPath> "README.md" .`,
-		repo + ` <https://worklode.io/ns/wl/ontology#unmatchedPath> "scripts" .`,
+		repo + " <http://purl.org/dc/terms/hasPart> <https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest> .",
+		repo + " <http://purl.org/dc/terms/hasPart> <https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/graphsrv> .",
+		"<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Component> .",
+		repo + ` <https://worklode.io/ns/ontology#unmatchedPath> "README.md" .`,
+		repo + ` <https://worklode.io/ns/ontology#unmatchedPath> "scripts" .`,
 	} {
 		if !strings.Contains(got, line+"\n") {
 			t.Errorf("missing line:\n%s\ngot:\n%s", line, got)
@@ -866,15 +866,15 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 )
 
 const (
 	rdfType     = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 	dctHasPart  = "http://purl.org/dc/terms/hasPart"
-	wlComponent = "https://worklode.io/ns/wl/ontology#Component"
-	wlUnmatched = "https://worklode.io/ns/wl/ontology#unmatchedPath"
+	wlComponent = "https://worklode.io/ns/ontology#Component"
+	wlUnmatched = "https://worklode.io/ns/ontology#unmatchedPath"
 )
 
 // LayoutTriples derives the observed/repo-layout document (spec 007
@@ -981,7 +981,7 @@ func TestDeriveDryRunPrintsTriples(t *testing.T) {
 	}
 	man := `repo: github.com/acme/app
 components:
-  - iri: https://worklode.io/ns/wl/id/component/github.com/acme/app
+  - iri: https://worklode.io/ns/id/component/github.com/acme/app
     name: app
     paths: ["**"]
 `
@@ -1035,7 +1035,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 )
@@ -1635,10 +1635,10 @@ func TestPRAffectsTriples(t *testing.T) {
 		t.Fatalf("PRAffectsTriples: %v", err)
 	}
 	got := string(doc)
-	task := "<https://worklode.io/ns/wl/id/task/WL-7>"
+	task := "<https://worklode.io/ns/id/task/WL-7>"
 	for _, comp := range []string{"research-stack/ingest", "research-stack/graphsrv"} {
 		if !strings.Contains(got,
-			task+" <https://worklode.io/ns/wl/ontology#affects> <https://worklode.io/ns/wl/id/component/github.com/sunstoneinstitute/"+comp+"> .") {
+			task+" <https://worklode.io/ns/ontology#affects> <https://worklode.io/ns/id/component/github.com/sunstoneinstitute/"+comp+"> .") {
 			t.Errorf("missing wl:affects to %s in:\n%s", comp, got)
 		}
 	}
@@ -1670,12 +1670,12 @@ import (
 	"sort"
 
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-const wlAffects = "https://worklode.io/ns/wl/ontology#affects"
+const wlAffects = "https://worklode.io/ns/ontology#affects"
 
 // ErrNotFound is returned by RepoReader implementations for a missing file.
 var ErrNotFound = errors.New("not found")
@@ -2191,15 +2191,15 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/graph"
 )
 
-const sparqlPrefixes = `PREFIX wl:  <https://worklode.io/ns/wl/ontology#>
+const sparqlPrefixes = `PREFIX wl:  <https://worklode.io/ns/ontology#>
 PREFIX dct: <http://purl.org/dc/terms/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 `
 
 const (
-	declaredFamily = "https://worklode.io/ns/wl/graph/declared/"
-	observedFamily = "https://worklode.io/ns/wl/graph/observed/"
+	declaredFamily = "https://worklode.io/ns/graph/declared/"
+	observedFamily = "https://worklode.io/ns/graph/observed/"
 )
 
 // DriftEdge is one dct:requires edge present in exactly one layer.
@@ -2363,8 +2363,8 @@ import (
 func TestQueriesConfineLayersByGraphFamily(t *testing.T) {
 	v := violationsQuery("2026-07-30")
 	for _, want := range []string{
-		`"https://worklode.io/ns/wl/graph/observed/"`,
-		`"https://worklode.io/ns/wl/graph/declared/"`,
+		`"https://worklode.io/ns/graph/observed/"`,
+		`"https://worklode.io/ns/graph/declared/"`,
 		`"2026-07-30"^^xsd:date`,
 		"wl:AcceptedDeviation",
 	} {
@@ -2391,7 +2391,7 @@ import (
 	"fmt"
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -2619,14 +2619,14 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/graph"
 	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
-	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 )
 
 const (
-	compA = "https://worklode.io/ns/wl/id/component/github.com/acme/app/a"
-	compB = "https://worklode.io/ns/wl/id/component/github.com/acme/app/b"
-	compC = "https://worklode.io/ns/wl/id/component/github.com/acme/app/c"
+	compA = "https://worklode.io/ns/id/component/github.com/acme/app/a"
+	compB = "https://worklode.io/ns/id/component/github.com/acme/app/b"
+	compC = "https://worklode.io/ns/id/component/github.com/acme/app/c"
 )
 
 // seed plants: declared A→B; observed A→B (agreement), A→C (violation),
@@ -2637,7 +2637,7 @@ func seed(t *testing.T, c *graph.Client) {
 	declared := iri.DeclaredGraph("adr-test-0001")
 	observed := iri.ObservedGraph("go-imports")
 	update := fmt.Sprintf(`
-	PREFIX wl:  <https://worklode.io/ns/wl/ontology#>
+	PREFIX wl:  <https://worklode.io/ns/ontology#>
 	PREFIX dct: <http://purl.org/dc/terms/>
 	INSERT DATA {
 	  GRAPH <%s> {
@@ -2686,7 +2686,7 @@ func TestDeviationSuppressesUntilExpiry(t *testing.T) {
 	// Active deviation for A→C (expires next year): 4.1 must drop it.
 	future := time.Now().UTC().AddDate(1, 0, 0).Format("2006-01-02")
 	plant := fmt.Sprintf(`
-	PREFIX wl:  <https://worklode.io/ns/wl/ontology#>
+	PREFIX wl:  <https://worklode.io/ns/ontology#>
 	PREFIX dct: <http://purl.org/dc/terms/>
 	PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -3555,24 +3555,22 @@ git commit -m "Document the drift and overview surface"
 
 ## Overlaps and open questions
 
-1. **IRI-grammar package conflict (flagged, not resolved here).** The
-   sibling plans place the grammar in three packages:
-   `internal/iri` (2026-07-30-knowledge-graph), `internal/kg/iri`
-   (2026-07-30-platform-graph-design, extended by
+1. **IRI-grammar package: resolved to `internal/kg/iri`.** The sibling plans
+   previously disagreed on where the grammar lives: this plan bound to a
+   knowledge-graph-plan package of the same short name, another line ran
+   through `internal/kg/iri` (2026-07-30-platform-graph-design, extended by
    2026-07-30-design-documents-as-graph-objects, and named canonical by
    2026-07-30-data-platform-kg-requirements), and `internal/graphproj`
-   (2026-07-30-runtime-layer, runtime nodes only). **This plan assumes
-   `internal/iri`** for components/tasks/repos/graph names — it ships with
-   the `internal/graph` client and `graphtest` harness every task here
-   uses — and `internal/graphproj` for runtime-node IRIs (paired with its
-   triple functions). Two of the newer plans lean `internal/kg/iri`
-   instead; if consolidation lands there, this plan's references change
-   mechanically (`iri.` → the winning package) and Task 1's three
-   constructors move with them — the grammar itself is identical
-   (base `https://worklode.io/ns/wl/`, `id/`, `graph/` families). A second,
-   deeper conflict sits above all five plans: data-platform ADR-0003 fixed
-   different published bases than spec 006/014 (see the
-   data-platform-kg-requirements plan, Overlaps §2) — resolve at the
+   (2026-07-30-runtime-layer) covered runtime nodes only. Resolved at the
+   planning tier in favor of `internal/kg/iri`, owned by the
+   platform-graph-design plan; this plan now takes it as a prerequisite, and
+   `internal/graphproj` keeps runtime-node IRIs (paired with its triple
+   functions) — the grammar itself is unchanged (base
+   `https://worklode.io/ns/`, `id/`, `graph/` families). A narrower conflict
+   remains above all five plans: data-platform ADR-0003 and Worklode spec
+   006/014 now agree on the schema base (`https://worklode.io/ns/ontology#`)
+   but still fix different authorities for instances and named graphs (see
+   the data-platform-kg-requirements plan, Overlaps §2) — resolve at the
    planning tier before any deriver writes to prod.
 2. **`.worklode/components.yaml` parser** is owned by
    2026-07-30-platform-graph-design (`internal/kg/manifest`); this plan only
@@ -3597,11 +3595,10 @@ git commit -m "Document the drift and overview surface"
    `lode specs --drifted/--unimplemented`, `lode drift --docs`, per-section
    web badges (014 §10). When those queries land, they slot into
    `internal/overview` beside 4.1/4.2.
-7. **Migration numbers:** this plan needs none. If one becomes necessary,
-   use **0009** — 0006 is claimed four times over by sibling plans
-   (`0006_skills`, `0006_task_hierarchy`, `0006_reconciliation`,
-   `0006_task_kinds`) and 0008 by knowledge-graph; those collisions must be
-   renumbered at execution time regardless.
+7. **Migration numbers:** this plan needs none. Migration ids are
+   provisional and assigned sequentially at execution time by the
+   migration-id script; if a checkpoint table is ever needed, it takes
+   whatever id is next free when this plan actually executes.
 8. **New IRI pattern flagged for spec 006:** `id/repo/<host>/<owner>/<name>`
    (Task 1) — the repo/doap:Project node had no minted pattern.
 9. **New vocabulary term flagged for spec 006/007:** `wl:unmatchedPath`
