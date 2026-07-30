@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// urlQueryEscape escapes a value for use in a query string.
-func urlQueryEscape(s string) string { return url.QueryEscape(s) }
-
 // mapRepo creates a project and maps a repo to it.
 func mapRepo(t *testing.T, h http.Handler, token, project, key, repo string) {
 	t.Helper()
@@ -35,7 +32,7 @@ func TestResolveRemoteFindsProject(t *testing.T) {
 		"sunstoneinstitute/worklode",
 	} {
 		rec := doReq(t, h, http.MethodGet,
-			"/api/v1/projects/resolve?remote="+urlQueryEscape(remote), token, nil)
+			"/api/v1/projects/resolve?remote="+url.QueryEscape(remote), token, nil)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("resolve %q: %d %s", remote, rec.Code, rec.Body.String())
 		}
@@ -55,7 +52,7 @@ func TestResolveRemoteFindsProject(t *testing.T) {
 func TestResolveRemoteUnmapped(t *testing.T) {
 	_, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodGet,
-		"/api/v1/projects/resolve?remote="+urlQueryEscape("git@github.com:acme/nope.git"), token, nil)
+		"/api/v1/projects/resolve?remote="+url.QueryEscape("git@github.com:acme/nope.git"), token, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unmapped repo: %d %s; want 404", rec.Code, rec.Body.String())
 	}
@@ -65,7 +62,7 @@ func TestResolveRemoteInvalid(t *testing.T) {
 	_, h, token := newTestServer(t)
 	for _, remote := range []string{"", "worklode", "https://github.com/a/b/c"} {
 		rec := doReq(t, h, http.MethodGet,
-			"/api/v1/projects/resolve?remote="+urlQueryEscape(remote), token, nil)
+			"/api/v1/projects/resolve?remote="+url.QueryEscape(remote), token, nil)
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("remote %q: %d %s; want 422", remote, rec.Code, rec.Body.String())
 		}
