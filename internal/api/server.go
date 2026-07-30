@@ -16,15 +16,18 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
 )
@@ -70,6 +73,21 @@ type Config struct {
 	// and never served.
 	GitHubAppID         string // LODE_GITHUB_APP_ID
 	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
+
+	// SkillSources configures org skill source repos, comma-separated
+	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
+	// App to be configured. Unset: skill sync off.
+	SkillSources string
+	// EmbeddingURL is a full OpenAI-compatible embeddings endpoint URL.
+	// LODE_EMBEDDING_URL. Unset: recommendations run pins-only.
+	EmbeddingURL string
+	// EmbeddingModel names the model sent to EmbeddingURL. LODE_EMBEDDING_MODEL.
+	EmbeddingModel string
+	// EmbeddingAPIKey authenticates against EmbeddingURL. LODE_EMBEDDING_API_KEY.
+	EmbeddingAPIKey string
+	// SkillScoreFloor is the minimum cosine similarity for a recommendation,
+	// default 0.35. LODE_SKILL_SCORE_FLOOR.
+	SkillScoreFloor string
 }
 
 // githubAPIBase is the public GitHub REST endpoint. Tests point AppAuth at a
@@ -114,6 +132,16 @@ type server struct {
 	// appAuth is nil unless the GitHub App id and private key are configured;
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
+
+	// embedder is nil unless an embedding provider is configured; recommend
+	// then runs pins-only. skillSyncer is nil unless skill sources are
+	// configured; sync then 422s. skillSyncMu serializes concurrent sync
+	// requests against the same source set.
+	embedder     embed.Provider
+	skillSyncer  *skillsync.Syncer
+	skillSources []skillsync.Source
+	skillFloor   float64
+	skillSyncMu  sync.Mutex
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
@@ -210,6 +238,32 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 	s.appAuth = appAuth
 
+	s.skillFloor = 0.35
+	if cfg.SkillScoreFloor != "" {
+		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
+		if err != nil || f < 0 || f > 1 {
+			return nil, nil, fmt.Errorf("LODE_SKILL_SCORE_FLOOR: want a float in [0,1], got %q", cfg.SkillScoreFloor)
+		}
+		s.skillFloor = f
+	}
+	if cfg.EmbeddingURL != "" {
+		if cfg.EmbeddingModel == "" {
+			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
+		}
+		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey}
+	}
+	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
+	if err != nil {
+		return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES: %w", err)
+	}
+	if len(skillSources) > 0 {
+		if appAuth == nil {
+			return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
+		}
+		s.skillSources = skillSources
+		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Embed: s.embedder, Log: s.log}
+	}
+
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
 			return nil, nil, fmt.Errorf("bootstrap admin: %w", err)
@@ -277,6 +331,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("POST /api/v1/tasks/{id}/abandon", s.auth(s.abandonTask))
 	mux.Handle("POST /api/v1/tasks/{id}/reopen", s.auth(s.reopenTask))
 	mux.Handle("GET /api/v1/tasks/{id}/timeline", s.auth(s.taskTimeline))
+
+	mux.Handle("GET /api/v1/skills", s.auth(s.listSkills))
+	mux.Handle("GET /api/v1/skills/{name}", s.auth(s.getSkill))
+	mux.Handle("GET /api/v1/skills/{name}/archive/{hash}", s.auth(s.skillArchive))
+	mux.Handle("POST /api/v1/skills/recommend", s.auth(s.recommendSkills))
+	mux.Handle("POST /api/v1/skills/sync", s.auth(requireAdmin(s.syncSkills)))
 
 	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))
 

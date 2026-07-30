@@ -1,0 +1,214 @@
+package api_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// seedSkill upserts one skill with a deterministic hash ("h-<name>") and a
+// non-empty archive, so archive-download and recommend tests have something
+// to read.
+func seedSkill(t *testing.T, st *store.Store, name, description string) {
+	t.Helper()
+	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Name:        name,
+		Description: description,
+		SourceRepo:  "acme/skills",
+		SourcePath:  "skills/" + name,
+		GitCommit:   "deadbeef",
+		ContentHash: "h-" + name,
+		SkillMD:     "# " + name + "\n\n" + description,
+		Frontmatter: json.RawMessage(`{}`),
+		Archive:     []byte("gzip-archive-" + name),
+	})
+	if err != nil {
+		t.Fatalf("seed skill %s: %v", name, err)
+	}
+}
+
+// newTestServerWithConfig is newTestServer with a caller-supplied Config, for
+// tests that need an embedding provider wired in.
+func newTestServerWithConfig(t *testing.T, cfg api.Config) (*store.Store, http.Handler, string) {
+	t.Helper()
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, _, err := api.NewServer(st, cfg)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return st, h, token
+}
+
+func TestSkillsEndpoints(t *testing.T) {
+	st, h, token := newTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	seedSkill(t, st, "debugging", "Systematic debugging loop")
+
+	// List.
+	rr := doReq(t, h, "GET", "/api/v1/skills", token, nil)
+	if rr.Code != 200 {
+		t.Fatalf("list: %d %s", rr.Code, rr.Body)
+	}
+	body := decodeMap(t, rr)
+	skills, _ := body["skills"].([]any)
+	if len(skills) != 2 {
+		t.Fatalf("list count: %v", body["skills"])
+	}
+
+	// Get.
+	rr = doReq(t, h, "GET", "/api/v1/skills/tdd", token, nil)
+	if rr.Code != 200 {
+		t.Fatalf("get: %d", rr.Code)
+	}
+	got := decodeMap(t, rr)
+	if got["name"] != "tdd" || got["hash"] != "h-tdd" {
+		t.Fatalf("get body: %v", got)
+	}
+
+	// Get missing: 404.
+	rr = doReq(t, h, "GET", "/api/v1/skills/nope", token, nil)
+	if rr.Code != 404 {
+		t.Fatalf("get missing: %d", rr.Code)
+	}
+
+	// Archive round-trips bytes with the right content type.
+	rr = doReq(t, h, "GET", "/api/v1/skills/tdd/archive/h-tdd", token, nil)
+	if rr.Code != 200 || rr.Header().Get("Content-Type") != "application/gzip" {
+		t.Fatalf("archive: %d %q", rr.Code, rr.Header().Get("Content-Type"))
+	}
+	if rr.Body.String() != "gzip-archive-tdd" {
+		t.Fatalf("archive body: %q", rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", "/api/v1/skills/tdd/archive/wrong", token, nil)
+	if rr.Code != 404 {
+		t.Fatalf("archive miss: %d", rr.Code)
+	}
+
+	// Recommend without a provider: pins-only degradation, provider "none".
+	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token,
+		map[string]any{"text": "write tests first"})
+	if rr.Code != 200 {
+		t.Fatalf("recommend: %d %s", rr.Code, rr.Body)
+	}
+	body = decodeMap(t, rr)
+	if body["provider"] != "none" {
+		t.Fatalf("provider: %v", body["provider"])
+	}
+	if m, _ := body["matches"].([]any); len(m) != 0 {
+		t.Fatalf("matches without a provider: %v", body["matches"])
+	}
+
+	// Recommend requires exactly one of task_id/text.
+	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token, map[string]any{})
+	if rr.Code != 422 {
+		t.Fatalf("recommend neither: %d", rr.Code)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token,
+		map[string]any{"task_id": "WL-1", "text": "x"})
+	if rr.Code != 422 {
+		t.Fatalf("recommend both: %d", rr.Code)
+	}
+
+	// Sync without configuration: 422. token is alice's, an admin token.
+	rr = doReq(t, h, "POST", "/api/v1/skills/sync", token, nil)
+	if rr.Code != 422 {
+		t.Fatalf("sync unconfigured: %d", rr.Code)
+	}
+
+	// Sync as non-admin: 403.
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+	userToken, err := st.CreateToken(ctx, "bob", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token bob: %v", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/skills/sync", userToken, nil)
+	if rr.Code != 403 {
+		t.Fatalf("sync non-admin: %d", rr.Code)
+	}
+}
+
+// TestRecommendWithProvider exercises the embedding-provider path: a fixed
+// vector from a fake embeddings endpoint, a skill embedded with the same
+// vector, and both the text and task_id request shapes.
+func TestRecommendWithProvider(t *testing.T) {
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer fakeSrv.Close()
+
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	sk, err := st.GetSkill(context.Background(), "tdd")
+	if err != nil {
+		t.Fatalf("get skill: %v", err)
+	}
+	if err := st.ReplaceSkillEmbeddings(context.Background(), sk.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
+	}
+
+	// text path: the fake vector is an exact match for the stored embedding.
+	rr := doReq(t, h, "POST", "/api/v1/skills/recommend", token,
+		map[string]any{"text": "write tests first"})
+	if rr.Code != 200 {
+		t.Fatalf("recommend: %d %s", rr.Code, rr.Body)
+	}
+	body := decodeMap(t, rr)
+	if body["provider"] != "openai-compatible" {
+		t.Fatalf("provider: %v", body["provider"])
+	}
+	matches, _ := body["matches"].([]any)
+	if len(matches) != 1 {
+		t.Fatalf("matches: %v", body["matches"])
+	}
+	m0, _ := matches[0].(map[string]any)
+	if m0["name"] != "tdd" {
+		t.Fatalf("match name: %v", m0["name"])
+	}
+	if score, ok := m0["score"].(float64); !ok || score < 0.99 {
+		t.Fatalf("match score: %v", m0["score"])
+	}
+
+	// task_id path: task.Skills does not exist yet (lands in Task 8), so pins
+	// resolve to none and the vector match still comes through.
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+	})
+	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token,
+		map[string]any{"task_id": task["id"]})
+	if rr.Code != 200 {
+		t.Fatalf("recommend by task: %d %s", rr.Code, rr.Body)
+	}
+	body = decodeMap(t, rr)
+	if pinned, _ := body["pinned"].([]any); len(pinned) != 0 {
+		t.Fatalf("pinned before task pins land: %v", body["pinned"])
+	}
+	matches, _ = body["matches"].([]any)
+	if len(matches) != 1 {
+		t.Fatalf("matches by task: %v", body["matches"])
+	}
+
+	// task_id for a missing task still maps to 404 through mapStoreErr.
+	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token, map[string]any{"task_id": "WL-999"})
+	if rr.Code != 404 {
+		t.Fatalf("recommend missing task: %d", rr.Code)
+	}
+}
