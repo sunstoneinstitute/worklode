@@ -1131,6 +1131,47 @@ func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
 	}
 }
 
+func TestCurrentProjectPathRecordsSource(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	userDir := filepath.Join(home, ".config", "worklode")
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatalf("mkdir user config: %v", err)
+	}
+	userPath := filepath.Join(userDir, "config.toml")
+	if err := os.WriteFile(userPath, []byte("current_project = \"from-user\"\n"), 0o600); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+
+	cfg, err := cli.LoadConfigFromForTest(home)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CurrentProject != "from-user" || cfg.CurrentProjectPath != userPath {
+		t.Fatalf("user config: project=%q path=%q; want from-user, %s",
+			cfg.CurrentProject, cfg.CurrentProjectPath, userPath)
+	}
+
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".worklode"), 0o755); err != nil {
+		t.Fatalf("mkdir repo config: %v", err)
+	}
+	repoPath := filepath.Join(repo, ".worklode", "config.toml")
+	if err := os.WriteFile(repoPath, []byte("current_project = \"from-repo\"\n"), 0o600); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+
+	cfg, err = cli.LoadConfigFromForTest(repo)
+	if err != nil {
+		t.Fatalf("load from repo: %v", err)
+	}
+	if cfg.CurrentProject != "from-repo" || cfg.CurrentProjectPath != repoPath {
+		t.Fatalf("repo config: project=%q path=%q; want from-repo, %s",
+			cfg.CurrentProject, cfg.CurrentProjectPath, repoPath)
+	}
+}
+
 func TestClientAgentSession(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
