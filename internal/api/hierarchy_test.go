@@ -46,6 +46,9 @@ func TestCreateTaskWithParent(t *testing.T) {
 	if parent["id"] != epic {
 		t.Fatalf("parent = %v, want %s", parent["id"], epic)
 	}
+	if parent["title"] != "Container" {
+		t.Fatalf("parent title = %v, want Container", parent["title"])
+	}
 }
 
 // TestCreateTaskWithUnknownParentCreatesNothing checks the single-transaction
@@ -90,40 +93,60 @@ func TestTaskDetailProgress(t *testing.T) {
 	}
 }
 
-func TestSecondParentIsConflict(t *testing.T) {
+// TestCreateTaskWithNonEpicParentIsUnprocessable checks a rule only
+// reachable through create's "parent" field: a fresh task can never already
+// have a parent, so the edges-endpoint conflict case this replaced was pure
+// duplication of internal/store/hierarchy_test.go and tasks_test.go's
+// TestEdges/TestEdgeValidation. "parent must be an epic" has no such
+// coverage on the create path.
+func TestCreateTaskWithNonEpicParentIsUnprocessable(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epicA := createEpic(t, h, token, "proj", "A")
-	epicB := createEpic(t, h, token, "proj", "B")
-	child := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": epicA,
+	notEpic := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Plain", "priority": "medium", "kind": "feature",
 	})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/"+child["id"].(string)+"/edges", token,
-		map[string]any{"to": epicB, "type": "child_of"})
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rr.Code)
+	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
+		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
+		"parent": notEpic["id"],
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rr.Code)
+	}
+	list := doReq(t, h, "GET", "/api/v1/tasks?project=proj", token, nil)
+	tasks := decodeMap(t, list)["tasks"].([]any)
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %d, want 1 (only Plain; the rejected create must have rolled back)", len(tasks))
 	}
 }
 
+// TestCrossProjectParentIsUnprocessable drives create's "parent" field, the
+// only path that reaches this rule: the edges endpoint (POST
+// /tasks/{id}/edges) predates spec 018 and is already covered by
+// internal/store/hierarchy_test.go and tasks_test.go's TestEdges/
+// TestEdgeValidation. This also proves the transaction rolls back on a 422,
+// not just on the 404 TestCreateTaskWithUnknownParentCreatesNothing covers.
 func TestCrossProjectParentIsUnprocessable(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
 	epic := createEpic(t, h, token, "proj", "Container")
-	child := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "other", "title": "Piece", "priority": "medium", "kind": "feature",
-	})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/"+child["id"].(string)+"/edges", token,
-		map[string]any{"to": epic, "type": "child_of"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
+		"project": "other", "title": "Piece", "priority": "medium", "kind": "feature",
+		"parent": epic,
+	})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rr.Code)
 	}
+	list := doReq(t, h, "GET", "/api/v1/tasks?project=other", token, nil)
+	tasks := decodeMap(t, list)["tasks"].([]any)
+	if len(tasks) != 0 {
+		t.Fatalf("tasks = %d, want 0 (the create must have rolled back)", len(tasks))
+	}
 }
 
-func TestListTasksByParent(t *testing.T) {
+func TestListTasksByParentAndKind(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	epic := createEpic(t, h, token, "proj", "Container")
