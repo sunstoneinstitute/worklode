@@ -6,6 +6,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -133,4 +134,78 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]s
 			child, parent, depth, maxHierarchyDepth, ErrInvalidInput)
 	}
 	return nil
+}
+
+// closedStateSet mirrors the closedStates SQL tuple for in-Go checks. Both
+// must list the same states.
+var closedStateSet = map[string]bool{
+	"merged": true, "deployed_dev": true, "deployed_prod": true,
+	"released": true, "abandoned": true,
+}
+
+// HierarchyProgress is an epic's derived roll-up: how many of its direct
+// children are closed, out of how many. It is computed on read and never
+// stored — there is no resolver, no migration, and no event-log noise behind
+// it.
+type HierarchyProgress struct {
+	Closed int
+	Total  int
+}
+
+// ChildProgress returns the closed/total counts over taskID's direct children.
+// A task with no children reports a zero value.
+func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProgress, error) {
+	var p HierarchyProgress
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE t.state IN `+closedStates+`)
+		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
+		  WHERE e.to_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.Total, &p.Closed)
+	if err != nil {
+		return HierarchyProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
+	}
+	return p, nil
+}
+
+// ParentOf returns taskID's parent, or nil when it has none. Only ID, Title,
+// and State are populated: one hop up is all any caller needs, and the full
+// ancestry is unbounded.
+func (s *Store) ParentOf(ctx context.Context, taskID string) (*Task, error) {
+	var p Task
+	err := s.db.QueryRowContext(ctx,
+		`SELECT t.id, t.title, t.state
+		   FROM task_edges e JOIN tasks t ON t.id = e.to_task
+		  WHERE e.from_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.ID, &p.Title, &p.State)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("parent of %s: %w", taskID, err)
+	}
+	return &p, nil
+}
+
+// ParentMap returns child id -> parent id for every child_of edge in a project
+// (every project when projectID is ""). One query, so a board can group an
+// epic's children under it without a lookup per task.
+func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT e.from_task, e.to_task
+		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
+		  WHERE e.type = 'child_of' AND ($1 = '' OR t.project_id = $1)`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("parent map: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var child, parent string
+		if err := rows.Scan(&child, &parent); err != nil {
+			return nil, fmt.Errorf("scan parent map row: %w", err)
+		}
+		out[child] = parent
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("parent map: %w", err)
+	}
+	return out, nil
 }
