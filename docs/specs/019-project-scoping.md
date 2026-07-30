@@ -167,8 +167,9 @@ cache is `~/.cache/worklode/remotes.json`, mode 0600, written atomically
 - **`remotes`** is keyed by the raw string `git remote get-url origin`
   returned, unmodified. The server normalizes, so two spellings of one repo
   get two entries — harmless, and it keeps normalization in one place.
-  An empty `project` is a negative entry: an unmapped repo stops re-querying
-  on every command.
+  An empty `project` is a negative entry, written whenever the server gives a
+  definite answer — 404 (no mapping) or 422 (a remote it cannot read as
+  `owner/name`) — so such a repo stops re-querying on every command.
 - **`keys`** caches project id → task-id key for the bare-number shorthand.
   A remote lookup fills it for free; a config-supplied `current_project` fills
   it from `GET /api/v1/projects` on first use.
