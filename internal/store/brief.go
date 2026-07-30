@@ -15,11 +15,16 @@ import (
 // GoverningDesign, AffectedComponents, and DefinitionOfDone are reserved for
 // spec 006 (Deliverable/design links) and stay nil in v1; the shape is fixed
 // now so the wire contract does not change when they are populated.
+//
+// Parent is exactly one hop up — an agent should know its task belongs to
+// "Delivery lifecycle" without spelunking, while the full ancestry and the
+// sibling list are both unbounded and stay out.
 type Brief struct {
 	Task               Task     // the task row
 	Body               string   // task body (mirrors Task.Body for the wire contract)
 	Branch             string   // <prefix><id>-<slug>
 	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
+	Parent             *Task    // the task's epic, or nil; only ID/Title/State are populated
 	Lease              *Lease   // active lease, or nil
 	GoverningDesign    *string  // reserved: spec 006 (nil in v1)
 	AffectedComponents []string // reserved: spec 006 (nil in v1)
@@ -48,11 +53,17 @@ func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
 		return nil, err
 	}
 
+	parent, err := s.ParentOf(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Brief{
 		Task:         *t,
 		Body:         t.Body,
 		Branch:       BranchFor(t),
 		OpenBlockers: blockers,
+		Parent:       parent,
 		Lease:        lease,
 	}, nil
 }
