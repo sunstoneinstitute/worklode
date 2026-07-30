@@ -2077,9 +2077,7 @@ func boardProjectIDs(t *testing.T, args ...string) []string {
 	}
 	var resp struct {
 		Projects []struct {
-			Project struct {
-				ID string `json:"id"`
-			} `json:"project"`
+			ID string `json:"id"`
 		} `json:"projects"`
 	}
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
@@ -2087,7 +2085,7 @@ func boardProjectIDs(t *testing.T, args ...string) []string {
 	}
 	ids := make([]string, 0, len(resp.Projects))
 	for _, p := range resp.Projects {
-		ids = append(ids, p.Project.ID)
+		ids = append(ids, p.ID)
 	}
 	sort.Strings(ids)
 	return ids
