@@ -38,10 +38,14 @@ type appFixture struct {
 	envStatus    int      // 0 means 200
 	releaseCode  int      // status for GET .../releases/latest (0 means 404)
 	tokenCode    int      // status for the token mint (0 means 201)
+	tarball      []byte   // body for GET .../tarball/<ref>
+	tarballCode  int      // status for the tarball (0 means 200)
+	tarballTo    string   // when set, the tarball 302s here (as codeload does)
 
-	mu    sync.Mutex
-	auth  map[string]string
-	calls []string
+	mu      sync.Mutex
+	auth    map[string]string
+	calls   []string
+	escaped []string
 }
 
 func (f *appFixture) record(r *http.Request) {
@@ -52,6 +56,19 @@ func (f *appFixture) record(r *http.Request) {
 	}
 	f.auth[r.URL.Path] = r.Header.Get("Authorization")
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	f.escaped = append(f.escaped, r.URL.EscapedPath())
+}
+
+// lastEscapedPath returns the still-percent-encoded path of the most recent
+// request. The server decodes r.URL.Path, so only this form shows how the
+// client escaped the ref.
+func (f *appFixture) lastEscapedPath() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.escaped) == 0 {
+		return ""
+	}
+	return f.escaped[len(f.escaped)-1]
 }
 
 func (f *appFixture) callCount() int {
@@ -119,6 +136,21 @@ func (f *appFixture) start(t *testing.T) *AppAuth {
 				json.NewEncoder(w).Encode(map[string]any{"tag_name": "v1"})
 			}
 		default:
+			// The tarball ref is matched by prefix so a test can pick any ref
+			// and inspect how it was escaped.
+			if strings.HasPrefix(r.URL.Path, "/repos/acme/app/tarball/") {
+				if f.tarballTo != "" {
+					http.Redirect(w, r, f.tarballTo, http.StatusFound)
+					return
+				}
+				if f.tarballCode != 0 {
+					w.WriteHeader(f.tarballCode)
+					w.Write([]byte("No commit found for the ref main"))
+					return
+				}
+				w.Write(f.tarball)
+				return
+			}
 			http.NotFound(w, r)
 		}
 	}))
