@@ -114,6 +114,23 @@ func TestResolveScopeCacheIsPerServer(t *testing.T) {
 	}
 }
 
+func TestResolveScopeUnnormalizableRemoteIsCachedNegative(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := initRepo(t, "/srv/git/foo.git")
+	c, calls := resolveServer(t, http.StatusUnprocessableEntity,
+		`{"error":"remote must name an owner and a repo"}`)
+
+	for i := 0; i < 2; i++ {
+		got := ResolveScope(context.Background(), c, Config{}, dir)
+		if got.Project != "" || got.Source != ScopeNone {
+			t.Fatalf("unnormalizable remote scope = %+v; want an empty ScopeNone", got)
+		}
+	}
+	if *calls != 1 {
+		t.Fatalf("server called %d times; a 422 is definite and must be cached", *calls)
+	}
+}
+
 func TestResolveScopeDegradesSilently(t *testing.T) {
 	cases := []struct {
 		name   string
