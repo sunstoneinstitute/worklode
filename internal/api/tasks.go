@@ -19,6 +19,10 @@ var validKinds = map[string]bool{
 	"feature": true, "bug": true, "chore": true, "spec": true, "epic": true,
 }
 
+// invalidKindMsg is shared by every handler that gates on validKinds, so the
+// message cannot drift from the map when a kind is added.
+const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, or epic"
+
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true,
 }
@@ -85,7 +89,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, spec, or epic")
+		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
 	if req.Concern != "" && !store.ValidConcern(req.Concern) {
