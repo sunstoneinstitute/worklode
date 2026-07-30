@@ -26,6 +26,18 @@ func TestDSN() string {
 // Skips the test if Postgres is unreachable and CI is not set.
 func OpenTestStore(t *testing.T) *Store {
 	t.Helper()
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return s
+}
+
+// OpenUnmigratedTestStore is OpenTestStore without the final Migrate call,
+// for tests that need to stop at an intermediate schema version (e.g. to
+// seed data before a specific migration runs) rather than jump to latest.
+func OpenUnmigratedTestStore(t *testing.T) *Store {
+	t.Helper()
 
 	admin, err := sql.Open("pgx", TestDSN())
 	if err == nil {
@@ -64,9 +76,6 @@ func OpenTestStore(t *testing.T) *Store {
 		t.Fatalf("open %s: %v", dbName, err)
 	}
 	t.Cleanup(func() { s.Close() })
-	if err := s.Migrate(MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate %s: %v", dbName, err)
-	}
 	return s
 }
 
