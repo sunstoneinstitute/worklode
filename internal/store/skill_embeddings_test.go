@@ -11,7 +11,7 @@ func TestSkillEmbeddingsRecommend(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"tdd", "debugging"} {
-		if _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
+		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
 		}
 	}
@@ -70,7 +70,7 @@ func TestReplaceSkillEmbeddingsMixedDimensions(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
@@ -101,7 +101,7 @@ func TestReplaceSkillEmbeddingsZeroNorm(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
@@ -124,7 +124,7 @@ func TestRecommendSkillsZeroNormQuery(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
@@ -164,7 +164,7 @@ func TestRecommendSkillsLimitTruncates(t *testing.T) {
 	names := []string{"tdd", "debugging", "diagnose"}
 	vecs := [][]float32{{1, 0, 0}, {0.9, 0.1, 0}, {0.8, 0.2, 0}}
 	for i, name := range names {
-		if _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
+		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
 		}
 		sk, _ := s.GetSkill(ctx, name)
@@ -189,7 +189,7 @@ func TestReplaceSkillEmbeddingsNilClears(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
@@ -214,14 +214,14 @@ func TestRecommendSkillsSkipsSkillWithoutEmbeddings(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed tdd: %v", err)
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
 	if err := s.ReplaceSkillEmbeddings(ctx, tdd.ID, [][]float32{{1, 0, 0}}); err != nil {
 		t.Fatalf("embed tdd: %v", err)
 	}
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h2")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h2")); err != nil {
 		t.Fatalf("seed debugging (never embedded): %v", err)
 	}
 
