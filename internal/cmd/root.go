@@ -69,20 +69,6 @@ func newAPIClientWithConfig() (*cli.Client, cli.Config, error) {
 	return cli.NewClient(cfg), cfg, nil
 }
 
-// resolveProject returns the project a command should act on: the --project
-// flag when it was passed (even as an empty string, which means "all
-// projects"), otherwise the configured current_project.
-func resolveProject(cmd *cobra.Command, flag, currentProject string) string {
-	if cmd.Flags().Changed("project") {
-		return flag
-	}
-	return currentProject
-}
-
-// projectFlagUsage suffixes a --project flag's help with where its default
-// comes from.
-const projectFlagUsage = " (default: current_project from config)"
-
 // printRaw writes a raw JSON response body to cmd's stdout, adding a
 // trailing newline if the body doesn't already end with one. Used by every
 // command's --json path. A nil/empty raw (e.g. a 204 response) prints nothing.
