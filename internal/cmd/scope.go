@@ -78,7 +78,10 @@ func resolveTaskID(ctx context.Context, arg string, c *cli.Client, cfg cli.Confi
 		key = cli.ProjectKey(ctx, c, scope.Project)
 	}
 	if key == "" {
-		return "", fmt.Errorf("%s is a task number, not a task id, and no current project is set:\npass a full id like WL-%s, or set current_project", arg, arg)
+		if scope.Project == "" {
+			return "", fmt.Errorf("%s is a task number, not a task id, and no current project is set:\npass a full id like WL-%s, or set current_project", arg, arg)
+		}
+		return "", fmt.Errorf("%s is a task number, and no task-id key could be looked up for project %s:\ncheck that the project exists and that the server is reachable", arg, scope.Project)
 	}
 	return key + "-" + arg, nil
 }

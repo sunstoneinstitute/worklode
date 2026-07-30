@@ -55,6 +55,24 @@ func TestBareTaskNumberWithoutProjectFails(t *testing.T) {
 	}
 }
 
+func TestBareTaskNumberWithUnknownProjectSaysSo(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createTestTask(t, c, "Unreachable by number")
+	setupRepoConfig(t, "projj") // a typo: no such project on the server
+
+	out, err := runLode(t, "task", "show", "1")
+	if err == nil {
+		t.Fatalf("bare number with an unknown project succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(err.Error(), "projj") {
+		t.Fatalf("error = %v; want it to name the project whose key could not be looked up", err)
+	}
+	if strings.Contains(err.Error(), "set current_project") {
+		t.Fatalf("error = %v; current_project is set — telling the user to set it is wrong", err)
+	}
+}
+
 func TestBareTaskNumberResolvesInTimeline(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
