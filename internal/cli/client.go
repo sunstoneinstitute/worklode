@@ -1193,9 +1193,11 @@ type Holder struct {
 }
 
 // BoardTask is a Task as it appears on the board, with its lease holder when
-// in progress.
+// in progress. Parent is its epic's id when it has one, so the board can
+// group children under it.
 type BoardTask struct {
 	Task
+	Parent string  `json:"parent,omitempty"`
 	Holder *Holder `json:"holder,omitempty"`
 }
 
