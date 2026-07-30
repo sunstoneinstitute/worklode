@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// seedIssue is defined in admin_test.go.
-
 func TestListInboxProjectFilter(t *testing.T) {
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "alpha", "AL", "acme/alpha-app")

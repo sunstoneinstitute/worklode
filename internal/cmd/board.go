@@ -25,7 +25,6 @@ func newBoardCmd() *cobra.Command {
 				if cmd.Flags().Changed("project") || cmd.Flags().Changed("repo") {
 					return errors.New("pass the project either positionally or with --project/--repo, not both")
 				}
-				scope.project = args[0]
 				if err := cmd.Flags().Set("project", args[0]); err != nil {
 					return err
 				}
