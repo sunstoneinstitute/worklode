@@ -3,12 +3,18 @@ package api_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// epicSeq feeds unique external ids for createEpicViaStore so two calls in
+// the same test never collide, even with the same project and title.
+var epicSeq atomic.Int64
 
 // createProject registers a project for tests. Most tests only create one
 // project and rely on tasks getting "WL-<n>" ids (a holdover from the old
@@ -41,8 +47,9 @@ func createTaskViaAPI(t *testing.T, h http.Handler, token string, body map[strin
 // task-hierarchy API work), so tests needing a child_of parent go around it.
 func createEpicViaStore(t *testing.T, st *store.Store, project, title string) *store.Task {
 	t.Helper()
+	extID := fmt.Sprintf("epic-%s-%d", t.Name(), epicSeq.Add(1))
 	var task *store.Task
-	_, _, err := st.RecordEvent(context.Background(), "cli", "epic-"+project+"-"+title, "task.create", nil,
+	_, inserted, err := st.RecordEvent(context.Background(), "cli", extID, "task.create", nil,
 		func(tx *sql.Tx, _ int64) error {
 			var err error
 			task, err = store.CreateTask(tx, st.Now(), store.TaskInput{
@@ -56,6 +63,9 @@ func createEpicViaStore(t *testing.T, st *store.Store, project, title string) *s
 		})
 	if err != nil {
 		t.Fatalf("create epic %s: %v", title, err)
+	}
+	if !inserted || task == nil {
+		t.Fatalf("create epic %s: event %s was already recorded, apply skipped", title, extID)
 	}
 	return task
 }
