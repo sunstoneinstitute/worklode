@@ -477,7 +477,7 @@ func TestClientInboxFlow(t *testing.T) {
 	seedIssue(1, "Frobnicator is broken")
 	seedIssue(2, "Not worth doing")
 
-	list, _, err := c.ListIssues(ctx, "new")
+	list, _, err := c.ListIssues(ctx, "new", "")
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestClientInboxFlow(t *testing.T) {
 		t.Fatalf("DismissIssue: %v", err)
 	}
 
-	list, _, err = c.ListIssues(ctx, "new")
+	list, _, err = c.ListIssues(ctx, "new", "")
 	if err != nil {
 		t.Fatalf("ListIssues after triage: %v", err)
 	}

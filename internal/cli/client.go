@@ -855,11 +855,15 @@ type IssueListResponse struct {
 	Issues []Issue `json:"issues"`
 }
 
-// ListIssues calls GET /api/v1/inbox. An empty state lists every issue.
-func (c *Client) ListIssues(ctx context.Context, state string) (IssueListResponse, []byte, error) {
+// ListIssues calls GET /api/v1/inbox. An empty state lists every triage
+// state; an empty project lists every project's issues.
+func (c *Client) ListIssues(ctx context.Context, state, project string) (IssueListResponse, []byte, error) {
 	q := url.Values{}
 	if state != "" {
 		q.Set("state", state)
+	}
+	if project != "" {
+		q.Set("project", project)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/inbox", q), nil)
 	if err != nil {
