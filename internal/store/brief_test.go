@@ -133,7 +133,8 @@ func TestBriefParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
-	if b.Parent == nil || b.Parent.ID != epic.ID || b.Parent.Title != epic.Title {
+	if b.Parent == nil || b.Parent.ID != epic.ID || b.Parent.Title != epic.Title ||
+		b.Parent.State != epic.State {
 		t.Fatalf("parent = %+v, want %s", b.Parent, epic.ID)
 	}
 	if b.Parent.Body != "" {
