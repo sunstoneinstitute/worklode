@@ -42,16 +42,17 @@ type SkillUpsert struct {
 }
 
 // UpsertSkill records the latest synced state of one skill and undeletes it.
-// It reports changed=true when the content hash differs from the stored
-// latest version (including brand-new skills) so the caller can re-embed.
-func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (bool, error) {
+// It returns the skill id, and changed=true when the content hash differs from
+// the stored latest version (including brand-new skills) so the caller can
+// re-embed that exact row without looking it up again by name.
+func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (int64, bool, error) {
 	if u.ContentHash == "" {
-		return false, fmt.Errorf("skill %s: content hash required: %w", u.Name, ErrInvalidInput)
+		return 0, false, fmt.Errorf("skill %s: content hash required: %w", u.Name, ErrInvalidInput)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("upsert skill %s: %w", u.Name, err)
+		return 0, false, fmt.Errorf("upsert skill %s: %w", u.Name, err)
 	}
 	defer tx.Rollback()
 
@@ -68,21 +69,21 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (bool, error) {
 			INSERT INTO skills (name, description, source_repo, source_path)
 			VALUES ($1, $2, $3, $4) RETURNING id`,
 			u.Name, u.Description, u.SourceRepo, u.SourcePath).Scan(&id); err != nil {
-			return false, fmt.Errorf("insert skill %s: %w", u.Name, err)
+			return 0, false, fmt.Errorf("insert skill %s: %w", u.Name, err)
 		}
 	case err != nil:
-		return false, fmt.Errorf("upsert skill %s: %w", u.Name, err)
+		return 0, false, fmt.Errorf("upsert skill %s: %w", u.Name, err)
 	case repo != u.SourceRepo:
-		return false, fmt.Errorf("skill %s already sourced from %s: %w", u.Name, repo, ErrInvalidInput)
+		return 0, false, fmt.Errorf("skill %s already sourced from %s: %w", u.Name, repo, ErrInvalidInput)
 	}
 
 	if latestHash == u.ContentHash {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE skills SET deleted_at = NULL, description = $2, source_path = $3
 			WHERE id = $1`, id, u.Description, u.SourcePath); err != nil {
-			return false, fmt.Errorf("refresh skill %s: %w", u.Name, err)
+			return 0, false, fmt.Errorf("refresh skill %s: %w", u.Name, err)
 		}
-		return false, tx.Commit()
+		return id, false, tx.Commit()
 	}
 
 	// ON CONFLICT fires when content reverts to an earlier hash, or on a
@@ -96,14 +97,14 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (bool, error) {
 		RETURNING id`,
 		id, u.GitCommit, u.ContentHash, u.Frontmatter, u.SkillMD, u.Archive, s.Now()).Scan(&versionID)
 	if err != nil {
-		return false, fmt.Errorf("insert skill version %s@%s: %w", u.Name, u.ContentHash, err)
+		return 0, false, fmt.Errorf("insert skill version %s@%s: %w", u.Name, u.ContentHash, err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE skills SET latest_version_id = $2, description = $3, source_path = $4, deleted_at = NULL
 		WHERE id = $1`, id, versionID, u.Description, u.SourcePath); err != nil {
-		return false, fmt.Errorf("point skill %s at version: %w", u.Name, err)
+		return 0, false, fmt.Errorf("point skill %s at version: %w", u.Name, err)
 	}
-	return true, tx.Commit()
+	return id, true, tx.Commit()
 }
 
 // SoftDeleteSkillsExcept marks every live skill from sourceRepo whose name is

@@ -22,24 +22,27 @@ func TestUpsertSkillLifecycle(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	changed, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
+	id, changed, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
 	if err != nil || !changed {
 		t.Fatalf("first upsert: changed=%v err=%v", changed, err)
 	}
-	// Same hash again: no change.
-	changed, err = s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
-	if err != nil || changed {
-		t.Fatalf("idempotent upsert: changed=%v err=%v", changed, err)
+	// Same hash again: no change, same id.
+	id2, changed, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
+	if err != nil || changed || id2 != id {
+		t.Fatalf("idempotent upsert: id=%d changed=%v err=%v", id2, changed, err)
 	}
-	// New hash: new version, changed.
-	changed, err = s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2"))
-	if err != nil || !changed {
-		t.Fatalf("new-hash upsert: changed=%v err=%v", changed, err)
+	// New hash: new version, changed, still the same skill row.
+	id2, changed, err = s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2"))
+	if err != nil || !changed || id2 != id {
+		t.Fatalf("new-hash upsert: id=%d changed=%v err=%v", id2, changed, err)
 	}
 
 	sk, err := s.GetSkill(ctx, "tdd")
 	if err != nil {
 		t.Fatalf("get: %v", err)
+	}
+	if sk.ID != id {
+		t.Fatalf("upsert returned id %d, GetSkill says %d", id, sk.ID)
 	}
 	if sk.ContentHash != "h2" || sk.SkillMD == "" || sk.Deleted {
 		t.Fatalf("get after upsert: %+v", sk)
@@ -56,12 +59,12 @@ func TestUpsertSkillLifecycle(t *testing.T) {
 	// Cross-repo name collision is rejected.
 	u := testSkillUpsert("tdd", "h3")
 	u.SourceRepo = "other/repo"
-	if _, err := s.UpsertSkill(ctx, u); !errors.Is(err, ErrInvalidInput) {
+	if _, _, err := s.UpsertSkill(ctx, u); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("collision: %v", err)
 	}
 
 	// Soft delete everything from the repo except a kept set.
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h9")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h9")); err != nil {
 		t.Fatalf("second skill: %v", err)
 	}
 	n, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"debugging"})
@@ -72,7 +75,7 @@ func TestUpsertSkillLifecycle(t *testing.T) {
 		t.Fatalf("tdd should be soft-deleted: %+v", sk)
 	}
 	// Re-upserting the same content resurrects it.
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2")); err != nil {
 		t.Fatalf("resurrect: %v", err)
 	}
 	if sk, _ := s.GetSkill(ctx, "tdd"); sk.Deleted {
@@ -104,10 +107,10 @@ func TestSoftDeleteSkillsExceptNilKeep(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed skill: %v", err)
 	}
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h2")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h2")); err != nil {
 		t.Fatalf("seed skill: %v", err)
 	}
 
@@ -135,12 +138,12 @@ func TestSoftDeleteSkillsExceptScopesToSourceRepo(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("seed skill: %v", err)
 	}
 	other := testSkillUpsert("other-skill", "h2")
 	other.SourceRepo = "other/repo"
-	if _, err := s.UpsertSkill(ctx, other); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, other); err != nil {
 		t.Fatalf("seed other-repo skill: %v", err)
 	}
 
@@ -165,7 +168,7 @@ func TestUpsertSkillEmptyContentHash(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", ""))
+	_, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", ""))
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("empty content hash: want ErrInvalidInput, got %v", err)
 	}
@@ -192,13 +195,13 @@ func TestUpsertSkillContentRevert(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
 		t.Fatalf("h1: %v", err)
 	}
-	if _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2")); err != nil {
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h2")); err != nil {
 		t.Fatalf("h2: %v", err)
 	}
-	changed, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
+	_, changed, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1"))
 	if err != nil || !changed {
 		t.Fatalf("revert to h1: changed=%v err=%v", changed, err)
 	}
