@@ -769,3 +769,119 @@ func TestRollUpReopenRoutesThroughReady(t *testing.T) {
 		t.Fatalf("epic = %s, want in_progress (one child reopened, one still closed)", got)
 	}
 }
+
+// decompose drives Decompose through RecordEvent.
+func decompose(t *testing.T, s *Store, id string, titles []string) ([]Task, error) {
+	t.Helper()
+	var kids []Task
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.decomposed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			kids, err = Decompose(tx, taskTestNow, id, titles, "stig", eventID)
+			return err
+		})
+	return kids, err
+}
+
+func TestDecompose(t *testing.T) {
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Kind = "bug"
+	in.Priority = "high"
+	in.Concern = "security"
+	parent := createTask(t, s, taskTestNow, in)
+
+	flag := true
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.updated", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return UpdateTaskFields(tx, taskTestNow, parent.ID, nil, nil, nil, nil, &flag)
+		}); err != nil {
+		t.Fatalf("set needs_decomposition: %v", err)
+	}
+
+	kids, err := decompose(t, s, parent.ID, []string{"Phase one", "Phase two"})
+	if err != nil {
+		t.Fatalf("Decompose: %v", err)
+	}
+	if len(kids) != 2 {
+		t.Fatalf("children = %d, want 2", len(kids))
+	}
+	for _, k := range kids {
+		if k.State != "draft" {
+			t.Fatalf("child %s state = %s, want draft", k.ID, k.State)
+		}
+		if k.Priority != "high" || k.Concern != "security" || k.ProjectID != parent.ProjectID {
+			t.Fatalf("child %s did not inherit project/priority/concern: %+v", k.ID, k)
+		}
+		if k.Kind != "bug" {
+			t.Fatalf("child %s kind = %s, want the parent's pre-conversion bug", k.ID, k.Kind)
+		}
+	}
+
+	got, err := s.GetTask(t.Context(), parent.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Kind != "epic" {
+		t.Fatalf("parent kind = %s, want epic", got.Kind)
+	}
+	if got.NeedsDecomposition {
+		t.Fatal("parent still flagged needs_decomposition")
+	}
+	if got.ID != parent.ID {
+		t.Fatalf("parent id changed to %s: decompose must keep the id and every reference to it", got.ID)
+	}
+
+	children, err := s.ListTasks(t.Context(), TaskFilter{Parent: parent.ID})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(children) != 2 {
+		t.Fatalf("wired children = %d, want 2", len(children))
+	}
+}
+
+func TestDecomposeRejectsLeasedTask(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+	if _, err := s.Claim(t.Context(), parent.ID, "stig", "wt-1", time.Hour); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	_, err := decompose(t, s, parent.ID, []string{"A"})
+	if !errors.Is(err, ErrLeased) {
+		t.Fatalf("error = %v, want ErrLeased", err)
+	}
+}
+
+func TestDecomposeRejectsEmptyAndBlankTitles(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+	if _, err := decompose(t, s, parent.ID, nil); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty error = %v, want ErrInvalidInput", err)
+	}
+	if _, err := decompose(t, s, parent.ID, []string{"A", "  "}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank-title error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDecomposeRespectsDepthCap: a task that is already a child cannot be
+// decomposed further without exceeding the two-edge cap.
+func TestDecomposeRespectsDepthCap(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	mid := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("mid under epic: %v", err)
+	}
+	if _, err := decompose(t, s, mid.ID, []string{"A"}); err != nil {
+		t.Fatalf("decompose at depth 1 should be allowed: %v", err)
+	}
+
+	deeper, err := s.ListTasks(t.Context(), TaskFilter{Parent: mid.ID})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if _, err := decompose(t, s, deeper[0].ID, []string{"B"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("decompose at depth 2 error = %v, want ErrInvalidInput", err)
+	}
+}
