@@ -40,3 +40,5 @@ jobs:
           fi
       - name: go vet
         run: go vet ./...
+      - name: migration numbers
+        run: ./scripts/check-migrations.sh --no-fix
