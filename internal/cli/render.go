@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -123,19 +124,47 @@ func BoardRender(w io.Writer, board BoardResponse) {
 	}
 }
 
+// boardGroupKey keeps an epic and its children adjacent within a bucket: a
+// child sorts under its parent's id (rank 1), a parent or loose task under its
+// own (rank 0).
+func boardGroupKey(t BoardTask) (string, int) {
+	if t.Parent != "" {
+		return t.Parent, 1
+	}
+	return t.ID, 0
+}
+
 func boardSection(w io.Writer, label string, tasks []BoardTask) {
 	if len(tasks) == 0 {
 		return
 	}
+	rows := make([]BoardTask, len(tasks))
+	copy(rows, tasks)
+	sort.SliceStable(rows, func(i, j int) bool {
+		ki, ri := boardGroupKey(rows[i])
+		kj, rj := boardGroupKey(rows[j])
+		if ki != kj {
+			return ki < kj
+		}
+		if ri != rj {
+			return ri < rj
+		}
+		return rows[i].ID < rows[j].ID
+	})
+
 	fmt.Fprintf(w, "\n%s\n", label)
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tPRIORITY\tTITLE\tHOLDER")
-	for _, t := range tasks {
+	for _, t := range rows {
 		holder := "-"
 		if t.Holder != nil {
 			holder = fmt.Sprintf("%s (until %s)", t.Holder.ActorID, localTime(t.Holder.ExpiresAt))
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", t.ID, t.Priority, t.Title, holder)
+		id := t.ID
+		if t.Parent != "" {
+			id = "└ " + id
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", id, t.Priority, t.Title, holder)
 	}
 	tw.Flush()
 }
