@@ -94,7 +94,7 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 // spec-018 invariants. project and kind carry both endpoints' columns, already
 // read by AddEdge.
 func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]string) error {
-	if kind[parent] != "epic" {
+	if kind[parent] != kindEpic {
 		return fmt.Errorf("parent %s is a %s, not an epic: %w", parent, kind[parent], ErrInvalidInput)
 	}
 	if project[child] != project[parent] {
