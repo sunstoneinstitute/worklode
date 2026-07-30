@@ -40,11 +40,14 @@ type TaskInput struct {
 	Draft     bool
 }
 
-// TaskFilter narrows ListTasks. Zero-valued fields do not filter.
+// TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
+// selects the direct children of one task.
 type TaskFilter struct {
 	Project  string
 	States   []string
 	Priority string
+	Kind     string
+	Parent   string
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -365,6 +368,17 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	if f.Priority != "" {
 		args = append(args, f.Priority)
 		conds = append(conds, fmt.Sprintf(`priority = $%d`, len(args)))
+	}
+	if f.Kind != "" {
+		args = append(args, f.Kind)
+		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+	}
+	if f.Parent != "" {
+		args = append(args, f.Parent)
+		conds = append(conds, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM task_edges e
+			          WHERE e.from_task = tasks.id AND e.to_task = $%d AND e.type = 'child_of')`,
+			len(args)))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)

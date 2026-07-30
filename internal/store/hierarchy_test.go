@@ -318,3 +318,108 @@ func TestDescendantDepthStopsAtCap(t *testing.T) {
 		t.Fatalf("depth = %d, want %d (walk should stop one level past the cap)", depth, maxHierarchyDepth+1)
 	}
 }
+
+func TestChildProgress(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	var kids []*Task
+	for i := 0; i < 3; i++ {
+		k := createTask(t, s, taskTestNow, defaultTaskInput())
+		if err := addEdge(t, s, k.ID, epic.ID, "child_of"); err != nil {
+			t.Fatalf("child %d: %v", i, err)
+		}
+		kids = append(kids, k)
+	}
+
+	got, err := s.ChildProgress(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if want := (HierarchyProgress{Closed: 0, Total: 3}); got != want {
+		t.Fatalf("progress = %+v, want %+v", got, want)
+	}
+
+	walkTo(t, s, kids[0].ID, "merged")
+	if err := transition(t, s, taskTestNow, kids[1].ID, "ready", "abandoned"); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+	got, err = s.ChildProgress(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if want := (HierarchyProgress{Closed: 2, Total: 3}); got != want {
+		t.Fatalf("progress = %+v, want %+v", got, want)
+	}
+}
+
+func TestChildProgressNoChildren(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	got, err := s.ChildProgress(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if want := (HierarchyProgress{}); got != want {
+		t.Fatalf("progress = %+v, want %+v", got, want)
+	}
+}
+
+func TestParentOf(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+
+	got, err := s.ParentOf(t.Context(), child.ID)
+	if err != nil {
+		t.Fatalf("ParentOf: %v", err)
+	}
+	if got == nil || got.ID != epic.ID || got.Title != epic.Title || got.State != epic.State {
+		t.Fatalf("parent = %+v, want id/title/state of %s", got, epic.ID)
+	}
+
+	root, err := s.ParentOf(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("ParentOf root: %v", err)
+	}
+	if root != nil {
+		t.Fatalf("parent of a root task = %+v, want nil", root)
+	}
+}
+
+func TestListTasksFilterParentAndKind(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	loose := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+
+	kids, err := s.ListTasks(t.Context(), TaskFilter{Parent: epic.ID})
+	if err != nil {
+		t.Fatalf("ListTasks parent: %v", err)
+	}
+	if len(kids) != 1 || kids[0].ID != child.ID {
+		t.Fatalf("children = %v, want [%s]", ids(kids), child.ID)
+	}
+
+	epics, err := s.ListTasks(t.Context(), TaskFilter{Kind: "epic"})
+	if err != nil {
+		t.Fatalf("ListTasks kind: %v", err)
+	}
+	if len(epics) != 1 || epics[0].ID != epic.ID {
+		t.Fatalf("epics = %v, want [%s]", ids(epics), epic.ID)
+	}
+	_ = loose
+}
+
+func ids(tasks []Task) []string {
+	out := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		out = append(out, t.ID)
+	}
+	return out
+}
