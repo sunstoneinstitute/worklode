@@ -45,7 +45,8 @@ func init() {
 }
 
 func newTaskAddCmd() *cobra.Command {
-	var project, title, body, priority, kind, concern string
+	var scope scopeFlags
+	var title, body, priority, kind, concern string
 	var draft bool
 	cmd := &cobra.Command{
 		Use:   "add",
@@ -55,12 +56,15 @@ func newTaskAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			project := resolveProject(cmd, project, cfg.CurrentProject)
-			if project == "" {
-				return errors.New(`--project is required (or set current_project in .worklode/config.toml or ~/.config/worklode/config.toml)`)
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
-				Project: project, Title: title, Body: body, Priority: priority, Kind: kind,
+				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft,
 			})
 			if err != nil {
@@ -74,7 +78,7 @@ func newTaskAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "project id"+projectFlagUsage)
+	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
@@ -86,7 +90,8 @@ func newTaskAddCmd() *cobra.Command {
 }
 
 func newTaskListCmd() *cobra.Command {
-	var project, priority string
+	var scope scopeFlags
+	var priority string
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -97,8 +102,12 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-				Project: resolveProject(cmd, project, cfg.CurrentProject), States: states, Priority: priority,
+				Project: sc.Project, States: states, Priority: priority,
 			})
 			if err != nil {
 				return err
@@ -111,7 +120,7 @@ func newTaskListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "filter by project id"+projectFlagUsage+"; pass --project= for all projects")
+	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	return cmd
@@ -339,7 +348,7 @@ func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
 	var next, strictFocus, dryRun bool
-	var project string
+	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "claim [id]",
 		Short: "Lease a task to the current worktree and move it to in_progress",
@@ -349,7 +358,6 @@ func newTaskClaimCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			project := resolveProject(cmd, project, cfg.CurrentProject)
 
 			if !next {
 				if len(args) == 0 {
@@ -385,9 +393,13 @@ func newTaskClaimCmd() *cobra.Command {
 					return err
 				}
 			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
 
 			resp, raw, err := c.ClaimNext(cmd.Context(), cli.ClaimNextInput{
-				Project: project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
+				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
 			})
 			if err != nil {
 				return err
@@ -419,7 +431,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
-	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project"+projectFlagUsage)
+	addScopeFlags(cmd, &scope, "restrict the pick to a project")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd

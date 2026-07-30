@@ -1,0 +1,84 @@
+package cmd
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"regexp"
+
+	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/cli"
+)
+
+// scopeFlags holds the values of the --project/--repo pair a command
+// registers with addScopeFlags.
+type scopeFlags struct {
+	project string
+	repo    string
+}
+
+// addScopeFlags registers the --project/--repo pair on cmd. projectHelp
+// describes what the project narrows ("filter by project id", "project id").
+func addScopeFlags(cmd *cobra.Command, f *scopeFlags, projectHelp string) {
+	cmd.Flags().StringVar(&f.project, "project", "",
+		projectHelp+" (default: the current repo's project — from current_project in config, else the git remote); pass --project= for all projects")
+	cmd.Flags().StringVar(&f.repo, "repo", "",
+		"name the project by one of its repos, as owner/name (alternative to --project)")
+}
+
+// resolveScope returns the project scope a command should act on: an explicit
+// --project/--repo when passed, otherwise the config/git-remote chain in
+// cli.ResolveScope. An explicitly empty --project= means "every project" and
+// stops the chain.
+func resolveScope(ctx context.Context, cmd *cobra.Command, c *cli.Client, cfg cli.Config, f *scopeFlags) (cli.Scope, error) {
+	projectSet := cmd.Flags().Changed("project")
+	repoSet := cmd.Flags().Changed("repo")
+
+	if projectSet && repoSet {
+		return cli.Scope{}, errors.New("--project and --repo name the same thing; pass only one")
+	}
+	if repoSet {
+		p, err := c.ResolveRemote(ctx, f.repo)
+		if err != nil {
+			return cli.Scope{}, fmt.Errorf("resolve --repo %s: %w", f.repo, err)
+		}
+		return cli.Scope{Project: p.ID, Key: p.Key, Source: cli.ScopeFlag}, nil
+	}
+	if projectSet {
+		return cli.Scope{Project: f.project, Source: cli.ScopeFlag}, nil
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = ""
+	}
+	return cli.ResolveScope(ctx, c, cfg, wd), nil
+}
+
+// bareTaskNumber matches a task number without its project key, as accepted
+// by every id-taking command.
+var bareTaskNumber = regexp.MustCompile(`^[0-9]+$`)
+
+// resolveTaskID expands a bare task number ("12") to a full task id ("WL-12")
+// using the current scope's project key. Anything else — including a full
+// id from another project — is returned untouched.
+func resolveTaskID(ctx context.Context, arg string, c *cli.Client, cfg cli.Config) (string, error) {
+	if !bareTaskNumber.MatchString(arg) {
+		return arg, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = ""
+	}
+	scope := cli.ResolveScope(ctx, c, cfg, wd)
+	key := scope.Key
+	if key == "" {
+		key = cli.ProjectKey(ctx, c, scope.Project)
+	}
+	if key == "" {
+		return "", fmt.Errorf("%s is a task number, not a task id, and no current project is set:\npass a full id like WL-%s, or set current_project", arg, arg)
+	}
+	return key + "-" + arg, nil
+}
