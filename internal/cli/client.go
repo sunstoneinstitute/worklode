@@ -41,6 +41,11 @@ type Config struct {
 	ServerURL      string
 	Token          string
 	CurrentProject string
+
+	// CurrentProjectPath is the config file CurrentProject came from, so
+	// commands can report which file set their scope. Empty when no file
+	// set it.
+	CurrentProjectPath string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -121,6 +126,9 @@ func loadConfigFrom(startDir string) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("parse %s: %w", path, err)
 		}
+		if cfg.CurrentProject != "" {
+			cfg.CurrentProjectPath = path
+		}
 	case os.IsNotExist(err):
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
@@ -133,7 +141,7 @@ func loadConfigFrom(startDir string) (Config, error) {
 			if err != nil {
 				return Config{}, err
 			}
-			cfg.merge(repoCfg)
+			cfg.merge(repoCfg, repoPath)
 		}
 	}
 
@@ -208,8 +216,9 @@ func readRepoConfig(path string) (Config, error) {
 	return cfg, nil
 }
 
-// merge applies the non-empty values of a repo-local config on top of cfg.
-func (cfg *Config) merge(repo Config) {
+// merge applies the non-empty values of a repo-local config (read from path)
+// on top of cfg.
+func (cfg *Config) merge(repo Config, path string) {
 	if repo.ServerURL != "" && repo.ServerURL != cfg.ServerURL {
 		// Same reasoning as the LODE_SERVER override in loadConfigFrom: a
 		// legacy cleartext token in the user config belongs to that config's
@@ -219,6 +228,7 @@ func (cfg *Config) merge(repo Config) {
 	}
 	if repo.CurrentProject != "" {
 		cfg.CurrentProject = repo.CurrentProject
+		cfg.CurrentProjectPath = path
 	}
 }
 
