@@ -1,0 +1,2459 @@
+# Knowledge graph phase 1 — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship the Worklode half of spec 006: the `wl:` vocabulary sources, the
+canonical IRI grammar as a Go package, and a backbone→graph projector that
+mirrors every task into its Workstream named graph and proves it with a SPARQL
+read-back.
+
+**Architecture:** The `wl:` ontology/SKOS/SHACL sources are authored under
+`rdf/wl/` (staged for the rdf-registry PR) and parse-gated by loading them into
+Oxigraph in tests. A new `internal/iri` package fixes the IRI grammar, a new
+`internal/graph` package turns a backbone task row into triples and renders
+per-subject-replace SPARQL updates, and a new `internal/projector` polls the
+existing `state_log` outbox (checkpointed in a new `graph_projection` table)
+and pushes each dirty task into the SPARQL endpoint. `lode serve` runs the
+projector as a background loop when `LODE_GRAPH_URL` is set.
+
+**Tech Stack:** Go 1.26, cobra CLI, PostgreSQL via `database/sql`,
+standard-library testing, SPARQL 1.1 Protocol + Graph Store Protocol over
+`net/http`, `golang.org/x/oauth2/clientcredentials` (already a dependency) for
+Keycloak client-credentials auth, Oxigraph (docker) as the test endpoint.
+
+**Spec:** `docs/specs/006-knowledge-graph.md`
+
+---
+
+## Scope: spec 006 is too large for one plan
+
+Spec 006 spans a cross-repo rdf-registry PR with its own CI gates, a projector
+service, graph-side design authoring, and is amended throughout by specs 014
+and 015. This plan is deliberately **phase 1**: the vocabulary, the IRI
+grammar, and a tracer-bullet vertical slice of the projection (backbone task →
+quads in a Workstream named graph → SPARQL read-back, acceptance criteria 4, 8
+and 10b). Deferred to later plans:
+
+- **rdf-registry PR + CI gates** (acceptance criteria 1, 10a/c/d): moving
+  `rdf/wl/` into rdf-registry, the SHACL gate (ADR-0003), the `owlrl` closure
+  test (ADR-0004), the `/rdf/` DCAT/VoID index entry, and the
+  `worklode.io/ns/` base-URL override (spec 009 item 3). The sources this plan
+  authors are the PR's content.
+- **Issue/PR projection and `wl:mirrors`**: needs the Task↔GitHub-Issue mirror
+  lifecycle (spec 004 Q5 / 008 Q008.4), still open.
+- **Runtime-node projection** (Artifact/Deployment/Environment): spec 015
+  types these and replaces 006's Artifact IRI pattern; ships with 015's plan.
+- **Declared-layer authoring** (Component, DesignDoc, Deliverable, Effect,
+  AcceptedDeviation instances and their crit-gated named graphs): spec 014
+  reworks the document model; authoring surfaces belong to 014/008 plans. The
+  *vocabulary* for all of it ships here.
+- **Partial supersession**: 014 §3 retires `wl:supersededSection` for section
+  IRIs, so 006's triple-term mechanism (acceptance criterion 5) is not built
+  at all; sections land with 014. Consequence: no `ontology.1-2.ttl` is needed
+  in this phase — the annotation predicate was 006's only RDF-1.2 content.
+- **Drift queries** (spec 007) and Deliverable auto-confirmation (v2).
+
+### Already implemented vs. remaining
+
+Nothing graph-side exists yet — `grep -ri 'rdf\|sparql\|oxigraph'` matches only
+`www/index.html`. What 006 calls the projection *sources* all shipped with the
+backbone:
+
+- The event outbox: `events` + `state_log` (`internal/store/events.go`,
+  `deploy/base/migrations/0001_baseline.up.sql:3-11,172-180`). Task state
+  transitions already write `state_log` rows via `Transition`
+  (`internal/store/tasks.go:154-179`); creates and edge changes do not yet
+  (fixed in Task 7).
+- The relational task model: `tasks`, `task_edges` (`child_of`/`blocks`),
+  `projects` (`internal/store/tasks.go`, `internal/store/projects.go`).
+- Runtime ingest exists relationally (`internal/store/artifacts.go`,
+  `internal/hooks/flux.go`) for later phases to project.
+
+### Amendments honored, and gaps this plan closes
+
+Spec 014 §1 says the `ls:`→`wl:` rename "must happen before spec 006 ships",
+so everything here uses `wl:`/`wlc:`/`wlid:` under
+`https://worklode.io/ns/wl/`. Also honored: no `wl:Plan` (014 §2), no
+`wl:supersededSection` (014 §3), status enum without `implemented` (014 §5),
+six-value TaskKind including `spec` (014 §8, matching today's `tasks.kind`
+CHECK plus the two values 014 adds). `wl:Section`, `wl:lastRevisedIn` and the
+015 runtime terms ship with those specs' plans.
+
+Three things 006 requires but never names — decided here, flagged for the spec:
+
+1. **Projected literal predicates.** The projection table projects
+   `concern`/`priority`/state, and the SHACL sketch requires "exactly one
+   projected state literal", but none of the three predicates is in the mint
+   set. This plan mints `wl:taskState` (functional), `wl:priority`
+   (functional) and `wl:concern` as datatype properties, documented as
+   projection-only mirrors that never fork the backbone enums (Open Q3).
+2. **Workstream IRIs.** The IRI grammar has no workstream pattern. This plan
+   fixes `id/workstream/<project-id>` for the instance and
+   `https://worklode.io/ns/wl/graph/workstream/<project-id>` for its
+   projection named graph (following spec 007's `declared/…`, `observed/…`
+   graph-family style).
+3. **One workstream per task in v1.** The backbone gives a task exactly one
+   `project_id` and no way to move it, so the projector writes each task to
+   exactly one Workstream graph. The multi-workstream model (acceptance
+   criterion 8) is real in the vocabulary and proven at the graph layer
+   (Task 6); the projector grows multi-graph fan-out when the backbone grows
+   multi-workstream membership.
+
+---
+
+## File Structure
+
+**New files**
+
+| Path | Responsibility |
+|---|---|
+| `internal/iri/iri.go` | the canonical IRI grammar: namespaces + constructors, pure functions |
+| `internal/iri/iri_test.go` | table test over every pattern |
+| `rdf/doc.go` | package stub so the vocabulary sources carry a Go test |
+| `rdf/vocab_test.go` | mint-set presence + retired/forbidden-term checks over the `.ttl` files |
+| `rdf/wl/ontology.ttl` | `wl:` classes and properties (RDF 1.1) |
+| `rdf/wl/concept.ttl` | `wlc:` SKOS schemes (DesignDocStatus, TaskKind, ModelLayer) |
+| `rdf/wl/wl-shapes.ttl` | SHACL node shapes (enforced later by rdf-registry CI) |
+| `internal/graph/triple.go` | `Term`/`Triple`, literal escaping, `InsertData`/`ReplaceSubject` rendering |
+| `internal/graph/triple_test.go` | escaping and exact update-string rendering |
+| `internal/graph/task.go` | backbone `store.Task` + edges → subject-complete triples |
+| `internal/graph/task_test.go` | mapping including kind concept, state literal, edge directions |
+| `internal/graph/client.go` | SPARQL 1.1 protocol client (`Update`/`Select`/`Ask`) + GSP `Load`, oauth2 TokenSource |
+| `internal/graph/client_test.go` | httptest: paths, content types, JSON parsing, bearer token, errors |
+| `internal/graph/graphtest/graphtest.go` | Oxigraph test endpoint (skip-unless-CI, like `OpenTestStore`) + unique graphs |
+| `internal/graph/oxigraph_test.go` | integration: vocabulary parse-loads; replace round-trip; two-graph task (criterion 8) |
+| `deploy/base/migrations/0008_graph_projection.up.sql` | `graph_projection` checkpoint table |
+| `deploy/base/migrations/0008_graph_projection.down.sql` | drop it |
+| `internal/store/projection.go` | checkpoint get/set + `DirtyTaskIDs` over `state_log` |
+| `internal/store/projection_test.go` | checkpoint round-trip, dirty scan, dedupe, limit |
+| `internal/store/outbox_test.go` | create/edge mutations write `state_log` rows |
+| `internal/projector/projector.go` | the poll loop: dirty tasks → per-subject replace → advance checkpoint |
+| `internal/projector/projector_test.go` | real store + fake SPARQL endpoint; idempotence; edge fan-out; error retry |
+| `internal/projector/e2e_oxigraph_test.go` | full slice vs. Oxigraph incl. `wl:dependsOn+` property path (criterion 10b) |
+
+**Modified files**
+
+| Path | Change |
+|---|---|
+| `internal/store/tasks.go:96-148` | `CreateTask` gains `eventID` and writes a `state_log` row |
+| `internal/store/tasks.go:402-506` | `AddEdge`/`RemoveEdge` gain `eventID` and log both endpoints |
+| `internal/api/tasks.go:112-129` | pass `eventID` to `CreateTask` |
+| `internal/api/tasks.go:385-388, 424-427` | pass `eventID` to `AddEdge`/`RemoveEdge` |
+| `internal/cmd/serve.go` | `graphProjectorFromEnv` + background projection loop |
+| `docker-compose.yml` | `oxigraph` service for local integration tests |
+| `.github/workflows/_test.yml` | start Oxigraph, set `TEST_SPARQL_URL` |
+| `README.md` | "Knowledge graph projection" section (env vars, compose service) |
+
+**Test commands**
+
+- Pure packages: `go test ./internal/iri/... ./rdf/...`
+- Graph package (unit tests run anywhere; integration needs Oxigraph):
+  `docker compose up -d oxigraph && go test ./internal/graph/...`
+- Postgres-backed (skip if unreachable outside CI):
+  `docker compose up -d postgres && go test ./internal/store/... ./internal/api/... ./internal/projector/...`
+- Everything: `docker compose up -d postgres oxigraph && go test ./...`
+
+---
+
+## Task 1: The IRI grammar package
+
+**Files:**
+- Create: `internal/iri/iri.go`
+- Test: `internal/iri/iri_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package iri_test
+
+import (
+	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+)
+
+func TestGrammar(t *testing.T) {
+	const base = "https://worklode.io/ns/wl/"
+	cases := []struct{ name, got, want string }{
+		{"term", iri.Term("Task"), base + "ontology#Task"},
+		{"concept", iri.Concept("feature"), base + "concept/feature"},
+		{"task", iri.Task("WL-7"), base + "id/task/WL-7"},
+		{"workstream", iri.Workstream("worklode"), base + "id/workstream/worklode"},
+		{"workstream graph", iri.WorkstreamGraph("worklode"), base + "graph/workstream/worklode"},
+		{"component default slug", iri.Component("github.com/sunstoneinstitute/worklode"),
+			base + "id/component/github.com/sunstoneinstitute/worklode"},
+		{"doc", iri.Doc("spec-worklode-006"), base + "id/doc/spec-worklode-006"},
+		{"deliverable", iri.Deliverable("worklode-graph-live"), base + "id/deliverable/worklode-graph-live"},
+		{"issue", iri.Issue("github.com", "sunstoneinstitute", "worklode", 42),
+			base + "id/issue/github.com/sunstoneinstitute/worklode/42"},
+		{"pr", iri.PR("github.com", "sunstoneinstitute", "worklode", 42),
+			base + "id/pr/github.com/sunstoneinstitute/worklode/42"},
+		{"environment", iri.Environment("prod"), base + "id/environment/prod"},
+		{"agent", iri.Agent("stig"), base + "id/agent/stig"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Fatalf("got %q; want %q", tc.got, tc.want)
+			}
+		})
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/iri/...`
+Expected: FAIL — `no required module provides package .../internal/iri`
+
+- [ ] **Step 3: Write the implementation**
+
+```go
+// Package iri mints the canonical Worklode IRIs (spec 006 §Canonical IRI
+// scheme, prefixes renamed per spec 014 §1). IRIs are branch-free and
+// version-free; local ids are opaque and stable, and slashes inside a local
+// id are permitted (slash namespace, opaque path).
+//
+// The Artifact pattern is deliberately absent: spec 015 §5 replaces 006's
+// docker-only grammar with a kind-first one and ships with 015's plan.
+package iri
+
+import "fmt"
+
+const (
+	// Base is the published namespace root (spec 009 item 3).
+	Base = "https://worklode.io/ns/wl/"
+	// Ontology is the wl: schema namespace (hash namespace).
+	Ontology = Base + "ontology#"
+	// ConceptNS is the wlc: SKOS concept namespace.
+	ConceptNS = Base + "concept/"
+	// IDNS is the wlid: instance namespace.
+	IDNS = Base + "id/"
+	// GraphNS holds named-graph IRIs, in the family style of spec 007's
+	// declared/... and observed/... graphs.
+	GraphNS = Base + "graph/"
+)
+
+// Term returns the IRI of a wl: class or property.
+func Term(local string) string { return Ontology + local }
+
+// Concept returns the IRI of a wlc: SKOS concept.
+func Concept(local string) string { return ConceptNS + local }
+
+// Task returns a backbone task's instance IRI (backbone id, e.g. WL-7).
+func Task(id string) string { return IDNS + "task/" + id }
+
+// Workstream returns the instance IRI of a backbone project acting as a
+// Workstream. Spec 006 defines no workstream pattern; this package fixes
+// id/workstream/<project-id>.
+func Workstream(projectID string) string { return IDNS + "workstream/" + projectID }
+
+// WorkstreamGraph returns the named graph a Workstream's projected quads
+// live in (spec 006 §Projection, Open Q4: graphs are anchored per
+// Workstream).
+func WorkstreamGraph(projectID string) string { return GraphNS + "workstream/" + projectID }
+
+// Component returns a component's instance IRI from its manifest slug
+// (default = repo coordinates, D5).
+func Component(slug string) string { return IDNS + "component/" + slug }
+
+// Doc returns a design document's instance IRI from its design-file slug.
+func Doc(slug string) string { return IDNS + "doc/" + slug }
+
+// Deliverable returns a deliverable's instance IRI.
+func Deliverable(slug string) string { return IDNS + "deliverable/" + slug }
+
+// Issue returns a VCS issue's instance IRI.
+func Issue(host, owner, repo string, number int64) string {
+	return fmt.Sprintf("%sissue/%s/%s/%s/%d", IDNS, host, owner, repo, number)
+}
+
+// PR returns a pull request's instance IRI.
+func PR(host, owner, repo string, number int64) string {
+	return fmt.Sprintf("%spr/%s/%s/%s/%d", IDNS, host, owner, repo, number)
+}
+
+// Environment returns an environment's instance IRI (dev, prod).
+func Environment(name string) string { return IDNS + "environment/" + name }
+
+// Agent returns a backbone actor's instance IRI (a foaf:/prov: Agent).
+func Agent(actorID string) string { return IDNS + "agent/" + actorID }
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `go test ./internal/iri/...`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/iri
+git commit -m "Add the canonical wl IRI grammar"
+```
+
+---
+
+## Task 2: The vocabulary sources
+
+**Files:**
+- Create: `rdf/doc.go`, `rdf/wl/ontology.ttl`, `rdf/wl/concept.ttl`, `rdf/wl/wl-shapes.ttl`
+- Test: `rdf/vocab_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+`rdf/doc.go`:
+
+```go
+// Package rdf holds the wl: vocabulary sources under rdf/wl/, staged for
+// the rdf-registry PR (spec 006 acceptance criterion 1). The SHACL gate and
+// owlrl closure proof run in rdf-registry CI; the tests here guard the mint
+// set and the spec-014 renames, and internal/graph's Oxigraph test is the
+// parse gate.
+package rdf
+```
+
+`rdf/vocab_test.go`:
+
+```go
+package rdf
+
+import (
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// read returns a vocabulary source under rdf/wl/.
+func read(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile("wl/" + name)
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return string(data)
+}
+
+// mintedDeclarations is spec 006 acceptance criterion 2 as amended: minus
+// wl:Plan and wl:supersededSection (014), minus the 014/015 additions that
+// ship with those specs' plans, plus the three projected-literal predicates
+// the spec's projection table needs but never names.
+var mintedDeclarations = []string{
+	"wl:Component a owl:Class",
+	"wl:DesignDoc a owl:Class",
+	"wl:ADR a owl:Class",
+	"wl:Spec a owl:Class",
+	"wl:Task a owl:Class",
+	"wl:Deliverable a owl:Class",
+	"wl:Effect a owl:Class",
+	"wl:Workstream a owl:Class",
+	"wl:Project a owl:Class",
+	"wl:OngoingMaintenance a owl:Class",
+	"wl:AcceptedDeviation a owl:Class",
+	"wl:governs a owl:ObjectProperty",
+	"wl:deliveredBy a owl:ObjectProperty",
+	"wl:implements a owl:ObjectProperty",
+	"wl:affects a owl:ObjectProperty",
+	"wl:status a owl:ObjectProperty, owl:FunctionalProperty",
+	"wl:sanctionedBy a owl:ObjectProperty",
+	"wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty",
+	"wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty",
+	"wl:blocks a owl:ObjectProperty, owl:TransitiveProperty",
+	"wl:inWorkstream a owl:ObjectProperty",
+	"wl:reviewer a owl:ObjectProperty",
+	"wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty",
+	"wl:layer a owl:AnnotationProperty",
+	"wl:taskState a owl:DatatypeProperty, owl:FunctionalProperty",
+	"wl:priority a owl:DatatypeProperty, owl:FunctionalProperty",
+	"wl:concern a owl:DatatypeProperty",
+}
+
+func TestOntologyMintSet(t *testing.T) {
+	s := read(t, "ontology.ttl")
+	for _, decl := range mintedDeclarations {
+		if !strings.Contains(s, decl) {
+			t.Errorf("ontology.ttl missing %q", decl)
+		}
+	}
+	// Every minted term carries a model-layer tag (spec 006 acceptance
+	// criterion 9). wl:layer itself is untagged, hence len-1.
+	if n := strings.Count(s, "wl:layer wlc:"); n < len(mintedDeclarations)-1 {
+		t.Errorf("wl:layer tags = %d; want >= %d (one per minted term)",
+			n, len(mintedDeclarations)-1)
+	}
+	for _, axiom := range []string{
+		"owl:members ( wl:Component wl:DesignDoc wl:Task wl:Deliverable wl:Workstream )",
+		"owl:members ( wl:ADR wl:Spec )",
+		"owl:members ( wl:Project wl:OngoingMaintenance )",
+	} {
+		if !strings.Contains(s, axiom) {
+			t.Errorf("ontology.ttl missing disjointness axiom %q", axiom)
+		}
+	}
+}
+
+func TestConceptSchemes(t *testing.T) {
+	s := read(t, "concept.ttl")
+	for _, want := range []string{
+		"wlc:DesignDocStatus a skos:ConceptScheme",
+		"wlc:draft", "wlc:proposed", "wlc:accepted", "wlc:superseded",
+		// 014 §5: implemented left the enum, so the ordered list has 4 members.
+		"skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded )",
+		"wlc:TaskKind a skos:ConceptScheme",
+		"wlc:feature", "wlc:bug", "wlc:chore", "wlc:spec", "wlc:review", "wlc:spike",
+		"wlc:ModelLayer a skos:ConceptScheme",
+		"wlc:intent", "wlc:execution", "wlc:runtime",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("concept.ttl missing %q", want)
+		}
+	}
+}
+
+func TestNoRetiredOrForbiddenTerms(t *testing.T) {
+	oldPrefix := regexp.MustCompile(`(^|[^a-zA-Z])ls(c|id)?:`)
+	for _, name := range []string{"ontology.ttl", "concept.ttl", "wl-shapes.ttl"} {
+		s := read(t, name)
+		if oldPrefix.MatchString(s) {
+			t.Errorf("%s still uses an old prefix (renamed by spec 014)", name)
+		}
+		for _, bad := range []string{"gtio", "wl:Plan", "wl:supersededSection", "wlc:implemented"} {
+			if strings.Contains(s, bad) {
+				t.Errorf("%s contains retired/forbidden term %q", name, bad)
+			}
+		}
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./rdf/...`
+Expected: FAIL — `read wl/ontology.ttl: ... no such file or directory`
+
+- [ ] **Step 3: Write `rdf/wl/ontology.ttl`**
+
+```turtle
+@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://worklode.io/ns/wl/ontology> a owl:Ontology ;
+    dct:title "Worklode wl: ontology" ;
+    rdfs:comment "The Worklode knowledge-graph vocabulary (spec 006, prefixes per spec 014). Standards-first: dcterms/foaf/prov/doap/skos are reused; only the terms below are minted." .
+
+# ---- Model-layer annotation (tags every minted term; itself untagged) ----
+wl:layer a owl:AnnotationProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Model-layer membership (wlc:ModelLayer: intent/execution/runtime) of a vocabulary term. Annotation only." .
+
+# ---- Classes ----
+wl:Component a owl:Class ; wl:layer wlc:intent ;
+    rdfs:comment "A software component - the atomic unit of the platform graph. Repo/project (doap:Project) is a coarser grouping via dct:hasPart." .
+
+wl:DesignDoc a owl:Class ; rdfs:subClassOf foaf:Document ; wl:layer wlc:intent ;
+    rdfs:comment "A design document; authored graph-side, crit-reviewed, never projected." .
+wl:ADR a owl:Class ; rdfs:subClassOf wl:DesignDoc ; wl:layer wlc:intent .
+wl:Spec a owl:Class ; rdfs:subClassOf wl:DesignDoc ; wl:layer wlc:intent .
+
+wl:Task a owl:Class ; wl:layer wlc:execution ;
+    rdfs:comment "Execution-owned; projected read-only from the Worklode backbone (D11)." .
+
+wl:Deliverable a owl:Class ; wl:layer wlc:intent ;
+    rdfs:comment "Declared definition-of-done (D7): the vertical join point where intent meets a running system. Declared only in v1; auto-confirmation is v2 (spec 007)." .
+
+wl:Effect a owl:Class ; rdfs:subClassOf wl:Deliverable ; wl:layer wlc:intent ;
+    rdfs:comment "A deliverable whose definition-of-done is a state of an existing system, not the existence and placement of an artifact. Declares a Deployment target and MUST NOT declare an Artifact; witnessed by that Deployment over a Commit on the delivering component's default branch (spec 015)." .
+
+wl:Workstream a owl:Class ; wl:layer wlc:execution ;
+    rdfs:comment "A grouping of work a Task belongs to. Projection named graphs are anchored per Workstream; a Task in several Workstreams appears in several graphs." .
+wl:Project a owl:Class ; rdfs:subClassOf wl:Workstream ; wl:layer wlc:execution ;
+    rdfs:comment "Bounded, goal-oriented workstream. Distinct from doap:Project (= repo)." .
+wl:OngoingMaintenance a owl:Class ; rdfs:subClassOf wl:Workstream ; wl:layer wlc:execution ;
+    rdfs:comment "Unbounded, continuous workstream." .
+
+wl:AcceptedDeviation a owl:Class ; wl:layer wlc:intent ;
+    rdfs:comment "A tolerated architectural deviation that drift queries suppress. Names the accepted edge via RDF reification (rdf:subject/predicate/object) WITHOUT asserting it - the edge stays out of the intent layer." .
+
+# ---- Disjointness (proved by owlrl in rdf-registry CI; closure never published, ADR-0004) ----
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:Component wl:DesignDoc wl:Task wl:Deliverable wl:Workstream ) .
+[] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .
+[] a owl:AllDisjointClasses ; owl:members ( wl:Project wl:OngoingMaintenance ) .
+
+# ---- Object properties ----
+wl:governs a owl:ObjectProperty ; wl:layer wlc:intent ;
+    rdfs:domain wl:DesignDoc ; rdfs:range wl:Component ;
+    rdfs:comment "This design doc governs the architecture of that component." .
+
+wl:deliveredBy a owl:ObjectProperty ; wl:layer wlc:intent ;
+    rdfs:domain wl:Deliverable ; rdfs:range wl:Component ;
+    rdfs:comment "The component that delivers this deliverable. Deliberately NOT functional. Declared rather than derived: the derivable route needs wl:Build, which has no v1 projection source (spec 015). SHACL enforces >= 1." .
+
+wl:implements a owl:ObjectProperty ; wl:layer wlc:execution ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Deliverable wl:Component ) ] ;
+    rdfs:comment "Execution realises intent. Declared when authored; observed when derived (spec 007). Spec 014 narrows the DesignDoc half to Component-to-Section manifest claims." .
+
+wl:affects a owl:ObjectProperty ; wl:layer wlc:execution ;
+    rdfs:range wl:Component ;
+    rdfs:comment "A Task/Issue/PullRequest touches/changes that component." .
+
+wl:status a owl:ObjectProperty, owl:FunctionalProperty ; wl:layer wlc:intent ;
+    rdfs:domain wl:DesignDoc ; rdfs:range skos:Concept ;
+    rdfs:comment "Lifecycle status in wlc:DesignDocStatus (D4). Functional catches more than one; SHACL enforces at least one." .
+
+wl:sanctionedBy a owl:ObjectProperty ; wl:layer wlc:intent ;
+    rdfs:domain wl:AcceptedDeviation ; rdfs:range wl:DesignDoc ;
+    rdfs:comment "The DesignDoc/ADR that authorises this accepted deviation." .
+
+wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ; wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range skos:Concept ;
+    rdfs:comment "Kind of task; see wlc:TaskKind. Backbone-projected." .
+
+wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ; wl:layer wlc:execution ;
+    rdfs:subPropertyOf dct:requires ;
+    rdfs:domain wl:Task ; rdfs:range wl:Task ;
+    rdfs:comment "This task needs that task done first (backbone dependency mirror). Transitive: reachability is a SPARQL property path, no reasoner needed." .
+
+wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ; wl:layer wlc:execution ;
+    owl:inverseOf wl:dependsOn ;
+    rdfs:domain wl:Task ; rdfs:range wl:Task ;
+    rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
+
+wl:inWorkstream a owl:ObjectProperty ; wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range wl:Workstream ;
+    rdfs:comment "Membership of a Task in a Workstream. Split from dct:isPartOf so the Task-to-Task decomposition stays type-homogeneous and cleanly transitive." .
+
+wl:reviewer a owl:ObjectProperty ; wl:layer wlc:intent ;
+    rdfs:domain wl:Component ; rdfs:range foaf:Agent ;
+    rdfs:comment "Agent (GitHub user/team IRI) to notify about PRs affecting this component." .
+
+wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ; wl:layer wlc:execution ;
+    rdfs:comment "Bidirectional mirror between a backbone Task and a GitHub Issue. The PR-to-Task join piggybacks GitHub's native Closes #N." .
+
+# ---- Projected literal mirrors (backbone-owned enums; the graph never forks them, Open Q3) ----
+wl:taskState a owl:DatatypeProperty, owl:FunctionalProperty ; wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range xsd:string ;
+    rdfs:comment "Projected literal mirror of the backbone task state machine (spec 004). Deliberately not wl:status." .
+
+wl:priority a owl:DatatypeProperty, owl:FunctionalProperty ; wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range xsd:string ;
+    rdfs:comment "Projected mirror of the backbone priority enum (spec 005)." .
+
+wl:concern a owl:DatatypeProperty ; wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range xsd:string ;
+    rdfs:comment "Projected mirror of the backbone concern enum (spec 005); absent when the task has none." .
+```
+
+- [ ] **Step 4: Write `rdf/wl/concept.ttl`**
+
+```turtle
+@prefix wlc:  <https://worklode.io/ns/wl/concept/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# DesignDoc lifecycle (D4). Order draft -> proposed -> accepted -> superseded;
+# spec 014 par.5 removed the implemented terminal (implementation is a derived
+# coverage query, never a status).
+wlc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
+wlc:draft a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "draft" ;
+    skos:definition "Being written; not yet proposed for review." .
+wlc:proposed a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "proposed" ;
+    skos:definition "Submitted for crit review; awaiting resolution." .
+wlc:accepted a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
+    skos:definition "Crit-resolved and approved as intent." .
+wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
+    skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
+
+# Lifecycle order as data (queryable), not prose:
+wlc:DesignDocStatusOrder a skos:OrderedCollection ;
+    skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded ) .
+
+# Task kind (spec 014 par.8: exactly these six, matching tasks.kind).
+wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
+wlc:feature a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "feature" ;
+    skos:definition "New capability or behaviour." .
+wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
+    skos:definition "Fix incorrect existing behaviour." .
+wlc:chore a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "chore" ;
+    skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
+wlc:spec a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spec" ;
+    skos:definition "Write or revise a design document." .
+wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review" ;
+    skos:definition "Review/evaluate someone else's work." .
+wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
+    skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
+
+# Model layer.
+wlc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
+wlc:intent a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "intent" ;
+    skos:definition "Declared design layer - what should be true." .
+wlc:execution a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "execution" ;
+    skos:definition "Observed execution/VCS layer - tasks, issues, PRs." .
+wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runtime" ;
+    skos:definition "Observed runtime/deploy layer - artifacts, deployments, environments." .
+```
+
+- [ ] **Step 5: Write `rdf/wl/wl-shapes.ttl`**
+
+```turtle
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix wl:   <https://worklode.io/ns/wl/ontology#> .
+@prefix wlsh: <https://worklode.io/ns/wl/shapes#> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Closed-world constraints (required fields, cardinality). OWL cannot flag a
+# missing field or a duplicate; these shapes catch 0 and the Functional
+# axioms catch >1. Enforced by the rdf-registry SHACL gate (ADR-0003).
+
+wlsh:TaskShape a sh:NodeShape ; sh:targetClass wl:Task ;
+    sh:property [ sh:path wl:taskKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] ;
+    sh:property [ sh:path wl:taskState ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path wl:inWorkstream ; sh:minCount 1 ] .
+
+wlsh:ComponentShape a sh:NodeShape ; sh:targetClass wl:Component ;
+    sh:property [ sh:path wl:reviewer ; sh:minCount 1 ] .
+
+wlsh:DeliverableShape a sh:NodeShape ; sh:targetClass wl:Deliverable ;
+    sh:property [ sh:path dct:description ; sh:minCount 1 ] ;
+    sh:property [ sh:path dct:relation ; sh:minCount 1 ] ;
+    sh:property [ sh:path wl:deliveredBy ; sh:minCount 1 ] .
+
+# wl:Effect inherits DeliverableShape via its class. The Effect-specific
+# constraints (a Deployment target, zero Artifact targets) need the
+# wl:Deployment/wl:Artifact classes and land with spec 015's plan.
+
+wlsh:AcceptedDeviationShape a sh:NodeShape ; sh:targetClass wl:AcceptedDeviation ;
+    sh:property [ sh:path rdf:subject ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rdf:predicate ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rdf:object ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path wl:sanctionedBy ; sh:minCount 1 ] .
+
+wlsh:DesignDocShape a sh:NodeShape ; sh:targetClass wl:DesignDoc ;
+    sh:property [ sh:path wl:status ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ] .
+```
+
+- [ ] **Step 6: Run the test to verify it passes**
+
+Run: `go test ./rdf/...`
+Expected: PASS (3 tests)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add rdf
+git commit -m "Author the wl vocabulary sources for the rdf-registry PR"
+```
+
+---
+
+## Task 3: Triples and SPARQL Update rendering
+
+**Files:**
+- Create: `internal/graph/triple.go`
+- Test: `internal/graph/triple_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package graph
+
+import "testing"
+
+func TestTermRendering(t *testing.T) {
+	cases := []struct {
+		name string
+		term Term
+		want string
+	}{
+		{"iri", IRIRef("https://worklode.io/ns/wl/id/task/WL-1"),
+			"<https://worklode.io/ns/wl/id/task/WL-1>"},
+		{"plain literal", Text("fix login"), `"fix login"`},
+		{"quote escaped", Text(`say "hi"`), `"say \"hi\""`},
+		{"backslash escaped", Text(`a\b`), `"a\\b"`},
+		{"newline escaped", Text("a\nb"), `"a\nb"`},
+		{"typed literal", Typed("2026-07-30T00:00:00Z", "http://www.w3.org/2001/XMLSchema#dateTime"),
+			`"2026-07-30T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.term.String(); got != tc.want {
+				t.Fatalf("got %s; want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReplaceSubject(t *testing.T) {
+	triples := []Triple{
+		{S: "urn:s", P: "urn:p", O: IRIRef("urn:o")},
+		{S: "urn:s", P: "urn:q", O: Text("v")},
+	}
+	got := ReplaceSubject("urn:g", "urn:s", triples)
+	want := "DELETE WHERE { GRAPH <urn:g> { <urn:s> ?p ?o } } ;\n" +
+		"INSERT DATA { GRAPH <urn:g> {\n" +
+		"  <urn:s> <urn:p> <urn:o> .\n" +
+		"  <urn:s> <urn:q> \"v\" .\n" +
+		"} }"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestReplaceSubjectEmptyDeletesOnly(t *testing.T) {
+	got := ReplaceSubject("urn:g", "urn:s", nil)
+	want := "DELETE WHERE { GRAPH <urn:g> { <urn:s> ?p ?o } }"
+	if got != want {
+		t.Fatalf("got %q; want %q", got, want)
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/graph/...`
+Expected: FAIL — `no required module provides package .../internal/graph`
+
+- [ ] **Step 3: Write the implementation**
+
+```go
+// Package graph maps backbone rows to RDF triples and talks to the
+// knowledge-graph SPARQL endpoint (spec 006 §Projection; spec 009 items
+// 2 and 4). It renders per-subject-replace updates: DELETE all quads of a
+// subject in one named graph, then INSERT the fresh projection - idempotent
+// per (subject, graph).
+package graph
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Term is a triple object: an IRI reference or a literal.
+type Term struct {
+	text  string
+	dtype string
+	isIRI bool
+}
+
+// IRIRef returns an IRI object term.
+func IRIRef(iri string) Term { return Term{text: iri, isIRI: true} }
+
+// Text returns a plain string literal term.
+func Text(s string) Term { return Term{text: s} }
+
+// Typed returns a literal term with a datatype IRI.
+func Typed(s, datatypeIRI string) Term { return Term{text: s, dtype: datatypeIRI} }
+
+// literalEscaper covers the SPARQL string escape set that can occur in task
+// titles and bodies.
+var literalEscaper = strings.NewReplacer(
+	`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`,
+)
+
+func (t Term) String() string {
+	if t.isIRI {
+		return "<" + t.text + ">"
+	}
+	lit := `"` + literalEscaper.Replace(t.text) + `"`
+	if t.dtype != "" {
+		lit += "^^<" + t.dtype + ">"
+	}
+	return lit
+}
+
+// Triple is one statement. S and P are IRIs (never literals).
+type Triple struct {
+	S string
+	P string
+	O Term
+}
+
+// InsertData renders an INSERT DATA update putting the triples into the
+// named graph.
+func InsertData(graphIRI string, triples []Triple) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "INSERT DATA { GRAPH <%s> {\n", graphIRI)
+	for _, tr := range triples {
+		fmt.Fprintf(&b, "  <%s> <%s> %s .\n", tr.S, tr.P, tr.O)
+	}
+	b.WriteString("} }")
+	return b.String()
+}
+
+// ReplaceSubject renders one SPARQL 1.1 update that atomically replaces
+// every triple with the given subject in the given named graph by the given
+// triples (spec 006 §Projection: per-subject replace). With no triples it
+// renders only the delete.
+func ReplaceSubject(graphIRI, subjectIRI string, triples []Triple) string {
+	del := fmt.Sprintf("DELETE WHERE { GRAPH <%s> { <%s> ?p ?o } }", graphIRI, subjectIRI)
+	if len(triples) == 0 {
+		return del
+	}
+	return del + " ;\n" + InsertData(graphIRI, triples)
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `go test ./internal/graph/...`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/graph
+git commit -m "Render triples and per-subject-replace SPARQL updates"
+```
+
+---
+
+## Task 4: Task row → triples
+
+**Files:**
+- Create: `internal/graph/task.go`
+- Test: `internal/graph/task_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package graph
+
+import (
+	"testing"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+func TestTaskTriples(t *testing.T) {
+	created := time.Date(2026, 7, 30, 10, 0, 0, 0, time.UTC)
+	task := store.Task{
+		ID: "WL-7", ProjectID: "worklode", Title: "wire the projector",
+		Priority: "high", Kind: "feature", State: "in_progress",
+		Concern: "completeness", CreatedBy: "stig",
+		CreatedAt: created, UpdatedAt: created.Add(time.Hour),
+	}
+	out := []store.Edge{
+		{FromTask: "WL-7", ToTask: "WL-2", Type: "child_of"},
+		{FromTask: "WL-7", ToTask: "WL-9", Type: "blocks"},
+	}
+	in := []store.Edge{
+		{FromTask: "WL-3", ToTask: "WL-7", Type: "blocks"},
+		{FromTask: "WL-8", ToTask: "WL-7", Type: "child_of"}, // a child; no triple here
+	}
+
+	got := map[string]bool{}
+	for _, tr := range TaskTriples(task, out, in) {
+		if tr.S != iri.Task("WL-7") {
+			t.Errorf("subject %q; TaskTriples must be subject-complete for the task", tr.S)
+		}
+		got[tr.P+" "+tr.O.String()] = true
+	}
+
+	want := []string{
+		RDFType + " <" + iri.Term("Task") + ">",
+		DCTTitle + ` "wire the projector"`,
+		iri.Term("taskState") + ` "in_progress"`,
+		iri.Term("taskKind") + " <" + iri.Concept("feature") + ">",
+		iri.Term("priority") + ` "high"`,
+		iri.Term("concern") + ` "completeness"`,
+		iri.Term("inWorkstream") + " <" + iri.Workstream("worklode") + ">",
+		ProvWasAttributedTo + " <" + iri.Agent("stig") + ">",
+		DCTCreated + ` "2026-07-30T10:00:00Z"^^<` + XSDDateTime + ">",
+		DCTModified + ` "2026-07-30T11:00:00Z"^^<` + XSDDateTime + ">",
+		DCTIsPartOf + " <" + iri.Task("WL-2") + ">",
+		iri.Term("blocks") + " <" + iri.Task("WL-9") + ">",
+		iri.Term("dependsOn") + " <" + iri.Task("WL-3") + ">",
+	}
+	for _, w := range want {
+		if !got[w] {
+			t.Errorf("missing triple %s", w)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("got %d distinct triples; want %d", len(got), len(want))
+	}
+}
+
+func TestTaskTriplesOmitsEmptyOptionals(t *testing.T) {
+	task := store.Task{
+		ID: "WL-1", ProjectID: "p", Title: "t", Priority: "low",
+		Kind: "chore", State: "ready",
+	}
+	for _, tr := range TaskTriples(task, nil, nil) {
+		if tr.P == iri.Term("concern") || tr.P == ProvWasAttributedTo {
+			t.Errorf("unexpected optional triple %s %s", tr.P, tr.O)
+		}
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/graph/ -run TestTaskTriples`
+Expected: FAIL — `undefined: TaskTriples` (and the vocabulary constants)
+
+- [ ] **Step 3: Write the implementation**
+
+```go
+package graph
+
+import (
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// Reused vocabulary IRIs (spec 006 reuse-vs-mint table).
+const (
+	RDFType             = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+	DCTTitle            = "http://purl.org/dc/terms/title"
+	DCTCreated          = "http://purl.org/dc/terms/created"
+	DCTModified         = "http://purl.org/dc/terms/modified"
+	DCTIsPartOf         = "http://purl.org/dc/terms/isPartOf"
+	ProvWasAttributedTo = "http://www.w3.org/ns/prov#wasAttributedTo"
+	XSDDateTime         = "http://www.w3.org/2001/XMLSchema#dateTime"
+)
+
+// TaskTriples maps one backbone task row plus its edges to the task's
+// triples (spec 006 §Projection table). It is subject-complete: every
+// triple whose subject is the task IRI and no others, so ReplaceSubject
+// over the result is a faithful re-projection.
+//
+// Directions: "A blocks B" is stored as from=A, to=B (store.Edge), so an
+// out-edge emits wl:blocks and an in-edge emits wl:dependsOn. "A child_of
+// B" emits dct:isPartOf on the child only; the parent's subtree needs no
+// triple with the parent as subject.
+func TaskTriples(t store.Task, out, in []store.Edge) []Triple {
+	s := iri.Task(t.ID)
+	ts := []Triple{
+		{S: s, P: RDFType, O: IRIRef(iri.Term("Task"))},
+		{S: s, P: DCTTitle, O: Text(t.Title)},
+		{S: s, P: iri.Term("taskState"), O: Text(t.State)},
+		{S: s, P: iri.Term("taskKind"), O: IRIRef(iri.Concept(t.Kind))},
+		{S: s, P: iri.Term("priority"), O: Text(t.Priority)},
+		{S: s, P: iri.Term("inWorkstream"), O: IRIRef(iri.Workstream(t.ProjectID))},
+		{S: s, P: DCTCreated, O: Typed(t.CreatedAt.UTC().Format(time.RFC3339), XSDDateTime)},
+		{S: s, P: DCTModified, O: Typed(t.UpdatedAt.UTC().Format(time.RFC3339), XSDDateTime)},
+	}
+	if t.Concern != "" {
+		ts = append(ts, Triple{S: s, P: iri.Term("concern"), O: Text(t.Concern)})
+	}
+	if t.CreatedBy != "" {
+		ts = append(ts, Triple{S: s, P: ProvWasAttributedTo, O: IRIRef(iri.Agent(t.CreatedBy))})
+	}
+	for _, e := range out {
+		switch e.Type {
+		case "child_of":
+			ts = append(ts, Triple{S: s, P: DCTIsPartOf, O: IRIRef(iri.Task(e.ToTask))})
+		case "blocks":
+			ts = append(ts, Triple{S: s, P: iri.Term("blocks"), O: IRIRef(iri.Task(e.ToTask))})
+		}
+	}
+	for _, e := range in {
+		if e.Type == "blocks" {
+			ts = append(ts, Triple{S: s, P: iri.Term("dependsOn"), O: IRIRef(iri.Task(e.FromTask))})
+		}
+	}
+	return ts
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `go test ./internal/graph/...`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/graph
+git commit -m "Map a backbone task row to its graph triples"
+```
+
+---
+
+## Task 5: The SPARQL client
+
+**Files:**
+- Create: `internal/graph/client.go`
+- Test: `internal/graph/client_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package graph_test
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"golang.org/x/oauth2"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+)
+
+// record captures one request.
+type record struct {
+	path, query, contentType, accept, body string
+}
+
+// recordingServer answers every request with status and respBody.
+func recordingServer(t *testing.T, status int, respBody string) (*httptest.Server, *record) {
+	t.Helper()
+	rec := &record{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		*rec = record{
+			path: r.URL.Path, query: r.URL.RawQuery,
+			contentType: r.Header.Get("Content-Type"),
+			accept:      r.Header.Get("Accept"),
+			body:        string(body),
+		}
+		w.WriteHeader(status)
+		io.WriteString(w, respBody)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, rec
+}
+
+func TestUpdate(t *testing.T) {
+	srv, rec := recordingServer(t, http.StatusNoContent, "")
+	c := graph.NewClient(srv.URL, nil)
+	if err := c.Update(context.Background(), "INSERT DATA {}"); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if rec.path != "/update" || rec.contentType != "application/sparql-update" ||
+		rec.body != "INSERT DATA {}" {
+		t.Fatalf("request = %+v; want POST /update with the raw update", rec)
+	}
+}
+
+func TestSelect(t *testing.T) {
+	srv, rec := recordingServer(t, http.StatusOK, `{
+		"head": {"vars": ["s"]},
+		"results": {"bindings": [
+			{"s": {"type": "uri", "value": "urn:a"}},
+			{"s": {"type": "literal", "value": "ready"}}
+		]}
+	}`)
+	c := graph.NewClient(srv.URL, nil)
+	rows, err := c.Select(context.Background(), "SELECT ?s WHERE {}")
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if rec.path != "/query" || rec.contentType != "application/sparql-query" ||
+		rec.accept != "application/sparql-results+json" {
+		t.Fatalf("request = %+v; want POST /query asking for JSON results", rec)
+	}
+	if len(rows) != 2 || rows[0]["s"] != "urn:a" || rows[1]["s"] != "ready" {
+		t.Fatalf("rows = %v; want urn:a and ready", rows)
+	}
+}
+
+func TestAsk(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusOK, `{"head": {}, "boolean": true}`)
+	c := graph.NewClient(srv.URL, nil)
+	ok, err := c.Ask(context.Background(), "ASK {}")
+	if err != nil || !ok {
+		t.Fatalf("Ask = %v, %v; want true, nil", ok, err)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	srv, rec := recordingServer(t, http.StatusNoContent, "")
+	c := graph.NewClient(srv.URL, nil)
+	if err := c.Load(context.Background(), "urn:g", []byte("@prefix : <urn:x> .")); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if rec.path != "/store" || rec.query != "graph=urn%3Ag" || rec.contentType != "text/turtle" {
+		t.Fatalf("request = %+v; want POST /store?graph=urn%%3Ag as text/turtle", rec)
+	}
+}
+
+func TestErrorStatusSurfacesBody(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusBadRequest, "parse error at line 3")
+	c := graph.NewClient(srv.URL, nil)
+	err := c.Update(context.Background(), "NOT SPARQL")
+	if err == nil {
+		t.Fatal("Update on a 400 returned nil error")
+	}
+	if got := err.Error(); !strings.Contains(got, "parse error at line 3") {
+		t.Fatalf("error %q does not carry the endpoint's body", got)
+	}
+}
+
+func TestBearerToken(t *testing.T) {
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+	c := graph.NewClient(srv.URL, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "tok"}))
+	if err := c.Update(context.Background(), "INSERT DATA {}"); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if auth != "Bearer tok" {
+		t.Fatalf("Authorization = %q; want Bearer tok", auth)
+	}
+}
+```
+
+Add `"strings"` to the test file's import block.
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/graph/ -run 'TestUpdate|TestSelect|TestAsk|TestLoad|TestError|TestBearer'`
+Expected: FAIL — `undefined: graph.NewClient`
+
+- [ ] **Step 3: Write the implementation**
+
+```go
+package graph
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"golang.org/x/oauth2"
+)
+
+// Client speaks the SPARQL 1.1 Protocol (query + update) plus the Graph
+// Store Protocol POST used to load Turtle documents. It targets Oxigraph in
+// tests and the data-platform graph-server in prod (spec 009 items 2 and
+// 4); both expose /query, /update and /store relative to the base URL.
+type Client struct {
+	base string
+	http *http.Client
+}
+
+// NewClient returns a client for the SPARQL endpoint at base. A nil
+// TokenSource means unauthenticated (dev Oxigraph); prod passes a Keycloak
+// client-credentials source (dataplatform-svc, spec 009 item 4).
+func NewClient(base string, src oauth2.TokenSource) *Client {
+	hc := &http.Client{}
+	if src != nil {
+		hc = oauth2.NewClient(context.Background(), src)
+	}
+	return &Client{base: strings.TrimRight(base, "/"), http: hc}
+}
+
+func (c *Client) post(ctx context.Context, path, contentType, accept string, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("POST %s: %s: %s", path, resp.Status, bytes.TrimSpace(data))
+	}
+	return data, nil
+}
+
+// Update executes a SPARQL 1.1 update (possibly multiple ;-separated
+// operations, which the endpoint applies as one transaction).
+func (c *Client) Update(ctx context.Context, update string) error {
+	_, err := c.post(ctx, "/update", "application/sparql-update", "", []byte(update))
+	return err
+}
+
+// sparqlResults is the application/sparql-results+json envelope.
+type sparqlResults struct {
+	Boolean *bool `json:"boolean"`
+	Results struct {
+		Bindings []map[string]struct {
+			Value string `json:"value"`
+		} `json:"bindings"`
+	} `json:"results"`
+}
+
+func (c *Client) query(ctx context.Context, q string) (*sparqlResults, error) {
+	data, err := c.post(ctx, "/query", "application/sparql-query",
+		"application/sparql-results+json", []byte(q))
+	if err != nil {
+		return nil, err
+	}
+	var res sparqlResults
+	if err := json.Unmarshal(data, &res); err != nil {
+		return nil, fmt.Errorf("decode sparql results: %w", err)
+	}
+	return &res, nil
+}
+
+// Select runs a SELECT query, flattening each solution to variable → value.
+func (c *Client) Select(ctx context.Context, q string) ([]map[string]string, error) {
+	res, err := c.query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]string, 0, len(res.Results.Bindings))
+	for _, b := range res.Results.Bindings {
+		row := make(map[string]string, len(b))
+		for k, v := range b {
+			row[k] = v.Value
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// Ask runs an ASK query.
+func (c *Client) Ask(ctx context.Context, q string) (bool, error) {
+	res, err := c.query(ctx, q)
+	if err != nil {
+		return false, err
+	}
+	if res.Boolean == nil {
+		return false, fmt.Errorf("ASK response carries no boolean")
+	}
+	return *res.Boolean, nil
+}
+
+// Load POSTs a Turtle document into a named graph via the Graph Store
+// Protocol. Tests use it as the parse gate for the rdf/wl sources.
+func (c *Client) Load(ctx context.Context, graphIRI string, turtle []byte) error {
+	_, err := c.post(ctx, "/store?graph="+url.QueryEscape(graphIRI), "text/turtle", "", turtle)
+	return err
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `go test ./internal/graph/...`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/graph
+git commit -m "Add the SPARQL protocol client"
+```
+
+---
+
+## Task 6: Oxigraph harness and graph-layer integration tests
+
+**Files:**
+- Modify: `docker-compose.yml` (new service)
+- Modify: `.github/workflows/_test.yml:48-53`
+- Create: `internal/graph/graphtest/graphtest.go`
+- Test: `internal/graph/oxigraph_test.go`
+
+- [ ] **Step 1: Add Oxigraph to docker-compose**
+
+Append to the `services:` map in `docker-compose.yml`:
+
+```yaml
+  # SPARQL endpoint for knowledge-graph integration tests (stand-in for the
+  # data-platform graph-server; both speak SPARQL 1.1 protocol + GSP).
+  oxigraph:
+    image: ghcr.io/oxigraph/oxigraph:latest
+    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    ports:
+      - "127.0.0.1:7878:7878"
+    volumes:
+      - ./data/oxigraph:/data
+    restart: unless-stopped
+```
+
+- [ ] **Step 2: Start Oxigraph in CI**
+
+In `.github/workflows/_test.yml`, insert a step before `go build` (after the
+cache-restore step) and add the env var to the `go test` step:
+
+```yaml
+      - name: Start Oxigraph
+        run: |
+          docker run -d --name oxigraph -p 7878:7878 \
+            ghcr.io/oxigraph/oxigraph:latest \
+            serve --location /data --bind 0.0.0.0:7878
+```
+
+and in the existing `go test` step's `env:` block:
+
+```yaml
+          TEST_SPARQL_URL: http://localhost:7878
+```
+
+(A `docker run` step rather than a `services:` entry because service
+containers cannot override the image command, and the Oxigraph image needs
+`serve …` as its command.)
+
+- [ ] **Step 3: Write the graphtest helper**
+
+`internal/graph/graphtest/graphtest.go`:
+
+```go
+// Package graphtest connects integration tests to the SPARQL endpoint the
+// docker-compose oxigraph service exposes, mirroring store.OpenTestStore's
+// skip-unless-CI contract.
+package graphtest
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+)
+
+// Endpoint returns the SPARQL base URL tests run against. Default matches
+// the docker-compose oxigraph service. Skips the test if the endpoint is
+// unreachable and CI is not set.
+func Endpoint(t *testing.T) string {
+	t.Helper()
+	base := os.Getenv("TEST_SPARQL_URL")
+	if base == "" {
+		base = "http://localhost:7878"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := graph.NewClient(base, nil).Ask(ctx, "ASK {}"); err != nil {
+		if os.Getenv("CI") == "" {
+			t.Skipf("sparql endpoint unreachable at %s: %v", base, err)
+		}
+		t.Fatalf("sparql endpoint unreachable at %s: %v", base, err)
+	}
+	return base
+}
+
+// UniqueGraph returns a fresh named-graph IRI so tests sharing one Oxigraph
+// instance never see each other's quads.
+func UniqueGraph(t *testing.T) string {
+	t.Helper()
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		t.Fatalf("random graph name: %v", err)
+	}
+	return iri.GraphNS + "test/" + hex.EncodeToString(buf)
+}
+```
+
+- [ ] **Step 4: Write the integration tests**
+
+`internal/graph/oxigraph_test.go`:
+
+```go
+package graph_test
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// rdfWLDir resolves rdf/wl relative to this source file.
+func rdfWLDir() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "rdf", "wl")
+}
+
+// TestVocabularySourcesParse is the parse gate for the staged rdf-registry
+// sources: Oxigraph rejects the POST on any Turtle syntax error.
+func TestVocabularySourcesParse(t *testing.T) {
+	c := graph.NewClient(graphtest.Endpoint(t), nil)
+	g := graphtest.UniqueGraph(t)
+	ctx := t.Context()
+
+	for _, name := range []string{"ontology.ttl", "concept.ttl", "wl-shapes.ttl"} {
+		data, err := os.ReadFile(filepath.Join(rdfWLDir(), name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if err := c.Load(ctx, g, data); err != nil {
+			t.Fatalf("load %s: %v", name, err)
+		}
+	}
+
+	// The layer tags make the model queryable by layer (criterion 9).
+	rows, err := c.Select(ctx, `SELECT ?c WHERE { GRAPH <`+g+`> { ?c <`+
+		iri.Term("layer")+`> <`+iri.Concept("intent")+`> } }`)
+	if err != nil {
+		t.Fatalf("layer query: %v", err)
+	}
+	found := false
+	for _, r := range rows {
+		if r["c"] == iri.Term("Component") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("wl:Component not tagged wlc:intent; layer rows = %v", rows)
+	}
+}
+
+func TestReplaceSubjectRoundTrip(t *testing.T) {
+	c := graph.NewClient(graphtest.Endpoint(t), nil)
+	g := graphtest.UniqueGraph(t)
+	ctx := t.Context()
+
+	s := iri.Task("WL-1")
+	other := iri.Task("WL-2")
+	if err := c.Update(ctx, graph.InsertData(g, []graph.Triple{
+		{S: s, P: graph.DCTTitle, O: graph.Text("old title")},
+		{S: s, P: iri.Term("taskState"), O: graph.Text("ready")},
+		{S: other, P: graph.DCTTitle, O: graph.Text("bystander")},
+	})); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := c.Update(ctx, graph.ReplaceSubject(g, s, []graph.Triple{
+		{S: s, P: graph.DCTTitle, O: graph.Text("new title")},
+	})); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	rows, err := c.Select(ctx, `SELECT ?p ?o WHERE { GRAPH <`+g+`> { <`+s+`> ?p ?o } }`)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["o"] != "new title" {
+		t.Fatalf("subject rows = %v; want only the new title", rows)
+	}
+	if ok, err := c.Ask(ctx, `ASK { GRAPH <`+g+`> { <`+other+`> ?p ?o } }`); err != nil || !ok {
+		t.Fatalf("bystander subject disturbed (ok=%v, err=%v)", ok, err)
+	}
+}
+
+// TestTaskInTwoWorkstreamGraphs proves acceptance criterion 8 at the graph
+// layer: the same task's quads in two Workstream graphs, and a per-subject
+// re-projection in one graph leaving the other (and other tasks) untouched.
+func TestTaskInTwoWorkstreamGraphs(t *testing.T) {
+	c := graph.NewClient(graphtest.Endpoint(t), nil)
+	ctx := t.Context()
+	g1 := graphtest.UniqueGraph(t)
+	g2 := graphtest.UniqueGraph(t)
+
+	now := time.Now().UTC()
+	task := store.Task{ID: "WL-9", ProjectID: "alpha", Title: "two homes",
+		Priority: "high", Kind: "chore", State: "ready", CreatedAt: now, UpdatedAt: now}
+	sibling := store.Task{ID: "WL-10", ProjectID: "alpha", Title: "sibling",
+		Priority: "low", Kind: "chore", State: "ready", CreatedAt: now, UpdatedAt: now}
+
+	for _, g := range []string{g1, g2} {
+		if err := c.Update(ctx, graph.ReplaceSubject(g, iri.Task(task.ID),
+			graph.TaskTriples(task, nil, nil))); err != nil {
+			t.Fatalf("project into %s: %v", g, err)
+		}
+	}
+	if err := c.Update(ctx, graph.ReplaceSubject(g1, iri.Task(sibling.ID),
+		graph.TaskTriples(sibling, nil, nil))); err != nil {
+		t.Fatalf("project sibling: %v", err)
+	}
+
+	// Re-project WL-9 in g1 only, with a new state.
+	task.State = "in_progress"
+	if err := c.Update(ctx, graph.ReplaceSubject(g1, iri.Task(task.ID),
+		graph.TaskTriples(task, nil, nil))); err != nil {
+		t.Fatalf("re-project: %v", err)
+	}
+
+	stateIn := func(g string) string {
+		t.Helper()
+		rows, err := c.Select(ctx, `SELECT ?s WHERE { GRAPH <`+g+`> { <`+
+			iri.Task("WL-9")+`> <`+iri.Term("taskState")+`> ?s } }`)
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("state in %s: rows=%v err=%v; want exactly one", g, rows, err)
+		}
+		return rows[0]["s"]
+	}
+	if got := stateIn(g1); got != "in_progress" {
+		t.Fatalf("g1 state = %q; want in_progress", got)
+	}
+	if got := stateIn(g2); got != "ready" {
+		t.Fatalf("g2 state = %q; want the untouched ready", got)
+	}
+	if ok, err := c.Ask(ctx, `ASK { GRAPH <`+g1+`> { <`+iri.Task("WL-10")+`> ?p ?o } }`); err != nil || !ok {
+		t.Fatalf("sibling task disturbed by re-projection (ok=%v, err=%v)", ok, err)
+	}
+}
+```
+
+- [ ] **Step 5: Run the tests**
+
+Run: `docker compose up -d oxigraph && go test ./internal/graph/...`
+Expected: PASS (integration tests skip instead if Oxigraph is not running)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docker-compose.yml .github/workflows/_test.yml internal/graph
+git commit -m "Prove the graph layer against Oxigraph"
+```
+
+---
+
+## Task 7: Complete the task outbox
+
+Task state transitions already write `state_log` rows
+(`internal/store/tasks.go:154-179`); creates and edge changes do not, so a
+`state_log`-driven projector would miss them. Close the gap at the store
+layer so the invariant is "every task mutation writes its own outbox row".
+
+**Files:**
+- Modify: `internal/store/tasks.go` (`CreateTask`, `AddEdge`, `RemoveEdge` gain `eventID`)
+- Modify: `internal/api/tasks.go:112-129` (create), `:385-388` (add edge), `:424-427` (remove edge)
+- Test: `internal/store/outbox_test.go` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package store
+
+import (
+	"database/sql"
+	"testing"
+	"time"
+)
+
+// outboxStore returns a migrated store with one project.
+func outboxStore(t *testing.T) *Store {
+	t.Helper()
+	s := OpenTestStore(t)
+	if err := s.CreateProject(t.Context(), "worklode", "Worklode", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	return s
+}
+
+// makeTask creates a ready task through the event log, as the API does.
+func makeTask(t *testing.T, s *Store, extID, title string) *Task {
+	t.Helper()
+	var created *Task
+	_, _, err := s.RecordEvent(t.Context(), "cli", extID, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := CreateTask(tx, time.Now().UTC(), TaskInput{
+				ProjectID: "worklode", Title: title, Priority: "medium", Kind: "feature",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			created = task
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create task %q: %v", title, err)
+	}
+	return created
+}
+
+func TestCreateTaskWritesStateLog(t *testing.T) {
+	s := outboxStore(t)
+	task := makeTask(t, s, "e1", "outbox on create")
+
+	entries, err := s.StateLogForEntity(t.Context(), "task", task.ID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("state_log entries after create = %d; want 1", len(entries))
+	}
+}
+
+func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
+	s := outboxStore(t)
+	a := makeTask(t, s, "e2", "blocker")
+	b := makeTask(t, s, "e3", "blocked")
+
+	_, _, err := s.RecordEvent(t.Context(), "cli", "e4", "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, time.Now().UTC(), a.ID, b.ID, "blocks", eventID)
+		})
+	if err != nil {
+		t.Fatalf("add edge: %v", err)
+	}
+	for _, id := range []string{a.ID, b.ID} {
+		entries, err := s.StateLogForEntity(t.Context(), "task", id)
+		if err != nil {
+			t.Fatalf("state log %s: %v", id, err)
+		}
+		if len(entries) != 2 { // create + edge add
+			t.Fatalf("%s entries = %d; want 2 (create + edge)", id, len(entries))
+		}
+	}
+
+	_, _, err = s.RecordEvent(t.Context(), "cli", "e5", "task.edge_removed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return RemoveEdge(tx, a.ID, b.ID, "blocks", eventID)
+		})
+	if err != nil {
+		t.Fatalf("remove edge: %v", err)
+	}
+	entries, err := s.StateLogForEntity(t.Context(), "task", b.ID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries after removal = %d; want 3", len(entries))
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/store/ -run 'TestCreateTaskWritesStateLog|TestEdgeChanges'`
+Expected: FAIL — compile error: `CreateTask`/`AddEdge`/`RemoveEdge` do not take an `eventID`
+
+- [ ] **Step 3: Extend the store functions**
+
+In `internal/store/tasks.go`:
+
+1. Change the `CreateTask` signature to
+   `func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*Task, error)`
+   and, immediately after the successful `INSERT INTO tasks`, add:
+
+```go
+	if err := LogChange(tx, "task", id, eventID,
+		map[string]string{"field": "state", "old": "", "new": state}); err != nil {
+		return nil, err
+	}
+```
+
+2. Change `AddEdge` to
+   `func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error`
+   and, after the successful edge insert (and cycle check), add:
+
+```go
+	change := map[string]string{"field": "edge", "op": "add", "type": typ,
+		"from": fromTask, "to": toTask}
+	if err := LogChange(tx, "task", fromTask, eventID, change); err != nil {
+		return err
+	}
+	if err := LogChange(tx, "task", toTask, eventID, change); err != nil {
+		return err
+	}
+```
+
+3. Change `RemoveEdge` to
+   `func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string, eventID int64) error`
+   with the same two `LogChange` calls (`"op": "remove"`) after the delete.
+
+Update the doc comments of all three to mention the appended `state_log` row
+(mirror `Transition`'s comment style at `internal/store/tasks.go:149-153`).
+
+- [ ] **Step 4: Update the API call sites**
+
+In `internal/api/tasks.go`:
+- create (line ~114): `store.CreateTask(tx, s.st.Now(), store.TaskInput{…}, eventID)`
+- `addEdge` (line ~386): change the apply callback parameter `_ int64` to
+  `eventID int64` and call `store.AddEdge(tx, s.st.Now(), from, to, req.Type, eventID)`
+- `removeEdge` (line ~425): likewise,
+  `store.RemoveEdge(tx, from, to, req.Type, eventID)`
+
+- [ ] **Step 5: Fix remaining callers and run everything**
+
+Run: `go build ./... && go test ./internal/store/... ./internal/api/...`
+Expected: a handful of test files fail to compile (e.g.
+`internal/store/tasks_test.go`, `internal/store/projects_test.go`). Every
+call site already sits inside a `RecordEvent` apply callback — pass that
+callback's `eventID` through. Then: PASS. Tests that assert exact
+`state_log` contents for a task may now see one extra "created" entry;
+update their expectations, do not weaken the new invariant.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add internal/store internal/api
+git commit -m "Write a state_log row for every task mutation"
+```
+
+---
+
+## Task 8: The projection checkpoint
+
+**Files:**
+- Create: `deploy/base/migrations/0008_graph_projection.up.sql`
+- Create: `deploy/base/migrations/0008_graph_projection.down.sql`
+- Create: `internal/store/projection.go`
+- Test: `internal/store/projection_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package store
+
+import (
+	"database/sql"
+	"testing"
+	"time"
+)
+
+func TestProjectionCheckpointRoundTrip(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+
+	cp, err := s.ProjectionCheckpoint(ctx)
+	if err != nil || cp != 0 {
+		t.Fatalf("initial checkpoint = %d, %v; want 0, nil", cp, err)
+	}
+	if err := s.SetProjectionCheckpoint(ctx, 42); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if cp, err = s.ProjectionCheckpoint(ctx); err != nil || cp != 42 {
+		t.Fatalf("checkpoint = %d, %v; want 42, nil", cp, err)
+	}
+}
+
+func TestDirtyTaskIDs(t *testing.T) {
+	s := outboxStore(t) // from outbox_test.go
+	ctx := t.Context()
+	a := makeTask(t, s, "d1", "first")
+	b := makeTask(t, s, "d2", "second")
+
+	ids, through, err := s.DirtyTaskIDs(ctx, 0, 100)
+	if err != nil {
+		t.Fatalf("dirty: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != a.ID || ids[1] != b.ID {
+		t.Fatalf("ids = %v; want [%s %s] in first-touched order", ids, a.ID, b.ID)
+	}
+	if through == 0 {
+		t.Fatal("through = 0; must advance past the scanned rows")
+	}
+
+	// Nothing new after the watermark.
+	ids, again, err := s.DirtyTaskIDs(ctx, through, 100)
+	if err != nil || len(ids) != 0 || again != through {
+		t.Fatalf("after watermark: ids=%v through=%d err=%v; want none, unchanged", ids, again, err)
+	}
+
+	// A transition dirties only its task, and repeat changes dedupe.
+	for i, move := range [][2]string{{"ready", "in_progress"}, {"in_progress", "ready"}} {
+		_, _, err = s.RecordEvent(ctx, "cli", "d-move-"+move[1], "task.transition", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return Transition(tx, time.Now().UTC(), b.ID, move[0], move[1], eventID)
+			})
+		if err != nil {
+			t.Fatalf("transition %d: %v", i, err)
+		}
+	}
+	ids, _, err = s.DirtyTaskIDs(ctx, through, 100)
+	if err != nil || len(ids) != 1 || ids[0] != b.ID {
+		t.Fatalf("dirty after transitions = %v, %v; want just [%s]", ids, err, b.ID)
+	}
+
+	// The limit bounds the scan, and through only covers what was read.
+	ids, part, err := s.DirtyTaskIDs(ctx, 0, 1)
+	if err != nil || len(ids) != 1 || ids[0] != a.ID {
+		t.Fatalf("limited scan = %v, %v; want just [%s]", ids, err, a.ID)
+	}
+	if part >= through {
+		t.Fatalf("limited through = %d; want < %d (only one row covered)", part, through)
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/store/ -run 'TestProjectionCheckpoint|TestDirtyTaskIDs'`
+Expected: FAIL — `undefined: (*Store).ProjectionCheckpoint`
+
+- [ ] **Step 3: Write the migration**
+
+`deploy/base/migrations/0008_graph_projection.up.sql`:
+
+```sql
+-- Watermark for the backbone→knowledge-graph projector (spec 006
+-- §Projection). One row; last_state_log_id is the state_log id through
+-- which tasks have been projected. Numbered 0008 because 0006/0007 are
+-- claimed by in-flight branches (task hierarchy, org-wide skills);
+-- golang-migrate accepts gaps.
+CREATE TABLE graph_projection (
+    id                integer PRIMARY KEY CHECK (id = 1),
+    last_state_log_id bigint  NOT NULL DEFAULT 0
+);
+INSERT INTO graph_projection (id, last_state_log_id) VALUES (1, 0);
+```
+
+`deploy/base/migrations/0008_graph_projection.down.sql`:
+
+```sql
+DROP TABLE graph_projection;
+```
+
+- [ ] **Step 4: Write the store methods**
+
+`internal/store/projection.go`:
+
+```go
+package store
+
+import (
+	"context"
+	"fmt"
+)
+
+// ProjectionCheckpoint returns the state_log id up to which tasks have been
+// projected into the knowledge graph (spec 006 §Projection).
+func (s *Store) ProjectionCheckpoint(ctx context.Context) (int64, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT last_state_log_id FROM graph_projection WHERE id = 1`).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("projection checkpoint: %w", err)
+	}
+	return id, nil
+}
+
+// SetProjectionCheckpoint advances the projection watermark.
+func (s *Store) SetProjectionCheckpoint(ctx context.Context, id int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE graph_projection SET last_state_log_id = $1 WHERE id = 1`, id); err != nil {
+		return fmt.Errorf("set projection checkpoint: %w", err)
+	}
+	return nil
+}
+
+// DirtyTaskIDs returns the distinct task ids with state_log activity after
+// the given watermark, in first-touched order, and the last state_log id
+// the scan covered (== after when there was nothing). limit bounds the
+// number of log rows read, so one projection batch is bounded even after a
+// long outage.
+//
+// state_log ids are assigned at insert time, so a slow transaction can in
+// principle commit a lower id after a higher one was already projected.
+// With a single API server and short ingest transactions the window is
+// negligible for v1; lode reconcile (spec 013) is the backstop.
+func (s *Store) DirtyTaskIDs(ctx context.Context, after int64, limit int) (ids []string, through int64, err error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, entity_id FROM state_log
+		 WHERE entity_kind = 'task' AND id > $1 ORDER BY id LIMIT $2`,
+		after, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("dirty task ids: %w", err)
+	}
+	defer rows.Close()
+
+	through = after
+	seen := map[string]bool{}
+	for rows.Next() {
+		var logID int64
+		var taskID string
+		if err := rows.Scan(&logID, &taskID); err != nil {
+			return nil, 0, fmt.Errorf("scan state log: %w", err)
+		}
+		through = logID
+		if !seen[taskID] {
+			seen[taskID] = true
+			ids = append(ids, taskID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("dirty task ids: %w", err)
+	}
+	return ids, through, nil
+}
+```
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `go test ./internal/store/...`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add deploy/base/migrations/0008_graph_projection.up.sql \
+        deploy/base/migrations/0008_graph_projection.down.sql \
+        internal/store/projection.go internal/store/projection_test.go
+git commit -m "Track the graph-projection watermark over state_log"
+```
+
+---
+
+## Task 9: The projector
+
+**Files:**
+- Create: `internal/projector/projector.go`
+- Test: `internal/projector/projector_test.go`
+
+- [ ] **Step 1: Write the failing test**
+
+```go
+package projector_test
+
+import (
+	"database/sql"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/projector"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// fakeSPARQL records /update bodies and can be told to fail.
+type fakeSPARQL struct {
+	mu      sync.Mutex
+	fail    bool
+	updates []string
+}
+
+func (f *fakeSPARQL) handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/update" {
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.fail {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		f.updates = append(f.updates, string(body))
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+func (f *fakeSPARQL) all() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return strings.Join(f.updates, "\n---\n")
+}
+
+func newProjector(t *testing.T) (*store.Store, *projector.Projector, *fakeSPARQL) {
+	t.Helper()
+	s := store.OpenTestStore(t)
+	if err := s.CreateProject(t.Context(), "worklode", "Worklode", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	f := &fakeSPARQL{}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	return s, projector.New(s, graph.NewClient(srv.URL, nil), 100), f
+}
+
+// createTask creates a ready task through the outbox, as the API does.
+func createTask(t *testing.T, s *store.Store, extID, title string) *store.Task {
+	t.Helper()
+	var created *store.Task
+	_, _, err := s.RecordEvent(t.Context(), "cli", extID, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.CreateTask(tx, time.Now().UTC(), store.TaskInput{
+				ProjectID: "worklode", Title: title, Priority: "medium", Kind: "feature",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			created = task
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create task %q: %v", title, err)
+	}
+	return created
+}
+
+func TestRunOnceProjectsCreatedTask(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	task := createTask(t, s, "p1", "wire the projector")
+
+	n, err := p.RunOnce(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("RunOnce = %d, %v; want 1, nil", n, err)
+	}
+	u := f.all()
+	for _, want := range []string{
+		"DELETE WHERE { GRAPH <" + iri.WorkstreamGraph("worklode") + "> { <" +
+			iri.Task(task.ID) + "> ?p ?o } }",
+		"<" + iri.Task(task.ID) + "> <" + graph.RDFType + "> <" + iri.Term("Task") + ">",
+		`"ready"`,
+		"<" + iri.Concept("feature") + ">",
+	} {
+		if !strings.Contains(u, want) {
+			t.Errorf("update missing %q\n%s", want, u)
+		}
+	}
+
+	// Checkpoint advanced: a second run is a no-op.
+	if n, err := p.RunOnce(ctx); err != nil || n != 0 {
+		t.Fatalf("second RunOnce = %d, %v; want 0, nil", n, err)
+	}
+	if got := len(strings.Split(f.all(), "\n---\n")); got != 1 {
+		t.Fatalf("updates after idempotent rerun = %d; want 1", got)
+	}
+}
+
+func TestRunOnceProjectsBothEdgeEndpoints(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	a := createTask(t, s, "p2", "blocker")
+	b := createTask(t, s, "p3", "blocked")
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("drain creates: %v", err)
+	}
+
+	_, _, err := s.RecordEvent(ctx, "cli", "p4", "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.AddEdge(tx, time.Now().UTC(), a.ID, b.ID, "blocks", eventID)
+		})
+	if err != nil {
+		t.Fatalf("add edge: %v", err)
+	}
+
+	n, err := p.RunOnce(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("RunOnce after edge = %d, %v; want both endpoints", n, err)
+	}
+	u := f.all()
+	if !strings.Contains(u, "<"+iri.Task(a.ID)+"> <"+iri.Term("blocks")+"> <"+iri.Task(b.ID)+">") {
+		t.Errorf("missing %s wl:blocks %s\n%s", a.ID, b.ID, u)
+	}
+	if !strings.Contains(u, "<"+iri.Task(b.ID)+"> <"+iri.Term("dependsOn")+"> <"+iri.Task(a.ID)+">") {
+		t.Errorf("missing %s wl:dependsOn %s\n%s", b.ID, a.ID, u)
+	}
+}
+
+func TestRunOnceLeavesCheckpointOnError(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	createTask(t, s, "p5", "unlucky")
+
+	f.fail = true
+	if _, err := p.RunOnce(ctx); err == nil {
+		t.Fatal("RunOnce against a failing endpoint returned nil error")
+	}
+	if cp, err := s.ProjectionCheckpoint(ctx); err != nil || cp != 0 {
+		t.Fatalf("checkpoint after failure = %d, %v; must stay 0 for the retry", cp, err)
+	}
+
+	f.fail = false
+	if n, err := p.RunOnce(ctx); err != nil || n != 1 {
+		t.Fatalf("retry RunOnce = %d, %v; want 1, nil", n, err)
+	}
+}
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/projector/...`
+Expected: FAIL — `no required module provides package .../internal/projector`
+
+- [ ] **Step 3: Write the implementation**
+
+```go
+// Package projector mirrors backbone execution facts into the knowledge
+// graph (spec 006 §Projection). Authority stays split (D2/D3): the backbone
+// owns execution facts and Task is the bridge (D11), projected read-only;
+// design facts are authored graph-side and never projected.
+package projector
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// Projector consumes the state_log outbox and maintains each dirty task by
+// a per-subject replace in its Workstream named graph - idempotent per
+// (task, graph), so re-running after a crash or a duplicated batch is safe.
+type Projector struct {
+	st    *store.Store
+	gc    *graph.Client
+	batch int
+}
+
+// New returns a projector reading at most batch state_log rows per run.
+func New(st *store.Store, gc *graph.Client, batch int) *Projector {
+	return &Projector{st: st, gc: gc, batch: batch}
+}
+
+// RunOnce projects every task dirtied since the checkpoint, then advances
+// the checkpoint. It returns how many tasks were (re-)projected. On error
+// the checkpoint is left untouched so the next run retries the same batch.
+func (p *Projector) RunOnce(ctx context.Context) (int, error) {
+	cp, err := p.st.ProjectionCheckpoint(ctx)
+	if err != nil {
+		return 0, err
+	}
+	ids, through, err := p.st.DirtyTaskIDs(ctx, cp, p.batch)
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	for i, id := range ids {
+		if err := p.projectTask(ctx, id); err != nil {
+			return i, fmt.Errorf("project %s: %w", id, err)
+		}
+	}
+	if err := p.st.SetProjectionCheckpoint(ctx, through); err != nil {
+		return len(ids), err
+	}
+	return len(ids), nil
+}
+
+// projectTask replaces the task's triples in its Workstream graph with a
+// fresh projection of the current row - never the event delta - which is
+// what makes replay safe: any event only marks the task dirty.
+func (p *Projector) projectTask(ctx context.Context, id string) error {
+	t, err := p.st.GetTask(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil // tasks are never deleted; guard anyway
+	}
+	if err != nil {
+		return err
+	}
+	out, in, err := p.st.ListEdges(ctx, id)
+	if err != nil {
+		return err
+	}
+	update := graph.ReplaceSubject(
+		iri.WorkstreamGraph(t.ProjectID), iri.Task(t.ID),
+		graph.TaskTriples(*t, out, in))
+	return p.gc.Update(ctx, update)
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `go test ./internal/projector/...`
+Expected: PASS (3 tests; skipped without Postgres)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/projector
+git commit -m "Project dirty tasks into their Workstream named graphs"
+```
+
+---
+
+## Task 10: The full slice against Oxigraph
+
+Proves acceptance criterion 4 (backbone lifecycle event → idempotent
+projection → SPARQL read-back) and criterion 10b (`wl:dependsOn+`
+reachability with no reasoner).
+
+**Files:**
+- Test: `internal/projector/e2e_oxigraph_test.go` (create)
+
+- [ ] **Step 1: Write the test**
+
+```go
+package projector_test
+
+import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
+	"github.com/sunstoneinstitute/worklode/internal/iri"
+	"github.com/sunstoneinstitute/worklode/internal/projector"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+func TestProjectorEndToEnd(t *testing.T) {
+	base := graphtest.Endpoint(t)
+	s := store.OpenTestStore(t)
+	ctx := t.Context()
+
+	// Unique project id: the Workstream graph IRI derives from it, which
+	// isolates this run in the shared Oxigraph instance.
+	buf := make([]byte, 4)
+	if _, err := rand.Read(buf); err != nil {
+		t.Fatalf("random project id: %v", err)
+	}
+	proj := "kg-" + hex.EncodeToString(buf)
+	if err := s.CreateProject(ctx, proj, "KG e2e", "KG"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	mk := func(ext, title string) *store.Task {
+		t.Helper()
+		var created *store.Task
+		_, _, err := s.RecordEvent(ctx, "cli", ext, "task.created", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				task, err := store.CreateTask(tx, time.Now().UTC(), store.TaskInput{
+					ProjectID: proj, Title: title, Priority: "medium", Kind: "feature",
+				}, eventID)
+				if err != nil {
+					return err
+				}
+				created = task
+				return nil
+			})
+		if err != nil {
+			t.Fatalf("create %q: %v", title, err)
+		}
+		return created
+	}
+	a, b, c := mk("g1", "foundation"), mk("g2", "middle"), mk("g3", "tip")
+	for i, e := range []struct{ from, to string }{{a.ID, b.ID}, {b.ID, c.ID}} {
+		_, _, err := s.RecordEvent(ctx, "cli", fmt.Sprintf("g-edge-%d", i), "task.edge_added", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return store.AddEdge(tx, time.Now().UTC(), e.from, e.to, "blocks", eventID)
+			})
+		if err != nil {
+			t.Fatalf("edge %d: %v", i, err)
+		}
+	}
+
+	p := projector.New(s, graph.NewClient(base, nil), 100)
+	if n, err := p.RunOnce(ctx); err != nil || n != 3 {
+		t.Fatalf("RunOnce = %d, %v; want 3 projected tasks", n, err)
+	}
+
+	gc := graph.NewClient(base, nil)
+	g := iri.WorkstreamGraph(proj)
+
+	state := func(id string) []map[string]string {
+		t.Helper()
+		rows, err := gc.Select(ctx, fmt.Sprintf(
+			"SELECT ?s WHERE { GRAPH <%s> { <%s> <%s> ?s } }",
+			g, iri.Task(id), iri.Term("taskState")))
+		if err != nil {
+			t.Fatalf("state query %s: %v", id, err)
+		}
+		return rows
+	}
+	if rows := state(a.ID); len(rows) != 1 || rows[0]["s"] != "ready" {
+		t.Fatalf("projected state of %s = %v; want ready", a.ID, rows)
+	}
+
+	// Criterion 10b: transitive reachability as a property path, no
+	// reasoner. c dependsOn b dependsOn a, so dependsOn+ joins c to a.
+	ok, err := gc.Ask(ctx, fmt.Sprintf(
+		"ASK { GRAPH <%s> { <%s> <%s>+ <%s> } }",
+		g, iri.Task(c.ID), iri.Term("dependsOn"), iri.Task(a.ID)))
+	if err != nil || !ok {
+		t.Fatalf("dependsOn+ reachability = %v, %v; want true", ok, err)
+	}
+
+	// A lifecycle event re-projects: exactly one state literal, the new one.
+	_, _, err = s.RecordEvent(ctx, "cli", "g-claim", "task.transition", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.Transition(tx, time.Now().UTC(), a.ID, "ready", "in_progress", eventID)
+		})
+	if err != nil {
+		t.Fatalf("transition: %v", err)
+	}
+	if n, err := p.RunOnce(ctx); err != nil || n != 1 {
+		t.Fatalf("RunOnce after transition = %d, %v; want 1", n, err)
+	}
+	if rows := state(a.ID); len(rows) != 1 || rows[0]["s"] != "in_progress" {
+		t.Fatalf("re-projected state = %v; want exactly one in_progress literal", rows)
+	}
+}
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `docker compose up -d postgres oxigraph && go test ./internal/projector/ -run TestProjectorEndToEnd -v`
+Expected: PASS (skips if either service is down and CI is unset)
+
+- [ ] **Step 3: Run the whole tree**
+
+Run: `go test ./...`
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add internal/projector/e2e_oxigraph_test.go
+git commit -m "Prove the projection slice end to end against Oxigraph"
+```
+
+---
+
+## Task 11: Run the projector under `lode serve`, document it
+
+**Files:**
+- Modify: `internal/cmd/serve.go` (env config + background loop, next to the sweeper at `internal/cmd/serve.go:91-108`)
+- Test: `internal/cmd/serve_test.go` (add)
+- Modify: `README.md`
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `internal/cmd/serve_test.go` (same package as the existing serve
+tests):
+
+```go
+func TestGraphProjectorFromEnv(t *testing.T) {
+	t.Setenv("LODE_GRAPH_URL", "")
+	t.Setenv("LODE_GRAPH_TOKEN_URL", "")
+	if p := graphProjectorFromEnv(context.Background(), nil); p != nil {
+		t.Fatal("projector enabled without LODE_GRAPH_URL")
+	}
+
+	t.Setenv("LODE_GRAPH_URL", "http://localhost:7878")
+	if p := graphProjectorFromEnv(context.Background(), nil); p == nil {
+		t.Fatal("projector nil with LODE_GRAPH_URL set")
+	}
+}
+```
+
+Add `"context"` to that file's imports if absent.
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `go test ./internal/cmd/ -run TestGraphProjectorFromEnv`
+Expected: FAIL — `undefined: graphProjectorFromEnv`
+
+- [ ] **Step 3: Write the wiring**
+
+In `internal/cmd/serve.go`, add:
+
+```go
+// graphProjectorFromEnv builds the knowledge-graph projector when
+// LODE_GRAPH_URL (the SPARQL endpoint base) is set. LODE_GRAPH_TOKEN_URL
+// plus LODE_GRAPH_CLIENT_ID/LODE_GRAPH_CLIENT_SECRET switch the client to
+// Keycloak client-credentials auth (spec 009 item 4); without them the
+// endpoint is called unauthenticated (dev Oxigraph).
+func graphProjectorFromEnv(ctx context.Context, st *store.Store) *projector.Projector {
+	base := os.Getenv("LODE_GRAPH_URL")
+	if base == "" {
+		return nil
+	}
+	var src oauth2.TokenSource
+	if tokenURL := os.Getenv("LODE_GRAPH_TOKEN_URL"); tokenURL != "" {
+		cfg := clientcredentials.Config{
+			ClientID:     os.Getenv("LODE_GRAPH_CLIENT_ID"),
+			ClientSecret: os.Getenv("LODE_GRAPH_CLIENT_SECRET"),
+			TokenURL:     tokenURL,
+		}
+		src = cfg.TokenSource(ctx)
+	}
+	return projector.New(st, graph.NewClient(base, src), 200)
+}
+```
+
+with these imports added to the file's import block:
+
+```go
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
+
+	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/projector"
+```
+
+Then, in the serve `RunE`, directly after the sweeper goroutine
+(`internal/cmd/serve.go:91-108`), add:
+
+```go
+			// Background graph projection: mirror dirty tasks into the
+			// knowledge graph every 10s (spec 006 §Projection). A single
+			// projector plus the per-branch write lock on graph-server
+			// makes CAS unnecessary for v1 (spec 009 item 6).
+			if p := graphProjectorFromEnv(ctx, st); p != nil {
+				go func() {
+					ticker := time.NewTicker(10 * time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-ticker.C:
+							if n, err := p.RunOnce(ctx); err != nil {
+								slog.Error("graph projection", "err", err)
+							} else if n > 0 {
+								slog.Info("projected tasks", "count", n)
+							}
+						}
+					}
+				}()
+			}
+```
+
+- [ ] **Step 4: Run the tests**
+
+Run: `go build ./... && go test ./internal/cmd/...`
+Expected: PASS
+
+- [ ] **Step 5: Document it**
+
+Add a section to `README.md` (after the existing server configuration
+material):
+
+```markdown
+## Knowledge graph projection
+
+When `LODE_GRAPH_URL` is set, `lode serve` mirrors every task into the
+Worklode knowledge graph (spec 006): a background projector follows the
+`state_log` outbox and replaces each dirty task's triples in its Workstream
+named graph over SPARQL Update, checkpointed in `graph_projection`.
+
+- `LODE_GRAPH_URL` — SPARQL endpoint base exposing `/query`, `/update`,
+  `/store` (data-platform graph-server in prod; the compose `oxigraph`
+  service locally).
+- `LODE_GRAPH_TOKEN_URL`, `LODE_GRAPH_CLIENT_ID`,
+  `LODE_GRAPH_CLIENT_SECRET` — optional Keycloak client-credentials for the
+  endpoint; unset means unauthenticated (dev only).
+
+The `wl:` vocabulary sources live under `rdf/wl/` and are staged for the
+rdf-registry PR. Integration tests run against the compose `oxigraph`
+service (`docker compose up -d oxigraph`) and skip when it is not running.
+```
+
+- [ ] **Step 6: Run everything once more**
+
+Run: `docker compose up -d postgres oxigraph && go test ./...`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add internal/cmd/serve.go internal/cmd/serve_test.go README.md
+git commit -m "Run the graph projector under lode serve"
+```
