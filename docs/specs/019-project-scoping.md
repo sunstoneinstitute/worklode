@@ -100,7 +100,8 @@ Accepts every form `git remote get-url` emits, plus a bare `owner/name` so
 
 Normalization: strip a `scp`-style `user@host:` prefix or a URL scheme and
 authority, drop a leading `/`, drop a trailing `.git` and any trailing `/`,
-then require exactly two non-empty path segments. Anything else is a 400. The
+then require exactly two non-empty path segments. Anything else is a 422, the
+validation status the rest of `internal/api` uses. The
 host is discarded — `project_repos.repo` is `owner/name` and unique, so a
 GitHub Enterprise mirror of a mapped repo resolves to the same project.
 
