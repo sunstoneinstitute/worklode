@@ -1,6 +1,6 @@
 # Spec 018 — Task hierarchy (epics and tracking tasks)
 
-**Date:** 2026-07-29 · **Status:** design ·
+**Date:** 2026-07-29 · **Status:** spec ·
 **Umbrella:** `000-umbrella-architecture.md`
 **Area:** spec 004 (execution backbone — task edges), spec 005 (pickup — the
 decomposition gate), spec 011 (delivery lifecycle — the state machine)
@@ -28,7 +28,7 @@ task from the pickup loop with no supported way to split it.
 
 ## Decisions
 
-Taken here with rationale, pending sign-off.
+Taken here with rationale.
 
 | Decision | Choice |
 |---|---|
