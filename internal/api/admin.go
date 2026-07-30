@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -109,6 +110,29 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		resp.Projects = append(resp.Projects, toProjectJSON(&p, repos))
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// resolveProjectByRemote handles GET /api/v1/projects/resolve?remote=<url>:
+// the repo → project mapping the CLI needs to scope commands to the repo it
+// is run from. The URL is normalized here rather than in the CLI so a
+// normalization fix ships without a client upgrade.
+func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) {
+	repo, err := repourl.Normalize(r.URL.Query().Get("remote"))
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	p, err := s.st.ProjectForRepo(r.Context(), repo)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	repos, err := s.st.ListRepos(r.Context(), p.ID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
 type patchProjectRequest struct {
