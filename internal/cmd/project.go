@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ func newProjectCmd() *cobra.Command {
 		Short: "Manage projects and their repos",
 	}
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
-		newProjectSetRepoCmd(), newProjectFocusCmd())
+		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectResolveCmd())
 	return cmd
 }
 
@@ -210,4 +211,87 @@ func newProjectFocusCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&clear, "clear", false, "clear the project's focus")
 	return cmd
+}
+
+// resolveResult is the --json form of `lode project resolve`.
+type resolveResult struct {
+	Project string `json:"project"`
+	Key     string `json:"key,omitempty"`
+	Source  string `json:"source"`
+	Path    string `json:"path,omitempty"`
+	Remote  string `json:"remote,omitempty"`
+	Cached  bool   `json:"cached"`
+}
+
+func newProjectResolveCmd() *cobra.Command {
+	var refresh bool
+	cmd := &cobra.Command{
+		Use:   "resolve",
+		Short: "Show which project this directory scopes to, and why",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			wd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+			if refresh {
+				cli.ForgetRemote(wd)
+			}
+			sc := cli.ResolveScope(cmd.Context(), c, cfg, wd)
+			if sc.Project != "" && sc.Key == "" {
+				sc.Key = cli.ProjectKey(cmd.Context(), c, sc.Project)
+			}
+
+			if jsonOut(cmd) {
+				b, err := json.Marshal(resolveResult{
+					Project: sc.Project, Key: sc.Key, Source: string(sc.Source),
+					Path: sc.Path, Remote: sc.Remote, Cached: sc.Cached,
+				})
+				if err != nil {
+					return fmt.Errorf("encode result: %w", err)
+				}
+				printRaw(cmd, b)
+				return nil
+			}
+
+			o := cmd.OutOrStdout()
+			if sc.Project == "" {
+				fmt.Fprintln(o, "no current project: commands run across every project")
+				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
+				return nil
+			}
+			fmt.Fprintf(o, "%s%s — from %s\n", sc.Project, keySuffix(sc.Key), scopeOrigin(sc))
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-query the server instead of using the cached answer")
+	return cmd
+}
+
+// keySuffix renders " (WL)" for a known task-id key, or nothing.
+func keySuffix(key string) string {
+	if key == "" {
+		return ""
+	}
+	return " (" + key + ")"
+}
+
+// scopeOrigin describes where a scope came from, for humans.
+func scopeOrigin(sc cli.Scope) string {
+	switch sc.Source {
+	case cli.ScopeRepoConfig, cli.ScopeUserConfig:
+		return fmt.Sprintf("%s %s", sc.Source, sc.Path)
+	case cli.ScopeGitRemote:
+		cached := ""
+		if sc.Cached {
+			cached = " (cached)"
+		}
+		return fmt.Sprintf("git remote %s%s", sc.Remote, cached)
+	default:
+		return string(sc.Source)
+	}
 }
