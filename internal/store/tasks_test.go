@@ -423,9 +423,11 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 func TestChildOfCycleRejected(t *testing.T) {
 	s := openTaskStore(t)
 
-	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
-	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
-	t3 := createTask(t, s, taskTestNow, defaultTaskInput())
+	// t1, t2, and t3 each stand in as a child_of parent below, so all three
+	// must be declared epics.
+	t1 := createTask(t, s, taskTestNow, epicInput())
+	t2 := createTask(t, s, taskTestNow, epicInput())
+	t3 := createTask(t, s, taskTestNow, epicInput())
 
 	if err := addEdge(t, s, t1.ID, t2.ID, "child_of"); err != nil {
 		t.Fatalf("AddEdge %s child_of %s: %v", t1.ID, t2.ID, err)

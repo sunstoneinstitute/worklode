@@ -399,9 +399,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
-// transaction. Self-edges are rejected for both types; a child_of edge that
-// would make the child hierarchy cyclic is rejected with a "cycle" error.
-// A missing endpoint returns ErrNotFound.
+// transaction. Self-edges are rejected for both types. A child_of edge must
+// also satisfy the spec-018 hierarchy invariants (see checkHierarchy): an epic
+// parent, one project, one parent per task, no cycle, and at most
+// maxHierarchyDepth edges. A missing endpoint returns ErrNotFound.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 	if typ != "child_of" && typ != "blocks" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
@@ -409,23 +410,22 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 	if fromTask == toTask {
 		return fmt.Errorf("self-edge %s %s %s not allowed: %w", fromTask, typ, toTask, ErrInvalidInput)
 	}
+	project := map[string]string{}
+	kind := map[string]string{}
 	for _, id := range []string{fromTask, toTask} {
-		var one int
-		err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1`, id).Scan(&one)
+		var p, k string
+		err := tx.QueryRow(`SELECT project_id, kind FROM tasks WHERE id = $1`, id).Scan(&p, &k)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		if err != nil {
 			return fmt.Errorf("check task %s: %w", id, err)
 		}
+		project[id], kind[id] = p, k
 	}
 	if typ == "child_of" {
-		reaches, err := reachesViaChildOf(tx, toTask, fromTask)
-		if err != nil {
+		if err := checkHierarchy(tx, fromTask, toTask, project, kind); err != nil {
 			return err
-		}
-		if reaches {
-			return fmt.Errorf("edge %s child_of %s: %w", fromTask, toTask, ErrCycle)
 		}
 	}
 	_, err := tx.Exec(
@@ -433,6 +433,11 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 		fromTask, toTask, typ, now.UTC(),
 	)
 	if err != nil {
+		// The partial unique index is the backstop for a second parent racing
+		// checkHierarchy's read; both report the same shape.
+		if isUniqueViolationOn(err, "task_edges_single_parent") {
+			return fmt.Errorf("task %s already has a parent: %w", fromTask, ErrEdgeExists)
+		}
 		if isUniqueViolation(err) {
 			return fmt.Errorf("edge %s %s %s: %w", fromTask, typ, toTask, ErrEdgeExists)
 		}
