@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -1169,6 +1171,45 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 	if cfg.CurrentProject != "from-repo" || cfg.CurrentProjectPath != repoPath {
 		t.Fatalf("repo config: project=%q path=%q; want from-repo, %s",
 			cfg.CurrentProject, cfg.CurrentProjectPath, repoPath)
+	}
+}
+
+func TestResolveRemoteSendsRawURL(t *testing.T) {
+	var gotPath, gotRemote string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotRemote = r.URL.Query().Get("remote")
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"worklode","name":"Worklode","key":"WL","repos":[],"focus":[]}`)
+	}))
+	defer srv.Close()
+
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_test"})
+	p, err := c.ResolveRemote(context.Background(), "git@github.com:sunstoneinstitute/worklode.git")
+	if err != nil {
+		t.Fatalf("ResolveRemote: %v", err)
+	}
+	if gotPath != "/api/v1/projects/resolve" {
+		t.Fatalf("path = %q; want /api/v1/projects/resolve", gotPath)
+	}
+	if gotRemote != "git@github.com:sunstoneinstitute/worklode.git" {
+		t.Fatalf("remote = %q; want the raw URL unmodified", gotRemote)
+	}
+	if p.ID != "worklode" || p.Key != "WL" {
+		t.Fatalf("project = %+v; want worklode/WL", p)
+	}
+}
+
+func TestResolveRemoteNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, `{"error":"not found"}`)
+	}))
+	defer srv.Close()
+
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_test"})
+	if _, err := c.ResolveRemote(context.Background(), "git@github.com:acme/nope.git"); err == nil {
+		t.Fatal("ResolveRemote on an unmapped repo returned nil error")
 	}
 }
 
