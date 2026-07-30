@@ -2,13 +2,18 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // setupGitRepo creates a fake $HOME containing a git repo with the given
@@ -158,5 +163,101 @@ func TestTaskAddWithoutAnyProjectFails(t *testing.T) {
 	out, err := runLode(t, "task", "add", "--title", "Nowhere")
 	if err == nil {
 		t.Fatalf("task add with no resolvable project succeeded\noutput: %s", out)
+	}
+}
+
+// boardProjectIDs runs `lode board --json` and returns the project ids shown.
+func boardProjectIDs(t *testing.T, args ...string) []string {
+	t.Helper()
+	out, err := runLode(t, append([]string{"board", "--json"}, args...)...)
+	if err != nil {
+		t.Fatalf("lode board: %v\noutput: %s", err, out)
+	}
+	var resp struct {
+		Projects []struct {
+			ID string `json:"id"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode board %q: %v", out, err)
+	}
+	ids := make([]string, 0, len(resp.Projects))
+	for _, p := range resp.Projects {
+		ids = append(ids, p.ID)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func TestBoardScopesToCurrentProject(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createOtherProjectTask(t, c)
+	setupRepoConfig(t, "proj")
+
+	if got := boardProjectIDs(t); len(got) != 1 || got[0] != "proj" {
+		t.Fatalf("board = %v; want only proj", got)
+	}
+}
+
+func TestBoardProjectFlagAndPositional(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createOtherProjectTask(t, c)
+	setupRepoConfig(t, "proj")
+
+	if got := boardProjectIDs(t, "--project", "other"); len(got) != 1 || got[0] != "other" {
+		t.Fatalf("board --project other = %v; want only other", got)
+	}
+	if got := boardProjectIDs(t, "other"); len(got) != 1 || got[0] != "other" {
+		t.Fatalf("board other = %v; want only other", got)
+	}
+	if got := boardProjectIDs(t, "--project="); len(got) != 2 {
+		t.Fatalf("board --project= = %v; want both projects", got)
+	}
+}
+
+func TestInboxListScopesToCurrentProject(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	mapProjectRepo(t, c, "proj", "acme/proj")
+	createOtherProjectTask(t, c)
+	mapProjectRepo(t, c, "other", "acme/other")
+	seedIssue(t, st, "acme/proj", 1)
+	seedIssue(t, st, "acme/other", 2)
+
+	setupRepoConfig(t, "proj")
+
+	out, err := runLode(t, "inbox", "list", "--json")
+	if err != nil {
+		t.Fatalf("lode inbox list: %v\noutput: %s", err, out)
+	}
+	var resp struct {
+		Issues []struct {
+			Repo string `json:"repo"`
+		} `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Issues) != 1 || resp.Issues[0].Repo != "acme/proj" {
+		t.Fatalf("inbox list = %+v; want only acme/proj", resp.Issues)
+	}
+}
+
+// seedIssue inserts a triage_state="new" inbox issue through the event log,
+// the same path a GitHub webhook takes.
+func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "github",
+		fmt.Sprintf("%s-%s-%d", t.Name(), repo, number), "issues.opened", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpsertIssue(tx, store.Issue{
+				Repo: repo, Number: number, Title: "issue", State: "open",
+				URL: "https://example.test/x",
+			})
+		})
+	if err != nil {
+		t.Fatalf("seed issue %s#%d: %v", repo, number, err)
 	}
 }
