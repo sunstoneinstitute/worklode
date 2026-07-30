@@ -33,7 +33,7 @@ func newInboxListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, raw, err := c.ListIssues(cmd.Context(), state)
+			resp, raw, err := c.ListIssues(cmd.Context(), state, "")
 			if err != nil {
 				return err
 			}
