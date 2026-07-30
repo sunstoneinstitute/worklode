@@ -799,12 +799,23 @@ func TestDecompose(t *testing.T) {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
 
-	kids, err := decompose(t, s, parent.ID, []string{"Phase one", "Phase two"})
+	// A blocks edge into the parent is a reference that must survive the
+	// conversion: the task on the other end of it must still resolve to the
+	// same id, in place, once it becomes an epic.
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, blocker.ID, parent.ID, "blocks"); err != nil {
+		t.Fatalf("blocks edge into parent: %v", err)
+	}
+
+	kids, err := decompose(t, s, parent.ID, []string{" Phase one ", "Phase two"})
 	if err != nil {
 		t.Fatalf("Decompose: %v", err)
 	}
 	if len(kids) != 2 {
 		t.Fatalf("children = %d, want 2", len(kids))
+	}
+	if kids[0].Title != "Phase one" {
+		t.Fatalf("child title = %q, want trimmed %q", kids[0].Title, "Phase one")
 	}
 	for _, k := range kids {
 		if k.State != "draft" {
@@ -829,7 +840,18 @@ func TestDecompose(t *testing.T) {
 		t.Fatal("parent still flagged needs_decomposition")
 	}
 	if got.ID != parent.ID {
-		t.Fatalf("parent id changed to %s: decompose must keep the id and every reference to it", got.ID)
+		t.Fatalf("parent id changed to %s, want %s", got.ID, parent.ID)
+	}
+
+	// The reference-survival check: the pre-existing blocks edge into the
+	// parent must still resolve to the same task, now converted in place.
+	_, inEdges, err := s.ListEdges(t.Context(), parent.ID)
+	if err != nil {
+		t.Fatalf("ListEdges: %v", err)
+	}
+	wantBlock := Edge{FromTask: blocker.ID, ToTask: parent.ID, Type: "blocks"}
+	if !slices.Contains(inEdges, wantBlock) {
+		t.Fatalf("blocks edge into %s did not survive decomposition: in=%v", parent.ID, inEdges)
 	}
 
 	children, err := s.ListTasks(t.Context(), TaskFilter{Parent: parent.ID})
@@ -865,7 +887,10 @@ func TestDecomposeRejectsEmptyAndBlankTitles(t *testing.T) {
 }
 
 // TestDecomposeRespectsDepthCap: a task that is already a child cannot be
-// decomposed further without exceeding the two-edge cap.
+// decomposed further without exceeding the two-edge cap. The error message is
+// pinned (rather than just the error class) so this fails if Decompose's own
+// depth guard is deleted and the rejection instead comes from AddEdge's
+// checkHierarchy, which would produce a different ErrInvalidInput message.
 func TestDecomposeRespectsDepthCap(t *testing.T) {
 	s := openTaskStore(t)
 	epic := createTask(t, s, taskTestNow, epicInput())
@@ -881,7 +906,58 @@ func TestDecomposeRespectsDepthCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
-	if _, err := decompose(t, s, deeper[0].ID, []string{"B"}); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("decompose at depth 2 error = %v, want ErrInvalidInput", err)
+	_, err = decompose(t, s, deeper[0].ID, []string{"B"})
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "deepest allowed level") {
+		t.Fatalf("decompose at depth 2 error = %v, want ErrInvalidInput naming the depth cap", err)
+	}
+}
+
+// TestDecomposeRejectsEpic: decompose is for splitting an oversized task, not
+// for re-splitting a container. An already-epic parent must be rejected
+// rather than guessing a child kind for it.
+func TestDecomposeRejectsEpic(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	_, err := decompose(t, s, epic.ID, []string{"A"})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDecomposeRejectsDeliveredTask pins the doc comment's claim that
+// Decompose rejects from the delivery states an epic can never occupy.
+func TestDecomposeRejectsDeliveredTask(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+	walkTo(t, s, parent.ID, "in_review")
+	_, err := decompose(t, s, parent.ID, []string{"A"})
+	if !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("error = %v, want ErrBadTransition", err)
+	}
+}
+
+// TestDecomposeRollsMergedParentToReady pins the trailing ResolveHierarchy
+// call: a merged parent's fresh, all-draft children roll it back to ready
+// rather than leaving it stuck in a state its new children contradict.
+func TestDecomposeRollsMergedParentToReady(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+	walkTo(t, s, parent.ID, "merged")
+
+	if _, err := decompose(t, s, parent.ID, []string{"A"}); err != nil {
+		t.Fatalf("Decompose: %v", err)
+	}
+	if got := stateOf(t, s, parent.ID); got != "ready" {
+		t.Fatalf("epic = %s, want ready (fresh draft children roll a merged parent back)", got)
+	}
+}
+
+// TestDecomposeUnknownParent pins ErrNotFound for a parent id that doesn't
+// exist.
+func TestDecomposeUnknownParent(t *testing.T) {
+	s := openTaskStore(t)
+	_, err := decompose(t, s, "HDB-999", []string{"A"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }

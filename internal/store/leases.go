@@ -87,6 +87,23 @@ func activeLeaseTxForShare(tx *sql.Tx, taskID string) (*Lease, error) {
 	return scanActiveLeaseRow(row, taskID)
 }
 
+// hasActiveLease reports whether taskID currently has an active (unreleased)
+// lease. It is the boolean-only counterpart to activeLeaseTx, for callers
+// that only need to gate on presence; a caller that also needs the holder
+// should follow up with activeLeaseTx once presence is confirmed.
+func hasActiveLease(tx *sql.Tx, taskID string) (bool, error) {
+	var id int64
+	err := tx.QueryRow(
+		`SELECT id FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID).Scan(&id)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, fmt.Errorf("check active lease on %s: %w", taskID, err)
+}
+
 func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 	l, err := scanLease(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -148,15 +165,12 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("check actor %s: %w", actorID, err)
 			}
 
-			var existing int64
-			err := tx.QueryRow(
-				`SELECT id FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID,
-			).Scan(&existing)
-			if err == nil {
-				return fmt.Errorf("task %s: %w", taskID, ErrLeased)
+			leased, err := hasActiveLease(tx, taskID)
+			if err != nil {
+				return err
 			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("check active lease on %s: %w", taskID, err)
+			if leased {
+				return fmt.Errorf("task %s: %w", taskID, ErrLeased)
 			}
 
 			blocked, err := IsBlocked(tx, taskID)
