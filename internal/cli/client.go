@@ -1009,6 +1009,24 @@ func (c *Client) GetProject(ctx context.Context, id string) (Project, error) {
 	return Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
 }
 
+// ResolveRemote calls GET /api/v1/projects/resolve, returning the project the
+// given git remote URL maps to. The URL is sent exactly as git reported it —
+// the server owns normalization — and a *ClientError with Status 404 means
+// the repo is not mapped to any project.
+func (c *Client) ResolveRemote(ctx context.Context, remote string) (Project, error) {
+	q := url.Values{}
+	q.Set("remote", remote)
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil)
+	if err != nil {
+		return Project{}, err
+	}
+	var p Project
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return Project{}, fmt.Errorf("decode project: %w", err)
+	}
+	return p, nil
+}
+
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
 func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) ([]byte, error) {
