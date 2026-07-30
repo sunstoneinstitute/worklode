@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -417,6 +420,21 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 	}
 	if isBlocked(t, s, blocked.ID) {
 		t.Fatalf("IsBlocked: abandoned blocker must not block")
+	}
+}
+
+// TestClosedStateSetMirrorsSQL pins closedStateSet against the closedStates
+// SQL literal it mirrors: they must list the same states, or ChildProgress
+// and the closedStates-driven queries silently disagree on what "closed"
+// means.
+func TestClosedStateSetMirrorsSQL(t *testing.T) {
+	want := strings.Split(strings.Trim(closedStates, "()"), ", ")
+	for i := range want {
+		want[i] = strings.Trim(want[i], "'")
+	}
+	slices.Sort(want)
+	if got := slices.Sorted(maps.Keys(closedStateSet)); !slices.Equal(got, want) {
+		t.Fatalf("closedStateSet = %v, closedStates = %v", got, want)
 	}
 }
 
