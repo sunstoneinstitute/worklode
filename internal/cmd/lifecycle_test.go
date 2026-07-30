@@ -581,6 +581,45 @@ func TestStatusReportsStateWithoutMutating(t *testing.T) {
 	}
 }
 
+func TestStatusReportsResolvedProject(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	mapProjectRepo(t, c, "proj", "acme/proj")
+	task := createTestTask(t, c, "Scoped status")
+
+	t.Setenv("HOME", t.TempDir()) // keep the remote cache out of the real one
+	root := initGitRepo(t)
+	addOrigin(t, root, "git@github.com:acme/proj.git")
+	t.Chdir(root)
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+	t.Chdir(filepath.Join(root, "wt", task.ID+"-scoped-status"))
+
+	out, err := runLode(t, "status", "--json")
+	if err != nil {
+		t.Fatalf("lode status: %v\noutput: %s", err, out)
+	}
+	var result statusResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if result.Project != "proj" {
+		t.Fatalf("status project = %q, want proj", result.Project)
+	}
+	if result.ProjectSource != string(cli.ScopeGitRemote) {
+		t.Fatalf("status project_source = %q, want %q", result.ProjectSource, cli.ScopeGitRemote)
+	}
+}
+
+// addOrigin points a repo's origin at url, so scope resolution has a remote.
+func addOrigin(t *testing.T, dir, url string) {
+	t.Helper()
+	if out, err := exec.Command("git", "-C", dir, "remote", "add", "origin", url).CombinedOutput(); err != nil {
+		t.Fatalf("git remote add origin: %v\n%s", err, out)
+	}
+}
+
 func TestStatusReportsSessionMarkerPresence(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

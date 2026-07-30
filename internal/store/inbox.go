@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -147,16 +148,28 @@ func scanIssue(row rowScanner) (*Issue, error) {
 	return &is, nil
 }
 
-// ListIssues returns inbox issues, optionally filtered by triage_state
-// ("" means all), ordered by repo then number.
-func (s *Store) ListIssues(ctx context.Context, triageState string) ([]Issue, error) {
-	q := `SELECT repo, number, title, state, triage_state, task_id, applies_to_versions, url FROM issues`
+// ListIssues returns inbox issues, ordered by repo then number. An empty
+// triageState or projectID disables that filter; a projectID with no mapped
+// repos yields no issues. Issues carry a repo, and project_repos maps a repo
+// to at most one project, so the project filter is a join.
+func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) ([]Issue, error) {
+	q := `SELECT i.repo, i.number, i.title, i.state, i.triage_state, i.task_id,
+	             i.applies_to_versions, i.url
+	      FROM issues i`
 	var args []any
-	if triageState != "" {
-		q += ` WHERE triage_state = $1`
-		args = append(args, triageState)
+	var where []string
+	if projectID != "" {
+		args = append(args, projectID)
+		q += fmt.Sprintf(` JOIN project_repos pr ON pr.repo = i.repo AND pr.project_id = $%d`, len(args))
 	}
-	q += ` ORDER BY repo, number`
+	if triageState != "" {
+		args = append(args, triageState)
+		where = append(where, fmt.Sprintf(`i.triage_state = $%d`, len(args)))
+	}
+	if len(where) > 0 {
+		q += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	q += ` ORDER BY i.repo, i.number`
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

@@ -92,7 +92,7 @@ func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string)
 
 // newNextCmd builds `lode next`.
 func newNextCmd() *cobra.Command {
-	var project string
+	var scope scopeFlags
 	var strictFocus bool
 	cmd := &cobra.Command{
 		Use:   "next [id]",
@@ -107,10 +107,10 @@ func newNextCmd() *cobra.Command {
 			if len(args) > 0 {
 				id = args[0]
 			}
-			return runNext(cmd, id, project, strictFocus)
+			return runNext(cmd, id, &scope, strictFocus)
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "restrict the pick to one project (only without an id)"+projectFlagUsage)
+	addScopeFlags(cmd, &scope, "restrict the pick to a project (only without an id)")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
 }
@@ -126,13 +126,19 @@ func slugFromBranch(branch, id string) string {
 	return branch
 }
 
-func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
+func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool) error {
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err
 	}
-	project = resolveProject(cmd, project, cfg.CurrentProject)
 	ctx := cmd.Context()
+
+	if id != "" {
+		id, err = resolveTaskID(ctx, id, c, cfg)
+		if err != nil {
+			return err
+		}
+	}
 
 	root, ok := worktree.Root(".")
 	if !ok {
@@ -160,7 +166,11 @@ func runNext(cmd *cobra.Command, id, project string, strictFocus bool) error {
 		branch = resp.Branch
 		slug = slugFromBranch(resp.Branch, id)
 	default:
-		resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Project: project, StrictFocus: strictFocus, Worktree: pending})
+		sc, err := resolveScope(ctx, cmd, c, cfg, scope)
+		if err != nil {
+			return err
+		}
+		resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
 		if err != nil {
 			return err
 		}
@@ -330,7 +340,7 @@ func newBlockCmd() *cobra.Command {
 		Short: "Record that another task blocks the current worktree's task, and release its lease",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
@@ -339,6 +349,10 @@ func newBlockCmd() *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
+			on, err = resolveTaskID(ctx, on, c, cfg)
+			if err != nil {
+				return err
+			}
 			raw, err := c.Block(ctx, taskID, on)
 			if err != nil {
 				return err
@@ -367,6 +381,16 @@ type statusResult struct {
 	Lease         *cli.Lease         `json:"lease,omitempty"`
 	OpenBlockers  []cli.BriefBlocker `json:"open_blockers"`
 	SessionMarker bool               `json:"session_marker"`
+	Project       string             `json:"project,omitempty"`
+	ProjectSource string             `json:"project_source"`
+}
+
+// orNone renders an empty scope as "-" rather than a blank column.
+func orNone(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // leaseState classifies lease relative to identity (this worktree) and now.
@@ -401,7 +425,7 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show the current worktree's task, lease, and session-marker state (read-only)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
@@ -421,6 +445,12 @@ func newStatusCmd() *cobra.Command {
 			sessionPresent := hasSessionMarker(root)
 			state := leaseState(brief.Lease, identity, time.Now())
 
+			wd, err := os.Getwd()
+			if err != nil {
+				wd = ""
+			}
+			scope := cli.ResolveScope(cmd.Context(), c, cfg, wd)
+
 			if jsonOut(cmd) {
 				b, err := json.Marshal(statusResult{
 					Worktree:      root,
@@ -429,6 +459,8 @@ func newStatusCmd() *cobra.Command {
 					Lease:         brief.Lease,
 					OpenBlockers:  brief.OpenBlockers,
 					SessionMarker: sessionPresent,
+					Project:       scope.Project,
+					ProjectSource: string(scope.Source),
 				})
 				if err != nil {
 					return fmt.Errorf("encode result: %w", err)
@@ -439,6 +471,7 @@ func newStatusCmd() *cobra.Command {
 
 			o := cmd.OutOrStdout()
 			fmt.Fprintf(o, "worktree: %s\n", root)
+			fmt.Fprintf(o, "project:  %s (%s)\n", orNone(scope.Project), scope.Source)
 			fmt.Fprintf(o, "task: %s — %s\n", brief.Task.ID, brief.Task.Title)
 			fmt.Fprintf(o, "state: %s   priority: %s\n", brief.Task.State, brief.Task.Priority)
 			switch state {

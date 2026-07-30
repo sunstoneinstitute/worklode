@@ -45,7 +45,8 @@ func init() {
 }
 
 func newTaskAddCmd() *cobra.Command {
-	var project, title, body, priority, kind, concern string
+	var scope scopeFlags
+	var title, body, priority, kind, concern string
 	var draft bool
 	cmd := &cobra.Command{
 		Use:   "add",
@@ -55,12 +56,15 @@ func newTaskAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			project := resolveProject(cmd, project, cfg.CurrentProject)
-			if project == "" {
-				return errors.New(`--project is required (or set current_project in .worklode/config.toml or ~/.config/worklode/config.toml)`)
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
-				Project: project, Title: title, Body: body, Priority: priority, Kind: kind,
+				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft,
 			})
 			if err != nil {
@@ -74,7 +78,7 @@ func newTaskAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "project id"+projectFlagUsage)
+	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
@@ -86,7 +90,8 @@ func newTaskAddCmd() *cobra.Command {
 }
 
 func newTaskListCmd() *cobra.Command {
-	var project, priority string
+	var scope scopeFlags
+	var priority string
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -97,8 +102,12 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-				Project: resolveProject(cmd, project, cfg.CurrentProject), States: states, Priority: priority,
+				Project: sc.Project, States: states, Priority: priority,
 			})
 			if err != nil {
 				return err
@@ -111,7 +120,7 @@ func newTaskListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "filter by project id"+projectFlagUsage+"; pass --project= for all projects")
+	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	return cmd
@@ -147,11 +156,15 @@ func newTaskShowCmd() *cobra.Command {
 		Short: "Show a task's details: body, edges, blocked status, and lease holder",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.GetTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.GetTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -203,11 +216,15 @@ func newTaskEditCmd() *cobra.Command {
 				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, or --needs-decomposition")
 			}
 
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.EditTask(cmd.Context(), args[0], in)
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.EditTask(cmd.Context(), id, in)
 			if err != nil {
 				return err
 			}
@@ -252,11 +269,15 @@ func newTaskReadyCmd() *cobra.Command {
 		Short: "Publish a draft task (draft -> ready)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.ReadyTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReadyTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -277,11 +298,15 @@ func newTaskReopenCmd() *cobra.Command {
 		Short: "Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.ReopenTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReopenTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -302,11 +327,15 @@ func newTaskReworkCmd() *cobra.Command {
 		Short: "Send a task under review back to in_progress (e.g. changes requested)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.ReworkTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.ReworkTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -339,7 +368,7 @@ func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
 	var next, strictFocus, dryRun bool
-	var project string
+	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "claim [id]",
 		Short: "Lease a task to the current worktree and move it to in_progress",
@@ -349,11 +378,14 @@ func newTaskClaimCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			project := resolveProject(cmd, project, cfg.CurrentProject)
 
 			if !next {
 				if len(args) == 0 {
 					return fmt.Errorf("task id is required (or use --next)")
+				}
+				id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+				if err != nil {
+					return err
 				}
 				if worktree == "" {
 					worktree, err = currentWorktreeIdentity()
@@ -361,7 +393,7 @@ func newTaskClaimCmd() *cobra.Command {
 						return err
 					}
 				}
-				resp, raw, err := c.ClaimTask(cmd.Context(), args[0], worktree, ttl)
+				resp, raw, err := c.ClaimTask(cmd.Context(), id, worktree, ttl)
 				if err != nil {
 					return err
 				}
@@ -370,7 +402,7 @@ func newTaskClaimCmd() *cobra.Command {
 					return nil
 				}
 				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "claimed %s, lease expires %s\n", args[0], resp.Lease.ExpiresAt.Local().Format(time.RFC3339))
+				fmt.Fprintf(out, "claimed %s, lease expires %s\n", id, resp.Lease.ExpiresAt.Local().Format(time.RFC3339))
 				fmt.Fprintf(out, "branch: %s\n\n", resp.Branch)
 				fmt.Fprintf(out, "  git switch -c %s\n", resp.Branch)
 				return nil
@@ -385,9 +417,13 @@ func newTaskClaimCmd() *cobra.Command {
 					return err
 				}
 			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
 
 			resp, raw, err := c.ClaimNext(cmd.Context(), cli.ClaimNextInput{
-				Project: project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
+				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
 			})
 			if err != nil {
 				return err
@@ -419,7 +455,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
-	cmd.Flags().StringVar(&project, "project", "", "restrict --next to one project"+projectFlagUsage)
+	addScopeFlags(cmd, &scope, "restrict the pick to a project")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd
@@ -432,11 +468,15 @@ func newTaskRenewCmd() *cobra.Command {
 		Short: "Extend the caller's lease on a task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			l, raw, err := c.RenewLease(cmd.Context(), args[0], ttl)
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			l, raw, err := c.RenewLease(cmd.Context(), id, ttl)
 			if err != nil {
 				return err
 			}
@@ -444,7 +484,7 @@ func newTaskRenewCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "renewed %s, lease now expires %s\n", args[0], l.ExpiresAt.Local().Format(time.RFC3339))
+			fmt.Fprintf(cmd.OutOrStdout(), "renewed %s, lease now expires %s\n", id, l.ExpiresAt.Local().Format(time.RFC3339))
 			return nil
 		},
 	}
@@ -458,11 +498,15 @@ func newTaskReleaseCmd() *cobra.Command {
 		Short: "Release the caller's lease on a task, returning it to ready",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			raw, err := c.ReleaseLease(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.ReleaseLease(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -470,7 +514,7 @@ func newTaskReleaseCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "released %s\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), "released %s\n", id)
 			return nil
 		},
 	}
@@ -483,11 +527,15 @@ func newTaskDoneCmd() *cobra.Command {
 		Short: "Mark a task merged (in_review -> merged)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.DoneTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.DoneTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -508,11 +556,15 @@ func newTaskAbandonCmd() *cobra.Command {
 		Short: "Abandon a task from any non-terminal state",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.AbandonTask(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.AbandonTask(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -534,11 +586,19 @@ func newTaskBlockCmd() *cobra.Command {
 		Short: "Record that another task blocks this one",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			raw, err := c.Block(cmd.Context(), args[0], by)
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			by, err = resolveTaskID(cmd.Context(), by, c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.Block(cmd.Context(), id, by)
 			if err != nil {
 				return err
 			}
@@ -546,7 +606,7 @@ func newTaskBlockCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now blocked by %s\n", args[0], by)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is now blocked by %s\n", id, by)
 			return nil
 		},
 	}
@@ -561,11 +621,15 @@ func newTaskBriefCmd() *cobra.Command {
 		Short: "Fetch a task's brief: body, branch, open blockers, and active lease",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			b, raw, err := c.Brief(cmd.Context(), args[0])
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			b, raw, err := c.Brief(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -609,11 +673,19 @@ func newTaskUnblockCmd() *cobra.Command {
 		Short: "Remove a blocking edge from another task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			raw, err := c.Unblock(cmd.Context(), args[0], by)
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			by, err = resolveTaskID(cmd.Context(), by, c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.Unblock(cmd.Context(), id, by)
 			if err != nil {
 				return err
 			}
@@ -621,7 +693,7 @@ func newTaskUnblockCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer blocked by %s\n", args[0], by)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer blocked by %s\n", id, by)
 			return nil
 		},
 	}

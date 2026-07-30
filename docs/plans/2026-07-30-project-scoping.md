@@ -402,50 +402,60 @@ git commit -m "Add GET /api/v1/projects/resolve for repo-to-project lookup"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/store/inbox_test.go`:
+Append to `internal/store/inbox_test.go`. That file is `package store`
+(internal), so there is no `store.` qualifier, and it already has the helpers
+`openInboxStore(t) *Store` (a store with project "horndb" and actor "stig")
+and `upsertIssue(t, s, Issue) error` (which drives the package-level
+`UpsertIssue` through `RecordEvent`).
 
 ```go
 func TestListIssuesProjectFilter(t *testing.T) {
-	st := store.OpenTestStore(t)
-	ctx := context.Background()
+	s := openInboxStore(t)
+	ctx := t.Context()
 
-	if err := st.CreateProject(ctx, "alpha", "Alpha", "AL"); err != nil {
+	if err := s.CreateProject(ctx, "alpha", "Alpha", "AL"); err != nil {
 		t.Fatalf("create project alpha: %v", err)
 	}
-	if err := st.CreateProject(ctx, "beta", "Beta", "BE"); err != nil {
+	if err := s.CreateProject(ctx, "beta", "Beta", "BE"); err != nil {
 		t.Fatalf("create project beta: %v", err)
 	}
-	if err := st.AddRepo(ctx, "alpha", "acme/alpha-app"); err != nil {
+	if err := s.AddRepo(ctx, "alpha", "acme/alpha-app"); err != nil {
 		t.Fatalf("map alpha repo: %v", err)
 	}
-	if err := st.AddRepo(ctx, "beta", "acme/beta-app"); err != nil {
+	if err := s.AddRepo(ctx, "beta", "acme/beta-app"); err != nil {
 		t.Fatalf("map beta repo: %v", err)
 	}
 
-	upsertIssue(t, st, "acme/alpha-app", 1, "alpha issue")
-	upsertIssue(t, st, "acme/beta-app", 2, "beta issue")
-	upsertIssue(t, st, "acme/unmapped", 3, "unmapped issue")
+	for _, is := range []Issue{
+		{Repo: "acme/alpha-app", Number: 1, Title: "alpha", State: "open", URL: "https://example.test/1"},
+		{Repo: "acme/beta-app", Number: 2, Title: "beta", State: "open", URL: "https://example.test/2"},
+		{Repo: "acme/unmapped", Number: 3, Title: "unmapped", State: "open", URL: "https://example.test/3"},
+	} {
+		if err := upsertIssue(t, s, is); err != nil {
+			t.Fatalf("upsert %s#%d: %v", is.Repo, is.Number, err)
+		}
+	}
 
-	got := issueKeys(t, st, "", "alpha")
+	got := issueKeys(t, s, "", "alpha")
 	if len(got) != 1 || got[0] != "acme/alpha-app#1" {
 		t.Fatalf("project alpha = %v; want [acme/alpha-app#1]", got)
 	}
 
-	got = issueKeys(t, st, "", "")
+	got = issueKeys(t, s, "", "")
 	if len(got) != 3 {
 		t.Fatalf("no project filter = %v; want all 3 issues", got)
 	}
 
-	got = issueKeys(t, st, "", "nosuchproject")
+	got = issueKeys(t, s, "", "nosuchproject")
 	if len(got) != 0 {
 		t.Fatalf("unknown project = %v; want none", got)
 	}
 }
 
 // issueKeys lists issues and returns "repo#number" for each.
-func issueKeys(t *testing.T, st *store.Store, triageState, project string) []string {
+func issueKeys(t *testing.T, s *Store, triageState, project string) []string {
 	t.Helper()
-	issues, err := st.ListIssues(context.Background(), triageState, project)
+	issues, err := s.ListIssues(t.Context(), triageState, project)
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
@@ -457,10 +467,7 @@ func issueKeys(t *testing.T, st *store.Store, triageState, project string) []str
 }
 ```
 
-`upsertIssue` is the existing helper this file already uses to create issues —
-reuse it exactly as the neighbouring tests do. If its signature differs from
-`(t, st, repo, number, title)`, adapt these three calls to match it rather
-than changing the helper. Ensure `"fmt"` is in the file's imports.
+Add `"fmt"` to that file's imports — it is not there yet.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -573,19 +580,9 @@ func TestListInboxProjectFilter(t *testing.T) {
 	ctx := context.Background()
 	mapRepo(t, h, token, "alpha", "AL", "acme/alpha-app")
 	mapRepo(t, h, token, "beta", "BE", "acme/beta-app")
-
-	if err := st.UpsertIssue(ctx, &store.Issue{
-		Repo: "acme/alpha-app", Number: 1, Title: "alpha", State: "open",
-		TriageState: "new", URL: "https://example.test/1",
-	}); err != nil {
-		t.Fatalf("upsert alpha issue: %v", err)
-	}
-	if err := st.UpsertIssue(ctx, &store.Issue{
-		Repo: "acme/beta-app", Number: 2, Title: "beta", State: "open",
-		TriageState: "new", URL: "https://example.test/2",
-	}); err != nil {
-		t.Fatalf("upsert beta issue: %v", err)
-	}
+	seedIssue(t, st, "acme/alpha-app", 1)
+	seedIssue(t, st, "acme/beta-app", 2)
+	_ = ctx
 
 	rec := doReq(t, h, http.MethodGet, "/api/v1/inbox?project=alpha", token, nil)
 	if rec.Code != http.StatusOK {
@@ -606,9 +603,30 @@ func TestListInboxProjectFilter(t *testing.T) {
 }
 ```
 
-Adapt the two `UpsertIssue` calls to the store's actual issue-creation method
-if its name or signature differs — check `internal/store/inbox.go` and copy
-what `internal/store/inbox_test.go` already does.
+`store.UpsertIssue` is a package-level function taking a `*sql.Tx`, not a
+method, so seeding goes through the event log. Add this helper to the same
+file:
+
+```go
+// seedIssue inserts a triage_state="new" inbox issue through the event log,
+// the same path a GitHub webhook takes.
+func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "github",
+		fmt.Sprintf("%s-%s-%d", t.Name(), repo, number), "issues.opened", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpsertIssue(tx, store.Issue{
+				Repo: repo, Number: number, Title: "issue", State: "open",
+				URL: "https://example.test/x",
+			})
+		})
+	if err != nil {
+		t.Fatalf("seed issue %s#%d: %v", repo, number, err)
+	}
+}
+```
+
+with `"database/sql"`, `"fmt"`, and `"context"` in the imports.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1085,13 +1103,16 @@ git commit -m "Read the origin remote URL for scope resolution"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/cli/client_test.go`:
+Append to `internal/cli/client_test.go`. That file is `package cli_test`
+(external), so it reaches `loadConfigFrom` through the existing
+`cli.LoadConfigFromForTest` export in `internal/cli/export_test.go`. Do not
+set `LODE_SERVER`: leaving `ServerURL` empty keeps `loadConfigFrom` away from
+the OS keychain.
 
 ```go
 func TestCurrentProjectPathRecordsSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("LODE_SERVER", "http://example.test")
 
 	userDir := filepath.Join(home, ".config", "worklode")
 	if err := os.MkdirAll(userDir, 0o755); err != nil {
@@ -1102,7 +1123,7 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 		t.Fatalf("write user config: %v", err)
 	}
 
-	cfg, err := loadConfigFrom(home)
+	cfg, err := cli.LoadConfigFromForTest(home)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -1120,7 +1141,7 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 		t.Fatalf("write repo config: %v", err)
 	}
 
-	cfg, err = loadConfigFrom(repo)
+	cfg, err = cli.LoadConfigFromForTest(repo)
 	if err != nil {
 		t.Fatalf("load from repo: %v", err)
 	}
@@ -2056,9 +2077,7 @@ func boardProjectIDs(t *testing.T, args ...string) []string {
 	}
 	var resp struct {
 		Projects []struct {
-			Project struct {
-				ID string `json:"id"`
-			} `json:"project"`
+			ID string `json:"id"`
 		} `json:"projects"`
 	}
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
@@ -2066,7 +2085,7 @@ func boardProjectIDs(t *testing.T, args ...string) []string {
 	}
 	ids := make([]string, 0, len(resp.Projects))
 	for _, p := range resp.Projects {
-		ids = append(ids, p.Project.ID)
+		ids = append(ids, p.ID)
 	}
 	sort.Strings(ids)
 	return ids
@@ -2128,23 +2147,27 @@ func TestInboxListScopesToCurrentProject(t *testing.T) {
 	}
 }
 
-// seedIssue inserts a "new" inbox issue directly into the store.
+// seedIssue inserts a triage_state="new" inbox issue through the event log,
+// the same path a GitHub webhook takes.
 func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
 	t.Helper()
-	if err := st.UpsertIssue(context.Background(), &store.Issue{
-		Repo: repo, Number: number, Title: "issue", State: "open",
-		TriageState: "new", URL: "https://example.test/x",
-	}); err != nil {
+	_, _, err := st.RecordEvent(context.Background(), "github",
+		fmt.Sprintf("%s-%s-%d", t.Name(), repo, number), "issues.opened", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpsertIssue(tx, store.Issue{
+				Repo: repo, Number: number, Title: "issue", State: "open",
+				URL: "https://example.test/x",
+			})
+		})
+	if err != nil {
 		t.Fatalf("seed issue %s#%d: %v", repo, number, err)
 	}
 }
 ```
 
-Adapt `seedIssue` to the store's actual issue-upsert method (see
-`internal/store/inbox.go`), and check that `lifecycleTestServer` returns the
-store as its first value — if it does not, get the store the same way other
-`internal/cmd` tests do. Add `"encoding/json"`, `"sort"`, `"context"` and the
-`store` import as needed.
+`lifecycleTestServer(t)` returns `(*store.Store, *cli.Client)`, so `st` is its
+first value. Add `"encoding/json"`, `"sort"`, `"context"`, `"database/sql"`,
+`"fmt"` and the `store` import as needed.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -2459,9 +2482,8 @@ func TestProjectResolveUnscoped(t *testing.T) {
 }
 ```
 
-`setupProject` creates project `proj` — adjust the expected key `"PROJ"` to
-whatever key that helper actually uses (check
-`internal/cmd/lifecycle_test.go`).
+`setupProject` (`internal/cmd/lifecycle_test.go:152`) creates project `proj`
+with key `PROJ`, which is what these assertions expect.
 
 - [ ] **Step 2: Run the test to verify it fails**
 

@@ -41,6 +41,11 @@ type Config struct {
 	ServerURL      string
 	Token          string
 	CurrentProject string
+
+	// CurrentProjectPath is the config file CurrentProject came from, so
+	// commands can report which file set their scope. Empty when no file
+	// set it.
+	CurrentProjectPath string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -121,6 +126,9 @@ func loadConfigFrom(startDir string) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("parse %s: %w", path, err)
 		}
+		if cfg.CurrentProject != "" {
+			cfg.CurrentProjectPath = path
+		}
 	case os.IsNotExist(err):
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
@@ -133,7 +141,7 @@ func loadConfigFrom(startDir string) (Config, error) {
 			if err != nil {
 				return Config{}, err
 			}
-			cfg.merge(repoCfg)
+			cfg.merge(repoCfg, repoPath)
 		}
 	}
 
@@ -208,8 +216,9 @@ func readRepoConfig(path string) (Config, error) {
 	return cfg, nil
 }
 
-// merge applies the non-empty values of a repo-local config on top of cfg.
-func (cfg *Config) merge(repo Config) {
+// merge applies the non-empty values of a repo-local config (read from path)
+// on top of cfg.
+func (cfg *Config) merge(repo Config, path string) {
 	if repo.ServerURL != "" && repo.ServerURL != cfg.ServerURL {
 		// Same reasoning as the LODE_SERVER override in loadConfigFrom: a
 		// legacy cleartext token in the user config belongs to that config's
@@ -219,6 +228,7 @@ func (cfg *Config) merge(repo Config) {
 	}
 	if repo.CurrentProject != "" {
 		cfg.CurrentProject = repo.CurrentProject
+		cfg.CurrentProjectPath = path
 	}
 }
 
@@ -292,6 +302,10 @@ func NewClient(cfg Config) *Client {
 		http:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
+
+// ServerURL returns the base URL this client talks to. Callers key
+// server-specific local state (such as the remote cache) by it.
+func (c *Client) ServerURL() string { return c.baseURL }
 
 // do sends one request and returns the raw response body. body, if non-nil,
 // is JSON-encoded as the request body. A non-2xx response is returned as a
@@ -855,11 +869,15 @@ type IssueListResponse struct {
 	Issues []Issue `json:"issues"`
 }
 
-// ListIssues calls GET /api/v1/inbox. An empty state lists every issue.
-func (c *Client) ListIssues(ctx context.Context, state string) (IssueListResponse, []byte, error) {
+// ListIssues calls GET /api/v1/inbox. An empty state lists every triage
+// state; an empty project lists every project's issues.
+func (c *Client) ListIssues(ctx context.Context, state, project string) (IssueListResponse, []byte, error) {
 	q := url.Values{}
 	if state != "" {
 		q.Set("state", state)
+	}
+	if project != "" {
+		q.Set("project", project)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/inbox", q), nil)
 	if err != nil {
@@ -993,6 +1011,24 @@ func (c *Client) GetProject(ctx context.Context, id string) (Project, error) {
 		}
 	}
 	return Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
+}
+
+// ResolveRemote calls GET /api/v1/projects/resolve, returning the project the
+// given git remote URL maps to. The URL is sent exactly as git reported it —
+// the server owns normalization — and a *ClientError with Status 404 means
+// the repo is not mapped to any project.
+func (c *Client) ResolveRemote(ctx context.Context, remote string) (Project, error) {
+	q := url.Values{}
+	q.Set("remote", remote)
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil)
+	if err != nil {
+		return Project{}, err
+	}
+	var p Project
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return Project{}, fmt.Errorf("decode project: %w", err)
+	}
+	return p, nil
 }
 
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
