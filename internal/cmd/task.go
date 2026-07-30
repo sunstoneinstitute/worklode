@@ -36,6 +36,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskBlockCmd(),
 		newTaskUnblockCmd(),
 		newTaskBriefCmd(),
+		newTaskSkillsCmd(),
 	)
 	return cmd
 }
@@ -48,6 +49,7 @@ func newTaskAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var title, body, priority, kind, concern string
 	var draft bool
+	var skills []string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Create a task",
@@ -65,7 +67,7 @@ func newTaskAddCmd() *cobra.Command {
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
-				Concern: concern, Draft: draft,
+				Concern: concern, Draft: draft, Skills: skills,
 			})
 			if err != nil {
 				return err
@@ -85,6 +87,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
+	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeatable)")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -176,6 +179,47 @@ func newTaskShowCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func newTaskSkillsCmd() *cobra.Command {
+	var set []string
+	cmd := &cobra.Command{
+		Use:   "skills <id>",
+		Short: "Show or replace the task's pinned skills",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			if cmd.Flags().Changed("set") {
+				raw, err := c.SetTaskSkills(cmd.Context(), id, set)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+				}
+				return nil
+			}
+			t, raw, err := c.GetTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), strings.Join(t.Skills, "\n"))
+			return nil
+		},
+	}
+	cmd.Flags().StringSliceVar(&set, "set", nil, "replace pinned skills (comma-separated)")
 	return cmd
 }
 

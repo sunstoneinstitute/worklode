@@ -118,7 +118,7 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		text = task.Title + "\n\n" + task.Body
-		// pins stays nil: tasks.skills lands in the task-pins commit (Task 8).
+		pins = task.Skills
 	}
 	rec, err := s.recommendation(r.Context(), text, pins, req.Limit)
 	if err != nil {

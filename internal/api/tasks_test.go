@@ -517,3 +517,84 @@ func TestEdgeValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateTaskWithSkills verifies "skills" on the create request persists
+// and round-trips through the response and a subsequent GET.
+func TestCreateTaskWithSkills(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	got := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Pinned", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+	skills, ok := got["skills"].([]any)
+	if !ok || len(skills) != 1 || skills[0] != "tdd" {
+		t.Fatalf("create response skills = %v", got["skills"])
+	}
+
+	task, err := st.GetTask(context.Background(), got["id"].(string))
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if len(task.Skills) != 1 || task.Skills[0] != "tdd" {
+		t.Fatalf("stored skills = %v", task.Skills)
+	}
+}
+
+// TestSetTaskSkills covers PUT /api/v1/tasks/{id}/skills: the 200 + echoed
+// list, that the pins show up in a later GET (proving taskColumns/scanTask
+// wiring, not just the write), that an empty list clears existing pins
+// (rather than merging), and the 404 for an unknown task.
+func TestSetTaskSkills(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	created := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "medium", "kind": "feature",
+	})
+	id := created["id"].(string)
+
+	rr := doReq(t, h, "PUT", "/api/v1/tasks/"+id+"/skills", token,
+		map[string]any{"skills": []string{"tdd", "debugging"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set skills status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills, ok := got["skills"].([]any)
+	if !ok || len(skills) != 2 || skills[0] != "tdd" || skills[1] != "debugging" {
+		t.Fatalf("echoed skills = %v", got["skills"])
+	}
+
+	// The GET response reflects the write (taskColumns/scanTask wiring).
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = decodeMap(t, rr)
+	skills, ok = got["skills"].([]any)
+	if !ok || len(skills) != 2 || skills[0] != "tdd" || skills[1] != "debugging" {
+		t.Fatalf("task skills after set = %v", got["skills"])
+	}
+
+	// An empty list clears rather than merges. Sent as null: the JSON
+	// round-trip through jsonb is where nil-vs-empty tends to break.
+	rr = doReq(t, h, "PUT", "/api/v1/tasks/"+id+"/skills", token,
+		map[string]any{"skills": nil})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear skills status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = decodeMap(t, rr)
+	if skills, ok := got["skills"].([]any); !ok || len(skills) != 0 {
+		t.Fatalf("echoed skills after clear = %v", got["skills"])
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
+	got = decodeMap(t, rr)
+	if skills, ok := got["skills"].([]any); !ok || len(skills) != 0 {
+		t.Fatalf("task skills after clear = %v", got["skills"])
+	}
+
+	rr = doReq(t, h, "PUT", "/api/v1/tasks/WL-999/skills", token, map[string]any{"skills": []string{"tdd"}})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("set skills on unknown task status = %d, want 404", rr.Code)
+	}
+}

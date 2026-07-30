@@ -377,6 +377,7 @@ type Task struct {
 	CreatedBy          string    `json:"created_by"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
+	Skills             []string  `json:"skills"`
 }
 
 // Lease is the wire form of a lease.
@@ -413,13 +414,14 @@ type TaskDetail struct {
 
 // CreateTaskInput is the request body for CreateTask.
 type CreateTaskInput struct {
-	Project  string `json:"project"`
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Priority string `json:"priority"`
-	Kind     string `json:"kind"`
-	Concern  string `json:"concern,omitempty"`
-	Draft    bool   `json:"draft"`
+	Project  string   `json:"project"`
+	Title    string   `json:"title"`
+	Body     string   `json:"body"`
+	Priority string   `json:"priority"`
+	Kind     string   `json:"kind"`
+	Concern  string   `json:"concern,omitempty"`
+	Draft    bool     `json:"draft"`
+	Skills   []string `json:"skills,omitempty"`
 }
 
 // CreateTask calls POST /api/v1/tasks.
@@ -481,6 +483,13 @@ func (c *Client) GetTask(ctx context.Context, id string) (TaskDetail, []byte, er
 		return TaskDetail{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
+}
+
+// SetTaskSkills calls PUT /api/v1/tasks/{id}/skills, replacing the task's
+// pinned skill names. A nil or empty skills clears existing pins.
+func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) ([]byte, error) {
+	return c.do(ctx, http.MethodPut, "/api/v1/tasks/"+url.PathEscape(id)+"/skills",
+		map[string]any{"skills": skills})
 }
 
 // ClaimResponse is the response body of ClaimTask.
