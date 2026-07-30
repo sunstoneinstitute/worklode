@@ -233,3 +233,44 @@ func TestUpsertSkillContentRevert(t *testing.T) {
 		t.Fatalf("expected exactly 2 version rows, got %d", count)
 	}
 }
+
+// TestSkillsMissingEmbeddings pins what the sync engine's convergence pass
+// sees: live skills with no vectors at all, carrying the text needed to
+// embed them without a second query.
+func TestSkillsMissingEmbeddings(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	for _, name := range []string{"tdd", "debugging", "gone"} {
+		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+	tdd, _ := s.GetSkill(ctx, "tdd")
+	if err := s.ReplaceSkillEmbeddings(ctx, tdd.ID, [][]float32{{1, 0, 0}}); err != nil {
+		t.Fatalf("embed tdd: %v", err)
+	}
+	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"tdd", "debugging"}); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	got, err := s.SkillsMissingEmbeddings(ctx)
+	if err != nil {
+		t.Fatalf("missing: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "debugging" {
+		t.Fatalf("missing = %+v, want only debugging", got)
+	}
+	if got[0].Description != "desc of debugging" || got[0].SkillMD == "" {
+		t.Fatalf("missing skill lacks embeddable text: %+v", got[0])
+	}
+
+	// Embedding the last one empties the set.
+	if err := s.ReplaceSkillEmbeddings(ctx, got[0].ID, [][]float32{{0, 1, 0}}); err != nil {
+		t.Fatalf("embed debugging: %v", err)
+	}
+	got, err = s.SkillsMissingEmbeddings(ctx)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("missing after embedding all = %+v err=%v", got, err)
+	}
+}

@@ -45,9 +45,10 @@ type Syncer struct {
 }
 
 type Summary struct {
-	Synced  int `json:"synced"`  // skills found and upserted
-	Changed int `json:"changed"` // of those, new content this sync
-	Deleted int `json:"deleted"`
+	Synced   int `json:"synced"`  // skills found and upserted
+	Changed  int `json:"changed"` // of those, new content this sync
+	Deleted  int `json:"deleted"`
+	Embedded int `json:"embedded"` // embedded by the convergence pass
 }
 
 func (sy *Syncer) log() *slog.Logger {
@@ -58,12 +59,23 @@ func (sy *Syncer) log() *slog.Logger {
 }
 
 // SyncAll fully syncs every source: upsert found skills, soft-delete the
-// missing, re-embed the changed. A failing source does not stop the others —
-// a 5xx or a rate limit on one repo should not leave the rest unsynced — so
-// the returned Summary covers whatever did sync alongside the joined errors.
+// missing, re-embed the changed, and embed whatever still has no vectors.
+// A failing source does not stop the others — a 5xx or a rate limit on one
+// repo should not leave the rest unsynced — so the returned Summary covers
+// whatever did sync alongside the joined errors. A failed embedding
+// invalidation is the exception: it returns before any source is synced, so
+// a zero Summary with an error means nothing happened at all.
 func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error) {
 	var sum Summary
 	var errs []error
+	if sy.Embed != nil {
+		// Before anything is embedded: syncing first would write vectors of the
+		// new model into a table still holding the old model's, which mixes two
+		// incomparable spaces and, on a dimension change, breaks every query.
+		if err := sy.invalidateOnProviderChange(ctx); err != nil {
+			return sum, err
+		}
+	}
 	for _, src := range sources {
 		s, err := sy.syncSource(ctx, src)
 		sum.Synced += s.Synced
@@ -73,7 +85,64 @@ func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error
 			errs = append(errs, fmt.Errorf("sync %s@%s: %w", src.Repo, src.Ref, err))
 		}
 	}
+	if sy.Embed != nil {
+		n, err := sy.embedMissing(ctx)
+		sum.Embedded = n
+		if err != nil {
+			errs = append(errs, fmt.Errorf("converge embeddings: %w", err))
+		}
+	}
 	return sum, errors.Join(errs...)
+}
+
+// invalidateOnProviderChange drops every stored vector when the configured
+// embedding provider is not the one they were computed with, and records the
+// new one. The embedSkill-on-change path alone cannot recover from this: a
+// skill whose content did not change is never re-embedded.
+func (sy *Syncer) invalidateOnProviderChange(ctx context.Context) error {
+	id := sy.Embed.ID()
+	stored, err := sy.Store.EmbeddingProviderID(ctx)
+	if err != nil {
+		return err
+	}
+	if stored == id {
+		return nil
+	}
+	n, err := sy.Store.ClearAllSkillEmbeddings(ctx)
+	if err != nil {
+		return err
+	}
+	if err := sy.Store.SetEmbeddingProviderID(ctx, id); err != nil {
+		return err
+	}
+	// Silent only on the usual first boot: no id recorded and nothing stored.
+	// A real swap that finds zero vectors still gets logged — that is exactly
+	// the state an operator debugging empty recommendations needs to see.
+	if stored != "" || n > 0 {
+		sy.log().Info("embedding provider changed, cleared embeddings",
+			"from", stored, "to", id, "cleared", n)
+	}
+	return nil
+}
+
+// embedMissing embeds every live skill that has no vectors, returning how
+// many it embedded. This is what makes the corpus converge: it re-embeds
+// after an invalidation, and retries skills whose embed call failed on an
+// earlier sync — those keep their content hash, so nothing else would.
+func (sy *Syncer) embedMissing(ctx context.Context) (int, error) {
+	skills, err := sy.Store.SkillsMissingEmbeddings(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, sk := range skills {
+		if err := sy.embedSkill(ctx, sk.ID, sk.Description, sk.SkillMD); err != nil {
+			sy.log().Warn("skill embed failed", "repo", sk.SourceRepo, "skill", sk.Name, "err", err)
+			continue
+		}
+		n++
+	}
+	return n, nil
 }
 
 // syncSource aborts on a tarball-level failure (fetch, gunzip, read) because

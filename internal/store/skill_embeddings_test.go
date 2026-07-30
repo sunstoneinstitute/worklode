@@ -253,3 +253,35 @@ func TestVectorLiteral(t *testing.T) {
 		}
 	}
 }
+
+// TestClearAllSkillEmbeddings covers the provider-change path: every vector
+// in the table is invalidated at once, whatever skill it belongs to.
+func TestClearAllSkillEmbeddings(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	for _, name := range []string{"tdd", "debugging"} {
+		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+		sk, _ := s.GetSkill(ctx, name)
+		if err := s.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0, 0}, {0, 1, 0}}); err != nil {
+			t.Fatalf("embed %s: %v", name, err)
+		}
+	}
+
+	n, err := s.ClearAllSkillEmbeddings(ctx)
+	if err != nil || n != 4 {
+		t.Fatalf("clear = %d err=%v, want 4", n, err)
+	}
+	got, err := s.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("after clear: %+v err=%v", got, err)
+	}
+
+	// Clearing an already-empty table is a no-op, not an error.
+	n, err = s.ClearAllSkillEmbeddings(ctx)
+	if err != nil || n != 0 {
+		t.Fatalf("second clear = %d err=%v, want 0", n, err)
+	}
+}
