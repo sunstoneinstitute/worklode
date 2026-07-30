@@ -559,6 +559,13 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 // dependents: everything from merged onward, plus abandoned.
 const closedStates = `('merged', 'deployed_dev', 'deployed_prod', 'released', 'abandoned')`
 
+// closedStateSet mirrors closedStates for in-Go checks. Both must list the
+// same states — see TestClosedStateSetMirrorsSQL, which pins that.
+var closedStateSet = map[string]bool{
+	"merged": true, "deployed_dev": true, "deployed_prod": true,
+	"released": true, "abandoned": true,
+}
+
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
 // open, i.e. the edge currently blocks its to_task.
 const blockedCondition = `e.type = 'blocks'

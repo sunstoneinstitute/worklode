@@ -136,13 +136,6 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]s
 	return nil
 }
 
-// closedStateSet mirrors the closedStates SQL tuple for in-Go checks. Both
-// must list the same states.
-var closedStateSet = map[string]bool{
-	"merged": true, "deployed_dev": true, "deployed_prod": true,
-	"released": true, "abandoned": true,
-}
-
 // HierarchyProgress is an epic's derived roll-up: how many of its direct
 // children are closed, out of how many. It is computed on read and never
 // stored — there is no resolver, no migration, and no event-log noise behind

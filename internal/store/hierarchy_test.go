@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -330,6 +332,12 @@ func TestChildProgress(t *testing.T) {
 		}
 		kids = append(kids, k)
 	}
+	// A blocks edge into the epic shares child_of's direction (to_task =
+	// epic). It must not be counted: pins the e.type = 'child_of' predicate.
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, blocker.ID, epic.ID, "blocks"); err != nil {
+		t.Fatalf("blocks: %v", err)
+	}
 
 	got, err := s.ChildProgress(t.Context(), epic.ID)
 	if err != nil {
@@ -340,9 +348,7 @@ func TestChildProgress(t *testing.T) {
 	}
 
 	walkTo(t, s, kids[0].ID, "merged")
-	if err := transition(t, s, taskTestNow, kids[1].ID, "ready", "abandoned"); err != nil {
-		t.Fatalf("abandon: %v", err)
-	}
+	walkTo(t, s, kids[1].ID, "abandoned")
 	got, err = s.ChildProgress(t.Context(), epic.ID)
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
@@ -389,6 +395,47 @@ func TestParentOf(t *testing.T) {
 	}
 }
 
+// TestParentMap covers both the scoped (projectID != "") and unscoped
+// (projectID == "") branches, across two projects.
+func TestParentMap(t *testing.T) {
+	s := openTaskStore(t)
+	if err := s.CreateProject(t.Context(), "other", "Other", "OTH"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	epic := createTask(t, s, taskTestNow, epicInput())
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+
+	otherEpicIn := epicInput()
+	otherEpicIn.ProjectID = "other"
+	otherEpic := createTask(t, s, taskTestNow, otherEpicIn)
+	otherChildIn := defaultTaskInput()
+	otherChildIn.ProjectID = "other"
+	otherChild := createTask(t, s, taskTestNow, otherChildIn)
+	if err := addEdge(t, s, otherChild.ID, otherEpic.ID, "child_of"); err != nil {
+		t.Fatalf("other child_of: %v", err)
+	}
+
+	scoped, err := s.ParentMap(t.Context(), "horndb")
+	if err != nil {
+		t.Fatalf("ParentMap horndb: %v", err)
+	}
+	if want := map[string]string{child.ID: epic.ID}; !reflect.DeepEqual(scoped, want) {
+		t.Fatalf("ParentMap(horndb) = %v, want %v", scoped, want)
+	}
+
+	all, err := s.ParentMap(t.Context(), "")
+	if err != nil {
+		t.Fatalf("ParentMap all: %v", err)
+	}
+	if want := (map[string]string{child.ID: epic.ID, otherChild.ID: otherEpic.ID}); !reflect.DeepEqual(all, want) {
+		t.Fatalf("ParentMap(\"\") = %v, want %v", all, want)
+	}
+}
+
 func TestListTasksFilterParentAndKind(t *testing.T) {
 	s := openTaskStore(t)
 	epic := createTask(t, s, taskTestNow, epicInput())
@@ -403,7 +450,10 @@ func TestListTasksFilterParentAndKind(t *testing.T) {
 		t.Fatalf("ListTasks parent: %v", err)
 	}
 	if len(kids) != 1 || kids[0].ID != child.ID {
-		t.Fatalf("children = %v, want [%s]", ids(kids), child.ID)
+		t.Fatalf("children = %v, want [%s]", taskIDs(kids), child.ID)
+	}
+	if slices.Contains(taskIDs(kids), loose.ID) {
+		t.Fatalf("children = %v, must not include the parentless task %s", taskIDs(kids), loose.ID)
 	}
 
 	epics, err := s.ListTasks(t.Context(), TaskFilter{Kind: "epic"})
@@ -411,12 +461,14 @@ func TestListTasksFilterParentAndKind(t *testing.T) {
 		t.Fatalf("ListTasks kind: %v", err)
 	}
 	if len(epics) != 1 || epics[0].ID != epic.ID {
-		t.Fatalf("epics = %v, want [%s]", ids(epics), epic.ID)
+		t.Fatalf("epics = %v, want [%s]", taskIDs(epics), epic.ID)
 	}
-	_ = loose
+	if slices.Contains(taskIDs(epics), loose.ID) {
+		t.Fatalf("epics = %v, must not include the non-epic task %s", taskIDs(epics), loose.ID)
+	}
 }
 
-func ids(tasks []Task) []string {
+func taskIDs(tasks []Task) []string {
 	out := make([]string, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, t.ID)
