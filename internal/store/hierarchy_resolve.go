@@ -1,7 +1,8 @@
 // Hierarchy resolver: the single place the spec-018 epic roll-up table lives.
 // Progress (closed/total) is derived on read in hierarchy.go; closure is
-// stored, one transition per event, by ResolveHierarchy. Transition itself
-// calls the resolver, so every state change rolls its parent up.
+// stored as real transitions, attributed to the triggering event, by
+// ResolveHierarchy. Transition itself calls the resolver, so every state
+// change rolls its parent up.
 
 package store
 
@@ -35,6 +36,7 @@ func epicTarget(states []string) string {
 		}
 	}
 	switch {
+	// Must precede the closed==len arm — abandoned is itself a closed state.
 	case closed == len(states) && abandoned == len(states):
 		return "abandoned"
 	case closed == len(states):
@@ -76,6 +78,8 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 		return nil
 	}
 
+	// No legal path to target: leave the epic where it is rather than fail the
+	// child's transition that triggered this.
 	if !legalTransitions[[2]string{state, target}] {
 		if !legalTransitions[[2]string{state, "ready"}] {
 			return nil
@@ -84,6 +88,9 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 			return err
 		}
 		state = "ready"
+		// Unreachable today (ready reaches every target epicTarget produces);
+		// kept so a new target state fails closed rather than driving an
+		// illegal transition.
 		if !legalTransitions[[2]string{state, target}] {
 			return nil
 		}
@@ -116,20 +123,15 @@ func childStates(tx *sql.Tx, parentID string) ([]string, error) {
 }
 
 // resolveParent rolls the task's parent, if it has one, up to the state its
-// children imply. Transition calls this rather than its eleven call sites
-// doing so: hooking each caller would leave the invariant one forgotten call
-// site away from breaking. Recursion terminates on the depth cap — a subtask
-// resolves its task, the task resolves the epic, the epic has no parent.
+// children imply. Transition calls this rather than its call sites doing so:
+// hooking each caller would leave the invariant one forgotten call site away
+// from breaking. Recursion terminates because checkHierarchy caps a child_of
+// chain at maxHierarchyDepth edges — a subtask resolves its task, the task
+// resolves the epic, the epic has no parent.
 func resolveParent(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
-	var parent string
-	err := tx.QueryRow(
-		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`,
-		taskID).Scan(&parent)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("parent of %s: %w", taskID, err)
+	parent, ok, err := parentOf(tx, taskID)
+	if err != nil || !ok {
+		return err
 	}
 	return ResolveHierarchy(tx, now, parent, eventID)
 }

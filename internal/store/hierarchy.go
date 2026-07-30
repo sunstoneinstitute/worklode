@@ -1,7 +1,8 @@
 // Task hierarchy (docs/specs/018-task-hierarchy.md): epics are declared
 // containers, a task has at most one parent, and a chain is at most
 // maxHierarchyDepth edges deep. Progress is derived on read; closure is
-// stored, one transition per event, by ResolveHierarchy.
+// stored as real transitions, attributed to the triggering event, by
+// ResolveHierarchy.
 
 package store
 
@@ -17,6 +18,22 @@ import (
 // breadcrumbs are unbounded without a cap.
 const maxHierarchyDepth = 2
 
+// parentOf returns id's parent via its child_of edge. The single-parent index
+// makes that at most one row, so ok reports whether id has a parent at all —
+// every walk over the hierarchy goes through here.
+func parentOf(tx *sql.Tx, id string) (parent string, ok bool, err error) {
+	err = tx.QueryRow(
+		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`,
+		id).Scan(&parent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("parent of %s: %w", id, err)
+	}
+	return parent, true, nil
+}
+
 // ancestorHops returns the number of child_of edges between id and the root of
 // its hierarchy (0 for a task with no parent). The visited set keeps the walk
 // terminating even if the stored graph already contains a cycle.
@@ -24,15 +41,12 @@ func ancestorHops(tx *sql.Tx, id string) (int, error) {
 	visited := map[string]bool{id: true}
 	hops, cur := 0, id
 	for {
-		var parent string
-		err := tx.QueryRow(
-			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`,
-			cur).Scan(&parent)
-		if errors.Is(err, sql.ErrNoRows) {
-			return hops, nil
-		}
+		parent, ok, err := parentOf(tx, cur)
 		if err != nil {
-			return 0, fmt.Errorf("walk parents of %s: %w", cur, err)
+			return 0, err
+		}
+		if !ok {
+			return hops, nil
 		}
 		if visited[parent] {
 			return hops, nil
@@ -102,15 +116,12 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]s
 			child, project[child], parent, project[parent], ErrInvalidInput)
 	}
 
-	var existing string
-	err := tx.QueryRow(
-		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`,
-		child).Scan(&existing)
-	if err == nil {
-		return fmt.Errorf("task %s already has parent %s: %w", child, existing, ErrEdgeExists)
+	existing, hasParent, err := parentOf(tx, child)
+	if err != nil {
+		return err
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("check parent of %s: %w", child, err)
+	if hasParent {
+		return fmt.Errorf("task %s already has parent %s: %w", child, existing, ErrEdgeExists)
 	}
 
 	reaches, err := reachesViaChildOf(tx, parent, child)
