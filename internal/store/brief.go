@@ -32,8 +32,8 @@ type Brief struct {
 }
 
 // Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, and any active lease. Returns ErrNotFound if the task does not
-// exist. It runs a bounded, fixed number of queries and never returns file
+// blockers, its parent, and any active lease. Returns ErrNotFound if the task
+// does not exist. It runs a bounded, fixed number of queries and never returns file
 // contents or unbounded lists.
 func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
