@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -210,5 +211,47 @@ func TestRecommendWithProvider(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token, map[string]any{"task_id": "WL-999"})
 	if rr.Code != 404 {
 		t.Fatalf("recommend missing task: %d", rr.Code)
+	}
+
+	// Provider errors degrade to pins-only with a warning rather than fail
+	// the request: recommendations must never block work.
+	t.Run("provider 500 degrades to pins-only", func(t *testing.T) {
+		errSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer errSrv.Close()
+		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m"})
+		assertDegradedRecommend(t, h, token)
+	})
+
+	t.Run("provider timeout degrades to pins-only", func(t *testing.T) {
+		slowSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(3 * time.Second) // longer than the server's recommendTimeout (2s)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer slowSrv.Close()
+		_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: slowSrv.URL, EmbeddingModel: "m"})
+		assertDegradedRecommend(t, h, token)
+	})
+}
+
+// assertDegradedRecommend POSTs a recommend request and asserts the
+// pins-only degradation shape: 200, provider still reported as configured,
+// no matches, and a warning explaining why.
+func assertDegradedRecommend(t *testing.T, h http.Handler, token string) {
+	t.Helper()
+	rr := doReq(t, h, "POST", "/api/v1/skills/recommend", token, map[string]any{"text": "write tests first"})
+	if rr.Code != 200 {
+		t.Fatalf("recommend: %d %s", rr.Code, rr.Body)
+	}
+	body := decodeMap(t, rr)
+	if body["provider"] != "openai-compatible" {
+		t.Fatalf("provider: %v", body["provider"])
+	}
+	if m, _ := body["matches"].([]any); len(m) != 0 {
+		t.Fatalf("matches on provider failure: %v", body["matches"])
+	}
+	if w, _ := body["warnings"].([]any); len(w) == 0 {
+		t.Fatalf("expected a degradation warning, got none")
 	}
 }

@@ -1,14 +1,22 @@
 package api
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -148,5 +156,275 @@ func TestRecommendationNoPins(t *testing.T) {
 	}
 	if len(rec.Matches) != 1 || rec.Matches[0].Name != "tdd" {
 		t.Fatalf("matches: %+v", rec.Matches)
+	}
+}
+
+// TestNewServerSkillsConfig covers NewServer's skills-config boot validation
+// one field at a time: the reviewer found this path had zero coverage, so
+// deleting the 0.35 default, the range check, the EmbeddingModel
+// requirement, or the appAuth requirement all left the api suite green.
+func TestNewServerSkillsConfig(t *testing.T) {
+	st := store.OpenTestStore(t)
+	appKeyPEM := appTestKeyPEM(t)
+
+	cases := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{"empty config boots with skills off", Config{}, false},
+
+		{"score floor non-numeric", Config{SkillScoreFloor: "abc"}, true},
+		{"score floor below zero", Config{SkillScoreFloor: "-0.1"}, true},
+		{"score floor above one", Config{SkillScoreFloor: "1.5"}, true},
+		{"score floor NaN", Config{SkillScoreFloor: "NaN"}, true},
+		{"score floor leading space", Config{SkillScoreFloor: " 0.5"}, true},
+		{"score floor zero", Config{SkillScoreFloor: "0"}, false},
+		{"score floor one", Config{SkillScoreFloor: "1"}, false},
+		{"score floor mid-range", Config{SkillScoreFloor: "0.5"}, false},
+
+		{"embedding url without model", Config{EmbeddingURL: "https://example.com/embed"}, true},
+		{"embedding url with model", Config{EmbeddingURL: "https://example.com/embed", EmbeddingModel: "m"}, false},
+
+		{"skill sources malformed", Config{SkillSources: "not-a-source"}, true},
+		{"skill sources without github app", Config{SkillSources: "acme/skills@main:skills/*"}, true},
+		{
+			"skill sources with github app configured",
+			Config{SkillSources: "acme/skills@main:skills/*", GitHubAppID: "12345", GitHubAppPrivateKey: appKeyPEM},
+			false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := NewServer(st, tc.cfg)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("NewServer(%+v) err = %v, wantErr %v", tc.cfg, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestDefaultSkillScoreFloor pins the 0.35 default end to end through
+// NewServer and the HTTP handler: a stored skill embedding and a query
+// vector at a known cosine similarity, just under and just over the
+// threshold. (1,0) and (cosθ,sinθ) are both unit vectors, so their cosine
+// similarity is exactly cosθ, independent of pgvector's own normalization.
+func TestDefaultSkillScoreFloor(t *testing.T) {
+	cosVector := func(cos float64) []float32 {
+		return []float32{float32(cos), float32(math.Sqrt(1 - cos*cos))}
+	}
+
+	if n := recommendMatchCountAtCosine(t, cosVector(0.30)); n != 0 {
+		t.Fatalf("cosine 0.30 vs default floor 0.35: got %d matches, want 0", n)
+	}
+	if n := recommendMatchCountAtCosine(t, cosVector(0.40)); n != 1 {
+		t.Fatalf("cosine 0.40 vs default floor 0.35: got %d matches, want 1", n)
+	}
+}
+
+// recommendMatchCountAtCosine seeds a skill embedded at (1,0), boots a real
+// server with no SkillScoreFloor override (so NewServer's 0.35 default
+// applies), points its embedder at a fake endpoint that always returns
+// query, and returns how many matches /api/v1/skills/recommend reports.
+func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
+	t.Helper()
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
+	}
+
+	vecJSON, err := json.Marshal(query)
+	if err != nil {
+		t.Fatalf("marshal query vector: %v", err)
+	}
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + string(vecJSON) + `}]}`))
+	}))
+	t.Cleanup(fakeSrv.Close)
+
+	h, _, err := NewServer(st, Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	reqBody, err := json.Marshal(map[string]any{"text": "the fake endpoint ignores this"})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills/recommend", bytes.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("recommend: %d %s", rr.Code, rr.Body)
+	}
+	var resp recommendationJSON
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return len(resp.Matches)
+}
+
+// TestRecommendationPinsSurviveProviderFailure covers I3's other half: pins
+// can only be exercised by calling recommendation() directly until Task 8
+// wires tasks.skills onto the wire, but the degrade-to-pins-only guarantee
+// must hold together with pins specifically, not just in isolation. Both a
+// hard failure (500) and a timeout past recommendTimeout must still return
+// the pin's inline content, an empty match list, and a warning.
+func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
+	st := store.OpenTestStore(t)
+	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{"500", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}},
+		{"timeout", func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(recommendTimeout + time.Second)
+			w.WriteHeader(http.StatusOK)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeSrv := httptest.NewServer(tc.handler)
+			t.Cleanup(fakeSrv.Close)
+			s := &server{
+				st: st, log: slog.Default(), skillFloor: 0.35,
+				embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+			}
+
+			rec, err := s.recommendation(context.Background(), "write tests first", []string{pinned.Name}, 5)
+			if err != nil {
+				t.Fatalf("recommendation: %v", err)
+			}
+			if rec.Provider != "openai-compatible" {
+				t.Fatalf("provider: %v", rec.Provider)
+			}
+			if len(rec.Matches) != 0 {
+				t.Fatalf("matches on provider failure: %+v", rec.Matches)
+			}
+			if len(rec.Warnings) == 0 {
+				t.Fatalf("expected a degradation warning, got none")
+			}
+			if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "tdd" || rec.Pinned[0].Content == "" {
+				t.Fatalf("pin did not survive provider failure: %+v", rec.Pinned)
+			}
+		})
+	}
+}
+
+// tarballOf builds a GitHub-shaped tarball: entries under root/, gzipped —
+// mirrors skillsync's own test helper, which lives in a different package
+// and is not importable from here.
+func tarballOf(t *testing.T, root string, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for p, c := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: root + "/" + p, Mode: 0o644, Size: int64(len(c)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatalf("tar header: %v", err)
+		}
+		if _, err := tw.Write([]byte(c)); err != nil {
+			t.Fatalf("tar write: %v", err)
+		}
+	}
+	tw.Close()
+	gz.Close()
+	return buf.Bytes()
+}
+
+// TestSyncSkillsPartialFailure covers I4: one source fetch fails, one
+// succeeds, and the real work done by the successful one must survive in
+// the response rather than being thrown away behind a bare 502.
+func TestSyncSkillsPartialFailure(t *testing.T) {
+	st := store.OpenTestStore(t)
+	goodTarball := tarballOf(t, "acme-good-sha1", map[string]string{
+		"skills/tdd/SKILL.md": "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\nBody.",
+	})
+
+	fetch := func(ctx context.Context, repo, ref string) ([]byte, error) {
+		switch repo {
+		case "acme/good":
+			return goodTarball, nil
+		case "acme/bad":
+			return nil, fmt.Errorf("fetch %s: simulated failure", repo)
+		default:
+			return nil, fmt.Errorf("unexpected repo %s", repo)
+		}
+	}
+
+	s := &server{
+		st:  st,
+		log: slog.Default(),
+		skillSources: []skillsync.Source{
+			{Repo: "acme/good", Ref: "main", Glob: "skills/*"},
+			{Repo: "acme/bad", Ref: "main", Glob: "skills/*"},
+		},
+		skillSyncer: &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills/sync", nil)
+	rr := httptest.NewRecorder()
+	s.syncSkills(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("sync: %d %s", rr.Code, rr.Body)
+	}
+	var resp syncResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Synced != 1 || resp.Changed != 1 {
+		t.Fatalf("counts did not survive the partial failure: %+v", resp)
+	}
+	if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0], "acme/bad") {
+		t.Fatalf("errors: %+v", resp.Errors)
+	}
+
+	sk, err := st.GetSkill(context.Background(), "tdd")
+	if err != nil || sk.Deleted {
+		t.Fatalf("good source's skill was not persisted: %v %+v", err, sk)
+	}
+}
+
+// TestSyncSkillsTotalFailure covers the zero-Summary branch of I4: when
+// nothing at all synced, the response is a generic 502 (the detail is
+// logged server-side, not leaked — see mapStoreErr's "logged, not leaked"
+// convention).
+func TestSyncSkillsTotalFailure(t *testing.T) {
+	st := store.OpenTestStore(t)
+	fetch := func(ctx context.Context, repo, ref string) ([]byte, error) {
+		return nil, fmt.Errorf("fetch %s: simulated failure with a secret token abc123", repo)
+	}
+	s := &server{
+		st:           st,
+		log:          slog.Default(),
+		skillSources: []skillsync.Source{{Repo: "acme/bad", Ref: "main", Glob: "skills/*"}},
+		skillSyncer:  &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills/sync", nil)
+	rr := httptest.NewRecorder()
+	s.syncSkills(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("sync: %d %s", rr.Code, rr.Body)
+	}
+	if strings.Contains(rr.Body.String(), "secret token") {
+		t.Fatalf("generic 502 leaked the underlying error: %s", rr.Body)
 	}
 }
