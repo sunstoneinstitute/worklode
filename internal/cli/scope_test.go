@@ -96,6 +96,24 @@ func TestResolveScopeUnmappedRepoIsCachedNegative(t *testing.T) {
 	}
 }
 
+func TestResolveScopeCacheIsPerServer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := initRepo(t, "git@github.com:acme/app.git")
+	a, _ := resolveServer(t, http.StatusOK, `{"id":"on-a","name":"A","key":"AA","repos":[],"focus":[]}`)
+	b, bCalls := resolveServer(t, http.StatusOK, `{"id":"on-b","name":"B","key":"BB","repos":[],"focus":[]}`)
+
+	if got := ResolveScope(context.Background(), a, Config{}, dir); got.Project != "on-a" {
+		t.Fatalf("scope on server a = %+v; want on-a", got)
+	}
+	got := ResolveScope(context.Background(), b, Config{}, dir)
+	if got.Project != "on-b" || got.Key != "BB" {
+		t.Fatalf("scope on server b = %+v; want on-b/BB — server a's answer must not be reused", got)
+	}
+	if *bCalls != 1 {
+		t.Fatalf("server b called %d times; want 1", *bCalls)
+	}
+}
+
 func TestResolveScopeDegradesSilently(t *testing.T) {
 	cases := []struct {
 		name   string

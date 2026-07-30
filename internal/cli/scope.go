@@ -55,7 +55,7 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 	}
 
 	now := time.Now()
-	cache := loadCache()
+	cache := loadCache(c.ServerURL())
 	if project, ok := cache.remote(remote, now); ok {
 		if project == "" {
 			return Scope{Source: ScopeNone, Remote: remote, Cached: true}
@@ -91,14 +91,17 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 	return Scope{Project: p.ID, Key: p.Key, Source: ScopeGitRemote, Remote: remote}
 }
 
-// ForgetRemote drops the cached answer for the repo containing dir, so the
-// next resolution re-queries the server. Backs `lode project resolve --refresh`.
-func ForgetRemote(dir string) {
+// ForgetRemote drops c's cached answer for the repo containing dir, so the
+// next resolution re-queries. Backs `lode project resolve --refresh`.
+func ForgetRemote(c *Client, dir string) {
+	if c == nil {
+		return
+	}
 	remote := gitRemoteURL(dir)
 	if remote == "" {
 		return
 	}
-	cache := loadCache()
+	cache := loadCache(c.ServerURL())
 	cache.forgetRemote(remote)
 	_ = cache.save()
 }
@@ -111,7 +114,7 @@ func ProjectKey(ctx context.Context, c *Client, project string) string {
 		return ""
 	}
 	now := time.Now()
-	cache := loadCache()
+	cache := loadCache(c.ServerURL())
 	if key, ok := cache.key(project, now); ok {
 		return key
 	}

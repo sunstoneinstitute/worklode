@@ -31,12 +31,21 @@ type keyEntry struct {
 	At  time.Time `json:"at"`
 }
 
-// remoteCache is the on-disk cache at ~/.cache/worklode/remotes.json. It is
+// serverCache holds one server's answers.
+type serverCache struct {
+	Remotes map[string]remoteEntry `json:"remotes"`
+	Keys    map[string]keyEntry    `json:"keys"`
+}
+
+// remoteCache is the on-disk cache at ~/.cache/worklode/remotes.json, viewed
+// through one server: repo→project mappings belong to the server that answered
+// them, and LODE_SERVER can point at a different one between commands. It is
 // pure optimization: every read failure yields an empty cache and every write
 // failure is survivable, so no caller ever fails a command over it.
 type remoteCache struct {
-	Remotes map[string]remoteEntry `json:"remotes"`
-	Keys    map[string]keyEntry    `json:"keys"`
+	Servers map[string]serverCache `json:"servers"`
+
+	server string // the server this view reads and writes; not serialized
 }
 
 // cachePath returns ~/.cache/worklode/remotes.json.
@@ -48,10 +57,11 @@ func cachePath() (string, error) {
 	return filepath.Join(home, ".cache", "worklode", "remotes.json"), nil
 }
 
-// loadCache reads the cache. A missing, unreadable, or corrupt file is an
-// empty cache, never an error.
-func loadCache() *remoteCache {
-	c := &remoteCache{Remotes: map[string]remoteEntry{}, Keys: map[string]keyEntry{}}
+// loadCache reads the cache and returns a view of the given server's section.
+// A missing, unreadable, or corrupt file is an empty cache, never an error;
+// so is a file in the older un-nested format, which simply yields no hits.
+func loadCache(server string) *remoteCache {
+	c := &remoteCache{Servers: map[string]serverCache{}, server: server}
 	path, err := cachePath()
 	if err != nil {
 		return c
@@ -64,11 +74,8 @@ func loadCache() *remoteCache {
 	if err := json.Unmarshal(data, &on); err != nil {
 		return c
 	}
-	if on.Remotes != nil {
-		c.Remotes = on.Remotes
-	}
-	if on.Keys != nil {
-		c.Keys = on.Keys
+	if on.Servers != nil {
+		c.Servers = on.Servers
 	}
 	return c
 }
@@ -77,7 +84,7 @@ func loadCache() *remoteCache {
 // reports whether a fresh entry exists; a fresh entry with an empty project
 // means "known to be unmapped".
 func (c *remoteCache) remote(rawURL string, now time.Time) (string, bool) {
-	e, ok := c.Remotes[rawURL]
+	e, ok := c.Servers[c.server].Remotes[rawURL]
 	if !ok || !fresh(e.At, e.Project != "", now) {
 		return "", false
 	}
@@ -86,23 +93,40 @@ func (c *remoteCache) remote(rawURL string, now time.Time) (string, bool) {
 
 // key returns the cached task-id key for a project id.
 func (c *remoteCache) key(project string, now time.Time) (string, bool) {
-	e, ok := c.Keys[project]
+	e, ok := c.Servers[c.server].Keys[project]
 	if !ok || !fresh(e.At, e.Key != "", now) {
 		return "", false
 	}
 	return e.Key, true
 }
 
+// section returns this view's server section, creating it on first write.
+func (c *remoteCache) section() serverCache {
+	s, ok := c.Servers[c.server]
+	if !ok || s.Remotes == nil || s.Keys == nil {
+		if s.Remotes == nil {
+			s.Remotes = map[string]remoteEntry{}
+		}
+		if s.Keys == nil {
+			s.Keys = map[string]keyEntry{}
+		}
+		c.Servers[c.server] = s
+	}
+	return s
+}
+
 func (c *remoteCache) putRemote(rawURL, project string, now time.Time) {
-	c.Remotes[rawURL] = remoteEntry{Project: project, At: now}
+	c.section().Remotes[rawURL] = remoteEntry{Project: project, At: now}
 }
 
 func (c *remoteCache) putKey(project, key string, now time.Time) {
-	c.Keys[project] = keyEntry{Key: key, At: now}
+	c.section().Keys[project] = keyEntry{Key: key, At: now}
 }
 
 // forgetRemote drops a cached remote answer, so the next resolution re-queries.
-func (c *remoteCache) forgetRemote(rawURL string) { delete(c.Remotes, rawURL) }
+func (c *remoteCache) forgetRemote(rawURL string) {
+	delete(c.Servers[c.server].Remotes, rawURL)
+}
 
 // fresh reports whether an entry recorded at "at" is still valid: hits live a
 // week, misses an hour.
