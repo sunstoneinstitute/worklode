@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 		t.Fatalf("upsert issue (insert): %v", err)
 	}
 
-	list, err := s.ListIssues(t.Context(), "")
+	list, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 	if err := upsertIssue(t, s, is2); err != nil {
 		t.Fatalf("upsert issue (update): %v", err)
 	}
-	list, err = s.ListIssues(t.Context(), "")
+	list, err = s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues after update: %v", err)
 	}
@@ -135,7 +136,7 @@ func TestUpsertIssueDoesNotClobberAfterPromote(t *testing.T) {
 		t.Fatalf("upsert issue (redelivery after promote): %v", err)
 	}
 
-	list, err := s.ListIssues(t.Context(), "")
+	list, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestPromoteIssue(t *testing.T) {
 		t.Fatalf("GetTask round trip: got %+v", got)
 	}
 
-	list, err := s.ListIssues(t.Context(), "")
+	list, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -238,7 +239,7 @@ func TestDismissIssue(t *testing.T) {
 	if err := dismissIssue(t, s, is.Repo, is.Number); err != nil {
 		t.Fatalf("DismissIssue: %v", err)
 	}
-	list, err := s.ListIssues(t.Context(), "")
+	list, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -290,7 +291,7 @@ func TestListIssuesFilter(t *testing.T) {
 		t.Fatalf("dismiss #%d: %v", dismissedIssue.Number, err)
 	}
 
-	all, err := s.ListIssues(t.Context(), "")
+	all, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("ListIssues all: %v", err)
 	}
@@ -298,7 +299,7 @@ func TestListIssuesFilter(t *testing.T) {
 		t.Fatalf("ListIssues all: got %d, want 3", len(all))
 	}
 
-	newOnly, err := s.ListIssues(t.Context(), "new")
+	newOnly, err := s.ListIssues(t.Context(), "new", "")
 	if err != nil {
 		t.Fatalf("ListIssues new: %v", err)
 	}
@@ -306,7 +307,7 @@ func TestListIssuesFilter(t *testing.T) {
 		t.Fatalf("ListIssues new: got %+v, want just #1", newOnly)
 	}
 
-	promotedOnly, err := s.ListIssues(t.Context(), "promoted")
+	promotedOnly, err := s.ListIssues(t.Context(), "promoted", "")
 	if err != nil {
 		t.Fatalf("ListIssues promoted: %v", err)
 	}
@@ -314,11 +315,68 @@ func TestListIssuesFilter(t *testing.T) {
 		t.Fatalf("ListIssues promoted: got %+v, want just #2", promotedOnly)
 	}
 
-	dismissedOnly, err := s.ListIssues(t.Context(), "dismissed")
+	dismissedOnly, err := s.ListIssues(t.Context(), "dismissed", "")
 	if err != nil {
 		t.Fatalf("ListIssues dismissed: %v", err)
 	}
 	if len(dismissedOnly) != 1 || dismissedOnly[0].Number != 3 {
 		t.Fatalf("ListIssues dismissed: got %+v, want just #3", dismissedOnly)
 	}
+}
+
+func TestListIssuesProjectFilter(t *testing.T) {
+	s := openInboxStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "alpha", "Alpha", "AL"); err != nil {
+		t.Fatalf("create project alpha: %v", err)
+	}
+	if err := s.CreateProject(ctx, "beta", "Beta", "BE"); err != nil {
+		t.Fatalf("create project beta: %v", err)
+	}
+	if err := s.AddRepo(ctx, "alpha", "acme/alpha-app"); err != nil {
+		t.Fatalf("map alpha repo: %v", err)
+	}
+	if err := s.AddRepo(ctx, "beta", "acme/beta-app"); err != nil {
+		t.Fatalf("map beta repo: %v", err)
+	}
+
+	for _, is := range []Issue{
+		{Repo: "acme/alpha-app", Number: 1, Title: "alpha", State: "open", URL: "https://example.test/1"},
+		{Repo: "acme/beta-app", Number: 2, Title: "beta", State: "open", URL: "https://example.test/2"},
+		{Repo: "acme/unmapped", Number: 3, Title: "unmapped", State: "open", URL: "https://example.test/3"},
+	} {
+		if err := upsertIssue(t, s, is); err != nil {
+			t.Fatalf("upsert %s#%d: %v", is.Repo, is.Number, err)
+		}
+	}
+
+	got := issueKeys(t, s, "", "alpha")
+	if len(got) != 1 || got[0] != "acme/alpha-app#1" {
+		t.Fatalf("project alpha = %v; want [acme/alpha-app#1]", got)
+	}
+
+	got = issueKeys(t, s, "", "")
+	if len(got) != 3 {
+		t.Fatalf("no project filter = %v; want all 3 issues", got)
+	}
+
+	got = issueKeys(t, s, "", "nosuchproject")
+	if len(got) != 0 {
+		t.Fatalf("unknown project = %v; want none", got)
+	}
+}
+
+// issueKeys lists issues and returns "repo#number" for each.
+func issueKeys(t *testing.T, s *Store, triageState, project string) []string {
+	t.Helper()
+	issues, err := s.ListIssues(t.Context(), triageState, project)
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
+	out := make([]string, 0, len(issues))
+	for _, is := range issues {
+		out = append(out, fmt.Sprintf("%s#%d", is.Repo, is.Number))
+	}
+	return out
 }
