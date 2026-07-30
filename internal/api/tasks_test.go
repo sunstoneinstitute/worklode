@@ -492,6 +492,11 @@ func TestEdgesFromDirection(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cycle status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
+	// Name the reason: the epic-parent rule also returns 422, so a status-only
+	// assertion would pass without the cycle check ever running.
+	if body := rr.Body.String(); !strings.Contains(body, "cycle") {
+		t.Fatalf("cycle body = %s, want the cycle rule to be what rejects", body)
+	}
 }
 
 func TestEdgeValidation(t *testing.T) {

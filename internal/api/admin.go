@@ -437,7 +437,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, or spec")
+		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
 	project, err := s.st.ProjectForRepo(r.Context(), req.Repo)
