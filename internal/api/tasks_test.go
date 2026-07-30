@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 	"testing"
@@ -33,6 +34,30 @@ func createTaskViaAPI(t *testing.T, h http.Handler, token string, body map[strin
 		t.Fatalf("create task status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	return decodeMap(t, rr)
+}
+
+// createEpicViaStore creates an epic-kind task directly through the store.
+// The API's validKinds doesn't accept "epic" yet (that lands with the
+// task-hierarchy API work), so tests needing a child_of parent go around it.
+func createEpicViaStore(t *testing.T, st *store.Store, project, title string) *store.Task {
+	t.Helper()
+	var task *store.Task
+	_, _, err := st.RecordEvent(context.Background(), "cli", "epic-"+project+"-"+title, "task.create", nil,
+		func(tx *sql.Tx, _ int64) error {
+			var err error
+			task, err = store.CreateTask(tx, st.Now(), store.TaskInput{
+				ProjectID: project,
+				Title:     title,
+				Priority:  "low",
+				Kind:      "epic",
+				CreatedBy: "alice",
+			})
+			return err
+		})
+	if err != nil {
+		t.Fatalf("create epic %s: %v", title, err)
+	}
+	return task
 }
 
 func TestCreateTask(t *testing.T) {
@@ -471,7 +496,7 @@ func TestEdgesFromDirection(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "chore"})
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Epic", "priority": "low", "kind": "feature"})
+	createEpicViaStore(t, st, "proj", "Epic")
 
 	// "from" on WL-2 means WL-1 -> WL-2 (WL-1 child_of WL-2).
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "child_of"})

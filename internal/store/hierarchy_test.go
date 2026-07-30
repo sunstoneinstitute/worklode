@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -147,4 +148,111 @@ func epicInput() TaskInput {
 	in.Title = "an epic"
 	in.Kind = "epic"
 	return in
+}
+
+// addEdge (tasks_test.go) drives AddEdge through RecordEvent and returns its
+// error; reused here for the hierarchy invariant tests.
+
+func TestAddEdgeRejectsNonEpicParent(t *testing.T) {
+	s := openTaskStore(t)
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	err := addEdge(t, s, child.ID, parent.ID, "child_of")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestAddEdgeRejectsSecondParent(t *testing.T) {
+	s := openTaskStore(t)
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+	epicA := createTask(t, s, taskTestNow, epicInput())
+	epicB := createTask(t, s, taskTestNow, epicInput())
+
+	if err := addEdge(t, s, child.ID, epicA.ID, "child_of"); err != nil {
+		t.Fatalf("first parent: %v", err)
+	}
+	err := addEdge(t, s, child.ID, epicB.ID, "child_of")
+	if !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("error = %v, want ErrEdgeExists", err)
+	}
+	// The baseline duplicate-edge rule still applies to the same pair.
+	if err := addEdge(t, s, child.ID, epicA.ID, "child_of"); !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("duplicate edge error = %v, want ErrEdgeExists", err)
+	}
+}
+
+func TestAddEdgeRejectsCrossProject(t *testing.T) {
+	s := openTaskStore(t)
+	if err := s.CreateProject(t.Context(), "other", "Other", "OTH"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	epic := createTask(t, s, taskTestNow, epicInput())
+	otherIn := defaultTaskInput()
+	otherIn.ProjectID = "other"
+	child := createTask(t, s, taskTestNow, otherIn)
+
+	err := addEdge(t, s, child.ID, epic.ID, "child_of")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestAddEdgeEnforcesDepthCap(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	mid := createTask(t, s, taskTestNow, epicInput())
+	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+	deep := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("depth 1: %v", err)
+	}
+	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
+		t.Fatalf("depth 2: %v", err)
+	}
+	// A third level is one edge too many.
+	err := addEdge(t, s, deep.ID, leaf.ID, "child_of")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAddEdgeDepthCapCountsSubtree checks that adopting a task that already
+// has children counts the whole resulting chain, not just the new edge.
+func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
+	s := openTaskStore(t)
+	top := createTask(t, s, taskTestNow, epicInput())
+	mid := createTask(t, s, taskTestNow, epicInput())
+	sub := createTask(t, s, taskTestNow, epicInput())
+	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, leaf.ID, sub.ID, "child_of"); err != nil {
+		t.Fatalf("leaf under sub: %v", err)
+	}
+	if err := addEdge(t, s, sub.ID, mid.ID, "child_of"); err != nil {
+		t.Fatalf("sub under mid: %v", err)
+	}
+	// mid already carries a 2-deep subtree; hanging it under top makes 3.
+	err := addEdge(t, s, mid.ID, top.ID, "child_of")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAddEdgeStillRejectsCycles checks the pre-existing cycle guard survives
+// the rewrite: a parent cannot become a child of its own descendant.
+func TestAddEdgeStillRejectsCycles(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	child := createTask(t, s, taskTestNow, epicInput())
+
+	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+		t.Fatalf("child under epic: %v", err)
+	}
+	err := addEdge(t, s, epic.ID, child.ID, "child_of")
+	if !errors.Is(err, ErrCycle) {
+		t.Fatalf("error = %v, want ErrCycle", err)
+	}
 }
