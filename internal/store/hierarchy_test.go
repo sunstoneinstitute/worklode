@@ -150,9 +150,6 @@ func epicInput() TaskInput {
 	return in
 }
 
-// addEdge (tasks_test.go) drives AddEdge through RecordEvent and returns its
-// error; reused here for the hierarchy invariant tests.
-
 func TestAddEdgeRejectsNonEpicParent(t *testing.T) {
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -254,5 +251,70 @@ func TestAddEdgeStillRejectsCycles(t *testing.T) {
 	err := addEdge(t, s, epic.ID, child.ID, "child_of")
 	if !errors.Is(err, ErrCycle) {
 		t.Fatalf("error = %v, want ErrCycle", err)
+	}
+}
+
+// TestDescendantDepthWideFanOut checks that a wide, shallow fan-out (many
+// direct children sharing one parent) is computed with the batched ANY($1)
+// query and still reports depth 1: width alone must not be mistaken for
+// depth.
+func TestDescendantDepthWideFanOut(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, epicInput())
+	for i := 0; i < 25; i++ {
+		leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+		if err := addEdge(t, s, leaf.ID, parent.ID, "child_of"); err != nil {
+			t.Fatalf("fan-out child %d: %v", i, err)
+		}
+	}
+
+	var depth int
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		var err error
+		depth, err = descendantDepth(tx, parent.ID)
+		return err
+	}); err != nil {
+		t.Fatalf("descendantDepth: %v", err)
+	}
+	if depth != 1 {
+		t.Fatalf("depth = %d, want 1 (25 direct children, one level deep)", depth)
+	}
+}
+
+// TestDescendantDepthStopsAtCap pins the early-exit behavior: a chain that
+// runs deeper than maxHierarchyDepth+1 must not be walked past the point
+// where the cap is already known to be blown. The fixture is built with
+// direct inserts (bypassing AddEdge, which would refuse a chain this deep)
+// so the walk has a level to stop short of.
+func TestDescendantDepthStopsAtCap(t *testing.T) {
+	s := openTaskStore(t)
+	top := createTask(t, s, taskTestNow, epicInput())
+	n1 := createTask(t, s, taskTestNow, epicInput())
+	n2 := createTask(t, s, taskTestNow, epicInput())
+	n3 := createTask(t, s, taskTestNow, epicInput())
+	n4 := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	// top <- n1 <- n2 <- n3 <- n4: 4 levels below top, two past the cap.
+	for _, e := range []struct{ child, parent string }{
+		{n1.ID, top.ID}, {n2.ID, n1.ID}, {n3.ID, n2.ID}, {n4.ID, n3.ID},
+	} {
+		if _, err := s.DBForTests().Exec(
+			`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
+			e.child, e.parent, taskTestNow); err != nil {
+			t.Fatalf("insert %s child_of %s: %v", e.child, e.parent, err)
+		}
+	}
+
+	var depth int
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		var err error
+		depth, err = descendantDepth(tx, top.ID)
+		return err
+	}); err != nil {
+		t.Fatalf("descendantDepth: %v", err)
+	}
+	// The true chain is 4 deep; a walk that doesn't stop early would return 4.
+	if depth != maxHierarchyDepth+1 {
+		t.Fatalf("depth = %d, want %d (walk should stop one level past the cap)", depth, maxHierarchyDepth+1)
 	}
 }

@@ -43,53 +43,50 @@ func ancestorHops(tx *sql.Tx, id string) (int, error) {
 }
 
 // descendantDepth returns the length of the longest child_of chain below id
-// (0 for a task with no children).
+// (0 for a task with no children). It queries one level at a time (all of a
+// level's children in a single ANY($1) round trip) and stops as soon as the
+// chain is known to exceed maxHierarchyDepth, since checkHierarchy only needs
+// to know the cap is blown, not by how much. The single-parent index makes
+// child_of a forest, which is what lets a shared-visited BFS return the
+// longest chain rather than just the level of first reachability.
 func descendantDepth(tx *sql.Tx, id string) (int, error) {
 	visited := map[string]bool{id: true}
 	depth := 0
 	frontier := []string{id}
 	for len(frontier) > 0 {
+		rows, err := tx.Query(
+			`SELECT from_task FROM task_edges WHERE to_task = ANY($1) AND type = 'child_of'`,
+			frontier)
+		if err != nil {
+			return 0, fmt.Errorf("walk children below %s: %w", id, err)
+		}
 		var next []string
-		for _, cur := range frontier {
-			kids, err := childIDs(tx, cur)
-			if err != nil {
-				return 0, err
+		for rows.Next() {
+			var k string
+			if err := rows.Scan(&k); err != nil {
+				rows.Close()
+				return 0, fmt.Errorf("scan child below %s: %w", id, err)
 			}
-			for _, k := range kids {
-				if !visited[k] {
-					visited[k] = true
-					next = append(next, k)
-				}
+			if !visited[k] {
+				visited[k] = true
+				next = append(next, k)
 			}
 		}
-		if len(next) > 0 {
-			depth++
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("walk children below %s: %w", id, err)
+		}
+		rows.Close()
+		if len(next) == 0 {
+			break
+		}
+		depth++
+		if depth > maxHierarchyDepth {
+			return depth, nil
 		}
 		frontier = next
 	}
 	return depth, nil
-}
-
-// childIDs returns the ids of a task's direct children.
-func childIDs(tx *sql.Tx, id string) ([]string, error) {
-	rows, err := tx.Query(
-		`SELECT from_task FROM task_edges WHERE to_task = $1 AND type = 'child_of'`, id)
-	if err != nil {
-		return nil, fmt.Errorf("walk children of %s: %w", id, err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			return nil, fmt.Errorf("scan child of %s: %w", id, err)
-		}
-		out = append(out, k)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("walk children of %s: %w", id, err)
-	}
-	return out, nil
 }
 
 // checkHierarchy validates a proposed "child child_of parent" edge against the
