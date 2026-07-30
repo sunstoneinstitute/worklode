@@ -45,7 +45,8 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 }
 
 // prefixedTaskColumns returns taskColumns with each column qualified by
-// alias, for queries that join tasks against other tables.
+// alias, for queries that join tasks against other tables. Splits naively on
+// ", ", so every taskColumns entry must stay comma-free.
 func prefixedTaskColumns(alias string) string {
 	cols := strings.Split(taskColumns, ", ")
 	for i, c := range cols {

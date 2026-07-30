@@ -809,3 +809,60 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 		t.Fatalf("title = %q, want Renamed", got.Title)
 	}
 }
+
+// setTaskSkills drives SetTaskSkills through RecordEvent, the way production
+// code will use it.
+func setTaskSkills(t *testing.T, s *Store, id string, skills []string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.skills_set", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return SetTaskSkills(tx, id, skills)
+		})
+	return err
+}
+
+func TestTaskSkills(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil || len(got.Skills) != 0 {
+		t.Fatalf("default skills: %+v err=%v", got.Skills, err)
+	}
+
+	if err := setTaskSkills(t, s, task.ID, []string{"tdd", "debugging"}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if len(got.Skills) != 2 || got.Skills[0] != "tdd" || got.Skills[1] != "debugging" {
+		t.Fatalf("skills: %+v", got.Skills)
+	}
+
+	// Clearing with an empty slice replaces, rather than merges.
+	if err := setTaskSkills(t, s, task.ID, []string{}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil || len(got.Skills) != 0 {
+		t.Fatalf("skills after clear: %+v err=%v", got.Skills, err)
+	}
+
+	// nil normalizes to [] rather than a SQL NULL.
+	if err := setTaskSkills(t, s, task.ID, []string{"tdd"}); err != nil {
+		t.Fatalf("set again: %v", err)
+	}
+	if err := setTaskSkills(t, s, task.ID, nil); err != nil {
+		t.Fatalf("clear with nil: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil || len(got.Skills) != 0 {
+		t.Fatalf("skills after nil clear: %+v err=%v", got.Skills, err)
+	}
+
+	if err := setTaskSkills(t, s, "WL-999", []string{"tdd"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("set skills on unknown task: want ErrNotFound, got %v", err)
+	}
+}

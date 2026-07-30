@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,6 +24,9 @@ type Task struct {
 	CreatedBy          string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	// Skills is the task's pinned skill names, always surfaced in a
+	// recommendation regardless of embedding similarity. Never nil.
+	Skills []string
 }
 
 // TaskInput carries the fields for creating a new task. Draft creates the
@@ -38,6 +42,7 @@ type TaskInput struct {
 	Concern   string
 	CreatedBy string
 	Draft     bool
+	Skills    []string
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -139,10 +144,18 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	if in.Concern != "" {
 		concern = sql.NullString{String: in.Concern, Valid: true}
 	}
-	_, err := tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
+	skills := in.Skills
+	if skills == nil {
+		skills = []string{}
+	}
+	skillsJSON, err := json.Marshal(skills)
+	if err != nil {
+		return nil, fmt.Errorf("marshal task %s skills: %w", id, err)
+	}
+	_, err = tx.Exec(
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts, string(skillsJSON),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -159,6 +172,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 		CreatedBy: in.CreatedBy,
 		CreatedAt: ts,
 		UpdatedAt: ts,
+		Skills:    skills,
 	}, nil
 }
 
@@ -297,8 +311,12 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	return nil
 }
 
-// taskColumns is the SELECT list scanTask expects, in order.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, needs_decomposition, created_by, created_at, updated_at`
+// taskColumns is the SELECT list scanTask expects, in order. skills is last
+// so positional scans elsewhere are unaffected by its addition. The column is
+// "jsonb NOT NULL DEFAULT '[]'" (see migration 0007), so a bare cast is
+// enough — no coalesce needed, and prefixedTaskColumns below requires each
+// entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, needs_decomposition, created_by, created_at, updated_at, skills::text`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -307,8 +325,9 @@ type rowScanner interface {
 func scanTask(row rowScanner) (*Task, error) {
 	var t Task
 	var body, createdBy, concern sql.NullString
+	var skillsJSON string
 	if err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&t.State, &concern, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON); err != nil {
 		return nil, err
 	}
 	t.Body = body.String
@@ -316,7 +335,34 @@ func scanTask(row rowScanner) (*Task, error) {
 	t.CreatedBy = createdBy.String
 	t.CreatedAt = t.CreatedAt.UTC()
 	t.UpdatedAt = t.UpdatedAt.UTC()
+	if err := json.Unmarshal([]byte(skillsJSON), &t.Skills); err != nil {
+		return nil, fmt.Errorf("unmarshal task %s skills: %w", t.ID, err)
+	}
+	if t.Skills == nil {
+		t.Skills = []string{}
+	}
 	return &t, nil
+}
+
+// SetTaskSkills replaces the task's pinned skill names inside the given
+// transaction. nil normalizes to an empty pin list rather than a SQL NULL.
+// Returns ErrNotFound if the task does not exist.
+func SetTaskSkills(tx *sql.Tx, id string, skills []string) error {
+	if skills == nil {
+		skills = []string{}
+	}
+	b, err := json.Marshal(skills)
+	if err != nil {
+		return fmt.Errorf("set task skills %s: %w", id, err)
+	}
+	res, err := tx.Exec(`UPDATE tasks SET skills = $2::jsonb WHERE id = $1`, id, string(b))
+	if err != nil {
+		return fmt.Errorf("set task skills %s: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("task %s: %w", id, ErrNotFound)
+	}
+	return nil
 }
 
 // SlugifyTitle turns a task title into a branch-name slug: lowercase, every

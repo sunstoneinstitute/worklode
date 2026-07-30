@@ -188,10 +188,12 @@ func TestRecommendWithProvider(t *testing.T) {
 		t.Fatalf("match score: %v", m0["score"])
 	}
 
-	// task_id path: task.Skills does not exist yet (lands in Task 8), so pins
-	// resolve to none and the vector match still comes through.
+	// task_id path: the task pins "tdd", so its content must come back in
+	// "pinned" — and, since it is now also the embedding match, it must be
+	// excluded from "matches" so the same skill is not surfaced twice.
 	task := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
 	})
 	rr = doReq(t, h, "POST", "/api/v1/skills/recommend", token,
 		map[string]any{"task_id": task["id"]})
@@ -199,12 +201,20 @@ func TestRecommendWithProvider(t *testing.T) {
 		t.Fatalf("recommend by task: %d %s", rr.Code, rr.Body)
 	}
 	body = decodeMap(t, rr)
-	if pinned, _ := body["pinned"].([]any); len(pinned) != 0 {
-		t.Fatalf("pinned before task pins land: %v", body["pinned"])
+	pinned, _ := body["pinned"].([]any)
+	if len(pinned) != 1 {
+		t.Fatalf("pinned by task: %v", body["pinned"])
+	}
+	p0, _ := pinned[0].(map[string]any)
+	if p0["name"] != "tdd" {
+		t.Fatalf("pinned name: %v", p0["name"])
+	}
+	if p0["content"] == "" || p0["content"] == nil {
+		t.Fatalf("pinned content missing: %v", p0["content"])
 	}
 	matches, _ = body["matches"].([]any)
-	if len(matches) != 1 {
-		t.Fatalf("matches by task: %v", body["matches"])
+	if len(matches) != 0 {
+		t.Fatalf("matches by task: want none (tdd is pinned, so excluded from matches), got %v", body["matches"])
 	}
 
 	// task_id for a missing task still maps to 404 through mapStoreErr.
