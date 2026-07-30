@@ -69,10 +69,13 @@ func ResolveScope(ctx context.Context, c *Client, cfg Config, dir string) Scope 
 
 	p, err := c.ResolveRemote(ctx, remote)
 	if err != nil {
-		// Only a definite "no such mapping" is worth remembering. A transient
-		// failure must not pin this repo to unscoped for the next hour.
+		// Only a definite answer is worth remembering: 404 (no mapping) and
+		// 422 (a remote the server cannot read as owner/name) will not change
+		// on a retry. A transient failure — 5xx, a dropped connection, a
+		// malformed body — must not pin this repo to unscoped for an hour.
 		var ce *ClientError
-		if errors.As(err, &ce) && ce.Status == http.StatusNotFound {
+		if errors.As(err, &ce) &&
+			(ce.Status == http.StatusNotFound || ce.Status == http.StatusUnprocessableEntity) {
 			cache.putRemote(remote, "", now)
 			_ = cache.save()
 		}
