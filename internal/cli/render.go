@@ -41,6 +41,14 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
 	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
 	fmt.Fprintf(w, "  state:    %s\n", t.State)
+	if t.Hierarchy.Parent != nil {
+		fmt.Fprintf(w, "  parent:   %s  %s (%s)\n",
+			t.Hierarchy.Parent.ID, t.Hierarchy.Parent.Title, t.Hierarchy.Parent.State)
+	}
+	if t.Hierarchy.Progress.Total > 0 {
+		fmt.Fprintf(w, "  progress: %d/%d children closed\n",
+			t.Hierarchy.Progress.Closed, t.Hierarchy.Progress.Total)
+	}
 	if t.Concern != "" {
 		fmt.Fprintf(w, "  concern:  %s\n", t.Concern)
 	}
@@ -222,5 +230,35 @@ func timelineSummary(typ string, e map[string]any) string {
 		return fmt.Sprintf("%s on %s: %s", str("kind"), str("workload"), str("message"))
 	default:
 		return ""
+	}
+}
+
+// TreeNode is one epic and its direct children, with the epic's derived
+// progress — the unit `lode task tree` renders.
+type TreeNode struct {
+	Epic     Task
+	Progress TaskProgress
+	Children []Task
+}
+
+// TreeRender prints each epic with its progress, then its children indented
+// one level. Depth is capped at two edges, so there is no deeper nesting to
+// render.
+func TreeRender(w io.Writer, nodes []TreeNode) {
+	for i, n := range nodes {
+		if i > 0 {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprintf(w, "%s  %s  [%s]  %d/%d closed\n",
+			n.Epic.ID, n.Epic.Title, n.Epic.State, n.Progress.Closed, n.Progress.Total)
+		for _, c := range n.Children {
+			fmt.Fprintf(w, "  %s  %s  (%s)\n", c.ID, c.Title, c.State)
+		}
+		if len(n.Children) == 0 {
+			fmt.Fprintln(w, "  (no children)")
+		}
+	}
+	if len(nodes) == 0 {
+		fmt.Fprintln(w, "no epics")
 	}
 }
