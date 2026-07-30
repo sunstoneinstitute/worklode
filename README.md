@@ -59,11 +59,40 @@ lode task claim <task-id>
 Managing projects, actors, and tokens requires an admin actor; the
 bootstrap actor is admin, and `lode actor add --admin` creates more.
 
-### Setting the current project per repo
+### Project scoping
 
-`current_project` supplies the default for `--project` on `lode task add`,
-`lode task list`, `lode task claim --next`, and `lode next`. Set it once per
-checkout in `.worklode/config.toml` (or `.lode/config.toml`) at the repo root:
+Commands that act on a set of tasks — `lode task list`, `lode task add`,
+`lode task claim --next`, `lode next`, `lode board`, `lode inbox list` — scope
+themselves to the project of the repo you are in. The project is resolved in
+this order, first hit wins:
+
+1. `--project <id>` or `--repo <owner/name>` on the command line.
+   `--project=` (explicitly empty) means *all projects*.
+2. `current_project` in the repo's `.worklode/config.toml` (or `.lode/`),
+   found by walking up from the working directory.
+3. `current_project` in `~/.config/worklode/config.toml`.
+4. The repo's `origin` git remote, resolved against the repo → project
+   mappings created by `lode project add-repo`.
+5. Nothing — the command runs across every project.
+
+Step 4 needs no setup beyond the mapping already on the server, so a fresh
+clone or a new worktree is scoped correctly on the first command. Its answer
+is cached in `~/.cache/worklode/remotes.json` for a week (an unmapped repo for
+an hour), so it costs one request per repo, not one per command. Anything that
+goes wrong there — no remote, an unreachable server, an unmapped repo — falls
+through to step 5 rather than failing the command.
+
+To see what the current directory resolves to:
+
+```bash
+lode project resolve
+# worklode (WL) — from git remote git@github.com:sunstoneinstitute/worklode.git (cached)
+
+lode project resolve --refresh   # re-query the server
+```
+
+To pin a project explicitly, set it in `.worklode/config.toml` at the repo
+root:
 
 ```toml
 current_project = "sunstone-web"
@@ -72,13 +101,15 @@ current_project = "sunstone-web"
 ```bash
 lode task add --title "Fix the footer link"   # goes to sunstone-web
 lode task list --project=                     # opt back out to all projects
+lode board --repo sunstoneinstitute/other     # name a project by its repo
 ```
 
-The CLI walks up from the working directory to the first `.worklode` or
-`.lode` directory containing a `config.toml`, stopping before `$HOME`, and
-merges it over `~/.config/worklode/config.toml`. It may set `server` and
-`current_project`, but not `token` — repo configs tend to be committed, and
-the token belongs in the OS keychain (or `LODE_TOKEN`).
+Inside a scoped repo, commands that take a task id also take a bare task
+number: `lode task show 12` means `WL-12`. Full ids work everywhere.
+
+The CLI merges the repo config over `~/.config/worklode/config.toml`. It may
+set `server` and `current_project`, but not `token` — repo configs tend to be
+committed, and the token belongs in the OS keychain (or `LODE_TOKEN`).
 
 The read-only web UI is at http://localhost:8080/.
 
