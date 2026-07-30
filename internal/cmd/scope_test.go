@@ -73,6 +73,23 @@ func TestBareTaskNumberWithUnknownProjectSaysSo(t *testing.T) {
 	}
 }
 
+func TestBareTaskNumberInClaimRespectsProjectFlag(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createTestTask(t, c, "In the current project")
+	other := createOtherProjectTask(t, c)
+	setupRepoConfig(t, "proj")
+
+	number := other.ID[strings.LastIndex(other.ID, "-")+1:]
+	out, err := runLode(t, "task", "claim", number, "--project", "other", "--worktree", "host:/tmp/wt")
+	if err != nil {
+		t.Fatalf("lode task claim %s --project other: %v\noutput: %s", number, err, out)
+	}
+	if !strings.Contains(out, other.ID) {
+		t.Fatalf("claim output = %q; want it to claim %s from the flagged project", out, other.ID)
+	}
+}
+
 func TestBareTaskNumberResolvesInTimeline(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
