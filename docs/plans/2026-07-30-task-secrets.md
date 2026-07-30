@@ -51,11 +51,12 @@ Nothing of spec 017 is implemented. Grounding points in today's code:
   `deploy/base/` (migrations ship via the `worklode-migrations`
   configMapGenerator in `deploy/base/kustomization.yaml`).
 
-**Migration number:** main has `0001`–`0005`; in-flight sibling plans claim
-`0006` (task hierarchy), `0007` (skills), `0008` (graph projection,
-`docs/plans/2026-07-30-knowledge-graph.md`). This plan takes **`0009_task_secrets`**.
-golang-migrate applies versions in order and tolerates gaps, so 0009 lands
-cleanly whether or not 0006–0008 have merged.
+**Migration number:** provisional. Ids are assigned sequentially at execution
+time, in the order plans are actually executed, by the migration-id script on
+main. `0008` is the current next-free (`0001`–`0005` on main; `0006` and `0007`
+claimed by the in-flight `task-hierarchy` and `skills-task3` worktrees), so the
+steps below use it and expect renumbering. golang-migrate applies versions in
+order and tolerates gaps, so any assigned id lands cleanly.
 
 **Plan-level decisions (deviations from spec prose, all deliberate):**
 
@@ -82,7 +83,7 @@ cleanly whether or not 0006–0008 have merged.
 
 | Path | Responsibility |
 |---|---|
-| `deploy/base/migrations/0009_task_secrets.up.sql` / `.down.sql` | `tasks.secrets jsonb NOT NULL DEFAULT '[]'` |
+| `deploy/base/migrations/0008_task_secrets.up.sql` / `.down.sql` | `tasks.secrets jsonb NOT NULL DEFAULT '[]'` |
 | `internal/secrets/names.go` | `ValidName` — the `^[A-Z][A-Z0-9_]*$` gate everything shares |
 | `internal/secrets/catalog.go` | `Entry`, `Catalog`, `ParseCatalog` (minimal TOML subset), `Resolve` |
 | `internal/secrets/catalog_test.go` | parse the spec's example, comments, errors, resolve/baseline split |
@@ -138,7 +139,7 @@ the swappable `opRunFunc`.
 ## Task 1: Secret-name validation and the `tasks.secrets` column
 
 **Files:**
-- Create: `internal/secrets/names.go`, `deploy/base/migrations/0009_task_secrets.up.sql`, `deploy/base/migrations/0009_task_secrets.down.sql`
+- Create: `internal/secrets/names.go`, `deploy/base/migrations/0008_task_secrets.up.sql`, `deploy/base/migrations/0008_task_secrets.down.sql`
 - Modify: `internal/store/tasks.go`, `deploy/base/kustomization.yaml`
 - Test: `internal/secrets/names_test.go`, `internal/store/tasks_test.go` (append)
 
@@ -199,7 +200,7 @@ Run: `go test ./internal/secrets/...` — PASS.
 
 - [ ] **Step 4: Write the migration**
 
-`deploy/base/migrations/0009_task_secrets.up.sql`:
+`deploy/base/migrations/0008_task_secrets.up.sql`:
 
 ```sql
 -- Spec 017: tasks declare which org-catalog secrets they need, by symbolic
@@ -207,7 +208,7 @@ Run: `go test ./internal/secrets/...` — PASS.
 ALTER TABLE tasks ADD COLUMN secrets jsonb NOT NULL DEFAULT '[]'::jsonb;
 ```
 
-`deploy/base/migrations/0009_task_secrets.down.sql`:
+`deploy/base/migrations/0008_task_secrets.down.sql`:
 
 ```sql
 ALTER TABLE tasks DROP COLUMN secrets;
@@ -217,8 +218,8 @@ In `deploy/base/kustomization.yaml`, append to the `worklode-migrations`
 generator's `files:` list:
 
 ```yaml
-      - migrations/0009_task_secrets.up.sql
-      - migrations/0009_task_secrets.down.sql
+      - migrations/0008_task_secrets.up.sql
+      - migrations/0008_task_secrets.down.sql
 ```
 
 (0006–0008 are claimed by in-flight plans; golang-migrate tolerates the gap.)
