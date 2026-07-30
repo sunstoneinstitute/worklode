@@ -19,10 +19,10 @@
 
 ---
 
-### Task 1: Migration 0006 + pgvector test infrastructure
+### Task 1: Migration 0007 + pgvector test infrastructure
 
 **Files:**
-- Create: `deploy/base/migrations/0006_skills.up.sql`, `deploy/base/migrations/0006_skills.down.sql`
+- Create: `deploy/base/migrations/0007_skills.up.sql`, `deploy/base/migrations/0007_skills.down.sql`
 - Modify: `docker-compose.yml` (postgres image), `.github/workflows/_test.yml` (postgres service image), `deploy/base/kustomization.yaml` (configMapGenerator file list), `internal/store/store_test.go` (`wantTables`)
 
 - [ ] **Step 1: Switch local + CI Postgres to a pgvector image**
@@ -44,7 +44,7 @@ Expected: FAIL — missing tables.
 
 - [ ] **Step 4: Write the migration pair**
 
-`deploy/base/migrations/0006_skills.up.sql`:
+`deploy/base/migrations/0007_skills.up.sql`:
 
 ```sql
 -- Org-wide agent skills: registry synced from git source repos, chunked
@@ -92,7 +92,7 @@ CREATE TABLE skill_embeddings (
 ALTER TABLE tasks ADD COLUMN skills jsonb NOT NULL DEFAULT '[]';
 ```
 
-`deploy/base/migrations/0006_skills.down.sql`:
+`deploy/base/migrations/0007_skills.down.sql`:
 
 ```sql
 ALTER TABLE tasks DROP COLUMN skills;
@@ -106,7 +106,7 @@ DROP TABLE skills;
 
 - [ ] **Step 5: Wire the migration files into the k8s ConfigMap**
 
-In `deploy/base/kustomization.yaml`, add both `0006_skills.up.sql` and `0006_skills.down.sql` to the `worklode-migrations` `configMapGenerator` file list, following the 0005 entries.
+In `deploy/base/kustomization.yaml`, add both `0007_skills.up.sql` and `0007_skills.down.sql` to the `worklode-migrations` `configMapGenerator` file list, following the 0005 entries.
 
 - [ ] **Step 6: Run tests to verify pass (including down-migration round trip)**
 
@@ -116,8 +116,8 @@ Expected: PASS (`TestMigrateAppliesMigrations` and `TestMigrateRoundTrip`).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add deploy/base/migrations/0006_skills.up.sql deploy/base/migrations/0006_skills.down.sql deploy/base/kustomization.yaml docker-compose.yml .github/workflows/_test.yml internal/store/store_test.go
-git commit -m "feat(store): skills schema (0006) + pgvector test images"
+git add deploy/base/migrations/0007_skills.up.sql deploy/base/migrations/0007_skills.down.sql deploy/base/kustomization.yaml docker-compose.yml .github/workflows/_test.yml internal/store/store_test.go
+git commit -m "feat(store): skills schema (0007) + pgvector test images"
 ```
 
 ---
