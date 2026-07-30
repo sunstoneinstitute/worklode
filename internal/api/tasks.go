@@ -16,7 +16,7 @@ var validPriorities = map[string]bool{
 }
 
 var validKinds = map[string]bool{
-	"feature": true, "bug": true, "chore": true, "spec": true,
+	"feature": true, "bug": true, "chore": true, "spec": true, "epic": true,
 }
 
 var validEdgeTypes = map[string]bool{
@@ -66,6 +66,7 @@ type createTaskRequest struct {
 	Kind     string `json:"kind"`
 	Concern  string `json:"concern"`
 	Draft    bool   `json:"draft"`
+	Parent   string `json:"parent"`
 }
 
 // createTask handles POST /api/v1/tasks.
@@ -84,7 +85,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, or spec")
+		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, spec, or epic")
 		return
 	}
 	if req.Concern != "" && !store.ValidConcern(req.Concern) {
@@ -125,6 +126,13 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			created = t
+			if req.Parent != "" {
+				// Same transaction as the insert: there is no window where
+				// the child exists unparented.
+				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of"); err != nil {
+					return err
+				}
+			}
 			return nil
 		})
 	if err != nil {
@@ -144,6 +152,28 @@ type edgeIn struct {
 	Type string `json:"type"`
 }
 
+// parentRefJSON is the one-hop-up projection of a task's parent: enough to
+// render a breadcrumb without a second request.
+type parentRefJSON struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	State string `json:"state"`
+}
+
+// progressJSON is the derived child roll-up, closed of total direct children.
+// Computed on read, never stored.
+type progressJSON struct {
+	Closed int `json:"closed"`
+	Total  int `json:"total"`
+}
+
+// hierarchyJSON is the spec-018 hierarchy block on a task detail. parent is
+// null for a root task; progress is zeroed for a task with no children.
+type hierarchyJSON struct {
+	Parent   *parentRefJSON `json:"parent"`
+	Progress progressJSON   `json:"progress"`
+}
+
 type taskDetailJSON struct {
 	taskJSON
 	Blocked bool `json:"blocked"`
@@ -151,7 +181,8 @@ type taskDetailJSON struct {
 		Out []edgeOut `json:"out"`
 		In  []edgeIn  `json:"in"`
 	} `json:"edges"`
-	Lease *leaseJSON `json:"lease,omitempty"`
+	Lease     *leaseJSON    `json:"lease,omitempty"`
+	Hierarchy hierarchyJSON `json:"hierarchy"`
 }
 
 // getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
@@ -191,10 +222,25 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+
+	parent, err := s.st.ParentOf(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	progress, err := s.st.ChildProgress(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp.Hierarchy.Progress = progressJSON{Closed: progress.Closed, Total: progress.Total}
+	if parent != nil {
+		resp.Hierarchy.Parent = &parentRefJSON{ID: parent.ID, Title: parent.Title, State: parent.State}
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// listTasks handles GET /api/v1/tasks?project=&state=&priority=.
+// listTasks handles GET /api/v1/tasks?project=&state=&priority=&kind=&parent=.
 // state is repeatable and/or comma-separated.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -210,6 +256,8 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Project:  q.Get("project"),
 		States:   states,
 		Priority: q.Get("priority"),
+		Kind:     q.Get("kind"),
+		Parent:   q.Get("parent"),
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

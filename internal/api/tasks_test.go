@@ -2,19 +2,12 @@ package api_test
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// epicSeq feeds unique external ids for createEpicViaStore so two calls in
-// the same test never collide, even with the same project and title.
-var epicSeq atomic.Int64
 
 // createProject registers a project for tests. Most tests only create one
 // project and rely on tasks getting "WL-<n>" ids (a holdover from the old
@@ -40,34 +33,6 @@ func createTaskViaAPI(t *testing.T, h http.Handler, token string, body map[strin
 		t.Fatalf("create task status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	return decodeMap(t, rr)
-}
-
-// createEpicViaStore creates an epic-kind task directly through the store.
-// The API's validKinds doesn't accept "epic" yet (that lands with the
-// task-hierarchy API work), so tests needing a child_of parent go around it.
-func createEpicViaStore(t *testing.T, st *store.Store, project, title string) *store.Task {
-	t.Helper()
-	extID := fmt.Sprintf("epic-%s-%d", t.Name(), epicSeq.Add(1))
-	var task *store.Task
-	_, inserted, err := st.RecordEvent(context.Background(), "cli", extID, "task.create", nil,
-		func(tx *sql.Tx, _ int64) error {
-			var err error
-			task, err = store.CreateTask(tx, st.Now(), store.TaskInput{
-				ProjectID: project,
-				Title:     title,
-				Priority:  "low",
-				Kind:      "epic",
-				CreatedBy: "alice",
-			})
-			return err
-		})
-	if err != nil {
-		t.Fatalf("create epic %s: %v", title, err)
-	}
-	if !inserted || task == nil {
-		t.Fatalf("create epic %s: event %s was already recorded, apply skipped", title, extID)
-	}
-	return task
 }
 
 func TestCreateTask(t *testing.T) {
@@ -505,8 +470,11 @@ func TestEdges(t *testing.T) {
 func TestEdgesFromDirection(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "chore"})
-	createEpicViaStore(t, st, "proj", "Epic")
+	// Both fixtures are epics: WL-1 must be an epic too, or the reverse edge
+	// below would be rejected for the wrong reason (not-an-epic instead of
+	// the cycle it is meant to exercise).
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "epic"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Epic", "priority": "low", "kind": "epic"})
 
 	// "from" on WL-2 means WL-1 -> WL-2 (WL-1 child_of WL-2).
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "child_of"})
