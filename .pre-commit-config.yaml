@@ -12,3 +12,11 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
+      # always_run: a rebase can create a collision in a commit that touches no
+      # migration at all, so matching on changed files would miss it.
+      - id: migration-numbers
+        name: one migration per number
+        entry: scripts/check-migrations.sh
+        language: script
+        pass_filenames: false
+        always_run: true
