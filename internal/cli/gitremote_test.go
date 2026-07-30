@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +28,7 @@ func initRepo(t *testing.T, origin string) string {
 
 func TestGitRemoteURL(t *testing.T) {
 	dir := initRepo(t, "git@github.com:acme/app.git")
-	if got := gitRemoteURL(dir); got != "git@github.com:acme/app.git" {
+	if got := gitRemoteURL(context.Background(), dir); got != "git@github.com:acme/app.git" {
 		t.Fatalf("gitRemoteURL = %q; want git@github.com:acme/app.git", got)
 	}
 }
@@ -38,19 +39,28 @@ func TestGitRemoteURLFromSubdirectory(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if got := gitRemoteURL(sub); got != "https://github.com/acme/app" {
+	if got := gitRemoteURL(context.Background(), sub); got != "https://github.com/acme/app" {
 		t.Fatalf("gitRemoteURL from subdir = %q; want https://github.com/acme/app", got)
 	}
 }
 
+func TestGitRemoteURLHonoursContext(t *testing.T) {
+	dir := initRepo(t, "git@github.com:acme/app.git")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := gitRemoteURL(ctx, dir); got != "" {
+		t.Fatalf("cancelled context = %q; want \"\"", got)
+	}
+}
+
 func TestGitRemoteURLNoOrigin(t *testing.T) {
-	if got := gitRemoteURL(initRepo(t, "")); got != "" {
+	if got := gitRemoteURL(context.Background(), initRepo(t, "")); got != "" {
 		t.Fatalf("repo without origin = %q; want \"\"", got)
 	}
 }
 
 func TestGitRemoteURLNotARepo(t *testing.T) {
-	if got := gitRemoteURL(t.TempDir()); got != "" {
+	if got := gitRemoteURL(context.Background(), t.TempDir()); got != "" {
 		t.Fatalf("non-repo directory = %q; want \"\"", got)
 	}
 }
