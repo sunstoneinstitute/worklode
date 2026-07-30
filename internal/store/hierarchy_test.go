@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -474,4 +475,105 @@ func taskIDs(tasks []Task) []string {
 		out = append(out, t.ID)
 	}
 	return out
+}
+
+// TestEpicNeverInReadySet checks that an epic stays out of the ranked pickup
+// set even when it is ready, unblocked, and top-ranked by every other factor.
+func TestEpicNeverInReadySet(t *testing.T) {
+	s := openTaskStore(t)
+	in := epicInput()
+	in.Priority = "critical"
+	epic := createTask(t, s, taskTestNow, in)
+	plain := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	got, err := s.readyCandidates(t.Context(), "")
+	if err != nil {
+		t.Fatalf("readyCandidates: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != plain.ID {
+		t.Fatalf("candidates = %v, want [%s] (epic %s excluded)", taskIDs(got), plain.ID, epic.ID)
+	}
+}
+
+// TestClaimRejectsEpic checks the direct-claim hole: ready -> in_progress is a
+// legal epic transition (it is the roll-up trigger), so Claim needs its own
+// guard.
+func TestClaimRejectsEpic(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	_, err := s.Claim(t.Context(), epic.ID, "stig", "wt-1", time.Hour)
+	if !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("error = %v, want ErrBadTransition", err)
+	}
+}
+
+// TestEpicForbiddenStates checks the kind guard on both ends of a transition:
+// an epic can never enter a delivery state, and `lode task done` (in_review ->
+// merged) reports the roll-up rule rather than a from-state mismatch.
+func TestEpicForbiddenStates(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	if err := transition(t, s, taskTestNow, epic.ID, "ready", "in_progress"); err != nil {
+		t.Fatalf("ready -> in_progress: %v", err)
+	}
+	err := transition(t, s, taskTestNow, epic.ID, "in_progress", "in_review")
+	if !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("in_review error = %v, want ErrBadTransition", err)
+	}
+	if !strings.Contains(err.Error(), "epic") {
+		t.Fatalf("error %q does not name the epic rule", err)
+	}
+	err = transition(t, s, taskTestNow, epic.ID, "in_review", "merged")
+	if !errors.Is(err, ErrBadTransition) || !strings.Contains(err.Error(), "epic") {
+		t.Fatalf("done error = %v, want an epic ErrBadTransition", err)
+	}
+	// The roll-up terminal is still reachable.
+	if err := transition(t, s, taskTestNow, epic.ID, "in_progress", "merged"); err != nil {
+		t.Fatalf("in_progress -> merged: %v", err)
+	}
+}
+
+// TestResolveDeliveryIgnoresEpics checks that an epic with commit and deploy
+// facts attributed to it is left alone.
+func TestResolveDeliveryIgnoresEpics(t *testing.T) {
+	s := openTaskStore(t)
+	epic := createTask(t, s, taskTestNow, epicInput())
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "delivery", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			if err := InsertTaskCommit(tx, TaskCommit{
+				TaskID: epic.ID, Repo: "o/r", SHA: "abc", Source: "branch_push", SeenAt: taskTestNow,
+			}); err != nil {
+				return err
+			}
+			if _, err := AppendMainCommit(tx, "o/r", "abc", taskTestNow); err != nil {
+				return err
+			}
+			return ResolveDelivery(tx, taskTestNow, epic.ID, "o/r", eventID)
+		})
+	if err != nil {
+		t.Fatalf("ResolveDelivery: %v", err)
+	}
+	got, err := s.GetTask(t.Context(), epic.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != "ready" {
+		t.Fatalf("state = %s, want ready (an epic has no commit)", got.State)
+	}
+}
+
+// TestResolveDeliveryIgnoresUnknownTask checks the other half of the
+// existence check added for epics: a task id that resolves to no row at all
+// (a stale or mistyped commit-message correlation, e.g. push.go's
+// merge-message parsing) is a no-op, not an error, per InsertTaskCommit's
+// contract that a correlation miss must never fail a delivery.
+func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
+	s := openTaskStore(t)
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "delivery", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ResolveDelivery(tx, taskTestNow, "HDB-999", "o/r", eventID)
+		})
+	if err != nil {
+		t.Fatalf("ResolveDelivery: %v", err)
+	}
 }
