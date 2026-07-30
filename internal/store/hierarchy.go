@@ -11,6 +11,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 )
 
 // maxHierarchyDepth caps a child_of chain at two edges (epic -> task ->
@@ -212,4 +214,104 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 		return nil, fmt.Errorf("parent map: %w", err)
 	}
 	return out, nil
+}
+
+// Decompose converts parentID into an epic and creates its children in one
+// transaction: kind becomes 'epic', needs_decomposition clears, and each title
+// becomes a draft child inheriting the parent's project, priority, concern,
+// and pre-conversion kind. This is what makes the spec-005 needs_decomposition
+// gate actionable — an oversized task becomes its own tracking task plus the
+// pieces, in place, keeping its id and every reference to it.
+//
+// Rejected when the parent holds an active lease (decomposing work someone is
+// holding is a coordination bug), when the parent sits deep enough that its
+// children would exceed maxHierarchyDepth, and from the delivery states an
+// epic can never occupy.
+func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]Task, error) {
+	if len(titles) == 0 {
+		return nil, fmt.Errorf("decompose %s: at least one child title is required: %w",
+			parentID, ErrInvalidInput)
+	}
+	for _, title := range titles {
+		if strings.TrimSpace(title) == "" {
+			return nil, fmt.Errorf("decompose %s: child titles must not be blank: %w",
+				parentID, ErrInvalidInput)
+		}
+	}
+
+	var projectID, priority, state, kind string
+	var concern sql.NullString
+	err := tx.QueryRow(
+		`SELECT project_id, priority, state, kind, concern FROM tasks WHERE id = $1 FOR UPDATE`,
+		parentID).Scan(&projectID, &priority, &state, &kind, &concern)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("task %s: %w", parentID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock task %s: %w", parentID, err)
+	}
+	if epicForbiddenStates[state] {
+		return nil, fmt.Errorf("task %s is in state %s and cannot become an epic: %w",
+			parentID, state, ErrBadTransition)
+	}
+
+	var one int
+	err = tx.QueryRow(
+		`SELECT 1 FROM leases WHERE task_id = $1 AND released_at IS NULL`, parentID).Scan(&one)
+	if err == nil {
+		return nil, fmt.Errorf("task %s: %w", parentID, ErrLeased)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("check active lease on %s: %w", parentID, err)
+	}
+
+	above, err := ancestorHops(tx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	if above+1 > maxHierarchyDepth {
+		return nil, fmt.Errorf("task %s is %d level(s) deep; its children would exceed the max of %d: %w",
+			parentID, above, maxHierarchyDepth, ErrInvalidInput)
+	}
+
+	childKind := kind
+	if childKind == kindEpic {
+		childKind = "feature"
+	}
+	if _, err := tx.Exec(
+		`UPDATE tasks SET kind = $1, needs_decomposition = false, updated_at = $2 WHERE id = $3`,
+		kindEpic, now.UTC(), parentID); err != nil {
+		return nil, fmt.Errorf("convert task %s to epic: %w", parentID, err)
+	}
+	if err := LogChange(tx, "task", parentID, eventID,
+		map[string]string{"field": "kind", "old": kind, "new": kindEpic}); err != nil {
+		return nil, err
+	}
+
+	children := make([]Task, 0, len(titles))
+	for _, title := range titles {
+		child, err := CreateTask(tx, now, TaskInput{
+			ProjectID: projectID,
+			Title:     title,
+			Priority:  priority,
+			Kind:      childKind,
+			Concern:   concern.String,
+			CreatedBy: createdBy,
+			Draft:     true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := AddEdge(tx, now, child.ID, parentID, "child_of"); err != nil {
+			return nil, err
+		}
+		children = append(children, *child)
+	}
+
+	// The fresh children are all draft, so this only pulls an epic that was
+	// mid-flight back to where its children put it.
+	if err := ResolveHierarchy(tx, now, parentID, eventID); err != nil {
+		return nil, err
+	}
+	return children, nil
 }
