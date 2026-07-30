@@ -124,12 +124,19 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			now := s.nowFn().UTC().Truncate(time.Second)
 
 			// Lock the task row first so concurrent claims serialize here.
-			var state string
-			if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID).Scan(&state); err != nil {
+			var state, kind string
+			if err := tx.QueryRow(
+				`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, taskID,
+			).Scan(&state, &kind); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 				}
 				return fmt.Errorf("lock task %s: %w", taskID, err)
+			}
+			// An epic has nothing to check out; decomposition work that needs a
+			// worktree is a child task (spec 018).
+			if kind == "epic" {
+				return fmt.Errorf("task %s is an epic and cannot be claimed: %w", taskID, ErrBadTransition)
 			}
 
 			var one int
