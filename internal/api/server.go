@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -241,7 +242,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	s.skillFloor = 0.35
 	if cfg.SkillScoreFloor != "" {
 		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
-		if err != nil || f < 0 || f > 1 {
+		if err != nil || math.IsNaN(f) || f < 0 || f > 1 {
 			return nil, nil, fmt.Errorf("LODE_SKILL_SCORE_FLOOR: want a float in [0,1], got %q", cfg.SkillScoreFloor)
 		}
 		s.skillFloor = f
