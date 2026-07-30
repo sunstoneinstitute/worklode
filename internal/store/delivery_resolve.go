@@ -76,6 +76,20 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // reopened task has no landed commit here and is left alone until new work
 // lands.
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
+	// An epic has no commit, and an unknown task id is a correlation miss
+	// that must not fail the delivery (InsertTaskCommit's contract); both
+	// return nil here rather than an error.
+	var kind string
+	if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, taskID).Scan(&kind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("get task %s kind: %w", taskID, err)
+	}
+	if kind == "epic" {
+		return nil
+	}
+
 	landed, err := LandedMainID(tx, taskID, repo)
 	if err != nil {
 		return err

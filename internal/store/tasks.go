@@ -149,23 +149,37 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	}, nil
 }
 
+// epicForbiddenStates are the delivery states an epic can never occupy. They
+// are earned by observed deploy facts about a specific commit (spec 011) and
+// an epic has no commit. Checked on both ends of a transition so `lode task
+// done` on an epic reports the roll-up rule instead of a from-state mismatch.
+var epicForbiddenStates = map[string]bool{
+	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
+}
+
 // Transition moves a task from one state to another inside the given
 // transaction. The move must be in legalTransitions and the task's current
 // state must equal from (otherwise ErrBadTransition; unknown task is
-// ErrNotFound). It bumps updated_at and appends a state_log row attributed
-// to eventID.
+// ErrNotFound). An epic is additionally barred from every delivery state
+// (see epicForbiddenStates), since its state is driven entirely by its
+// children. It bumps updated_at and appends a state_log row attributed to
+// eventID.
 func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int64) error {
 	if !legalTransitions[[2]string{from, to}] {
 		return fmt.Errorf("task %s: %s -> %s: %w", taskID, from, to, ErrBadTransition)
 	}
 
-	var current string
-	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&current)
+	var current, kind string
+	err := tx.QueryRow(`SELECT state, kind FROM tasks WHERE id = $1`, taskID).Scan(&current, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
+	}
+	if kind == "epic" && (epicForbiddenStates[from] || epicForbiddenStates[to]) {
+		return fmt.Errorf("task %s is an epic: its state follows its children, so it cannot move %s -> %s: %w",
+			taskID, from, to, ErrBadTransition)
 	}
 	if current != from {
 		return fmt.Errorf("task %s is in state %s, not %s: %w", taskID, current, from, ErrBadTransition)
