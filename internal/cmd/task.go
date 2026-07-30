@@ -383,7 +383,11 @@ func newTaskClaimCmd() *cobra.Command {
 				if len(args) == 0 {
 					return fmt.Errorf("task id is required (or use --next)")
 				}
-				id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+				sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+				if err != nil {
+					return err
+				}
+				id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
 				if err != nil {
 					return err
 				}
@@ -455,7 +459,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().StringVar(&worktree, "worktree", "", "worktree identity (default: <hostname>:<git worktree root> of the current directory)")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
-	addScopeFlags(cmd, &scope, "restrict the pick to a project")
+	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd

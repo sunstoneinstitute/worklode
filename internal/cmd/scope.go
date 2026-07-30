@@ -72,7 +72,16 @@ func resolveTaskID(ctx context.Context, arg string, c *cli.Client, cfg cli.Confi
 	if err != nil {
 		wd = ""
 	}
-	scope := cli.ResolveScope(ctx, c, cfg, wd)
+	return resolveTaskIDInScope(ctx, arg, c, cli.ResolveScope(ctx, c, cfg, wd))
+}
+
+// resolveTaskIDInScope is resolveTaskID against an already-resolved scope, for
+// commands that take both an id and --project/--repo: the flag must decide
+// which project a bare number belongs to.
+func resolveTaskIDInScope(ctx context.Context, arg string, c *cli.Client, scope cli.Scope) (string, error) {
+	if !bareTaskNumber.MatchString(arg) {
+		return arg, nil
+	}
 	key := scope.Key
 	if key == "" {
 		key = cli.ProjectKey(ctx, c, scope.Project)
