@@ -462,15 +462,19 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.skills_set", payload,
 		func(tx *sql.Tx, _ int64) error {
-			return store.SetTaskSkills(tx, id, req.Skills)
+			return store.SetTaskSkills(tx, s.st.Now(), id, req.Skills)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-	skills := req.Skills
-	if skills == nil {
-		skills = []string{}
+	// Read back the stored (cleaned: trimmed, deduped) list rather than
+	// echoing the raw request, so the response never lies about what was
+	// actually persisted.
+	t, err := s.st.GetTask(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
+	writeJSON(w, http.StatusOK, map[string]any{"skills": t.Skills})
 }

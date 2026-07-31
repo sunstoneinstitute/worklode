@@ -319,17 +319,28 @@ func scanTask(row rowScanner) (*Task, error) {
 }
 
 // SetTaskSkills replaces the task's pinned skill names inside the given
-// transaction. nil normalizes to an empty pin list rather than a SQL NULL.
-// Returns ErrNotFound if the task does not exist.
-func SetTaskSkills(tx *sql.Tx, id string, skills []string) error {
-	if skills == nil {
-		skills = []string{}
+// transaction and bumps updated_at, matching UpdateTaskFields and Transition.
+// nil normalizes to an empty pin list rather than a SQL NULL — SkillsByNames
+// reads the column with jsonb_array_elements_text, which errors on a JSON
+// null. Blank entries are dropped and the list is deduped, preserving first
+// occurrence order. Returns ErrNotFound if the task does not exist.
+func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error {
+	clean := make([]string, 0, len(skills))
+	seen := map[string]bool{}
+	for _, sk := range skills {
+		sk = strings.TrimSpace(sk)
+		if sk == "" || seen[sk] {
+			continue
+		}
+		seen[sk] = true
+		clean = append(clean, sk)
 	}
-	b, err := json.Marshal(skills)
+	b, err := json.Marshal(clean)
 	if err != nil {
 		return fmt.Errorf("set task skills %s: %w", id, err)
 	}
-	res, err := tx.Exec(`UPDATE tasks SET skills = $2::jsonb WHERE id = $1`, id, string(b))
+	res, err := tx.Exec(`UPDATE tasks SET skills = $2::jsonb, updated_at = $3 WHERE id = $1`,
+		id, string(b), now.UTC())
 	if err != nil {
 		return fmt.Errorf("set task skills %s: %w", id, err)
 	}

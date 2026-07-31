@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,7 +88,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
-	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeatable)")
+	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -204,7 +205,15 @@ func newTaskSkillsCmd() *cobra.Command {
 				}
 				if jsonOut(cmd) {
 					printRaw(cmd, raw)
+					return nil
 				}
+				var resp struct {
+					Skills []string `json:"skills"`
+				}
+				if err := json.Unmarshal(raw, &resp); err != nil {
+					return fmt.Errorf("decode skills: %w", err)
+				}
+				printSkills(cmd, resp.Skills)
 				return nil
 			}
 			t, raw, err := c.GetTask(cmd.Context(), id)
@@ -215,12 +224,22 @@ func newTaskSkillsCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), strings.Join(t.Skills, "\n"))
+			printSkills(cmd, t.Skills)
 			return nil
 		},
 	}
 	cmd.Flags().StringSliceVar(&set, "set", nil, "replace pinned skills (comma-separated)")
 	return cmd
+}
+
+// printSkills renders a task's pinned skills, one per line, or a note when
+// there are none — a bare blank line reads as a rendering bug, not "no pins".
+func printSkills(cmd *cobra.Command, skills []string) {
+	if len(skills) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "(no pinned skills)")
+		return
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), strings.Join(skills, "\n"))
 }
 
 func newTaskEditCmd() *cobra.Command {
