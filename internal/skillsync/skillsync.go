@@ -28,9 +28,12 @@ import (
 // decompressed content retained from one source — the 64 MiB download cap
 // bounds the *compressed* tarball only, so without this a highly compressible
 // tree could hold far more than that in memory at once.
+// maxSkillEntries mirrors the client-side extract cap: a dir the server
+// happily ingests but no client will unpack is a skill nobody can install.
 var (
-	maxSkillBytes  = 8 << 20
-	maxSourceBytes = 64 << 20
+	maxSkillBytes   = 8 << 20
+	maxSourceBytes  = 64 << 20
+	maxSkillEntries = skillhash.MaxEntries
 )
 
 // FetchFunc downloads a repo tarball at a ref (githubauth.AppAuth.Tarball).
@@ -349,6 +352,13 @@ func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error)
 			d.over, d.files, d.bytes = true, nil, 0
 			continue
 		}
+		if len(d.files) >= maxSkillEntries {
+			sy.warn(src, "skipping skill dir with too many files", "dir", dir, "file", rel,
+				"entries", len(d.files)+1, "max", maxSkillEntries)
+			total -= d.bytes
+			d.over, d.files, d.bytes = true, nil, 0
+			continue
+		}
 		content, err := io.ReadAll(io.LimitReader(tr, h.Size))
 		if err != nil {
 			return nil, "", fmt.Errorf("read %s: %w", h.Name, err)
@@ -381,6 +391,12 @@ func buildUpsert(src Source, commit, dir string, files map[string]file) (*store.
 	name, description := parseFrontmatter(md)
 	if name == "" {
 		return nil, fmt.Errorf("SKILL.md has no frontmatter name")
+	}
+	// The same predicate the client applies at extract time. A name with a
+	// separator or a leading dot would otherwise be stored and listed, then
+	// rejected by every install and unroutable on GET /api/v1/skills/{name}.
+	if !skillhash.ValidName(name) {
+		return nil, fmt.Errorf("frontmatter name %q is not a usable skill name", name)
 	}
 	fm, err := json.Marshal(map[string]string{"name": name, "description": description})
 	if err != nil {
