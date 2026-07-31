@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -289,6 +290,54 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 	matches, _ := skills["matches"].([]any)
 	if len(matches) != 0 {
 		t.Fatalf("matches = %v, want none: tdd is pinned so must be excluded from matches", skills["matches"])
+	}
+}
+
+// TestTaskBriefSkillsFalseSkipsTheWork: ?skills=false is for callers that
+// read only the task row or the lease (lode status, the pre-renew fetch in
+// lode resume). It must skip the work, not just trim the output — no pin
+// resolution, no inlined bodies, and no embedding round trip.
+func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
+	var embedCalls atomic.Int32
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		embedCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer fakeSrv.Close()
+
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+	id := task["id"].(string)
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+id+"/brief?skills=false", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief?skills=false: %d %s", rr.Code, rr.Body.String())
+	}
+	skills := decodeMap(t, rr)["skills"].(map[string]any)
+	if pinned, _ := skills["pinned"].([]any); len(pinned) != 0 {
+		t.Fatalf("pinned = %v, want none", skills["pinned"])
+	}
+	if n := embedCalls.Load(); n != 0 {
+		t.Fatalf("embedding provider called %d times for a skills=false brief", n)
+	}
+
+	// The default is unchanged: pins resolve and the provider is consulted.
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief: %d %s", rr.Code, rr.Body.String())
+	}
+	skills = decodeMap(t, rr)["skills"].(map[string]any)
+	if pinned, _ := skills["pinned"].([]any); len(pinned) != 1 {
+		t.Fatalf("pinned = %v, want one entry by default", skills["pinned"])
+	}
+	if n := embedCalls.Load(); n != 1 {
+		t.Fatalf("embedding provider called %d times for a default brief, want 1", n)
 	}
 }
 

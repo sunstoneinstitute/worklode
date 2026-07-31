@@ -279,7 +279,9 @@ func runResume(cmd *cobra.Command, dir string) error {
 		return err
 	}
 
-	brief, _, err := c.Brief(ctx, taskID)
+	// Only brief.Lease is read here, and the full brief follows once the lease
+	// is secured — no reason to pay for pins and matching twice.
+	brief, _, err := c.BriefWithoutSkills(ctx, taskID)
 	if err != nil {
 		return err
 	}
@@ -437,7 +439,8 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			brief, _, err := c.Brief(cmd.Context(), taskID)
+			// status reports the lease, nothing from the brief's skills.
+			brief, _, err := c.BriefWithoutSkills(cmd.Context(), taskID)
 			if err != nil {
 				return err
 			}

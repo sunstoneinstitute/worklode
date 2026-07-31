@@ -614,7 +614,19 @@ type Brief struct {
 
 // Brief calls GET /api/v1/tasks/{id}/brief.
 func (c *Client) Brief(ctx context.Context, id string) (Brief, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id)+"/brief", nil)
+	return c.brief(ctx, id, "")
+}
+
+// BriefWithoutSkills is Brief with skills=false: the server skips pin
+// resolution, the inlined pin bodies, and the embedding call. For callers
+// that only read the task row or the lease, where a pinned brief is hundreds
+// of kilobytes and up to a 2s round trip nobody reads.
+func (c *Client) BriefWithoutSkills(ctx context.Context, id string) (Brief, []byte, error) {
+	return c.brief(ctx, id, "?skills=false")
+}
+
+func (c *Client) brief(ctx context.Context, id, query string) (Brief, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id)+"/brief"+query, nil)
 	if err != nil {
 		return Brief{}, nil, err
 	}
