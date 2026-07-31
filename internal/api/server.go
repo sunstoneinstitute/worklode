@@ -300,7 +300,17 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
-	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log))
+	// onSkillPush triggers an async sync on a push matching a configured
+	// skill source; skillSources is nil when none are configured, so
+	// MatchesPush always reports false and the closure is a no-op.
+	onSkillPush := func(repo, branch string) bool {
+		if !skillsync.MatchesPush(s.skillSources, repo, branch) {
+			return false
+		}
+		go s.runSkillSync(context.Background(), "webhook push")
+		return true
+	}
+	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush))
 	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
@@ -373,7 +383,32 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	admin.HandleFunc("GET /healthz", s.healthz)
 	admin.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
+	// One sync at boot keeps the registry current with whatever landed on
+	// skill-source branches while the server was down; webhook pushes cover
+	// it live from here. Guarded on skillSyncer so a server with no skill
+	// sources configured starts no background goroutine.
+	if s.skillSyncer != nil {
+		go s.runSkillSync(context.Background(), "boot")
+	}
+
 	return s.logging(s.metrics(mux)), admin, nil
+}
+
+// runSkillSync serializes full syncs; overlapping triggers coalesce by
+// skipping when one is already running rather than queueing.
+func (s *server) runSkillSync(ctx context.Context, reason string) {
+	if s.skillSyncer == nil || !s.skillSyncMu.TryLock() {
+		return
+	}
+	defer s.skillSyncMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, skillSyncTimeout)
+	defer cancel()
+	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
+	if err != nil {
+		s.log.Warn("skill sync failed", "reason", reason, "err", err)
+		return
+	}
+	s.log.Info("skill sync", "reason", reason, "synced", sum.Synced, "deleted", sum.Deleted)
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
