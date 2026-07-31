@@ -443,6 +443,9 @@ type CreateTaskInput struct {
 	Concern  string   `json:"concern,omitempty"`
 	Draft    bool     `json:"draft"`
 	Skills   []string `json:"skills,omitempty"`
+	// Parent, when set, files the new task under this epic in the same
+	// request instead of a separate edge call.
+	Parent string `json:"parent,omitempty"`
 }
 
 // CreateTask calls POST /api/v1/tasks.
@@ -640,6 +643,8 @@ type Brief struct {
 	AffectedComponents []string            `json:"affected_components"`
 	DefinitionOfDone   *string             `json:"definition_of_done"`
 	Skills             SkillRecommendation `json:"skills"`
+	// Parent is the task's epic, one hop up; nil for a root task.
+	Parent *TaskParent `json:"parent"`
 }
 
 // Brief calls GET /api/v1/tasks/{id}/brief.

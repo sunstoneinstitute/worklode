@@ -72,7 +72,7 @@ func newTaskAddCmd() *cobra.Command {
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
-				Concern: concern, Draft: draft, Parent: parent,
+				Concern: concern, Draft: draft, Skills: skills, Parent: parent,
 			})
 			if err != nil {
 				return err
@@ -93,6 +93,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
+	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this epic")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }

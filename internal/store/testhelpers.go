@@ -35,7 +35,18 @@ func TestDSN() string {
 // unreachable and CI is not set.
 func OpenTestStore(t *testing.T) *Store {
 	t.Helper()
-	admin := adminConnForTest(t)
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return s
+}
+
+// OpenUnmigratedTestStore is OpenTestStore without the final Migrate call,
+// for tests that need to stop at an intermediate schema version (e.g. to
+// seed data before a specific migration runs) rather than jump to latest.
+func OpenUnmigratedTestStore(t *testing.T) *Store {
+	t.Helper()
 
 	tmpl, err := ensureTemplate(admin, MigrationsDirForTests())
 	if err != nil {

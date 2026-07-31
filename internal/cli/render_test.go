@@ -36,7 +36,7 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 			{Task: Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
 			{Task: Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
 		},
-	}})
+	}}})
 	got := buf.String()
 	urgent := strings.Index(got, "WL-5")
 	epic := strings.Index(got, "WL-1")
