@@ -215,7 +215,12 @@ func newInboxImportCmd() *cobra.Command {
 			fmt.Fprintf(out, "%s%s: %d new, %d updated issues; %d new, %d updated PRs\n",
 				prefix, res.Repo, res.Issues.New, res.Issues.Updated, res.PRs.New, res.PRs.Updated)
 			if res.Truncated {
-				fmt.Fprintf(out, "warning: hit the page cap; re-run with --since to get the rest\n")
+				if res.NewestUpdatedAt != nil {
+					fmt.Fprintf(out, "warning: hit the page cap; re-run with --since %s to continue\n",
+						res.NewestUpdatedAt.UTC().Format(time.RFC3339))
+				} else {
+					fmt.Fprintf(out, "warning: hit the page cap; re-run with --since to get the rest\n")
+				}
 			}
 			return nil
 		},

@@ -182,6 +182,24 @@ func TestListIssuesOmitsSinceWhenZero(t *testing.T) {
 	}
 }
 
+// TestListIssuesSortsByUpdatedAscending catches the pager silently falling
+// back to GitHub's default (sort=created&direction=desc): page 1 would then
+// be the newest items, so a truncated run's tail (the oldest) could never be
+// recovered by --since, which only ever narrows a result set.
+func TestListIssuesSortsByUpdatedAscending(t *testing.T) {
+	app, rec := listServer(t, "issues", [][]map[string]any{{}})
+	_, _, err := app.ListIssues(context.Background(), "acme/widgets", "open", time.Time{}, 20)
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	if got := rec.last().Get("sort"); got != "updated" {
+		t.Fatalf("sort = %q, want %q", got, "updated")
+	}
+	if got := rec.last().Get("direction"); got != "asc" {
+		t.Fatalf("direction = %q, want %q", got, "asc")
+	}
+}
+
 func TestListPullsDerivesMergedState(t *testing.T) {
 	app, _ := listServer(t, "pulls", [][]map[string]any{{
 		{"number": 1, "title": "open one", "state": "open",
@@ -209,6 +227,24 @@ func TestListPullsDerivesMergedState(t *testing.T) {
 	}
 	if got[1].HeadRef != "lode/WL-2-y" || got[1].HeadSHA != "bbb" {
 		t.Fatalf("head = %q/%q, want lode/WL-2-y/bbb", got[1].HeadRef, got[1].HeadSHA)
+	}
+}
+
+// TestListPullsSortsByUpdatedAscending mirrors
+// TestListIssuesSortsByUpdatedAscending: ListPulls has its own hand-written
+// pager, so it needs its own assertion that sort/direction actually reach the
+// request.
+func TestListPullsSortsByUpdatedAscending(t *testing.T) {
+	app, rec := listServer(t, "pulls", [][]map[string]any{{}})
+	_, _, err := app.ListPulls(context.Background(), "acme/widgets", "all", 20)
+	if err != nil {
+		t.Fatalf("ListPulls: %v", err)
+	}
+	if got := rec.last().Get("sort"); got != "updated" {
+		t.Fatalf("sort = %q, want %q", got, "updated")
+	}
+	if got := rec.last().Get("direction"); got != "asc" {
+		t.Fatalf("direction = %q, want %q", got, "asc")
 	}
 }
 
