@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -112,6 +113,140 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		resp.Projects = append(resp.Projects, toProjectJSON(&p, repos))
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// tokenCountsJSON is the per-class token breakdown, shared by the daily rows
+// and the window totals.
+type tokenCountsJSON struct {
+	InputTokens        int64 `json:"input_tokens"`
+	CacheWrite5mTokens int64 `json:"cache_write_5m_tokens"`
+	CacheWrite1hTokens int64 `json:"cache_write_1h_tokens"`
+	CacheReadTokens    int64 `json:"cache_read_tokens"`
+	OutputTokens       int64 `json:"output_tokens"`
+}
+
+func toTokenCountsJSON(t store.TokenCounts) tokenCountsJSON {
+	return tokenCountsJSON{
+		InputTokens:        t.Input,
+		CacheWrite5mTokens: t.CacheWrite5m,
+		CacheWrite1hTokens: t.CacheWrite1h,
+		CacheReadTokens:    t.CacheRead,
+		OutputTokens:       t.Output,
+	}
+}
+
+// projectDayCostJSON is one day of a project's accounted usage in one
+// currency. CostAmount is a decimal string for the same reason the agent
+// session endpoints use one: numeric(14,6) does not survive a float64.
+type projectDayCostJSON struct {
+	Day      string `json:"day"`
+	Currency string `json:"currency"`
+	tokenCountsJSON
+	CostAmount string `json:"cost_amount"`
+	// UnpricedTokens are tokens whose model had no rate on file, so
+	// CostAmount understates the bill by whatever they were worth.
+	UnpricedTokens int64 `json:"unpriced_tokens"`
+}
+
+// projectCostTotalJSON is the window total for one currency. Totals are per
+// currency because summing across them needs a dated conversion rate the
+// server does not own.
+type projectCostTotalJSON struct {
+	Currency string `json:"currency"`
+	tokenCountsJSON
+	CostAmount     string `json:"cost_amount"`
+	UnpricedTokens int64  `json:"unpriced_tokens"`
+}
+
+type projectCostJSON struct {
+	Days   []projectDayCostJSON   `json:"days"`
+	Totals []projectCostTotalJSON `json:"totals"`
+}
+
+// projectDetailJSON is a project plus its cost. The list-shape fields are
+// embedded so the two endpoints cannot drift apart.
+type projectDetailJSON struct {
+	projectJSON
+	Cost projectCostJSON `json:"cost"`
+}
+
+// toProjectCostJSON builds the wire form of a cost window, normalizing nil
+// slices to empty arrays so days and totals never serialize as null.
+func toProjectCostJSON(pc *store.ProjectCost) projectCostJSON {
+	out := projectCostJSON{
+		Days:   make([]projectDayCostJSON, 0, len(pc.Days)),
+		Totals: make([]projectCostTotalJSON, 0, len(pc.Totals)),
+	}
+	for _, d := range pc.Days {
+		out.Days = append(out.Days, projectDayCostJSON{
+			Day:             d.Day.Format(time.DateOnly),
+			Currency:        d.Currency,
+			tokenCountsJSON: toTokenCountsJSON(d.Tokens),
+			CostAmount:      d.Cost,
+			UnpricedTokens:  d.UnpricedTokens,
+		})
+	}
+	for _, t := range pc.Totals {
+		out.Totals = append(out.Totals, projectCostTotalJSON{
+			Currency:        t.Currency,
+			tokenCountsJSON: toTokenCountsJSON(t.Tokens),
+			CostAmount:      t.Cost,
+			UnpricedTokens:  t.UnpricedTokens,
+		})
+	}
+	return out
+}
+
+// dayParam reads an optional YYYY-MM-DD query parameter. An absent one yields
+// the zero time, which ProjectCost reads as unbounded on that side.
+func dayParam(r *http.Request, name string) (time.Time, error) {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		return time.Time{}, nil
+	}
+	day, err := time.Parse(time.DateOnly, v)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid %s %q: want YYYY-MM-DD", name, v)
+	}
+	return day, nil
+}
+
+// getProject handles GET /api/v1/projects/{id}: one project with its repos
+// and its accounted cost. Read-only, so unlike the project mutations it is
+// not admin-gated. Optional from and to (YYYY-MM-DD) bound the cost window,
+// inclusive on both ends; either may be omitted for unbounded.
+func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	from, err := dayParam(r, "from")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	to, err := dayParam(r, "to")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	p, err := s.st.GetProject(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	repos, err := s.st.ListRepos(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	cost, err := s.st.ProjectCost(r.Context(), id, from, to)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, projectDetailJSON{
+		projectJSON: toProjectJSON(p, repos),
+		Cost:        toProjectCostJSON(cost),
+	})
 }
 
 // resolveProjectByRemote handles GET /api/v1/projects/resolve?remote=<url>:

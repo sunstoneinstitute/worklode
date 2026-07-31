@@ -723,6 +723,20 @@ func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion,
 	return a, raw, nil
 }
 
+// SessionUsageBucket is the tokens one model billed on one UTC day at one
+// billing speed — the granularity a price can be applied at. Mirrors
+// transcript.Bucket; Day is YYYY-MM-DD.
+type SessionUsageBucket struct {
+	Day          string `json:"day"`
+	Model        string `json:"model"`
+	Speed        string `json:"speed"`
+	InputTokens  int64  `json:"input_tokens"`
+	CacheWrite5m int64  `json:"cache_write_5m_tokens"`
+	CacheWrite1h int64  `json:"cache_write_1h_tokens"`
+	CacheRead    int64  `json:"cache_read_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+}
+
 // EndAgentSessionInput carries the required identity plus optional accounting
 // for ending a session. A nil usage field leaves the stored value untouched.
 type EndAgentSessionInput struct {
@@ -734,6 +748,11 @@ type EndAgentSessionInput struct {
 	// the server's numeric(12,6) column exactly (see agentsessions.go).
 	CostAmount   *string
 	CostCurrency string
+	// Usage replaces the session's stored per-model usage. No omitempty: nil
+	// must reach the server as JSON null (leave stored usage alone), which an
+	// empty slice — meaning "clear it" — would otherwise be indistinguishable
+	// from.
+	Usage []SessionUsageBucket `json:"usage"`
 }
 
 // EndAgentSession calls POST /api/v1/tasks/{id}/agent-session/end.
@@ -751,6 +770,7 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in EndAgentSess
 	if in.CostCurrency != "" {
 		body["cost_currency"] = in.CostCurrency
 	}
+	body["usage"] = in.Usage // nil marshals as null: leave stored usage alone
 	_, err := c.do(ctx, http.MethodPost,
 		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session/end", body)
 	return err
@@ -1138,6 +1158,66 @@ func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string)
 	var p Project
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+	}
+	return p, raw, nil
+}
+
+// CostTotals is the tokens and money one currency accounts for over a
+// window. CostAmount is a decimal string, for the same reason
+// EndAgentSessionInput.CostAmount is.
+//
+// UnpricedTokens counts tokens whose model had no price on file: the amount
+// understates the bill by whatever they were worth, so it is reported rather
+// than folded in at zero.
+type CostTotals struct {
+	Currency       string `json:"currency"`
+	InputTokens    int64  `json:"input_tokens"`
+	CacheWrite5m   int64  `json:"cache_write_5m_tokens"`
+	CacheWrite1h   int64  `json:"cache_write_1h_tokens"`
+	CacheRead      int64  `json:"cache_read_tokens"`
+	OutputTokens   int64  `json:"output_tokens"`
+	CostAmount     string `json:"cost_amount"`
+	UnpricedTokens int64  `json:"unpriced_tokens"`
+}
+
+// CostDay is one UTC day's slice of CostTotals. Day is YYYY-MM-DD.
+type CostDay struct {
+	Day string `json:"day"`
+	CostTotals
+}
+
+// ProjectCost is a project's cost over the requested window: one row per
+// (day, currency) and one total per currency. Currencies are never summed
+// together.
+type ProjectCost struct {
+	Days   []CostDay    `json:"days"`
+	Totals []CostTotals `json:"totals"`
+}
+
+// ProjectDetail is the wire form of GET /api/v1/projects/{id}: a Project plus
+// its cost.
+type ProjectDetail struct {
+	Project
+	Cost ProjectCost `json:"cost"`
+}
+
+// ProjectDetail calls GET /api/v1/projects/{id}. A zero from or to leaves
+// that end of the cost window unbounded.
+func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Time) (ProjectDetail, []byte, error) {
+	q := url.Values{}
+	if !from.IsZero() {
+		q.Set("from", from.Format(time.DateOnly))
+	}
+	if !to.IsZero() {
+		q.Set("to", to.Format(time.DateOnly))
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/"+url.PathEscape(id), q), nil)
+	if err != nil {
+		return ProjectDetail{}, nil, err
+	}
+	var p ProjectDetail
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return ProjectDetail{}, nil, fmt.Errorf("decode project detail: %w", err)
 	}
 	return p, raw, nil
 }

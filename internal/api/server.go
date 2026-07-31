@@ -388,9 +388,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// may otherwise mint further tokens (verified privilege escalation).
 	mux.Handle("POST /api/v1/projects", s.auth(requireAdmin(s.createProject)))
 	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
-	// Literal segment, so Go's mux prefers it over any future
-	// GET /api/v1/projects/{id}. Read-only: no requireAdmin.
+	// Literal segment, so Go's mux prefers it over the wildcard route below.
+	// Both are read-only: no requireAdmin.
 	mux.Handle("GET /api/v1/projects/resolve", s.auth(s.resolveProjectByRemote))
+	mux.Handle("GET /api/v1/projects/{id}", s.auth(s.getProject))
 	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
 	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
 	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))

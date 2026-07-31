@@ -27,6 +27,26 @@ once an instance is running (dogfooding); until then this file is the list.
   lines across projects, actors/tokens, inbox, and the board. The inbox section
   alone is ~233 lines, and `internal/api/inbox_import.go` already exists as the
   sibling to move them next to.
+- **Cost is lost when a session never ends cleanly**: usage is reported on
+  `session-end` and `worktree-exit`. A crashed agent, or a lease swept by
+  `ExpireLeases`, closes the session with `ended_at` but no usage, so its spend
+  never lands. Reporting on the debounced heartbeat as well would close the gap
+  — the write is already replace-not-accumulate, so a mid-session report is
+  safe to repeat.
+- **Unmodelled billing dimensions**: `service_tier` (batch is half price) and
+  server-side tool use (`web_search_requests`, billed per request) are both
+  present in the transcript's `usage` block and both ignored. Claude Code runs
+  the standard tier, so the first is theoretical; the second understates a
+  search-heavy session by a small, real amount.
+- **No admin surface for `model_prices`**: rates are seeded by migration `0008`
+  and editable only by SQL, via `store.UpsertModelPrice`. A `lode admin price`
+  verb plus an endpoint would make a mid-quarter rate change routine. Also note
+  fast-mode rates for Opus 4.8 are assumed to mirror Opus 5's 2x — unverified.
+- **Cache-write TTL assumption**: a transcript entry with
+  `cache_creation_input_tokens` but no `cache_creation` breakdown is attributed
+  entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
+  cache by 37.5%. Every current Claude Code version emits the breakdown, so
+  this only bites on old transcripts.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
