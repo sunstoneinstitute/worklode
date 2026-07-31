@@ -372,6 +372,98 @@ func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 	}
 }
 
+// TestSkillMatchesLimitClamped: an ask above the maximum clamps to the
+// maximum. Falling back to the default instead made --limit 50 return fewer
+// matches than --limit 20, which is the one answer that cannot be right.
+func TestSkillMatchesLimitClamped(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < maxSkillLimit+5; i++ {
+		sk := seedSkillDirect(t, st, fmt.Sprintf("skill-%02d", i), "matches everything")
+		if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+			t.Fatalf("replace embeddings: %v", err)
+		}
+	}
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	t.Cleanup(fakeSrv.Close)
+	s := &server{
+		st: st, log: slog.Default(), skillFloor: 0.35,
+		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+	}
+
+	matches, _ := s.skillMatches(ctx, "anything", nil, maxSkillLimit+30)
+	if len(matches) != maxSkillLimit {
+		t.Fatalf("over-large limit returned %d matches, want the cap of %d", len(matches), maxSkillLimit)
+	}
+	if matches, _ := s.skillMatches(ctx, "anything", nil, 0); len(matches) != defaultSkillLimit {
+		t.Fatalf("unset limit returned %d matches, want the default of %d", len(matches), defaultSkillLimit)
+	}
+}
+
+// seedMixedDimensionCorpus leaves the store in the one state that makes
+// every cosine query fail: two skills whose vectors have different
+// dimensions. ReplaceSkillEmbeddings validates within a call, not across
+// them, so a provider swap that outran an invalidation produces exactly this.
+func seedMixedDimensionCorpus(t *testing.T, st *store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	two := seedSkillDirect(t, st, "two-dim", "Vectors from the old model")
+	three := seedSkillDirect(t, st, "three-dim", "Vectors from the new model")
+	if err := st.ReplaceSkillEmbeddings(ctx, two.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace 2-dim embeddings: %v", err)
+	}
+	if err := st.ReplaceSkillEmbeddings(ctx, three.ID, [][]float32{{1, 0, 0}}); err != nil {
+		t.Fatalf("replace 3-dim embeddings: %v", err)
+	}
+	if _, err := st.RecommendSkills(ctx, []float32{1, 0}, 5, 0.35); err == nil {
+		t.Fatal("setup: want the corpus to make vector queries fail")
+	}
+}
+
+// TestRecommendationPinsSurviveMatchQueryFailure is the store-side half of
+// the degradation contract: a mixed-dimension corpus makes RecommendSkills
+// error, and that must degrade to pins-only exactly like a provider failure
+// rather than 500. The brief path shares skillMatches, so a 500 here would
+// mean nobody could get a brief either.
+func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
+	st := store.OpenTestStore(t)
+	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	seedMixedDimensionCorpus(t, st)
+
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	t.Cleanup(fakeSrv.Close)
+	s := &server{
+		st: st, log: slog.Default(), skillFloor: 0.35,
+		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+	}
+
+	rec, err := s.recommendation(context.Background(), "write tests first", []string{pinned.Name}, 5)
+	if err != nil {
+		t.Fatalf("recommendation: %v", err)
+	}
+	if len(rec.Matches) != 0 {
+		t.Fatalf("matches from a failing query: %+v", rec.Matches)
+	}
+	if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "tdd" || rec.Pinned[0].Content == "" {
+		t.Fatalf("pin did not survive the query failure: %+v", rec.Pinned)
+	}
+	found := false
+	for _, w := range rec.Warnings {
+		if strings.Contains(w, "skill matching unavailable") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want a matching-unavailable warning, got %v", rec.Warnings)
+	}
+}
+
 // tarballOf builds a GitHub-shaped tarball: entries under root/, gzipped —
 // mirrors skillsync's own test helper, which lives in a different package
 // and is not importable from here.

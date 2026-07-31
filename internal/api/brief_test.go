@@ -292,6 +292,54 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 	}
 }
 
+// TestTaskBriefMatchQueryFailureDegrades is the brief-path half of the
+// degradation contract. A corpus left at two vector dimensions makes every
+// cosine query error; the brief is the gate on starting work, so it must
+// still serve pins with a warning rather than 500.
+func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer fakeSrv.Close()
+
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	seedSkill(t, st, "two-dim", "Vectors from the old model")
+	seedSkill(t, st, "three-dim", "Vectors from the new model")
+	ctx := context.Background()
+	for name, vec := range map[string][]float32{"two-dim": {1, 0}, "three-dim": {1, 0, 0}} {
+		sk, err := st.GetSkill(ctx, name)
+		if err != nil {
+			t.Fatalf("get skill %s: %v", name, err)
+		}
+		if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{vec}); err != nil {
+			t.Fatalf("replace embeddings %s: %v", name, err)
+		}
+	}
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, want 200 even when the vector query fails, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills := got["skills"].(map[string]any)
+	if pinned, _ := skills["pinned"].([]any); len(pinned) != 1 {
+		t.Fatalf("pinned = %v, want the pin to survive", skills["pinned"])
+	}
+	if matches, _ := skills["matches"].([]any); len(matches) != 0 {
+		t.Fatalf("matches = %v, want none", skills["matches"])
+	}
+	if warnings, _ := skills["warnings"].([]any); len(warnings) == 0 {
+		t.Fatalf("expected a degradation warning, got none")
+	}
+}
+
 // TestTaskBriefProviderFailureDegrades guards the 2s degrade-to-pins-only
 // behavior on the brief path: a provider failure must never turn a brief
 // fetch into a 5xx.

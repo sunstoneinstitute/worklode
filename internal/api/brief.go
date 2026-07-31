@@ -89,11 +89,7 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	if s.embedder != nil {
 		out.Skills.Provider = "openai-compatible"
 	}
-	matches, warnings, err := s.skillMatches(r.Context(), b.Task.Title+"\n\n"+b.Body, pinnedNames, 0)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
+	matches, warnings := s.skillMatches(r.Context(), b.Task.Title+"\n\n"+b.Body, pinnedNames, 0)
 	out.Skills.Matches = matches
 	out.Skills.Warnings = append(out.Skills.Warnings, warnings...)
 
