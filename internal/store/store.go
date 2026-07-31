@@ -21,6 +21,7 @@ import (
 // Store wraps the Postgres connection pool.
 type Store struct {
 	db    *sql.DB
+	dsn   string
 	nowFn func() time.Time
 }
 
@@ -35,7 +36,7 @@ func Open(dsn string) (*Store, error) {
 	db.SetMaxOpenConns(16)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(30 * time.Minute)
-	return &Store{db: db, nowFn: func() time.Time { return time.Now().UTC() }}, nil
+	return &Store{db: db, dsn: dsn, nowFn: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 // SetNowFunc overrides the clock used for timestamps written by the store
@@ -59,8 +60,13 @@ func (s *Store) Migrate(migrationsPath string) error {
 	if err != nil {
 		return err
 	}
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("apply migrations: %w", err)
+	upErr := m.Up()
+	srcErr, dbErr := m.Close()
+	if upErr != nil && !errors.Is(upErr, migrate.ErrNoChange) {
+		return fmt.Errorf("apply migrations: %w", upErr)
+	}
+	if srcErr != nil || dbErr != nil {
+		return fmt.Errorf("close migration driver: source=%v db=%v", srcErr, dbErr)
 	}
 	return nil
 }
@@ -72,12 +78,29 @@ func (s *Store) MigrateDown(migrationsPath string) error {
 	if err != nil {
 		return err
 	}
-	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("revert migrations: %w", err)
+	downErr := m.Down()
+	srcErr, dbErr := m.Close()
+	if downErr != nil && !errors.Is(downErr, migrate.ErrNoChange) {
+		return fmt.Errorf("revert migrations: %w", downErr)
+	}
+	if srcErr != nil || dbErr != nil {
+		return fmt.Errorf("close migration driver: source=%v db=%v", srcErr, dbErr)
 	}
 	return nil
 }
 
+// newMigrate builds a migrate.Migrate instance over a *sql.DB dedicated to
+// this migration run, rather than the Store's own pool (s.db). This matters
+// because golang-migrate's pgx v5 driver Close() (database/pgx/v5.Postgres.
+// Close) closes both its advisory-lock connection *and* whatever *sql.DB it
+// was constructed with via WithInstance — confirmed by reading v4.19.1's
+// database/pgx/v5/pgx.go, where Close does `p.conn.Close(); p.db.Close()`.
+// Migrate/MigrateDown must call m.Close() to release the advisory-lock
+// connection (otherwise it leaks: golang-migrate never returns it to the
+// pool), but calling it against s.db would close the Store's pool along
+// with it, breaking every caller that keeps using the Store afterward.
+// Running migrations over their own short-lived *sql.DB sidesteps that:
+// m.Close() closing it is exactly what we want.
 func (s *Store) newMigrate(migrationsPath string) (*migrate.Migrate, error) {
 	absPath, err := filepath.Abs(migrationsPath)
 	if err != nil {
@@ -87,12 +110,19 @@ func (s *Store) newMigrate(migrationsPath string) (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load migrations from %s: %w", absPath, err)
 	}
-	drv, err := migratepgx.WithInstance(s.db, &migratepgx.Config{})
+	migrateDB, err := sql.Open("pgx", s.dsn)
 	if err != nil {
+		return nil, fmt.Errorf("open migration connection: %w", err)
+	}
+	migrateDB.SetMaxOpenConns(1)
+	drv, err := migratepgx.WithInstance(migrateDB, &migratepgx.Config{})
+	if err != nil {
+		migrateDB.Close()
 		return nil, fmt.Errorf("init migrate driver: %w", err)
 	}
 	m, err := migrate.NewWithInstance("file", src, "pgx5", drv)
 	if err != nil {
+		migrateDB.Close()
 		return nil, fmt.Errorf("init migrate: %w", err)
 	}
 	return m, nil

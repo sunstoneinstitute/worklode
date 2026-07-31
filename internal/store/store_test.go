@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -73,4 +74,36 @@ func TestMigrateRoundTrip(t *testing.T) {
 	if err := s.Migrate(MigrationsDirForTests()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestMigrateReleasesDedicatedConnection guards against golang-migrate's pgx
+// driver leaking the dedicated advisory-lock connection it opens via
+// db.Conn(). A leaked connection makes Postgres refuse
+// CREATE DATABASE ... TEMPLATE with SQLSTATE 55006 ("source database is
+// being accessed by other users") even after Migrate has returned and the
+// Store been closed — exactly the failure the template-database builder
+// (testhelpers.go) used to work around by reaching into newMigrate/m.Close()
+// directly instead of going through Store.Migrate().
+func TestMigrateReleasesDedicatedConnection(t *testing.T) {
+	admin := adminConnForTest(t)
+	dbName := randomDBName(t, "wl_test_leak_")
+	if _, err := admin.Exec("CREATE DATABASE " + sqlIdent(dbName)); err != nil {
+		t.Fatalf("create database %s: %v", dbName, err)
+	}
+	t.Cleanup(func() { dropDatabase(t, admin, dbName) })
+
+	s := openTestDB(t, dbName)
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate %s: %v", dbName, err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close store for %s: %v", dbName, err)
+	}
+
+	cloneName := dbName + "_clone"
+	stmt := fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s", sqlIdent(cloneName), sqlIdent(dbName))
+	if _, err := admin.Exec(stmt); err != nil {
+		t.Fatalf("CREATE DATABASE ... TEMPLATE %s: %v (Migrate's dedicated connection was not released)", dbName, err)
+	}
+	t.Cleanup(func() { dropDatabase(t, admin, cloneName) })
 }
