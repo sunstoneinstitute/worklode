@@ -1012,6 +1012,45 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 	return c.do(ctx, http.MethodPost, "/api/v1/inbox/dismiss", map[string]any{"repo": repo, "number": number})
 }
 
+// ImportInput is the request body for ImportInbox. An empty State means the
+// server default, "open".
+type ImportInput struct {
+	Repo       string     `json:"repo"`
+	State      string     `json:"state,omitempty"`
+	IncludePRs bool       `json:"include_prs,omitempty"`
+	Since      *time.Time `json:"since,omitempty"`
+	DryRun     bool       `json:"dry_run,omitempty"`
+}
+
+// ImportCounts splits imported rows into ones that did not exist and ones
+// that were refreshed.
+type ImportCounts struct {
+	New     int `json:"new"`
+	Updated int `json:"updated"`
+}
+
+// ImportResult is the response from ImportInbox.
+type ImportResult struct {
+	Repo      string       `json:"repo"`
+	Issues    ImportCounts `json:"issues"`
+	PRs       ImportCounts `json:"prs"`
+	Truncated bool         `json:"truncated"`
+	DryRun    bool         `json:"dry_run"`
+}
+
+// ImportInbox calls POST /api/v1/inbox/import.
+func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/import", in)
+	if err != nil {
+		return ImportResult{}, nil, err
+	}
+	var out ImportResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
+	}
+	return out, raw, nil
+}
+
 // --- projects ---------------------------------------------------------
 
 // Project is the wire form of a project, including its mapped repos and
