@@ -992,6 +992,7 @@ type PromoteInput struct {
 	Priority          string   `json:"priority"`
 	Kind              string   `json:"kind"`
 	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
+	Draft             bool     `json:"draft,omitempty"`
 }
 
 // PromoteIssue calls POST /api/v1/inbox/promote.
