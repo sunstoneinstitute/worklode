@@ -78,6 +78,12 @@ func TestLinkInboxUnknownTask(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body = %s, want 404", rr.Code, rr.Body)
 	}
+	// Not just any 404: it must be the named pre-check in linkInbox
+	// (internal/api/admin.go), not an anonymous 404 that LinkIssue's own
+	// ErrNotFound would produce just as well.
+	if !strings.Contains(rr.Body.String(), "task not found: PR-999") {
+		t.Fatalf("body = %s, want it to name the missing task", rr.Body)
+	}
 }
 
 func TestPromoteDraft(t *testing.T) {

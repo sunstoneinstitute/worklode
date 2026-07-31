@@ -629,6 +629,13 @@ func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "task_id is required")
 		return
 	}
+	// Named 404 ahead of the transaction: store.LinkIssue's own check stays
+	// the authority, but its ErrNotFound would otherwise be reported
+	// anonymously.
+	if _, err := s.st.GetTask(r.Context(), req.TaskID); errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "task not found: "+req.TaskID)
+		return
+	}
 
 	extID, err := randomExternalID()
 	if err != nil {
