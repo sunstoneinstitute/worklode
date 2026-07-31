@@ -276,3 +276,34 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 		}
 	}
 }
+
+type failingCollector struct{ desc *prometheus.Desc }
+
+func (c failingCollector) Describe(ch chan<- *prometheus.Desc) { ch <- c.desc }
+func (c failingCollector) Collect(ch chan<- prometheus.Metric) {
+	ch <- prometheus.NewInvalidMetric(c.desc, errors.New("collector boom"))
+}
+
+// A failing collector must not take the whole scrape down with it.
+func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(failingCollector{prometheus.NewDesc("worklode_probe", "test", nil, nil)})
+	main, admin, err := api.NewServer(newTestStore(t), api.Config{Metrics: reg})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	doReq(t, main, "GET", "/api/v1/tasks", "", nil)
+
+	doReq(t, admin, "GET", "/metrics", "", nil) // first scrape trips the error counter
+	rr := doReq(t, admin, "GET", "/metrics", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "http_requests_total") {
+		t.Fatalf("healthy family dropped:\n%s", body)
+	}
+	if !strings.Contains(body, `promhttp_metric_handler_errors_total{cause="gathering"} 1`) {
+		t.Fatalf("collector failure not surfaced:\n%s", body)
+	}
+}
