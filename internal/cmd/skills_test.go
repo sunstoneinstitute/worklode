@@ -21,8 +21,11 @@ import (
 )
 
 // skillsTestServer is lifecycleTestServer plus a counter of archive-download
-// requests, so install tests can assert a repeat install performs no fetch.
-func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32) {
+// requests (so install tests can assert a repeat install performs no fetch)
+// and a temp LODE_SKILLS_DIR (so no test can forget to isolate the local
+// store and scribble in a developer's home directory). Returns the store,
+// client, archive-hit counter, and the skills-dir root.
+func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32, string) {
 	t.Helper()
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
@@ -50,7 +53,10 @@ func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32) {
 	t.Setenv("LODE_SERVER", ts.URL)
 	t.Setenv("LODE_TOKEN", token)
 
-	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token}), &archiveHits
+	root := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", root)
+
+	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token}), &archiveHits, root
 }
 
 // seedSkill upserts one skill with a deterministic hash and a fake (non-tar)
@@ -162,7 +168,7 @@ func runLodeOutErr(t *testing.T, args ...string) (stdout, stderr string, err err
 }
 
 func TestSkillsListTableAndJSON(t *testing.T) {
-	st, _, _ := skillsTestServer(t)
+	st, _, _, _ := skillsTestServer(t)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	seedSkill(t, st, "debugging", "Systematic debugging loop")
 
@@ -217,8 +223,31 @@ func TestSkillsRecommendFlagValidation(t *testing.T) {
 	}
 }
 
+func TestSkillsRecommendFileFlag(t *testing.T) {
+	skillsTestServer(t)
+	path := filepath.Join(t.TempDir(), "note.md")
+	if err := os.WriteFile(path, []byte("write tests first"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if _, err := runLode(t, "skills", "recommend", "--file", path); err != nil {
+		t.Fatalf("skills recommend --file: %v", err)
+	}
+}
+
+func TestSkillsRecommendEmptyFile(t *testing.T) {
+	skillsTestServer(t)
+	path := filepath.Join(t.TempDir(), "empty.md")
+	if err := os.WriteFile(path, []byte("   \n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	_, err := runLode(t, "skills", "recommend", "--file", path)
+	if err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Fatalf("skills recommend --file (empty): want an 'is empty' error, got %v", err)
+	}
+}
+
 func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
-	st, c, _ := skillsTestServer(t)
+	st, c, _, _ := skillsTestServer(t)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -250,9 +279,8 @@ func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
 }
 
 func TestSkillsInstallResolvesHash(t *testing.T) {
-	st, _, archiveHits := skillsTestServer(t)
+	st, _, archiveHits, _ := skillsTestServer(t)
 	_, content := seedInstallableSkill(t, st, "tdd")
-	t.Setenv("LODE_SKILLS_DIR", t.TempDir())
 
 	out, err := runLode(t, "skills", "install", "tdd")
 	if err != nil {
@@ -272,9 +300,8 @@ func TestSkillsInstallResolvesHash(t *testing.T) {
 }
 
 func TestSkillsInstallIdempotent(t *testing.T) {
-	st, _, archiveHits := skillsTestServer(t)
+	st, _, archiveHits, _ := skillsTestServer(t)
 	hash, _ := seedInstallableSkill(t, st, "tdd")
-	t.Setenv("LODE_SKILLS_DIR", t.TempDir())
 
 	if _, err := runLode(t, "skills", "install", "tdd@"+hash); err != nil {
 		t.Fatalf("first install: %v", err)
@@ -292,16 +319,18 @@ func TestSkillsInstallIdempotent(t *testing.T) {
 }
 
 func TestSkillsInstallHashMismatch(t *testing.T) {
-	st, _, _ := skillsTestServer(t)
+	st, _, _, root := skillsTestServer(t)
 	// A well-formed but wrong hash: the archive's real content hashes to
 	// something else, simulating a corrupt or truncated download.
 	const badHash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	seedInstallableSkillWithHash(t, st, "tdd", badHash)
-	root := t.TempDir()
-	t.Setenv("LODE_SKILLS_DIR", root)
 
-	if _, err := runLode(t, "skills", "install", "tdd"); err == nil {
-		t.Fatal("skills install with a content-hash mismatch: want error, got nil")
+	// Asserted precisely, not just "some error": a wrong error here (e.g.
+	// from a broken hash-resolution step upstream) would let this test pass
+	// for the wrong reason while proving nothing about hash verification.
+	_, err := runLode(t, "skills", "install", "tdd")
+	if err == nil || !strings.Contains(err.Error(), "content hash mismatch") {
+		t.Fatalf("skills install: want a content-hash mismatch error, got %v", err)
 	}
 
 	if _, err := os.Lstat(filepath.Join(root, "tdd")); err == nil {
@@ -312,5 +341,39 @@ func TestSkillsInstallHashMismatch(t *testing.T) {
 		if e.Name() == badHash {
 			t.Fatalf("skills install left a store dir for the mismatched hash: %s", e.Name())
 		}
+	}
+}
+
+func TestSkillsInstallNameRequired(t *testing.T) {
+	skillsTestServer(t)
+	for _, arg := range []string{"", "@somehash"} {
+		_, err := runLode(t, "skills", "install", arg)
+		if err == nil || !strings.Contains(err.Error(), "skill name is required") {
+			t.Fatalf("skills install %q: want a name-required error, got %v", arg, err)
+		}
+	}
+}
+
+func TestSkillsInstallDeletedWarnsOnStderr(t *testing.T) {
+	st, _, _, _ := skillsTestServer(t)
+	_, content := seedInstallableSkill(t, st, "tdd")
+	if _, err := st.SoftDeleteSkillsExcept(context.Background(), "acme/skills", nil); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	stdout, stderr, err := runLodeOutErr(t, "skills", "install", "tdd")
+	if err != nil {
+		t.Fatalf("skills install tdd (deleted): %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "warning: tdd was removed from its source repo") {
+		t.Fatalf("stderr = %q, want a removed-from-source-repo warning", stderr)
+	}
+	path := strings.TrimSpace(stdout)
+	got, err := os.ReadFile(filepath.Join(path, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed SKILL.md at %s: %v", path, err)
+	}
+	if string(got) != content {
+		t.Fatalf("installed SKILL.md = %q, want %q", got, content)
 	}
 }
