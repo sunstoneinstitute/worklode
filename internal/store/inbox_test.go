@@ -367,6 +367,42 @@ func TestListIssuesProjectFilter(t *testing.T) {
 	}
 }
 
+// TestExistingIssueNumbers covers the read import uses before upserting, so
+// it can report new rows separately from updated ones.
+func TestExistingIssueNumbers(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue #%d: %v", is.Number, err)
+	}
+	is2 := defaultIssue()
+	is2.Number = 5
+	if err := upsertIssue(t, s, is2); err != nil {
+		t.Fatalf("upsert issue #%d: %v", is2.Number, err)
+	}
+
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		got, err := ExistingIssueNumbers(tx, is.Repo)
+		if err != nil {
+			return err
+		}
+		if len(got) != 2 || !got[1] || !got[5] {
+			t.Fatalf("got %v, want {1,5}", got)
+		}
+
+		other, err := ExistingIssueNumbers(tx, "acme/other")
+		if err != nil {
+			return err
+		}
+		if len(other) != 0 {
+			t.Fatalf("other repo got %v, want empty", other)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("tx: %v", err)
+	}
+}
+
 // issueKeys lists issues and returns "repo#number" for each.
 func issueKeys(t *testing.T, s *Store, triageState, project string) []string {
 	t.Helper()

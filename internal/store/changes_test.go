@@ -272,6 +272,44 @@ func TestUpsertPRUpdateKeepsTaskID(t *testing.T) {
 	}
 }
 
+// TestExistingPRNumbers covers the read import uses before upserting, so it
+// can report new rows separately from updated ones.
+func TestExistingPRNumbers(t *testing.T) {
+	s := openChangesStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	pr := defaultPR(task.ID)
+	if _, err := upsertPR(t, s, pr, ""); err != nil {
+		t.Fatalf("upsert PR #%d: %v", pr.Number, err)
+	}
+	pr2 := defaultPR(task.ID)
+	pr2.Number = 5
+	if _, err := upsertPR(t, s, pr2, ""); err != nil {
+		t.Fatalf("upsert PR #%d: %v", pr2.Number, err)
+	}
+
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		got, err := ExistingPRNumbers(tx, pr.Repo)
+		if err != nil {
+			return err
+		}
+		if len(got) != 2 || !got[1] || !got[5] {
+			t.Fatalf("got %v, want {1,5}", got)
+		}
+
+		other, err := ExistingPRNumbers(tx, "acme/other")
+		if err != nil {
+			return err
+		}
+		if len(other) != 0 {
+			t.Fatalf("other repo got %v, want empty", other)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("tx: %v", err)
+	}
+}
+
 func TestGetPRNotFound(t *testing.T) {
 	s := openChangesStore(t)
 	if _, err := s.GetPR(t.Context(), "sunstoneinstitute/demo", 999); !errors.Is(err, ErrNotFound) {
