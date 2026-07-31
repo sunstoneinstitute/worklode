@@ -8,8 +8,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -378,28 +377,21 @@ func buildUpsert(src Source, commit, dir string, files map[string]file) (*store.
 	}, nil
 }
 
-// contentHash is sha256 over the sorted (path, length, mode, content) tuples —
-// independent of archive encoding, so the local cache key never churns on tar
-// details. The length makes the encoding self-delimiting, so no two distinct
-// file sets can hash the same by shifting bytes across a boundary. The mode is
-// in so an upstream chmod +x produces a new version.
+// contentHash delegates to skillhash.Sum — see internal/skillhash for the
+// encoding. Kept as a thin wrapper so the rest of this file stays in terms
+// of the local file/map[string]file shapes.
 func contentHash(files map[string]file) string {
-	h := sha256.New()
-	for _, p := range sortedPaths(files) {
-		f := files[p]
-		fmt.Fprintf(h, "%s\x00%d\x00%o\x00", p, len(f.data), fileMode(f))
-		h.Write(f.data)
+	hfiles := make([]skillhash.File, 0, len(files))
+	for p, f := range files {
+		hfiles = append(hfiles, skillhash.File{Path: p, Data: f.data, Exec: f.exec})
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return skillhash.Sum(hfiles)
 }
 
 // fileMode is the one mode bit that survives a sync: skills ship scripts, and
 // an archive extracted without the executable bit fails at run time.
 func fileMode(f file) int64 {
-	if f.exec {
-		return 0o755
-	}
-	return 0o644
+	return skillhash.Mode(f.exec)
 }
 
 // buildArchive produces a deterministic tar.gz: sorted paths, mode from the
