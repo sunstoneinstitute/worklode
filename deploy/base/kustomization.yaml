@@ -9,6 +9,7 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - service.yaml
+  - metrics-service.yaml
   - ingress.yaml
 configMapGenerator:
   - name: worklode-migrations

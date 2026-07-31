@@ -15,12 +15,12 @@ behaves. This spec adds those domain metrics.
 
 **In scope:** registry plumbing so packages outside `internal/api` can register
 instruments; process and DB-pool collectors; lease/claim, sweeper, skill-sync, webhook,
-and embedding metrics; tests; a `CLAUDE.md` maintenance rule so new server code keeps
-its metrics current (§8).
+and embedding metrics; tests; the scrape-path Service (§9); a `CLAUDE.md` maintenance
+rule so new server code keeps its metrics current (§8).
 
-**Out of scope:** OpenTelemetry or tracing, ServiceMonitor/PodMonitor CRs (annotation
-discovery already scrapes 9090), renaming the existing `http_*` metrics, `/healthz`
-changes, dashboards and alerts.
+**Out of scope:** OpenTelemetry or tracing, ServiceMonitor/PodMonitor CRs (no
+Prometheus operator runs on the clusters), renaming the existing `http_*` metrics,
+`/healthz` changes, dashboards and alerts.
 
 ---
 
@@ -135,10 +135,25 @@ short **Metrics** section stating the rule and pointing here for details:
 
 - Server-side changes that add an HTTP endpoint, background loop, outbound call, or
   store operation with meaningful outcomes must add or extend `worklode_*` metrics in
-  the owning package, following this spec's conventions (package-private nil-safe
-  metrics struct, `prometheus.Registerer` threading from `serve.go`, bounded label
-  values, `worklode_` prefix).
+  the owning package, following this spec's conventions (nil-safe metrics struct in the
+  owning package's `metrics.go`, `prometheus.Registerer` threading from `serve.go`,
+  bounded label values, `worklode_` prefix).
 - Metric changes ship with the `testutil` assertions and the `TestMetricsEndpoint`
   family check described in §7.
 
 The paragraph stays short — the conventions live in this spec, not in `CLAUDE.md`.
+
+## 9. Scrape path
+
+The deploy manifests carried `prometheus.io/*` annotations on the pod
+template, but the hzdev ClickStack collector discovers targets by *Service*
+annotations (its `k8s-service-endpoints` job keeps only endpoints whose
+Service is annotated `prometheus.io/scrape: "true"`). Nothing does
+pod-annotation discovery, so the metrics were scraped by nothing.
+
+Fix: a dedicated single-port `worklode-metrics` Service carrying the
+annotations (`deploy/base/metrics-service.yaml`), following the working
+precedent in sunstone-cms (`deploy/base/payload-cms-db/metrics-service.yaml`).
+Scraped metrics flow direct to ClickHouse, bypassing the otel-gateway. The
+pod-template annotations and the old Service's metrics port are removed as
+dead wiring.

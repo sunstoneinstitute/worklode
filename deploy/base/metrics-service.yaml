@@ -1,0 +1,22 @@
+---
+# Metrics-only Service. The cluster's clickstack-otel-collector discovers
+# scrape targets by *Service* annotations (its k8s-service-endpoints job), so
+# the prometheus.io/* annotations must live here, not on the pod template.
+# Scraped metrics flow direct to ClickHouse, bypassing the otel-gateway (no
+# per-service token needed). Single-port on purpose: one endpoint per pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: worklode-metrics
+  namespace: worklode
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app: worklode
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: admin

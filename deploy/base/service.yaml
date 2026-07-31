@@ -11,8 +11,3 @@ spec:
     - name: http
       port: 80
       targetPort: http
-    # In-cluster scraping of /metrics (and /healthz). The ingress references the
-    # http port only, so this admin port is never exposed publicly.
-    - name: metrics
-      port: 9090
-      targetPort: admin
