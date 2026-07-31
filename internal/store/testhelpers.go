@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -282,25 +281,13 @@ func buildTemplate(admin *sql.DB, name, migrationsDir string) error {
 	if err != nil {
 		return fmt.Errorf("open building database %s: %w", buildName, err)
 	}
-	// Use newMigrate/m.Close() directly rather than Store.Migrate(): the
-	// golang-migrate pgx driver opens its own dedicated connection
-	// (db.Conn) for advisory locking and never returns it to the pool, so
-	// Store.Migrate() alone leaks it — Store.Close() afterward does not
-	// close it either, since it was never idle in the pool. That leftover
-	// connection is exactly what makes the rename below fail with
-	// SQLSTATE 55006. m.Close() closes both that connection and the pool.
-	m, err := s.newMigrate(migrationsDir)
-	if err != nil {
-		s.Close()
-		return fmt.Errorf("init migration driver for %s: %w", buildName, err)
-	}
-	upErr := m.Up()
-	if upErr != nil && !errors.Is(upErr, migrate.ErrNoChange) {
-		m.Close()
-		return fmt.Errorf("migrate building database %s: %w", buildName, upErr)
-	}
-	if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
-		return fmt.Errorf("close migration driver for %s: source=%v db=%v", buildName, srcErr, dbErr)
+	defer s.Close()
+	// Store.Migrate() runs migrations over its own dedicated connection and
+	// closes it before returning (see newMigrate in store.go), so no
+	// connection to buildName lingers here for the rename below to trip
+	// over.
+	if err := s.Migrate(migrationsDir); err != nil {
+		return fmt.Errorf("migrate building database %s: %w", buildName, err)
 	}
 
 	return renameToTemplate(admin, buildName, name)
