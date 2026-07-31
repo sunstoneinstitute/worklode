@@ -7,11 +7,11 @@
 
 The server already carries the Prometheus scaffolding: a private registry with the Go
 collector, `http_requests_total` / `http_request_duration_seconds` middleware with
-mux-pattern route labels, `/metrics` on the admin listener (9090), and scrape annotations
-in `deploy/base/deployment.yaml`. What it lacks is any signal about what the server
-*does*: whether claims succeed, how many leases are live, whether the sweeper and skill
-sync run clean, whether webhooks are being rejected, and how the outbound embedding API
-behaves. This spec adds those domain metrics.
+mux-pattern route labels, `/metrics` on the admin listener (9090), and pod-template
+scrape annotations that nothing actually consumed (see §9). What it lacks is any signal
+about what the server *does*: whether claims succeed, how many leases are live, whether
+the sweeper and skill sync run clean, whether webhooks are being rejected, and how the
+outbound embedding API behaves. This spec adds those domain metrics.
 
 **In scope:** registry plumbing so packages outside `internal/api` can register
 instruments; process and DB-pool collectors; lease/claim, sweeper, skill-sync, webhook,
@@ -26,7 +26,7 @@ Prometheus operator runs on the clusters), renaming the existing `http_*` metric
 
 ## 1. Registry plumbing
 
-The registry moves out of `api.NewServer` (`internal/api/server.go:305`) into
+The registry moves out of `api.NewServer` (`internal/api/server.go`) into
 `internal/cmd/serve.go`, which becomes the composition root for metrics:
 
 ```go
@@ -36,7 +36,10 @@ reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{
 ```
 
 - `api.NewServer` takes the `*prometheus.Registry` (it both registers the HTTP
-  middleware metrics and serves `promhttp.HandlerFor(reg, ...)` on the admin mux).
+  middleware metrics and serves `promhttp.HandlerFor(reg, ...)` on the admin mux, with
+  `ErrorHandling: promhttp.ContinueOnError` and an `ErrorLog`: a failing collector no
+  longer 500s the whole scrape — its family is dropped and the failure surfaces as
+  `promhttp_metric_handler_errors_total{cause="gathering"}` plus an error log).
 - Every other subsystem takes a `prometheus.Registerer` and owns its instruments in a
   package-private `metrics.go` next to the code they measure. No central metrics package.
 - All metrics structs are nil-safe: a nil receiver no-ops, so the CLI and tests that
@@ -66,9 +69,13 @@ When present it registers:
 
 `outcome` on claims maps from the store's sentinel errors: `ok`, `leased` (ErrLeased),
 `blocked` (ErrBlocked), `not_found` (ErrNotFound), `none` (ClaimNext found no eligible
-task), `error` (anything else). Incremented inside `Claim` (`leases.go:130`), `ClaimNext`
-(`ranking.go:242`), `Renew`, `Release`. `ExpireLeases` (`leases.go:411`) adds the count
-it expired.
+task), `error` (anything else). Incremented inside `Claim` (`leases.go`), `ClaimNext`
+(`ranking.go`), `Renew`, `Release`. `ExpireLeases` (`leases.go`) adds the count it
+expired.
+
+Label-key convention: `outcome` names a domain result — one of the sentinels above —
+while `result` (§§4-6) names plain operational success/failure. Pick deliberately rather
+than mixing the two.
 
 `worklode_leases_active` is a small custom `prometheus.Collector` that counts unexpired
 leases at scrape time with a 2-second timeout; on query failure it emits
@@ -77,12 +84,15 @@ only, so this is one trivial query per scrape interval.
 
 ## 4. Background jobs
 
-**Lease sweeper** (`internal/cmd/serve.go:101`): the 60s loop owns
+**Lease sweeper** (`internal/cmd/serve.go`): the 60s loop owns
 `worklode_lease_sweeper_runs_total{result="ok"|"error"}`, registered directly in
-`serve.go`. Expiry counts come from §3's `worklode_lease_expiries_total`.
+`serve.go`. Expiry counts come from §3's `worklode_lease_expiries_total`. A cancelled
+context (shutdown) records nothing — neither `ok` nor `error` — so it doesn't spike the
+error rate; a deadline exceeded still counts as `error`.
 
 **Skill sync** (`internal/api/server.go`, `runSkillSync`/`syncOnce`): instruments live on
-the api server struct alongside the HTTP metrics.
+the api server struct alongside the HTTP metrics. The admin `POST /api/v1/skills/sync`
+handler records through the same `observeSkillSync` call.
 
 | Metric | Type | Labels / buckets |
 |---|---|---|
@@ -107,26 +117,31 @@ handlers via their constructors.
 
 ## 6. Embeddings (`internal/embed`)
 
-The `OpenAI` provider (`embed.go:104`) gains an optional registerer and wraps `Embed`:
+The `OpenAI` provider (`embed.go`) gains an optional registerer and wraps `Embed`:
 
 | Metric | Type | Labels / buckets |
 |---|---|---|
 | `worklode_embed_requests_total` | counter | `result` = `ok` \| `error` |
 | `worklode_embed_request_duration_seconds` | histogram | 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 |
 
-One observation per `Embed` call (which may batch many texts), not per text.
+One observation per `Embed` call (which may batch many texts), not per text. As with the
+sweeper (§4), a cancelled call records nothing — the sync loop's shutdown-time calls
+against a dead context shouldn't spike the error rate — while a deadline exceeded still
+counts as `error`.
 
 ## 7. Testing
 
 - Per-package unit tests pass a fresh `prometheus.NewRegistry()` and assert with
   `prometheus/testutil` (`ToFloat64`, `CollectAndCount`) after driving the operation —
   e.g. a failed claim increments `{op="claim",outcome="leased"}`.
-- `TestMetricsEndpoint` (`internal/api/server_test.go:230`) extends to assert the new
-  families appear in the admin `/metrics` body.
+- `TestMetricsEndpointDomainFamilies` (`internal/api/server_test.go`), added alongside
+  `TestMetricsEndpoint`, wires a shared registry through both the store and the server
+  and asserts the new families appear in the admin `/metrics` body.
 - `TestHealthzAndMetricsNotOnPublicHandler` stays green: nothing new lands on the
   public mux.
-- `newTestServer`/`newTestServerAdmin` construct the registry themselves, mirroring
-  `serve.go`, so the `NewServer` signature change is absorbed in the helpers.
+- `newTestServer`/`newTestServerAdmin` pass `api.Config{}` with no `Metrics` set;
+  `NewServer` falls back to a private `prometheus.NewRegistry()` in that case, so the
+  existing helpers need no changes.
 
 ## 8. Maintenance instructions
 
