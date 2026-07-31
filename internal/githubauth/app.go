@@ -78,6 +78,28 @@ func (a *AppAuth) appJWT() (string, error) {
 	return s, nil
 }
 
+// SubscribedEvents returns the event names this App is subscribed to, read
+// from GET /app under the App JWT. The Apps settings page shows permissions
+// and event subscriptions separately, so an App can hold issues:write and
+// still never receive an issues event — this is what surfaces that.
+func (a *AppAuth) SubscribedEvents(ctx context.Context) ([]string, error) {
+	jwtStr, err := a.appJWT()
+	if err != nil {
+		return nil, err
+	}
+	var app struct {
+		Events []string `json:"events"`
+	}
+	code, err := githubJSON(ctx, http.MethodGet, a.BaseURL+"/app", "Bearer "+jwtStr, &app)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("get app: status %d", code)
+	}
+	return app.Events, nil
+}
+
 // repoPath renders "owner/name" as an escaped URL path segment pair, rejecting
 // anything that is not exactly two non-empty segments so a malformed mapping
 // cannot reshape the request URL.

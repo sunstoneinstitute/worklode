@@ -610,3 +610,19 @@ func TestMountedOnServer(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestHandledEventsMatchesApplyFunc(t *testing.T) {
+	want := map[string]bool{
+		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
+		"pull_request_review": true, "workflow_run": true, "release": true,
+	}
+	got := hooks.HandledEvents()
+	if len(got) != len(want) {
+		t.Fatalf("HandledEvents() = %v, want %d entries", got, len(want))
+	}
+	for _, e := range got {
+		if !want[e] {
+			t.Errorf("unexpected event %q", e)
+		}
+	}
+}

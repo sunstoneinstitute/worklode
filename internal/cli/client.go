@@ -1171,14 +1171,32 @@ func (c *Client) ResolveRemote(ctx context.Context, remote string) (Project, err
 	return p, nil
 }
 
+// AddRepoResult is the response from AddRepo. Warnings are non-fatal setup
+// problems — the mapping was created regardless.
+type AddRepoResult struct {
+	ProjectID string   `json:"project_id"`
+	Repo      string   `json:"repo"`
+	DoneState string   `json:"done_state"`
+	Warnings  []string `json:"warnings,omitempty"`
+}
+
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
-func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) ([]byte, error) {
+func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (AddRepoResult, []byte, error) {
 	body := map[string]string{"repo": repo}
 	if doneState != "" {
 		body["done_state"] = doneState
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+	raw, err := c.do(ctx, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+	if err != nil {
+		return AddRepoResult{}, nil, err
+	}
+	var out AddRepoResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return AddRepoResult{}, nil, fmt.Errorf("decode add-repo response: %w", err)
+	}
+	return out, raw, nil
 }
 
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),

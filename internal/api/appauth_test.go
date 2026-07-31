@@ -35,13 +35,17 @@ func appTestKeyPEM(t *testing.T) string {
 }
 
 // fakeGitHubApp serves the discovery endpoints for repo acme/widgets. envs is
-// the environment list; fail makes every discovery call 500.
+// the environment list; events is the App's subscribed-event list served from
+// GET /app (nil serves an empty list, which existing envs-based tests never
+// hit); fail makes every discovery call 500.
 type fakeGitHubApp struct {
-	envs []string
-	fail bool
+	envs   []string
+	events []string
+	fail   bool
 
-	mu    sync.Mutex
-	calls int
+	mu             sync.Mutex
+	calls          int
+	discoveryCalls int // calls to done-state discovery endpoints, i.e. all but GET /app
 }
 
 func (f *fakeGitHubApp) count() int {
@@ -50,11 +54,24 @@ func (f *fakeGitHubApp) count() int {
 	return f.calls
 }
 
+// discoveryCount reports calls to the done-state discovery endpoints only,
+// excluding the event-subscription check's GET /app — the two features run
+// independently, so a test asserting "done-state discovery did not run" must
+// not also be tripped by the unrelated subscription check.
+func (f *fakeGitHubApp) discoveryCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.discoveryCalls
+}
+
 func (f *fakeGitHubApp) start(t *testing.T) *githubauth.AppAuth {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.calls++
+		if r.URL.Path != "/app" {
+			f.discoveryCalls++
+		}
 		f.mu.Unlock()
 		if f.fail {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -74,6 +91,8 @@ func (f *fakeGitHubApp) start(t *testing.T) *githubauth.AppAuth {
 			json.NewEncoder(w).Encode(map[string]any{"environments": envs})
 		case "/repos/acme/widgets/releases/latest":
 			http.NotFound(w, r)
+		case "/app":
+			json.NewEncoder(w).Encode(map[string]any{"events": f.events})
 		default:
 			http.NotFound(w, r)
 		}
@@ -153,8 +172,8 @@ func TestAddRepoExplicitDoneStateSkipsDiscovery(t *testing.T) {
 	if got := storedDoneState(t, st, "acme/widgets"); got != "released" {
 		t.Fatalf("stored done_state = %q, want released", got)
 	}
-	if n := f.count(); n != 0 {
-		t.Fatalf("discovery made %d GitHub calls despite an explicit done_state", n)
+	if n := f.discoveryCount(); n != 0 {
+		t.Fatalf("done-state discovery made %d GitHub calls despite an explicit done_state", n)
 	}
 }
 
@@ -284,5 +303,44 @@ func TestNewServerRejectsBadAppKey(t *testing.T) {
 	_, _, err := NewServer(st, Config{GitHubAppID: "12345", GitHubAppPrivateKey: "not a pem"})
 	if err == nil {
 		t.Fatal("want an error from NewServer for an unusable app key")
+	}
+}
+
+func TestAddRepoWarnsOnMissingEventSubscription(t *testing.T) {
+	app := (&fakeGitHubApp{events: []string{"push", "pull_request"}}).start(t)
+	_, post := addRepoServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 — the check must never gate the mapping", rr.Code)
+	}
+	var got struct {
+		Warnings []string `json:"warnings"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &got)
+	if len(got.Warnings) == 0 {
+		t.Fatal("no warnings; want one naming the unsubscribed events")
+	}
+	if !strings.Contains(got.Warnings[0], "issues") {
+		t.Errorf("warning = %q, want it to name the missing issues event", got.Warnings[0])
+	}
+}
+
+// A GitHub that fails the subscription check must not gate the mapping: same
+// posture as discoverDoneState. No warnings is the correct, silent outcome.
+func TestAddRepoSubscriptionCheckFailureStillMapsRepoNoWarnings(t *testing.T) {
+	app := (&fakeGitHubApp{fail: true}).start(t)
+	_, post := addRepoServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 — the check must never gate the mapping", rr.Code)
+	}
+	var got struct {
+		Warnings []string `json:"warnings"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &got)
+	if len(got.Warnings) != 0 {
+		t.Fatalf("warnings = %v, want none when GitHub fails the check", got.Warnings)
 	}
 }
