@@ -6,13 +6,22 @@ metadata:
   namespace: worklode
 spec:
   instances: 1  # dev-scale; bump to 3 for prod HA
-  imageName: ghcr.io/cloudnative-pg/postgresql:17
+  # system flavor (standard + barman-cloud, same as the old floating `:17`)
+  # ships pgvector; see deploy/base/migrations/0007_skills.up.sql. vector is
+  # NOT a trusted extension, so the app role (non-superuser) cannot CREATE
+  # EXTENSION it — postInitApplicationSQL below runs as superuser at
+  # bootstrap, and deploy/base/database.yaml (the Database CRD) covers
+  # already-bootstrapped clusters, where postInitApplicationSQL does not
+  # apply.
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.10-202607271318-system-bookworm
   storage:
     size: 10Gi
   bootstrap:
     initdb:
       database: worklode
       owner: worklode
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
   resources:
     requests:
       memory: "512Mi"

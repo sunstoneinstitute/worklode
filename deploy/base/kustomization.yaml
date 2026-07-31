@@ -5,6 +5,7 @@ namespace: worklode
 resources:
   - namespace.yaml
   - postgres.yaml
+  - database.yaml
   - configmap.yaml
   - deployment.yaml
   - service.yaml
