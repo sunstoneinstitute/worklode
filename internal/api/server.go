@@ -173,6 +173,10 @@ type server struct {
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
+	syncRuns     *prometheus.CounterVec
+	syncDuration prometheus.Histogram
+	syncItems    *prometheus.CounterVec
+
 	// Web UI templates, parsed once at startup (template.Must panics on a
 	// parse error, so a broken template fails fast at boot, not on first
 	// request). One *template.Template per page — see parseWebTemplates.
@@ -312,16 +316,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 	}
 
-	s.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_requests_total",
-		Help: "HTTP requests served, by method, route pattern, and status code.",
-	}, []string{"method", "route", "code"})
-	s.durations = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_request_duration_seconds",
-		Help:    "HTTP request duration, by method and route pattern.",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "route"})
-	reg.MustRegister(s.requests, s.durations)
+	s.initMetrics(reg)
 
 	mux := http.NewServeMux()
 
@@ -470,11 +465,14 @@ func (s *server) runSkillSync(ctx context.Context, reason string) {
 	}
 }
 
-// syncOnce runs a single bounded sync pass and logs its outcome.
+// syncOnce runs a single bounded sync pass, records its metrics, and logs
+// its outcome.
 func (s *server) syncOnce(ctx context.Context, reason string) {
 	ctx, cancel := context.WithTimeout(ctx, skillSyncTimeout)
 	defer cancel()
+	start := time.Now()
 	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
+	s.observeSkillSync(sum, err, time.Since(start))
 	if err != nil {
 		// Error, matching the HTTP path: a background failure has no caller
 		// watching a response, so the log is the only signal there is.
@@ -483,6 +481,32 @@ func (s *server) syncOnce(ctx context.Context, reason string) {
 	}
 	s.log.Info("skill sync", "reason", reason, "synced", sum.Synced,
 		"changed", sum.Changed, "embedded", sum.Embedded, "deleted", sum.Deleted)
+}
+
+// observeSkillSync records one sync pass. A partial failure still carries a
+// summary of what landed before the error, so items are recorded on both
+// paths (spec 022 §4). Nil-safe: tests build a *server directly without
+// initMetrics, matching the store package's optional-metrics convention.
+func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Duration) {
+	if s.syncDuration == nil {
+		return
+	}
+	s.syncDuration.Observe(d.Seconds())
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	s.syncRuns.WithLabelValues(result).Inc()
+	for action, n := range map[string]int{
+		"synced":   sum.Synced,
+		"changed":  sum.Changed,
+		"embedded": sum.Embedded,
+		"deleted":  sum.Deleted,
+	} {
+		if n > 0 {
+			s.syncItems.WithLabelValues(action).Add(float64(n))
+		}
+	}
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
