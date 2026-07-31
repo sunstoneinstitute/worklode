@@ -571,6 +571,58 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 	}
 }
 
+// TestSyncSkillsCoalescesPendingPush: a webhook push arriving during an
+// operator's `lode skills sync` finds the mutex held, so runSkillSync only
+// records it in skillSyncPending. The admin handler holds that mutex without
+// runSkillSync's drain loop, so it has to consume the flag itself — otherwise
+// the push is dropped, and on a quiet repo the next trigger may be a restart.
+func TestSyncSkillsCoalescesPendingPush(t *testing.T) {
+	st := store.OpenTestStore(t)
+	tb := tarballOf(t, "acme-p-aaa111", map[string]string{
+		"skills/tdd/SKILL.md": "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\nBody.",
+	})
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var fetches atomic.Int32
+	fetch := func(ctx context.Context, repo, ref string) ([]byte, error) {
+		if fetches.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return tb, nil
+	}
+	s := &server{
+		st: st, log: slog.Default(), bgCtx: context.Background(),
+		skillSources: []skillsync.Source{{Repo: "acme/p", Ref: "main", Glob: "skills/*"}},
+		skillSyncer:  &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
+	}
+
+	code := make(chan int, 1)
+	go func() {
+		rr := httptest.NewRecorder()
+		s.syncSkills(rr, httptest.NewRequest(http.MethodPost, "/api/v1/skills/sync", nil))
+		code <- rr.Code
+	}()
+
+	<-started // the admin sync now holds skillSyncMu
+	s.runSkillSync(context.Background(), "webhook push")
+	if !s.skillSyncPending.Load() {
+		t.Fatal("a push during an admin sync should have set skillSyncPending")
+	}
+	close(release)
+
+	if got := <-code; got != http.StatusOK {
+		t.Fatalf("admin sync: %d", got)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for fetches.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the push was dropped: no sync ran after the admin sync finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // TestSyncSkillsTotalFailure covers the zero-Summary branch of I4: when
 // nothing at all synced, the response is a generic 502 (the detail is
 // logged server-side, not leaked — see mapStoreErr's "logged, not leaked"
