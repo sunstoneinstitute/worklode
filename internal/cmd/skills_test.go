@@ -1,0 +1,316 @@
+package cmd
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// skillsTestServer is lifecycleTestServer plus a counter of archive-download
+// requests, so install tests can assert a repeat install performs no fetch.
+func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32) {
+	t.Helper()
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, _, err := api.NewServer(st, api.Config{})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	var archiveHits int32
+	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/archive/") {
+			atomic.AddInt32(&archiveHits, 1)
+		}
+		h.ServeHTTP(w, r)
+	})
+	ts := httptest.NewServer(counted)
+	t.Cleanup(ts.Close)
+
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", token)
+
+	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token}), &archiveHits
+}
+
+// seedSkill upserts one skill with a deterministic hash and a fake (non-tar)
+// archive — good enough for list/get/recommend tests, which never extract
+// it.
+func seedSkill(t *testing.T, st *store.Store, name, description string) {
+	t.Helper()
+	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Name:        name,
+		Description: description,
+		SourceRepo:  "acme/skills",
+		SourcePath:  "skills/" + name,
+		GitCommit:   "deadbeef",
+		ContentHash: "h-" + name,
+		SkillMD:     "# " + name + "\n\n" + description,
+		Frontmatter: json.RawMessage(`{}`),
+		Archive:     []byte("gzip-archive-" + name),
+	})
+	if err != nil {
+		t.Fatalf("seed skill %s: %v", name, err)
+	}
+}
+
+// seedInstallableSkill upserts a skill backed by a real tar.gz archive whose
+// content hash is correctly computed — install tests extract it for real via
+// skillstore.Ensure, unlike seedSkill's fixtures.
+func seedInstallableSkill(t *testing.T, st *store.Store, name string) (hash, content string) {
+	t.Helper()
+	content = "# " + name + "\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	hash = skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
+	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Name:        name,
+		Description: "desc for " + name,
+		SourceRepo:  "acme/skills",
+		SourcePath:  "skills/" + name,
+		GitCommit:   "deadbeef",
+		ContentHash: hash,
+		SkillMD:     content,
+		Frontmatter: json.RawMessage(`{}`),
+		Archive:     archive,
+	})
+	if err != nil {
+		t.Fatalf("seed installable skill %s: %v", name, err)
+	}
+	return hash, content
+}
+
+// seedInstallableSkillWithHash is seedInstallableSkill but the caller
+// supplies (and can deliberately mis-state) the content hash, so the
+// server-advertised hash and the archive's real content can disagree — the
+// seam that surfaces a corrupt or truncated download to a human.
+func seedInstallableSkillWithHash(t *testing.T, st *store.Store, name, hash string) (content string) {
+	t.Helper()
+	content = "# " + name + "\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Name:        name,
+		Description: "desc for " + name,
+		SourceRepo:  "acme/skills",
+		SourcePath:  "skills/" + name,
+		GitCommit:   "deadbeef",
+		ContentHash: hash,
+		SkillMD:     content,
+		Frontmatter: json.RawMessage(`{}`),
+		Archive:     archive,
+	})
+	if err != nil {
+		t.Fatalf("seed installable skill %s: %v", name, err)
+	}
+	return content
+}
+
+func buildTarGz(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for name, content := range files {
+		body := []byte(content)
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body))}); err != nil {
+			t.Fatalf("tar header %q: %v", name, err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			t.Fatalf("tar write %q: %v", name, err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// runLodeOutErr is runLode but keeps stdout and stderr in separate buffers,
+// for tests asserting which stream a command writes to.
+func runLodeOutErr(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	resetFlags(t, rootCmd)
+	outBuf := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(args)
+	err = rootCmd.Execute()
+	return outBuf.String(), errBuf.String(), err
+}
+
+func TestSkillsListTableAndJSON(t *testing.T) {
+	st, _, _ := skillsTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	seedSkill(t, st, "debugging", "Systematic debugging loop")
+
+	out, err := runLode(t, "skills", "list")
+	if err != nil {
+		t.Fatalf("skills list: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "tdd\tRed-green-refactor discipline\n") ||
+		!strings.Contains(out, "debugging\tSystematic debugging loop\n") {
+		t.Fatalf("skills list table output = %q", out)
+	}
+
+	out, err = runLode(t, "skills", "list", "--json")
+	if err != nil {
+		t.Fatalf("skills list --json: %v\noutput: %s", err, out)
+	}
+	var resp struct {
+		Skills []cli.Skill `json:"skills"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode skills list --json output %q: %v", out, err)
+	}
+	if len(resp.Skills) != 2 {
+		t.Fatalf("skills list --json = %+v, want 2 skills", resp.Skills)
+	}
+}
+
+func TestSkillsRecommendFlagValidation(t *testing.T) {
+	skillsTestServer(t)
+
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{"none", nil, true},
+		{"task and text", []string{"--task", "WL-1", "--text", "x"}, true},
+		{"task and file", []string{"--task", "WL-1", "--file", "/nonexistent"}, true},
+		{"text alone", []string{"--text", "write tests first"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"skills", "recommend"}, tc.args...)
+			_, err := runLode(t, args...)
+			if tc.wantErr && err == nil {
+				t.Fatalf("skills recommend %v: want error, got nil", tc.args)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("skills recommend %v: %v", tc.args, err)
+			}
+		})
+	}
+}
+
+func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
+	st, c, _ := skillsTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	task, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+		Project: "proj", Title: "Fix it", Priority: "high", Kind: "bug",
+		Skills: []string{"tdd", "ghost"},
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	stdout, stderr, err := runLodeOutErr(t, "skills", "recommend", "--task", task.ID)
+	if err != nil {
+		t.Fatalf("skills recommend --task: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "pinned\ttdd\t") {
+		t.Fatalf("stdout = %q, want a pinned tdd line", stdout)
+	}
+	if strings.Contains(stdout, "ghost") {
+		t.Fatalf("stdout = %q, warning about ghost leaked into stdout", stdout)
+	}
+	if !strings.Contains(stderr, "warning: pinned skill not found: ghost") {
+		t.Fatalf("stderr = %q, want a warning about the missing ghost skill", stderr)
+	}
+	if strings.Contains(stderr, "pinned\ttdd") {
+		t.Fatalf("stderr = %q, pinned result leaked into stderr", stderr)
+	}
+}
+
+func TestSkillsInstallResolvesHash(t *testing.T) {
+	st, _, archiveHits := skillsTestServer(t)
+	_, content := seedInstallableSkill(t, st, "tdd")
+	t.Setenv("LODE_SKILLS_DIR", t.TempDir())
+
+	out, err := runLode(t, "skills", "install", "tdd")
+	if err != nil {
+		t.Fatalf("skills install tdd: %v\noutput: %s", err, out)
+	}
+	if atomic.LoadInt32(archiveHits) != 1 {
+		t.Fatalf("archive hits = %d, want 1", atomic.LoadInt32(archiveHits))
+	}
+	path := strings.TrimSpace(out)
+	got, err := os.ReadFile(filepath.Join(path, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed SKILL.md at %s: %v", path, err)
+	}
+	if string(got) != content {
+		t.Fatalf("installed SKILL.md = %q, want %q", got, content)
+	}
+}
+
+func TestSkillsInstallIdempotent(t *testing.T) {
+	st, _, archiveHits := skillsTestServer(t)
+	hash, _ := seedInstallableSkill(t, st, "tdd")
+	t.Setenv("LODE_SKILLS_DIR", t.TempDir())
+
+	if _, err := runLode(t, "skills", "install", "tdd@"+hash); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if atomic.LoadInt32(archiveHits) != 1 {
+		t.Fatalf("archive hits after first install = %d, want 1", atomic.LoadInt32(archiveHits))
+	}
+
+	if _, err := runLode(t, "skills", "install", "tdd@"+hash); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	if atomic.LoadInt32(archiveHits) != 1 {
+		t.Fatalf("archive hits after second install = %d, want still 1 (no re-fetch)", atomic.LoadInt32(archiveHits))
+	}
+}
+
+func TestSkillsInstallHashMismatch(t *testing.T) {
+	st, _, _ := skillsTestServer(t)
+	// A well-formed but wrong hash: the archive's real content hashes to
+	// something else, simulating a corrupt or truncated download.
+	const badHash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	seedInstallableSkillWithHash(t, st, "tdd", badHash)
+	root := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", root)
+
+	if _, err := runLode(t, "skills", "install", "tdd"); err == nil {
+		t.Fatal("skills install with a content-hash mismatch: want error, got nil")
+	}
+
+	if _, err := os.Lstat(filepath.Join(root, "tdd")); err == nil {
+		t.Fatalf("skills install left a symlink at %s despite the hash mismatch", filepath.Join(root, "tdd"))
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, ".store"))
+	for _, e := range entries {
+		if e.Name() == badHash {
+			t.Fatalf("skills install left a store dir for the mismatched hash: %s", e.Name())
+		}
+	}
+}
