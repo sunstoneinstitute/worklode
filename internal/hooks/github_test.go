@@ -44,7 +44,7 @@ func newEnv(t *testing.T) *env {
 	}
 	return &env{
 		st: st,
-		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default()),
+		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default(), nil),
 	}
 }
 
@@ -217,7 +217,7 @@ func TestMissingHeaders(t *testing.T) {
 
 func TestEmptySecretIs503(t *testing.T) {
 	e := newEnv(t)
-	h := hooks.NewGitHubHandler(e.st, "", slog.Default())
+	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil)
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
