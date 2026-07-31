@@ -1,6 +1,6 @@
 # Spec 020 — Inbox import (onboarding a repo with history)
 
-**Date:** 2026-07-31 · **Status:** design ·
+**Date:** 2026-07-31 · **Status:** spec ·
 **Umbrella:** `000-umbrella-architecture.md`
 **Area:** spec 002 (GitHub App auth — the installation token), spec 011
 (delivery lifecycle — what import must *not* replay), spec 018 (task
@@ -62,7 +62,7 @@ Nothing surfaced the mismatch; the cost was diagnosis time, not data.
 
 ## Decisions
 
-Taken here with rationale, pending sign-off.
+Taken here with rationale.
 
 | Decision | Choice |
 |---|---|
@@ -120,7 +120,7 @@ which is the second reason the default stays narrow.
 
 ## Design
 
-### Fetch — `internal/githubauth/list.go` (new)
+### Fetch — `internal/githubauth/list.go`
 
 Two functions beside `DiscoverDoneState` (`app.go:138`), reusing
 `InstallationToken` (`app.go:94`) and `githubJSON` (`githubauth.go:93`):
@@ -156,9 +156,10 @@ onboarding act like `add-repo` (`server.go:395`), not a triage act like
 promote.
 
 Preconditions, in order: `503` when `s.appAuth` is nil (no App configured);
-`404` when `ProjectForRepo` finds no mapping — an unmapped repo's webhooks are
-recorded `.ignored` (`internal/hooks/github.go:164`), so its import must be
-refused for the same reason; `422` on an unknown `state`.
+`422` on an unknown `state`; `404` when `ProjectForRepo` finds no mapping — an
+unmapped repo's webhooks are recorded `.ignored`
+(`internal/hooks/github.go:164`), so its import must be refused for the same
+reason.
 
 The GitHub round trips happen outside any transaction under a 60s bound, then
 the whole result is applied in one `RecordEvent("cli", extID, "inbox.imported",
