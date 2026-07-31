@@ -1,8 +1,12 @@
 package api_test
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
 )
 
 func TestTaskBrief(t *testing.T) {
@@ -166,5 +170,198 @@ func TestRebindWorktree(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/lease/worktree", bobToken, map[string]any{"worktree": "host:/wt-bob"})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("non-holder rebind status = %d, want 404", rr.Code)
+	}
+}
+
+// --- brief skills section ---------------------------------------------
+
+func TestTaskBriefSkillsPinned(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills, ok := got["skills"].(map[string]any)
+	if !ok {
+		t.Fatalf("skills section missing: %v", got)
+	}
+	if skills["provider"] != "none" {
+		t.Fatalf("provider = %v, want none", skills["provider"])
+	}
+	pinned, _ := skills["pinned"].([]any)
+	if len(pinned) != 1 {
+		t.Fatalf("pinned = %v, want one entry", skills["pinned"])
+	}
+	p0, _ := pinned[0].(map[string]any)
+	if p0["name"] != "tdd" || p0["content"] == "" || p0["content"] == nil {
+		t.Fatalf("pinned[0] = %v, want tdd with content", p0)
+	}
+	matches, _ := skills["matches"].([]any)
+	if len(matches) != 0 {
+		t.Fatalf("matches = %v, want none (no embedder configured)", skills["matches"])
+	}
+}
+
+// TestTaskBriefSkillsEmptyWhenNoPinsNoEmbedder guards the wire contract Task
+// 13 renders against: the skills section is always present, with empty
+// arrays (never null) even when there is nothing to show.
+func TestTaskBriefSkillsEmptyWhenNoPinsNoEmbedder(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "No pins", "priority": "low", "kind": "chore",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills, ok := got["skills"].(map[string]any)
+	if !ok {
+		t.Fatalf("skills section missing entirely: %v", got)
+	}
+	if skills["provider"] != "none" {
+		t.Fatalf("provider = %v, want none", skills["provider"])
+	}
+	if pinned, ok := skills["pinned"].([]any); !ok || len(pinned) != 0 {
+		t.Fatalf("pinned = %v, want empty array not null", skills["pinned"])
+	}
+	if matches, ok := skills["matches"].([]any); !ok || len(matches) != 0 {
+		t.Fatalf("matches = %v, want empty array not null", skills["matches"])
+	}
+	if warnings, ok := skills["warnings"].([]any); !ok || len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want empty array not null", skills["warnings"])
+	}
+}
+
+// TestTaskBriefDeletedPinStillResolves guards that a brief never breaks
+// because a pinned skill was withdrawn upstream: content still comes back,
+// alongside a warning.
+func TestTaskBriefDeletedPinStillResolves(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	if _, err := st.SoftDeleteSkillsExcept(context.Background(), "acme/skills", nil); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills := got["skills"].(map[string]any)
+	pinned, _ := skills["pinned"].([]any)
+	if len(pinned) != 1 {
+		t.Fatalf("pinned = %v, want tdd resolved despite deletion", skills["pinned"])
+	}
+	p0 := pinned[0].(map[string]any)
+	if p0["content"] == "" || p0["content"] == nil {
+		t.Fatalf("pinned[0] content missing: %v", p0)
+	}
+	warnings, _ := skills["warnings"].([]any)
+	found := false
+	for _, w := range warnings {
+		if w == "pinned skill removed from its source repo: tdd" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("warnings = %v, want a removed-from-source-repo warning", warnings)
+	}
+}
+
+// TestTaskBriefPinnedExcludedFromMatches guards that the skillMatches
+// refactor kept the exclusion behavior: a pinned skill that would also match
+// by embedding must appear only under pinned, never duplicated into matches.
+func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer fakeSrv.Close()
+
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	createProject(t, st, "proj")
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	sk, err := st.GetSkill(context.Background(), "tdd")
+	if err != nil {
+		t.Fatalf("get skill: %v", err)
+	}
+	if err := st.ReplaceSkillEmbeddings(context.Background(), sk.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
+	}
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+		"skills": []string{"tdd"},
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills := got["skills"].(map[string]any)
+	if skills["provider"] != "openai-compatible" {
+		t.Fatalf("provider = %v, want openai-compatible", skills["provider"])
+	}
+	pinned, _ := skills["pinned"].([]any)
+	if len(pinned) != 1 {
+		t.Fatalf("pinned = %v, want one entry", skills["pinned"])
+	}
+	matches, _ := skills["matches"].([]any)
+	if len(matches) != 0 {
+		t.Fatalf("matches = %v, want none: tdd is pinned so must be excluded from matches", skills["matches"])
+	}
+}
+
+// TestTaskBriefProviderFailureDegrades guards the 2s degrade-to-pins-only
+// behavior on the brief path: a provider failure must never turn a brief
+// fetch into a 5xx.
+func TestTaskBriefProviderFailureDegrades(t *testing.T) {
+	errSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer errSrv.Close()
+
+	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: errSrv.URL, EmbeddingModel: "m"})
+	createProject(t, st, "proj")
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "T", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task["id"].(string)+"/brief", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brief status = %d, want 200 even on provider failure, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	skills := got["skills"].(map[string]any)
+	if skills["provider"] != "openai-compatible" {
+		t.Fatalf("provider = %v, want openai-compatible (still configured)", skills["provider"])
+	}
+	matches, _ := skills["matches"].([]any)
+	if len(matches) != 0 {
+		t.Fatalf("matches = %v, want none on provider failure", skills["matches"])
+	}
+	warnings, _ := skills["warnings"].([]any)
+	if len(warnings) == 0 {
+		t.Fatalf("expected a degradation warning, got none")
 	}
 }

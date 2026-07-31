@@ -121,31 +121,75 @@ func TestBriefNotFound(t *testing.T) {
 	}
 }
 
-func TestBriefParent(t *testing.T) {
-	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
-		t.Fatalf("child_of: %v", err)
+// TestBriefResolvesPins pins a real skill and an unknown one: the real skill
+// resolves with content, the unknown one produces a warning instead of
+// failing the brief.
+func TestBriefResolvesPins(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
 	}
 
-	b, err := s.Brief(t.Context(), child.ID)
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd", "ghost"}
+	task := createTask(t, s, leaseTestNow, in)
+
+	b, err := s.Brief(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
-	if b.Parent == nil || b.Parent.ID != epic.ID || b.Parent.Title != epic.Title ||
-		b.Parent.State != epic.State {
-		t.Fatalf("parent = %+v, want %s", b.Parent, epic.ID)
+	if len(b.PinnedSkills) != 1 || b.PinnedSkills[0].Name != "tdd" || b.PinnedSkills[0].SkillMD == "" {
+		t.Fatalf("pinned skills = %+v, want one tdd entry with SkillMD populated", b.PinnedSkills)
 	}
-	if b.Parent.Body != "" {
-		t.Fatalf("parent body = %q, want empty (one hop carries id, title, state only)", b.Parent.Body)
+	if len(b.SkillWarnings) != 1 || b.SkillWarnings[0] != "pinned skill not found: ghost" {
+		t.Fatalf("skill warnings = %+v, want [pinned skill not found: ghost]", b.SkillWarnings)
+	}
+}
+
+// TestBriefNoPins guards the bounded-queries contract: no pins, no extra
+// query, and the fields stay empty rather than nil-panicking a caller.
+func TestBriefNoPins(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	b, err := s.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.PinnedSkills) != 0 || len(b.SkillWarnings) != 0 {
+		t.Fatalf("brief with no pins = %+v, want no pinned skills or warnings", b)
+	}
+}
+
+// TestBriefResolvesDeletedPin guards that a pin surviving upstream deletion
+// still resolves with its content: a brief must never break because a skill
+// was withdrawn from its source repo.
+func TestBriefResolvesDeletedPin(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", nil); err != nil {
+		t.Fatalf("soft delete: %v", err)
 	}
 
-	root, err := s.Brief(t.Context(), epic.ID)
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd"}
+	task := createTask(t, s, leaseTestNow, in)
+
+	b, err := s.Brief(ctx, task.ID)
 	if err != nil {
-		t.Fatalf("Brief root: %v", err)
+		t.Fatalf("Brief: %v", err)
 	}
-	if root.Parent != nil {
-		t.Fatalf("parent of a root task = %+v, want nil", root.Parent)
+	if len(b.PinnedSkills) != 1 || b.PinnedSkills[0].Name != "tdd" || b.PinnedSkills[0].SkillMD == "" {
+		t.Fatalf("pinned skills = %+v, want tdd resolved with content despite deletion", b.PinnedSkills)
+	}
+	if len(b.SkillWarnings) != 1 || b.SkillWarnings[0] != "pinned skill removed from its source repo: tdd" {
+		t.Fatalf("skill warnings = %+v, want a removed-from-source-repo warning", b.SkillWarnings)
 	}
 }

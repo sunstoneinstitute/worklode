@@ -20,7 +20,9 @@ type briefBlockerJSON struct {
 // hierarchyJSON.Parent for the same convention on task detail). The three
 // reserved fields serialize as JSON null in v1: governing_design and
 // definition_of_done are *string, affected_components is a nil []string
-// (marshals to null, not []) — see store.Brief.
+// (marshals to null, not []) — see store.Brief. skills carries the task's
+// pinned skills (content inline) plus embedding-matched suggestions, in the
+// same shape as POST /api/v1/skills/recommend.
 type briefJSON struct {
 	Task               taskJSON           `json:"task"`
 	Body               string             `json:"body"`
@@ -31,8 +33,12 @@ type briefJSON struct {
 	GoverningDesign    *string            `json:"governing_design"`
 	AffectedComponents []string           `json:"affected_components"`
 	DefinitionOfDone   *string            `json:"definition_of_done"`
+	Skills             recommendationJSON `json:"skills"`
 }
 
+// toBriefJSON fills every field except Skills.Matches: those come from
+// skillMatches, which taskBrief calls once pins are known so a pinned skill
+// is excluded from its own matches.
 func toBriefJSON(b *store.Brief) briefJSON {
 	out := briefJSON{
 		Task:               toTaskJSON(&b.Task),
@@ -42,6 +48,12 @@ func toBriefJSON(b *store.Brief) briefJSON {
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,
+		Skills: recommendationJSON{
+			Pinned:   make([]pinnedSkillJSON, 0, len(b.PinnedSkills)),
+			Matches:  []skillMatchJSON{},
+			Warnings: append([]string{}, b.SkillWarnings...),
+			Provider: "none",
+		},
 	}
 	for i := range b.OpenBlockers {
 		blk := &b.OpenBlockers[i]
@@ -56,11 +68,17 @@ func toBriefJSON(b *store.Brief) briefJSON {
 		l := toLeaseJSON(b.Lease)
 		out.Lease = &l
 	}
+	for _, sk := range b.PinnedSkills {
+		out.Skills.Pinned = append(out.Skills.Pinned, toPinnedSkillJSON(sk))
+	}
 	return out
 }
 
 // taskBrief handles GET /api/v1/tasks/{id}/brief: the bounded start-of-work
-// payload for a task (task row, branch, open blockers, active lease).
+// payload for a task (task row, branch, open blockers, active lease, and
+// pinned/recommended skills). Pins are already resolved by store.Brief, so
+// this calls skillMatches directly (excluding the pinned names) instead of
+// recommendation, which would re-resolve the same pins — see Task 12.
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	b, err := s.st.Brief(r.Context(), id)
@@ -68,7 +86,24 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toBriefJSON(b))
+	out := toBriefJSON(b)
+
+	pinnedNames := make(map[string]bool, len(b.PinnedSkills))
+	for _, sk := range b.PinnedSkills {
+		pinnedNames[sk.Name] = true
+	}
+	if s.embedder != nil {
+		out.Skills.Provider = "openai-compatible"
+	}
+	matches, warnings, err := s.skillMatches(r.Context(), b.Task.Title+"\n\n"+b.Body, pinnedNames, 0)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	out.Skills.Matches = matches
+	out.Skills.Warnings = append(out.Skills.Warnings, warnings...)
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 type rebindWorktreeRequest struct {
