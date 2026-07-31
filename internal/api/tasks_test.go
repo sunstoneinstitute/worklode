@@ -561,6 +561,7 @@ func TestSetTaskSkills(t *testing.T) {
 		"project": "proj", "title": "T", "priority": "medium", "kind": "feature",
 	})
 	id := created["id"].(string)
+	updatedAt0, _ := created["updated_at"].(string)
 
 	rr := doReq(t, h, "PUT", "/api/v1/tasks/"+id+"/skills", token,
 		map[string]any{"skills": []string{"tdd", "debugging"}})
@@ -573,7 +574,8 @@ func TestSetTaskSkills(t *testing.T) {
 		t.Fatalf("echoed skills = %v", got["skills"])
 	}
 
-	// The GET response reflects the write (taskColumns/scanTask wiring).
+	// The GET response reflects the write (taskColumns/scanTask wiring), and
+	// updated_at advances — a consumer polling on it must not see stale pins.
 	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get task status = %d, body %s", rr.Code, rr.Body.String())
@@ -582,6 +584,21 @@ func TestSetTaskSkills(t *testing.T) {
 	skills, ok = got["skills"].([]any)
 	if !ok || len(skills) != 2 || skills[0] != "tdd" || skills[1] != "debugging" {
 		t.Fatalf("task skills after set = %v", got["skills"])
+	}
+	if updatedAt1, _ := got["updated_at"].(string); updatedAt1 == "" || updatedAt1 == updatedAt0 {
+		t.Fatalf("updated_at after set = %q, want it to advance from %q", updatedAt1, updatedAt0)
+	}
+
+	// Blank entries are dropped and duplicates removed: the response reflects
+	// what was actually persisted, not the raw request.
+	rr = doReq(t, h, "PUT", "/api/v1/tasks/"+id+"/skills", token,
+		map[string]any{"skills": []string{"tdd", "", "  ", "tdd", "review"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set skills with blanks/dupes status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = decodeMap(t, rr)
+	if skills, ok := got["skills"].([]any); !ok || len(skills) != 2 || skills[0] != "tdd" || skills[1] != "review" {
+		t.Fatalf("echoed skills with blanks/dupes = %v", got["skills"])
 	}
 
 	// An empty list clears rather than merges. Sent as null: the JSON
