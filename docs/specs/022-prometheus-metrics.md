@@ -1,6 +1,6 @@
 # Spec 022 — Prometheus domain metrics
 
-**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` ·
+**Status:** implemented · **Umbrella:** `000-umbrella-architecture.md` ·
 **Depends on:** 004 (execution backbone — leases), 011 (delivery lifecycle), 016 (org-wide skills — sync + embeddings)
 
 ## Purpose & scope
