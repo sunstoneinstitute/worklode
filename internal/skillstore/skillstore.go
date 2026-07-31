@@ -25,13 +25,13 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 )
 
-// maxExtracted caps the unpacked size of one skill version, and maxEntries
-// caps the file count — bytes alone don't stop an archive of many
-// zero-byte files from exhausting inodes. Both are vars, not consts, so
-// tests can lower them instead of building huge fixtures.
+// maxExtracted caps the unpacked size of one skill version; maxEntries is
+// skillhash.MaxEntries, the file-count cap the ingest side enforces too.
+// Both are vars, not consts, so tests can lower them instead of building
+// huge fixtures.
 var (
 	maxExtracted int64 = 8 << 20
-	maxEntries         = 2000
+	maxEntries         = skillhash.MaxEntries
 )
 
 // Root returns the local skill dir: $LODE_SKILLS_DIR or ~/.worklode/skills.
@@ -50,10 +50,6 @@ func Root() (string, error) {
 // yet. It points at whichever version was installed last, so it is for humans
 // only; anything needing a particular version uses the path Ensure returns.
 func Path(root, name string) string { return filepath.Join(root, name) }
-
-func validName(name string) bool {
-	return name != "" && !strings.ContainsAny(name, `/\`) && name != "." && name != ".." && !strings.HasPrefix(name, ".")
-}
 
 // validHash requires lowercase hex only: uppercase would collide with
 // lowercase store dirs on a case-insensitive filesystem (macOS default
@@ -80,7 +76,7 @@ func validHash(hash string) bool {
 // <root>/<name> is still repointed here, as the human-facing pointer to the
 // most recent install.
 func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, error) {
-	if !validName(name) {
+	if !skillhash.ValidName(name) {
 		return "", fmt.Errorf("skill name %q: invalid", name)
 	}
 	if !validHash(hash) {
@@ -171,14 +167,12 @@ func extract(tgz []byte, dst, wantHash string) error {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-		// Only the exec bit survives from the archive header; mask everything
-		// else so a hostile archive can't request setuid/setgid/sticky bits.
-		perm := os.FileMode(0o644)
+		// Only the exec bit survives from the archive header; skillhash.Mode
+		// masks everything else, so a hostile archive cannot request setuid,
+		// setgid or sticky bits, and the mode we write is the mode the hash
+		// below is computed over.
 		exec := h.Mode&0o111 != 0
-		if exec {
-			perm = 0o755
-		}
-		if err := os.WriteFile(p, content, perm); err != nil {
+		if err := os.WriteFile(p, content, os.FileMode(skillhash.Mode(exec))); err != nil {
 			return err
 		}
 		hashed[rel] = skillhash.File{Path: rel, Data: content, Exec: exec}

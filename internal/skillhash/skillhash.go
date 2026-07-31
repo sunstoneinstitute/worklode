@@ -10,7 +10,24 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 )
+
+// MaxEntries caps the number of files in one skill version. Bytes alone do
+// not stop an archive of many empty files from exhausting inodes. It lives
+// here because both sides must agree: a dir the server ingests but no client
+// will extract is a skill nobody can install.
+const MaxEntries = 2000
+
+// ValidName reports whether name can serve as a skill's org-unique
+// identifier. It becomes a path segment in the local store and a URL segment
+// on GET /api/v1/skills/{name}, so separators, the dot dirs, and any leading
+// dot are out. Enforced at ingest and again at extract, for the same reason
+// as MaxEntries.
+func ValidName(name string) bool {
+	return name != "" && !strings.ContainsAny(name, `/\`) &&
+		name != "." && name != ".." && !strings.HasPrefix(name, ".")
+}
 
 // File is one entry contributing to a skill version's content hash.
 type File struct {
