@@ -1,9 +1,12 @@
 package hookrun
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,14 +14,33 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
+
+// TestMain sets a package-wide default LODE_SKILLS_DIR before any test runs,
+// so isolation from a developer's real ~/.worklode/skills is structural
+// rather than resting on "no other test's brief happens to carry skills".
+// Individual skills tests still set their own via t.Setenv (scoped and
+// auto-restored); this is the backstop for any that forget.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "worklode-skills-test-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "TestMain: create temp skills dir:", err)
+		os.Exit(1)
+	}
+	os.Setenv("LODE_SKILLS_DIR", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 // allEvents is the guarded event set (unknown events are handled separately).
 var allEvents = []string{"session-start", "session-end", "pre-commit",
@@ -790,5 +812,536 @@ func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
 	// worktree-exit must remove B's marker — symmetric with session-end.
 	if _, ok := markerSessionID(wtDirB); ok {
 		t.Fatal("worktree B marker still present after worktree-exit")
+	}
+}
+
+// --- session-start skills ----------------------------------------------------
+
+// skillsBackbone fakes the backbone for the skills tests: a canned Brief plus
+// a controllable archive endpoint (per-name success or forced 500). It is the
+// single place these tests point LODE_SERVER/LODE_SKILLS_DIR at, so the
+// "always use a throwaway skills dir" rule can't be forgotten in one of them.
+type skillsBackbone struct {
+	mu      sync.Mutex
+	archive map[string][]byte
+	fail    map[string]bool
+	hang    map[string]bool
+	brief   cli.Brief
+
+	inFlight    int32 // atomic
+	maxInFlight int32 // atomic; high-water mark, so a test can assert the concurrency bound held
+}
+
+func newSkillsBackbone(t *testing.T, brief cli.Brief) *skillsBackbone {
+	t.Helper()
+	b := &skillsBackbone{archive: map[string][]byte{}, fail: map[string]bool{}, hang: map[string]bool{}, brief: brief}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/tasks/{id}/brief", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(b.brief)
+	})
+	mux.HandleFunc("GET /api/v1/skills/{name}/archive/{hash}", func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&b.inFlight, 1)
+		defer atomic.AddInt32(&b.inFlight, -1)
+		for {
+			cur := atomic.LoadInt32(&b.maxInFlight)
+			if n <= cur || atomic.CompareAndSwapInt32(&b.maxInFlight, cur, n) {
+				break
+			}
+		}
+
+		name, hash := r.PathValue("name"), r.PathValue("hash")
+		b.mu.Lock()
+		fail := b.fail[name]
+		hang := b.hang[name]
+		data, ok := b.archive[name+"@"+hash]
+		b.mu.Unlock()
+		if hang {
+			// Block until the client gives up (archiveTimeout/skillsBudget)
+			// rather than forever — a real timed-out client cancels its
+			// request context, so this mirrors that instead of leaking a
+			// goroutine for the life of the test process.
+			<-r.Context().Done()
+			return
+		}
+		if fail {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	t.Setenv("LODE_SKILLS_DIR", t.TempDir())
+	return b
+}
+
+func (b *skillsBackbone) setArchive(name, hash string, data []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.archive[name+"@"+hash] = data
+}
+
+func (b *skillsBackbone) failArchive(name string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.fail[name] = true
+}
+
+func (b *skillsBackbone) peakConcurrency() int {
+	return int(atomic.LoadInt32(&b.maxInFlight))
+}
+
+func (b *skillsBackbone) hangArchive(name string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.hang[name] = true
+}
+
+// setupFakeWorktree creates a wt/<taskID>-<slug> git worktree under root
+// without exercising a real claim/lease — the skills tests fake the
+// backbone's HTTP surface directly instead.
+func setupFakeWorktree(t *testing.T, root, taskID, slug string) string {
+	t.Helper()
+	wtDir := filepath.Join(root, "wt", taskID+"-"+slug)
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", wtDir, "-b", taskID+"-"+slug).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	return wtDir
+}
+
+// buildSkillArchive builds a single-file (SKILL.md) tar.gz and returns it
+// alongside the content hash skillstore.Ensure will require of it.
+func buildSkillArchive(t *testing.T, content string) (archive []byte, hash string) {
+	t.Helper()
+	data := []byte(content)
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "SKILL.md", Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		t.Fatalf("write tar content: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+
+	hash = skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: data}})
+	return buf.Bytes(), hash
+}
+
+// runSessionStart runs the session-start hook against wtDir and returns its
+// stdout/stderr, requiring exit 0 (the package's never-fail invariant).
+func runSessionStart(t *testing.T, wtDir, sessionID string) (stdout, stderr string) {
+	t.Helper()
+	var outBuf, errBuf bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "session-start",
+		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDir, SessionID: sessionID, HookEventName: "SessionStart"})),
+		Stdout: &outBuf,
+		Stderr: &errBuf,
+	})
+	if code != 0 {
+		t.Fatalf("session-start exit code = %d, want 0 (stderr: %s)", code, errBuf.String())
+	}
+	return outBuf.String(), errBuf.String()
+}
+
+// additionalContext extracts the additionalContext string from a session-start
+// hook's stdout.
+func additionalContext(t *testing.T, stdout string) string {
+	t.Helper()
+	var out struct {
+		HookSpecificOutput struct {
+			AdditionalContext string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("stdout is not valid additionalContext JSON: %v\nstdout: %s", err, stdout)
+	}
+	return out.HookSpecificOutput.AdditionalContext
+}
+
+// extractSupportingFilesPath pulls the path out of compactBrief's "(supporting
+// files: <path>)" line — whatever ensureSkills/skillstore.Ensure actually
+// returned, not an assumed layout.
+func extractSupportingFilesPath(t *testing.T, ctx string) string {
+	t.Helper()
+	const marker = "(supporting files: "
+	i := strings.Index(ctx, marker)
+	if i < 0 {
+		t.Fatalf("no supporting-files line in additionalContext: %q", ctx)
+	}
+	rest := ctx[i+len(marker):]
+	j := strings.IndexByte(rest, ')')
+	if j < 0 {
+		t.Fatalf("unterminated supporting-files line in additionalContext: %q", ctx)
+	}
+	return rest[:j]
+}
+
+// extractMatchLocation pulls the trailing "— <location>" off a matched
+// skill's line in compactBrief's output (either an install hint or a local
+// SKILL.md path — again, whatever was actually emitted).
+func extractMatchLocation(t *testing.T, ctx, name string) string {
+	t.Helper()
+	prefix := "- " + name + " ("
+	for _, line := range strings.Split(ctx, "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		const sep = " — "
+		i := strings.Index(line, sep)
+		if i < 0 {
+			t.Fatalf("match line for %s has no location: %q", name, line)
+		}
+		return line[i+len(sep):]
+	}
+	t.Fatalf("no match line for %s in additionalContext: %q", name, ctx)
+	return ""
+}
+
+// pinnedBodyLine returns the first line of a pinned skill's body — either
+// its content's own first line, or the "(content omitted — ...)" pointer
+// once the byte budget is exceeded.
+func pinnedBodyLine(t *testing.T, ctx, name string) string {
+	t.Helper()
+	heading := "### Pinned: " + name + "\n"
+	i := strings.Index(ctx, heading)
+	if i < 0 {
+		t.Fatalf("no pinned heading for %s in additionalContext: %q", name, ctx)
+	}
+	rest := ctx[i+len(heading):]
+	j := strings.IndexByte(rest, '\n')
+	if j < 0 {
+		t.Fatalf("pinned section for %s has no body line: %q", name, ctx)
+	}
+	return rest[:j]
+}
+
+// TestSessionStartSkillsHappyPath covers a pinned skill (content inlined,
+// dir materialized) and a matched skill (dir materialized, pointed at by its
+// install line) both landing successfully.
+func TestSessionStartSkillsHappyPath(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-1", "happy")
+
+	tddContent := "# TDD\nRed-green-refactor.\n"
+	tddArchive, tddHash := buildSkillArchive(t, tddContent)
+	diagContent := "# Diagnose\nSystematic debugging.\n"
+	diagArchive, diagHash := buildSkillArchive(t, diagContent)
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{
+				{Name: "tdd", Description: "Red-green-refactor discipline", Hash: tddHash, Content: tddContent},
+			},
+			Matches: []cli.SkillMatch{
+				{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.87},
+			},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.setArchive("tdd", tddHash, tddArchive)
+	back.setArchive("diagnose", diagHash, diagArchive)
+
+	stdout, _ := runSessionStart(t, wtDir, "s-skills-happy")
+	ctx := additionalContext(t, stdout)
+
+	// Pull the paths the hook actually emitted rather than assuming
+	// skillstore's internal layout — Ensure owns that shape, not this test.
+	pinnedPath := extractSupportingFilesPath(t, ctx)
+	matchLoc := extractMatchLocation(t, ctx, "diagnose")
+
+	wantSection := "\n## Skills\n" +
+		"\n### Pinned: tdd\n" + tddContent + "\n" +
+		"(supporting files: " + pinnedPath + ")\n" +
+		"\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n" +
+		"- diagnose (0.87): Systematic debugging — " + matchLoc + "\n"
+	if !strings.HasSuffix(ctx, wantSection) {
+		t.Fatalf("additionalContext = %q\nwant suffix %q", ctx, wantSection)
+	}
+
+	// Verify the emitted paths actually resolve to the fetched content, not
+	// just that some string got printed.
+	got, err := os.ReadFile(filepath.Join(pinnedPath, "SKILL.md"))
+	if err != nil || string(got) != tddContent {
+		t.Fatalf("SKILL.md at pinned path %s = %q, %v; want %q", pinnedPath, got, err, tddContent)
+	}
+	if !strings.HasSuffix(matchLoc, "/SKILL.md") {
+		t.Fatalf("match location %q should point at a SKILL.md file", matchLoc)
+	}
+	got, err = os.ReadFile(matchLoc)
+	if err != nil || string(got) != diagContent {
+		t.Fatalf("content at match location %s = %q, %v; want %q", matchLoc, got, err, diagContent)
+	}
+}
+
+// TestSessionStartSkillsArchiveFetchFailure covers the warn-only discipline:
+// one skill's archive 500s, the hook still exits 0 and emits the full brief,
+// a warning lands on stderr, and the OTHER (pinned) skill is still installed.
+// The failed match must fall back to an install hint rather than a bogus path.
+func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-2", "archfail")
+
+	tddContent := "# TDD\n"
+	tddArchive, tddHash := buildSkillArchive(t, tddContent)
+	_, diagHash := buildSkillArchive(t, "# Diagnose\n") // archive itself is never served: forced 500
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
+			Matches: []cli.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.setArchive("tdd", tddHash, tddArchive)
+	back.failArchive("diagnose")
+
+	stdout, stderr := runSessionStart(t, wtDir, "s-archfail")
+	ctx := additionalContext(t, stdout)
+
+	if !strings.Contains(ctx, tddContent) {
+		t.Fatalf("additionalContext missing pinned content: %q", ctx)
+	}
+	if !strings.Contains(stderr, "diagnose") {
+		t.Fatalf("stderr missing warning about the failed skill: %q", stderr)
+	}
+
+	// The failed match falls back to the install hint, never a local path —
+	// whatever shape a successful path would have taken.
+	loc := extractMatchLocation(t, ctx, "diagnose")
+	if loc != "lode skills install diagnose" {
+		t.Fatalf("match location for a failed install = %q, want the install hint", loc)
+	}
+
+	// The other (pinned) skill still installed: its emitted path resolves to
+	// the real content despite diagnose's failure.
+	pinnedPath := extractSupportingFilesPath(t, ctx)
+	got, err := os.ReadFile(filepath.Join(pinnedPath, "SKILL.md"))
+	if err != nil || string(got) != tddContent {
+		t.Fatalf("SKILL.md at pinned path %s = %q, %v; want %q", pinnedPath, got, err, tddContent)
+	}
+}
+
+// TestSessionStartSkillsEmptySection covers a brief with no skills at all:
+// no "## Skills" heading, and no crash.
+func TestSessionStartSkillsEmptySection(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-3", "empty")
+
+	brief := cli.Brief{Task: cli.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
+	newSkillsBackbone(t, brief)
+
+	stdout, _ := runSessionStart(t, wtDir, "s-empty")
+	ctx := additionalContext(t, stdout)
+	if strings.Contains(ctx, "## Skills") {
+		t.Fatalf("additionalContext should have no Skills heading for an empty skills section: %q", ctx)
+	}
+}
+
+// TestSessionStartSkillsPinnedEmptyHashSkipped covers a pinned skill with no
+// hash (e.g. a skill pinned before its content synced): ensureSkills skips
+// the fetch without warning, and the inline content still reaches the model.
+func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-4", "nohash")
+
+	draftContent := "# Draft\n"
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
+		},
+	}
+	newSkillsBackbone(t, brief)
+
+	stdout, stderr := runSessionStart(t, wtDir, "s-nohash")
+	ctx := additionalContext(t, stdout)
+	if !strings.Contains(ctx, draftContent) {
+		t.Fatalf("additionalContext missing pinned content: %q", ctx)
+	}
+	if strings.Contains(ctx, "supporting files") {
+		t.Fatalf("a hashless pinned skill must not report a local dir: %q", ctx)
+	}
+	if strings.Contains(stderr, "draft-skill") {
+		t.Fatalf("a hashless pinned skill must not produce a warning: %q", stderr)
+	}
+}
+
+// shrinkSkillFetchBudget lowers skillsBudget/archiveTimeout/skillFetchConcurrency
+// for a test and restores them on cleanup. These are vars (not consts)
+// specifically so a test can avoid waiting out the real 10s budget against a
+// deliberately hanging fixture; see skillsBudget's doc comment. This package
+// must not adopt t.Parallel() while any test uses this.
+func shrinkSkillFetchBudget(t *testing.T, budget, archive time.Duration, concurrency int) {
+	t.Helper()
+	origBudget, origArchive, origConcurrency := skillsBudget, archiveTimeout, skillFetchConcurrency
+	skillsBudget, archiveTimeout, skillFetchConcurrency = budget, archive, concurrency
+	t.Cleanup(func() {
+		skillsBudget, archiveTimeout, skillFetchConcurrency = origBudget, origArchive, origConcurrency
+	})
+}
+
+// TestSessionStartSkillsFetchBudgetBounded covers the fix for a measured
+// regression: 1 pin + 5 matches (5 is RecommendSkills' default limit; see
+// internal/api/brief.go) against a hanging archive endpoint used to cost
+// 12s+ of dead air at session start, strictly linear in skill count. The
+// fetch loop must instead be bounded overall by skillsBudget and run with
+// bounded concurrency (skillFetchConcurrency), never serially per skill.
+func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
+	shrinkSkillFetchBudget(t, 500*time.Millisecond, 500*time.Millisecond, 2)
+
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-5", "budget")
+
+	_, tddHash := buildSkillArchive(t, "# TDD\n")
+	matches := make([]cli.SkillMatch, 0, 5)
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("match-%d", i)
+		_, hash := buildSkillArchive(t, "# "+name+"\n")
+		matches = append(matches, cli.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
+	}
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
+			Matches: matches,
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.hangArchive("tdd")
+	for _, m := range matches {
+		back.hangArchive(m.Name)
+	}
+
+	start := time.Now()
+	stdout, stderr := runSessionStart(t, wtDir, "s-budget")
+	elapsed := time.Since(start)
+
+	// 6 skills serialized at the old 2s-per-fetch rate would be 12s; bounded
+	// by a 500ms budget the whole loop — regardless of skill count — must
+	// land near that budget, not near (skill count × archiveTimeout).
+	if elapsed > skillsBudget+time.Second {
+		t.Fatalf("session-start with 6 hanging archives took %s, want well under skillsBudget=%s", elapsed, skillsBudget)
+	}
+
+	// The concurrency cap actually held: with 6 hanging fetches and a limit
+	// of 2, the server must never see more than 2 requests in flight at once.
+	if peak := back.peakConcurrency(); peak != 2 {
+		t.Fatalf("peak concurrent archive fetches = %d, want exactly the skillFetchConcurrency limit (2)", peak)
+	}
+
+	// The never-fail invariant holds throughout: the brief still comes
+	// through, and every hung skill was warned about.
+	ctx := additionalContext(t, stdout)
+	if !strings.Contains(ctx, "PROJ-5") {
+		t.Fatalf("additionalContext missing the brief despite hanging archives: %q", ctx)
+	}
+	if !strings.Contains(stderr, "tdd") {
+		t.Fatalf("stderr missing warning for the hung pinned skill: %q", stderr)
+	}
+	for _, m := range matches {
+		if !strings.Contains(stderr, m.Name) {
+			t.Fatalf("stderr missing warning for hung match %s: %q", m.Name, stderr)
+		}
+	}
+}
+
+// TestSessionStartSkillsPinnedByteCapEmitsPointer covers the fix for the
+// second measured regression: pinned content is inlined with no size bound,
+// so one large SKILL.md (or several) could inject hundreds of KB into every
+// session start. Once the running total of inlined pinned bytes would
+// exceed maxInlinedSkillBytes, later pins get a pointer instead of their
+// content — never a mid-document truncation.
+func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-6", "bytecap")
+
+	small := "# Small\n"
+	big := "# Big\n" + strings.Repeat("x", maxInlinedSkillBytes) // alone, guarantees overflow
+	smallArchive, smallHash := buildSkillArchive(t, small)
+	bigArchive, bigHash := buildSkillArchive(t, big)
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{
+				{Name: "small", Description: "d", Hash: smallHash, Content: small},
+				{Name: "big", Description: "d", Hash: bigHash, Content: big},
+			},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.setArchive("small", smallHash, smallArchive)
+	back.setArchive("big", bigHash, bigArchive)
+
+	stdout, _ := runSessionStart(t, wtDir, "s-bytecap")
+	ctx := additionalContext(t, stdout)
+
+	// The small pin fits under budget and is inlined in full.
+	if got, want := pinnedBodyLine(t, ctx, "small"), "# Small"; got != want {
+		t.Fatalf("small pin body line = %q, want %q (should be inlined in full)", got, want)
+	}
+	if strings.Contains(ctx, big) {
+		t.Fatalf("big pin's content must not appear in full once the byte budget is exceeded")
+	}
+
+	// The big pin gets a pointer, sized and located, never a truncated body.
+	line := pinnedBodyLine(t, ctx, "big")
+	wantPrefix := "(content omitted — " + humanKB(len(big)) + "; read it at "
+	if !strings.HasPrefix(line, wantPrefix) || !strings.HasSuffix(line, "/SKILL.md)") {
+		t.Fatalf("big pin body line = %q, want prefix %q and suffix %q", line, wantPrefix, "/SKILL.md)")
+	}
+}
+
+// TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint covers the
+// interaction the coordinator flagged between fixes 1-3: an over-budget
+// pinned skill whose archive ALSO failed to fetch must point at the install
+// hint, not a local path that was never actually populated.
+func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-7", "bytecapfail")
+
+	big := "# Big\n" + strings.Repeat("y", maxInlinedSkillBytes)
+	_, bigHash := buildSkillArchive(t, big)
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.failArchive("big")
+
+	stdout, _ := runSessionStart(t, wtDir, "s-bytecapfail")
+	ctx := additionalContext(t, stdout)
+
+	got := pinnedBodyLine(t, ctx, "big")
+	want := "(content omitted — " + humanKB(len(big)) + "; read it at lode skills install big)"
+	if got != want {
+		t.Fatalf("pinned body line = %q, want %q", got, want)
 	}
 }
