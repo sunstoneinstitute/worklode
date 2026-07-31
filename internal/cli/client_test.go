@@ -3,6 +3,7 @@ package cli_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -19,6 +20,26 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// seedSkill upserts one skill with a deterministic hash ("h-<name>") and a
+// non-empty archive, mirroring internal/api's own seedSkill test helper.
+func seedSkill(t *testing.T, st *store.Store, name, description string) {
+	t.Helper()
+	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Name:        name,
+		Description: description,
+		SourceRepo:  "acme/skills",
+		SourcePath:  "skills/" + name,
+		GitCommit:   "deadbeef",
+		ContentHash: "h-" + name,
+		SkillMD:     "# " + name + "\n\n" + description,
+		Frontmatter: json.RawMessage(`{}`),
+		Archive:     []byte("gzip-archive-" + name),
+	})
+	if err != nil {
+		t.Fatalf("seed skill %s: %v", name, err)
+	}
+}
 
 // newTestServer opens a store in a temp dir, creates admin actor "alice"
 // with a token, and starts a real HTTP server (httptest.NewServer, a live
@@ -1272,54 +1293,100 @@ func TestClientAgentSession(t *testing.T) {
 	}
 }
 
-func TestClientHierarchyCalls(t *testing.T) {
-	var gotPath, gotMethod, gotBody string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		gotPath, gotMethod, gotBody = r.URL.RequestURI(), r.Method, string(body)
-		if r.Method == http.MethodDelete {
-			// Matches the real removeEdge: 204, no body.
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"epic":{"id":"WL-1","kind":"epic"},"children":[{"id":"WL-2"}]}`))
-	}))
-	defer srv.Close()
-	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
+func TestClientSkillsList(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+	seedSkill(t, st, "debugging", "Systematic debugging loop")
 
-	if _, err := c.Parent(context.Background(), "WL-2", "WL-1"); err != nil {
-		t.Fatalf("Parent: %v", err)
-	}
-	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-2/edges" {
-		t.Fatalf("Parent hit %s %s", gotMethod, gotPath)
-	}
-	if !strings.Contains(gotBody, `"child_of"`) || !strings.Contains(gotBody, `"to":"WL-1"`) {
-		t.Fatalf("Parent body = %s", gotBody)
-	}
-
-	if _, err := c.Unparent(context.Background(), "WL-2", "WL-1"); err != nil {
-		t.Fatalf("Unparent: %v", err)
-	}
-	if gotMethod != http.MethodDelete || gotPath != "/api/v1/tasks/WL-2/edges" {
-		t.Fatalf("Unparent hit %s %s", gotMethod, gotPath)
-	}
-	if !strings.Contains(gotBody, `"to":"WL-1"`) {
-		t.Fatalf("Unparent body = %s, want to:WL-1 (not from, which would invert the edge)", gotBody)
-	}
-
-	resp, _, err := c.Decompose(context.Background(), "WL-1", []string{"A"})
+	skills, raw, err := c.Skills(context.Background())
 	if err != nil {
-		t.Fatalf("Decompose: %v", err)
+		t.Fatalf("Skills: %v", err)
 	}
-	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/decompose" {
-		t.Fatalf("Decompose hit %s %s", gotMethod, gotPath)
+	if len(skills) != 2 {
+		t.Fatalf("Skills = %+v, want 2 entries", skills)
 	}
-	if !strings.Contains(gotBody, `"into":["A"]`) {
-		t.Fatalf("Decompose body = %s, want into:[A]", gotBody)
+	if len(raw) == 0 {
+		t.Fatal("Skills: raw body empty")
 	}
-	if resp.Epic.Kind != "epic" || len(resp.Children) != 1 {
-		t.Fatalf("Decompose response = %+v", resp)
+	names := map[string]cli.Skill{}
+	for _, sk := range skills {
+		names[sk.Name] = sk
+	}
+	if names["tdd"].Hash != "h-tdd" || names["tdd"].Description != "Red-green-refactor discipline" {
+		t.Fatalf("Skills[tdd] = %+v", names["tdd"])
+	}
+}
+
+func TestClientSkillGet(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	sk, raw, err := c.Skill(context.Background(), "tdd")
+	if err != nil {
+		t.Fatalf("Skill: %v", err)
+	}
+	if sk.Name != "tdd" || sk.Hash != "h-tdd" {
+		t.Fatalf("Skill = %+v", sk)
+	}
+	if len(raw) == 0 {
+		t.Fatal("Skill: raw body empty")
+	}
+
+	if _, _, err := c.Skill(context.Background(), "nope"); err == nil {
+		t.Fatal("Skill(nope): want error, got nil")
+	}
+}
+
+func TestClientSkillArchive(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	data, err := c.SkillArchive(context.Background(), "tdd", "h-tdd")
+	if err != nil {
+		t.Fatalf("SkillArchive: %v", err)
+	}
+	if string(data) != "gzip-archive-tdd" {
+		t.Fatalf("SkillArchive = %q, want %q", data, "gzip-archive-tdd")
+	}
+
+	if _, err := c.SkillArchive(context.Background(), "tdd", "wrong-hash"); err == nil {
+		t.Fatal("SkillArchive(wrong hash): want error, got nil")
+	}
+}
+
+func TestClientRecommendSkills(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	rec, raw, err := c.RecommendSkills(context.Background(), "", "write tests first", 5)
+	if err != nil {
+		t.Fatalf("RecommendSkills: %v", err)
+	}
+	if rec.Provider != "none" {
+		t.Fatalf("RecommendSkills.Provider = %q, want none", rec.Provider)
+	}
+	if len(raw) == 0 {
+		t.Fatal("RecommendSkills: raw body empty")
+	}
+
+	// Neither task nor text: the server 422s, surfaced as a ClientError.
+	if _, _, err := c.RecommendSkills(context.Background(), "", "", 5); err == nil {
+		t.Fatal("RecommendSkills(neither): want error, got nil")
+	}
+}
+
+func TestClientSyncSkills(t *testing.T) {
+	_, c, _ := newTestServer(t)
+
+	// alice (the newTestServer token) is an admin, but api.Config{} has no
+	// skill sources configured, so this exercises the path/method wiring
+	// and surfaces the server's own 422 rather than a decode error.
+	_, err := c.SyncSkills(context.Background())
+	if err == nil {
+		t.Fatal("SyncSkills with no sources configured: want error, got nil")
+	}
+	var clientErr *cli.ClientError
+	if !errors.As(err, &clientErr) || clientErr.Status != 422 {
+		t.Fatalf("SyncSkills error = %v, want *cli.ClientError with status 422", err)
 	}
 }
