@@ -20,7 +20,7 @@ func WithMetrics(reg prometheus.Registerer) Option {
 	return func(s *Store) {
 		s.metrics = newStoreMetrics(reg)
 		reg.MustRegister(collectors.NewDBStatsCollector(s.db, "worklode"))
-		reg.MustRegister(&leaseCollector{db: s.db})
+		reg.MustRegister(&leaseCollector{db: s.db, now: s.Now})
 	}
 }
 
@@ -114,10 +114,12 @@ var leasesActiveDesc = prometheus.NewDesc(
 	"Active (unreleased, unexpired) leases, counted at scrape time.",
 	nil, nil)
 
-// leaseCollector counts active leases at scrape time. On query failure it
-// emits an invalid metric (surfacing a scrape error) rather than a stale zero.
+// leaseCollector counts active leases at scrape time, against the store's
+// clock. On query failure it emits an invalid metric (surfacing a scrape
+// error) rather than a stale zero.
 type leaseCollector struct {
-	db *sql.DB
+	db  *sql.DB
+	now func() time.Time
 }
 
 func (c *leaseCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -129,7 +131,8 @@ func (c *leaseCollector) Collect(ch chan<- prometheus.Metric) {
 	defer cancel()
 	var n float64
 	err := c.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM leases WHERE released_at IS NULL AND expires_at > now()`,
+		`SELECT COUNT(*) FROM leases WHERE released_at IS NULL AND expires_at > $1`,
+		c.now().UTC(),
 	).Scan(&n)
 	if err != nil {
 		ch <- prometheus.NewInvalidMetric(leasesActiveDesc, err)
