@@ -32,6 +32,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
+	"github.com/sunstoneinstitute/worklode/internal/transcript"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -85,6 +86,9 @@ type Payload struct {
 	SessionID     string          `json:"session_id"`
 	HookEventName string          `json:"hook_event_name"`
 	ToolInput     json.RawMessage `json:"tool_input"`
+	// TranscriptPath is the session's JSONL transcript, sent on SessionEnd and
+	// Stop. It is where the session's billed tokens come from.
+	TranscriptPath string `json:"transcript_path"`
 }
 
 // Options configures a single Run. Stdin/Stdout/Stderr are injected so the
@@ -257,11 +261,11 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, roo
 	}
 }
 
-// endSession ends an agent session on taskID. Mirrors reportSession's shape —
-// bounded, downgrades failure to a warning — so the two halves of a session's
-// lifecycle (touch/end) enforce the same timeout-and-warn contract in exactly
-// one place each.
-func endSession(ctx context.Context, opts Options, taskID, sessionID string) {
+// endSession ends an agent session on taskID, reporting the tokens it billed
+// in root. Mirrors reportSession's shape — bounded, downgrades failure to a
+// warning — so the two halves of a session's lifecycle (touch/end) enforce the
+// same timeout-and-warn contract in exactly one place each.
+func endSession(ctx context.Context, opts Options, taskID, sessionID, transcriptPath, root string) {
 	if sessionID == "" {
 		return
 	}
@@ -270,12 +274,56 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID string) {
 		warn(opts, "load config: %v", err)
 		return
 	}
+	// Parsed before the timeout below is started: a transcript is local file
+	// IO and can run to hundreds of megabytes, and reading it must not eat the
+	// backbone budget.
+	usage := sessionUsage(opts, transcriptPath, root)
+
 	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if err := c.EndAgentSession(ectx, taskID,
-		cli.EndAgentSessionInput{Agent: agentName(), SessionID: sessionID}); err != nil {
+	if err := c.EndAgentSession(ectx, taskID, cli.EndAgentSessionInput{
+		Agent: agentName(), SessionID: sessionID, Usage: usage,
+	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)
 	}
+}
+
+// sessionUsage reads the session's transcript and returns the buckets that
+// billed against root.
+//
+// Root is load-bearing: one session can work several worktrees in sequence
+// against a single cumulative transcript, so filtering by the directory each
+// turn ran in is what stops the same tokens being billed to two leases.
+//
+// No failure here is fatal — a missing path, an unreadable file, or an empty
+// result all yield nil, which leaves the backbone's stored usage untouched and
+// still lets the session end.
+func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageBucket {
+	if transcriptPath == "" {
+		return nil
+	}
+	buckets, err := transcript.ParseFile(transcriptPath, transcript.Options{Root: root})
+	if err != nil {
+		warn(opts, "parse transcript %s: %v", transcriptPath, err)
+		return nil
+	}
+	out := make([]cli.SessionUsageBucket, 0, len(buckets))
+	for _, b := range buckets {
+		out = append(out, cli.SessionUsageBucket{
+			Day:          b.Day.Format(time.DateOnly),
+			Model:        b.Model,
+			Speed:        b.Speed,
+			InputTokens:  b.Usage.Input,
+			CacheWrite5m: b.Usage.CacheWrite5m,
+			CacheWrite1h: b.Usage.CacheWrite1h,
+			CacheRead:    b.Usage.CacheRead,
+			OutputTokens: b.Usage.Output,
+		})
+	}
+	if len(out) == 0 {
+		return nil // an empty slice would clear stored usage; nothing was read
+	}
+	return out
 }
 
 // --- event handlers ---------------------------------------------------------
@@ -467,7 +515,7 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) 
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	endSession(ctx, opts, taskID, sessionID)
+	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}
@@ -660,7 +708,9 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	endSession(ctx, opts, taskID, sessionID)
+	// root is the worktree being LEFT, so its turns are the ones that bill
+	// against this lease.
+	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}

@@ -227,6 +227,17 @@ type SessionUsage struct {
 	OutputTokens *int64
 	CostAmount   *string
 	CostCurrency string
+
+	// Buckets is the per-day, per-model, per-speed breakdown the session
+	// actually billed. When it is non-nil it supersedes the four scalars
+	// above: those are derived from it, and the server prices it rather than
+	// trusting a client-computed amount. A non-nil empty slice is meaningful —
+	// it clears the session's recorded usage.
+	//
+	// The breakdown is what makes cost correct rather than approximate: a
+	// session mixes models at several-fold different rates, and each model's
+	// prompt splits into cache classes priced from 0.1x to 2x base input.
+	Buckets []SessionUsageBucket
 }
 
 // EndAgentSession closes the open session agent/sessionID on taskID's active
@@ -274,7 +285,8 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 
 	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			res, err := tx.Exec(
+			var rowID int64
+			err := tx.QueryRow(
 				`UPDATE agent_sessions
 				    SET ended_at      = $1,
 				        input_tokens  = COALESCE($2, input_tokens),
@@ -282,23 +294,67 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 				        cost_amount   = COALESCE($4, cost_amount),
 				        cost_currency = CASE WHEN $4 IS NULL THEN cost_currency ELSE $5 END
 				  WHERE lease_id = $6 AND agent = $7 AND external_session_id = $8
-				    AND ended_at IS NULL`,
+				    AND ended_at IS NULL
+				RETURNING id`,
 				now, usage.InputTokens, usage.OutputTokens, usage.CostAmount, currency,
-				lease.ID, agent, sessionID)
-			if err != nil {
-				return fmt.Errorf("end agent session %s/%s: %w", agent, sessionID, err)
-			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("end agent session %s/%s: %w", agent, sessionID, err)
-			}
-			if n == 0 {
+				lease.ID, agent, sessionID).Scan(&rowID)
+			if errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("no open agent session %s/%s on task %s: %w",
 					agent, sessionID, taskID, ErrNotFound)
 			}
-			return nil
+			if err != nil {
+				return fmt.Errorf("end agent session %s/%s: %w", agent, sessionID, err)
+			}
+			if usage.Buckets == nil {
+				return nil
+			}
+			return applySessionUsageTx(ctx, tx, rowID, usage.Buckets)
 		})
 	return err
+}
+
+// applySessionUsageTx records a session's per-model breakdown, rolls it up
+// onto the session row, and rebuilds the affected days of the owning
+// project's daily cost — all inside the caller's transaction, so the detail,
+// the session summary, and the rollup can never disagree.
+func applySessionUsageTx(ctx context.Context, tx *sql.Tx, rowID int64, buckets []SessionUsageBucket) error {
+	totals, cost, currency, days, err := replaceSessionUsageTx(ctx, tx, rowID, buckets)
+	if err != nil {
+		return err
+	}
+
+	// input_tokens is every token the session put into a prompt — uncached
+	// input, cache writes, and cache reads together. The class split that
+	// determines what those tokens cost lives in agent_session_usage; this is
+	// the headline volume, not a billing quantity.
+	//
+	// cost_amount is left NULL when priced buckets disagreed on a currency
+	// (replaceSessionUsageTx returns an empty currency): one scalar cannot
+	// honestly carry two.
+	var amount, amountCurrency any
+	if currency != "" {
+		amount, amountCurrency = cost, currency
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE agent_sessions
+		    SET input_tokens  = $1,
+		        output_tokens = $2,
+		        cost_amount   = $3,
+		        cost_currency = COALESCE($4, cost_currency)
+		  WHERE id = $5`,
+		totals.Total()-totals.Output, totals.Output, amount, amountCurrency, rowID,
+	); err != nil {
+		return fmt.Errorf("roll up usage onto agent session %d: %w", rowID, err)
+	}
+
+	if len(days) == 0 {
+		return nil
+	}
+	projectID, err := projectForSessionTx(ctx, tx, rowID)
+	if err != nil {
+		return err
+	}
+	return recomputeProjectDailyCostTx(ctx, tx, projectID, days)
 }
 
 // endOpenAgentSessionsOnLease stamps ended_at on every still-open session for

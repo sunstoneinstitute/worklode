@@ -99,3 +99,45 @@ func TestTreeRender(t *testing.T) {
 		}
 	}
 }
+
+func TestMoney(t *testing.T) {
+	tests := []struct {
+		name   string
+		amount string
+		want   string
+	}{
+		{"whole micros truncate", "10.880324", "10.88"},
+		{"rounds down below half a cent", "0.414999", "0.41"},
+		{"rounds half up", "0.415000", "0.42"},
+		// Spend below half a cent is real; reporting it as 0.00 would say
+		// the work was free.
+		{"tiny amount is not zero", "0.001000", "<0.01"},
+		{"exactly zero stays zero", "0.000000", "0.00"},
+		{"half a cent rounds to a cent", "0.005000", "0.01"},
+		{"carries into the next unit", "1234.999999", "1235.00"},
+		{"no fractional part", "7", "7.00"},
+		{"unparseable is shown verbatim", "not-a-number", "not-a-number"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Money(tc.amount); got != tc.want {
+				t.Fatalf("Money(%q) = %q, want %q", tc.amount, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHumanTokens(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"}, {999, "999"}, {1000, "1.0k"}, {1200, "1.2k"},
+		{999_999, "1000.0k"}, {1_000_000, "1.0M"}, {11_779_507, "11.8M"},
+	}
+	for _, tc := range tests {
+		if got := HumanTokens(tc.n); got != tc.want {
+			t.Errorf("HumanTokens(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}

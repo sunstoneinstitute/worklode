@@ -367,6 +367,48 @@ that leaves a worktree ages out instead: its `last_seen_at` stops advancing, and
 the row is closed for good when the lease is released, expires, or the task
 completes.
 
+### Token cost
+
+Ending a session reports what it spent. `lode hook` parses the agent's own
+transcript — Claude Code's `SessionEnd` payload carries `transcript_path`, and
+every assistant entry in it carries the vendor's `usage` block, so the numbers
+are reported rather than estimated. The server prices them from `model_prices`.
+
+A prompt is not one number. It bills as four separate classes, at rates that
+span a factor of twenty:
+
+| Class | Rate vs. base input | What it is |
+|---|---|---|
+| `input_tokens` | 1x | the uncached remainder of the prompt — **not** the prompt size |
+| `cache_creation` 5m TTL | 1.25x | prefix written to cache |
+| `cache_creation` 1h TTL | 2x | same, at the longer TTL |
+| `cache_read_input_tokens` | 0.1x | prefix served from cache |
+
+Output is billed separately and is never cached; last turn's output re-enters
+the next prompt and is billed as a cache read from then on.
+
+The classes are not interchangeable. On one real session of this repo — 1.9k
+uncached input, 354k cache writes, 11.8M cache reads, 58k output — the correct
+figure is **$10.88**. Pricing every input token at the base rate gives $62.12;
+using only `input_tokens` and `output_tokens` gives $1.45.
+
+Two more things the numbers depend on: usage is recorded per model, because one
+session mixes them (a main loop on one, subagents on another) at several-fold
+different rates; and transcript entries are deduplicated by message id, since
+an assistant message is written once per content block with the whole usage
+block repeated on each line.
+
+Rates live in `model_prices` and are effective-dated, so a past session keeps
+pricing at the rate that applied when it ran. Correcting a rate or filing one
+ahead of its date is a row, not a redeploy. A model with no rate on file is
+reported as unpriced rather than billed at zero.
+
+```
+lode project show                 # current project, last 30 days
+lode project show --project wl --days 7
+lode project show --days 0        # all history
+```
+
 The Claude Code plugin (`lode` plugin, `plugins/lode/` in the
 `sunstoneinstitute/claude-plugins` repo, installable from the Sunstone
 plugins marketplace) provides a `/lode:*` slash-command flow for agents

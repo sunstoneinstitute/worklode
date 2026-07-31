@@ -1345,3 +1345,143 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 		t.Fatalf("pinned body line = %q, want %q", got, want)
 	}
 }
+
+// --- session-end reports transcript usage -----------------------------------
+
+// endRecorder stands in for the backbone's agent-session/end endpoint and
+// keeps every request body, so a test can assert on the exact usage posted.
+type endRecorder struct {
+	mu     sync.Mutex
+	bodies []map[string]json.RawMessage
+}
+
+func newEndRecorder(t *testing.T) *endRecorder {
+	t.Helper()
+	rec := &endRecorder{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/tasks/{id}/agent-session/end", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		rec.mu.Lock()
+		rec.bodies = append(rec.bodies, body)
+		rec.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	return rec
+}
+
+// only returns the single recorded body, failing if there was not exactly one.
+func (r *endRecorder) only(t *testing.T) map[string]json.RawMessage {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.bodies) != 1 {
+		t.Fatalf("agent-session/end called %d times, want 1", len(r.bodies))
+	}
+	return r.bodies[0]
+}
+
+// addWorktree creates a wt/<taskID>-<slug> git worktree under root. Unlike
+// setupLeasedWorktree it needs no backbone: session-end's guard only reads the
+// directory name.
+func addWorktree(t *testing.T, root, taskID, slug string) string {
+	t.Helper()
+	dir := filepath.Join(root, "wt", taskID+"-"+slug)
+	out, err := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", "lode/"+taskID+"-"+slug).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	return dir
+}
+
+// writeTranscript writes a JSONL transcript and returns its path.
+func writeTranscript(t *testing.T, lines ...string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	return path
+}
+
+// transcriptLine builds one assistant entry with the given identity and usage.
+func transcriptLine(cwd, msgID, model string, in, write5m, write1h, read, out int64) string {
+	return fmt.Sprintf(`{"type":"assistant","cwd":%q,"timestamp":"2026-07-31T10:00:00Z",`+
+		`"message":{"id":%q,"model":%q,"usage":{"input_tokens":%d,`+
+		`"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d,"output_tokens":%d,`+
+		`"cache_creation":{"ephemeral_5m_input_tokens":%d,"ephemeral_1h_input_tokens":%d}}}}`,
+		cwd, msgID, model, in, write5m+write1h, read, out, write5m, write1h)
+}
+
+// TestSessionEndPostsTranscriptUsage drives the whole accounting path: the
+// same message id repeated across content-block lines is billed once, and a
+// turn that ran in a different directory belongs to that worktree's lease, not
+// this one.
+func TestSessionEndPostsTranscriptUsage(t *testing.T) {
+	rec := newEndRecorder(t)
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, "WL-1", "bill-me")
+	elsewhere := t.TempDir()
+
+	path := writeTranscript(t,
+		transcriptLine(wtDir, "msg_1", "claude-opus-5", 100, 200, 300, 400, 50),
+		transcriptLine(wtDir, "msg_1", "claude-opus-5", 100, 200, 300, 400, 50), // same message, second content block
+		transcriptLine(elsewhere, "msg_2", "claude-opus-5", 9_000, 9_000, 9_000, 9_000, 9_000),
+	)
+
+	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
+
+	body := rec.only(t)
+	var usage []cli.SessionUsageBucket
+	if err := json.Unmarshal(body["usage"], &usage); err != nil {
+		t.Fatalf("decode usage %s: %v", body["usage"], err)
+	}
+	want := []cli.SessionUsageBucket{{
+		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
+		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
+		CacheRead: 400, OutputTokens: 50,
+	}}
+	if len(usage) != 1 || usage[0] != want[0] {
+		t.Fatalf("posted usage = %+v, want %+v", usage, want)
+	}
+}
+
+// A hook must never fail its triggering event, so an unreadable transcript
+// still ends the session — just with no usage attached.
+func TestSessionEndWithoutTranscriptStillEndsSession(t *testing.T) {
+	for _, tc := range []struct{ name, path string }{
+		{"absent field", ""},
+		{"missing file", filepath.Join(t.TempDir(), "gone.jsonl")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newEndRecorder(t)
+			root := initGitRepo(t)
+			wtDir := addWorktree(t, root, "WL-2", "no-transcript")
+
+			var stdout, stderr bytes.Buffer
+			code := Run(context.Background(), Options{
+				Event:  "session-end",
+				Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: tc.path})),
+				Stdout: &stdout,
+				Stderr: &stderr,
+			})
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+			}
+			body := rec.only(t)
+			if got := string(body["usage"]); got != "null" {
+				t.Fatalf("usage = %s, want null (nil must leave stored usage alone)", got)
+			}
+		})
+	}
+}
