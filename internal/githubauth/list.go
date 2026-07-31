@@ -43,21 +43,28 @@ type PullRequest struct {
 	HeadSHA        string
 }
 
-// listQuery builds the shared per-page query string.
+// listQuery builds the shared per-page query string. sort=updated with
+// direction=asc is fixed, not caller-configurable: it makes the truncated
+// tail the newest items, so --since (a lower bound on updated_at) can resume
+// a capped import instead of only ever narrowing one.
 func listQuery(state string, page int) url.Values {
 	q := url.Values{}
 	q.Set("state", state)
 	q.Set("per_page", strconv.Itoa(maxPerPage))
 	q.Set("page", strconv.Itoa(page))
+	q.Set("sort", "updated")
+	q.Set("direction", "asc")
 	return q
 }
 
-// ListIssues pages a repo's issues under an installation token. Entries
-// carrying a pull_request key are skipped: GitHub's issues endpoint returns
-// pull requests as issues, and without the filter every PR in the repo would
-// land in the inbox as an issue. A zero since disables the filter. The bool
-// reports truncation — maxPages exhausted without reaching a short page — so
-// the caller can say so rather than silently importing a prefix.
+// ListIssues pages a repo's issues under an installation token, oldest
+// updated_at first (see listQuery) so a truncated run's tail is resumable via
+// since. Entries carrying a pull_request key are skipped: GitHub's issues
+// endpoint returns pull requests as issues, and without the filter every PR
+// in the repo would land in the inbox as an issue. A zero since disables the
+// filter. The bool reports truncation — maxPages exhausted without reaching a
+// short page — so the caller can say so rather than silently importing a
+// prefix.
 func (a *AppAuth) ListIssues(ctx context.Context, repo, state string, since time.Time, maxPages int) ([]Issue, bool, error) {
 	path, err := repoPath(repo)
 	if err != nil {
@@ -107,8 +114,10 @@ func (a *AppAuth) ListIssues(ctx context.Context, repo, state string, since time
 	return out, true, nil
 }
 
-// ListPulls pages a repo's pull requests under an installation token. The
-// endpoint takes no since parameter, so callers filter on UpdatedAt.
+// ListPulls pages a repo's pull requests under an installation token, oldest
+// updated_at first (see listQuery), matching ListIssues so their truncation
+// and resume behavior agree. The endpoint takes no since parameter, so
+// callers filter on UpdatedAt.
 func (a *AppAuth) ListPulls(ctx context.Context, repo, state string, maxPages int) ([]PullRequest, bool, error) {
 	path, err := repoPath(repo)
 	if err != nil {

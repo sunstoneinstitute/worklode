@@ -1038,13 +1038,16 @@ type ImportCounts struct {
 	Updated int `json:"updated"`
 }
 
-// ImportResult is the response from ImportInbox.
+// ImportResult is the response from ImportInbox. NewestUpdatedAt is set only
+// when Truncated — it is the timestamp to pass as --since to resume the
+// import where this run stopped.
 type ImportResult struct {
-	Repo      string       `json:"repo"`
-	Issues    ImportCounts `json:"issues"`
-	PRs       ImportCounts `json:"prs"`
-	Truncated bool         `json:"truncated"`
-	DryRun    bool         `json:"dry_run"`
+	Repo            string       `json:"repo"`
+	Issues          ImportCounts `json:"issues"`
+	PRs             ImportCounts `json:"prs"`
+	Truncated       bool         `json:"truncated"`
+	DryRun          bool         `json:"dry_run"`
+	NewestUpdatedAt *time.Time   `json:"newest_updated_at,omitempty"`
 }
 
 // ImportInbox calls POST /api/v1/inbox/import.
