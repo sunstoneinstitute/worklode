@@ -549,3 +549,111 @@ func TestRunSkillSyncNoopWithoutSyncer(t *testing.T) {
 		t.Fatal("runSkillSync did not return promptly with a nil skillSyncer")
 	}
 }
+
+// TestRunSkillSyncReRunsTriggerThatArrivesMidFlight covers the coalescing
+// path a TryLock-drop would silently lose: a trigger arriving while a sync
+// is already in flight must not be discarded. It should mark
+// skillSyncPending and get a second pass once the in-flight run finishes —
+// otherwise new content pushed mid-sync is never re-checked until the next
+// trigger (which may not come, on a quiet repo) or a restart.
+func TestRunSkillSyncReRunsTriggerThatArrivesMidFlight(t *testing.T) {
+	st := store.OpenTestStore(t)
+
+	var fetchCalls int32
+	fetchStarted := make(chan struct{})
+	release := make(chan struct{})
+	fetch := func(ctx context.Context, repo, ref string) ([]byte, error) {
+		n := atomic.AddInt32(&fetchCalls, 1)
+		if n == 1 {
+			close(fetchStarted)
+			<-release // hold the first run "in flight" until the test releases it
+		}
+		return nil, fmt.Errorf("simulated failure %d", n)
+	}
+	s := &server{
+		st:           st,
+		log:          slog.Default(),
+		skillSources: []skillsync.Source{{Repo: "acme/skills", Ref: "main", Glob: "skills/*"}},
+		skillSyncer:  &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
+	}
+
+	syncADone := make(chan struct{})
+	go func() {
+		s.runSkillSync(context.Background(), "A")
+		close(syncADone)
+	}()
+	select {
+	case <-fetchStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sync A never started")
+	}
+
+	// A second trigger while A is in flight must coalesce (TryLock fails and
+	// returns immediately), not block waiting for A to finish.
+	triggerBDone := make(chan struct{})
+	go func() {
+		s.runSkillSync(context.Background(), "B")
+		close(triggerBDone)
+	}()
+	select {
+	case <-triggerBDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("trigger B blocked instead of coalescing via TryLock")
+	}
+
+	close(release) // let A's Fetch return, so the coalesced re-run can proceed
+
+	select {
+	case <-syncADone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runSkillSync did not complete its coalesced re-run")
+	}
+
+	if got := atomic.LoadInt32(&fetchCalls); got != 2 {
+		t.Fatalf("Fetch calls = %d, want 2 (B's trigger must cause a re-run, not be dropped)", got)
+	}
+}
+
+// TestRunSkillSyncAbortsWhenBackgroundContextCancelled covers Config.
+// BackgroundCtx: the ctx passed to runSkillSync (cfg.BackgroundCtx in
+// production, wired to cmd/serve.go's shutdown signal) must reach
+// skillSyncer.SyncAll, so cancelling it — as happens on SIGTERM — aborts an
+// in-flight background sync instead of leaving it to run for up to
+// skillSyncTimeout past shutdown.
+func TestRunSkillSyncAbortsWhenBackgroundContextCancelled(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fetchStarted := make(chan struct{})
+	fetch := func(fctx context.Context, repo, ref string) ([]byte, error) {
+		close(fetchStarted)
+		<-fctx.Done() // blocks until the sync's own context is cancelled
+		return nil, fctx.Err()
+	}
+	s := &server{
+		st:           st,
+		log:          slog.Default(),
+		skillSources: []skillsync.Source{{Repo: "acme/skills", Ref: "main", Glob: "skills/*"}},
+		skillSyncer:  &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.runSkillSync(ctx, "test")
+		close(done)
+	}()
+
+	select {
+	case <-fetchStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sync never started")
+	}
+
+	cancel() // simulate shutdown: the background context is cancelled
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runSkillSync did not abort when its background context was cancelled")
+	}
+}
