@@ -109,6 +109,9 @@ func newServeCmd() *cobra.Command {
 				Help: "Lease sweeper runs by result.",
 			}, []string{"result"})
 			reg.MustRegister(sweeperRuns)
+			// Pre-initialise both series so alert expressions see 0, not no-data.
+			sweeperRuns.WithLabelValues("ok")
+			sweeperRuns.WithLabelValues("error")
 
 			// Background sweeper: expire stale leases every 60s until shutdown.
 			go func() {
@@ -119,7 +122,9 @@ func newServeCmd() *cobra.Command {
 					case <-ctx.Done():
 						return
 					case <-ticker.C:
-						if n, err := st.ExpireLeases(ctx, time.Now().UTC()); err != nil {
+						if n, err := st.ExpireLeases(ctx, time.Now().UTC()); errors.Is(err, context.Canceled) {
+							return
+						} else if err != nil {
 							sweeperRuns.WithLabelValues("error").Inc()
 							slog.Error("expire leases", "err", err)
 						} else {

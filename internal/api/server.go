@@ -426,10 +426,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// ContinueOnError: one failing collector (e.g. the store's lease query
 	// timing out) must not 500 the whole scrape and take every other family
 	// with it. Registry exposes promhttp_metric_handler_errors_total so a
-	// persistently failing collector is still visible.
+	// persistently failing collector is still visible, and ErrorLog reports
+	// what actually failed.
 	admin.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
 		ErrorHandling: promhttp.ContinueOnError,
 		Registry:      reg,
+		ErrorLog:      slog.NewLogLogger(s.log.Handler(), slog.LevelError),
 	}))
 
 	// One sync at boot keeps the registry current with whatever landed on
