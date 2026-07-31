@@ -264,10 +264,19 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "skill sync already running")
 		return
 	}
-	defer s.skillSyncMu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), skillSyncTimeout)
 	defer cancel()
 	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
+	// A webhook push that arrived while this ran found the mutex held, set
+	// skillSyncPending and returned. runSkillSync's loop drains that flag; this
+	// handler holds the same mutex without one, so it has to hand the trigger
+	// on or the push is dropped until the next one. Unlock first: runSkillSync
+	// TryLocks, and would otherwise just re-set the flag nobody is left to
+	// drain.
+	s.skillSyncMu.Unlock()
+	if s.skillSyncPending.CompareAndSwap(true, false) {
+		go s.runSkillSync(s.bgCtx, "coalesced after admin sync")
+	}
 	if err != nil {
 		// Logged unconditionally: a caller that drops the response (or gets
 		// the generic 502 below) must not be the only record of this.
