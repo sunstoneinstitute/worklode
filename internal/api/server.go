@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
@@ -98,6 +97,12 @@ type Config struct {
 	// (e.g. the one built around signal.NotifyContext in cmd/serve.go) to
 	// have them abort on shutdown instead of outliving the server.
 	BackgroundCtx context.Context
+
+	// Metrics is the registry the server registers its instruments on and
+	// serves at /metrics on the admin handler. Nil (tests) gets a private
+	// empty registry; serve.go passes the process-wide one, which also
+	// carries the Go/process collectors and the store's instruments.
+	Metrics *prometheus.Registry
 }
 
 // githubAPIBase is the public GitHub REST endpoint. A var, not a const, so
@@ -208,6 +213,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.bgCtx = context.Background()
 	}
 
+	reg := cfg.Metrics
+	if reg == nil {
+		reg = prometheus.NewRegistry()
+	}
+
 	store.SetBranchPrefix(cfg.BranchPrefix)
 	s.branchPrefix = store.BranchPrefix()
 
@@ -302,8 +312,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 	}
 
-	reg := prometheus.NewRegistry()
-	reg.MustRegister(collectors.NewGoCollector())
 	s.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total",
 		Help: "HTTP requests served, by method, route pattern, and status code.",
