@@ -287,7 +287,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if cfg.EmbeddingModel == "" {
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
 		}
-		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey}
+		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey, Metrics: embed.NewMetrics(reg)}
 		// At boot, before the first request and regardless of whether skill
 		// sources are configured. Vectors from a previous provider are not
 		// comparable with this one's, and dropping the sources (or swapping the

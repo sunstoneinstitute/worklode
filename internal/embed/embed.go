@@ -76,6 +76,8 @@ type OpenAI struct {
 	Key   string
 	// HTTPClient overrides the default 30s-timeout client.
 	HTTPClient *http.Client
+	// Metrics records call outcomes and duration. Nil records nothing.
+	Metrics *Metrics
 }
 
 // ID identifies this provider's embedding space as model+endpoint, e.g.
@@ -105,6 +107,13 @@ func (p *OpenAI) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	if len(texts) == 0 {
 		return nil, nil
 	}
+	start := time.Now()
+	vecs, err := p.embed(ctx, texts)
+	p.Metrics.observe(err, time.Since(start))
+	return vecs, err
+}
+
+func (p *OpenAI) embed(ctx context.Context, texts []string) ([][]float32, error) {
 	body, err := json.Marshal(map[string]any{"model": p.Model, "input": texts})
 	if err != nil {
 		return nil, fmt.Errorf("marshal embed request: %w", err)
