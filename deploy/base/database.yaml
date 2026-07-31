@@ -1,0 +1,22 @@
+---
+# Declarative extension management for the already-running dev/prod
+# clusters, where postgres.yaml's postInitApplicationSQL never re-runs
+# (bootstrap-only). The operator reconciles this against the existing
+# `worklode` database (created by initdb) without recreating it, and
+# creates the `vector` extension as superuser — CNPG's Database CRD,
+# available from operator 1.26 (chart >=0.26, in use here per
+# provisioning/infrastructure/base/postgres-operator/release.yaml).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: worklode
+  namespace: worklode
+spec:
+  name: worklode
+  owner: worklode
+  cluster:
+    name: worklode-postgres
+  databaseReclaimPolicy: retain
+  extensions:
+    - name: vector
+      ensure: present
