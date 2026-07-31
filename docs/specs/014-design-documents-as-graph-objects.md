@@ -31,7 +31,7 @@ This spec covers, and only covers:
 Out of scope (reference, do not duplicate): the two-layer drift model and the other derivers (007);
 task ranking (005); the lease lifecycle (004); reconciliation of *ingestion* gaps (013 — a different
 diff over different entities); and **adoption** — importing an existing GitHub project's issues,
-documents and repos into this model is candidate spec 015, not this spec (see *Adoption is out of
+documents and repos into this model is candidate spec 020, not this spec (see *Adoption is out of
 scope*).
 
 ---
@@ -45,13 +45,15 @@ becomes a breaking change the moment that PR lands. **It must happen before spec
 
 | Role | Old | New | Namespace |
 |---|---|---|---|
-| Schema (classes/properties) | `ls:` | **`wl:`** | `https://worklode.io/ns/wl/ontology#` |
-| Concepts (SKOS) | `lsc:` | **`wlc:`** | `https://worklode.io/ns/wl/concept/` |
-| Instances | `lsid:` | **`wlid:`** | `https://worklode.io/ns/wl/id/` |
+| Schema (classes/properties) | `ls:` | **`wl:`** | `https://worklode.io/ns/ontology#` |
+| Concepts (SKOS) | `lsc:` | **`wlc:`** | `https://worklode.io/ns/concept/` |
+| Instances | `lsid:` | **`wlid:`** | `https://worklode.io/ns/id/` |
 
-The **path segment changes with the prefix label** — rdf-registry sources move `rdf/ls/` → `rdf/wl/`
-and the published base becomes `https://worklode.io/ns/wl/…`. A rename that stops at the prefix
-label leaves the IRIs wrong, which is the only part that is actually load-bearing.
+rdf-registry sources move `rdf/ls/` → `rdf/wl/`, but the **published base carries no
+ontology-name segment**: `https://worklode.io/ns/…`, not `…/ns/wl/…`. The `wl` in the source
+path is a repo-layout detail; the base-URL override (009 item 3) maps it away. A rename that
+stops at the prefix label leaves the IRIs wrong, which is the only part that is actually
+load-bearing.
 
 `wl:` also matches the existing `WL-<n>` task-id scheme, so the two identifier systems finally read
 as one product.
@@ -598,13 +600,13 @@ Two pieces of work follow from this spec without belonging to it:
 
 - **Dogfooding Worklode within Worklode** — a task, not a spec. It is how this design earns
   confidence, and it should not be smuggled in as a migration section.
-- **Onboarding existing projects** — a candidate **spec 015**. Importing an existing GitHub project
+- **Onboarding existing projects** — a candidate **spec 020**. Importing an existing GitHub project
   wholesale (issues → Tasks, `docs/specs/**` and `docs/adr/**` → published documents at v1, repos →
   Components, GitHub projects → Workstreams) is a substantial design in its own right, with real
   questions this spec should not prejudge: what anchors get assigned to a corpus that never had
   them, how imported issues reconcile with the already-shipped `lode inbox` promotion path (013), and
   whether a first publication of legacy prose should be `accepted` or `draft`. Spec 014 defines the
-  target state; spec 015 would define how an existing project reaches it.
+  target state; spec 020 would define how an existing project reaches it.
 
 ## Open questions
 
@@ -613,7 +615,7 @@ Two pieces of work follow from this spec without belonging to it:
 2. ~~Granularity of a section~~ — **RESOLVED:** server-configurable, default 3, governing
    addressability rather than authoring; raising is safe, lowering is constrained (§7).
 3. ~~Migrating the existing corpus~~ — **RESOLVED:** out of scope; constraints bind from first
-   publication. Dogfooding is a task; onboarding is candidate spec 015 (above).
+   publication. Dogfooding is a task; onboarding is candidate spec 020 (above).
 4. ~~Does a Component pin, or a repository~~ — **RESOLVED:** the Component pins, derived from the
    claim's paths rather than declared, with an implicit repo-coords Component for single-component
    repositories (§6).
@@ -631,7 +633,7 @@ Two pieces of work follow from this spec without belonging to it:
 ## Acceptance criteria
 
 1. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
-   `rdf/wl/` and publish under `https://worklode.io/ns/wl/`.
+   `rdf/wl/` and publish under `https://worklode.io/ns/`.
 2. `wl:Plan` is absent from the ontology; a plan-shaped body of work is representable as a task
    subtree, and no acceptance criterion anywhere still refers to `Spec ⊃ Plan ⊃ Task`.
 3. A section declared `## 2.1 Title {#sec-2.1}` is addressable as
