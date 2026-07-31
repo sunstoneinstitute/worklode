@@ -1,7 +1,13 @@
-// Package skillstore manages the local content-addressed skill cache:
-// <root>/.store/<hash>/ holds unpacked skill dirs; <root>/<name> is a
-// symlink to the current version. Concurrent worktrees can hold different
-// versions because store dirs are immutable once extracted.
+// Package skillstore manages the local content-addressed skill cache.
+//
+// <root>/.store/<hash>/ holds unpacked skill dirs and is the canonical
+// location: immutable once extracted, one dir per version, so worktrees
+// briefed against different versions of one skill never collide. That is the
+// path Ensure returns and the path a brief should carry.
+//
+// <root>/<name> is a symlink to the most recently installed version — a
+// convenience for humans browsing the cache. It holds one version at a time,
+// so nothing that needs a specific version may depend on it.
 package skillstore
 
 import (
@@ -40,8 +46,9 @@ func Root() (string, error) {
 	return filepath.Join(home, ".worklode", "skills"), nil
 }
 
-// Path returns the stable per-name path (the symlink), whether or not it
-// exists yet. Callers print this in briefs.
+// Path returns the by-name symlink <root>/<name>, whether or not it exists
+// yet. It points at whichever version was installed last, so it is for humans
+// only; anything needing a particular version uses the path Ensure returns.
 func Path(root, name string) string { return filepath.Join(root, name) }
 
 func validName(name string) bool {
@@ -63,9 +70,15 @@ func validHash(hash string) bool {
 	return true
 }
 
-// Ensure makes <root>/<name> point at the unpacked version identified by
-// hash, calling fetch for the tar.gz only when that version is not already
-// in the store. Returns the symlink path.
+// Ensure makes the version identified by hash available locally, calling
+// fetch for the tar.gz only when it is not already in the store. It returns
+// the canonical <root>/.store/<hash> path: spec 016 requires two worktrees
+// briefed against different hashes of one skill to resolve valid paths
+// simultaneously, and the single <root>/<name> symlink cannot do that — the
+// second install would repoint the first's path at the other version.
+//
+// <root>/<name> is still repointed here, as the human-facing pointer to the
+// most recent install.
 func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, error) {
 	if !validName(name) {
 		return "", fmt.Errorf("skill name %q: invalid", name)
@@ -91,7 +104,7 @@ func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, erro
 	if err := swapSymlink(filepath.Join(".store", hash), link); err != nil {
 		return "", fmt.Errorf("link skill %s: %w", name, err)
 	}
-	return link, nil
+	return dst, nil
 }
 
 // extract unpacks tgz into a sibling tmp dir, verifies its content hashes to
