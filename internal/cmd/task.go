@@ -799,9 +799,19 @@ func newTaskTreeCmd() *cobra.Command {
 				return err
 			}
 
-			var epics []cli.Task
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+
+			// Each epic and its progress, before its children are fetched.
+			type epicNode struct {
+				task     cli.Task
+				progress cli.TaskProgress
+			}
+			var epics []epicNode
 			if len(args) == 1 {
-				id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+				id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
 				if err != nil {
 					return err
 				}
@@ -809,35 +819,33 @@ func newTaskTreeCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				epics = []cli.Task{t.Task}
+				epics = []epicNode{{task: t.Task, progress: t.Hierarchy.Progress}}
 			} else {
-				sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
-				if err != nil {
-					return err
-				}
 				resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-					Project: sc.Project, Kind: "epic",
+					Project: sc.Project, Kind: "epic", States: resolveStatusFilter(nil),
 				})
 				if err != nil {
 					return err
 				}
-				epics = resp.Tasks
+				// One GetTask per epic, for the progress the list omits.
+				for _, e := range resp.Tasks {
+					detail, _, err := c.GetTask(cmd.Context(), e.ID)
+					if err != nil {
+						return err
+					}
+					epics = append(epics, epicNode{task: e, progress: detail.Hierarchy.Progress})
+				}
 			}
 
-			// N+1 by construction: one GetTask (for progress) plus one
-			// ListTasks (for children) per epic, over a bounded epic list.
+			// One more round trip per epic, for its children.
 			nodes := make([]cli.TreeNode, 0, len(epics))
 			for _, e := range epics {
-				detail, _, err := c.GetTask(cmd.Context(), e.ID)
-				if err != nil {
-					return err
-				}
-				kids, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Parent: e.ID})
+				kids, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Parent: e.task.ID})
 				if err != nil {
 					return err
 				}
 				nodes = append(nodes, cli.TreeNode{
-					Epic: e, Progress: detail.Hierarchy.Progress, Children: kids.Tasks,
+					Epic: e.task, Progress: e.progress, Children: kids.Tasks,
 				})
 			}
 			cli.TreeRender(cmd.OutOrStdout(), nodes)
@@ -855,9 +863,6 @@ func newTaskDecomposeCmd() *cobra.Command {
 		Short: "Turn an oversized task into an epic plus its children, in place",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(into) == 0 {
-				return fmt.Errorf("--into is required: pass one title per child")
-			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err

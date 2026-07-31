@@ -132,32 +132,33 @@ func BoardRender(w io.Writer, board BoardResponse) {
 	}
 }
 
-// boardGroupKey keeps an epic and its children adjacent within a bucket: a
-// child sorts under its parent's id (rank 1), a parent or loose task under its
-// own (rank 0).
-func boardGroupKey(t BoardTask) (string, int) {
-	if t.Parent != "" {
-		return t.Parent, 1
-	}
-	return t.ID, 0
-}
-
 func boardSection(w io.Writer, label string, tasks []BoardTask) {
 	if len(tasks) == 0 {
 		return
 	}
+	pos := make(map[string]int, len(tasks))
+	for i, t := range tasks {
+		pos[t.ID] = i
+	}
+	// A child sorts at its parent's position in the incoming slice (rank 1),
+	// anything else at its own (rank 0), so grouping keeps an epic and its
+	// children adjacent without disturbing the server's priority ordering. A
+	// child whose parent is in another bucket keeps its own position.
+	anchor := func(t BoardTask) (int, int) {
+		if p, ok := pos[t.Parent]; ok {
+			return p, 1
+		}
+		return pos[t.ID], 0
+	}
 	rows := make([]BoardTask, len(tasks))
 	copy(rows, tasks)
 	sort.SliceStable(rows, func(i, j int) bool {
-		ki, ri := boardGroupKey(rows[i])
-		kj, rj := boardGroupKey(rows[j])
-		if ki != kj {
-			return ki < kj
+		ai, ri := anchor(rows[i])
+		aj, rj := anchor(rows[j])
+		if ai != aj {
+			return ai < aj
 		}
-		if ri != rj {
-			return ri < rj
-		}
-		return rows[i].ID < rows[j].ID
+		return ri < rj
 	})
 
 	fmt.Fprintf(w, "\n%s\n", label)
@@ -169,7 +170,7 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 			holder = fmt.Sprintf("%s (until %s)", t.Holder.ActorID, localTime(t.Holder.ExpiresAt))
 		}
 		id := t.ID
-		if t.Parent != "" {
+		if _, ok := pos[t.Parent]; ok {
 			id = "└ " + id
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", id, t.Priority, t.Title, holder)
@@ -242,9 +243,13 @@ type TreeNode struct {
 }
 
 // TreeRender prints each epic with its progress, then its children indented
-// one level. Depth is capped at two edges, so there is no deeper nesting to
-// render.
+// one level. Subtasks — the third tier the depth cap allows — are not
+// expanded.
 func TreeRender(w io.Writer, nodes []TreeNode) {
+	if len(nodes) == 0 {
+		fmt.Fprintln(w, "no epics")
+		return
+	}
 	for i, n := range nodes {
 		if i > 0 {
 			fmt.Fprintln(w)
@@ -257,8 +262,5 @@ func TreeRender(w io.Writer, nodes []TreeNode) {
 		if len(n.Children) == 0 {
 			fmt.Fprintln(w, "  (no children)")
 		}
-	}
-	if len(nodes) == 0 {
-		fmt.Fprintln(w, "no epics")
 	}
 }
