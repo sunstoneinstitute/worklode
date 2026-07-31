@@ -3,7 +3,10 @@
 **Date:** 2026-07-20
 **Status:** Design — approved shape, pending spec review
 **Umbrella:** `000-umbrella-architecture.md`
-**Amended by:** CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`
+**Amended by:** CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`.
+GitHub as a *login provider* (sections B–D) superseded by spec 023 — Keycloak
+is the sole login; GitHub becomes a link-only flow. Token storage (§E) and the
+attribution goal are retained and completed by 023.
 
 ## Summary
 
