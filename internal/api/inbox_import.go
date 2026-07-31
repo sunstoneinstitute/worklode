@@ -45,6 +45,11 @@ type importResponse struct {
 	PRs       importCounts `json:"prs"`
 	Truncated bool         `json:"truncated"`
 	DryRun    bool         `json:"dry_run"`
+	// NewestUpdatedAt is the latest updated_at fetched this run, set only when
+	// Truncated: it is the value that makes --since a resume cursor (see
+	// listQuery in internal/githubauth/list.go) rather than just a filter,
+	// and is meaningless on a run that already reached the end.
+	NewestUpdatedAt *time.Time `json:"newest_updated_at,omitempty"`
 }
 
 // importInbox handles POST /api/v1/inbox/import. It fetches outside any
@@ -109,6 +114,12 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := importResponse{Repo: req.Repo, Truncated: truncated, DryRun: req.DryRun}
+	if truncated {
+		newest := newestUpdatedAt(issues, pulls)
+		if !newest.IsZero() {
+			resp.NewestUpdatedAt = &newest
+		}
+	}
 
 	// Safe to mutate resp here: RecordEvent runs apply exactly once, no retry.
 	count := func(tx *sql.Tx) error {
@@ -215,4 +226,21 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// newestUpdatedAt returns the maximum UpdatedAt across issues and pulls, or
+// the zero Time if both are empty.
+func newestUpdatedAt(issues []githubauth.Issue, pulls []githubauth.PullRequest) time.Time {
+	var newest time.Time
+	for _, is := range issues {
+		if is.UpdatedAt.After(newest) {
+			newest = is.UpdatedAt
+		}
+	}
+	for _, pr := range pulls {
+		if pr.UpdatedAt.After(newest) {
+			newest = pr.UpdatedAt
+		}
+	}
+	return newest
 }

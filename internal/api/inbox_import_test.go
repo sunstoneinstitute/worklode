@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -147,6 +148,96 @@ func TestImportDryRunWritesNothing(t *testing.T) {
 	}
 	if n := countEvents(t, st); n != 0 {
 		t.Fatalf("dry run wrote %d events, want 0", n)
+	}
+}
+
+// fullIssuePageAt builds a full page (importPageSize entries) of issues for
+// page (1-based), with updated_at increasing monotonically across the whole
+// run: item i on page p gets base + ((p-1)*importPageSize + i) seconds. That
+// makes the overall maximum predictable (the last item of the last page) and
+// lets a fake server that always returns a full page force truncation without
+// a huge literal fixture.
+const importPageSize = 100
+
+func fullIssuePageAt(page int, base time.Time) []map[string]any {
+	items := make([]map[string]any, 0, importPageSize)
+	for i := 0; i < importPageSize; i++ {
+		n := (page-1)*importPageSize + i + 1
+		ts := base.Add(time.Duration((page-1)*importPageSize+i) * time.Second)
+		items = append(items, map[string]any{
+			"number": n, "title": "t", "state": "open",
+			"html_url": "u", "updated_at": ts.Format(time.RFC3339),
+		})
+	}
+	return items
+}
+
+// importGitHubAlwaysFullIssues serves the installation handshake plus a full
+// page of issues for every requested page, so importMaxPages is exhausted and
+// the import truncates without needing a page-cap-sized literal fixture.
+func importGitHubAlwaysFullIssues(t *testing.T, base time.Time) *githubauth.AppAuth {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/acme/widgets/installation":
+			json.NewEncoder(w).Encode(map[string]any{"id": 7})
+		case "/app/installations/7/access_tokens":
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"token": "ghs_test"})
+		case "/repos/acme/widgets/issues":
+			page := 1
+			fmt.Sscanf(r.URL.Query().Get("page"), "%d", &page)
+			json.NewEncoder(w).Encode(fullIssuePageAt(page, base))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return &githubauth.AppAuth{AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}
+}
+
+// TestImportTruncatedReportsNewestUpdatedAt drives real truncation (every
+// page full, importMaxPages exhausted) and checks the response names the
+// exact timestamp a caller must pass to --since to resume: the newest
+// updated_at among everything fetched this run.
+func TestImportTruncatedReportsNewestUpdatedAt(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	app := importGitHubAlwaysFullIssues(t, base)
+	_, post := importServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "open"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	var got struct {
+		Truncated       bool       `json:"truncated"`
+		NewestUpdatedAt *time.Time `json:"newest_updated_at"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Truncated {
+		t.Fatalf("truncated = false, want true — the fixture serves importMaxPages full pages")
+	}
+	wantNewest := base.Add(time.Duration(importMaxPages*importPageSize-1) * time.Second)
+	if got.NewestUpdatedAt == nil || !got.NewestUpdatedAt.Equal(wantNewest) {
+		t.Fatalf("newest_updated_at = %v, want %v", got.NewestUpdatedAt, wantNewest)
+	}
+}
+
+// TestImportUntruncatedOmitsNewestUpdatedAt guards the other direction: the
+// field is meaningless (and must not be printed as a bogus --since) when the
+// import already reached the end.
+func TestImportUntruncatedOmitsNewestUpdatedAt(t *testing.T) {
+	app := importGitHub(t, []map[string]any{openIssue(1, "first")}, nil)
+	_, post := importServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "open"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	if bytes.Contains(rr.Body.Bytes(), []byte("newest_updated_at")) {
+		t.Fatalf("body = %s, want no newest_updated_at field for a non-truncated import", rr.Body)
 	}
 }
 
