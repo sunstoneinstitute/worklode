@@ -10,6 +10,15 @@ name: Promote to prod
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for the prod tag (from existing tags)
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -45,14 +54,14 @@ jobs:
 
       - name: Promote image to hzprod
         id: promote
-        uses: sunstoneinstitute/actions/promote-images@23d867008b2c88a200c6c64cd540cd6d31839518 # v1.7.0
+        uses: sunstoneinstitute/actions/promote-images@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
         with:
           from-env: dev
           to-env: prod
           images: worklode
           from-registry: ${{ env.REGISTRY }}
           to-registry: ${{ env.REGISTRY }}
-          version-file: VERSION
+          bump: ${{ inputs.bump }}
           # Overlay dirs are named after the cluster (hzdev/hzprod), not the
           # env (dev/prod), so neither path can be auto-detected from from-env.
           from-overlay-path: deploy/overlays/hzdev/kustomization.yaml
