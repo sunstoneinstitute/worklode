@@ -11,8 +11,9 @@ once an instance is running (dogfooding); until then this file is the list.
 - **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
 - **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
-- **`lode import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
-  (`docs/spec.md` §Migration).
+- **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
+  does not scale to `lode inbox import --state all` on a mature repo — spec 020
+  keeps the import default narrow for this reason.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
