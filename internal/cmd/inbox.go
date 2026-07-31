@@ -82,9 +82,15 @@ func newInboxPromoteCmd() *cobra.Command {
 			if appliesTo != "" {
 				versions = strings.Split(appliesTo, ",")
 			}
-			c, err := newAPIClient()
+			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
+			}
+			if parent != "" {
+				parent, err = resolveTaskID(cmd.Context(), parent, c, cfg)
+				if err != nil {
+					return err
+				}
 			}
 			t, raw, err := c.PromoteIssue(cmd.Context(), cli.PromoteInput{
 				Repo: args[0], Number: number, Title: title, Body: body,
