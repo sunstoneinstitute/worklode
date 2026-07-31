@@ -1390,3 +1390,55 @@ func TestClientSyncSkills(t *testing.T) {
 		t.Fatalf("SyncSkills error = %v, want *cli.ClientError with status 422", err)
 	}
 }
+
+func TestClientHierarchyCalls(t *testing.T) {
+	var gotPath, gotMethod, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotPath, gotMethod, gotBody = r.URL.RequestURI(), r.Method, string(body)
+		if r.Method == http.MethodDelete {
+			// Matches the real removeEdge: 204, no body.
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"epic":{"id":"WL-1","kind":"epic"},"children":[{"id":"WL-2"}]}`))
+	}))
+	defer srv.Close()
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
+
+	if _, err := c.Parent(context.Background(), "WL-2", "WL-1"); err != nil {
+		t.Fatalf("Parent: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-2/edges" {
+		t.Fatalf("Parent hit %s %s", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"child_of"`) || !strings.Contains(gotBody, `"to":"WL-1"`) {
+		t.Fatalf("Parent body = %s", gotBody)
+	}
+
+	if _, err := c.Unparent(context.Background(), "WL-2", "WL-1"); err != nil {
+		t.Fatalf("Unparent: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/v1/tasks/WL-2/edges" {
+		t.Fatalf("Unparent hit %s %s", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"to":"WL-1"`) {
+		t.Fatalf("Unparent body = %s, want to:WL-1 (not from, which would invert the edge)", gotBody)
+	}
+
+	resp, _, err := c.Decompose(context.Background(), "WL-1", []string{"A"})
+	if err != nil {
+		t.Fatalf("Decompose: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/decompose" {
+		t.Fatalf("Decompose hit %s %s", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"into":["A"]`) {
+		t.Fatalf("Decompose body = %s, want into:[A]", gotBody)
+	}
+	if resp.Epic.Kind != "epic" || len(resp.Children) != 1 {
+		t.Fatalf("Decompose response = %+v", resp)
+	}
+}

@@ -76,6 +76,7 @@ type createTaskRequest struct {
 	Kind     string   `json:"kind"`
 	Concern  string   `json:"concern"`
 	Draft    bool     `json:"draft"`
+	Parent   string   `json:"parent"`
 	Skills   []string `json:"skills"`
 }
 

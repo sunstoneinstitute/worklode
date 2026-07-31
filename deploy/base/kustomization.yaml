@@ -23,5 +23,7 @@ configMapGenerator:
       - migrations/0004_agent_sessions.down.sql
       - migrations/0005_delivery.up.sql
       - migrations/0005_delivery.down.sql
+      - migrations/0006_task_hierarchy.up.sql
+      - migrations/0006_task_hierarchy.down.sql
       - migrations/0007_skills.up.sql
       - migrations/0007_skills.down.sql

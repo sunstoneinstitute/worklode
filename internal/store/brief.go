@@ -47,10 +47,10 @@ type BriefOptions struct {
 }
 
 // Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, any active lease, and — when opts.Skills is set — its pinned
-// skills. Returns ErrNotFound if the task does not exist. It runs a bounded,
-// fixed number of queries — one more only when pins are asked for and the
-// task has some — and never returns unbounded lists.
+// blockers, its parent, any active lease, and — when opts.Skills is set — its
+// pinned skills. Returns ErrNotFound if the task does not exist. It runs a
+// bounded, fixed number of queries — one more only when pins are asked for and
+// the task has some — and never returns unbounded lists.
 func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -69,6 +69,11 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		return nil, err
 	}
 
+	parent, err := s.ParentOf(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
 	var pinned []Skill
 	var warnings []string
 	if opts.Skills && len(t.Skills) > 0 {
@@ -83,6 +88,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		Body:          t.Body,
 		Branch:        BranchFor(t),
 		OpenBlockers:  blockers,
+		Parent:        parent,
 		Lease:         lease,
 		PinnedSkills:  pinned,
 		SkillWarnings: warnings,

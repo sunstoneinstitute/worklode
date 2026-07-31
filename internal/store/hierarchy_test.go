@@ -75,19 +75,32 @@ func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
 		t.Fatalf("CreateActor: %v", err)
 	}
 
-	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	parentA := createTask(t, s, taskTestNow, defaultTaskInput())
-	parentB := createTask(t, s, taskTestNow, defaultTaskInput())
+	// Insert rows directly rather than through CreateTask: the store is
+	// deliberately held at 0005 here, and CreateTask writes columns later
+	// migrations add.
+	insertTaskAt0005 := func(id string) {
+		t.Helper()
+		if _, err := s.DBForTests().Exec(
+			`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, created_by, created_at, updated_at)
+			 VALUES ($1, 'horndb', 'a task', 'body', 'medium', 'feature', 'ready', 'stig', $2, $2)`,
+			id, taskTestNow); err != nil {
+			t.Fatalf("insert task %s: %v", id, err)
+		}
+	}
+	childID, parentAID, parentBID := "HDB-1", "HDB-2", "HDB-3"
+	insertTaskAt0005(childID)
+	insertTaskAt0005(parentAID)
+	insertTaskAt0005(parentBID)
 
 	older, newer := taskTestNow, taskTestNow.Add(time.Hour)
 	if _, err := s.DBForTests().Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
-		child.ID, parentA.ID, older); err != nil {
+		childID, parentAID, older); err != nil {
 		t.Fatalf("insert first parent edge: %v", err)
 	}
 	if _, err := s.DBForTests().Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
-		child.ID, parentB.ID, newer); err != nil {
+		childID, parentBID, newer); err != nil {
 		t.Fatalf("insert second parent edge: %v", err)
 	}
 
@@ -96,7 +109,7 @@ func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
 	}
 
 	rows, err := s.DBForTests().Query(
-		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, child.ID)
+		`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, childID)
 	if err != nil {
 		t.Fatalf("query surviving edges: %v", err)
 	}
@@ -112,8 +125,8 @@ func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("rows: %v", err)
 	}
-	if len(survivors) != 1 || survivors[0] != parentB.ID {
-		t.Fatalf("surviving child_of edges = %v, want [%s] (the later one)", survivors, parentB.ID)
+	if len(survivors) != 1 || survivors[0] != parentBID {
+		t.Fatalf("surviving child_of edges = %v, want [%s] (the later one)", survivors, parentBID)
 	}
 }
 
