@@ -20,6 +20,13 @@ once an instance is running (dogfooding); until then this file is the list.
   write, so one outcome is silently lost — and promote's loser orphans the task
   it created. Add `AND triage_state = 'new'` plus a `RowsAffected` check to all
   three. Low impact while triage is human-driven and one issue at a time.
+- **e2e coverage for the inbox verbs**: `lode inbox import` and `lode inbox link`
+  are tested per layer but never through CLI → API → store. `link` is the cheap
+  one to add (no fake GitHub needed) and covers the seam the unit tests split.
+- **Split the inbox handlers out of `internal/api/admin.go`**: the file is 757
+  lines across projects, actors/tokens, inbox, and the board. The inbox section
+  alone is ~233 lines, and `internal/api/inbox_import.go` already exists as the
+  sibling to move them next to.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
