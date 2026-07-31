@@ -262,10 +262,10 @@ Pin skills to a task with `lode task add --skill <name>` (repeatable) or
 manage them after the fact with `lode task skills <id> [--set ...]`; pinned
 skills are always inlined in `lode task brief`.
 
-Recommendations need `LODE_EMBEDDING_URL`, `LODE_EMBEDDING_MODEL`, and
-`LODE_EMBEDDING_API_KEY` on the server. With `LODE_EMBEDDING_URL` unset, the
-server runs pins-only: briefs and recommendations both still work, just
-without similarity matches.
+Recommendations need `LODE_EMBEDDING_URL` and `LODE_EMBEDDING_MODEL` on the
+server, and, if the endpoint requires auth, `LODE_EMBEDDING_API_KEY`. With
+`LODE_EMBEDDING_URL` unset, the server runs pins-only: briefs and
+recommendations both still work, just without similarity matches.
 
 ## Worklode plugin (Claude Code)
 
