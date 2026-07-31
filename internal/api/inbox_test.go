@@ -75,3 +75,39 @@ func TestLinkInboxUnknownTask(t *testing.T) {
 		t.Fatalf("status = %d, body = %s, want 404", rr.Code, rr.Body)
 	}
 }
+
+func TestPromoteDraft(t *testing.T) {
+	st, h, token := newTestServer(t)
+	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
+	seedIssue(t, st, "acme/widgets", 1, "an issue")
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "draft": true,
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	var got map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &got)
+	if got["state"] != "draft" {
+		t.Fatalf("state = %v, want draft — a bulk-promoted backlog must be stageable", got["state"])
+	}
+}
+
+func TestPromoteRejectsEpicKind(t *testing.T) {
+	st, h, token := newTestServer(t)
+	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
+	seedIssue(t, st, "acme/widgets", 1, "an issue")
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "epic",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 — a childless epic can never leave in_progress", rr.Code)
+	}
+
+	issues, _ := st.ListIssues(context.Background(), "", "")
+	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
+		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
+	}
+}
