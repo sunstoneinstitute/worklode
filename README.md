@@ -108,6 +108,31 @@ lode board --repo sunstoneinstitute/other     # name a project by its repo
 Inside a scoped repo, commands that take a task id also take a bare task
 number: `lode task show 12` means `WL-12`. Full ids work everywhere.
 
+### Importing an existing backlog
+
+`add-repo` only wires up new webhook traffic — issues and PRs that predate
+the mapping stay invisible until backfilled:
+
+```bash
+lode project add-repo myproject acme/widgets
+lode inbox import acme/widgets --dry-run
+lode inbox import acme/widgets
+lode task add --project myproject --kind epic --title "acme/widgets backlog" --priority medium
+lode inbox promote acme/widgets 41 --priority medium --draft --parent <epic-id>
+```
+
+- `lode inbox import <repo>` backfills through the same store path the
+  webhooks use — it never drives the delivery lifecycle, so re-running is
+  always safe. It defaults to open issues; add `--include-prs`, `--state
+  closed`/`--state all`, or `--since <RFC3339>` to widen it. It caps at 20
+  pages of 100 per kind, and on truncation prints the `--since` value to
+  resume with.
+- `--draft` on `lode inbox promote` lands the task in `draft` (not claimable
+  until `lode task ready`); `--parent <epic>` files it under an epic in the
+  same step.
+- `lode inbox link <repo> <number> <task-id>` marks an issue as already
+  covered by an existing task, without creating a new one.
+
 The CLI merges the repo config over `~/.config/worklode/config.toml`. It may
 set `server` and `current_project`, but not `token` — repo configs tend to be
 committed, and the token belongs in the OS keychain (or `LODE_TOKEN`).
