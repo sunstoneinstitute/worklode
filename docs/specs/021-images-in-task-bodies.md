@@ -167,17 +167,28 @@ rewriting is what people will actually use for images, because it requires knowi
 agent fetch (bearer token, `s.auth`). One middleware covers it:
 
 ```go
-// eitherAuth accepts a bearer token or a web session. Blobs are the only
-// route both audiences fetch directly.
+// eitherAuth accepts a bearer token or a web session, and mirrors webAuth's
+// pass-through when no web auth provider is configured.
 func (s *server) eitherAuth(next http.HandlerFunc) http.Handler
 ```
 
-A content-addressed URL is unguessable, and that is **not** the access control. Task bodies
-carry pre-release design work; an unauthenticated blob route is a public bucket with extra
-steps. Authenticate, and let the hash do dedup only.
+**It must mirror `webAuth`'s bypass exactly.** `webAuth` (`internal/api/oidcweb.go:57`) passes
+every request through when neither OIDC nor GitHub login is configured — the read-only web UI
+is unauthenticated on such an install. A blob route that authenticated unconditionally would
+render the task page fine and 401 every `<img>` on it. Consistency with the surrounding UI wins
+here: the blob route is not the place to unilaterally tighten the installation's auth model.
 
-The bucket itself stays private — presigned URLs are the only anonymous read path, and they
-expire.
+The consequence is worth stating plainly rather than burying: **on an install with no web auth
+provider, blobs are readable by anyone who can reach the server**, exactly like the task pages
+that reference them. That is a property of the UI's auth model, not of this spec, and Q021.4
+tracks fixing it at the right level.
+
+Where web auth *is* configured, a content-addressed URL is unguessable and that is **not** the
+access control. Task bodies carry pre-release design work; the hash does dedup, the middleware
+does access.
+
+The bucket itself stays private in every case — presigned URLs are the only anonymous read
+path, and they expire.
 
 Session cookies are already `SameSite=Lax` (`internal/api/cliauth.go:130`, `oidcweb.go:97`,
 `githubweb.go:100`). That is load-bearing here: Lax withholds the cookie from cross-site
@@ -519,6 +530,12 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
   under different key prefixes halves the credential management and makes a prod-to-dev data
   copy trivially wrong. Separate buckets is the safer default; confirm against how the fleet
   provisions the other buckets.
+- **Q021.4 — The web UI is unauthenticated without an SSO provider.** §4 mirrors that bypass
+  for consistency, which means blobs inherit it. Spec 021 makes the stakes higher rather than
+  creating them: task bodies already carry pre-release design work, and now they carry the
+  screenshots too. The fix belongs to the UI's auth model — either require a provider before
+  serving any web surface, or gate the whole UI behind a default-deny. Tracked in
+  `docs/follow-ups.md`.
 
 ---
 
@@ -528,9 +545,10 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
    hash, creates no second row, and issues no second `PutObject`.
 2. A 200 MiB upload gets `413`, and the server's memory does not track payload size on any
    upload — asserted by uploading 100 MiB with a bounded heap.
-3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session, and
-   `401`s with neither. The presigned response carries the sniffed `Content-Type`, a correct
-   `Content-Length`, and `Content-Disposition: attachment` for a non-embeddable type.
+3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session. With a
+   web auth provider configured it `401`s with neither; with no provider configured it passes
+   through, matching `webAuth`. The presigned response carries the sniffed `Content-Type`, a
+   correct `Content-Length`, and `Content-Disposition: attachment` for a non-embeddable type.
 4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose
    body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows at
    `embedded = true`.

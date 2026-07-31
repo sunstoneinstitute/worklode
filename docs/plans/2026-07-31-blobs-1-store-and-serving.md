@@ -1243,7 +1243,55 @@ git commit -m "feat(api): streaming content-addressed blob upload"
 - Modify: `internal/api/server.go` (route table, middleware)
 - Modify: `internal/api/blobs_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add the test helpers**
+
+`signSession` is unexported and `blobs_test.go` is in `package api_test`, so add
+`internal/api/export_test.go`:
+
+```go
+package api
+
+// SignSessionForTest exposes signSession to the api_test package, which
+// needs a valid session cookie to exercise the blob route's web-session
+// path.
+var SignSessionForTest = signSession
+```
+
+Append to `internal/api/server_test.go` a variant with a web auth provider configured — the
+GitHub login path, since it needs no network at construction (`server.go:233`):
+
+```go
+// newTestServerBlobsWebAuth is newTestServerBlobs with GitHub web login
+// configured, so webAuth and eitherAuth stop passing requests through.
+func newTestServerBlobsWebAuth(t *testing.T) (*store.Store, http.Handler, string, *blobstore.Fake) {
+	t.Helper()
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	fake := blobstore.NewFake()
+	h, _, err := api.NewServer(st, api.Config{
+		BlobStoreForTest:   fake,
+		GitHubClientID:     "cid",
+		GitHubClientSecret: "secret",
+		GitHubOrg:          "sunstoneinstitute",
+		SessionSecret:      "sekret",
+		PublicURL:          "https://wl.test",
+		TokenEncKey:        strings.Repeat("0123456789abcdef", 4),
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return st, h, token, fake
+}
+```
+
+- [ ] **Step 2: Write the failing test**
 
 Append to `internal/api/blobs_test.go`:
 
@@ -1311,7 +1359,10 @@ func TestServeBlobAttachmentDisposition(t *testing.T) {
 	}
 }
 
-func TestServeBlobUnauthorized(t *testing.T) {
+// TestServeBlobOpenWithoutProvider pins the bypass: with no web auth
+// provider the read-only UI is unauthenticated, and blobs match it. Serving
+// a 401 here would render a task page fine and break every image on it.
+func TestServeBlobOpenWithoutProvider(t *testing.T) {
 	_, h, token, _ := newTestServerBlobs(t)
 	rec := postBlob(t, h, token, "", pngBytes)
 	var up struct {
@@ -1322,8 +1373,40 @@ func TestServeBlobUnauthorized(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/blob/"+up.Hash, nil)
 	got := httptest.NewRecorder()
 	h.ServeHTTP(got, req)
-	if got.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401 with no credentials", got.Code)
+	if got.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302 (webAuth is a pass-through with no provider)", got.Code)
+	}
+}
+
+// TestServeBlobRequiresSessionWithProvider is the other half: once a
+// provider is configured, an anonymous fetch is refused and a valid session
+// cookie is honoured.
+func TestServeBlobRequiresSessionWithProvider(t *testing.T) {
+	st, h, token, _ := newTestServerBlobsWebAuth(t)
+	rec := postBlob(t, h, token, "", pngBytes)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	var up struct {
+		Hash string `json:"hash"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &up)
+
+	anon := httptest.NewRecorder()
+	h.ServeHTTP(anon, httptest.NewRequest(http.MethodGet, "/blob/"+up.Hash, nil))
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", anon.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/blob/"+up.Hash, nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "wl_session",
+		Value: api.SignSessionForTest("sekret", "alice", st.Now().Add(time.Hour)),
+	})
+	sess := httptest.NewRecorder()
+	h.ServeHTTP(sess, req)
+	if sess.Code != http.StatusFound {
+		t.Fatalf("session status = %d, want 302; body = %s", sess.Code, sess.Body)
 	}
 }
 
@@ -1339,12 +1422,12 @@ func TestServeBlobNotFound(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/api/ -run TestServeBlob -v`
 Expected: FAIL — 404 on `/blob/{hash}`.
 
-- [ ] **Step 3: Write eitherAuth**
+- [ ] **Step 4: Write eitherAuth**
 
 Append to `internal/api/server.go`, next to `auth`:
 
@@ -1353,9 +1436,12 @@ Append to `internal/api/server.go`, next to `auth`:
 // route both audiences fetch directly: a browser <img> carries the session
 // cookie, the CLI and agents carry a token.
 //
-// The content-addressed URL is unguessable, and that is NOT the access
-// control -- task bodies carry pre-release design work, so an
-// unauthenticated blob route is a public bucket with extra steps.
+// It mirrors webAuth's bypass deliberately. With no web auth provider
+// configured the read-only UI is unauthenticated, so a blob route that
+// authenticated unconditionally would render a task page fine and 401 every
+// image on it. Blobs are not the place to unilaterally tighten the
+// installation's auth model -- spec 021 Q021.4 tracks fixing that at the UI
+// level.
 func (s *server) eitherAuth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && token != "" {
@@ -1371,7 +1457,13 @@ func (s *server) eitherAuth(next http.HandlerFunc) http.Handler {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		// No bearer token: fall back to a web session. Session cookies are
+		// Same bypass as webAuth: no provider configured means the whole web
+		// surface is open, and blobs match it.
+		if s.oidc == nil && s.gh == nil {
+			next(w, r)
+			return
+		}
+		// Otherwise fall back to a web session. Session cookies are
 		// SameSite=Lax, which withholds them from cross-site subresource
 		// loads -- so an attacker page embedding <img src="/blob/..."> gets
 		// a 401 rather than a probe for what a logged-in victim can see.
@@ -1386,7 +1478,7 @@ func (s *server) eitherAuth(next http.HandlerFunc) http.Handler {
 }
 ```
 
-- [ ] **Step 4: Write the serve handler**
+- [ ] **Step 5: Write the serve handler**
 
 Append to `internal/api/blobs.go`:
 
@@ -1465,7 +1557,7 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 
 Add `"strings"` and `"time"` to the file's imports.
 
-- [ ] **Step 5: Register the route**
+- [ ] **Step 6: Register the route**
 
 In `internal/api/server.go`, next to the web routes (outside `/api/v1`, since this is an asset route reachable by both audiences):
 
@@ -1473,20 +1565,20 @@ In `internal/api/server.go`, next to the web routes (outside `/api/v1`, since th
 	mux.Handle("GET /blob/{hash}", s.eitherAuth(s.serveBlob))
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `go test ./internal/api/ -run 'TestServeBlob|TestUploadBlob' -v`
-Expected: PASS — ten tests.
+Expected: PASS — eleven tests.
 
-- [ ] **Step 7: Run the full suite**
+- [ ] **Step 8: Run the full suite**
 
 Run: `go test ./...`
 Expected: PASS, no regressions.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add internal/api/blobs.go internal/api/blobs_test.go internal/api/server.go
+git add internal/api/blobs.go internal/api/blobs_test.go internal/api/server.go internal/api/server_test.go internal/api/export_test.go
 git commit -m "feat(api): serve blobs via authenticated presigned redirect"
 ```
 
@@ -1551,7 +1643,8 @@ git commit -m "docs: blob storage configuration and presign verification"
 
 - `POST /api/v1/blobs` returns a hash for a PNG; a second identical upload returns the same body and stores one object.
 - A 100 MiB + 1 upload returns 413.
-- `GET /blob/{hash}` 302s to a presigned URL for a bearer token and for a web session, 401s with neither, 404s for an unknown hash, and sets `inline` for images and `attachment` for everything else.
+- `GET /blob/{hash}` 302s to a presigned URL for a bearer token and for a web session, 404s for an unknown hash, and sets `inline` for images and `attachment` for everything else.
+- With a web auth provider configured, an anonymous `GET /blob/{hash}` is 401; with no provider configured it passes through, matching `webAuth`.
 - With no `LODE_BLOB_ENDPOINT`, uploads return 501 and `go test ./...` passes unchanged.
 
 Continue with `2026-07-31-blobs-2-task-references-and-cli.md`.
