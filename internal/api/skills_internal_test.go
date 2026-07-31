@@ -428,3 +428,78 @@ func TestSyncSkillsTotalFailure(t *testing.T) {
 		t.Fatalf("generic 502 leaked the underlying error: %s", rr.Body)
 	}
 }
+
+// TestSyncSkillsConflictWhenSyncRunning covers the TryLock swap: a sync
+// already holding skillSyncMu (webhook push or boot, in practice) must make
+// the admin endpoint fail fast with 409, not block for up to
+// skillSyncTimeout and then surface a 502 that looks like a GitHub problem.
+func TestSyncSkillsConflictWhenSyncRunning(t *testing.T) {
+	st := store.OpenTestStore(t)
+	s := &server{
+		st:           st,
+		log:          slog.Default(),
+		skillSources: []skillsync.Source{{Repo: "acme/skills", Ref: "main", Glob: "skills/*"}},
+		skillSyncer: &skillsync.Syncer{Store: st, Fetch: func(ctx context.Context, repo, ref string) ([]byte, error) {
+			return nil, fmt.Errorf("must not be called: sync should short-circuit on the held lock")
+		}, Log: slog.Default()},
+	}
+
+	s.skillSyncMu.Lock()
+	defer s.skillSyncMu.Unlock()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills/sync", nil)
+	rr := httptest.NewRecorder()
+	s.syncSkills(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("sync while another is running: %d %s, want 409", rr.Code, rr.Body)
+	}
+}
+
+// TestRunSkillSyncCoalescesConcurrentCalls covers the same TryLock
+// coalescing from runSkillSync's side (the webhook/boot trigger path): a
+// second call while one is in flight must return immediately instead of
+// queueing behind it, and must never call Fetch.
+func TestRunSkillSyncCoalescesConcurrentCalls(t *testing.T) {
+	st := store.OpenTestStore(t)
+	s := &server{
+		st:           st,
+		log:          slog.Default(),
+		skillSources: []skillsync.Source{{Repo: "acme/skills", Ref: "main", Glob: "skills/*"}},
+		skillSyncer: &skillsync.Syncer{Store: st, Fetch: func(ctx context.Context, repo, ref string) ([]byte, error) {
+			return nil, fmt.Errorf("must not be called: coalescing should skip this run entirely")
+		}, Log: slog.Default()},
+	}
+
+	// Simulate a sync already in flight.
+	s.skillSyncMu.Lock()
+	defer s.skillSyncMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.runSkillSync(context.Background(), "test")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runSkillSync blocked instead of coalescing via TryLock")
+	}
+}
+
+// TestRunSkillSyncNoopWithoutSyncer covers the nil-skillSyncer guard: a
+// server built without skill sources must not panic or block when the
+// webhook/boot trigger calls runSkillSync.
+func TestRunSkillSyncNoopWithoutSyncer(t *testing.T) {
+	s := &server{log: slog.Default()}
+
+	done := make(chan struct{})
+	go func() {
+		s.runSkillSync(context.Background(), "test")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runSkillSync did not return promptly with a nil skillSyncer")
+	}
+}

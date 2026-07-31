@@ -213,10 +213,14 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "no skill sources configured (LODE_SKILL_SOURCES)")
 		return
 	}
-	// Lock before deriving the timeout: a sync queued behind another must get
-	// its full budget once it actually starts, not spend part of it waiting
-	// here and then fail looking like a GitHub timeout.
-	s.skillSyncMu.Lock()
+	// TryLock, not Lock: a background sync (webhook push or boot) can hold
+	// this mutex for up to skillSyncTimeout. Blocking the admin request that
+	// long and then failing with a 502 that looks like a GitHub problem is
+	// worse than an honest, immediate 409.
+	if !s.skillSyncMu.TryLock() {
+		writeErr(w, http.StatusConflict, "skill sync already running")
+		return
+	}
 	defer s.skillSyncMu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), skillSyncTimeout)
 	defer cancel()

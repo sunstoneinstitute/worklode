@@ -26,9 +26,10 @@ import (
 const maxGitHubBody = 5 << 20
 
 type githubHandler struct {
-	st     *store.Store
-	secret string
-	log    *slog.Logger
+	st          *store.Store
+	secret      string
+	log         *slog.Logger
+	onSkillPush func(repo, branch string) bool
 }
 
 // NewGitHubHandler returns the POST /hooks/github handler. It verifies the
@@ -36,15 +37,21 @@ type githubHandler struct {
 // (keyed by X-GitHub-Delivery), and applies the per-event effects. An empty
 // secret makes the handler refuse all requests with 503 — a misconfigured
 // server must not accept unauthenticated webhooks.
-func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger) http.Handler {
+//
+// onSkillPush, if non-nil, is consulted on every push event with the repo and
+// target branch; a true result marks the event "push.skills" instead of
+// running the normal apply path (see ServeHTTP). Pass nil where skill sources
+// are not configured.
+func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &githubHandler{st: st, secret: secret, log: log}
+	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush}
 }
 
 // envelope is the part of every GitHub webhook payload the router needs.
 type envelope struct {
+	Ref        string `json:"ref"`
 	Action     string `json:"action"`
 	Repository struct {
 		FullName      string `json:"full_name"`
@@ -122,6 +129,16 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		typ = event + "." + env.Action
 	}
 
+	// A push to a configured skill source triggers a sync instead of the
+	// normal apply path, whether or not its repo also maps to a project.
+	skillPush := false
+	if event == "push" && h.onSkillPush != nil {
+		if branch, ok := strings.CutPrefix(env.Ref, "refs/heads/"); ok &&
+			h.onSkillPush(env.Repository.FullName, branch) {
+			skillPush = true
+		}
+	}
+
 	// Resolve the repo → project mapping before recording, so an unmapped
 	// repo's event is stored with a ".ignored" type and an empty apply. Only
 	// the existence of the mapping matters here; the handlers work from the
@@ -139,9 +156,12 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var apply func(tx *sql.Tx, eventID int64) error
-	if ignored {
+	switch {
+	case skillPush:
+		typ = "push.skills"
+	case ignored:
 		typ += ".ignored"
-	} else {
+	default:
 		apply = h.applyFunc(event, env, body)
 	}
 
@@ -154,6 +174,8 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !inserted:
 		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
+	case skillPush:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	case ignored:
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 	default:
