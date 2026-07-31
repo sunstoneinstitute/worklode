@@ -1012,6 +1012,13 @@ func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([
 	return c.do(ctx, http.MethodPost, "/api/v1/inbox/dismiss", map[string]any{"repo": repo, "number": number})
 }
 
+// LinkIssue calls POST /api/v1/inbox/link (204, no body): attach an inbox
+// issue to a task that already exists.
+func (c *Client) LinkIssue(ctx context.Context, repo string, number int64, taskID string) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/inbox/link",
+		map[string]any{"repo": repo, "number": number, "task_id": taskID})
+}
+
 // ImportInput is the request body for ImportInbox. An empty State means the
 // server default, "open".
 type ImportInput struct {

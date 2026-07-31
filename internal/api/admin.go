@@ -528,6 +528,50 @@ func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type linkRequest struct {
+	Repo   string `json:"repo"`
+	Number int64  `json:"number"`
+	TaskID string `json:"task_id"`
+}
+
+// linkInbox handles POST /api/v1/inbox/link: mark an inbox issue as covered
+// by a task that already exists, instead of creating a new one.
+func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
+	var req linkRequest
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if strings.TrimSpace(req.Repo) == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "repo is required")
+		return
+	}
+	if strings.TrimSpace(req.TaskID) == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "task_id is required")
+		return
+	}
+
+	extID, err := randomExternalID()
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.linked", payload,
+		func(tx *sql.Tx, _ int64) error {
+			return store.LinkIssue(tx, req.Repo, req.Number, req.TaskID)
+		})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- board ---------------------------------------------------------------
 
 type holderJSON struct {
