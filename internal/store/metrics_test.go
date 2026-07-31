@@ -1,8 +1,10 @@
 package store
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -61,5 +63,95 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.expire(3)
 }
 
-// keep testutil imported before Task 2 fills in behavioral assertions
-var _ = testutil.ToFloat64
+// TestLeaseMetricsCounters drives claim/renew/release/expire through a store
+// with metrics attached and asserts the counters.
+func TestLeaseMetricsCounters(t *testing.T) {
+	s, now := openLeaseStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	// Claim ok, then a second claim → leased.
+	if _, err := s.Claim(ctx, task.ID, "stig", "host:/wt-a", 0); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := s.Claim(ctx, task.ID, "stig", "host:/wt-b", 0); !errors.Is(err, ErrLeased) {
+		t.Fatalf("second claim err = %v, want ErrLeased", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim", "ok")); got != 1 {
+		t.Fatalf("claims{claim,ok} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim", "leased")); got != 1 {
+		t.Fatalf("claims{claim,leased} = %v, want 1", got)
+	}
+
+	// Active-lease collector sees the one live lease.
+	if got := testutil.ToFloat64(&leaseCollector{db: s.db, now: s.Now}); got != 1 {
+		t.Fatalf("worklode_leases_active = %v, want 1", got)
+	}
+
+	// Renew by a non-holder → error; by the holder → ok.
+	if _, err := s.Renew(ctx, task.ID, "nobody", 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("renew by non-holder err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.Renew(ctx, task.ID, "stig", 0); err != nil {
+		t.Fatalf("renew: %v", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.renewals.WithLabelValues("error")); got != 1 {
+		t.Fatalf("renewals{error} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.renewals.WithLabelValues("ok")); got != 1 {
+		t.Fatalf("renewals{ok} = %v, want 1", got)
+	}
+
+	// Release ok.
+	if err := s.Release(ctx, task.ID, "stig"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.releases.WithLabelValues("ok")); got != 1 {
+		t.Fatalf("releases{ok} = %v, want 1", got)
+	}
+
+	// Re-claim, then expire it: expiries counts 1.
+	if _, err := s.Claim(ctx, task.ID, "stig", "host:/wt-a", time.Second); err != nil {
+		t.Fatalf("re-claim: %v", err)
+	}
+	*now = now.Add(time.Hour)
+	n, err := s.ExpireLeases(ctx, *now)
+	if err != nil || n != 1 {
+		t.Fatalf("ExpireLeases = (%d, %v), want (1, nil)", n, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.expiries); got != 1 {
+		t.Fatalf("expiries = %v, want 1", got)
+	}
+}
+
+// TestClaimNextMetrics: an empty ready set records claim_next/none; a
+// successful pickup records claim_next/ok (plus its internal claim/ok).
+func TestClaimNextMetrics(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "host:/wt-x"})
+	if err != nil || res.Claimed {
+		t.Fatalf("ClaimNext on empty set = (%+v, %v), want unclaimed, nil", res, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "none")); got != 1 {
+		t.Fatalf("claims{claim_next,none} = %v, want 1", got)
+	}
+
+	createTask(t, s, leaseTestNow, defaultTaskInput())
+	res, err = s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "host:/wt-x"})
+	if err != nil || !res.Claimed {
+		t.Fatalf("ClaimNext = (%+v, %v), want claimed, nil", res, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "ok")); got != 1 {
+		t.Fatalf("claims{claim_next,ok} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim", "ok")); got != 1 {
+		t.Fatalf("claims{claim,ok} = %v, want 1", got)
+	}
+}
