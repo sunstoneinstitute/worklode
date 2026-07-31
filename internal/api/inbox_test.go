@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -48,7 +49,10 @@ func TestLinkInbox(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
 	}
 
-	issues, _ := st.ListIssues(context.Background(), "", "")
+	issues, err := st.ListIssues(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
 	if issues[0].TriageState != "promoted" || issues[0].TaskID == nil || *issues[0].TaskID != taskID {
 		t.Fatalf("issue = %+v, want promoted and linked to %s", issues[0], taskID)
 	}
@@ -88,7 +92,9 @@ func TestPromoteDraft(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
 	}
 	var got map[string]any
-	json.Unmarshal(rr.Body.Bytes(), &got)
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if got["state"] != "draft" {
 		t.Fatalf("state = %v, want draft — a bulk-promoted backlog must be stageable", got["state"])
 	}
@@ -106,7 +112,10 @@ func TestPromoteRejectsEpicKind(t *testing.T) {
 		t.Fatalf("status = %d, want 422 — a childless epic can never leave in_progress", rr.Code)
 	}
 
-	issues, _ := st.ListIssues(context.Background(), "", "")
+	issues, err := st.ListIssues(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
 	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
 		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
 	}
@@ -128,7 +137,9 @@ func TestPromoteUnderEpic(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
 	}
 	var got map[string]any
-	json.Unmarshal(rr.Body.Bytes(), &got)
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 
 	parent, err := st.ParentOf(context.Background(), got["id"].(string))
 	if err != nil {
@@ -150,9 +161,50 @@ func TestPromoteUnknownParentIs404(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rr.Code)
 	}
+	// Not just any 404: it must be the named pre-check in promoteInbox
+	// (internal/api/admin.go), not an anonymous 404 that AddEdge's own
+	// ErrNotFound would produce just as well.
+	if !strings.Contains(rr.Body.String(), "parent not found: PR-999") {
+		t.Fatalf("body = %s, want it to name the missing parent", rr.Body)
+	}
 
-	issues, _ := st.ListIssues(context.Background(), "", "")
+	issues, err := st.ListIssues(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
 	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
 		t.Fatalf("issue = %+v, want unchanged — a 404'd promote must not write anything", issues[0])
+	}
+}
+
+// TestPromoteRejectsNonEpicParent covers the invariant --parent's help text
+// promises ("make the new task a child of this epic"): promoting under a
+// task that exists but isn't an epic must be rejected, not silently filed.
+// store.AddEdge -> checkHierarchy (internal/store/hierarchy.go) returns
+// ErrInvalidInput for a non-epic parent, and mapStoreErr
+// (internal/api/server.go) maps ErrInvalidInput to 422 — the same status
+// TestPromoteRejectsEpicKind above expects for the mirror-image mistake.
+func TestPromoteRejectsNonEpicParent(t *testing.T) {
+	st, h, token := newTestServer(t)
+	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
+	seedIssue(t, st, "acme/widgets", 1, "an issue")
+
+	notEpic := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "not an epic", "priority": "low", "kind": "bug",
+	})["id"].(string)
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": notEpic,
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 — %s is not an epic", rr.Code, notEpic)
+	}
+
+	issues, err := st.ListIssues(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
+	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
+		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
 	}
 }
