@@ -1,6 +1,8 @@
 package embed
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,6 +15,7 @@ type Metrics struct {
 	duration prometheus.Histogram
 }
 
+// NewMetrics registers the embedding instruments on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -36,6 +39,13 @@ func (m *Metrics) Requests() *prometheus.CounterVec {
 
 func (m *Metrics) observe(err error, d time.Duration) {
 	if m == nil {
+		return
+	}
+	// A cancelled call says nothing about the provider: at shutdown the sync
+	// loop keeps calling Embed against a dead context, one fast failure per
+	// remaining skill. Counting those spikes the error rate on every restart.
+	// A deadline that expired is still a real failure and stays counted.
+	if errors.Is(err, context.Canceled) {
 		return
 	}
 	m.duration.Observe(d.Seconds())

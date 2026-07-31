@@ -226,6 +226,20 @@ func TestEmbedMetrics(t *testing.T) {
 	if got := testutil.ToFloat64(m.Requests().WithLabelValues("error")); got != 1 {
 		t.Fatalf("requests{error} = %v, want 1", got)
 	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var count uint64
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_embed_request_duration_seconds" {
+			count = mf.GetMetric()[0].GetHistogram().GetSampleCount()
+		}
+	}
+	if count != 2 {
+		t.Fatalf("duration observations = %d, want 2 (the failed call must be timed, the empty one must not)", count)
+	}
 }
 
 func TestOpenAIID(t *testing.T) {
