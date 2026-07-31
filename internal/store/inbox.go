@@ -107,6 +107,43 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 	return task, nil
 }
 
+// LinkIssue attaches an inbox issue to a task that already exists — the third
+// triage outcome, for an issue whose work is already tracked. Like
+// PromoteIssue it requires triage_state='new' and sets triage_state='promoted':
+// "this issue has a task" is exactly what promoted means, so no new
+// triage_state value (and no migration) is needed. The task must exist.
+func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
+	var triageState string
+	err := tx.QueryRow(
+		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
+	).Scan(&triageState)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("get issue %s#%d triage_state: %w", repo, number, err)
+	}
+	if triageState != "new" {
+		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
+	}
+
+	exists, err := taskExists(tx, taskID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE issues SET triage_state = 'promoted', task_id = $1 WHERE repo = $2 AND number = $3`,
+		taskID, repo, number,
+	); err != nil {
+		return fmt.Errorf("link issue %s#%d to %s: %w", repo, number, taskID, err)
+	}
+	return nil
+}
+
 // DismissIssue marks an inbox issue triage_state=dismissed. The issue must
 // currently be triage_state='new'. Returns ErrNotFound if no such issue
 // exists.
