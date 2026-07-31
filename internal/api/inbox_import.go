@@ -110,9 +110,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 
 	resp := importResponse{Repo: req.Repo, Truncated: truncated, DryRun: req.DryRun}
 
-	// count is called at most once — s.st.Tx (and RecordEvent, which wraps
-	// it) runs its function exactly once, with no retry — so mutating resp's
-	// counters directly from inside the closure cannot double-count.
+	// Safe to mutate resp here: RecordEvent runs apply exactly once, no retry.
 	count := func(tx *sql.Tx) error {
 		haveIssues, err := store.ExistingIssueNumbers(tx, req.Repo)
 		if err != nil {
@@ -188,6 +186,13 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 						state = "merged"
 					}
 				}
+				// list.go leaves MergedAt raw (it's a transport type); match
+				// the webhook path's guard (internal/hooks/github.go) so a
+				// closed-unmerged PR never gets a non-nil merged_at.
+				var mergedAt *time.Time
+				if pr.MergedAt != nil && !pr.MergedAt.IsZero() {
+					mergedAt = pr.MergedAt
+				}
 				if _, err := store.UpsertPR(tx, store.PullRequest{
 					Repo:     req.Repo,
 					Number:   pr.Number,
@@ -198,7 +203,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 					MergeSHA: pr.MergeCommitSHA,
 					URL:      pr.HTMLURL,
 					OpenedAt: pr.CreatedAt,
-					MergedAt: pr.MergedAt,
+					MergedAt: mergedAt,
 				}, pr.Body); err != nil {
 					return err
 				}

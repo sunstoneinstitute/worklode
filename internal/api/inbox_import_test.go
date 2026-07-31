@@ -293,3 +293,34 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		t.Fatalf("task state = %q, want ready — importing a merged PR must not replay the delivery lifecycle", task.State)
 	}
 }
+
+// A GitHub list response can carry a zero merged_at ("0001-01-01T00:00:00Z")
+// on a closed-unmerged PR (list.go leaves it un-normalized; ListPulls
+// derives Merged from the same raw value). Import must not store that zero
+// time as merged_at, matching the webhook path's guard.
+func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
+	pulls := []map[string]any{{
+		"number": 1, "title": "closed without merge", "state": "closed",
+		"html_url": "https://gh/pr/1", "created_at": "2026-01-01T00:00:00Z",
+		"updated_at": "2026-01-02T00:00:00Z", "merged_at": "0001-01-01T00:00:00Z",
+		"head": map[string]any{"ref": "unrelated-branch", "sha": "cafe"},
+	}}
+	app := importGitHub(t, nil, pulls)
+	st, post := importServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "all", "include_prs": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+
+	pr, err := st.GetPR(context.Background(), "acme/widgets", 1)
+	if err != nil {
+		t.Fatalf("get pr: %v", err)
+	}
+	if pr.State != "closed" {
+		t.Fatalf("state = %q, want closed", pr.State)
+	}
+	if pr.MergedAt != nil {
+		t.Fatalf("merged_at = %v, want nil for a closed-unmerged PR", pr.MergedAt)
+	}
+}
