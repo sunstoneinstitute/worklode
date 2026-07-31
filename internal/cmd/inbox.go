@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +16,8 @@ func newInboxCmd() *cobra.Command {
 		Use:   "inbox",
 		Short: "Triage GitHub issues into tasks",
 	}
-	cmd.AddCommand(newInboxListCmd(), newInboxPromoteCmd(), newInboxDismissCmd())
+	cmd.AddCommand(newInboxListCmd(), newInboxPromoteCmd(), newInboxDismissCmd(),
+		newInboxImportCmd())
 	return cmd
 }
 
@@ -133,5 +135,57 @@ func newInboxDismissCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func newInboxImportCmd() *cobra.Command {
+	var state, since string
+	var includePRs, dryRun bool
+	cmd := &cobra.Command{
+		Use:   "import <repo>",
+		Short: "Backfill an inbox from a repo's existing GitHub issues",
+		Long: "Pages the GitHub REST API and upserts through the same path the webhooks use.\n" +
+			"Re-running is safe and leaves already-triaged issues alone.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			in := cli.ImportInput{
+				Repo: args[0], State: state, IncludePRs: includePRs, DryRun: dryRun,
+			}
+			if since != "" {
+				t, err := time.Parse(time.RFC3339, since)
+				if err != nil {
+					return fmt.Errorf("invalid --since %q: want RFC3339, e.g. 2026-01-01T00:00:00Z: %w", since, err)
+				}
+				in.Since = &t
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			res, raw, err := c.ImportInbox(cmd.Context(), in)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			out := cmd.OutOrStdout()
+			prefix := ""
+			if res.DryRun {
+				prefix = "would import: "
+			}
+			fmt.Fprintf(out, "%s%s: %d new, %d updated issues; %d new, %d updated PRs\n",
+				prefix, res.Repo, res.Issues.New, res.Issues.Updated, res.PRs.New, res.PRs.Updated)
+			if res.Truncated {
+				fmt.Fprintf(out, "warning: hit the page cap; re-run with --since to get the rest\n")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&state, "state", "open", `which to import: "open", "closed", or "all"`)
+	cmd.Flags().BoolVar(&includePRs, "include-prs", false, "also import pull requests")
+	cmd.Flags().StringVar(&since, "since", "", "only items updated at or after this RFC3339 time")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be imported without writing")
 	return cmd
 }
