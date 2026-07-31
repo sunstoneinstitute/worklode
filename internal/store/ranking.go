@@ -245,6 +245,7 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 		return nil, err
 	}
 	if len(candidates) == 0 {
+		s.metrics.claim("claim_next", "none")
 		return &ClaimNextResult{Claimed: false}, nil
 	}
 
@@ -287,10 +288,13 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 			if errors.Is(err, ErrLeased) || errors.Is(err, ErrBlocked) || errors.Is(err, ErrBadTransition) {
 				continue
 			}
+			s.metrics.claim("claim_next", "error")
 			return nil, err
 		}
 		task := t
+		s.metrics.claim("claim_next", "ok")
 		return &ClaimNextResult{Claimed: true, Task: &task, FanOut: fanOut[t.ID], Lease: lease}, nil
 	}
+	s.metrics.claim("claim_next", "none")
 	return &ClaimNextResult{Claimed: false}, nil
 }
