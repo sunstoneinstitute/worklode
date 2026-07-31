@@ -15,11 +15,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 )
 
-// maxExtracted caps the unpacked size of one skill version. A var, not a
-// const, so tests can lower it instead of building an 8 MiB fixture.
-var maxExtracted int64 = 8 << 20
+// maxExtracted caps the unpacked size of one skill version, and maxEntries
+// caps the file count — bytes alone don't stop an archive of many
+// zero-byte files from exhausting inodes. Both are vars, not consts, so
+// tests can lower them instead of building huge fixtures.
+var (
+	maxExtracted int64 = 8 << 20
+	maxEntries         = 2000
+)
 
 // Root returns the local skill dir: $LODE_SKILLS_DIR or ~/.worklode/skills.
 func Root() (string, error) {
@@ -41,12 +48,19 @@ func validName(name string) bool {
 	return name != "" && !strings.ContainsAny(name, `/\`) && name != "." && name != ".." && !strings.HasPrefix(name, ".")
 }
 
+// validHash requires lowercase hex only: uppercase would collide with
+// lowercase store dirs on a case-insensitive filesystem (macOS default
+// APFS), silently mixing two versions under one path.
 func validHash(hash string) bool {
-	if len(hash) < 6 {
+	if len(hash) < 6 || len(hash)%2 != 0 {
 		return false
 	}
-	_, err := hex.DecodeString(hash)
-	return err == nil
+	for _, r := range hash {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // Ensure makes <root>/<name> point at the unpacked version identified by
@@ -60,26 +74,31 @@ func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, erro
 		return "", fmt.Errorf("skill hash %q: invalid", hash)
 	}
 	dst := filepath.Join(root, ".store", hash)
-	if _, err := os.Stat(dst); err != nil {
+	if info, err := os.Stat(dst); err != nil || !info.IsDir() {
 		data, err := fetch()
 		if err != nil {
 			return "", fmt.Errorf("fetch skill %s@%s: %w", name, hash, err)
 		}
-		if err := extract(data, dst); err != nil {
+		if err := extract(data, dst, hash); err != nil {
 			return "", fmt.Errorf("extract skill %s@%s: %w", name, hash, err)
 		}
 	}
 	link := Path(root, name)
-	if err := swapSymlink(dst, link); err != nil {
+	// The symlink target is store-relative (".store/<hash>", not the
+	// absolute or root-prefixed dst): a symlink resolves relative to its
+	// own directory, which is always root — so this works whether root
+	// itself is relative or absolute, and keeps the store relocatable.
+	if err := swapSymlink(filepath.Join(".store", hash), link); err != nil {
 		return "", fmt.Errorf("link skill %s: %w", name, err)
 	}
 	return link, nil
 }
 
-// extract unpacks tgz into a sibling tmp dir, then renames it into place at
-// dst. The rename is the commit point: a half-extracted archive never
-// becomes visible at dst, and dst is immutable once it exists.
-func extract(tgz []byte, dst string) error {
+// extract unpacks tgz into a sibling tmp dir, verifies its content hashes to
+// wantHash, then renames it into place at dst. The rename is the commit
+// point: a half-extracted or hash-mismatched archive never becomes visible
+// at dst, and dst is immutable once it exists.
+func extract(tgz []byte, dst, wantHash string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(tgz))
 	if err != nil {
 		return err
@@ -96,6 +115,10 @@ func extract(tgz []byte, dst string) error {
 
 	tr := tar.NewReader(gz)
 	var total int64
+	var entries int
+	// Keyed by path: a duplicate entry overwrites on disk (last write wins),
+	// so the hash we verify must reflect the same collapse, not both writes.
+	hashed := map[string]skillhash.File{}
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -106,6 +129,10 @@ func extract(tgz []byte, dst string) error {
 		}
 		if h.Typeflag != tar.TypeReg {
 			continue // symlinks, dirs, etc: never materialized or followed
+		}
+		entries++
+		if entries > maxEntries {
+			return fmt.Errorf("archive exceeds %d entries", maxEntries)
 		}
 		rel := filepath.Clean(h.Name)
 		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -119,6 +146,14 @@ func extract(tgz []byte, dst string) error {
 			return fmt.Errorf("archive exceeds %d bytes", maxExtracted)
 		}
 
+		content, err := io.ReadAll(tr)
+		if err != nil {
+			return fmt.Errorf("archive entry %q: %w", h.Name, err)
+		}
+		if int64(len(content)) != h.Size {
+			return fmt.Errorf("archive entry %q: short read (%d of %d bytes)", h.Name, len(content), h.Size)
+		}
+
 		p := filepath.Join(tmp, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
@@ -126,32 +161,31 @@ func extract(tgz []byte, dst string) error {
 		// Only the exec bit survives from the archive header; mask everything
 		// else so a hostile archive can't request setuid/setgid/sticky bits.
 		perm := os.FileMode(0o644)
-		if h.Mode&0o111 != 0 {
+		exec := h.Mode&0o111 != 0
+		if exec {
 			perm = 0o755
 		}
-		f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
-		if err != nil {
+		if err := os.WriteFile(p, content, perm); err != nil {
 			return err
 		}
-		n, cerr := io.Copy(f, tr)
-		cerr2 := f.Close()
-		if cerr != nil {
-			return cerr
-		}
-		if cerr2 != nil {
-			return cerr2
-		}
-		if n != h.Size {
-			return fmt.Errorf("archive entry %q: short write (%d of %d bytes)", h.Name, n, h.Size)
-		}
+		hashed[rel] = skillhash.File{Path: rel, Data: content, Exec: exec}
+	}
+
+	files := make([]skillhash.File, 0, len(hashed))
+	for _, f := range hashed {
+		files = append(files, f)
+	}
+	if got := skillhash.Sum(files); got != wantHash {
+		return fmt.Errorf("content hash mismatch: want %s, got %s", wantHash, got)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, dst); err != nil {
-		// A concurrent Ensure won the race; its content is identical.
-		if _, statErr := os.Stat(dst); statErr == nil {
+		// A concurrent Ensure won the race; its content is identical because
+		// it verified against the same hash.
+		if info, statErr := os.Stat(dst); statErr == nil && info.IsDir() {
 			return nil
 		}
 		return err
@@ -174,6 +208,7 @@ func swapSymlink(target, link string) error {
 	if err := os.Symlink(target, tmp); err != nil {
 		return err
 	}
+	defer os.Remove(tmp) // no-op once rename consumes it; cleans up on failure
 	return os.Rename(tmp, link)
 }
 
