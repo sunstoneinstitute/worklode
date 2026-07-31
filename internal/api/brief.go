@@ -72,7 +72,7 @@ func toBriefJSON(b *store.Brief) briefJSON {
 // payload for a task (task row, branch, open blockers, active lease, and
 // pinned/recommended skills). Pins are already resolved by store.Brief, so
 // this calls skillMatches directly (excluding the pinned names) instead of
-// recommendation, which would re-resolve the same pins — see Task 12.
+// recommendation, which would re-resolve the same pins.
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	b, err := s.st.Brief(r.Context(), id)

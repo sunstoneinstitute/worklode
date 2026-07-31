@@ -47,8 +47,8 @@ func seedSkillDirect(t *testing.T, st *store.Store, name, description string) *s
 }
 
 // TestRecommendationPins exercises s.recommendation's pin-resolution branch
-// directly: task_id can't carry pins until Task 8 adds tasks.skills, so this
-// is the only path that exercises it before then.
+// directly, covering the not-found and soft-deleted warnings and the rule
+// that a pinned name never also appears in matches.
 func TestRecommendationPins(t *testing.T) {
 	st := store.OpenTestStore(t)
 
@@ -356,12 +356,11 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	return len(resp.Matches)
 }
 
-// TestRecommendationPinsSurviveProviderFailure covers I3's other half: pins
-// can only be exercised by calling recommendation() directly until Task 8
-// wires tasks.skills onto the wire, but the degrade-to-pins-only guarantee
-// must hold together with pins specifically, not just in isolation. Both a
-// hard failure (500) and a timeout past recommendTimeout must still return
-// the pin's inline content, an empty match list, and a warning.
+// TestRecommendationPinsSurviveProviderFailure: the degrade-to-pins-only
+// guarantee must hold together with pins specifically, not just in
+// isolation. Both a hard failure (500) and a timeout past recommendTimeout
+// must still return the pin's inline content, an empty match list, and a
+// warning.
 func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 	st := store.OpenTestStore(t)
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
@@ -520,9 +519,9 @@ func tarballOf(t *testing.T, root string, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// TestSyncSkillsPartialFailure covers I4: one source fetch fails, one
-// succeeds, and the real work done by the successful one must survive in
-// the response rather than being thrown away behind a bare 502.
+// TestSyncSkillsPartialFailure: one source fetch fails, one succeeds, and the
+// real work done by the successful one must survive in the response rather
+// than being thrown away behind a bare 502.
 func TestSyncSkillsPartialFailure(t *testing.T) {
 	st := store.OpenTestStore(t)
 	goodTarball := tarballOf(t, "acme-good-sha1", map[string]string{
@@ -648,7 +647,7 @@ func TestSyncSkillsCoalescesPendingPush(t *testing.T) {
 	}
 }
 
-// TestSyncSkillsTotalFailure covers the zero-Summary branch of I4: when
+// TestSyncSkillsTotalFailure covers the zero-Summary branch: when
 // nothing at all synced, the response is a generic 502 (the detail is
 // logged server-side, not leaked — see mapStoreErr's "logged, not leaked"
 // convention).
