@@ -404,6 +404,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /api/v1/inbox", s.auth(s.listInbox))
 	mux.Handle("POST /api/v1/inbox/promote", s.auth(s.promoteInbox))
 	mux.Handle("POST /api/v1/inbox/dismiss", s.auth(s.dismissInbox))
+	mux.Handle("POST /api/v1/inbox/import", s.auth(requireAdmin(s.importInbox)))
 
 	mux.Handle("GET /api/v1/board", s.auth(s.board))
 
