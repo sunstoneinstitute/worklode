@@ -101,6 +101,15 @@ inside one request; beyond it the response says `truncated` and the caller
 reruns with `--since`. A job table, a status endpoint, and retry semantics buy
 nothing at the scale onboarding actually has.
 
+That resume only works because the fetch fixes the ordering. GitHub defaults
+these endpoints to `sort=created&direction=desc`, which would put the *newest*
+items on page 1 and truncate the oldest — and since `since` filters on
+`updated_at >= T`, rerunning could only ever return a subset of what the first
+run already had. Paging `sort=updated&direction=asc` instead puts the truncated
+tail at the *newest* end, so `--since` becomes a cursor rather than a filter.
+The response carries `newest_updated_at` when it truncates, and the CLI prints
+the exact rerun.
+
 ### `--state open` by default
 
 Whether closed and merged history is worth importing is a per-repo judgement,
@@ -121,8 +130,9 @@ func (a *AppAuth) ListIssues(ctx context.Context, repo, state string, since time
 func (a *AppAuth) ListPulls(ctx context.Context, repo, state string, maxPages int) ([]PullRequest, bool, error)
 ```
 
-Both page `?per_page=100&page=N` until a short page or `maxPages`, returning
-`truncated` rather than parsing Link headers. They return plain structs
+Both page `?sort=updated&direction=asc&per_page=100&page=N` until a short page
+or `maxPages`, returning `truncated` rather than parsing Link headers. The
+ordering is what makes `--since` a resume cursor, as above. They return plain structs
 carrying exactly the fields the webhook appliers read, so the new file needs no
 `store` import at all — assembling `store.Issue` / `store.PullRequest` is the
 API layer's job, as it already is for webhook payloads.
