@@ -20,6 +20,9 @@ patches:
       - op: replace
         path: /data/LODE_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
+      - op: replace
+        path: /data/LODE_SKILL_SOURCES
+        value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
   - target:
       kind: Ingress
       name: worklode-ingress
