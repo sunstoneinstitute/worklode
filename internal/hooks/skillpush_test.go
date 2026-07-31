@@ -24,7 +24,7 @@ func newEnvWithSkillPush(t *testing.T, onSkillPush func(repo, branch string) boo
 	}
 	return &env{
 		st: st,
-		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default(), onSkillPush),
+		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default(), onSkillPush, nil),
 	}
 }
 

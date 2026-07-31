@@ -40,7 +40,7 @@ func newFluxEnv(t *testing.T) *fluxEnv {
 
 	return &fluxEnv{
 		st: st,
-		h:  hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil),
+		h:  hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil, nil),
 	}
 }
 
@@ -182,7 +182,7 @@ func TestFluxSignatureRejected(t *testing.T) {
 
 func TestFluxEmptySecretIs503(t *testing.T) {
 	e := newFluxEnv(t)
-	h := hooks.NewFluxHandler(e.st, "", map[string]string{"prod-1": "prod"}, nil)
+	h := hooks.NewFluxHandler(e.st, "", map[string]string{"prod-1": "prod"}, nil, nil)
 	rr := fluxDeliver(t, h, "kustomization_succeeded.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
@@ -443,7 +443,7 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 
 	t.Run("unmapped cluster defaults to dev", func(t *testing.T) {
 		st := store.OpenTestStore(t)
-		h := hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil)
+		h := hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil, nil)
 		e := &fluxEnv{st: st, h: h}
 
 		rr := fluxDeliverBody(t, e.h, mkBody("staging-9"))
@@ -471,7 +471,7 @@ const (
 // fluxHandlerFor returns a Flux handler sharing e's store, so GitHub and Flux
 // events land in the same database.
 func fluxHandlerFor(e *env, clusterEnv map[string]string) http.Handler {
-	return hooks.NewFluxHandler(e.st, fluxTestSecret, clusterEnv, nil)
+	return hooks.NewFluxHandler(e.st, fluxTestSecret, clusterEnv, nil, nil)
 }
 
 // fluxBody builds a Kustomization event. Distinct shas yield distinct bodies,

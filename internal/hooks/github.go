@@ -31,6 +31,7 @@ type githubHandler struct {
 	secret      string
 	log         *slog.Logger
 	onSkillPush func(repo, branch string) bool
+	metrics     *Metrics
 }
 
 // NewGitHubHandler returns the POST /hooks/github handler. It verifies the
@@ -44,11 +45,11 @@ type githubHandler struct {
 // running the normal apply path (see ServeHTTP). onSkillPush may be nil
 // (tests); production always passes a closure that reports false when no
 // skill sources are configured.
-func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool) http.Handler {
+func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, m *Metrics) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush}
+	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush, metrics: m}
 }
 
 // envelope is the part of every GitHub webhook payload the router needs.
@@ -90,6 +91,11 @@ func validSignature(secret string, body []byte, header string) bool {
 }
 
 func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	result := "error"
+	defer func() {
+		h.metrics.event("github", eventLabel(r.Header.Get("X-GitHub-Event")), result)
+	}()
+
 	if h.secret == "" {
 		writeErr(w, http.StatusServiceUnavailable, "github webhook secret not configured")
 		return
@@ -109,6 +115,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validSignature(h.secret, body, r.Header.Get("X-Hub-Signature-256")) {
+		result = "rejected"
 		writeErr(w, http.StatusUnauthorized, "invalid signature")
 		return
 	}
@@ -175,12 +182,16 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case !inserted:
+		result = "ok"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
 	case skillPush:
+		result = "ok"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	case ignored:
+		result = "ignored"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 	default:
+		result = "ok"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
