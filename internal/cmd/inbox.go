@@ -220,13 +220,17 @@ func newInboxImportCmd() *cobra.Command {
 			}
 			fmt.Fprintf(out, "%s%s: %d new, %d updated issues; %d new, %d updated PRs\n",
 				prefix, res.Repo, res.Issues.New, res.Issues.Updated, res.PRs.New, res.PRs.Updated)
-			if res.Truncated {
+			if res.Issues.Truncated {
 				if res.NewestUpdatedAt != nil {
-					fmt.Fprintf(out, "warning: hit the page cap; re-run with --since %s to continue\n",
+					fmt.Fprintf(out, "warning: hit the page cap on issues; re-run with --since %s to continue\n",
 						res.NewestUpdatedAt.UTC().Format(time.RFC3339))
 				} else {
-					fmt.Fprintf(out, "warning: hit the page cap; re-run with --since to get the rest\n")
+					fmt.Fprintf(out, "warning: hit the page cap on issues; re-run with --since to get the rest\n")
 				}
+			}
+			if res.PRs.Truncated {
+				fmt.Fprintf(out, "warning: hit the page cap on PRs; --since cannot resume pull requests "+
+					"(GitHub's /pulls has no since filter) — narrow the run instead, e.g. --state open\n")
 			}
 			return nil
 		},

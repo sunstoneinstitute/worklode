@@ -106,9 +106,14 @@ these endpoints to `sort=created&direction=desc`, which would put the *newest*
 items on page 1 and truncate the oldest — and since `since` filters on
 `updated_at >= T`, rerunning could only ever return a subset of what the first
 run already had. Paging `sort=updated&direction=asc` instead puts the truncated
-tail at the *newest* end, so `--since` becomes a cursor rather than a filter.
-The response carries `newest_updated_at` when it truncates, and the CLI prints
-the exact rerun.
+tail at the *newest* end, so `--since` becomes a cursor rather than a filter —
+but only for issues: `/issues` accepts `since` server-side, `/pulls` does not.
+`issues.truncated` and `prs.truncated` are therefore reported independently,
+and `newest_updated_at` is computed from the issues stream only, set when
+issues truncate. A truncated PR list cannot be resumed via `--since` at all
+(rerunning refetches the same first `maxPages` pages and merely re-filters
+them client-side); the CLI instead tells the caller to narrow the run, e.g.
+`--state open`. The CLI prints the exact rerun for issues.
 
 ### `--state open` by default
 
