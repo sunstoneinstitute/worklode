@@ -456,10 +456,13 @@ func (s *server) syncOnce(ctx context.Context, reason string) {
 	defer cancel()
 	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
 	if err != nil {
-		s.log.Warn("skill sync failed", "reason", reason, "err", err)
+		// Error, matching the HTTP path: a background failure has no caller
+		// watching a response, so the log is the only signal there is.
+		s.log.Error("skill sync failed", "reason", reason, "err", err)
 		return
 	}
-	s.log.Info("skill sync", "reason", reason, "synced", sum.Synced, "deleted", sum.Deleted)
+	s.log.Info("skill sync", "reason", reason, "synced", sum.Synced,
+		"changed", sum.Changed, "embedded", sum.Embedded, "deleted", sum.Deleted)
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {

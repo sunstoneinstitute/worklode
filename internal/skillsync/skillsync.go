@@ -50,7 +50,7 @@ type Summary struct {
 	Synced   int `json:"synced"`  // skills found and upserted
 	Changed  int `json:"changed"` // of those, new content this sync
 	Deleted  int `json:"deleted"`
-	Embedded int `json:"embedded"` // embedded by the convergence pass
+	Embedded int `json:"embedded"` // skills embedded, on content change or by convergence
 }
 
 func (sy *Syncer) log() *slog.Logger {
@@ -83,13 +83,14 @@ func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error
 		sum.Synced += s.Synced
 		sum.Changed += s.Changed
 		sum.Deleted += s.Deleted
+		sum.Embedded += s.Embedded
 		if err != nil {
 			errs = append(errs, fmt.Errorf("sync %s@%s: %w", src.Repo, src.Ref, err))
 		}
 	}
 	if sy.Embed != nil {
 		n, err := sy.embedMissing(ctx)
-		sum.Embedded = n
+		sum.Embedded += n
 		if err != nil {
 			errs = append(errs, fmt.Errorf("converge embeddings: %w", err))
 		}
@@ -194,6 +195,8 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 			if sy.Embed != nil {
 				if err := sy.reembed(ctx, id, u.Description, u.SkillMD); err != nil {
 					sy.warn(src, "skill embed failed", "skill", u.Name, "err", err)
+				} else {
+					sum.Embedded++
 				}
 			}
 		}
@@ -211,7 +214,8 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 	}
 	sum.Deleted = int(n)
 	sy.log().Info("synced skill source", "repo", src.Repo, "ref", src.Ref, "commit", commit,
-		"dirs", len(dirs), "synced", sum.Synced, "changed", sum.Changed, "deleted", sum.Deleted)
+		"dirs", len(dirs), "synced", sum.Synced, "changed", sum.Changed,
+		"embedded", sum.Embedded, "deleted", sum.Deleted)
 	return sum, nil
 }
 

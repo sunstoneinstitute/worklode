@@ -567,8 +567,9 @@ func TestSyncAllRecordsEmbeddingProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
-	// The skill was embedded as it changed, so convergence found nothing left.
-	if sum.Embedded != 0 {
+	// Embedded counts the change-driven embed too, not just convergence: a
+	// sync that re-embeds ten changed skills used to report "embedded": 0.
+	if sum.Embedded != 1 {
 		t.Fatalf("summary: %+v", sum)
 	}
 	got, err := st.EmbeddingProviderID(ctx)
