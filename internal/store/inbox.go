@@ -44,6 +44,30 @@ func UpsertIssue(tx *sql.Tx, is Issue) error {
 	return nil
 }
 
+// ExistingIssueNumbers returns the inbox issue numbers already stored for
+// repo. Import reads it before upserting so it can report new rows separately
+// from updated ones — the upsert itself cannot distinguish the two, and a
+// dry run must report the same split without writing.
+func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
+	rows, err := tx.Query(`SELECT number FROM issues WHERE repo = $1`, repo)
+	if err != nil {
+		return nil, fmt.Errorf("existing issue numbers for %s: %w", repo, err)
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("scan issue number: %w", err)
+		}
+		out[n] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("existing issue numbers for %s: %w", repo, err)
+	}
+	return out, nil
+}
+
 // PromoteIssue turns an inbox issue into a task: it creates the task via
 // CreateTask, then marks the issue triage_state=promoted, linking task_id and
 // recording appliesToVersions (marshalled to JSON). The issue must currently
@@ -81,6 +105,43 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 		return nil, fmt.Errorf("promote issue %s#%d: %w", repo, number, err)
 	}
 	return task, nil
+}
+
+// LinkIssue attaches an inbox issue to a task that already exists — the third
+// triage outcome, for an issue whose work is already tracked. Like
+// PromoteIssue it requires triage_state='new' and sets triage_state='promoted':
+// "this issue has a task" is exactly what promoted means, so no new
+// triage_state value (and no migration) is needed. The task must exist.
+func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
+	var triageState string
+	err := tx.QueryRow(
+		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
+	).Scan(&triageState)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("get issue %s#%d triage_state: %w", repo, number, err)
+	}
+	if triageState != "new" {
+		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
+	}
+
+	exists, err := taskExists(tx, taskID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE issues SET triage_state = 'promoted', task_id = $1 WHERE repo = $2 AND number = $3`,
+		taskID, repo, number,
+	); err != nil {
+		return fmt.Errorf("link issue %s#%d to %s: %w", repo, number, taskID, err)
+	}
+	return nil
 }
 
 // DismissIssue marks an inbox issue triage_state=dismissed. The issue must

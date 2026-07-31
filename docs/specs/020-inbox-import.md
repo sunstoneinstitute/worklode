@@ -1,6 +1,6 @@
 # Spec 020 — Inbox import (onboarding a repo with history)
 
-**Date:** 2026-07-31 · **Status:** design ·
+**Date:** 2026-07-31 · **Status:** spec ·
 **Umbrella:** `000-umbrella-architecture.md`
 **Area:** spec 002 (GitHub App auth — the installation token), spec 011
 (delivery lifecycle — what import must *not* replay), spec 018 (task
@@ -16,8 +16,8 @@ was registered stays invisible to Worklode forever.
 
 | Path into `issues` / `prs` | Caller |
 |---|---|
-| `store.UpsertIssue` | `internal/hooks/github.go:221` — the `issues` webhook, and nothing else |
-| `store.UpsertPR` | `internal/hooks/github.go:270` — the `pull_request` webhook, and nothing else |
+| `store.UpsertIssue` | `internal/hooks/github.go:244` — the `issues` webhook, and nothing else |
+| `store.UpsertPR` | `internal/hooks/github.go:293` — the `pull_request` webhook, and nothing else |
 | Any import, backfill, poll, or sync | **none** |
 
 `internal/cmd/` holds `admin, board, claude, currentproject, githooks, hook,
@@ -42,10 +42,10 @@ Three gaps compound it, all reachable from the same command:
   task claimable at once. Survivable when triaging arrivals one at a time;
   not survivable when 41 arrive together, and there is no un-ready command.
 - **Promote cannot reach the hierarchy.** `lode task add` gained `--parent`
-  (`internal/api/tasks.go:104`), promote did not — so an imported backlog
+  (`internal/api/tasks.go:111`), promote did not — so an imported backlog
   lands as loose tasks, never as an epic's children.
 - **No way to link an issue to an existing task.** `issues.task_id` is written
-  in exactly one place (`internal/store/inbox.go:76`), inside `PromoteIssue`,
+  in exactly one place (`internal/store/inbox.go:77`), inside `PromoteIssue`,
   which unconditionally creates a new task. The 35 horndb tasks already seeded
   with `lode task add` carry issue URLs in their bodies and no link; the only
   remedy today is abandoning all 35 and re-promoting, losing their priorities,
@@ -62,7 +62,7 @@ Nothing surfaced the mismatch; the cost was diagnosis time, not data.
 
 ## Decisions
 
-Taken here with rationale, pending sign-off.
+Taken here with rationale.
 
 | Decision | Choice |
 |---|---|
@@ -80,7 +80,7 @@ Taken here with rationale, pending sign-off.
 ### Import is inventory, not replay
 
 This is the load-bearing decision. `applyPullRequest`
-(`internal/hooks/github.go:230`) does two things: it upserts the PR row, and
+(`internal/hooks/github.go:253`) does two things: it upserts the PR row, and
 it drives the lifecycle — `Transition` to `in_review`, `CloseActiveLease`,
 `InsertTaskCommit`, `ResolveDelivery`. Import does the first and never the
 second.
@@ -88,7 +88,7 @@ second.
 Those transitions encode *this just happened*. Replaying two years of merged
 PRs through them would resolve delivery for tasks that were never in flight,
 and — since spec 018 — `store.Transition` now ends in `resolveParent`
-(`internal/store/tasks.go:205`), so it would roll that fiction up into epic
+(`internal/store/tasks.go:220`), so it would roll that fiction up into epic
 state as well. Import therefore calls the two `Upsert*` functions directly and
 nothing else. Correlation still happens, because it lives inside `UpsertPR`
 (head_ref, then body) and no-ops when the task does not exist.
@@ -101,6 +101,20 @@ inside one request; beyond it the response says `truncated` and the caller
 reruns with `--since`. A job table, a status endpoint, and retry semantics buy
 nothing at the scale onboarding actually has.
 
+That resume only works because the fetch fixes the ordering. GitHub defaults
+these endpoints to `sort=created&direction=desc`, which would put the *newest*
+items on page 1 and truncate the oldest — and since `since` filters on
+`updated_at >= T`, rerunning could only ever return a subset of what the first
+run already had. Paging `sort=updated&direction=asc` instead puts the truncated
+tail at the *newest* end, so `--since` becomes a cursor rather than a filter —
+but only for issues: `/issues` accepts `since` server-side, `/pulls` does not.
+`issues.truncated` and `prs.truncated` are therefore reported independently,
+and `newest_updated_at` is computed from the issues stream only, set when
+issues truncate. A truncated PR list cannot be resumed via `--since` at all
+(rerunning refetches the same first `maxPages` pages and merely re-filters
+them client-side); the CLI instead tells the caller to narrow the run, e.g.
+`--state open`. The CLI prints the exact rerun for issues.
+
 ### `--state open` by default
 
 Whether closed and merged history is worth importing is a per-repo judgement,
@@ -111,7 +125,7 @@ which is the second reason the default stays narrow.
 
 ## Design
 
-### Fetch — `internal/githubauth/list.go` (new)
+### Fetch — `internal/githubauth/list.go`
 
 Two functions beside `DiscoverDoneState` (`app.go:138`), reusing
 `InstallationToken` (`app.go:94`) and `githubJSON` (`githubauth.go:93`):
@@ -121,8 +135,9 @@ func (a *AppAuth) ListIssues(ctx context.Context, repo, state string, since time
 func (a *AppAuth) ListPulls(ctx context.Context, repo, state string, maxPages int) ([]PullRequest, bool, error)
 ```
 
-Both page `?per_page=100&page=N` until a short page or `maxPages`, returning
-`truncated` rather than parsing Link headers. They return plain structs
+Both page `?sort=updated&direction=asc&per_page=100&page=N` until a short page
+or `maxPages`, returning `truncated` rather than parsing Link headers. The
+ordering is what makes `--since` a resume cursor, as above. They return plain structs
 carrying exactly the fields the webhook appliers read, so the new file needs no
 `store` import at all — assembling `store.Issue` / `store.PullRequest` is the
 API layer's job, as it already is for webhook payloads.
@@ -141,14 +156,15 @@ parameter, so `--since` is applied server-side for issues and filtered on
 ```
 
 Registered `s.auth(requireAdmin(s.importInbox))` alongside the other inbox
-routes (`internal/api/server.go:301-303`). Admin, because this is an
-onboarding act like `add-repo` (`server.go:292`), not a triage act like
+routes (`internal/api/server.go:404-406`). Admin, because this is an
+onboarding act like `add-repo` (`server.go:395`), not a triage act like
 promote.
 
 Preconditions, in order: `503` when `s.appAuth` is nil (no App configured);
-`404` when `ProjectForRepo` finds no mapping — an unmapped repo's webhooks are
-recorded `.ignored` (`internal/hooks/github.go:143`), so its import must be
-refused for the same reason; `422` on an unknown `state`.
+`422` on an unknown `state`; `404` when `ProjectForRepo` finds no mapping — an
+unmapped repo's webhooks are recorded `.ignored`
+(`internal/hooks/github.go:164`), so its import must be refused for the same
+reason.
 
 The GitHub round trips happen outside any transaction under a 60s bound, then
 the whole result is applied in one `RecordEvent("cli", extID, "inbox.imported",
@@ -174,17 +190,17 @@ Three changes to `promoteRequest` (`internal/api/admin.go:411`),
 `cli.PromoteInput`, and the `lode inbox promote` flags:
 
 - **`draft`** → `store.TaskInput.Draft`, which already exists
-  (`internal/store/tasks.go:40`) and already yields state `draft`. Published
+  (`internal/store/tasks.go:44`) and already yields state `draft`. Published
   with the existing `lode task ready`. This is what makes a 41-issue backlog
   reviewable before it becomes claimable.
 - **`parent`** → `store.AddEdge(tx, now, t.ID, parent, "child_of")` inside the
   same `RecordEvent` as the promotion, mirroring `createTask`
-  (`internal/api/tasks.go:146-152`) including its named-404 pre-check
+  (`internal/api/tasks.go:154-159`) including its named-404 pre-check
   (`:104-114`), which exists so `AddEdge`'s `ErrNotFound` is not reported
   anonymously. `AddEdge` remains the authority on the spec-018 invariants.
 - **`kind = "epic"` is rejected with 422.** `validKinds` admits `epic`
   (`internal/api/tasks.go:18`), but `epicForbiddenStates`
-  (`internal/store/tasks.go:103`) bars an epic from `in_review`,
+  (`internal/store/tasks.go:108`) bars an epic from `in_review`,
   `deployed_dev`, `deployed_prod`, and `released`. An issue promoted as a
   childless epic can therefore never leave `in_progress`. This is reachable on
   `main` today; import makes it reachable 41 times in a row.
@@ -210,7 +226,7 @@ CHECK allows `new`, `promoted`, `dismissed`
 
 `AppAuth.SubscribedEvents(ctx)` reads `events` from `GET /app` under the App
 JWT. `hooks.HandledEvents()` exports the seven strings `applyFunc` routes
-(`internal/hooks/github.go:170-197`) **and `applyFunc` switches over that same
+(`internal/hooks/github.go:192-227`) **and `applyFunc` switches over that same
 list**, so the check cannot drift from the handler when an eighth event is
 added.
 
@@ -241,11 +257,36 @@ fixtures.
 | `LinkIssue` | Happy path; already-promoted → `ErrBadTransition`; missing task → `ErrNotFound` |
 | `SubscribedEvents` missing `issues` | `add-repo` warns, mapping still created |
 
+## What this spec does not cover
+
+Spec 014 §*Adoption is out of scope* forward-declares a spec 020 that onboards
+an existing project wholesale: issues → Tasks, `docs/specs/**` and
+`docs/adr/**` → published documents, repos → Components, GitHub projects →
+Workstreams. **This spec delivers the first of those four and defers the rest.**
+
+The reason is dependency order, not preference. The three deferred halves all
+land in spec 014's document and component model, which is Status `draft` with
+no implementation: there is no document or section table, and no RDF layer at
+all. Spec 014 in turn depends on 006 (the vocabulary it amends, its SHACL gate
+and closure tests) and 007 (the deriver contract and named-graph
+partitioning), both unimplemented, plus a `wl:` ontology PR against
+rdf-registry. Importing documents therefore has no destination, and inventing
+one here would prejudge exactly the questions 014 reserves: what anchors a
+corpus that never had them receives, and whether a first publication of legacy
+prose is `accepted` or `draft`.
+
+The issues half has no such dependency — `issues`, `prs`, and `tasks` all
+exist — so it ships on its own. The two were never coupled in code.
+
+One asset survives for later: `AppAuth.Tarball`
+(`internal/githubauth/content.go:28`), built for skill sync, is already the
+right mechanism for pulling `docs/specs/**` out of a repo. When 014 lands,
+fetching is solved and only the mapping is new.
+
 ## Follow-ups this leaves open
 
 - **Bulk dismiss.** `--state all` on a mature repo makes one-at-a-time
-  dismissal untenable. Not in scope; the narrow default is the mitigation.
-- **`docs/follow-ups.md:14`** lists `lode import horndb-tasks` as a one-off
-  importer for TASKS.md *and* GitHub issues. This spec supersedes the issues
-  half; that line should be trimmed to the TASKS.md remainder rather than left
-  looking outstanding.
+  dismissal untenable. Not in scope; the narrow default is the mitigation,
+  and it is recorded in `docs/follow-ups.md`.
+- **Documents, components, and workstreams.** The other three quarters of
+  014's adoption story, blocked as above.

@@ -11,8 +11,22 @@ once an instance is running (dogfooding); until then this file is the list.
 - **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
 - **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
-- **`lode import horndb-tasks`**: one-off importer for TASKS.md + GitHub issues
-  (`docs/spec.md` §Migration).
+- **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
+  does not scale to `lode inbox import --state all` on a mature repo — spec 020
+  keeps the import default narrow for this reason.
+- **Triage lost-update window**: `PromoteIssue`, `DismissIssue`, and `LinkIssue`
+  each `SELECT triage_state` and then `UPDATE` keyed only on `(repo, number)`,
+  under READ COMMITTED. Two concurrent triage calls can both read `new` and both
+  write, so one outcome is silently lost — and promote's loser orphans the task
+  it created. Add `AND triage_state = 'new'` plus a `RowsAffected` check to all
+  three. Low impact while triage is human-driven and one issue at a time.
+- **e2e coverage for the inbox verbs**: `lode inbox import` and `lode inbox link`
+  are tested per layer but never through CLI → API → store. `link` is the cheap
+  one to add (no fake GitHub needed) and covers the seam the unit tests split.
+- **Split the inbox handlers out of `internal/api/admin.go`**: the file is 757
+  lines across projects, actors/tokens, inbox, and the board. The inbox section
+  alone is ~233 lines, and `internal/api/inbox_import.go` already exists as the
+  sibling to move them next to.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the

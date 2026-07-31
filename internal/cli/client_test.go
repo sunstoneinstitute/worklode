@@ -98,7 +98,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 		t.Fatalf("CreateProject result = %+v", p)
 	}
 
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
+	if _, _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 
@@ -478,7 +478,7 @@ func TestClientInboxFlow(t *testing.T) {
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
+	if _, _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 
@@ -1440,5 +1440,53 @@ func TestClientHierarchyCalls(t *testing.T) {
 	}
 	if resp.Epic.Kind != "epic" || len(resp.Children) != 1 {
 		t.Fatalf("Decompose response = %+v", resp)
+	}
+}
+
+func TestImportInbox(t *testing.T) {
+	var gotMethod string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/inbox/import" {
+			t.Errorf("path = %q, want /api/v1/inbox/import", r.URL.Path)
+		}
+		gotMethod = r.Method
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{
+			"repo":   "acme/widgets",
+			"issues": map[string]int{"new": 3, "updated": 1},
+			"prs":    map[string]int{"new": 0, "updated": 0},
+		})
+	}))
+	defer srv.Close()
+
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
+	got, _, err := c.ImportInbox(context.Background(), cli.ImportInput{
+		Repo: "acme/widgets", State: "open", IncludePRs: true, DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("ImportInbox: %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("method = %q, want POST", gotMethod)
+	}
+	if got.Issues.New != 3 || got.Issues.Updated != 1 {
+		t.Fatalf("counts = %+v, want new=3 updated=1", got.Issues)
+	}
+	if gotBody["state"] != "open" || gotBody["include_prs"] != true || gotBody["dry_run"] != true {
+		t.Fatalf("request body = %v, want state/include_prs/dry_run carried through", gotBody)
+	}
+	if _, ok := gotBody["since"]; ok {
+		t.Fatalf("request body = %v, want no since key when Since is nil", gotBody)
+	}
+
+	since := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, _, err := c.ImportInbox(context.Background(), cli.ImportInput{
+		Repo: "acme/widgets", Since: &since,
+	}); err != nil {
+		t.Fatalf("ImportInbox with Since: %v", err)
+	}
+	if gotBody["since"] != "2026-01-01T00:00:00Z" {
+		t.Fatalf("request body since = %v, want 2026-01-01T00:00:00Z", gotBody["since"])
 	}
 }

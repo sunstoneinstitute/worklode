@@ -382,6 +382,39 @@ func TestAdminGatedEndpoints(t *testing.T) {
 	}
 }
 
+// TestImportRouteRequiresAdmin covers the one admin-gated route
+// TestAdminGatedEndpoints cannot fold into its shared gated slice: POST
+// /api/v1/inbox/import needs s.appAuth configured to succeed, which
+// newTestServer's zero-value Config does not provide, so an admin-token call
+// would 503 before ever exercising requireAdmin — breaking that test's
+// shared "admin succeeds" loop for every other route in it. This test
+// isolates the assertion that actually matters for the admin gate: a
+// non-admin token must be rejected with 403 before importInbox ever runs,
+// proving requireAdmin is still wired on this route (rather than relying on
+// importInbox's own checks to reject it). It goes through the real mux —
+// s.auth(requireAdmin(s.importInbox)) — unlike inbox_import_test.go's
+// fixtures, which call s.importInbox directly and so never exercise this
+// wrapper.
+func TestImportRouteRequiresAdmin(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
+		t.Fatalf("create non-admin actor: %v", err)
+	}
+	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
+	if err != nil {
+		t.Fatalf("create worker token: %v", err)
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/inbox/import", workerToken, map[string]any{"repo": "acme/widgets"})
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("non-admin status = %d, want 403; body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["error"]; got != "admin required" {
+		t.Fatalf("error = %v, want admin required", got)
+	}
+}
+
 // TestCreateActorAdminFlag checks the admin flag round-trips through POST
 // /api/v1/actors into the store.
 func TestCreateActorAdminFlag(t *testing.T) {

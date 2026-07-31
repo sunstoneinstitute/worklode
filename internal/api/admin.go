@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -205,6 +207,7 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doneState := store.DefaultDoneState
+	var warnings []string
 	switch {
 	case req.DoneState != "":
 		if err := s.st.SetRepoDoneState(r.Context(), req.Repo, req.DoneState); err != nil {
@@ -212,12 +215,60 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		doneState = req.DoneState
+		warnings = s.subscriptionWarnings(r.Context())
 	case s.appAuth != nil:
-		doneState = s.discoverDoneState(r.Context(), req.Repo)
+		// Done-state discovery and the subscription check are independent
+		// GitHub round trips, each bounded by discoveryTimeout; run them
+		// concurrently so a slow GitHub costs one timeout, not two.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			doneState = s.discoverDoneState(r.Context(), req.Repo)
+		}()
+		go func() {
+			defer wg.Done()
+			warnings = s.subscriptionWarnings(r.Context())
+		}()
+		wg.Wait()
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"project_id": id, "repo": req.Repo, "done_state": doneState,
-	})
+	resp := map[string]any{"project_id": id, "repo": req.Repo, "done_state": doneState}
+	if len(warnings) > 0 {
+		resp["warnings"] = warnings
+	}
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+// subscriptionWarnings names the events the webhook handler routes that this
+// installation is not subscribed to. Like done-state discovery it never gates
+// the mapping: the repo is already mapped, and a GitHub failure must not fail
+// the request — so any error yields no warnings.
+func (s *server) subscriptionWarnings(ctx context.Context) []string {
+	if s.appAuth == nil {
+		return nil
+	}
+	sctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
+	subscribed, err := s.appAuth.SubscribedEvents(sctx)
+	if err != nil {
+		s.log.Warn("check app event subscriptions", "err", err)
+		return nil
+	}
+	have := make(map[string]bool, len(subscribed))
+	for _, e := range subscribed {
+		have[e] = true
+	}
+	var missing []string
+	for _, e := range hooks.HandledEvents() {
+		if !have[e] {
+			missing = append(missing, e)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return []string{"github app is not subscribed to: " + strings.Join(missing, ", ") +
+		" — those webhooks will never arrive"}
 }
 
 // discoveryTimeout bounds the GitHub round trips addRepo makes; the mapping is
@@ -416,6 +467,8 @@ type promoteRequest struct {
 	Priority          string   `json:"priority"`
 	Kind              string   `json:"kind"`
 	AppliesToVersions []string `json:"applies_to_versions"`
+	Draft             bool     `json:"draft"`
+	Parent            string   `json:"parent"`
 }
 
 // promoteInbox handles POST /api/v1/inbox/promote: turn an inbox issue into a
@@ -439,6 +492,24 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	if !validKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
+	}
+	// An epic's state follows its children (spec 018), and epicForbiddenStates
+	// bars it from every delivery state — so an issue promoted as a childless
+	// epic could never leave in_progress.
+	if req.Kind == "epic" {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"cannot promote an issue to kind epic: an epic's state follows its children; promote as a normal kind and use lode task decompose")
+		return
+	}
+	req.Parent = strings.TrimSpace(req.Parent)
+	if req.Parent != "" {
+		// Named 404 ahead of the transaction: AddEdge's own lookup stays the
+		// authority for the rest of the spec-018 invariants, but its
+		// ErrNotFound would otherwise be reported anonymously.
+		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)
+			return
+		}
 	}
 	project, err := s.st.ProjectForRepo(r.Context(), req.Repo)
 	if err != nil {
@@ -476,11 +547,19 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				Priority:  req.Priority,
 				Kind:      req.Kind,
 				CreatedBy: actor.ID,
+				Draft:     req.Draft,
 			}, req.AppliesToVersions)
 			if err != nil {
 				return err
 			}
 			created = t
+			if req.Parent != "" {
+				// Same transaction as the promotion: there is no window
+				// where the child exists unparented.
+				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of"); err != nil {
+					return err
+				}
+			}
 			return nil
 		})
 	if err != nil {
@@ -520,6 +599,57 @@ func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.dismissed", payload,
 		func(tx *sql.Tx, _ int64) error {
 			return store.DismissIssue(tx, req.Repo, req.Number)
+		})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type linkRequest struct {
+	Repo   string `json:"repo"`
+	Number int64  `json:"number"`
+	TaskID string `json:"task_id"`
+}
+
+// linkInbox handles POST /api/v1/inbox/link: mark an inbox issue as covered
+// by a task that already exists, instead of creating a new one.
+func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
+	var req linkRequest
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if strings.TrimSpace(req.Repo) == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "repo is required")
+		return
+	}
+	if strings.TrimSpace(req.TaskID) == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "task_id is required")
+		return
+	}
+	// Named 404 ahead of the transaction: store.LinkIssue's own check stays
+	// the authority, but its ErrNotFound would otherwise be reported
+	// anonymously.
+	if _, err := s.st.GetTask(r.Context(), req.TaskID); errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "task not found: "+req.TaskID)
+		return
+	}
+
+	extID, err := randomExternalID()
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.linked", payload,
+		func(tx *sql.Tx, _ int64) error {
+			return store.LinkIssue(tx, req.Repo, req.Number, req.TaskID)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)

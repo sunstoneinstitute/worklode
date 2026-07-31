@@ -992,6 +992,8 @@ type PromoteInput struct {
 	Priority          string   `json:"priority"`
 	Kind              string   `json:"kind"`
 	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
+	Draft             bool     `json:"draft,omitempty"`
+	Parent            string   `json:"parent,omitempty"`
 }
 
 // PromoteIssue calls POST /api/v1/inbox/promote.
@@ -1010,6 +1012,57 @@ func (c *Client) PromoteIssue(ctx context.Context, in PromoteInput) (Task, []byt
 // DismissIssue calls POST /api/v1/inbox/dismiss (204, no body).
 func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/inbox/dismiss", map[string]any{"repo": repo, "number": number})
+}
+
+// LinkIssue calls POST /api/v1/inbox/link (204, no body): attach an inbox
+// issue to a task that already exists.
+func (c *Client) LinkIssue(ctx context.Context, repo string, number int64, taskID string) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/inbox/link",
+		map[string]any{"repo": repo, "number": number, "task_id": taskID})
+}
+
+// ImportInput is the request body for ImportInbox. An empty State means the
+// server default, "open".
+type ImportInput struct {
+	Repo       string     `json:"repo"`
+	State      string     `json:"state,omitempty"`
+	IncludePRs bool       `json:"include_prs,omitempty"`
+	Since      *time.Time `json:"since,omitempty"`
+	DryRun     bool       `json:"dry_run,omitempty"`
+}
+
+// ImportCounts splits imported rows into ones that did not exist and ones
+// that were refreshed. Truncated is this kind's own page-cap signal — issues
+// and PRs page independently, so each has its own truncation state.
+type ImportCounts struct {
+	New       int  `json:"new"`
+	Updated   int  `json:"updated"`
+	Truncated bool `json:"truncated"`
+}
+
+// ImportResult is the response from ImportInbox. NewestUpdatedAt is set only
+// when Issues.Truncated — it resumes the issues stream via --since. PRs have
+// no such cursor; /pulls takes no since parameter.
+type ImportResult struct {
+	Repo            string       `json:"repo"`
+	Issues          ImportCounts `json:"issues"`
+	PRs             ImportCounts `json:"prs"`
+	Truncated       bool         `json:"truncated"`
+	DryRun          bool         `json:"dry_run"`
+	NewestUpdatedAt *time.Time   `json:"newest_updated_at,omitempty"`
+}
+
+// ImportInbox calls POST /api/v1/inbox/import.
+func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/import", in)
+	if err != nil {
+		return ImportResult{}, nil, err
+	}
+	var out ImportResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
+	}
+	return out, raw, nil
 }
 
 // --- projects ---------------------------------------------------------
@@ -1123,14 +1176,32 @@ func (c *Client) ResolveRemote(ctx context.Context, remote string) (Project, err
 	return p, nil
 }
 
+// AddRepoResult is the response from AddRepo. Warnings are non-fatal setup
+// problems — the mapping was created regardless.
+type AddRepoResult struct {
+	ProjectID string   `json:"project_id"`
+	Repo      string   `json:"repo"`
+	DoneState string   `json:"done_state"`
+	Warnings  []string `json:"warnings,omitempty"`
+}
+
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
-func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) ([]byte, error) {
+func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (AddRepoResult, []byte, error) {
 	body := map[string]string{"repo": repo}
 	if doneState != "" {
 		body["done_state"] = doneState
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+	raw, err := c.do(ctx, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+	if err != nil {
+		return AddRepoResult{}, nil, err
+	}
+	var out AddRepoResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return AddRepoResult{}, nil, fmt.Errorf("decode add-repo response: %w", err)
+	}
+	return out, raw, nil
 }
 
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),

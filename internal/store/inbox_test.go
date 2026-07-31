@@ -55,6 +55,16 @@ func dismissIssue(t *testing.T, s *Store, repo string, number int64) error {
 	return err
 }
 
+// linkIssue drives LinkIssue through RecordEvent, source "cli".
+func linkIssue(t *testing.T, s *Store, repo string, number int64, taskID string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "issue.link", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return LinkIssue(tx, repo, number, taskID)
+		})
+	return err
+}
+
 func defaultIssue() Issue {
 	return Issue{
 		Repo:   "sunstoneinstitute/demo",
@@ -269,6 +279,110 @@ func TestDismissIssueRequiresNew(t *testing.T) {
 	}
 }
 
+func TestLinkIssueAttachesExistingTask(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue: %v", err)
+	}
+
+	var taskID string
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	if err := linkIssue(t, s, is.Repo, is.Number, taskID); err != nil {
+		t.Fatalf("LinkIssue: %v", err)
+	}
+
+	list, err := s.ListIssues(t.Context(), "", "")
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	got := list[0]
+	if got.TriageState != "promoted" {
+		t.Fatalf("triage_state = %q, want promoted", got.TriageState)
+	}
+	if got.TaskID == nil || *got.TaskID != taskID {
+		t.Fatalf("task_id = %v, want %s", got.TaskID, taskID)
+	}
+}
+
+func TestLinkIssueRejectsAlreadyTriaged(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue: %v", err)
+	}
+	if err := dismissIssue(t, s, is.Repo, is.Number); err != nil {
+		t.Fatalf("dismiss issue: %v", err)
+	}
+
+	var taskID string
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	if err := linkIssue(t, s, is.Repo, is.Number, taskID); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("link dismissed issue: want ErrBadTransition, got %v", err)
+	}
+}
+
+func TestLinkIssueRejectsAlreadyPromoted(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue: %v", err)
+	}
+	if _, err := promoteIssue(t, s, inboxTestNow, is.Repo, is.Number, defaultTaskInput(), nil); err != nil {
+		t.Fatalf("promote issue: %v", err)
+	}
+
+	var taskID string
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	// The issue already has a task from the earlier promote; a second link
+	// must not silently overwrite it.
+	if err := linkIssue(t, s, is.Repo, is.Number, taskID); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("link already-promoted issue: want ErrBadTransition, got %v", err)
+	}
+}
+
+func TestLinkIssueRejectsMissingTask(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue: %v", err)
+	}
+
+	if err := linkIssue(t, s, is.Repo, is.Number, "HDB-999"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("link to missing task: want ErrNotFound, got %v", err)
+	}
+}
+
 func TestListIssuesFilter(t *testing.T) {
 	s := openInboxStore(t)
 
@@ -364,6 +478,42 @@ func TestListIssuesProjectFilter(t *testing.T) {
 	got = issueKeys(t, s, "", "nosuchproject")
 	if len(got) != 0 {
 		t.Fatalf("unknown project = %v; want none", got)
+	}
+}
+
+// TestExistingIssueNumbers covers the read import uses before upserting, so
+// it can report new rows separately from updated ones.
+func TestExistingIssueNumbers(t *testing.T) {
+	s := openInboxStore(t)
+	is := defaultIssue()
+	if err := upsertIssue(t, s, is); err != nil {
+		t.Fatalf("upsert issue #%d: %v", is.Number, err)
+	}
+	is2 := defaultIssue()
+	is2.Number = 5
+	if err := upsertIssue(t, s, is2); err != nil {
+		t.Fatalf("upsert issue #%d: %v", is2.Number, err)
+	}
+
+	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
+		got, err := ExistingIssueNumbers(tx, is.Repo)
+		if err != nil {
+			return err
+		}
+		if len(got) != 2 || !got[1] || !got[5] {
+			t.Fatalf("got %v, want {1,5}", got)
+		}
+
+		other, err := ExistingIssueNumbers(tx, "acme/other")
+		if err != nil {
+			return err
+		}
+		if len(other) != 0 {
+			t.Fatalf("other repo got %v, want empty", other)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("tx: %v", err)
 	}
 }
 
