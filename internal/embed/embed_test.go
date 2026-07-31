@@ -220,10 +220,10 @@ func TestEmbedMetrics(t *testing.T) {
 		t.Fatalf("embed empty: %v", err)
 	}
 
-	if got := testutil.ToFloat64(m.Requests().WithLabelValues("ok")); got != 1 {
+	if got := testutil.ToFloat64(m.requests.WithLabelValues("ok")); got != 1 {
 		t.Fatalf("requests{ok} = %v, want 1", got)
 	}
-	if got := testutil.ToFloat64(m.Requests().WithLabelValues("error")); got != 1 {
+	if got := testutil.ToFloat64(m.requests.WithLabelValues("error")); got != 1 {
 		t.Fatalf("requests{error} = %v, want 1", got)
 	}
 

@@ -245,7 +245,10 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		s.metrics.claim("claim_next", "none")
+		// A dry run is a read, not a claim attempt.
+		if !opts.DryRun {
+			s.metrics.claim("claim_next", "none")
+		}
 		return &ClaimNextResult{Claimed: false}, nil
 	}
 

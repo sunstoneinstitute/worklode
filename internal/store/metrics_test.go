@@ -158,3 +158,20 @@ func TestClaimNextMetrics(t *testing.T) {
 		t.Fatalf("claims{claim_next,none} after success = %v, want 1", got)
 	}
 }
+
+// TestClaimNextDryRunRecordsNothing: a dry run is a read, not a claim
+// attempt, so it must not touch the claim counters.
+func TestClaimNextDryRunRecordsNothing(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "host:/wt-x", DryRun: true})
+	if err != nil || res.Claimed {
+		t.Fatalf("dry-run ClaimNext = (%+v, %v), want unclaimed, nil", res, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "none")); got != 0 {
+		t.Fatalf("claims{claim_next,none} after dry run = %v, want 0", got)
+	}
+}

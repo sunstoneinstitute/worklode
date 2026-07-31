@@ -47,6 +47,13 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 		t.Fatalf("redelivery status = %d, want 200", rr.Code)
 	}
 
+	// Malformed JSON exits before any outcome is decided: the sentinel's
+	// "error" default stands.
+	rr = deliverBody(t, h, "issues", "d-4", []byte(`{not json`))
+	if rr.Code != 400 {
+		t.Fatalf("malformed-body status = %d, want 400", rr.Code)
+	}
+
 	for _, tc := range []struct {
 		event, result string
 		want          float64
@@ -54,6 +61,7 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 		{"issues", "ignored", 1},
 		{"issues", "ok", 1},
 		{"issues", "rejected", 1},
+		{"issues", "error", 1},
 		{"other", "ignored", 1},
 	} {
 		got := testutil.ToFloat64(m.Events().WithLabelValues("github", tc.event, tc.result))
