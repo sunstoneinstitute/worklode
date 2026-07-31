@@ -1,6 +1,12 @@
 package api
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/sunstoneinstitute/worklode/internal/skillsync"
+)
 
 // initMetrics creates and registers the server-owned instruments (HTTP
 // middleware and skill sync) on reg.
@@ -28,4 +34,34 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Skills touched by sync passes, by action.",
 	}, []string{"action"})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems)
+
+	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
+	// for the sweeper).
+	s.syncRuns.WithLabelValues("ok")
+	s.syncRuns.WithLabelValues("error")
+}
+
+// observeSkillSync records one sync pass, called from both syncOnce
+// (background) and the admin sync handler. A partial failure still carries a
+// summary of what landed before the error, so items are recorded on both
+// paths (spec 022 §4).
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Duration) {
+	if s.syncDuration == nil {
+		return
+	}
+	s.syncDuration.Observe(d.Seconds())
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	s.syncRuns.WithLabelValues(result).Inc()
+	for action, n := range map[string]int{
+		"synced":   sum.Synced,
+		"changed":  sum.Changed,
+		"embedded": sum.Embedded,
+		"deleted":  sum.Deleted,
+	} {
+		s.syncItems.WithLabelValues(action).Add(float64(n))
+	}
 }
