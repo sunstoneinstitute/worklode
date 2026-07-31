@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -812,13 +811,25 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 
 // setTaskSkills drives SetTaskSkills through RecordEvent, the way production
 // code will use it.
-func setTaskSkills(t *testing.T, s *Store, id string, skills []string) error {
+func setTaskSkills(t *testing.T, s *Store, now time.Time, id string, skills []string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.skills_set", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return SetTaskSkills(tx, id, skills)
+			return SetTaskSkills(tx, now, id, skills)
 		})
 	return err
+}
+
+// rawSkills reads the tasks.skills column as text, bypassing scanTask's
+// nil-normalization, so a test can tell a stored JSON null from "[]".
+func rawSkills(t *testing.T, s *Store, id string) string {
+	t.Helper()
+	var raw string
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT skills::text FROM tasks WHERE id = $1`, id).Scan(&raw); err != nil {
+		t.Fatalf("read raw skills: %v", err)
+	}
+	return raw
 }
 
 func TestTaskSkills(t *testing.T) {
@@ -830,7 +841,17 @@ func TestTaskSkills(t *testing.T) {
 		t.Fatalf("default skills: %+v err=%v", got.Skills, err)
 	}
 
-	if err := setTaskSkills(t, s, task.ID, []string{"tdd", "debugging"}); err != nil {
+	// CreateTask persists TaskInput.Skills too, not just SetTaskSkills.
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd"}
+	seeded := createTask(t, s, taskTestNow, in)
+	got, err = s.GetTask(t.Context(), seeded.ID)
+	if err != nil || len(got.Skills) != 1 || got.Skills[0] != "tdd" {
+		t.Fatalf("skills from CreateTask: %+v err=%v", got.Skills, err)
+	}
+
+	setNow := taskTestNow.Add(time.Hour)
+	if err := setTaskSkills(t, s, setNow, task.ID, []string{"tdd", "debugging"}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	got, err = s.GetTask(t.Context(), task.ID)
@@ -840,9 +861,21 @@ func TestTaskSkills(t *testing.T) {
 	if len(got.Skills) != 2 || got.Skills[0] != "tdd" || got.Skills[1] != "debugging" {
 		t.Fatalf("skills: %+v", got.Skills)
 	}
+	if !got.UpdatedAt.Equal(setNow.UTC()) {
+		t.Fatalf("updated_at after set = %v, want %v", got.UpdatedAt, setNow.UTC())
+	}
+
+	// Blank entries are dropped and duplicates removed, preserving order.
+	if err := setTaskSkills(t, s, setNow, task.ID, []string{"tdd", "", "  ", "tdd", "debugging", "tdd"}); err != nil {
+		t.Fatalf("set with blanks and dupes: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), task.ID)
+	if err != nil || len(got.Skills) != 2 || got.Skills[0] != "tdd" || got.Skills[1] != "debugging" {
+		t.Fatalf("skills after blanks/dupes: %+v err=%v", got.Skills, err)
+	}
 
 	// Clearing with an empty slice replaces, rather than merges.
-	if err := setTaskSkills(t, s, task.ID, []string{}); err != nil {
+	if err := setTaskSkills(t, s, setNow, task.ID, []string{}); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 	got, err = s.GetTask(t.Context(), task.ID)
@@ -850,19 +883,48 @@ func TestTaskSkills(t *testing.T) {
 		t.Fatalf("skills after clear: %+v err=%v", got.Skills, err)
 	}
 
-	// nil normalizes to [] rather than a SQL NULL.
-	if err := setTaskSkills(t, s, task.ID, []string{"tdd"}); err != nil {
+	// nil normalizes to a jsonb "[]", not a JSON null: SkillsByNames reads
+	// this column with jsonb_array_elements_text, which errors on null. The
+	// Go-side len() check above is not enough to catch a regression here —
+	// read the raw column instead.
+	if err := setTaskSkills(t, s, setNow, task.ID, []string{"tdd"}); err != nil {
 		t.Fatalf("set again: %v", err)
 	}
-	if err := setTaskSkills(t, s, task.ID, nil); err != nil {
+	clearNow := setNow.Add(time.Hour)
+	if err := setTaskSkills(t, s, clearNow, task.ID, nil); err != nil {
 		t.Fatalf("clear with nil: %v", err)
 	}
+	if raw := rawSkills(t, s, task.ID); raw != "[]" {
+		t.Fatalf("stored skills after nil clear = %q, want []", raw)
+	}
 	got, err = s.GetTask(t.Context(), task.ID)
-	if err != nil || len(got.Skills) != 0 {
-		t.Fatalf("skills after nil clear: %+v err=%v", got.Skills, err)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Skills == nil {
+		t.Fatal("Task.Skills is nil, violating its documented never-nil invariant")
+	}
+	if len(got.Skills) != 0 {
+		t.Fatalf("skills after nil clear: %+v", got.Skills)
+	}
+	if !got.UpdatedAt.Equal(clearNow.UTC()) {
+		t.Fatalf("updated_at after nil clear = %v, want %v", got.UpdatedAt, clearNow.UTC())
 	}
 
-	if err := setTaskSkills(t, s, "WL-999", []string{"tdd"}); !errors.Is(err, ErrNotFound) {
+	if err := setTaskSkills(t, s, clearNow, "WL-999", []string{"tdd"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("set skills on unknown task: want ErrNotFound, got %v", err)
+	}
+}
+
+// TestTaskColumnsEntriesAreCommaFree guards prefixedTaskColumns' naive
+// strings.Split(taskColumns, ", "): a call expression or a bare comma in any
+// entry silently mangles the alias-qualified SELECT list it builds for
+// readyCandidates, surfacing only as a SQLSTATE 42601 deep inside ClaimNext.
+func TestTaskColumnsEntriesAreCommaFree(t *testing.T) {
+	for _, c := range strings.Split(taskColumns, ", ") {
+		if strings.ContainsAny(c, "(),") {
+			t.Fatalf("taskColumns entry %q contains a call expression or comma; "+
+				"prefixedTaskColumns splits naively on \", \" and would mangle it", c)
+		}
 	}
 }
