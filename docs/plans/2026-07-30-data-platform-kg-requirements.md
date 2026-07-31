@@ -1019,9 +1019,9 @@ https://worklode.io/ns/ontology#). Update the plan to that base and land it.
 
 Not a runtime blocker for graph-server hosting; required for
 https://worklode.io/ns/ontology to dereference as a document.
-Coordinates with Worklode's rdf/wl/ vocabulary staging
-(worklode docs/plans/2026-07-30-knowledge-graph.md, Task 2), which is the
-content of the eventual PR.
+Coordinates with Worklode's rdf/wl/ vocabulary staging (worklode
+docs/plans/2026-07-30-knowledge-graph-1-graph-foundations.md, Task 2),
+which is the content of the eventual PR.
 EOF
 )"
 ```
@@ -1057,9 +1057,9 @@ gh issue create -R sunstoneinstitute/data-platform \
 graph-server writes are whole-named-graph PUT/POST/DELETE on
 /branches/{branch}/graphs; /sparql proxies reads to the Oxigraph
 materialization only. Worklode's projector design (worklode
-docs/plans/2026-07-30-knowledge-graph.md) currently maintains tasks by
-per-subject DELETE/INSERT via SPARQL Update, which this surface cannot
-express — a task update would rewrite its whole Workstream graph.
+docs/plans/2026-07-30-knowledge-graph-2-projector.md) currently maintains
+tasks by per-subject DELETE/INSERT via SPARQL Update, which this surface
+cannot express — a task update would rewrite its whole Workstream graph.
 
 No action needed yet; Worklode needs to know which way to converge:
 
