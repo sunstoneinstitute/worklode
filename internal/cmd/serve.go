@@ -63,7 +63,14 @@ func newServeCmd() *cobra.Command {
 			}
 			defer st.Close()
 
+			// Built before NewServer so its boot-time skill sync (a background
+			// goroutine NewServer starts internally) shares the same shutdown
+			// signal as the lease sweeper below, instead of running uncancellable.
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
 			handler, adminHandler, err := api.NewServer(st, api.Config{
+				BackgroundCtx:       ctx,
 				BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
 				GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
@@ -89,9 +96,6 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
 
 			// Background sweeper: expire stale leases every 60s until shutdown.
 			go func() {

@@ -100,6 +100,35 @@ func TestSkillPushWinsOverMappedRepoApply(t *testing.T) {
 	}
 }
 
+// TestSkillPushNoMatchOnMappedRepoStillApplies covers the branch
+// TestSkillPushNoMatchStaysIgnored can't: that test uses an unmapped repo,
+// so it only proves the ".ignored" path stays untouched. Here the repo IS
+// project-mapped and onSkillPush is non-nil but declines the match, so the
+// normal apply path must still run — a regression where a false callback
+// result short-circuits apply (instead of just skipping the skill-push
+// override) would slip past every other test in this file.
+func TestSkillPushNoMatchOnMappedRepoStillApplies(t *testing.T) {
+	calls := 0
+	e := newEnvWithSkillPush(t, func(repo, branch string) bool {
+		calls++
+		return false // no configured skill source matches this repo
+	})
+
+	rr := deliver(t, e.h, "push", "d-1", "push_main_ff.json")
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if typ := e.eventType(t, "d-1"); typ != "push" {
+		t.Fatalf("event type = %q, want push", typ)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM main_commits`); n == 0 {
+		t.Fatalf("main_commits rows = 0, want > 0 (apply must still run)")
+	}
+	if calls != 1 {
+		t.Fatalf("onSkillPush calls = %d, want 1", calls)
+	}
+}
+
 // TestSkillPushTagRefDoesNotMatch proves the refs/heads/ gate: a tag push
 // never calls onSkillPush, regardless of what it would return.
 func TestSkillPushTagRefDoesNotMatch(t *testing.T) {
