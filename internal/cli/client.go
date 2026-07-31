@@ -1217,6 +1217,104 @@ type BoardProject struct {
 	Blocked    []BoardTask `json:"blocked"`
 }
 
+// --- skills -----------------------------------------------------------
+
+// Skill mirrors internal/api's skillJSON.
+type Skill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	SourceRepo  string `json:"source_repo"`
+	Hash        string `json:"hash"`
+	Deleted     bool   `json:"deleted"`
+}
+
+// SkillMatch mirrors internal/api's skillMatchJSON: one embedding-recommend
+// hit.
+type SkillMatch struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Hash        string  `json:"hash"`
+	Score       float64 `json:"score"`
+}
+
+// PinnedSkill mirrors internal/api's pinnedSkillJSON: a task-pinned skill
+// with its content inlined, so a caller never needs a second round trip to
+// read it.
+type PinnedSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Hash        string `json:"hash"`
+	Content     string `json:"content"`
+}
+
+// SkillRecommendation mirrors internal/api's recommendationJSON.
+type SkillRecommendation struct {
+	Pinned   []PinnedSkill `json:"pinned"`
+	Matches  []SkillMatch  `json:"matches"`
+	Warnings []string      `json:"warnings"`
+	Provider string        `json:"provider"`
+}
+
+// skillsListResponse is the response body of Skills.
+type skillsListResponse struct {
+	Skills []Skill `json:"skills"`
+}
+
+// Skills calls GET /api/v1/skills.
+func (c *Client) Skills(ctx context.Context) ([]Skill, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills", nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	var resp skillsListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, nil, fmt.Errorf("decode skills: %w", err)
+	}
+	return resp.Skills, raw, nil
+}
+
+// Skill calls GET /api/v1/skills/{name}.
+func (c *Client) Skill(ctx context.Context, name string) (Skill, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills/"+url.PathEscape(name), nil)
+	if err != nil {
+		return Skill{}, nil, err
+	}
+	var sk Skill
+	if err := json.Unmarshal(raw, &sk); err != nil {
+		return Skill{}, nil, fmt.Errorf("decode skill: %w", err)
+	}
+	return sk, raw, nil
+}
+
+// SkillArchive calls GET /api/v1/skills/{name}/archive/{hash} and returns the
+// raw tar.gz bytes. Unlike every other client method, the response body is
+// not JSON — c.do returns the response body untouched regardless of content
+// type, so no decode step is needed or possible here.
+func (c *Client) SkillArchive(ctx context.Context, name, hash string) ([]byte, error) {
+	return c.do(ctx, http.MethodGet,
+		"/api/v1/skills/"+url.PathEscape(name)+"/archive/"+url.PathEscape(hash), nil)
+}
+
+// RecommendSkills calls POST /api/v1/skills/recommend. Exactly one of taskID
+// or text is required by the server.
+func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit int) (SkillRecommendation, []byte, error) {
+	body := map[string]any{"task_id": taskID, "text": text, "limit": limit}
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/skills/recommend", body)
+	if err != nil {
+		return SkillRecommendation{}, nil, err
+	}
+	var rec SkillRecommendation
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return SkillRecommendation{}, nil, fmt.Errorf("decode skill recommendation: %w", err)
+	}
+	return rec, raw, nil
+}
+
+// SyncSkills calls POST /api/v1/skills/sync (admin-only).
+func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
+}
+
 // RuntimeEvent is a recent runtime event as shown on the board.
 type RuntimeEvent struct {
 	ID         int64     `json:"id"`
