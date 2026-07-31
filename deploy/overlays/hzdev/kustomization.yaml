@@ -29,6 +29,9 @@ patches:
       - op: add
         path: /data/LODE_GITHUB_ADMIN_TEAM
         value: "worklode-admins"
+      - op: replace
+        path: /data/LODE_SKILL_SOURCES
+        value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
   - target:
       kind: Ingress
       name: worklode-ingress

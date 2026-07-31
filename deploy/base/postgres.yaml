@@ -6,7 +6,9 @@ metadata:
   namespace: worklode
 spec:
   instances: 1  # dev-scale; bump to 3 for prod HA
-  imageName: ghcr.io/cloudnative-pg/postgresql:17
+  # standard flavor bundles pgvector (a trusted extension, no superuser
+  # needed for CREATE EXTENSION); see deploy/base/migrations/0007_skills.up.sql
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.10-202607271318-standard-bookworm
   storage:
     size: 10Gi
   bootstrap:
