@@ -129,6 +129,7 @@ type taskPageData struct {
 	BlockedBy []string
 	Parent    string
 	Children  []string
+	Progress  store.HierarchyProgress
 	Timeline  []webTimelineRow
 }
 
@@ -181,6 +182,17 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.webStoreErr(w, err)
 		return
+	}
+
+	// Leaves can never have children, so skip the query — template only
+	// reads Progress inside the {{if .Children}} branch anyway.
+	if len(data.Children) > 0 {
+		progress, err := s.st.ChildProgress(ctx, id)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		data.Progress = progress
 	}
 
 	data.Timeline = make([]webTimelineRow, 0, len(entries))

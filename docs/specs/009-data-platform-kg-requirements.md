@@ -9,22 +9,31 @@ lives in the data-platform `graph-server` (Postgres RDF quad store). The **execu
 (tasks, leases, events) stays in Worklode's own Postgres — so the data-platform only has to host
 the *knowledge* half. This spec is the minimum the data-platform must ship for that.
 
-## Context (verified against data-platform `graph-server`)
+## Context (verified against data-platform `graph-server`, 2026-07)
 
-Already built: named-graph writes with a genuine single-writer serialization point (`SELECT …
-FOR UPDATE` per-branch + one ACID Postgres txn), O(1) copy-on-write branch create, child-wins
-overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only deployment.
+Built and deployed in **dev**: named-graph writes with a genuine single-writer serialization point
+(`SELECT … FOR UPDATE` per-branch + one ACID Postgres txn), O(1) copy-on-write branch create,
+child-wins overlay reads, Keycloak-authenticated HTTP (GSP), the outbox table, and **Oxigraph plus
+the outbox→Oxigraph materializer** behind a real `/sparql` endpoint. The full projector path —
+client-credentials token → `PUT` named graph to `main` → GSP read-back → drift query over SPARQL —
+is proven end-to-end in dev by data-platform's runbook
+`docs/runbooks/2026-07-22-worklode-projector-acceptance.md`.
+
+Still open: **prod** (no graph-server manifests under `deploy/overlays/prod/`; the prod-deploy plan
+is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL override.
 
 ## Must-have (v1 blockers)
 
-1. **Prod deployment of `graph-server`.** Dev-only today (no prod overlay under
-   `deploy/overlays/prod/`). The KG cannot be authoritative for the platform on a dev service.
-2. **A working query/read path.** The SoR is the quad store, but SPARQL reads route through
-   **Oxigraph, which is not deployed**, and there is no outbox→Oxigraph materializer. Overview
-   and every drift query need graph-pattern querying.
-   → **Recommended: deploy Oxigraph + the outbox materializer** (a real SPARQL endpoint). The
-   GSP-`GET`-per-graph-and-query-in-Worklode fallback cannot do graph patterns at scale.
-3. **A stable, documented IRI scheme** for Worklode entities, aligned with rdf-registry ADR-0006
+1. **Prod deployment of `graph-server`** — **open**. Dev-only today; no graph-server manifests in
+   `deploy/overlays/prod/`, and data-platform's prod-deploy plan is deferred until the Hetzner prod
+   cluster exists. The KG cannot be authoritative for the platform on a dev service. Items 2, 4 and
+   5 are proven in dev and ride on this one to reach prod.
+2. **A working query/read path** — **done in dev**. Oxigraph and the outbox→Oxigraph materializer
+   are deployed (`deploy/overlays/dev/`), giving a real SPARQL endpoint; the drift query in the
+   acceptance runbook returns over it. The GSP-`GET`-per-graph-and-query-in-Worklode fallback is
+   dropped. Remaining work is the prod copy of these manifests (item 1).
+3. **A stable, documented IRI scheme** for Worklode entities — **scheme agreed, override open**;
+   aligned with rdf-registry ADR-0006
    (branch-free term IRIs; `/id/…` for instances). Worklode mints IRIs for `Component`,
    `DesignDoc`, `Task`; the host/namespace grammar must be fixed and agreed. (Canonical scheme is
    authored in Worklode **spec 006**; this item is the data-platform-side commitment to host it.)
@@ -33,15 +42,18 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
    a **base-URL override** for the `ls` ontology in rdf-registry (ADR-0006's implicit "repo path =
    host path" mapping doesn't hold for a foreign domain) — a required rdf-registry change.
 
-   > **Amended by 014 §1.** The sources are `rdf/wl/` and the published base is
-   > `https://worklode.io/ns/wl/`; the base-URL override applies to the `wl` ontology.
+   > **Amended by 014 §1.** The sources move to `rdf/wl/`, but the published base stays
+   > `https://worklode.io/ns/` with no `wl/` segment; the base-URL override applies to the `wl`
+   > ontology. The override is not yet implemented in rdf-registry.
 
-4. **External-service write auth confirmed.** Worklode's projector is a Go service authenticating
-   via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs. The atomic
-   per-branch write exists; verify the client-credentials path works end-to-end for an external caller.
-5. **A writable, fixed branch** for the work graph (project = property, not branch — sibling
-   branches are invisible to each other, which would hide cross-project edges). Branch-create +
-   overlay-read are built; confirm committing to a fixed `main`-equivalent branch.
+4. **External-service write auth confirmed** — **done in dev**. Worklode's projector is a Go service
+   authenticating via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs.
+   The acceptance runbook proves the client-credentials path end-to-end for an external caller; no
+   graph-server-side config was needed, because the `dataplatform-dev:readwrite` client role travels
+   under its owning client regardless of `azp`.
+5. **A writable, fixed branch** for the work graph — **confirmed**. Project = property, not branch
+   (sibling branches are invisible to each other, which would hide cross-project edges). The runbook
+   commits to the fixed `main` branch and reads it back.
 
 ## Should-have (soon; not v1 blockers)
 
@@ -62,4 +74,6 @@ overlay reads, Keycloak-authenticated HTTP (GSP), an outbox table. Dev-only depl
 
 Worklode's projector can, against prod `graph-server`: authenticate, `PUT` a Worklode named graph
 to the fixed branch under the agreed IRI scheme, and read it back via a SPARQL query that answers
-a drift question (e.g. "components with no governing DesignDoc").
+a drift question (e.g. "components with no governing DesignDoc"). This passes against **dev**
+today (data-platform runbook `docs/runbooks/2026-07-22-worklode-projector-acceptance.md`); prod
+remains blocked on item 1.

@@ -90,6 +90,23 @@ func TestBareTaskNumberInClaimRespectsProjectFlag(t *testing.T) {
 	}
 }
 
+func TestBareTaskNumberInTreeRespectsProjectFlag(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	createTestTask(t, c, "In the current project")
+	other := createOtherProjectTask(t, c)
+	setupRepoConfig(t, "proj")
+
+	number := other.ID[strings.LastIndex(other.ID, "-")+1:]
+	out, err := runLode(t, "task", "tree", number, "--project", "other")
+	if err != nil {
+		t.Fatalf("lode task tree %s --project other: %v\noutput: %s", number, err, out)
+	}
+	if !strings.Contains(out, other.ID) {
+		t.Fatalf("tree output = %q; want it to show %s from the flagged project", out, other.ID)
+	}
+}
+
 func TestBareTaskNumberResolvesInTimeline(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

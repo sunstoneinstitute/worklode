@@ -437,7 +437,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be feature, bug, chore, or spec")
+		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
 	project, err := s.st.ProjectForRepo(r.Context(), req.Repo)
@@ -535,8 +535,11 @@ type holderJSON struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// boardTaskJSON is a board row. Parent is the task's epic when it has one, so
+// a board can group an epic's children under it without a lookup per task.
 type boardTaskJSON struct {
 	taskJSON
+	Parent string      `json:"parent,omitempty"`
 	Holder *holderJSON `json:"holder,omitempty"`
 }
 
@@ -624,6 +627,11 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		return nil, err
 	}
 
+	parents, err := s.st.ParentMap(ctx, projectFilter)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
 
 	for _, p := range projects {
@@ -638,7 +646,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		}
 		for i := range tasks {
 			t := &tasks[i]
-			bt := boardTaskJSON{taskJSON: toTaskJSON(t)}
+			bt := boardTaskJSON{taskJSON: toTaskJSON(t), Parent: parents[t.ID]}
 			switch {
 			case t.State == "in_progress":
 				// No active lease (e.g. it expired but the sweeper hasn't

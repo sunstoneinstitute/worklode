@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -421,12 +423,29 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 	}
 }
 
+// TestClosedStateSetMirrorsSQL pins closedStateSet against the closedStates
+// SQL literal it mirrors: they must list the same states, or ChildProgress
+// and the closedStates-driven queries silently disagree on what "closed"
+// means.
+func TestClosedStateSetMirrorsSQL(t *testing.T) {
+	want := strings.Split(strings.Trim(closedStates, "()"), ", ")
+	for i := range want {
+		want[i] = strings.Trim(want[i], "'")
+	}
+	slices.Sort(want)
+	if got := slices.Sorted(maps.Keys(closedStateSet)); !slices.Equal(got, want) {
+		t.Fatalf("closedStateSet = %v, closedStates = %v", got, want)
+	}
+}
+
 func TestChildOfCycleRejected(t *testing.T) {
 	s := openTaskStore(t)
 
-	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
-	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
-	t3 := createTask(t, s, taskTestNow, defaultTaskInput())
+	// t1, t2, and t3 each stand in as a child_of parent below, so all three
+	// must be declared epics.
+	t1 := createTask(t, s, taskTestNow, epicInput())
+	t2 := createTask(t, s, taskTestNow, epicInput())
+	t3 := createTask(t, s, taskTestNow, epicInput())
 
 	if err := addEdge(t, s, t1.ID, t2.ID, "child_of"); err != nil {
 		t.Fatalf("AddEdge %s child_of %s: %v", t1.ID, t2.ID, err)

@@ -19,15 +19,13 @@
     ]
   },
   "enabledPlugins": {
-    "golang-migrate@sunstone-plugins": true,
-    "sunstone-dev@sunstone-plugins": true,
-    "sunstone-devops@sunstone-plugins": true
+    "lode@sunstone-public": true
   },
   "extraKnownMarketplaces": {
-    "sunstone-plugins": {
+    "sunstone-public": {
       "source": {
         "source": "github",
-        "repo": "sunstoneinstitute/claude-plugins"
+        "repo": "sunstoneinstitute/claude-public-plugins"
       }
     }
   }

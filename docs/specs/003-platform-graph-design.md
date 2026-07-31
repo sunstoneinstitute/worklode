@@ -6,7 +6,7 @@
 
 > **Status corrected.** D1–D15 are no longer unimplemented: the backbone, ranking, per-project task keys, delivery lifecycle and agent sessions all shipped (migrations 0001–0005).
 
-> **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/wl/`.
+> **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/`.
 
 This design record holds decisions D1–D15. Specs `000-umbrella-architecture.md`
 and `004`–`009` graduated out of it; D-ids are not renumbered.

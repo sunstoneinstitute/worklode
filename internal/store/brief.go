@@ -16,11 +16,16 @@ import (
 // GoverningDesign, AffectedComponents, and DefinitionOfDone are reserved for
 // spec 006 (Deliverable/design links) and stay nil in v1; the shape is fixed
 // now so the wire contract does not change when they are populated.
+//
+// Parent is exactly one hop up — an agent should know its task belongs to
+// "Delivery lifecycle" without spelunking, while the full ancestry and the
+// sibling list are both unbounded and stay out.
 type Brief struct {
 	Task               Task     // the task row
 	Body               string   // task body (mirrors Task.Body for the wire contract)
 	Branch             string   // <prefix><id>-<slug>
 	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
+	Parent             *Task    // the task's epic, or nil; only ID/Title/State are populated
 	Lease              *Lease   // active lease, or nil
 	GoverningDesign    *string  // reserved: spec 006 (nil in v1)
 	AffectedComponents []string // reserved: spec 006 (nil in v1)
@@ -42,10 +47,10 @@ type BriefOptions struct {
 }
 
 // Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, any active lease, and — when opts.Skills is set — its pinned
-// skills. Returns ErrNotFound if the task does not exist. It runs a bounded,
-// fixed number of queries — one more only when pins are asked for and the
-// task has some — and never returns unbounded lists.
+// blockers, its parent, any active lease, and — when opts.Skills is set — its
+// pinned skills. Returns ErrNotFound if the task does not exist. It runs a
+// bounded, fixed number of queries — one more only when pins are asked for and
+// the task has some — and never returns unbounded lists.
 func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -64,6 +69,11 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		return nil, err
 	}
 
+	parent, err := s.ParentOf(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
 	var pinned []Skill
 	var warnings []string
 	if opts.Skills && len(t.Skills) > 0 {
@@ -78,6 +88,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		Body:          t.Body,
 		Branch:        BranchFor(t),
 		OpenBlockers:  blockers,
+		Parent:        parent,
 		Lease:         lease,
 		PinnedSkills:  pinned,
 		SkillWarnings: warnings,

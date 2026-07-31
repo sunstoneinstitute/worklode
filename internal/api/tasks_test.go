@@ -470,8 +470,11 @@ func TestEdges(t *testing.T) {
 func TestEdgesFromDirection(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "chore"})
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Epic", "priority": "low", "kind": "feature"})
+	// Both fixtures are epics: WL-1 must be an epic too, or the reverse edge
+	// below would be rejected for the wrong reason (not-an-epic instead of
+	// the cycle it is meant to exercise).
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "epic"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Epic", "priority": "low", "kind": "epic"})
 
 	// "from" on WL-2 means WL-1 -> WL-2 (WL-1 child_of WL-2).
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"from": "WL-1", "type": "child_of"})
@@ -488,6 +491,11 @@ func TestEdgesFromDirection(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token, map[string]any{"to": "WL-1", "type": "child_of"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cycle status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	// Name the reason: the epic-parent rule also returns 422, so a status-only
+	// assertion would pass without the cycle check ever running.
+	if body := rr.Body.String(); !strings.Contains(body, "cycle") {
+		t.Fatalf("cycle body = %s, want the cycle rule to be what rejects", body)
 	}
 }
 

@@ -15,7 +15,9 @@ type briefBlockerJSON struct {
 }
 
 // briefJSON is the wire form of a task brief. lease is null when the task has
-// no active lease. open_blockers is always an array (never null). The three
+// no active lease. open_blockers is always an array (never null). parent is
+// null for a root task (no omitempty, so the key is always present — see
+// hierarchyJSON.Parent for the same convention on task detail). The three
 // reserved fields serialize as JSON null in v1: governing_design and
 // definition_of_done are *string, affected_components is a nil []string
 // (marshals to null, not []) — see store.Brief. skills carries the task's
@@ -26,6 +28,7 @@ type briefJSON struct {
 	Body               string             `json:"body"`
 	Branch             string             `json:"branch"`
 	OpenBlockers       []briefBlockerJSON `json:"open_blockers"`
+	Parent             *parentRefJSON     `json:"parent"`
 	Lease              *leaseJSON         `json:"lease"`
 	GoverningDesign    *string            `json:"governing_design"`
 	AffectedComponents []string           `json:"affected_components"`
@@ -57,6 +60,9 @@ func toBriefJSON(b *store.Brief) briefJSON {
 		out.OpenBlockers = append(out.OpenBlockers, briefBlockerJSON{
 			ID: blk.ID, Title: blk.Title, State: blk.State,
 		})
+	}
+	if b.Parent != nil {
+		out.Parent = &parentRefJSON{ID: b.Parent.ID, Title: b.Parent.Title, State: b.Parent.State}
 	}
 	if b.Lease != nil {
 		l := toLeaseJSON(b.Lease)
