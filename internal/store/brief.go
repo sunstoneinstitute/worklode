@@ -57,7 +57,7 @@ func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
 	var pinned []Skill
 	var warnings []string
 	if len(t.Skills) > 0 {
-		pinned, warnings, err = s.resolvePins(ctx, t.Skills)
+		pinned, warnings, err = s.ResolvePins(ctx, t.Skills)
 		if err != nil {
 			return nil, err
 		}
@@ -74,12 +74,15 @@ func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
 	}, nil
 }
 
-// resolvePins resolves pinned skill names into skills with content, in pin
-// order. An unknown pin produces a "not found" warning; a pin that resolves
-// to a soft-deleted skill still comes back with its content, plus a
+// ResolvePins resolves pinned skill names into skills with content, in pin
+// order, deduped. An unknown pin produces a "not found" warning; a pin that
+// resolves to a soft-deleted skill still comes back with its content, plus a
 // "removed from its source repo" warning — a brief must never break because
 // a skill was withdrawn or misspelled upstream.
-func (s *Store) resolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
+//
+// The brief and POST /api/v1/skills/recommend both go through here, so the
+// two agree on the warning text without hand-copying it.
+func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
 	skills, err := s.SkillsByNames(ctx, pins)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)

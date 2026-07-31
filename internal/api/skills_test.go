@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,6 +111,12 @@ func TestSkillsEndpoints(t *testing.T) {
 	}
 	if m, _ := body["matches"].([]any); len(m) != 0 {
 		t.Fatalf("matches without a provider: %v", body["matches"])
+	}
+	// On the raw body, not the decoded map: a nil slice marshals to null, and
+	// a client iterating matches would break on it. len() cannot tell the two
+	// apart.
+	if !strings.Contains(rr.Body.String(), `"matches":[]`) {
+		t.Fatalf("matches must serialize as [], not null: %s", rr.Body.String())
 	}
 
 	// Recommend requires exactly one of task_id/text.

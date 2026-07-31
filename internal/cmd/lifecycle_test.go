@@ -773,6 +773,29 @@ func TestPrintBriefRendersSkillsSection(t *testing.T) {
 	}
 }
 
+// A brief whose only skills content is warnings still prints them: a user who
+// misspelled every pin would otherwise see nothing, which is the one case the
+// warnings exist for.
+func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
+	b := cli.Brief{
+		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "lode/WL-1-t",
+		Skills: cli.SkillRecommendation{
+			Warnings: []string{"pinned skill not found: ghost"},
+			Provider: "openai-compatible",
+		},
+	}
+	buf := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+
+	printBrief(cmd, b)
+
+	if out := buf.String(); !strings.Contains(out, "warning: pinned skill not found: ghost") {
+		t.Fatalf("output = %q, want the warning rendered", out)
+	}
+}
+
 func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
 	b := cli.Brief{
 		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
