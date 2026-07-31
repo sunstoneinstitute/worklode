@@ -44,7 +44,7 @@ none of their packages; it only calls them.
 
 | Plan | Provides (consumed here) |
 |---|---|
-| `docs/plans/2026-07-30-knowledge-graph.md` | `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`, projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
+| `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` | part 1: `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`; part 2: projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
 | `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/iri` (IRI grammar, `GraphNS`), `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2), Worklode's own manifest |
 | `docs/plans/2026-07-30-runtime-layer.md` | `internal/graphproj` (`Triple`, `Render`, `ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCoversTriples`, `CommitKnown`) — exactly the row→triple functions 015 says "007's observed/deploy deriver will emit" |
 | `docs/plans/2026-07-30-reconciliation-{1-replay-engine,2-cli-surface,3-poll-engine}.md` | nothing consumed directly; noted because the series owns `lode doctor` and `internal/reconcile`, which this series must not touch |
