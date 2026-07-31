@@ -15,7 +15,8 @@ behaves. This spec adds those domain metrics.
 
 **In scope:** registry plumbing so packages outside `internal/api` can register
 instruments; process and DB-pool collectors; lease/claim, sweeper, skill-sync, webhook,
-and embedding metrics; tests.
+and embedding metrics; tests; a `CLAUDE.md` maintenance rule so new server code keeps
+its metrics current (§8).
 
 **Out of scope:** OpenTelemetry or tracing, ServiceMonitor/PodMonitor CRs (annotation
 discovery already scrapes 9090), renaming the existing `http_*` metrics, `/healthz`
@@ -126,3 +127,18 @@ One observation per `Embed` call (which may batch many texts), not per text.
   public mux.
 - `newTestServer`/`newTestServerAdmin` construct the registry themselves, mirroring
   `serve.go`, so the `NewServer` signature change is absorbed in the helpers.
+
+## 8. Maintenance instructions
+
+Metrics rot when new server code ships without them. The top-level `CLAUDE.md` gains a
+short **Metrics** section stating the rule and pointing here for details:
+
+- Server-side changes that add an HTTP endpoint, background loop, outbound call, or
+  store operation with meaningful outcomes must add or extend `worklode_*` metrics in
+  the owning package, following this spec's conventions (package-private nil-safe
+  metrics struct, `prometheus.Registerer` threading from `serve.go`, bounded label
+  values, `worklode_` prefix).
+- Metric changes ship with the `testutil` assertions and the `TestMetricsEndpoint`
+  family check described in §7.
+
+The paragraph stays short — the conventions live in this spec, not in `CLAUDE.md`.
