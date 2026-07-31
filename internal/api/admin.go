@@ -416,6 +416,7 @@ type promoteRequest struct {
 	Priority          string   `json:"priority"`
 	Kind              string   `json:"kind"`
 	AppliesToVersions []string `json:"applies_to_versions"`
+	Draft             bool     `json:"draft"`
 }
 
 // promoteInbox handles POST /api/v1/inbox/promote: turn an inbox issue into a
@@ -438,6 +439,14 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+		return
+	}
+	// An epic's state follows its children (spec 018), and epicForbiddenStates
+	// bars it from every delivery state — so an issue promoted as a childless
+	// epic could never leave in_progress.
+	if req.Kind == "epic" {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"cannot promote an issue to kind epic: an epic's state follows its children; promote as a normal kind and use lode task decompose")
 		return
 	}
 	project, err := s.st.ProjectForRepo(r.Context(), req.Repo)
@@ -476,6 +485,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				Priority:  req.Priority,
 				Kind:      req.Kind,
 				CreatedBy: actor.ID,
+				Draft:     req.Draft,
 			}, req.AppliesToVersions)
 			if err != nil {
 				return err
