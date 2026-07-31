@@ -35,8 +35,9 @@ type importRequest struct {
 }
 
 type importCounts struct {
-	New     int `json:"new"`
-	Updated int `json:"updated"`
+	New       int  `json:"new"`
+	Updated   int  `json:"updated"`
+	Truncated bool `json:"truncated"`
 }
 
 type importResponse struct {
@@ -45,10 +46,11 @@ type importResponse struct {
 	PRs       importCounts `json:"prs"`
 	Truncated bool         `json:"truncated"`
 	DryRun    bool         `json:"dry_run"`
-	// NewestUpdatedAt is the latest updated_at fetched this run, set only when
-	// Truncated: it is the value that makes --since a resume cursor (see
-	// listQuery in internal/githubauth/list.go) rather than just a filter,
-	// and is meaningless on a run that already reached the end.
+	// NewestUpdatedAt is the latest issue updated_at fetched this run, set
+	// only when Issues.Truncated: it is the value that makes --since a resume
+	// cursor (see listQuery in internal/githubauth/list.go) rather than just
+	// a filter. It is issues-only because /pulls takes no since parameter, so
+	// a PR timestamp here would be a cursor into a stream that cannot resume.
 	NewestUpdatedAt *time.Time `json:"newest_updated_at,omitempty"`
 }
 
@@ -90,22 +92,26 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 	if req.Since != nil {
 		since = *req.Since
 	}
-	issues, truncated, err := s.appAuth.ListIssues(fctx, req.Repo, req.State, since, importMaxPages)
+	issues, issuesTruncated, err := s.appAuth.ListIssues(fctx, req.Repo, req.State, since, importMaxPages)
 	if err != nil {
 		s.log.Warn("import: list issues", "repo", req.Repo, "err", err)
 		writeErr(w, http.StatusBadGateway, "github list issues failed")
 		return
 	}
 	var pulls []githubauth.PullRequest
+	var prsTruncated bool
 	if req.IncludePRs {
-		prs, prTruncated, err := s.appAuth.ListPulls(fctx, req.Repo, req.State, importMaxPages)
+		prs, truncated, err := s.appAuth.ListPulls(fctx, req.Repo, req.State, importMaxPages)
 		if err != nil {
 			s.log.Warn("import: list pulls", "repo", req.Repo, "err", err)
 			writeErr(w, http.StatusBadGateway, "github list pulls failed")
 			return
 		}
-		truncated = truncated || prTruncated
-		// The pulls endpoint has no since parameter, so filter here.
+		prsTruncated = truncated
+		// The pulls endpoint has no since parameter, so filter here. This can
+		// only narrow the pages already fetched — it cannot reach further
+		// pages, which is why prsTruncated (not this filtering) is what gets
+		// reported.
 		for _, pr := range prs {
 			if since.IsZero() || !pr.UpdatedAt.Before(since) {
 				pulls = append(pulls, pr)
@@ -113,9 +119,12 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := importResponse{Repo: req.Repo, Truncated: truncated, DryRun: req.DryRun}
-	if truncated {
-		newest := newestUpdatedAt(issues, pulls)
+	resp := importResponse{Repo: req.Repo, DryRun: req.DryRun}
+	resp.Issues.Truncated = issuesTruncated
+	resp.PRs.Truncated = prsTruncated
+	resp.Truncated = issuesTruncated || prsTruncated
+	if issuesTruncated {
+		newest := newestIssueUpdatedAt(issues)
 		if !newest.IsZero() {
 			resp.NewestUpdatedAt = &newest
 		}
@@ -228,18 +237,16 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// newestUpdatedAt returns the maximum UpdatedAt across issues and pulls, or
-// the zero Time if both are empty.
-func newestUpdatedAt(issues []githubauth.Issue, pulls []githubauth.PullRequest) time.Time {
+// newestIssueUpdatedAt returns the maximum UpdatedAt across issues, or the
+// zero Time if empty. Issues-only: only /issues accepts since server-side
+// (see listQuery), so a cursor built from pulls too would point resume
+// requests at a stream that cannot skip ahead, silently dropping issues
+// between the two streams' timestamps.
+func newestIssueUpdatedAt(issues []githubauth.Issue) time.Time {
 	var newest time.Time
 	for _, is := range issues {
 		if is.UpdatedAt.After(newest) {
 			newest = is.UpdatedAt
-		}
-	}
-	for _, pr := range pulls {
-		if pr.UpdatedAt.After(newest) {
-			newest = pr.UpdatedAt
 		}
 	}
 	return newest

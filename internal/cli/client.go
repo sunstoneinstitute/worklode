@@ -1032,15 +1032,17 @@ type ImportInput struct {
 }
 
 // ImportCounts splits imported rows into ones that did not exist and ones
-// that were refreshed.
+// that were refreshed. Truncated is this kind's own page-cap signal — issues
+// and PRs page independently, so each has its own truncation state.
 type ImportCounts struct {
-	New     int `json:"new"`
-	Updated int `json:"updated"`
+	New       int  `json:"new"`
+	Updated   int  `json:"updated"`
+	Truncated bool `json:"truncated"`
 }
 
 // ImportResult is the response from ImportInbox. NewestUpdatedAt is set only
-// when Truncated — it is the timestamp to pass as --since to resume the
-// import where this run stopped.
+// when Issues.Truncated — it resumes the issues stream via --since. PRs have
+// no such cursor; /pulls takes no since parameter.
 type ImportResult struct {
 	Repo            string       `json:"repo"`
 	Issues          ImportCounts `json:"issues"`

@@ -241,6 +241,166 @@ func TestImportUntruncatedOmitsNewestUpdatedAt(t *testing.T) {
 	}
 }
 
+// fullPRPageAt mirrors fullIssuePageAt for pulls: a full page (importPageSize
+// entries) with updated_at increasing monotonically, so a fake server that
+// always returns a full page forces PR truncation the same way issues do.
+func fullPRPageAt(page int, base time.Time) []map[string]any {
+	items := make([]map[string]any, 0, importPageSize)
+	for i := 0; i < importPageSize; i++ {
+		n := (page-1)*importPageSize + i + 1
+		ts := base.Add(time.Duration((page-1)*importPageSize+i) * time.Second)
+		items = append(items, map[string]any{
+			"number": n, "title": "t", "state": "open",
+			"html_url": "u", "created_at": ts.Format(time.RFC3339),
+			"updated_at": ts.Format(time.RFC3339),
+			"head":       map[string]any{"ref": "unrelated-branch", "sha": "cafe"},
+		})
+	}
+	return items
+}
+
+// importGitHubFullIssuesShortPulls serves a full page of issues for every
+// requested page (so importMaxPages exhausts the issues stream, as in
+// importGitHubAlwaysFullIssues) alongside a fixed, non-truncating page of
+// pulls — letting a test drive the two streams' truncation independently.
+func importGitHubFullIssuesShortPulls(t *testing.T, base time.Time, pulls []map[string]any) *githubauth.AppAuth {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := 1
+		fmt.Sscanf(r.URL.Query().Get("page"), "%d", &page)
+		switch r.URL.Path {
+		case "/repos/acme/widgets/installation":
+			json.NewEncoder(w).Encode(map[string]any{"id": 7})
+		case "/app/installations/7/access_tokens":
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"token": "ghs_test"})
+		case "/repos/acme/widgets/issues":
+			json.NewEncoder(w).Encode(fullIssuePageAt(page, base))
+		case "/repos/acme/widgets/pulls":
+			if page > 1 {
+				json.NewEncoder(w).Encode([]map[string]any{})
+				return
+			}
+			json.NewEncoder(w).Encode(pulls)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return &githubauth.AppAuth{AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}
+}
+
+// importGitHubShortIssuesFullPulls is importGitHubFullIssuesShortPulls
+// mirrored: a single short (non-truncating) page of issues alongside a full
+// page of pulls for every requested page, so PRs truncate and issues do not.
+func importGitHubShortIssuesFullPulls(t *testing.T, base time.Time) *githubauth.AppAuth {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := 1
+		fmt.Sscanf(r.URL.Query().Get("page"), "%d", &page)
+		switch r.URL.Path {
+		case "/repos/acme/widgets/installation":
+			json.NewEncoder(w).Encode(map[string]any{"id": 7})
+		case "/app/installations/7/access_tokens":
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"token": "ghs_test"})
+		case "/repos/acme/widgets/issues":
+			if page > 1 {
+				json.NewEncoder(w).Encode([]map[string]any{})
+				return
+			}
+			json.NewEncoder(w).Encode([]map[string]any{openIssue(1, "only")})
+		case "/repos/acme/widgets/pulls":
+			json.NewEncoder(w).Encode(fullPRPageAt(page, base))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return &githubauth.AppAuth{AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}
+}
+
+// TestImportTruncatedIssuesNewestExcludesLaterPR reproduces Defect A: issues
+// truncate at importMaxPages while a single PR carries an updated_at later
+// than every issue. newest_updated_at must come from the issues stream only
+// — the old code took the max across both streams, which pointed --since
+// past unfetched issues (they're older than the PR) and silently dropped
+// them on the next run.
+func TestImportTruncatedIssuesNewestExcludesLaterPR(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	wantNewest := base.Add(time.Duration(importMaxPages*importPageSize-1) * time.Second)
+	prUpdatedAt := wantNewest.Add(time.Hour)
+	pulls := []map[string]any{{
+		"number": 1, "title": "later pr", "state": "open",
+		"html_url": "https://gh/pr/1", "created_at": prUpdatedAt.Format(time.RFC3339),
+		"updated_at": prUpdatedAt.Format(time.RFC3339),
+		"head":       map[string]any{"ref": "unrelated-branch", "sha": "cafe"},
+	}}
+	app := importGitHubFullIssuesShortPulls(t, base, pulls)
+	_, post := importServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "open", "include_prs": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	var got struct {
+		Issues          struct{ Truncated bool } `json:"issues"`
+		PRs             struct{ Truncated bool } `json:"prs"`
+		NewestUpdatedAt *time.Time               `json:"newest_updated_at"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Issues.Truncated {
+		t.Fatalf("issues.truncated = false, want true — fixture serves importMaxPages full pages")
+	}
+	if got.PRs.Truncated {
+		t.Fatalf("prs.truncated = true, want false — the pulls fixture is one short page")
+	}
+	if got.NewestUpdatedAt == nil || !got.NewestUpdatedAt.Equal(wantNewest) {
+		t.Fatalf("newest_updated_at = %v, want %v (issues-only max, not the later PR timestamp %v)",
+			got.NewestUpdatedAt, wantNewest, prUpdatedAt)
+	}
+}
+
+// TestImportPRsTruncateIssuesDoNot is the reverse of the above: PRs hit the
+// page cap while issues do not. It asserts issues.truncated and prs.truncated
+// are reported independently in both directions, that the top-level
+// truncated is their OR, and that newest_updated_at stays nil — a truncated
+// PR list has no server-side since filter to resume with, so the cursor
+// (which is issues-only) must not be set just because something truncated.
+func TestImportPRsTruncateIssuesDoNot(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	app := importGitHubShortIssuesFullPulls(t, base)
+	_, post := importServer(t, app)
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "open", "include_prs": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	var got struct {
+		Truncated       bool                     `json:"truncated"`
+		Issues          struct{ Truncated bool } `json:"issues"`
+		PRs             struct{ Truncated bool } `json:"prs"`
+		NewestUpdatedAt *time.Time               `json:"newest_updated_at"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Issues.Truncated {
+		t.Fatalf("issues.truncated = true, want false — the issues fixture is one short page")
+	}
+	if !got.PRs.Truncated {
+		t.Fatalf("prs.truncated = false, want true — fixture serves importMaxPages full pages of pulls")
+	}
+	if !got.Truncated {
+		t.Fatalf("truncated = false, want true — top-level truncated is the OR of issues/prs")
+	}
+	if got.NewestUpdatedAt != nil {
+		t.Fatalf("newest_updated_at = %v, want nil — cursor is issues-only and issues did not truncate", got.NewestUpdatedAt)
+	}
+}
+
 func TestImportRejectsUnmappedRepo(t *testing.T) {
 	app := importGitHub(t, nil, nil)
 	_, post := importServer(t, app)
