@@ -274,6 +274,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
 		}
 		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey}
+		// At boot, before the first request and regardless of whether skill
+		// sources are configured. Vectors from a previous provider are not
+		// comparable with this one's, and dropping the sources (or swapping the
+		// model on an instance that has none) leaves no sync to notice. Fatal
+		// like the bootstrap below: refusing to start beats serving matches
+		// from the wrong embedding space.
+		if err := skillsync.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
+			return nil, nil, fmt.Errorf("invalidate skill embeddings: %w", err)
+		}
 	}
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
 	if err != nil {
