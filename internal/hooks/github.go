@@ -40,8 +40,9 @@ type githubHandler struct {
 //
 // onSkillPush, if non-nil, is consulted on every push event with the repo and
 // target branch; a true result marks the event "push.skills" instead of
-// running the normal apply path (see ServeHTTP). Pass nil where skill sources
-// are not configured.
+// running the normal apply path (see ServeHTTP). onSkillPush may be nil
+// (tests); production always passes a closure that reports false when no
+// skill sources are configured.
 func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool) http.Handler {
 	if log == nil {
 		log = slog.Default()

@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -89,6 +90,14 @@ type Config struct {
 	// SkillScoreFloor is the minimum cosine similarity for a recommendation,
 	// default 0.35. LODE_SKILL_SCORE_FLOOR.
 	SkillScoreFloor string
+
+	// BackgroundCtx governs goroutines NewServer starts on its own (boot
+	// skill sync, webhook-triggered skill syncs) — not any HTTP request.
+	// Defaults to context.Background() when nil, so background syncs run
+	// unbounded and are never cancelled; pass the process's shutdown context
+	// (e.g. the one built around signal.NotifyContext in cmd/serve.go) to
+	// have them abort on shutdown instead of outliving the server.
+	BackgroundCtx context.Context
 }
 
 // githubAPIBase is the public GitHub REST endpoint. A var, not a const, so
@@ -138,12 +147,20 @@ type server struct {
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. skillSyncer is nil unless skill sources are
 	// configured; sync then 422s. skillSyncMu serializes concurrent sync
-	// requests against the same source set.
-	embedder     embed.Provider
-	skillSyncer  *skillsync.Syncer
-	skillSources []skillsync.Source
-	skillFloor   float64
-	skillSyncMu  sync.Mutex
+	// requests against the same source set. skillSyncPending records a
+	// trigger that arrived while a sync was already running, so runSkillSync
+	// re-runs once more instead of silently dropping it (see runSkillSync).
+	embedder         embed.Provider
+	skillSyncer      *skillsync.Syncer
+	skillSources     []skillsync.Source
+	skillFloor       float64
+	skillSyncMu      sync.Mutex
+	skillSyncPending atomic.Bool
+
+	// bgCtx governs background goroutines started by NewServer (boot sync,
+	// webhook-triggered syncs) — cfg.BackgroundCtx, or context.Background()
+	// when unset. It is not the request context of any HTTP call.
+	bgCtx context.Context
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
@@ -186,6 +203,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		tmplProject: parseWebTemplates("project.html"),
 	}
 	s.cliCodes = newCLICodeStore(st.Now)
+	s.bgCtx = cfg.BackgroundCtx
+	if s.bgCtx == nil {
+		s.bgCtx = context.Background()
+	}
 
 	store.SetBranchPrefix(cfg.BranchPrefix)
 	s.branchPrefix = store.BranchPrefix()
@@ -308,7 +329,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if !skillsync.MatchesPush(s.skillSources, repo, branch) {
 			return false
 		}
-		go s.runSkillSync(context.Background(), "webhook push")
+		go s.runSkillSync(s.bgCtx, "webhook push")
 		return true
 	}
 	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush))
@@ -389,19 +410,39 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// it live from here. Guarded on skillSyncer so a server with no skill
 	// sources configured starts no background goroutine.
 	if s.skillSyncer != nil {
-		go s.runSkillSync(context.Background(), "boot")
+		go s.runSkillSync(s.bgCtx, "boot")
 	}
 
 	return s.logging(s.metrics(mux)), admin, nil
 }
 
-// runSkillSync serializes full syncs; overlapping triggers coalesce by
-// skipping when one is already running rather than queueing.
+// runSkillSync serializes full syncs via skillSyncMu. A trigger that arrives
+// while one is already running does not queue behind it (that could pile up
+// unboundedly under a busy source); it instead sets skillSyncPending so the
+// in-flight run does one more pass once it finishes. Without this, a push
+// landing mid-sync would be silently dropped — its content never re-checked
+// until the next trigger or a restart, which on a quiet repo can be never.
 func (s *server) runSkillSync(ctx context.Context, reason string) {
-	if s.skillSyncer == nil || !s.skillSyncMu.TryLock() {
+	if s.skillSyncer == nil {
+		return
+	}
+	if !s.skillSyncMu.TryLock() {
+		s.skillSyncPending.Store(true)
 		return
 	}
 	defer s.skillSyncMu.Unlock()
+	for {
+		s.skillSyncPending.Store(false)
+		s.syncOnce(ctx, reason)
+		if !s.skillSyncPending.CompareAndSwap(true, false) {
+			return
+		}
+		reason += " (coalesced)"
+	}
+}
+
+// syncOnce runs a single bounded sync pass and logs its outcome.
+func (s *server) syncOnce(ctx context.Context, reason string) {
 	ctx, cancel := context.WithTimeout(ctx, skillSyncTimeout)
 	defer cancel()
 	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
