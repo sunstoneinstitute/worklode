@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -296,6 +297,45 @@ func TestSkillDirsDropsOversize(t *testing.T) {
 	}
 	if len(dirs) != 1 || dirs[0].dir != "skills/slim" {
 		t.Fatalf("dirs: %+v", dirs)
+	}
+}
+
+// The file-count cap has to hold at ingest too. Without it a 2100-file skill
+// dir passed ingest, listed fine and served its archive, then failed on every
+// client with "archive exceeds 2000 entries".
+func TestSkillDirsDropsOverEntryCount(t *testing.T) {
+	orig := maxSkillEntries
+	maxSkillEntries = 4
+	t.Cleanup(func() { maxSkillEntries = orig })
+
+	files := map[string]string{"skills/fat/SKILL.md": skillMD, "skills/slim/SKILL.md": skillMD}
+	for i := 0; i < maxSkillEntries; i++ {
+		files[fmt.Sprintf("skills/fat/f%02d.md", i)] = "x"
+	}
+	var logbuf bytes.Buffer
+	sy := &Syncer{Log: slog.New(slog.NewTextHandler(&logbuf, nil))}
+	dirs, _, err := sy.skillDirs(tarballOf(t, "acme-p-aaa111", files), testSource)
+	if err != nil {
+		t.Fatalf("skillDirs: %v", err)
+	}
+	if len(dirs) != 1 || dirs[0].dir != "skills/slim" {
+		t.Fatalf("dirs: %+v", dirs)
+	}
+	if got := logbuf.String(); !strings.Contains(got, "too many files") {
+		t.Fatalf("want a warning naming the dropped dir, got: %s", got)
+	}
+}
+
+// A frontmatter name that is not a usable path or URL segment must be
+// rejected at ingest. Stored, it would list fine and then fail every install
+// and be unroutable on GET /api/v1/skills/{name}.
+func TestBuildUpsertRejectsUnusableName(t *testing.T) {
+	for _, name := range []string{"../escape", "a/b", ".hidden", ".", ".."} {
+		md := "---\nname: " + name + "\ndescription: d\n---\n\nbody"
+		files := map[string]file{"SKILL.md": {data: []byte(md)}}
+		if _, err := buildUpsert(testSource, "aaa111", "skills/x", files); err == nil {
+			t.Fatalf("name %q: want an ingest error", name)
+		}
 	}
 }
 
