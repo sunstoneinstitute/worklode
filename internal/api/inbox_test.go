@@ -111,3 +111,48 @@ func TestPromoteRejectsEpicKind(t *testing.T) {
 		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
 	}
 }
+
+func TestPromoteUnderEpic(t *testing.T) {
+	st, h, token := newTestServer(t)
+	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
+	seedIssue(t, st, "acme/widgets", 1, "an issue")
+
+	epic := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "backlog", "priority": "low", "kind": "epic",
+	})["id"].(string)
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": epic,
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+	var got map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &got)
+
+	parent, err := st.ParentOf(context.Background(), got["id"].(string))
+	if err != nil {
+		t.Fatalf("parent of promoted task: %v", err)
+	}
+	if parent == nil || parent.ID != epic {
+		t.Fatalf("parent = %v, want %s", parent, epic)
+	}
+}
+
+func TestPromoteUnknownParentIs404(t *testing.T) {
+	st, h, token := newTestServer(t)
+	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
+	seedIssue(t, st, "acme/widgets", 1, "an issue")
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": "PR-999",
+	})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rr.Code)
+	}
+
+	issues, _ := st.ListIssues(context.Background(), "", "")
+	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
+		t.Fatalf("issue = %+v, want unchanged — a 404'd promote must not write anything", issues[0])
+	}
+}

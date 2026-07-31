@@ -417,6 +417,7 @@ type promoteRequest struct {
 	Kind              string   `json:"kind"`
 	AppliesToVersions []string `json:"applies_to_versions"`
 	Draft             bool     `json:"draft"`
+	Parent            string   `json:"parent"`
 }
 
 // promoteInbox handles POST /api/v1/inbox/promote: turn an inbox issue into a
@@ -448,6 +449,16 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity,
 			"cannot promote an issue to kind epic: an epic's state follows its children; promote as a normal kind and use lode task decompose")
 		return
+	}
+	req.Parent = strings.TrimSpace(req.Parent)
+	if req.Parent != "" {
+		// Named 404 ahead of the transaction: AddEdge's own lookup stays the
+		// authority for the rest of the spec-018 invariants, but its
+		// ErrNotFound would otherwise be reported anonymously.
+		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)
+			return
+		}
 	}
 	project, err := s.st.ProjectForRepo(r.Context(), req.Repo)
 	if err != nil {
@@ -491,6 +502,13 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			created = t
+			if req.Parent != "" {
+				// Same transaction as the promotion: there is no window
+				// where the child exists unparented.
+				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of"); err != nil {
+					return err
+				}
+			}
 			return nil
 		})
 	if err != nil {
