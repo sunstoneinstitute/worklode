@@ -14,6 +14,12 @@ once an instance is running (dogfooding); until then this file is the list.
 - **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
   does not scale to `lode inbox import --state all` on a mature repo — spec 020
   keeps the import default narrow for this reason.
+- **Triage lost-update window**: `PromoteIssue`, `DismissIssue`, and `LinkIssue`
+  each `SELECT triage_state` and then `UPDATE` keyed only on `(repo, number)`,
+  under READ COMMITTED. Two concurrent triage calls can both read `new` and both
+  write, so one outcome is silently lost — and promote's loser orphans the task
+  it created. Add `AND triage_state = 'new'` plus a `RowsAffected` check to all
+  three. Low impact while triage is human-driven and one issue at a time.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
