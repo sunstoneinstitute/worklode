@@ -133,18 +133,42 @@ func TestBriefResolvesPins(t *testing.T) {
 	}
 
 	in := defaultTaskInput()
-	in.Skills = []string{"tdd", "ghost"}
+	in.Skills = []string{"tdd", "tdd", "ghost"}
 	task := createTask(t, s, leaseTestNow, in)
 
 	b, err := s.Brief(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
+	// One entry, not two: CreateTask normalizes the pin list, and ResolvePins
+	// dedupes again — a repeated pin must not inline the same body twice.
 	if len(b.PinnedSkills) != 1 || b.PinnedSkills[0].Name != "tdd" || b.PinnedSkills[0].SkillMD == "" {
 		t.Fatalf("pinned skills = %+v, want one tdd entry with SkillMD populated", b.PinnedSkills)
 	}
 	if len(b.SkillWarnings) != 1 || b.SkillWarnings[0] != "pinned skill not found: ghost" {
 		t.Fatalf("skill warnings = %+v, want [pinned skill not found: ghost]", b.SkillWarnings)
+	}
+}
+
+// TestResolvePinsDedupes covers ResolvePins' own dedupe, which the brief path
+// can no longer reach now that both task write paths normalize: the API's
+// recommend endpoint passes caller-supplied pins straight through.
+func TestResolvePinsDedupes(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"tdd", "tdd", "ghost", "ghost"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "tdd" {
+		t.Fatalf("pinned = %+v, want one tdd entry", pinned)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %+v, want one", warnings)
 	}
 }
 
