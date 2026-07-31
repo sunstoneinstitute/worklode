@@ -33,7 +33,7 @@ func TestDSN() string {
 // template database (see ensureTemplate) and returns a Store bound to it.
 // The database is dropped on cleanup. Skips the test if Postgres is
 // unreachable and CI is not set.
-func OpenTestStore(t *testing.T) *Store {
+func OpenTestStore(t *testing.T, opts ...Option) *Store {
 	t.Helper()
 	admin := adminConnForTest(t)
 
@@ -48,7 +48,7 @@ func OpenTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { dropDatabase(t, admin, dbName) })
 
-	return openTestDB(t, dbName)
+	return openTestDB(t, dbName, opts...)
 }
 
 // OpenUnmigratedTestStore is OpenTestStore without any migrations applied,
@@ -104,7 +104,7 @@ func dropDatabase(t *testing.T, admin *sql.DB, dbName string) {
 	}
 }
 
-func openTestDB(t *testing.T, dbName string) *Store {
+func openTestDB(t *testing.T, dbName string, opts ...Option) *Store {
 	t.Helper()
 	u, err := url.Parse(TestDSN())
 	if err != nil {
@@ -112,7 +112,7 @@ func openTestDB(t *testing.T, dbName string) *Store {
 	}
 	u.Path = "/" + dbName
 
-	s, err := Open(u.String())
+	s, err := Open(u.String(), opts...)
 	if err != nil {
 		t.Fatalf("open %s: %v", dbName, err)
 	}
