@@ -204,6 +204,38 @@ func TestNewServerSkillsConfig(t *testing.T) {
 	}
 }
 
+// TestNewServerInvalidatesEmbeddingsWithoutSkillSources covers the boot path
+// for a provider swap on an instance with no skill sources. The check used to
+// run only from SyncAll, which such an instance never calls — so dropping the
+// sources, or swapping LODE_EMBEDDING_MODEL after doing so, left vectors from
+// the old space in place forever. At a different dimension they make every
+// query error, and nothing would have cleared them.
+func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
+	}
+	if err := st.SetEmbeddingProviderID(ctx, "openai:old-model@example.com/v1/embeddings"); err != nil {
+		t.Fatalf("set provider id: %v", err)
+	}
+
+	cfg := Config{EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "new-model"}
+	if _, _, err := NewServer(st, cfg); err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	got, err := st.RecommendSkills(ctx, []float32{1, 0}, 5, 0.5)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("vectors from the previous provider survived boot: %+v err=%v", got, err)
+	}
+	want := (&embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel}).ID()
+	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != want {
+		t.Fatalf("provider id = %q err=%v, want %q", id, err, want)
+	}
+}
+
 // TestNewServerSkillsSourcesWithGitHubApp covers the "skill sources with
 // github app configured" boot case that TestNewServerSkillsConfig can't:
 // that config makes NewServer's boot-time skill sync (see runSkillSync)

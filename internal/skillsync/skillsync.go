@@ -71,7 +71,7 @@ func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error
 		// Before anything is embedded: syncing first would write vectors of the
 		// new model into a table still holding the old model's, which mixes two
 		// incomparable spaces and, on a dimension change, breaks every query.
-		if err := sy.invalidateOnProviderChange(ctx); err != nil {
+		if err := InvalidateOnProviderChange(ctx, sy.Store, sy.Embed, sy.Log); err != nil {
 			return sum, err
 		}
 	}
@@ -94,31 +94,39 @@ func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error
 	return sum, errors.Join(errs...)
 }
 
-// invalidateOnProviderChange drops every stored vector when the configured
-// embedding provider is not the one they were computed with, and records the
-// new one. The embedSkill-on-change path alone cannot recover from this: a
-// skill whose content did not change is never re-embedded.
-func (sy *Syncer) invalidateOnProviderChange(ctx context.Context) error {
-	id := sy.Embed.ID()
-	stored, err := sy.Store.EmbeddingProviderID(ctx)
+// InvalidateOnProviderChange drops every stored vector when p is not the
+// provider they were computed with, and records p as the new one. Re-embedding
+// on content change alone cannot recover from a swap: a skill whose content
+// did not change is never re-embedded, and vectors from two models are not
+// comparable — at two dimensions they make every query error outright.
+//
+// It takes a Store and a Provider rather than a Syncer because it must also
+// run at boot on an instance with no skill sources configured, where there is
+// no Syncer. A caller may pass a nil log.
+func InvalidateOnProviderChange(ctx context.Context, st *store.Store, p embed.Provider, log *slog.Logger) error {
+	if log == nil {
+		log = slog.Default()
+	}
+	id := p.ID()
+	stored, err := st.EmbeddingProviderID(ctx)
 	if err != nil {
 		return err
 	}
 	if stored == id {
 		return nil
 	}
-	n, err := sy.Store.ClearAllSkillEmbeddings(ctx)
+	n, err := st.ClearAllSkillEmbeddings(ctx)
 	if err != nil {
 		return err
 	}
-	if err := sy.Store.SetEmbeddingProviderID(ctx, id); err != nil {
+	if err := st.SetEmbeddingProviderID(ctx, id); err != nil {
 		return err
 	}
 	// Silent only on the usual first boot: no id recorded and nothing stored.
 	// A real swap that finds zero vectors still gets logged — that is exactly
 	// the state an operator debugging empty recommendations needs to see.
 	if stored != "" || n > 0 {
-		sy.log().Info("embedding provider changed, cleared embeddings",
+		log.Info("embedding provider changed, cleared embeddings",
 			"from", stored, "to", id, "cleared", n)
 	}
 	return nil
