@@ -315,11 +315,6 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
-		t.Fatalf("replace embeddings: %v", err)
-	}
-
 	vecJSON, err := json.Marshal(query)
 	if err != nil {
 		t.Fatalf("marshal query vector: %v", err)
@@ -330,9 +325,17 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	}))
 	t.Cleanup(fakeSrv.Close)
 
-	h, _, err := NewServer(st, Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	cfg := Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"}
+	h, _, err := NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
+	}
+	// After NewServer: its boot-time provider check clears vectors it cannot
+	// attribute to the configured provider, and a store seeded out of band is
+	// exactly that case.
+	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
 	}
 
 	reqBody, err := json.Marshal(map[string]any{"text": "the fake endpoint ignores this"})
@@ -568,6 +571,28 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 	sk, err := st.GetSkill(context.Background(), "tdd")
 	if err != nil || sk.Deleted {
 		t.Fatalf("good source's skill was not persisted: %v %+v", err, sk)
+	}
+}
+
+// TestSyncOnceLogsFailureAtError: the background sync path used to log a
+// failure at Warn while the HTTP path logged Error. A background failure is
+// precisely the one nobody is watching a response for, so it gets the higher
+// level, not the lower one.
+func TestSyncOnceLogsFailureAtError(t *testing.T) {
+	st := store.OpenTestStore(t)
+	var logbuf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logbuf, nil))
+	s := &server{
+		st: st, log: log,
+		skillSources: []skillsync.Source{{Repo: "acme/p", Ref: "main", Glob: "skills/*"}},
+		skillSyncer: &skillsync.Syncer{Store: st, Log: log,
+			Fetch: func(ctx context.Context, repo, ref string) ([]byte, error) {
+				return nil, fmt.Errorf("simulated failure")
+			}},
+	}
+	s.syncOnce(context.Background(), "test")
+	if got := logbuf.String(); !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "skill sync failed") {
+		t.Fatalf("want the background failure at ERROR, got: %s", got)
 	}
 }
 
