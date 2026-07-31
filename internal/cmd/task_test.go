@@ -207,6 +207,7 @@ func TestTaskListStatusFiltering(t *testing.T) {
 func TestTaskHierarchyCommands(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
+	setupRepoConfig(t, "proj") // so a bare task number resolves
 
 	epic, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
 		Project: "proj", Title: "Container", Priority: "high", Kind: "epic",
@@ -214,6 +215,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create epic: %v", err)
 	}
+	loose := createTestTask(t, c, "Not an epic")
 
 	// add --parent files the new task under the epic in one round trip.
 	out, err := runLode(t, "task", "add", "--json", "--project", "proj",
@@ -234,8 +236,8 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task show: %v", err)
 	}
-	if !strings.Contains(show, "parent:") || !strings.Contains(show, epic.ID) {
-		t.Fatalf("show has no parent line:\n%s", show)
+	if !strings.Contains(show, "parent:   "+epic.ID) {
+		t.Fatalf("show has no parent line naming %s:\n%s", epic.ID, show)
 	}
 
 	tree, err := runLode(t, "task", "tree", "--project", "proj")
@@ -245,12 +247,26 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if !strings.Contains(tree, epic.ID) || !strings.Contains(tree, child.ID) {
 		t.Fatalf("tree missing epic or child:\n%s", tree)
 	}
+	// Only epics are roots: a loose task is neither an epic nor a child of
+	// one, so it must not appear at all.
+	if strings.Contains(tree, loose.ID) {
+		t.Fatalf("tree lists the non-epic %s:\n%s", loose.ID, tree)
+	}
 
 	if _, err := runLode(t, "task", "unparent", child.ID); err != nil {
 		t.Fatalf("task unparent: %v", err)
 	}
 	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 0 {
 		t.Fatalf("list --parent after unparent = %v, want []", got)
+	}
+
+	// parent --under re-files it, expanding a bare number for the epic.
+	epicNumber := epic.ID[strings.LastIndex(epic.ID, "-")+1:]
+	if out, err := runLode(t, "task", "parent", child.ID, "--under", epicNumber); err != nil {
+		t.Fatalf("task parent --under %s: %v\noutput: %s", epicNumber, err, out)
+	}
+	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 1 || got[0] != child.ID {
+		t.Fatalf("list --parent after parent --under = %v, want [%s]", got, child.ID)
 	}
 
 	// decompose converts a task in place and creates its children as drafts.
