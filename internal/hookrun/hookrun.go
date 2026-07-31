@@ -24,8 +24,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
@@ -35,6 +38,31 @@ import (
 // backboneTimeout bounds every backbone call so a slow/unreachable server can
 // never stall an editor or git event.
 const backboneTimeout = 2 * time.Second
+
+// archiveTimeout bounds one skill archive fetch. Deliberately larger than
+// backboneTimeout: archives are bulk payloads, not JSON round trips, and a
+// truncated fetch degrades the feature silently (pinned content still
+// inlines from the brief; only supporting files and matched dirs vanish).
+// A var, not a const — see skillsBudget's note on why, and its note on
+// t.Parallel().
+var archiveTimeout = 10 * time.Second
+
+// skillsBudget bounds the ENTIRE skill-fetch loop — every pin plus every
+// match, however many the brief carries. Without an overall cap, a brief
+// with several matches against a hanging endpoint would cost one
+// archiveTimeout per skill, serialized; session-start is exactly when an
+// agent is waiting to start work. A var, not a const, so tests can shrink
+// it (and archiveTimeout/skillFetchConcurrency) instead of waiting out the
+// real budget against a deliberately hanging fixture; this package must not
+// adopt t.Parallel() while any test relies on that pattern (mirrors
+// internal/skillstore's maxExtracted/maxEntries).
+var skillsBudget = 10 * time.Second
+
+// skillFetchConcurrency bounds how many archive fetches run at once.
+// skillstore.Ensure is safe for concurrent callers (tmp-dir + rename with a
+// race-loser fallback, and swapSymlink is tmp+rename too), so only the
+// paths map built up here needs its own lock.
+var skillFetchConcurrency = 4
 
 // leaseRenewWindow is how close to expiry a still-held lease must be for
 // session-start to proactively renew it.
@@ -294,30 +322,49 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 }
 
 // ensureSkills lazily fetches brief-referenced skill archives into the local
-// content-addressed store. Failures are warnings: the pinned content is
-// already inline in the brief, and recommended skills degrade to an install
-// hint. Returns name -> local path for the ones that are present.
+// content-addressed store, bounded-parallel and bounded overall by
+// skillsBudget: however many skills a brief carries, this can never cost
+// more than one budget's worth of dead air at session start. Failures are
+// warnings: the pinned content is already inline in the brief, and
+// recommended skills degrade to an install hint. Returns name -> local path
+// for the ones that are present.
 func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief) map[string]string {
 	root, err := skillstore.Root()
 	if err != nil {
 		warn(opts, "skill store: %v", err)
 		return nil
 	}
+
+	sctx, cancel := context.WithTimeout(ctx, skillsBudget)
+	defer cancel()
+
+	var mu sync.Mutex
 	paths := map[string]string{}
+	g, gctx := errgroup.WithContext(sctx)
+	g.SetLimit(skillFetchConcurrency)
+
 	ensure := func(name, hash string) {
 		if hash == "" {
 			return
 		}
-		bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		defer cancel()
-		p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
-			return c.SkillArchive(bctx, name, hash)
+		g.Go(func() error {
+			actx, cancel := context.WithTimeout(gctx, archiveTimeout)
+			defer cancel()
+			p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
+				return c.SkillArchive(actx, name, hash)
+			})
+			// mu also guards opts.Stderr: warn's writer (a *bytes.Buffer in
+			// tests) is not safe for concurrent use, and up to
+			// skillFetchConcurrency fetches can land here at once.
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				warn(opts, "skill %s: %v (run: lode skills install %s)", name, err, name)
+				return nil // one skill's failure must never abort the others
+			}
+			paths[name] = p
+			return nil
 		})
-		if err != nil {
-			warn(opts, "skill %s: %v (run: lode skills install %s)", name, err, name)
-			return
-		}
-		paths[name] = p
 	}
 	for _, p := range b.Skills.Pinned {
 		ensure(p.Name, p.Hash)
@@ -325,6 +372,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief)
 	for _, m := range b.Skills.Matches {
 		ensure(m.Name, m.Hash)
 	}
+	_ = g.Wait() // every branch above returns nil; errors are warned in place
 	return paths
 }
 
@@ -695,24 +743,50 @@ func compactBrief(b cli.Brief, skillPaths map[string]string) string {
 	}
 	if len(b.Skills.Pinned)+len(b.Skills.Matches) > 0 {
 		fmt.Fprintf(&sb, "\n## Skills\n")
+		var inlined int     // running total of bytes inlined so far, across ALL pins
+		var overBudget bool // sticky: once one pin doesn't fit, none after it are considered either
 		for _, p := range b.Skills.Pinned {
-			fmt.Fprintf(&sb, "\n### Pinned: %s\n%s\n", p.Name, p.Content)
+			fmt.Fprintf(&sb, "\n### Pinned: %s\n", p.Name)
+			loc := "lode skills install " + p.Name
 			if path := skillPaths[p.Name]; path != "" {
-				fmt.Fprintf(&sb, "(supporting files: %s)\n", path)
+				loc = filepath.Join(path, "SKILL.md")
 			}
+			if !overBudget && inlined+len(p.Content) <= maxInlinedSkillBytes {
+				inlined += len(p.Content)
+				fmt.Fprintf(&sb, "%s\n", p.Content)
+				if path := skillPaths[p.Name]; path != "" {
+					fmt.Fprintf(&sb, "(supporting files: %s)\n", path)
+				}
+				continue
+			}
+			// Never truncate mid-document: half a SKILL.md is worse than
+			// none, since the model would act on incomplete instructions.
+			overBudget = true
+			fmt.Fprintf(&sb, "(content omitted — %s; read it at %s)\n", humanKB(len(p.Content)), loc)
 		}
 		if len(b.Skills.Matches) > 0 {
 			fmt.Fprintf(&sb, "\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n")
 			for _, m := range b.Skills.Matches {
 				loc := "lode skills install " + m.Name
 				if path := skillPaths[m.Name]; path != "" {
-					loc = path + "/SKILL.md"
+					loc = filepath.Join(path, "SKILL.md")
 				}
 				fmt.Fprintf(&sb, "- %s (%.2f): %s — %s\n", m.Name, m.Score, m.Description, loc)
 			}
 		}
 	}
 	return sb.String()
+}
+
+// maxInlinedSkillBytes caps the total bytes of pinned SKILL.md content
+// compactBrief will inline, summed across every pin — not a per-pin cap and
+// not a pin-count cap, since one large pin costs far more context than
+// several small ones.
+const maxInlinedSkillBytes = 32 << 10
+
+// humanKB renders a byte count in kilobytes to one decimal place.
+func humanKB(n int) string {
+	return fmt.Sprintf("%.1f KB", float64(n)/1024)
 }
 
 // --- session marker ---------------------------------------------------------

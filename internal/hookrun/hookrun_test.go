@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +24,23 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
+
+// TestMain sets a package-wide default LODE_SKILLS_DIR before any test runs,
+// so isolation from a developer's real ~/.worklode/skills is structural
+// rather than resting on "no other test's brief happens to carry skills".
+// Individual skills tests still set their own via t.Setenv (scoped and
+// auto-restored); this is the backstop for any that forget.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "worklode-skills-test-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "TestMain: create temp skills dir:", err)
+		os.Exit(1)
+	}
+	os.Setenv("LODE_SKILLS_DIR", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 // allEvents is the guarded event set (unknown events are handled separately).
 var allEvents = []string{"session-start", "session-end", "pre-commit",
@@ -806,12 +825,16 @@ type skillsBackbone struct {
 	mu      sync.Mutex
 	archive map[string][]byte
 	fail    map[string]bool
+	hang    map[string]bool
 	brief   cli.Brief
+
+	inFlight    int32 // atomic
+	maxInFlight int32 // atomic; high-water mark, so a test can assert the concurrency bound held
 }
 
 func newSkillsBackbone(t *testing.T, brief cli.Brief) *skillsBackbone {
 	t.Helper()
-	b := &skillsBackbone{archive: map[string][]byte{}, fail: map[string]bool{}, brief: brief}
+	b := &skillsBackbone{archive: map[string][]byte{}, fail: map[string]bool{}, hang: map[string]bool{}, brief: brief}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/tasks/{id}/brief", func(w http.ResponseWriter, r *http.Request) {
@@ -819,11 +842,29 @@ func newSkillsBackbone(t *testing.T, brief cli.Brief) *skillsBackbone {
 		_ = json.NewEncoder(w).Encode(b.brief)
 	})
 	mux.HandleFunc("GET /api/v1/skills/{name}/archive/{hash}", func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&b.inFlight, 1)
+		defer atomic.AddInt32(&b.inFlight, -1)
+		for {
+			cur := atomic.LoadInt32(&b.maxInFlight)
+			if n <= cur || atomic.CompareAndSwapInt32(&b.maxInFlight, cur, n) {
+				break
+			}
+		}
+
 		name, hash := r.PathValue("name"), r.PathValue("hash")
 		b.mu.Lock()
 		fail := b.fail[name]
+		hang := b.hang[name]
 		data, ok := b.archive[name+"@"+hash]
 		b.mu.Unlock()
+		if hang {
+			// Block until the client gives up (archiveTimeout/skillsBudget)
+			// rather than forever — a real timed-out client cancels its
+			// request context, so this mirrors that instead of leaking a
+			// goroutine for the life of the test process.
+			<-r.Context().Done()
+			return
+		}
 		if fail {
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return
@@ -856,6 +897,16 @@ func (b *skillsBackbone) failArchive(name string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.fail[name] = true
+}
+
+func (b *skillsBackbone) peakConcurrency() int {
+	return int(atomic.LoadInt32(&b.maxInFlight))
+}
+
+func (b *skillsBackbone) hangArchive(name string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.hang[name] = true
 }
 
 // setupFakeWorktree creates a wt/<taskID>-<slug> git worktree under root
@@ -965,6 +1016,24 @@ func extractMatchLocation(t *testing.T, ctx, name string) string {
 	}
 	t.Fatalf("no match line for %s in additionalContext: %q", name, ctx)
 	return ""
+}
+
+// pinnedBodyLine returns the first line of a pinned skill's body — either
+// its content's own first line, or the "(content omitted — ...)" pointer
+// once the byte budget is exceeded.
+func pinnedBodyLine(t *testing.T, ctx, name string) string {
+	t.Helper()
+	heading := "### Pinned: " + name + "\n"
+	i := strings.Index(ctx, heading)
+	if i < 0 {
+		t.Fatalf("no pinned heading for %s in additionalContext: %q", name, ctx)
+	}
+	rest := ctx[i+len(heading):]
+	j := strings.IndexByte(rest, '\n')
+	if j < 0 {
+		t.Fatalf("pinned section for %s has no body line: %q", name, ctx)
+	}
+	return rest[:j]
 }
 
 // TestSessionStartSkillsHappyPath covers a pinned skill (content inlined,
@@ -1117,5 +1186,162 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 	}
 	if strings.Contains(stderr, "draft-skill") {
 		t.Fatalf("a hashless pinned skill must not produce a warning: %q", stderr)
+	}
+}
+
+// shrinkSkillFetchBudget lowers skillsBudget/archiveTimeout/skillFetchConcurrency
+// for a test and restores them on cleanup. These are vars (not consts)
+// specifically so a test can avoid waiting out the real 10s budget against a
+// deliberately hanging fixture; see skillsBudget's doc comment. This package
+// must not adopt t.Parallel() while any test uses this.
+func shrinkSkillFetchBudget(t *testing.T, budget, archive time.Duration, concurrency int) {
+	t.Helper()
+	origBudget, origArchive, origConcurrency := skillsBudget, archiveTimeout, skillFetchConcurrency
+	skillsBudget, archiveTimeout, skillFetchConcurrency = budget, archive, concurrency
+	t.Cleanup(func() {
+		skillsBudget, archiveTimeout, skillFetchConcurrency = origBudget, origArchive, origConcurrency
+	})
+}
+
+// TestSessionStartSkillsFetchBudgetBounded covers the fix for a measured
+// regression: 1 pin + 5 matches (5 is RecommendSkills' default limit; see
+// internal/api/brief.go) against a hanging archive endpoint used to cost
+// 12s+ of dead air at session start, strictly linear in skill count. The
+// fetch loop must instead be bounded overall by skillsBudget and run with
+// bounded concurrency (skillFetchConcurrency), never serially per skill.
+func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
+	shrinkSkillFetchBudget(t, 500*time.Millisecond, 500*time.Millisecond, 2)
+
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-5", "budget")
+
+	_, tddHash := buildSkillArchive(t, "# TDD\n")
+	matches := make([]cli.SkillMatch, 0, 5)
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("match-%d", i)
+		_, hash := buildSkillArchive(t, "# "+name+"\n")
+		matches = append(matches, cli.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
+	}
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
+			Matches: matches,
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.hangArchive("tdd")
+	for _, m := range matches {
+		back.hangArchive(m.Name)
+	}
+
+	start := time.Now()
+	stdout, stderr := runSessionStart(t, wtDir, "s-budget")
+	elapsed := time.Since(start)
+
+	// 6 skills serialized at the old 2s-per-fetch rate would be 12s; bounded
+	// by a 500ms budget the whole loop — regardless of skill count — must
+	// land near that budget, not near (skill count × archiveTimeout).
+	if elapsed > skillsBudget+time.Second {
+		t.Fatalf("session-start with 6 hanging archives took %s, want well under skillsBudget=%s", elapsed, skillsBudget)
+	}
+
+	// The concurrency cap actually held: with 6 hanging fetches and a limit
+	// of 2, the server must never see more than 2 requests in flight at once.
+	if peak := back.peakConcurrency(); peak != 2 {
+		t.Fatalf("peak concurrent archive fetches = %d, want exactly the skillFetchConcurrency limit (2)", peak)
+	}
+
+	// The never-fail invariant holds throughout: the brief still comes
+	// through, and every hung skill was warned about.
+	ctx := additionalContext(t, stdout)
+	if !strings.Contains(ctx, "PROJ-5") {
+		t.Fatalf("additionalContext missing the brief despite hanging archives: %q", ctx)
+	}
+	if !strings.Contains(stderr, "tdd") {
+		t.Fatalf("stderr missing warning for the hung pinned skill: %q", stderr)
+	}
+	for _, m := range matches {
+		if !strings.Contains(stderr, m.Name) {
+			t.Fatalf("stderr missing warning for hung match %s: %q", m.Name, stderr)
+		}
+	}
+}
+
+// TestSessionStartSkillsPinnedByteCapEmitsPointer covers the fix for the
+// second measured regression: pinned content is inlined with no size bound,
+// so one large SKILL.md (or several) could inject hundreds of KB into every
+// session start. Once the running total of inlined pinned bytes would
+// exceed maxInlinedSkillBytes, later pins get a pointer instead of their
+// content — never a mid-document truncation.
+func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-6", "bytecap")
+
+	small := "# Small\n"
+	big := "# Big\n" + strings.Repeat("x", maxInlinedSkillBytes) // alone, guarantees overflow
+	smallArchive, smallHash := buildSkillArchive(t, small)
+	bigArchive, bigHash := buildSkillArchive(t, big)
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{
+				{Name: "small", Description: "d", Hash: smallHash, Content: small},
+				{Name: "big", Description: "d", Hash: bigHash, Content: big},
+			},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.setArchive("small", smallHash, smallArchive)
+	back.setArchive("big", bigHash, bigArchive)
+
+	stdout, _ := runSessionStart(t, wtDir, "s-bytecap")
+	ctx := additionalContext(t, stdout)
+
+	// The small pin fits under budget and is inlined in full.
+	if got, want := pinnedBodyLine(t, ctx, "small"), "# Small"; got != want {
+		t.Fatalf("small pin body line = %q, want %q (should be inlined in full)", got, want)
+	}
+	if strings.Contains(ctx, big) {
+		t.Fatalf("big pin's content must not appear in full once the byte budget is exceeded")
+	}
+
+	// The big pin gets a pointer, sized and located, never a truncated body.
+	line := pinnedBodyLine(t, ctx, "big")
+	wantPrefix := "(content omitted — " + humanKB(len(big)) + "; read it at "
+	if !strings.HasPrefix(line, wantPrefix) || !strings.HasSuffix(line, "/SKILL.md)") {
+		t.Fatalf("big pin body line = %q, want prefix %q and suffix %q", line, wantPrefix, "/SKILL.md)")
+	}
+}
+
+// TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint covers the
+// interaction the coordinator flagged between fixes 1-3: an over-budget
+// pinned skill whose archive ALSO failed to fetch must point at the install
+// hint, not a local path that was never actually populated.
+func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-7", "bytecapfail")
+
+	big := "# Big\n" + strings.Repeat("y", maxInlinedSkillBytes)
+	_, bigHash := buildSkillArchive(t, big)
+
+	brief := cli.Brief{
+		Task: cli.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
+		Skills: cli.SkillRecommendation{
+			Pinned: []cli.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
+		},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.failArchive("big")
+
+	stdout, _ := runSessionStart(t, wtDir, "s-bytecapfail")
+	ctx := additionalContext(t, stdout)
+
+	got := pinnedBodyLine(t, ctx, "big")
+	want := "(content omitted — " + humanKB(len(big)) + "; read it at lode skills install big)"
+	if got != want {
+		t.Fatalf("pinned body line = %q, want %q", got, want)
 	}
 }
