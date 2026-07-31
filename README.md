@@ -244,6 +244,29 @@ variables, same as the CLI client. Omit `--kubeconfig` when running in-cluster
 Backups are owned by CNPG (CloudNativePG) in-cluster; the compose stack has
 no backup mechanism of its own.
 
+## Org skills
+
+`lode skills` manages the org-wide agent skill registry, synced from git
+source repos named in `LODE_SKILL_SOURCES` (comma-separated
+`owner/repo@ref:glob` entries, e.g.
+`sunstoneinstitute/claude-plugins@main:plugins/*/skills/*`; requires the
+GitHub App):
+
+- `lode skills sync` — trigger a full server-side re-sync (admin).
+- `lode skills list` — list skills known to the server.
+- `lode skills recommend` — cosine-similarity matches for a task or free text.
+- `lode skills install <name>[@<hash>]` — fetch a skill into the local
+  content-addressed store (`~/.worklode/skills`).
+
+Pin skills to a task with `lode task add --skill <name>` (repeatable) or
+manage them after the fact with `lode task skills <id> [--set ...]`; pinned
+skills are always inlined in `lode task brief`.
+
+Recommendations need `LODE_EMBEDDING_URL`, `LODE_EMBEDDING_MODEL`, and
+`LODE_EMBEDDING_API_KEY` on the server. With `LODE_EMBEDDING_URL` unset, the
+server runs pins-only: briefs and recommendations both still work, just
+without similarity matches.
+
 ## Worklode plugin (Claude Code)
 
 Installing the `lode` CLI is covered in Quickstart above; this section covers
