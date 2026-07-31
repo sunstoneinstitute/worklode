@@ -11,8 +11,8 @@ import (
 )
 
 // recommendTimeout bounds the embedding-provider call on both the recommend
-// endpoint and the task-brief path (recommendation() is shared with the
-// brief — see Task 12); on expiry the response degrades to pins-only.
+// endpoint and the task-brief path, which share skillMatches; on expiry the
+// response degrades to pins-only.
 const recommendTimeout = 2 * time.Second
 
 // defaultSkillLimit applies when the caller asks for no particular number of
@@ -146,9 +146,9 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 // recommendation resolves pins (inline content) and, when a provider is
 // configured, embedding matches excluding the pinned names. Provider
 // failures degrade to pins-only with a warning — recommendations never block
-// work. Matching itself is shared with the task brief via skillMatches (see
-// Task 12): the brief already has its pins resolved by store.Brief, so it
-// calls skillMatches directly instead of re-resolving them here.
+// work. Matching itself is shared with the task brief via skillMatches: the
+// brief already has its pins resolved by store.Brief, so taskBrief calls
+// skillMatches directly instead of re-resolving them here.
 func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*recommendationJSON, error) {
 	rec := &recommendationJSON{
 		Pinned: []pinnedSkillJSON{}, Matches: []skillMatchJSON{}, Warnings: []string{},

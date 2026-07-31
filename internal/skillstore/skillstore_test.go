@@ -198,7 +198,7 @@ func TestEnsureTwoVersionsResolveSimultaneously(t *testing.T) {
 }
 
 // TestExtractPreservesExecBit guards against silently dropping the
-// executable bit: Task 6's buildArchive carries mode into the tar header
+// executable bit: skillsync.buildArchive carries mode into the tar header
 // and folds it into the content hash specifically so scripts stay runnable.
 func TestExtractPreservesExecBit(t *testing.T) {
 	root := t.TempDir()
@@ -363,7 +363,7 @@ func TestEnsureConcurrent(t *testing.T) {
 }
 
 // TestExtractSkipsSymlink documents that the extractor never follows or
-// materializes a symlink entry. Task 6 already drops symlinks server-side,
+// materializes a symlink entry. skillsync.skillDirs drops symlinks at ingest,
 // but the extractor should not be the weak link if that ever changes.
 func TestExtractSkipsSymlink(t *testing.T) {
 	root := t.TempDir()
