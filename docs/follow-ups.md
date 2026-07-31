@@ -47,6 +47,16 @@ once an instance is running (dogfooding); until then this file is the list.
   entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
+- **The web UI is unauthenticated without an SSO provider**: `webAuth`
+  (`internal/api/oidcweb.go:57`) passes every request through when neither
+  OIDC nor GitHub login is configured, so the board, project, and task pages
+  are readable by anyone who can reach the server. Spec 021 mirrors that
+  bypass in `eitherAuth` for consistency — the blob route is the wrong place
+  to unilaterally tighten the auth model — which means task screenshots and
+  attachments inherit it too. Spec 021 raises the stakes rather than creating
+  them: bodies already carried pre-release design work. Fix at the UI level,
+  either by refusing to serve web surfaces with no provider configured or by
+  gating the whole UI default-deny. Tracked as spec 021 Q021.4.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
