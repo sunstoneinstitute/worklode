@@ -15,6 +15,15 @@ import (
 // brief — see Task 12); on expiry the response degrades to pins-only.
 const recommendTimeout = 2 * time.Second
 
+// defaultSkillLimit applies when the caller asks for no particular number of
+// matches; maxSkillLimit clamps an over-large ask. Clamping, not falling back
+// to the default: "--limit 50" asked for more, so returning fewer than
+// "--limit 20" would have is the one answer that cannot be right.
+const (
+	defaultSkillLimit = 5
+	maxSkillLimit     = 20
+)
+
 // skillSyncTimeout bounds one sync request: N tarball downloads (each up to
 // 2 minutes, see githubauth.Tarball) plus serial per-skill embedding (each up
 // to 30s, see embed.OpenAI's client timeout) can add up fast on a large
@@ -178,10 +187,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 	if s.embedder != nil {
 		rec.Provider = "openai-compatible"
 	}
-	matches, warnings, err := s.skillMatches(ctx, text, pinnedNames, limit)
-	if err != nil {
-		return nil, err
-	}
+	matches, warnings := s.skillMatches(ctx, text, pinnedNames, limit)
 	rec.Matches = matches
 	rec.Warnings = append(rec.Warnings, warnings...)
 	return rec, nil
@@ -191,26 +197,37 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // exclude (typically already-pinned skills, so the same skill is never
 // surfaced twice). It is the one embedding code path shared by recommendation
 // (pins resolved just above) and the task brief handler (pins already
-// resolved by store.Brief). A provider failure or timeout — bounded by
-// recommendTimeout — degrades to no matches plus a warning rather than an
-// error, since a recommendation must never block work.
-func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]skillMatchJSON, []string, error) {
+// resolved by store.Brief).
+//
+// It never fails. Every way matching can break — provider down, provider
+// timeout past recommendTimeout, or a vector query the store rejects (mixed
+// dimensions in the corpus make every cosine query error) — degrades to no
+// matches plus a warning. Pins-only is a fully functional mode per spec 016,
+// and this path serves the task brief: an error here would stop anyone from
+// starting work.
+func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]skillMatchJSON, []string) {
 	matches := []skillMatchJSON{}
-	if limit <= 0 || limit > 20 {
-		limit = 5
+	switch {
+	case limit <= 0:
+		limit = defaultSkillLimit
+	case limit > maxSkillLimit:
+		limit = maxSkillLimit
 	}
 	if s.embedder == nil {
-		return matches, nil, nil
+		return matches, nil
 	}
 	ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
 	defer cancel()
 	vecs, err := s.embedder.Embed(ectx, []string{embed.Truncate(text, embed.ChunkRunes)})
 	if err != nil {
-		return matches, []string{"embedding provider unavailable; matches omitted"}, nil
+		return matches, []string{"embedding provider unavailable; matches omitted"}
 	}
 	found, err := s.st.RecommendSkills(ctx, vecs[0], limit+len(exclude), s.skillFloor)
 	if err != nil {
-		return nil, nil, err
+		// Logged: the caller gets a warning, but the cause (usually a corpus
+		// left at two dimensions) is only visible here.
+		s.log.Error("skill match query failed", "err", err)
+		return matches, []string{"skill matching unavailable; matches omitted"}
 	}
 	for _, m := range found {
 		if exclude[m.Name] || len(matches) >= limit {
@@ -220,7 +237,7 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 			Name: m.Name, Description: m.Description, Hash: m.ContentHash, Score: m.Score,
 		})
 	}
-	return matches, nil, nil
+	return matches, nil
 }
 
 // syncResponse is skillsync.Summary plus, on a partial failure, the
