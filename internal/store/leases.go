@@ -216,6 +216,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			}
 			return nil
 		})
+	s.metrics.claim("claim", claimOutcome(err))
 	if err != nil {
 		return nil, err
 	}
@@ -262,6 +263,7 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 			lease = l
 			return nil
 		})
+	s.metrics.renew(outcome(err))
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +293,7 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 			now := s.nowFn().UTC().Truncate(time.Second)
 			return closeLease(tx, now, l.ID, taskID, eventID)
 		})
+	s.metrics.release(outcome(err))
 	return err
 }
 
@@ -436,6 +439,9 @@ func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
 	defer conn.ExecContext(context.WithoutCancel(ctx),
 		`SELECT pg_advisory_unlock(hashtext('worklode-sweeper'))`)
 
+	count := 0
+	defer func() { s.metrics.expire(count) }()
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, task_id FROM leases WHERE released_at IS NULL AND expires_at < $1 ORDER BY id`,
 		now.UTC())
@@ -461,7 +467,6 @@ func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
 	}
 	rows.Close()
 
-	count := 0
 	for _, e := range candidates {
 		extID := fmt.Sprintf("lease-expired-%d", e.leaseID)
 		_, inserted, err := s.RecordEvent(ctx, "system", extID, "lease.expired", nil,
