@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,7 +166,6 @@ func TestRecommendationNoPins(t *testing.T) {
 // requirement, or the appAuth requirement all left the api suite green.
 func TestNewServerSkillsConfig(t *testing.T) {
 	st := store.OpenTestStore(t)
-	appKeyPEM := appTestKeyPEM(t)
 
 	cases := []struct {
 		name    string
@@ -188,11 +188,11 @@ func TestNewServerSkillsConfig(t *testing.T) {
 
 		{"skill sources malformed", Config{SkillSources: "not-a-source"}, true},
 		{"skill sources without github app", Config{SkillSources: "acme/skills@main:skills/*"}, true},
-		{
-			"skill sources with github app configured",
-			Config{SkillSources: "acme/skills@main:skills/*", GitHubAppID: "12345", GitHubAppPrivateKey: appKeyPEM},
-			false,
-		},
+		// "skill sources with github app configured" lives in its own test,
+		// TestNewServerSkillsSourcesWithGitHubApp below: that config makes
+		// NewServer fire a boot-time skill sync (see runSkillSync), which
+		// needs githubAPIBase redirected at a local server so the test suite
+		// never reaches out to the real GitHub API.
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,6 +201,52 @@ func TestNewServerSkillsConfig(t *testing.T) {
 				t.Fatalf("NewServer(%+v) err = %v, wantErr %v", tc.cfg, err, tc.wantErr)
 			}
 		})
+	}
+}
+
+// TestNewServerSkillsSourcesWithGitHubApp covers the "skill sources with
+// github app configured" boot case that TestNewServerSkillsConfig can't:
+// that config makes NewServer's boot-time skill sync (see runSkillSync)
+// fire a real GitHub App auth flow in a background goroutine. Left pointed
+// at the real API, that goroutine would reach out to api.github.com — slow,
+// flaky, and network-dependent for a unit test — and it can still be
+// running when t.Cleanup drops the test database out from under it.
+// Redirecting githubAPIBase at a local server keeps the whole flow local and
+// fast; the hit counter proves the boot sync actually ran through the
+// redirect rather than skipping the network call entirely.
+func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
+	st := store.OpenTestStore(t)
+
+	var hits int32
+	hit := make(chan struct{})
+	fakeGH := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			close(hit)
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(fakeGH.Close)
+
+	orig := githubAPIBase
+	githubAPIBase = fakeGH.URL
+	t.Cleanup(func() { githubAPIBase = orig })
+
+	_, _, err := NewServer(st, Config{
+		SkillSources:        "acme/skills@main:skills/*",
+		GitHubAppID:         "12345",
+		GitHubAppPrivateKey: appTestKeyPEM(t),
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	select {
+	case <-hit:
+	case <-time.After(5 * time.Second):
+		t.Fatal("boot sync never reached the fake GitHub server: redirect did not take effect")
+	}
+	if atomic.LoadInt32(&hits) == 0 {
+		t.Fatal("fake GitHub server hit counter is zero: boot sync did not run through the redirect")
 	}
 }
 

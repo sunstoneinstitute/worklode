@@ -91,9 +91,10 @@ type Config struct {
 	SkillScoreFloor string
 }
 
-// githubAPIBase is the public GitHub REST endpoint. Tests point AppAuth at a
-// local server by building it directly.
-const githubAPIBase = "https://api.github.com"
+// githubAPIBase is the public GitHub REST endpoint. A var, not a const, so
+// tests can redirect it at a local server instead of reaching out to the
+// real GitHub API (e.g. a boot-time skill sync triggered by NewServer).
+var githubAPIBase = "https://api.github.com"
 
 // newAppAuth builds the GitHub App client used for repo discovery, or nil when
 // the app id and key are not both configured. An unusable key is a startup
