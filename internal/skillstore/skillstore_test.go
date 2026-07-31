@@ -160,6 +160,43 @@ func TestEnsure(t *testing.T) {
 	}
 }
 
+// TestEnsureTwoVersionsResolveSimultaneously is spec 016 acceptance
+// criterion 5: two worktrees briefed against different hashes of one skill
+// must both resolve valid local paths at the same time. The by-name symlink
+// holds one version, so the path Ensure returns has to be the content-
+// addressed one; returning the symlink made the second install silently
+// repoint the first worktree's path at the other version.
+func TestEnsureTwoVersionsResolveSimultaneously(t *testing.T) {
+	root := t.TempDir()
+	v1 := map[string]string{"SKILL.md": "version one"}
+	v2 := map[string]string{"SKILL.md": "version two"}
+
+	p1, err := Ensure(root, "tdd", hashFiles(v1), func() ([]byte, error) { return gzTar(t, v1), nil })
+	if err != nil {
+		t.Fatalf("ensure v1: %v", err)
+	}
+	p2, err := Ensure(root, "tdd", hashFiles(v2), func() ([]byte, error) { return gzTar(t, v2), nil })
+	if err != nil {
+		t.Fatalf("ensure v2: %v", err)
+	}
+	if p1 == p2 {
+		t.Fatalf("both versions resolved to one path: %s", p1)
+	}
+	for _, tc := range []struct{ path, want string }{{p1, "version one"}, {p2, "version two"}} {
+		got, err := os.ReadFile(filepath.Join(tc.path, "SKILL.md"))
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.path, err)
+		}
+		if string(got) != tc.want {
+			t.Fatalf("%s holds %q, want %q", tc.path, got, tc.want)
+		}
+	}
+	// The by-name symlink is the convenience pointer: last install wins.
+	if got, err := os.ReadFile(filepath.Join(Path(root, "tdd"), "SKILL.md")); err != nil || string(got) != "version two" {
+		t.Fatalf("by-name symlink = %q err=%v, want the most recent install", got, err)
+	}
+}
+
 // TestExtractPreservesExecBit guards against silently dropping the
 // executable bit: Task 6's buildArchive carries mode into the tar header
 // and folds it into the content hash specifically so scripts stay runnable.
