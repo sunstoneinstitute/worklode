@@ -286,6 +286,9 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 		lease, err := s.Claim(ctx, t.ID, opts.ActorID, opts.Worktree, opts.TTL)
 		if err != nil {
 			if errors.Is(err, ErrLeased) || errors.Is(err, ErrBlocked) || errors.Is(err, ErrBadTransition) {
+				// These lost races are already counted under op=claim by Claim itself —
+				// ErrBadTransition lands in outcome="error", so that series includes
+				// contention, not just faults.
 				continue
 			}
 			s.metrics.claim("claim_next", "error")
@@ -295,6 +298,7 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 		s.metrics.claim("claim_next", "ok")
 		return &ClaimNextResult{Claimed: true, Task: &task, FanOut: fanOut[t.ID], Lease: lease}, nil
 	}
+	// Every candidate lost its race; reported as none, same as an empty ready set.
 	s.metrics.claim("claim_next", "none")
 	return &ClaimNextResult{Claimed: false}, nil
 }

@@ -154,4 +154,7 @@ func TestClaimNextMetrics(t *testing.T) {
 	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim", "ok")); got != 1 {
 		t.Fatalf("claims{claim,ok} = %v, want 1", got)
 	}
+	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "none")); got != 1 {
+		t.Fatalf("claims{claim_next,none} after success = %v, want 1", got)
+	}
 }
