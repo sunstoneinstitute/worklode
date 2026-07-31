@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -205,6 +207,7 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doneState := store.DefaultDoneState
+	var warnings []string
 	switch {
 	case req.DoneState != "":
 		if err := s.st.SetRepoDoneState(r.Context(), req.Repo, req.DoneState); err != nil {
@@ -212,12 +215,60 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		doneState = req.DoneState
+		warnings = s.subscriptionWarnings(r.Context())
 	case s.appAuth != nil:
-		doneState = s.discoverDoneState(r.Context(), req.Repo)
+		// Done-state discovery and the subscription check are independent
+		// GitHub round trips, each bounded by discoveryTimeout; run them
+		// concurrently so a slow GitHub costs one timeout, not two.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			doneState = s.discoverDoneState(r.Context(), req.Repo)
+		}()
+		go func() {
+			defer wg.Done()
+			warnings = s.subscriptionWarnings(r.Context())
+		}()
+		wg.Wait()
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"project_id": id, "repo": req.Repo, "done_state": doneState,
-	})
+	resp := map[string]any{"project_id": id, "repo": req.Repo, "done_state": doneState}
+	if len(warnings) > 0 {
+		resp["warnings"] = warnings
+	}
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+// subscriptionWarnings names the events the webhook handler routes that this
+// installation is not subscribed to. Like done-state discovery it never gates
+// the mapping: the repo is already mapped, and a GitHub failure must not fail
+// the request — so any error yields no warnings.
+func (s *server) subscriptionWarnings(ctx context.Context) []string {
+	if s.appAuth == nil {
+		return nil
+	}
+	sctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
+	subscribed, err := s.appAuth.SubscribedEvents(sctx)
+	if err != nil {
+		s.log.Warn("check app event subscriptions", "err", err)
+		return nil
+	}
+	have := make(map[string]bool, len(subscribed))
+	for _, e := range subscribed {
+		have[e] = true
+	}
+	var missing []string
+	for _, e := range hooks.HandledEvents() {
+		if !have[e] {
+			missing = append(missing, e)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return []string{"github app is not subscribed to: " + strings.Join(missing, ", ") +
+		" — those webhooks will never arrive"}
 }
 
 // discoveryTimeout bounds the GitHub round trips addRepo makes; the mapping is

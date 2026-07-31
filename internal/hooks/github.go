@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -184,10 +185,29 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handledEvents are the GitHub event names applyFunc routes. It is the single
+// source of truth: applyFunc switches over these names, and the add-repo
+// subscription check compares an installation's subscriptions against them, so
+// adding an eighth event cannot leave the check behind.
+var handledEvents = []string{
+	"issues", "push", "pull_request", "deployment_status",
+	"pull_request_review", "workflow_run", "release",
+}
+
+// HandledEvents returns the event names this handler routes.
+func HandledEvents() []string {
+	out := make([]string, len(handledEvents))
+	copy(out, handledEvents)
+	return out
+}
+
 // applyFunc routes a mapped-repo event to its per-event apply callback.
 // Unknown events (and unhandled actions) get a nil apply: the event is still
 // recorded, with no typed-table effect.
 func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(tx *sql.Tx, eventID int64) error {
+	if !slices.Contains(handledEvents, event) {
+		return nil
+	}
 	repo := env.Repository.FullName
 	switch event {
 	case "issues":

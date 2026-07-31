@@ -159,7 +159,7 @@ func setupGitRepo(t *testing.T, origin string) string {
 // mapProjectRepo maps a GitHub repo to a project on the test server.
 func mapProjectRepo(t *testing.T, c *cli.Client, project, repo string) {
 	t.Helper()
-	if _, err := c.AddRepo(context.Background(), project, repo, ""); err != nil {
+	if _, _, err := c.AddRepo(context.Background(), project, repo, ""); err != nil {
 		t.Fatalf("map %s to %s: %v", repo, project, err)
 	}
 }
