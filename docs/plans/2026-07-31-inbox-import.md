@@ -811,7 +811,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 	if req.DryRun {
 		// Counting needs a transaction but no event: a dry run must leave the
 		// events table untouched too, not just the typed tables.
-		if err := s.st.InTx(r.Context(), count); err != nil {
+		if err := s.st.Tx(r.Context(), count); err != nil {
 			s.mapStoreErr(w, err)
 			return
 		}
@@ -884,27 +884,9 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 
 `count` runs inside the same transaction as the upserts, and increments the response counters. Because `RecordEvent` retries nothing, the counters are written exactly once.
 
-`store.Store` has no `InTx` helper yet — add one to `internal/store/store.go` in this task. Tasks 4 and 6 use it too:
-
-```go
-// InTx runs fn in a transaction, committing on success and rolling back on
-// error. For read-only work that still needs transactional consistency —
-// import's dry run, which must not write an event row.
-func (s *Store) InTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
-}
-```
+Use the existing `store.Store.Tx` (`internal/store/store.go:137`) for the dry-run
+path — it already runs `fn` in a transaction, committing on nil and rolling back
+on error. Do **not** add an `InTx` duplicate; Tasks 4 and 6 use `Tx` too.
 
 - [ ] **Step 4: Register the route**
 
@@ -922,7 +904,7 @@ Expected: PASS (5 tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add internal/api/inbox_import.go internal/api/inbox_import_test.go internal/api/server.go internal/store/store.go
+git add internal/api/inbox_import.go internal/api/inbox_import_test.go internal/api/server.go
 git commit -m "Add POST /api/v1/inbox/import"
 ```
 
@@ -949,7 +931,7 @@ func TestImportDoesNotClobberPromotedRow(t *testing.T) {
 
 	// Promote it, then re-import with a changed upstream title.
 	var taskID string
-	err := st.InTx(ctx, func(tx *sql.Tx) error {
+	err := st.Tx(ctx, func(tx *sql.Tx) error {
 		task, err := store.PromoteIssue(tx, st.Now(), "acme/widgets", 1, store.TaskInput{
 			ProjectID: "proj", Title: "kept", Priority: "low", Kind: "bug", CreatedBy: "someone",
 		}, nil)
@@ -998,7 +980,7 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 
 	// A ready task the historical PR's branch name correlates to.
 	var taskID string
-	if err := st.InTx(ctx, func(tx *sql.Tx) error {
+	if err := st.Tx(ctx, func(tx *sql.Tx) error {
 		task, err := store.CreateTask(tx, st.Now(), store.TaskInput{
 			ProjectID: "proj", Title: "unrelated", Priority: "low", Kind: "bug", CreatedBy: "someone",
 		})
@@ -1268,7 +1250,7 @@ func TestLinkIssueRejectsAlreadyTriaged(t *testing.T) {
 		return DismissIssue(tx, "acme/widgets", 1)
 	})
 
-	err := st.InTx(context.Background(), func(tx *sql.Tx) error {
+	err := st.Tx(context.Background(), func(tx *sql.Tx) error {
 		task, err := CreateTask(tx, st.Now(), TaskInput{
 			ProjectID: "proj", Title: "t", Priority: "low", Kind: "bug", CreatedBy: "someone",
 		})
@@ -1290,7 +1272,7 @@ func TestLinkIssueRejectsMissingTask(t *testing.T) {
 		return UpsertIssue(tx, Issue{Repo: "acme/widgets", Number: 1, Title: "a", State: "open"})
 	})
 
-	err := st.InTx(context.Background(), func(tx *sql.Tx) error {
+	err := st.Tx(context.Background(), func(tx *sql.Tx) error {
 		return LinkIssue(tx, "acme/widgets", 1, "PR-999")
 	})
 	if !errors.Is(err, ErrNotFound) {
@@ -2029,7 +2011,7 @@ git commit -m "Document inbox import and graduate spec 020"
 
 **Spec coverage.** Fetch layer → Task 1. Import endpoint, preconditions, dry run, counts, truncation → Tasks 3–5. Inventory-not-replay → Task 4 (tests) enforcing Task 3's implementation. `--draft` and the epic guard → Task 8. `--parent` → Task 9. `lode inbox link` → Tasks 6–7. Event-subscription check → Task 10. Every row of the spec's Testing table maps to a named test above except "two pages then a short page" and "`maxPages` exceeded", which are Task 1's `TestListIssuesPagesUntilShortPage` and `TestListIssuesTruncatesAtMaxPages`.
 
-**Verified against the worktree's base commit.** `store.Store.InTx` does not exist (Task 3 adds it). `mapStoreErr` maps `ErrBadTransition` to 422. `taskExists` is at `internal/store/changes.go:129` and is package-private, so `LinkIssue` can call it. Every `file:line` reference in this plan and in spec 020 was re-checked against this branch's base.
+**Verified against the worktree's base commit.** `store.Store.Tx` already exists (`internal/store/store.go:137`); no `InTx` is added. `mapStoreErr` maps `ErrBadTransition` to 422. `taskExists` is at `internal/store/changes.go:129` and is package-private, so `LinkIssue` can call it. Every `file:line` reference in this plan and in spec 020 was re-checked against this branch's base.
 
 **The one thing to resolve during execution, not by guessing.** Test-helper names (`inboxServer`, `seedIssue`, `postJSON`, `mustTx`, `seedProjectRepo`, `createTaskViaAPI`) are written as the neighbouring tests' conventions rather than verified symbols; read each test file first and use what is actually there.
 
