@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -688,5 +689,103 @@ func TestTaskBriefCmd(t *testing.T) {
 	}
 	if b.Branch != "lode/"+task.ID+"-brief-me" {
 		t.Fatalf("brief.Branch = %q, want lode/%s-brief-me", b.Branch, task.ID)
+	}
+	if b.Skills.Provider != "none" || len(b.Skills.Pinned) != 0 || len(b.Skills.Matches) != 0 {
+		t.Fatalf("brief.Skills = %+v, want empty (no pins, no embedder)", b.Skills)
+	}
+}
+
+// TestTaskBriefCmdShowsSkills exercises the end-to-end pinned-skill path
+// through the CLI: a pin resolves with content, an unknown pin warns, and
+// both surface in the non-JSON `lode task brief` rendering.
+func TestTaskBriefCmdShowsSkills(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
+
+	task, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+		Project: "proj", Title: "Brief with skills", Priority: "high", Kind: "feature",
+		Skills: []string{"tdd", "ghost"},
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	out, err := runLode(t, "task", "brief", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("lode task brief: %v\noutput: %s", err, out)
+	}
+	var b cli.Brief
+	if err := json.Unmarshal([]byte(out), &b); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if len(b.Skills.Pinned) != 1 || b.Skills.Pinned[0].Name != "tdd" || b.Skills.Pinned[0].Content == "" {
+		t.Fatalf("brief.Skills.Pinned = %+v, want one tdd entry with content", b.Skills.Pinned)
+	}
+	if len(b.Skills.Warnings) != 1 || b.Skills.Warnings[0] != "pinned skill not found: ghost" {
+		t.Fatalf("brief.Skills.Warnings = %+v, want [pinned skill not found: ghost]", b.Skills.Warnings)
+	}
+
+	// Non-JSON rendering surfaces the same information via printBrief.
+	out, err = runLode(t, "task", "brief", task.ID)
+	if err != nil {
+		t.Fatalf("lode task brief (table): %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "pinned  tdd") {
+		t.Fatalf("brief output = %q, want a pinned tdd line", out)
+	}
+	if !strings.Contains(out, "warning: pinned skill not found: ghost") {
+		t.Fatalf("brief output = %q, want the missing-skill warning", out)
+	}
+}
+
+// --- printBrief -------------------------------------------------------
+
+func TestPrintBriefRendersSkillsSection(t *testing.T) {
+	b := cli.Brief{
+		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "lode/WL-1-t",
+		Skills: cli.SkillRecommendation{
+			Pinned:   []cli.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
+			Matches:  []cli.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
+			Warnings: []string{"pinned skill not found: ghost"},
+			Provider: "openai-compatible",
+		},
+	}
+	buf := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+
+	printBrief(cmd, b)
+
+	out := buf.String()
+	if !strings.Contains(out, "Skills:") {
+		t.Fatalf("output = %q, want a Skills section", out)
+	}
+	if !strings.Contains(out, "pinned  tdd — Red-green-refactor (content in brief)") {
+		t.Fatalf("output = %q, want a rendered pinned line", out)
+	}
+	if !strings.Contains(out, "0.87    debugging — Systematic debugging") {
+		t.Fatalf("output = %q, want a rendered match line", out)
+	}
+	if !strings.Contains(out, "warning: pinned skill not found: ghost") {
+		t.Fatalf("output = %q, want a rendered warning line", out)
+	}
+}
+
+func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
+	b := cli.Brief{
+		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "lode/WL-1-t",
+		Skills: cli.SkillRecommendation{Provider: "none"},
+	}
+	buf := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+
+	printBrief(cmd, b)
+
+	if strings.Contains(buf.String(), "Skills:") {
+		t.Fatalf("output = %q, want no Skills section when there is nothing to show", buf.String())
 	}
 }

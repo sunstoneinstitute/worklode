@@ -120,3 +120,76 @@ func TestBriefNotFound(t *testing.T) {
 		t.Fatalf("Brief unknown task: err = %v, want ErrNotFound", err)
 	}
 }
+
+// TestBriefResolvesPins pins a real skill and an unknown one: the real skill
+// resolves with content, the unknown one produces a warning instead of
+// failing the brief.
+func TestBriefResolvesPins(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd", "ghost"}
+	task := createTask(t, s, leaseTestNow, in)
+
+	b, err := s.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.PinnedSkills) != 1 || b.PinnedSkills[0].Name != "tdd" || b.PinnedSkills[0].SkillMD == "" {
+		t.Fatalf("pinned skills = %+v, want one tdd entry with SkillMD populated", b.PinnedSkills)
+	}
+	if len(b.SkillWarnings) != 1 || b.SkillWarnings[0] != "pinned skill not found: ghost" {
+		t.Fatalf("skill warnings = %+v, want [pinned skill not found: ghost]", b.SkillWarnings)
+	}
+}
+
+// TestBriefNoPins guards the bounded-queries contract: no pins, no extra
+// query, and the fields stay empty rather than nil-panicking a caller.
+func TestBriefNoPins(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	b, err := s.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.PinnedSkills) != 0 || len(b.SkillWarnings) != 0 {
+		t.Fatalf("brief with no pins = %+v, want no pinned skills or warnings", b)
+	}
+}
+
+// TestBriefResolvesDeletedPin guards that a pin surviving upstream deletion
+// still resolves with its content: a brief must never break because a skill
+// was withdrawn from its source repo.
+func TestBriefResolvesDeletedPin(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", nil); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd"}
+	task := createTask(t, s, leaseTestNow, in)
+
+	b, err := s.Brief(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.PinnedSkills) != 1 || b.PinnedSkills[0].Name != "tdd" || b.PinnedSkills[0].SkillMD == "" {
+		t.Fatalf("pinned skills = %+v, want tdd resolved with content despite deletion", b.PinnedSkills)
+	}
+	if len(b.SkillWarnings) != 1 || b.SkillWarnings[0] != "pinned skill removed from its source repo: tdd" {
+		t.Fatalf("skill warnings = %+v, want a removed-from-source-repo warning", b.SkillWarnings)
+	}
+}

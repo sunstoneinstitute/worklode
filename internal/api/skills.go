@@ -57,6 +57,12 @@ func toSkillJSON(sk store.Skill) skillJSON {
 	}
 }
 
+func toPinnedSkillJSON(sk store.Skill) pinnedSkillJSON {
+	return pinnedSkillJSON{
+		Name: sk.Name, Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
+	}
+}
+
 func (s *server) listSkills(w http.ResponseWriter, r *http.Request) {
 	skills, err := s.st.ListSkills(r.Context(), r.URL.Query().Get("deleted") == "true")
 	if err != nil {
@@ -129,15 +135,15 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 }
 
 // recommendation resolves pins (inline content) and, when a provider is
-// configured, embedding matches. Provider failures degrade to pins-only with
-// a warning — recommendations never block work.
+// configured, embedding matches excluding the pinned names. Provider
+// failures degrade to pins-only with a warning — recommendations never block
+// work. Matching itself is shared with the task brief via skillMatches (see
+// Task 12): the brief already has its pins resolved by store.Brief, so it
+// calls skillMatches directly instead of re-resolving them here.
 func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*recommendationJSON, error) {
 	rec := &recommendationJSON{
 		Pinned: []pinnedSkillJSON{}, Matches: []skillMatchJSON{}, Warnings: []string{},
 		Provider: "none",
-	}
-	if limit <= 0 || limit > 20 {
-		limit = 5
 	}
 
 	pinnedNames := map[string]bool{}
@@ -165,36 +171,56 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 				rec.Warnings = append(rec.Warnings, "pinned skill removed from its source repo: "+name)
 			}
 			pinnedNames[name] = true
-			rec.Pinned = append(rec.Pinned, pinnedSkillJSON{
-				Name: sk.Name, Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
-			})
+			rec.Pinned = append(rec.Pinned, toPinnedSkillJSON(sk))
 		}
 	}
 
-	if s.embedder == nil {
-		return rec, nil
+	if s.embedder != nil {
+		rec.Provider = "openai-compatible"
 	}
-	rec.Provider = "openai-compatible"
+	matches, warnings, err := s.skillMatches(ctx, text, pinnedNames, limit)
+	if err != nil {
+		return nil, err
+	}
+	rec.Matches = matches
+	rec.Warnings = append(rec.Warnings, warnings...)
+	return rec, nil
+}
+
+// skillMatches computes embedding matches for text, excluding any name in
+// exclude (typically already-pinned skills, so the same skill is never
+// surfaced twice). It is the one embedding code path shared by recommendation
+// (pins resolved just above) and the task brief handler (pins already
+// resolved by store.Brief). A provider failure or timeout — bounded by
+// recommendTimeout — degrades to no matches plus a warning rather than an
+// error, since a recommendation must never block work.
+func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]skillMatchJSON, []string, error) {
+	matches := []skillMatchJSON{}
+	if limit <= 0 || limit > 20 {
+		limit = 5
+	}
+	if s.embedder == nil {
+		return matches, nil, nil
+	}
 	ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
 	defer cancel()
 	vecs, err := s.embedder.Embed(ectx, []string{embed.Truncate(text, embed.ChunkRunes)})
 	if err != nil {
-		rec.Warnings = append(rec.Warnings, "embedding provider unavailable; matches omitted")
-		return rec, nil
+		return matches, []string{"embedding provider unavailable; matches omitted"}, nil
 	}
-	matches, err := s.st.RecommendSkills(ctx, vecs[0], limit+len(pinnedNames), s.skillFloor)
+	found, err := s.st.RecommendSkills(ctx, vecs[0], limit+len(exclude), s.skillFloor)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	for _, m := range matches {
-		if pinnedNames[m.Name] || len(rec.Matches) >= limit {
+	for _, m := range found {
+		if exclude[m.Name] || len(matches) >= limit {
 			continue
 		}
-		rec.Matches = append(rec.Matches, skillMatchJSON{
+		matches = append(matches, skillMatchJSON{
 			Name: m.Name, Description: m.Description, Hash: m.ContentHash, Score: m.Score,
 		})
 	}
-	return rec, nil
+	return matches, nil, nil
 }
 
 // syncResponse is skillsync.Summary plus, on a partial failure, the

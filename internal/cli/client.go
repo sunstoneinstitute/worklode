@@ -598,16 +598,18 @@ type BriefBlocker struct {
 // Brief is the wire form of GET /api/v1/tasks/{id}/brief: the bounded
 // start-of-work payload for a task. Lease is nil when the task has no active
 // lease. GoverningDesign, AffectedComponents, and DefinitionOfDone are
-// reserved fields that serialize as JSON null in v1.
+// reserved fields that serialize as JSON null in v1. Skills carries the
+// task's pinned skills (content inline) plus embedding-matched suggestions.
 type Brief struct {
-	Task               Task           `json:"task"`
-	Body               string         `json:"body"`
-	Branch             string         `json:"branch"`
-	OpenBlockers       []BriefBlocker `json:"open_blockers"`
-	Lease              *Lease         `json:"lease"`
-	GoverningDesign    *string        `json:"governing_design"`
-	AffectedComponents []string       `json:"affected_components"`
-	DefinitionOfDone   *string        `json:"definition_of_done"`
+	Task               Task                `json:"task"`
+	Body               string              `json:"body"`
+	Branch             string              `json:"branch"`
+	OpenBlockers       []BriefBlocker      `json:"open_blockers"`
+	Lease              *Lease              `json:"lease"`
+	GoverningDesign    *string             `json:"governing_design"`
+	AffectedComponents []string            `json:"affected_components"`
+	DefinitionOfDone   *string             `json:"definition_of_done"`
+	Skills             SkillRecommendation `json:"skills"`
 }
 
 // Brief calls GET /api/v1/tasks/{id}/brief.
