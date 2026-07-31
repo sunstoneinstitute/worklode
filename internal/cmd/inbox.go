@@ -17,7 +17,7 @@ func newInboxCmd() *cobra.Command {
 		Short: "Triage GitHub issues into tasks",
 	}
 	cmd.AddCommand(newInboxListCmd(), newInboxPromoteCmd(), newInboxDismissCmd(),
-		newInboxImportCmd())
+		newInboxLinkCmd(), newInboxImportCmd())
 	return cmd
 }
 
@@ -132,6 +132,39 @@ func newInboxDismissCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "dismissed %s#%d\n", args[0], number)
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newInboxLinkCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "link <repo> <number> <task-id>",
+		Short: "Attach an inbox issue to a task that already exists",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			number, err := parseIssueNumber(args[1])
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			taskID, err := resolveTaskID(cmd.Context(), args[2], c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.LinkIssue(cmd.Context(), args[0], number, taskID)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "linked %s#%d to %s\n", args[0], number, taskID)
 			return nil
 		},
 	}
