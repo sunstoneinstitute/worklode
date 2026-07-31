@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -288,7 +289,43 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	}
 	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 
-	emitAdditionalContext(opts.Stdout, compactBrief(brief))
+	skillPaths := ensureSkills(ctx, opts, c, brief)
+	emitAdditionalContext(opts.Stdout, compactBrief(brief, skillPaths))
+}
+
+// ensureSkills lazily fetches brief-referenced skill archives into the local
+// content-addressed store. Failures are warnings: the pinned content is
+// already inline in the brief, and recommended skills degrade to an install
+// hint. Returns name -> local path for the ones that are present.
+func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief) map[string]string {
+	root, err := skillstore.Root()
+	if err != nil {
+		warn(opts, "skill store: %v", err)
+		return nil
+	}
+	paths := map[string]string{}
+	ensure := func(name, hash string) {
+		if hash == "" {
+			return
+		}
+		bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+		defer cancel()
+		p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
+			return c.SkillArchive(bctx, name, hash)
+		})
+		if err != nil {
+			warn(opts, "skill %s: %v (run: lode skills install %s)", name, err, name)
+			return
+		}
+		paths[name] = p
+	}
+	for _, p := range b.Skills.Pinned {
+		ensure(p.Name, p.Hash)
+	}
+	for _, m := range b.Skills.Matches {
+		ensure(m.Name, m.Hash)
+	}
+	return paths
 }
 
 // ensureLease keeps this worktree's lease healthy at session start: renew a
@@ -634,8 +671,10 @@ func emitAdditionalContext(w io.Writer, text string) {
 }
 
 // compactBrief renders a brief as a few lines of plain text suitable for
-// injecting as session context.
-func compactBrief(b cli.Brief) string {
+// injecting as session context. skillPaths is name -> local dir for skills
+// ensureSkills managed to fetch; a skill missing from it either had no hash
+// (pinned) or failed to fetch (falls back to an install hint).
+func compactBrief(b cli.Brief, skillPaths map[string]string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s: %s [%s, %s]", b.Task.ID, b.Task.Title, b.Task.State, b.Task.Priority)
 	if b.Branch != "" {
@@ -653,6 +692,25 @@ func compactBrief(b cli.Brief) string {
 			names = append(names, blk.ID)
 		}
 		fmt.Fprintf(&sb, "\nopen blockers: %s", strings.Join(names, ", "))
+	}
+	if len(b.Skills.Pinned)+len(b.Skills.Matches) > 0 {
+		fmt.Fprintf(&sb, "\n## Skills\n")
+		for _, p := range b.Skills.Pinned {
+			fmt.Fprintf(&sb, "\n### Pinned: %s\n%s\n", p.Name, p.Content)
+			if path := skillPaths[p.Name]; path != "" {
+				fmt.Fprintf(&sb, "(supporting files: %s)\n", path)
+			}
+		}
+		if len(b.Skills.Matches) > 0 {
+			fmt.Fprintf(&sb, "\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n")
+			for _, m := range b.Skills.Matches {
+				loc := "lode skills install " + m.Name
+				if path := skillPaths[m.Name]; path != "" {
+					loc = path + "/SKILL.md"
+				}
+				fmt.Fprintf(&sb, "- %s (%.2f): %s — %s\n", m.Name, m.Score, m.Description, loc)
+			}
+		}
 	}
 	return sb.String()
 }
