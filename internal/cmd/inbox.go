@@ -67,7 +67,7 @@ func parseIssueNumber(s string) (int64, error) {
 }
 
 func newInboxPromoteCmd() *cobra.Command {
-	var title, body, priority, kind, appliesTo string
+	var title, body, priority, kind, appliesTo, parent string
 	var draft bool
 	cmd := &cobra.Command{
 		Use:   "promote <repo> <number>",
@@ -89,6 +89,7 @@ func newInboxPromoteCmd() *cobra.Command {
 			t, raw, err := c.PromoteIssue(cmd.Context(), cli.PromoteInput{
 				Repo: args[0], Number: number, Title: title, Body: body,
 				Priority: priority, Kind: kind, AppliesToVersions: versions, Draft: draft,
+				Parent: parent,
 			})
 			if err != nil {
 				return err
@@ -107,6 +108,7 @@ func newInboxPromoteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, spec")
 	cmd.Flags().StringVar(&appliesTo, "applies-to", "", "comma-separated versions this issue applies to, e.g. v1.2,v1.3")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create the task as a draft (not claimable until `lode task ready`)")
+	cmd.Flags().StringVar(&parent, "parent", "", "make the new task a child of this epic")
 	cmd.MarkFlagRequired("priority")
 	return cmd
 }
