@@ -344,8 +344,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		go s.runSkillSync(s.bgCtx, "webhook push")
 		return true
 	}
-	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush))
-	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log))
+	hookMetrics := hooks.NewMetrics(reg)
+	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, hookMetrics))
+	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
