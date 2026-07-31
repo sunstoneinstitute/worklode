@@ -98,7 +98,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 		t.Fatalf("CreateProject result = %+v", p)
 	}
 
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
+	if _, _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 
@@ -478,7 +478,7 @@ func TestClientInboxFlow(t *testing.T) {
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
+	if _, _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
 		t.Fatalf("AddRepo: %v", err)
 	}
 

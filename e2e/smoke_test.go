@@ -147,7 +147,7 @@ func TestFullChain(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, err := admin.AddRepo(ctx, "demo", repo, ""); err != nil {
+	if _, _, err := admin.AddRepo(ctx, "demo", repo, ""); err != nil {
 		t.Fatalf("add repo: %v", err)
 	}
 	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{

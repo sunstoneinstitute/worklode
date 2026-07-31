@@ -96,7 +96,7 @@ func newProjectAddRepoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			raw, err := c.AddRepo(cmd.Context(), args[0], args[1], doneState)
+			res, raw, err := c.AddRepo(cmd.Context(), args[0], args[1], doneState)
 			if err != nil {
 				return err
 			}
@@ -104,7 +104,11 @@ func newProjectAddRepoCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "added %s to project %s\n", args[1], args[0])
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "added %s to project %s\n", args[1], args[0])
+			for _, warning := range res.Warnings {
+				fmt.Fprintf(out, "warning: %s\n", warning)
+			}
 			return nil
 		},
 	}
