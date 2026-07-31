@@ -294,7 +294,9 @@ func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
 	}
 	doReq(t, main, "GET", "/api/v1/tasks", "", nil)
 
-	doReq(t, admin, "GET", "/metrics", "", nil) // first scrape trips the error counter
+	// Two scrapes: the body is encoded from the snapshot Gather() returned, and
+	// the error counter increments after it, so the failure only shows up next scrape.
+	doReq(t, admin, "GET", "/metrics", "", nil)
 	rr := doReq(t, admin, "GET", "/metrics", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("metrics status = %d, want 200", rr.Code)
@@ -305,5 +307,8 @@ func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
 	}
 	if !strings.Contains(body, `promhttp_metric_handler_errors_total{cause="gathering"} 1`) {
 		t.Fatalf("collector failure not surfaced:\n%s", body)
+	}
+	if strings.Contains(body, "worklode_probe") {
+		t.Fatalf("failing collector's family should be absent:\n%s", body)
 	}
 }
