@@ -32,11 +32,6 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	return m
 }
 
-// Requests exposes the counter for test assertions.
-func (m *Metrics) Requests() *prometheus.CounterVec {
-	return m.requests
-}
-
 func (m *Metrics) observe(err error, d time.Duration) {
 	if m == nil {
 		return
