@@ -423,7 +423,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// metrics endpoint must not count its own scrapes.
 	admin := http.NewServeMux()
 	admin.HandleFunc("GET /healthz", s.healthz)
-	admin.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	// ContinueOnError: one failing collector (e.g. the store's lease query
+	// timing out) must not 500 the whole scrape and take every other family
+	// with it. Registry exposes promhttp_metric_handler_errors_total so a
+	// persistently failing collector is still visible.
+	admin.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		ErrorHandling: promhttp.ContinueOnError,
+		Registry:      reg,
+	}))
 
 	// One sync at boot keeps the registry current with whatever landed on
 	// skill-source branches while the server was down; webhook pushes cover
