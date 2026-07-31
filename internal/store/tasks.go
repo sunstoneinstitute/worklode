@@ -116,6 +116,11 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
+	// Before the id is allocated: a rejected input must not burn a task number.
+	skills, err := normalizePins(in.Skills)
+	if err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
 
 	var n int64
 	var key string
@@ -143,10 +148,6 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	var concern sql.NullString
 	if in.Concern != "" {
 		concern = sql.NullString{String: in.Concern, Valid: true}
-	}
-	skills := in.Skills
-	if skills == nil {
-		skills = []string{}
 	}
 	skillsJSON, err := json.Marshal(skills)
 	if err != nil {
@@ -344,13 +345,18 @@ func scanTask(row rowScanner) (*Task, error) {
 	return &t, nil
 }
 
-// SetTaskSkills replaces the task's pinned skill names inside the given
-// transaction and bumps updated_at, matching UpdateTaskFields and Transition.
-// nil normalizes to an empty pin list rather than a SQL NULL — SkillsByNames
-// reads the column with jsonb_array_elements_text, which errors on a JSON
-// null. Blank entries are dropped and the list is deduped, preserving first
-// occurrence order. Returns ErrNotFound if the task does not exist.
-func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error {
+// maxTaskPins caps a task's pinned skill list. Every pin is inlined whole
+// into every brief for that task, so an unbounded list crowds out the task
+// itself; 20 is far above any real pin set.
+const maxTaskPins = 20
+
+// normalizePins cleans a pinned-skill list: trim, drop blanks, dedupe keeping
+// first-occurrence order. Both write paths use it — storing pins verbatim on
+// create produced "pinned skill not found" warnings for whitespace and for
+// the empty string in every brief the task ever served. Over the cap is an
+// error rather than a silent truncation: a caller must not be told its pins
+// were stored when some were dropped.
+func normalizePins(skills []string) ([]string, error) {
 	clean := make([]string, 0, len(skills))
 	seen := map[string]bool{}
 	for _, sk := range skills {
@@ -360,6 +366,24 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 		}
 		seen[sk] = true
 		clean = append(clean, sk)
+	}
+	if len(clean) > maxTaskPins {
+		return nil, fmt.Errorf("%d pinned skills exceeds the maximum of %d: %w",
+			len(clean), maxTaskPins, ErrInvalidInput)
+	}
+	return clean, nil
+}
+
+// SetTaskSkills replaces the task's pinned skill names inside the given
+// transaction and bumps updated_at, matching UpdateTaskFields and Transition.
+// nil normalizes to an empty pin list rather than a SQL NULL — SkillsByNames
+// reads the column with jsonb_array_elements_text, which errors on a JSON
+// null. See normalizePins for the cleaning rules. Returns ErrNotFound if the
+// task does not exist.
+func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error {
+	clean, err := normalizePins(skills)
+	if err != nil {
+		return fmt.Errorf("set task skills %s: %w", id, err)
 	}
 	b, err := json.Marshal(clean)
 	if err != nil {

@@ -809,6 +809,49 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 	}
 }
 
+// TestCreateTaskNormalizesPins: CreateTask used to store TaskInput.Skills
+// verbatim while SetTaskSkills cleaned them, so a task created with padded,
+// duplicated or empty pins produced a "pinned skill not found" warning — one
+// of them for the empty string — in every recommendation and brief it served.
+// Both paths now share normalizePins, and an over-cap list is rejected rather
+// than truncated behind the caller's back.
+func TestCreateTaskNormalizesPins(t *testing.T) {
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Skills = []string{"  tdd  ", "tdd", "", "   ", "tdd", "debugging"}
+	task := createTask(t, s, taskTestNow, in)
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if len(got.Skills) != 2 || got.Skills[0] != "tdd" || got.Skills[1] != "debugging" {
+		t.Fatalf("pins stored verbatim: %+v", got.Skills)
+	}
+	// The returned Task must agree with what was persisted.
+	if len(task.Skills) != 2 || task.Skills[0] != "tdd" {
+		t.Fatalf("returned task pins: %+v", task.Skills)
+	}
+
+	over := make([]string, maxTaskPins+1)
+	for i := range over {
+		over[i] = fmt.Sprintf("skill-%02d", i)
+	}
+	in = defaultTaskInput()
+	in.Skills = over
+	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, in)
+			return err
+		})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("over-cap pins on create: want ErrInvalidInput, got %v", err)
+	}
+	if err := setTaskSkills(t, s, taskTestNow, task.ID, over); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("over-cap pins on set: want ErrInvalidInput, got %v", err)
+	}
+}
+
 // setTaskSkills drives SetTaskSkills through RecordEvent, the way production
 // code will use it.
 func setTaskSkills(t *testing.T, s *Store, now time.Time, id string, skills []string) error {
