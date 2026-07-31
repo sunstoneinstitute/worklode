@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestChunks(t *testing.T) {
@@ -191,6 +194,37 @@ func TestTruncate(t *testing.T) {
 	s := "héllo wörld"
 	if got := Truncate(s, 3); got != "hél" {
 		t.Fatalf("multi-byte: got %q", got)
+	}
+}
+
+func TestEmbedMetrics(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[0.1,0.2]}]}`))
+	}))
+	defer srv.Close()
+
+	reg := prometheus.NewRegistry()
+	m := NewMetrics(reg)
+	p := &OpenAI{URL: srv.URL, Model: "test-model", Metrics: m}
+
+	if _, err := p.Embed(context.Background(), []string{"hello"}); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	// Second call against a closed server → error.
+	srv.Close()
+	if _, err := p.Embed(context.Background(), []string{"hello"}); err == nil {
+		t.Fatal("embed against closed server: want error")
+	}
+	// Empty input makes no HTTP call and records nothing.
+	if _, err := p.Embed(context.Background(), nil); err != nil {
+		t.Fatalf("embed empty: %v", err)
+	}
+
+	if got := testutil.ToFloat64(m.Requests().WithLabelValues("ok")); got != 1 {
+		t.Fatalf("requests{ok} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.Requests().WithLabelValues("error")); got != 1 {
+		t.Fatalf("requests{error} = %v, want 1", got)
 	}
 }
 
