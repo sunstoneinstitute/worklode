@@ -1,37 +1,50 @@
-# Spec 021 — Images in task bodies
+# Spec 021 — Images and attachments on tasks
 
-**Status:** sketch · **Umbrella:** `000-umbrella-architecture.md` ·
+**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
 **Depends on:** 004 (execution backbone — `tasks.body`), 008 (worklode plugin — `lode task brief`),
-020 (inbox import — supplies untrusted body text)
+020 (inbox import — supplies untrusted body text and remote image URLs)
 
 ## Purpose & scope
 
 `tasks.body` is markdown, and markdown already has image syntax. What is missing is somewhere
 for the bytes to live and a path that gets them there without the author thinking about it.
-This spec adds a content-addressed blob store, one upload endpoint, one download route, and the
-CLI ergonomics that make `![alt](./shot.png)` in a body file Just Work.
+This spec adds a content-addressed blob store on Hetzner Object Storage, the database index
+that makes those blobs referenceable and collectable, and the CLI ergonomics that make
+`![alt](./shot.png)` in a body file Just Work.
 
 The motivating user is a designer whose bug reports are "the map flashes narrow for one frame
-when you scroll back up at 390px". That report is a 2-second screen capture and two screenshots.
-Prose is a lossy re-encoding of it.
+when you scroll back up at 390px". That report is a screen capture and two screenshots. Prose
+is a lossy re-encoding of it.
 
-**In scope:** blob storage and dedup, upload/download surfaces, local-reference rewriting on
-task create/update, rendering in the web UI and CLI, `brief` integration, the sanitisation
-that rendering markdown as HTML now requires.
+Blobs serve two distinct jobs, and the difference runs through the whole spec:
 
-**Out of scope:** video (see *Size and media types*), attachments on design documents
-(spec 014 — same blob store, different reference table, later), mirroring remote images found
-in imported GitHub issue bodies (see *Open questions*), blob garbage collection (see
-*Lifecycle*).
+- **Embedded** — an image or video the body cites inline. Rendered in place.
+- **Attached** — a log, a core dump, a HAR file, a dataset. Downloadable, never rendered.
+
+Every attachment is a blob; only image and video blobs are embeddable.
+
+**In scope:** object storage and the database index, upload/download surfaces, local-reference
+rewriting on task create/update, mirroring remote images on import, rendering in the web UI and
+CLI, `brief` integration, two-directional garbage collection, and the sanitisation that
+rendering markdown as HTML now requires.
+
+**Out of scope:** attachments on design documents (spec 014 — same blob store, a second
+reference table, later); the alt-text lint (§14, v2); inline terminal rendering (§8, v2).
 
 ---
 
 ## 1. Storage
 
-Content-addressed `bytea` in Postgres, mirroring `skill_versions.archive` (spec 016,
-migration `0007`). That precedent already carries binary payloads through this schema, this
-store layer, and this HTTP stack, so there is no new operational surface — no bucket, no
-credentials, no lifecycle policy, no second thing to back up.
+Bytes live in **Hetzner Object Storage** (S3-compatible, path-style addressing, the same
+service the fleet already uses for CNPG and Velero backups). Postgres holds the index and the
+reference graph, never the payload.
+
+The object key is derived from the content hash, sharded two hex characters deep so the
+orphan sweep (§11) can parallelise over 256 prefixes:
+
+```
+blobs/<hash[0:2]>/<hash>          e.g. blobs/9f/9f2a…c1
+```
 
 ```sql
 -- 0009_blobs.up.sql
@@ -40,52 +53,91 @@ CREATE TABLE blobs (
     hash       text PRIMARY KEY,              -- sha256, lowercase hex, 64 chars
     media_type text NOT NULL,                 -- server-sniffed, never client-supplied
     size       bigint NOT NULL,
-    content    bytea NOT NULL,
     created_at timestamptz NOT NULL
 );
 
--- Provenance and a GC root. Not the render path: rendering reads the body's
--- markdown, not this table.
+-- The reference graph. A blobs row with no referencing row here is garbage (§11).
 CREATE TABLE task_blobs (
     task_id    text NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     hash       text NOT NULL REFERENCES blobs(hash) ON DELETE RESTRICT,
-    alt        text NOT NULL DEFAULT '',
+    filename   text NOT NULL,                 -- for Content-Disposition and display
+    embedded   boolean NOT NULL DEFAULT false,  -- derived: the body cites /blob/<hash>
+    attached   boolean NOT NULL DEFAULT false,  -- explicit: lode task attach
     created_by text REFERENCES actors(id) ON DELETE RESTRICT,
     created_at timestamptz NOT NULL,
-    PRIMARY KEY (task_id, hash)
+    PRIMARY KEY (task_id, hash),
+    CONSTRAINT task_blobs_referenced CHECK (embedded OR attached)
 );
+
+CREATE INDEX task_blobs_hash_idx ON task_blobs (hash);
 ```
 
-Dedup is free: the same screenshot attached to five tasks is one row. `blobs` is deliberately
-not task-scoped — spec 014 design-document sections will want the same bytes behind a
-`section_blobs` table without a migration or a copy.
+No object key column: the key is a pure function of the hash, so storing it would create a
+second source of truth that can disagree.
 
-`ON DELETE RESTRICT` on `task_blobs.hash` is the safety interlock: no code path can delete a
-blob out from under a body that still references it.
+Dedup is free — the same screenshot on five tasks is one object and one `blobs` row.
+`blobs` is deliberately not task-scoped, so spec 014 document sections can reference the same
+bytes through a `section_blobs` table without a migration or a copy.
+
+### Why two booleans instead of a kind enum
+
+`embedded` is **derived**: on every task create and update, the body is parsed, its
+`/blob/<hash>` references are extracted, and `embedded` is reconciled to match in the same
+transaction. Edit an image out of the body and the flag clears on the next write, which is
+what makes GC honest — a reference the body no longer makes must not keep bytes alive.
+
+`attached` is **declared**: set by `lode task attach`, cleared by `lode task detach`. It
+survives body edits because it was never in the body.
+
+A row needs at least one of the two; the `CHECK` enforces it, and reconciliation deletes any
+row that would fail it.
+
+`ON DELETE RESTRICT` on `task_blobs.hash` is the interlock that makes GC safe: the database
+refuses to delete a `blobs` row that anything still references, so a GC bug degrades into an
+error rather than into a broken image.
 
 ---
 
-## 2. Reference syntax
+## 2. Reference syntax and serving
 
-Bodies store a **root-relative URL**:
+Bodies store a **root-relative, permanent URL**:
 
 ```markdown
 ![map flashes narrow on scroll-up](/blob/9f2a…c1)
 ```
 
-No custom scheme, no macro, no rewriting on the render path. The web UI is served from the
-same origin, so the browser resolves it with zero help. A body pasted into any other markdown
-tool degrades to a broken image rather than to visible sigil noise.
+`GET /blob/{hash}` authenticates the caller (§4), then **302-redirects to a short-lived
+presigned object-storage URL**. This is the GitHub and GitLab pattern: the durable identifier
+lives in the content, the credential lives in a URL that expires in minutes, and the bytes
+never transit the application. That last property is what makes a 100 MiB screen recording
+affordable to serve.
 
-The two consumers that are *not* same-origin resolve the prefix themselves, and both already
-know the server base URL:
+Presign parameters carry the headers, since the browser sees the object store's response and
+not ours:
 
-- **CLI** — `cli.Client` holds `server`; rewrite `/blob/` → `<server>/blob/` before rendering.
-- **Agents** — never parse the body. `lode task brief --json` gains a resolved `attachments`
-  array (§6).
+| Header | Source |
+|---|---|
+| `Content-Type` | Set as object metadata at upload, and overridden per-request via `response-content-type` from `blobs.media_type` |
+| `Content-Length` | The object store's own, always correct |
+| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, `attachment; filename="…"` for everything else |
+| `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
 
-`/blob/{hash}` sits outside `/api/v1` on purpose: it is not a JSON API, it is a static asset
-route, and it must be reachable by both auth schemes (§4).
+Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
+the override is what actually reaches the browser, and the stored metadata keeps the object
+self-describing for anyone reading the bucket directly.
+
+The redirect itself is `Cache-Control: private, max-age=60`, comfortably inside the presign
+TTL of 5 minutes, so a page with twenty images issues twenty redirects once and then serves
+from cache.
+
+`/blob/{hash}` sits outside `/api/v1` on purpose: it is an asset route rather than a JSON API,
+and it must be reachable by both auth schemes.
+
+**Verify before building:** Hetzner Object Storage is Ceph RADOS Gateway behind an S3 API, and
+presigned GET with `response-*` overrides is standard SigV4 that it should honour. Confirm
+against the live bucket in the first task. If an override turns out to be unsupported, the
+fallback is to stream the object through the server with our own headers — simpler, same
+external behaviour, and it costs the app egress and a held connection per download.
 
 ---
 
@@ -93,21 +145,26 @@ route, and it must be reachable by both auth schemes (§4).
 
 | Surface | Purpose |
 |---|---|
-| `POST /api/v1/blobs` | Raw body upload. `Content-Type` is advisory; the server sniffs. Returns `{hash, media_type, size, url}`. Idempotent — re-uploading identical bytes returns `200` with the existing row, never a duplicate. |
-| `GET /blob/{hash}` | Serve the bytes. Immutable caching, hardened headers (§5). |
-| `lode task attach <id> <file>…` | Upload each file, write `task_blobs`, append `![<basename>](/blob/…)` to the body. |
+| `POST /api/v1/blobs` | Raw body upload, streamed (§5). Returns `{hash, media_type, size, url}`. Idempotent — identical bytes return `200` and the existing row, never a duplicate object. |
+| `GET /blob/{hash}` | Authenticate, then redirect to a presigned URL (§2). |
+| `GET /api/v1/tasks/{id}/blobs` | List a task's blobs: hash, filename, media type, size, embedded/attached. |
+| `POST /api/v1/tasks/{id}/blobs` | Attach an already-uploaded hash to a task (`attached = true`). |
+| `DELETE /api/v1/tasks/{id}/blobs/{hash}` | Clear `attached`; the row goes if `embedded` is also false. |
+| `lode task attach <id> <file>…` | Upload, then attach. Images additionally get `![<basename>](/blob/…)` appended to the body. |
 | `lode task attach <id> -` | Read one blob from stdin. Pairs with `pngpaste - \| lode task attach WL-42 -`. |
+| `lode task detach <id> <hash>` | The inverse. Warns if the body still embeds it. |
 | `lode task add --body-file`, `lode task edit --body-file` | **Reference rewriting** (§7) — the main event. |
+| `lode admin blob gc [--dry-run]` | Both GC sweeps (§11). |
 
-`lode task attach` is the explicit path. Reference rewriting is the one people will actually
-use, because it requires knowing nothing.
+`lode task attach` is the explicit path and the only path for non-embeddable files. Reference
+rewriting is what people will actually use for images, because it requires knowing nothing.
 
 ---
 
 ## 4. Auth
 
 `/blob/{hash}` must serve both a browser `<img>` (session cookie, `s.webAuth`) and a CLI or
-agent fetch (bearer token, `s.auth`). Add one middleware:
+agent fetch (bearer token, `s.auth`). One middleware covers it:
 
 ```go
 // eitherAuth accepts a bearer token or a web session. Blobs are the only
@@ -115,97 +172,109 @@ agent fetch (bearer token, `s.auth`). Add one middleware:
 func (s *server) eitherAuth(next http.HandlerFunc) http.Handler
 ```
 
-A content-addressed URL is unguessable, and that is **not** the access control. Worklode task
-bodies carry pre-release design work; an unauthenticated blob route is a public bucket with
-extra steps. Authenticate, and let the hash do dedup only.
+A content-addressed URL is unguessable, and that is **not** the access control. Task bodies
+carry pre-release design work; an unauthenticated blob route is a public bucket with extra
+steps. Authenticate, and let the hash do dedup only.
+
+The bucket itself stays private — presigned URLs are the only anonymous read path, and they
+expire.
+
+Session cookies are already `SameSite=Lax` (`internal/api/cliauth.go:130`, `oidcweb.go:97`,
+`githubweb.go:100`). That is load-bearing here: Lax withholds the cookie from cross-site
+subresource loads, so an attacker page embedding `<img src="https://worklode/blob/…">` gets a
+401 rather than a probe for which blobs a logged-in victim can see. Keep it.
 
 ---
 
-## 5. Serving hardening
+## 5. Upload
 
-A blob is bytes an authenticated user uploaded, served from the app's own origin. Untrusted
-content on a trusted origin is the whole XSS problem, so the response headers do the work:
+**Stream; never buffer the payload in memory.** Content addressing means the hash is not known
+until the last byte, so the handler cannot decide where bytes belong until it has seen them
+all:
+
+1. `http.MaxBytesReader(w, r.Body, maxBlobBytes)`.
+2. `os.CreateTemp` in the server's spool directory; `defer` both close and remove so every
+   exit path cleans up.
+3. Copy request body → temp file through an `io.TeeReader` into a `sha256` hasher, capturing
+   the first 512 bytes for sniffing.
+4. Look up the hash. **Present → discard the temp file and return the existing row.** A
+   re-uploaded screenshot costs one query and zero object-store traffic.
+5. Absent → `PutObject` streaming from the rewound temp file, then insert the `blobs` row.
+
+`readJSON`'s 1 MiB `maxAPIBody` does not apply — this route takes a raw body and sets its own
+limit:
+
+```go
+const maxBlobBytes = 100 << 20 // 100 MiB
+```
+
+100 MiB fits screen recordings, which is the point: the bug reports this spec exists to carry
+are frequently motion, and a still frame of a one-frame flash proves nothing.
+
+**Write ordering is object-then-row, always.** A failure after the PUT leaves an orphan object,
+which §11 sweeps. The reverse order would leave a `blobs` row pointing at nothing, which
+renders as a permanently broken image. Both failure modes are possible; only one is recoverable
+without a human, so the design fails toward that one.
+
+### Media types
+
+The server sniffs with `http.DetectContentType` over the first 512 bytes and stores the result.
+A client's `Content-Type` header is advisory and never persisted — a payload labelled
+`image/png` that sniffs as HTML is stored, and served, as HTML, which is why §6's headers exist
+rather than relying on the label.
+
+| Class | Types | Treatment |
+|---|---|---|
+| **Embeddable image** | `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml` | Rendered inline; `Content-Disposition: inline` |
+| **Embeddable video** | `video/mp4`, `video/webm` | Rendered inline via `<video>`; `inline` |
+| **Attachment** | anything else | Never rendered; `Content-Disposition: attachment` |
+
+Nothing is rejected on type. A core dump is a legitimate attachment, and an allowlist that
+blocks it buys nothing once §6 guarantees non-embeddable types are never served inline.
+
+**SVG is embeddable deliberately.** It is a first-class asset in the repos this serves, and
+rejecting it would push authors into lossy PNG screenshots of vector work. §6's CSP neuters
+script inside it.
+
+---
+
+## 6. Serving hardening
+
+A blob is bytes an authenticated user uploaded. The redirect target is a different origin from
+the app, which is itself a useful boundary — a hostile SVG or HTML payload executes in the
+object store's origin, where there is no session cookie and nothing to steal.
+
+The redirect response carries:
+
+```
+Cache-Control: private, max-age=60
+Referrer-Policy: no-referrer
+```
+
+and the presigned URL carries, via `response-*` overrides:
 
 ```
 Content-Type: <sniffed media type>
-X-Content-Type-Options: nosniff
+Content-Disposition: inline | attachment; filename="…"
+X-Content-Type-Options: nosniff        (bucket-level default; see below)
 Content-Security-Policy: default-src 'none'; sandbox
-Cache-Control: private, max-age=31536000, immutable
 ```
 
-- **Sniff server-side** with `http.DetectContentType` and store the result. A client that
-  labels a `.html` payload `image/png` gets the sniffed type, so it is served as HTML — which
-  is why the CSP and the allowlist both exist rather than either alone.
-- **Allowlist:** `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`.
-  Anything else is `415`.
-- **SVG is accepted deliberately.** It is a first-class asset in the repos this serves (the
-  CMS ships hand-optimised SVG), and rejecting it would push authors to lossy PNG screenshots
-  of vector work. `default-src 'none'; sandbox` neuters script inside it. Note that `sandbox`
-  on an `<img>`-loaded SVG is belt-and-braces — SVG loaded via `<img>` cannot run script in
-  any current browser regardless; the CSP covers the case where someone navigates to the blob
-  URL directly.
+Hetzner's S3 API does not expose `response-content-security-policy`; `Content-Security-Policy`
+and `X-Content-Type-Options` are therefore set as **object metadata at upload time**, where
+RGW returns them on every GET. Confirm this in the same first task that verifies presign
+overrides — if the gateway strips unknown metadata headers, `Content-Disposition: attachment`
+on every non-embeddable type is the fallback that carries the security weight on its own.
 
-`Cache-Control` is `private`, not `public` as `skillArchive` uses: these responses are
-per-user-authenticated and must not land in a shared proxy cache.
-
-### Size and media types
-
-`maxAPIBody` (1 MiB) is applied by `readJSON` and does not bind a raw-body route. The upload
-handler sets its own limit:
-
-```go
-const maxBlobBytes = 10 << 20 // 10 MiB
-```
-
-10 MiB comfortably fits retina screenshots and short GIFs. It does not fit screen recordings,
-which is the honest limit of the Postgres-bytea approach — a 40 MiB MP4 per bug report is
-where object storage stops being premature. **v1 is images only.** When video arrives, `blobs`
-grows a nullable `external_url` and the bytes move; the reference syntax and every consumer
-stay unchanged.
-
----
-
-## 6. Rendering
-
-### Web UI
-
-`templates/task.html` renders `<pre>{{.Task.Body}}</pre>` today. Images require real markdown
-rendering, which turns the body into HTML — and **task bodies are untrusted**. Spec 020's
-`lode inbox import` writes GitHub issue text straight into `tasks.body`, so anyone who can
-open an issue on a mapped repo can put markup in a task body. Rendering that unsanitised is
-stored XSS with an ingestion pipeline attached.
-
-Therefore:
-
-- Render with **goldmark** (already an indirect dependency via glamour; promote it to direct).
-- Disable raw HTML: `goldmark.WithParserOptions()` without `html.WithUnsafe()`. Goldmark
-  escapes raw HTML by default, so this is a matter of not opting out.
-- Restrict image `src` to `/blob/<64 hex>` at render time. An imported issue body containing
-  `![](https://tracker.example/pixel.png)` must not turn every task page view into a callback
-  to a third party.
-- Restrict link `href` schemes to `http`, `https`, `mailto`. Goldmark's default link handling
-  permits `javascript:`; the CMS hit precisely this class of bug in `fix(security): reject
-  non-http(s) licence URLs before rendering as href`.
-
-The board and project pages keep showing titles only; nothing changes there.
-
-### CLI
-
-`cli.Markdown` already routes through glamour. Two changes:
-
-1. Rewrite `/blob/…` → `<server>/blob/…` so the URL is complete and terminal-clickable.
-2. Glamour renders `![alt](url)` as alt text plus the link, which is the correct v1 behaviour.
-
-Inline terminal images (iTerm2 / Kitty / WezTerm escape sequences) are a deliberate v2 — the
-capability detection and the graceful fallback are more code than the feature is worth before
-anyone has asked.
+The task page's own CSP must list the object-storage endpoint in `img-src` and `media-src`,
+since that is where the redirect lands.
 
 ---
 
 ## 7. Reference rewriting
 
-The feature that makes the rest of it invisible. An author writes an ordinary markdown file
-next to their screenshots:
+The feature that makes the rest of it invisible. An author writes ordinary markdown next to
+their screenshots:
 
 ```markdown
 The map flashes to its narrow inset for one frame on scroll-up at 390px:
@@ -218,95 +287,267 @@ The map flashes to its narrow inset for one frame on scroll-up at 390px:
 lode task add --project cms --title "Map flashes narrow on scroll-up" --body-file ./bug.md
 ```
 
-`lode` walks the parsed markdown for image destinations that are **local relative paths**
-(no scheme, no leading `/`), resolves each against the body file's directory, uploads it,
-and rewrites the destination to `/blob/<hash>` before the body is sent. Same pass on
+`lode` walks the parsed markdown for image destinations that are **local relative paths** (no
+scheme, no leading `/`), resolves each against the body file's directory, uploads it, and
+rewrites the destination to `/blob/<hash>` before the body is sent. Same pass on
 `lode task edit --body-file`.
 
 Rules that keep it predictable:
 
-- Only image nodes. Links to local files are left alone and reported as a warning.
-- Absolute paths and any destination with a scheme are left untouched.
-- Path traversal above the body file's directory is an error, not a silent skip.
-- A missing file is an error — the whole command fails before creating the task, so an author
-  never ends up with a task whose body points at images that were never uploaded.
-- `--body` (inline string) does **not** rewrite. There is no base directory to resolve
-  against, and inline bodies come from scripts.
+- Only image nodes. A link to a local file is left alone and reported as a warning — use
+  `lode task attach` for those.
+- Absolute paths and any destination carrying a scheme are untouched.
+- Path traversal above the body file's directory is an error.
+- A missing file is an error, and the whole command fails before the task is written, so an
+  author never ends up with a body pointing at images that were never uploaded.
+- `--body` (inline string) does not rewrite: there is no base directory to resolve against,
+  and inline bodies come from scripts.
 - `--no-upload` opts out.
 
-Uploads happen before the create/update call, so the task is written once, with final content.
+Uploads complete before the create or update call, so the task is written once, with final
+content, and `embedded` reconciliation (§1) sees the rewritten body.
 
 ---
 
-## 8. Brief integration
+## 8. Rendering
+
+### Web UI
+
+`templates/task.html` renders `<pre>{{.Task.Body}}</pre>` today. Images require real markdown
+rendering, which turns the body into HTML — and **task bodies are untrusted**. Spec 020's
+`lode inbox import` writes GitHub issue text straight into `tasks.body`, so anyone who can open
+an issue on a mapped repo can put markup in a task body. Rendering that unsanitised is stored
+XSS with an ingestion pipeline attached.
+
+The pipeline mirrors what GitHub does — render permissively, then sanitise the **output HTML**:
+
+1. **goldmark** with the GFM extension set, `html.WithUnsafe()` **enabled** so raw HTML passes
+   through to the sanitiser rather than being escaped at the parser. (goldmark is already an
+   indirect dependency via glamour; promote it to direct.)
+2. **bluemonday** `UGCPolicy()` — GitHub's allowlist in all but name: headings, lists, tables,
+   `code`/`pre`, `blockquote`, inline emphasis, `a`, `img`, and GFM task-list checkboxes, with
+   everything else stripped. New direct dependency.
+3. Policy tightenings on top of `UGCPolicy`:
+   - `img[src]` and `video[src]`/`source[src]` matched against `^/blob/[0-9a-f]{64}$`. An
+     imported issue body containing `![](https://tracker.example/pixel.png)` must not turn
+     every page view into a callback to a third party. §12 mirrors those into blobs on import
+     precisely so this restriction costs nothing.
+   - `a[href]` limited to `http`, `https`, `mailto`. `UGCPolicy` covers this and adds
+     `rel="nofollow"`; assert it in a test regardless — the CMS shipped this exact bug in
+     `fix(security): reject non-http(s) licence URLs before rendering as href`.
+   - `video` allowed with `controls`, `preload`, `poster`.
+
+**CSRF.** Every web route is `GET` today (`server.go:323–330`) and the UI has no form that
+mutates state, so there is nothing to forge. That is a property to keep rather than one to
+assume: the moment a mutating web surface is added, it needs a per-session token and a
+`SameSite=Strict` cookie for that route. Until then, the standing rule is that the web UI
+performs no state change, and a test asserts the template set contains no `<form method="post">`.
+
+The board and project pages keep showing titles only.
+
+The UI is, in the reviewer's words, horrible. Making it less so is not this spec's job, and
+rendered markdown with inline screenshots will move it in the right direction on its own.
+
+### CLI
+
+`cli.Markdown` already routes through glamour. Two changes:
+
+1. Rewrite `/blob/…` → `<server>/blob/…` so URLs are complete and terminal-clickable.
+2. `lode task show` gains an attachments list under the body — filename, size, media type, URL
+   — since attached blobs appear nowhere in the markdown.
+
+Glamour renders `![alt](url)` as alt text plus a link, which is correct for v1.
+
+**v2 — authenticated browser hand-off.** The interesting terminal integration is not escape
+sequences, it is `lode task view <id>` opening a browser tab that is already authenticated,
+which makes screenshots work in cmux and any terminal with an embedded browser, with no
+capability detection and no per-terminal image protocol. The mechanism already exists: the CLI
+auth flow (`/auth/cli/login`, `internal/api/cliauth.go`) mints a session, so the same
+short-lived-token-in-URL exchange can open a tab that lands logged in. Deferred, but it is the
+shape to build, and inline escape-sequence images are not.
+
+---
+
+## 9. Attachments
+
+Non-embeddable files are why `lode task attach` earns its place. A crash report is a core dump
+and a log; a rendering bug is a HAR file; a data bug is the CSV that triggers it. All are
+blobs, none belong in the body.
+
+```bash
+lode task attach WL-42 ./crash.log ./heap.prof
+lode task attach WL-42 ./flash-390.png        # image → also appended to the body
+```
+
+The distinction is entirely media-type driven: image and video get a markdown reference
+appended and `embedded = true` on the reconciliation that follows; everything else gets
+`attached = true` and appears only in the attachments list. `--no-embed` suppresses the append
+for an image the author wants attached but not shown inline.
+
+---
+
+## 10. Brief integration
 
 Agents must not parse markdown to find pictures. `lode task brief --json` gains:
 
 ```json
-"attachments": [
+"blobs": [
   {
-    "alt": "map flashes narrow on scroll-up",
     "url": "https://worklode.dev.sunstoneinstitute.ai/blob/9f2a…c1",
+    "filename": "flash-390.png",
     "media_type": "image/png",
-    "size": 214003
+    "size": 214003,
+    "embedded": true
+  },
+  {
+    "url": "https://worklode.dev.sunstoneinstitute.ai/blob/3b71…9d",
+    "filename": "crash.log",
+    "media_type": "text/plain; charset=utf-8",
+    "size": 88210,
+    "embedded": false
   }
 ]
 ```
 
-Derived from `task_blobs` joined to `blobs`, with `alt` taken from the row. URLs are absolute
-and fetchable with the agent's existing bearer token, so a vision-capable agent can read the
-screenshot the reporter actually saw. This keeps the brief's "no file spelunking" contract
-(spec 008) intact for a class of context it previously could not carry at all.
+URLs are absolute and fetchable with the agent's existing bearer token, so a vision-capable
+agent can read the screenshot the reporter actually saw, and any agent can pull the log. This
+keeps the brief's "no file spelunking" contract (spec 008) intact for a class of context it
+previously could not carry at all.
+
+Alt text stays in the body markdown, where it belongs, and is not duplicated here.
 
 ---
 
-## 9. Lifecycle
+## 11. Lifecycle and garbage collection
 
-`task_blobs` rows are written by `lode task attach` and by reference rewriting. They are the
-GC root — and **v1 does not GC**.
+Two sweeps, both in `lode admin blob gc`, both with a **24-hour grace period** so neither can
+race an upload in flight.
 
-The reason to defer it: a body is free text, so a reference can be edited away, leaving a
-`task_blobs` row that no rendered body cites. Reconciling that means re-parsing bodies on a
-schedule to prune stale rows before any blob becomes collectable. That is a real piece of
-machinery to protect against leaking a few megabytes of screenshots, on an install with two
-projects.
+### Unreferenced blobs
 
-Deleting a task cascades its `task_blobs` rows; `ON DELETE RESTRICT` on `blobs.hash` keeps the
-bytes. A `lode admin blob gc --dry-run` verb is the natural v2 once there is enough data to
-know whether it matters.
+A `blobs` row with no `task_blobs` row sharing its hash is garbage:
+
+```sql
+SELECT b.hash FROM blobs b
+ WHERE NOT EXISTS (SELECT 1 FROM task_blobs tb WHERE tb.hash = b.hash)
+   AND b.created_at < now() - interval '24 hours';
+```
+
+Delete the **row first**, inside a transaction that re-checks the zero-reference condition,
+then delete the object. Failure after the row delete leaves an orphan object, which the second
+sweep catches. The reverse order would leave a row pointing at a deleted object — a permanently
+broken image. Symmetric with the write path (§5): both fail toward orphan objects, never toward
+dangling rows.
+
+When spec 014 adds `section_blobs`, the `NOT EXISTS` grows a second clause. That is the one
+place adding a reference table touches GC, and it is worth a comment in the migration saying so.
+
+### Orphan objects
+
+The other direction, which should find nothing and will occasionally find something, because
+the write path deliberately creates orphans on partial failure. List the bucket under
+`blobs/`, parallel over the 256 shard prefixes, and delete any key whose hash has no `blobs`
+row and whose `LastModified` is older than the grace period.
+
+`--dry-run` reports both sets without deleting, and is the default in the first release —
+running the real sweep should be a deliberate act until the reference reconciliation in §1 has
+been observed to behave.
+
+Deleting a task cascades its `task_blobs` rows, which drops the reference count and makes its
+blobs collectable on the next sweep unless another task shares them.
 
 ---
 
-## Open questions
+## 12. Mirroring on import
 
-- **Q021.1 — Mirror remote images on import?** Imported GitHub issue bodies reference
-  `https://user-images.githubusercontent.com/…`. Those URLs require GitHub auth for private
-  repos and are not stable forever, so an imported bug report's screenshots render as broken
-  images. Mirroring them into `blobs` at import time fixes it and makes the import a
-  content-fetching operation with an SSRF surface. Deferred; §6's `src` restriction means they
-  render as broken rather than as live third-party requests in the meantime.
-- **Q021.2 — Alt text as the accessibility contract.** `lode task attach` defaults `alt` to
-  the file basename, which is not alt text. Worth a `--alt` flag; worth more as a lint that
-  refuses `![](…)` on a task whose concern is `usability`.
-- **Q021.3 — Does `lode task attach` belong at all**, given §7 covers the authoring case? It
-  covers the *append to an existing task* case (`pngpaste - | lode task attach WL-42 -`),
-  which rewriting does not. Keep both, but if one is cut, cut `attach`.
+Imported GitHub issue bodies reference `https://user-images.githubusercontent.com/…`. Those
+URLs need GitHub auth for private repos and do not last forever, so an imported bug report's
+screenshots would render as broken images — and §8 blocks remote `img src` outright, so they
+would render as nothing at all.
+
+`lode inbox import` therefore **fetches every remote image reference in a body and rewrites it
+to `/blob/<hash>`**, using the same upload path as §5 and the installation's GitHub App token
+for `githubusercontent.com`. Everything becomes a blob; nothing in a rendered body ever points
+off-site.
+
+This makes import a URL-fetching operation on attacker-influenced input, so it needs the usual
+SSRF guard:
+
+- Fetch only `https`, only from a host allowlist (`*.githubusercontent.com`,
+  `github.com`) — the import path knows exactly which host it expects.
+- Resolve and check the IP before connecting, rejecting private, loopback, link-local, and
+  metadata ranges, with the check applied again on every redirect hop.
+- Cap redirects at 3, the response at `maxBlobBytes`, and the whole fetch at a 30-second
+  timeout.
+- On any failure, leave the original URL in place and log it. A partially-mirrored import is
+  better than a failed one, and §8 renders the leftover as nothing rather than as a beacon.
+
+---
+
+## 13. Configuration
+
+Server config (env, and the deployment's ConfigMap plus an ESO-provisioned secret):
+
+| Key | Example |
+|---|---|
+| `LODE_BLOB_ENDPOINT` | `https://hel1.your-objectstorage.com` |
+| `LODE_BLOB_BUCKET` | `sunstone-worklode-blobs` |
+| `LODE_BLOB_REGION` | `hel1` |
+| `LODE_BLOB_ACCESS_KEY` / `LODE_BLOB_SECRET_KEY` | 1Password → ESO, per the fleet's existing pattern |
+| `LODE_BLOB_SPOOL_DIR` | temp-file directory for §5; defaults to `os.TempDir()` |
+
+`aws-sdk-go-v2` with `UsePathStyle: true`, matching the `s3ForcePathStyle: true` the fleet
+already sets for Velero and CNPG against this endpoint.
+
+**Blobs are unconfigured by default.** With no endpoint set, uploads return `501` and every
+other surface behaves exactly as it does today, so a local `docker compose` stack keeps working
+with no bucket. Worth a `lode doctor` line rather than a silent absence.
+
+---
+
+## 14. Open questions
+
+- **Q021.1 — Alt text as an accessibility contract.** `lode task attach` defaults the appended
+  alt text to the file basename, which is not alt text. A `--alt` flag is cheap; a lint that
+  refuses `![](…)` on a task whose concern is `usability` is more valuable and more annoying.
+  **v2.**
+- **Q021.2 — Do embedded videos want a poster frame?** A `<video>` with no poster is a black
+  rectangle until played, which is a poor answer to "show me the bug". Extracting frame 0
+  server-side means an ffmpeg dependency in the server image. Deferred; authors can attach a
+  still alongside.
+- **Q021.3 — Bucket per environment or prefix per environment?** Dev and prod sharing a bucket
+  under different key prefixes halves the credential management and makes a prod-to-dev data
+  copy trivially wrong. Separate buckets is the safer default; confirm against how the fleet
+  provisions the other buckets.
 
 ---
 
 ## Acceptance criteria
 
 1. `POST /api/v1/blobs` with a PNG returns a hash; re-posting identical bytes returns the same
-   hash and creates no second row.
-2. A payload whose sniffed type is outside the allowlist gets `415`; a payload over 10 MiB
-   gets `413`.
-3. `GET /blob/{hash}` serves the bytes to both a bearer token and a web session, and `401`s
-   with neither.
-4. `lode task add --body-file` on a markdown file referencing two local PNGs creates one task
-   whose body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows.
-5. A body containing `<script>alert(1)</script>`, `[x](javascript:alert(1))`, and
-   `![](https://evil.example/p.png)` renders in the web UI with the script escaped, the link
-   inert, and the remote image dropped.
-6. `lode task show` prints absolute, clickable blob URLs.
-7. `lode task brief --json` returns an `attachments` array with absolute URLs and media types.
-8. Deleting a task removes its `task_blobs` rows and leaves `blobs` intact.
+   hash, creates no second row, and issues no second `PutObject`.
+2. A 200 MiB upload gets `413`, and the server's memory does not track payload size on any
+   upload — asserted by uploading 100 MiB with a bounded heap.
+3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session, and
+   `401`s with neither. The presigned response carries the sniffed `Content-Type`, a correct
+   `Content-Length`, and `Content-Disposition: attachment` for a non-embeddable type.
+4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose
+   body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows at
+   `embedded = true`.
+5. Editing that body to drop one image clears its `embedded` flag and deletes the row; the next
+   `lode admin blob gc` collects that blob and its object, and leaves the other.
+6. `lode task attach` with a `.log` file creates a row at `attached = true, embedded = false`,
+   appends nothing to the body, and the blob survives a body rewrite.
+7. A body containing `<script>alert(1)</script>`, `[x](javascript:alert(1))`,
+   `![](https://evil.example/p.png)`, and `<img src="/blob/../../etc/passwd">` renders with the
+   script stripped, the link inert, and both images dropped — while `<b>`, tables, and task-list
+   checkboxes survive.
+8. An imported issue body with a `user-images.githubusercontent.com` image ends up citing
+   `/blob/…`; one pointing at `http://169.254.169.254/…` is refused and left as-is.
+9. `lode task brief --json` returns a `blobs` array with absolute URLs, media types, and the
+   `embedded` flag.
+10. An object with no `blobs` row and a `LastModified` older than the grace period is deleted by
+    the orphan sweep; one newer than it is not.
+11. Deleting a task cascades its `task_blobs` rows and leaves blobs that another task still
+    references intact.
+12. With no `LODE_BLOB_ENDPOINT`, uploads return `501` and every existing test still passes.
