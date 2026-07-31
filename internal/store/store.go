@@ -20,15 +20,16 @@ import (
 
 // Store wraps the Postgres connection pool.
 type Store struct {
-	db    *sql.DB
-	dsn   string
-	nowFn func() time.Time
+	db      *sql.DB
+	dsn     string
+	nowFn   func() time.Time
+	metrics *storeMetrics
 }
 
 // Open opens a Postgres-backed store for the given postgres:// DSN. Callers
 // are responsible for applying migrations (see Migrate) before relying on
 // the schema being present — Open does not do this implicitly.
-func Open(dsn string) (*Store, error) {
+func Open(dsn string, opts ...Option) (*Store, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
@@ -36,7 +37,11 @@ func Open(dsn string) (*Store, error) {
 	db.SetMaxOpenConns(16)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(30 * time.Minute)
-	return &Store{db: db, dsn: dsn, nowFn: func() time.Time { return time.Now().UTC() }}, nil
+	st := &Store{db: db, dsn: dsn, nowFn: func() time.Time { return time.Now().UTC() }}
+	for _, o := range opts {
+		o(st)
+	}
+	return st, nil
 }
 
 // SetNowFunc overrides the clock used for timestamps written by the store
