@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -244,5 +246,33 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(body, "http_request_duration_seconds") {
 		t.Fatalf("metrics body missing http_request_duration_seconds")
+	}
+}
+
+// TestMetricsEndpointDomainFamilies wires a shared registry through both the
+// store and the server, the way serve.go does, and asserts the domain
+// families appear on the admin /metrics alongside the HTTP ones.
+func TestMetricsEndpointDomainFamilies(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	st := store.OpenTestStore(t, store.WithMetrics(reg))
+	main, admin, err := api.NewServer(st, api.Config{Metrics: reg})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	doReq(t, main, "GET", "/api/v1/tasks", "", nil)
+
+	rr := doReq(t, admin, "GET", "/metrics", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"http_requests_total",
+		"worklode_leases_active",
+		"go_sql_open_connections",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %s", want)
+		}
 	}
 }
