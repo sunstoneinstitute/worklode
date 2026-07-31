@@ -20,31 +20,43 @@ func TestProjectTableShowsKey(t *testing.T) {
 }
 
 // TestBoardSectionGroupsChildren checks that an epic's children render
-// directly beneath it, in id order, whatever order the server sent them.
+// directly beneath it while the rest of the rows keep the order the server
+// sent — the server already sorts by priority, so a plain id sort would be
+// wrong. The fixture is built so id order and the wanted order disagree:
+// WL-5 is critical and arrives first, and epic WL-1's children are WL-9 and
+// WL-4.
 func TestBoardSectionGroupsChildren(t *testing.T) {
 	var buf bytes.Buffer
 	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
 		ID: "proj", Name: "Proj",
 		Ready: []BoardTask{
-			{Task: Task{ID: "WL-9", Title: "Loose", Priority: "medium"}},
-			{Task: Task{ID: "WL-3", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
+			{Task: Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
+			{Task: Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
 			{Task: Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
-			{Task: Task{ID: "WL-2", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
+			{Task: Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
+			{Task: Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
 		},
 	}}})
 	got := buf.String()
+	urgent := strings.Index(got, "WL-5")
 	epic := strings.Index(got, "WL-1")
-	childA := strings.Index(got, "WL-2")
-	childB := strings.Index(got, "WL-3")
-	loose := strings.Index(got, "WL-9")
-	if !(epic < childA && childA < childB) {
-		t.Fatalf("children are not grouped under their epic:\n%s", got)
+	childB := strings.Index(got, "WL-9")
+	childA := strings.Index(got, "WL-4")
+	orphan := strings.Index(got, "WL-2")
+	if !(epic < childB && childB < childA) {
+		t.Fatalf("children are not grouped under their epic in arrival order:\n%s", got)
 	}
-	if loose < epic {
-		t.Fatalf("the loose task should sort by its own id, after WL-1:\n%s", got)
+	if urgent > epic {
+		t.Fatalf("grouping moved the critical task below the epic:\n%s", got)
 	}
-	if !strings.Contains(got, "└ WL-2") {
+	if orphan < childA {
+		t.Fatalf("the orphan should keep its own position, last:\n%s", got)
+	}
+	if !strings.Contains(got, "└ WL-9") || !strings.Contains(got, "└ WL-4") {
 		t.Fatalf("child rows are not marked:\n%s", got)
+	}
+	if strings.Contains(got, "└ WL-2") {
+		t.Fatalf("the orphan's parent is not in this bucket, so it must not be marked:\n%s", got)
 	}
 }
 
