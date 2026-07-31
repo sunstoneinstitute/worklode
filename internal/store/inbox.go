@@ -44,6 +44,30 @@ func UpsertIssue(tx *sql.Tx, is Issue) error {
 	return nil
 }
 
+// ExistingIssueNumbers returns the inbox issue numbers already stored for
+// repo. Import reads it before upserting so it can report new rows separately
+// from updated ones — the upsert itself cannot distinguish the two, and a
+// dry run must report the same split without writing.
+func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
+	rows, err := tx.Query(`SELECT number FROM issues WHERE repo = $1`, repo)
+	if err != nil {
+		return nil, fmt.Errorf("existing issue numbers for %s: %w", repo, err)
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("scan issue number: %w", err)
+		}
+		out[n] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("existing issue numbers for %s: %w", repo, err)
+	}
+	return out, nil
+}
+
 // PromoteIssue turns an inbox issue into a task: it creates the task via
 // CreateTask, then marks the issue triage_state=promoted, linking task_id and
 // recording appliesToVersions (marshalled to JSON). The issue must currently

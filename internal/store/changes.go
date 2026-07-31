@@ -201,6 +201,28 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	return getPRTx(tx, pr.Repo, pr.Number)
 }
 
+// ExistingPRNumbers returns the pull-request numbers already stored for repo.
+// See ExistingIssueNumbers for why import needs it.
+func ExistingPRNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
+	rows, err := tx.Query(`SELECT number FROM pull_requests WHERE repo = $1`, repo)
+	if err != nil {
+		return nil, fmt.Errorf("existing pr numbers for %s: %w", repo, err)
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("scan pr number: %w", err)
+		}
+		out[n] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("existing pr numbers for %s: %w", repo, err)
+	}
+	return out, nil
+}
+
 // prColumns is the SELECT list scanPR expects, in order.
 const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at`
 
