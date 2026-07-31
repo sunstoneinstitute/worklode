@@ -32,7 +32,7 @@ func TestBrief(t *testing.T) {
 		}
 	}
 
-	b, err := s.Brief(ctx, task.ID)
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestBriefNoBlockersNoLease(t *testing.T) {
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
-	b, err := s.Brief(ctx, task.ID)
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
 		t.Fatalf("add blocks edge %s -> %s: %v", blocker2.ID, target.ID, err)
 	}
 
-	b, err := s.Brief(ctx, target.ID)
+	b, err := s.Brief(ctx, target.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
 
 func TestBriefNotFound(t *testing.T) {
 	s, _ := openLeaseStore(t)
-	if _, err := s.Brief(t.Context(), "HDB-999"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Brief(t.Context(), "HDB-999", BriefOptions{Skills: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Brief unknown task: err = %v, want ErrNotFound", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestBriefResolvesPins(t *testing.T) {
 	in.Skills = []string{"tdd", "tdd", "ghost"}
 	task := createTask(t, s, leaseTestNow, in)
 
-	b, err := s.Brief(ctx, task.ID)
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
@@ -172,6 +172,38 @@ func TestResolvePinsDedupes(t *testing.T) {
 	}
 }
 
+// TestBriefWithoutSkillsSkipsTheQuery: the flag must skip the work, not just
+// omit the output. Renaming the skills table away makes any pin lookup fail
+// outright, so a brief that still succeeds provably never ran one.
+func TestBriefWithoutSkillsSkipsTheQuery(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+	in := defaultTaskInput()
+	in.Skills = []string{"tdd"}
+	task := createTask(t, s, leaseTestNow, in)
+
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE skills RENAME TO skills_moved`); err != nil {
+		t.Fatalf("rename skills table: %v", err)
+	}
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: false})
+	if err != nil {
+		t.Fatalf("Brief without skills still queried them: %v", err)
+	}
+	if len(b.PinnedSkills) != 0 || len(b.SkillWarnings) != 0 {
+		t.Fatalf("brief carried skills it was told to skip: %+v", b)
+	}
+	// The pin list itself is still on the task; only the resolution is skipped.
+	if len(b.Task.Skills) != 1 {
+		t.Fatalf("task pins = %+v, want them still reported", b.Task.Skills)
+	}
+	if _, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true}); err == nil {
+		t.Fatal("setup is not proving anything: the pin lookup should have failed")
+	}
+}
+
 // TestBriefNoPins guards the bounded-queries contract: no pins, no extra
 // query, and the fields stay empty rather than nil-panicking a caller.
 func TestBriefNoPins(t *testing.T) {
@@ -179,7 +211,7 @@ func TestBriefNoPins(t *testing.T) {
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
-	b, err := s.Brief(ctx, task.ID)
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
@@ -206,7 +238,7 @@ func TestBriefResolvesDeletedPin(t *testing.T) {
 	in.Skills = []string{"tdd"}
 	task := createTask(t, s, leaseTestNow, in)
 
-	b, err := s.Brief(ctx, task.ID)
+	b, err := s.Brief(ctx, task.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}

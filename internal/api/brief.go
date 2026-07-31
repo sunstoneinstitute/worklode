@@ -81,12 +81,20 @@ func toBriefJSON(b *store.Brief) briefJSON {
 // recommendation, which would re-resolve the same pins.
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	b, err := s.st.Brief(r.Context(), id)
+	// skills=false is for callers that want the task row or the lease and
+	// nothing else (lode status, the pre-renew fetch in lode resume). It skips
+	// pin resolution, the inlined bodies, and the embedding round trip.
+	withSkills := r.URL.Query().Get("skills") != "false"
+	b, err := s.st.Brief(r.Context(), id, store.BriefOptions{Skills: withSkills})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
 	out := toBriefJSON(b)
+	if !withSkills {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 
 	pinnedNames := make(map[string]bool, len(b.PinnedSkills))
 	for _, sk := range b.PinnedSkills {

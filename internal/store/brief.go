@@ -37,11 +37,21 @@ type Brief struct {
 	SkillWarnings []string
 }
 
+// BriefOptions selects the optional work a brief does.
+type BriefOptions struct {
+	// Skills resolves the task's pinned skills and inlines their bodies.
+	// Callers that only need the task row or the lease turn it off: pinned
+	// bodies dominate the payload (a dozen pins run to hundreds of KB) and
+	// cost a query and, on the API side, an embedding round trip.
+	Skills bool
+}
+
 // Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, any active lease, and its pinned skills. Returns ErrNotFound if
-// the task does not exist. It runs a bounded, fixed number of queries — one
-// more only when the task has pins — and never returns unbounded lists.
-func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
+// blockers, any active lease, and — when opts.Skills is set — its pinned
+// skills. Returns ErrNotFound if the task does not exist. It runs a bounded,
+// fixed number of queries — one more only when pins are asked for and the
+// task has some — and never returns unbounded lists.
+func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
 	if err != nil {
 		return nil, err
@@ -61,7 +71,7 @@ func (s *Store) Brief(ctx context.Context, taskID string) (*Brief, error) {
 
 	var pinned []Skill
 	var warnings []string
-	if len(t.Skills) > 0 {
+	if opts.Skills && len(t.Skills) > 0 {
 		pinned, warnings, err = s.ResolvePins(ctx, t.Skills)
 		if err != nil {
 			return nil, err
