@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -57,7 +59,11 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st, err := store.Open(dsn)
+			reg := prometheus.NewRegistry()
+			reg.MustRegister(collectors.NewGoCollector())
+			reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+			st, err := store.Open(dsn, store.WithMetrics(reg))
 			if err != nil {
 				return err
 			}
@@ -92,10 +98,17 @@ func newServeCmd() *cobra.Command {
 				EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
 				EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
 				SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
+				Metrics:             reg,
 			})
 			if err != nil {
 				return err
 			}
+
+			sweeperRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
+				Name: "worklode_lease_sweeper_runs_total",
+				Help: "Lease sweeper runs by result.",
+			}, []string{"result"})
+			reg.MustRegister(sweeperRuns)
 
 			// Background sweeper: expire stale leases every 60s until shutdown.
 			go func() {
@@ -107,9 +120,13 @@ func newServeCmd() *cobra.Command {
 						return
 					case <-ticker.C:
 						if n, err := st.ExpireLeases(ctx, time.Now().UTC()); err != nil {
+							sweeperRuns.WithLabelValues("error").Inc()
 							slog.Error("expire leases", "err", err)
-						} else if n > 0 {
-							slog.Info("expired leases", "count", n)
+						} else {
+							sweeperRuns.WithLabelValues("ok").Inc()
+							if n > 0 {
+								slog.Info("expired leases", "count", n)
+							}
 						}
 					}
 				}
