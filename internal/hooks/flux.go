@@ -39,6 +39,7 @@ type fluxHandler struct {
 	secret     string
 	clusterEnv map[string]string
 	log        *slog.Logger
+	metrics    *Metrics
 }
 
 // NewFluxHandler returns the POST /hooks/flux handler. It verifies the
@@ -48,11 +49,11 @@ type fluxHandler struct {
 // id, so the idempotency key is the SHA-256 of the request body. An empty
 // secret makes the handler refuse all requests with 503 — a misconfigured
 // server must not accept unauthenticated webhooks.
-func NewFluxHandler(st *store.Store, secret string, clusterEnv map[string]string, log *slog.Logger) http.Handler {
+func NewFluxHandler(st *store.Store, secret string, clusterEnv map[string]string, log *slog.Logger, m *Metrics) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &fluxHandler{st: st, secret: secret, clusterEnv: clusterEnv, log: log}
+	return &fluxHandler{st: st, secret: secret, clusterEnv: clusterEnv, log: log, metrics: m}
 }
 
 // fluxEvent is the part of a Flux notification-controller Event payload the
@@ -71,6 +72,9 @@ type fluxEvent struct {
 }
 
 func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	result := "error"
+	defer func() { h.metrics.event("flux", "flux", result) }()
+
 	if h.secret == "" {
 		writeErr(w, http.StatusServiceUnavailable, "flux webhook secret not configured")
 		return
@@ -90,6 +94,7 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validSignature(h.secret, body, r.Header.Get("X-Signature")) {
+		result = "rejected"
 		writeErr(w, http.StatusUnauthorized, "invalid signature")
 		return
 	}
@@ -127,10 +132,13 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case !inserted:
+		result = "ok"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
 	case ignored:
+		result = "ignored"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 	default:
+		result = "ok"
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
