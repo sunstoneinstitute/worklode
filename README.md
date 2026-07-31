@@ -10,7 +10,8 @@ giving full provenance for every state change. Work arrives from three
 sources — a GitHub App (issues, PRs, reviews, CI, releases), a Flux
 notification-controller webhook (deployments), and a Kubernetes pod watcher
 (crash loops, OOM kills) — and is read back through the `lode` CLI or a
-read-only web UI. See `docs/spec.md` for the full design.
+read-only web UI. See `docs/specs/` for the design, starting with
+`000-umbrella-architecture.md`.
 
 ## Quickstart
 
