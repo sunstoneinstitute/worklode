@@ -736,6 +736,18 @@ func printBrief(cmd *cobra.Command, b cli.Brief) {
 		fmt.Fprintln(out)
 		cli.Markdown(out, b.Body)
 	}
+	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 {
+		fmt.Fprintln(out, "\nSkills:")
+		for _, p := range b.Skills.Pinned {
+			fmt.Fprintf(out, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
+		}
+		for _, m := range b.Skills.Matches {
+			fmt.Fprintf(out, "  %.2f    %s — %s\n", m.Score, m.Name, m.Description)
+		}
+		for _, w := range b.Skills.Warnings {
+			fmt.Fprintf(out, "  warning: %s\n", w)
+		}
+	}
 }
 
 func newTaskUnblockCmd() *cobra.Command {
