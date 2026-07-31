@@ -253,7 +253,9 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), skillSyncTimeout)
 	defer cancel()
+	start := time.Now()
 	sum, err := s.skillSyncer.SyncAll(ctx, s.skillSources)
+	s.observeSkillSync(sum, err, time.Since(start))
 	// A webhook push that arrived while this ran found the mutex held, set
 	// skillSyncPending and returned. runSkillSync's loop drains that flag; this
 	// handler holds the same mutex without one, so it has to hand the trigger

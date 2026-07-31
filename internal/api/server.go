@@ -483,32 +483,6 @@ func (s *server) syncOnce(ctx context.Context, reason string) {
 		"changed", sum.Changed, "embedded", sum.Embedded, "deleted", sum.Deleted)
 }
 
-// observeSkillSync records one sync pass. A partial failure still carries a
-// summary of what landed before the error, so items are recorded on both
-// paths (spec 022 §4). Nil-safe: tests build a *server directly without
-// initMetrics, matching the store package's optional-metrics convention.
-func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Duration) {
-	if s.syncDuration == nil {
-		return
-	}
-	s.syncDuration.Observe(d.Seconds())
-	result := "ok"
-	if err != nil {
-		result = "error"
-	}
-	s.syncRuns.WithLabelValues(result).Inc()
-	for action, n := range map[string]int{
-		"synced":   sum.Synced,
-		"changed":  sum.Changed,
-		"embedded": sum.Embedded,
-		"deleted":  sum.Deleted,
-	} {
-		if n > 0 {
-			s.syncItems.WithLabelValues(action).Add(float64(n))
-		}
-	}
-}
-
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

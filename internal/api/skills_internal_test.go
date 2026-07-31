@@ -16,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -548,6 +551,7 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 		},
 		skillSyncer: &skillsync.Syncer{Store: st, Fetch: fetch, Log: slog.Default()},
 	}
+	s.initMetrics(prometheus.NewRegistry())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/skills/sync", nil)
 	rr := httptest.NewRecorder()
@@ -565,6 +569,18 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 	}
 	if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0], "acme/bad") {
 		t.Fatalf("errors: %+v", resp.Errors)
+	}
+
+	// The admin sync path (this handler) must record metrics itself, not
+	// just the coalesced background run it may trigger.
+	if got := testutil.ToFloat64(s.syncRuns.WithLabelValues("error")); got != 1 {
+		t.Fatalf("syncRuns{error} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.syncItems.WithLabelValues("synced")); got != 1 {
+		t.Fatalf("syncItems{synced} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.syncItems.WithLabelValues("changed")); got != 1 {
+		t.Fatalf("syncItems{changed} = %v, want 1", got)
 	}
 
 	sk, err := st.GetSkill(context.Background(), "tdd")
