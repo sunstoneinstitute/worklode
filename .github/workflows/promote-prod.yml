@@ -1,0 +1,111 @@
+name: Promote to prod
+
+# Promotes the dev (hzdev cluster) image to prod (hzprod cluster) without
+# rebuilding. Uses crane to copy the byte-identical image within the same
+# ghcr.io/sunstoneinstitute namespace, tagged with a computed semver version.
+#
+# hzprod has no cluster yet, so nothing consumes last-deploy/prod until one is
+# provisioned and Flux is wired to watch it — this workflow just keeps the
+# branch and image ready for when that happens.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for the prod tag (from existing tags)
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: promote-prod
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/sunstoneinstitute
+  APP: worklode
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.promote.outputs.to-tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote image to hzprod
+        id: promote
+        uses: sunstoneinstitute/actions/promote-images@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
+        with:
+          from-env: dev
+          to-env: prod
+          images: worklode
+          from-registry: ${{ env.REGISTRY }}
+          to-registry: ${{ env.REGISTRY }}
+          bump: ${{ inputs.bump }}
+          # Overlay dirs are named after the cluster (hzdev/hzprod), not the
+          # env (dev/prod), so neither path can be auto-detected from from-env.
+          from-overlay-path: deploy/overlays/hzdev/kustomization.yaml
+          overlay-path: deploy/overlays/hzprod/kustomization.yaml
+
+      - name: Output summary
+        run: |
+          {
+            echo "### Production Promotion Summary"
+            echo ""
+            echo "**dev tag promoted:** \`${{ steps.promote.outputs.from-tag }}\`"
+            echo "**prod version:** \`${{ steps.promote.outputs.to-tag }}\`"
+            echo "**Deploy branch updated:** \`last-deploy/prod\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-bottles:
+    needs: promote
+    uses: ./.github/workflows/_build-bottles.yml
+    with:
+      tag: ${{ needs.promote.outputs.tag }}
+
+  # promote-images pushes the v* tag with GITHUB_TOKEN, and pushes made with
+  # that token do not trigger workflows — release.yml's `on: push: tags` never
+  # fires here, so the tap update runs directly.
+  homebrew:
+    needs: [promote, build-bottles]
+    runs-on: ubuntu-latest
+    # Resolves TAP_DEPLOY_KEY and gates it to the refs the environment's branch
+    # policy allows. The environment must be declared on this job: a job that
+    # delegates to a reusable workflow cannot declare one, and an environment
+    # secret read inside a called workflow arrives empty.
+    environment: release
+    timeout-minutes: 10
+    steps:
+      # The tap update is a local composite action, so the repo must be on disk
+      # before it can be resolved.
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Update Homebrew tap
+        uses: ./.github/actions/update-homebrew-tap
+        with:
+          tag: ${{ needs.promote.outputs.tag }}
+          deploy-key: ${{ secrets.TAP_DEPLOY_KEY }}
+          arm64-sequoia-sha: ${{ needs.build-bottles.outputs.arm64_sequoia_sha256 }}
+          arm64-tahoe-sha: ${{ needs.build-bottles.outputs.arm64_tahoe_sha256 }}
+          cellar: ${{ needs.build-bottles.outputs.cellar }}
