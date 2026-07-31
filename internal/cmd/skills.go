@@ -70,6 +70,9 @@ func newSkillsRecommendCmd() *cobra.Command {
 					return err
 				}
 				text = string(b)
+				if strings.TrimSpace(text) == "" {
+					return fmt.Errorf("%s is empty", file)
+				}
 			}
 			c, err := newAPIClient()
 			if err != nil {
@@ -110,6 +113,9 @@ func newSkillsInstallCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, hash, _ := strings.Cut(args[0], "@")
+			if name == "" {
+				return fmt.Errorf("skill name is required")
+			}
 			c, err := newAPIClient()
 			if err != nil {
 				return err
@@ -120,6 +126,9 @@ func newSkillsInstallCmd() *cobra.Command {
 					return err
 				}
 				hash = sk.Hash
+				if sk.Deleted {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was removed from its source repo\n", name)
+				}
 			}
 			root, err := skillstore.Root()
 			if err != nil {
