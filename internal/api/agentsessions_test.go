@@ -99,6 +99,124 @@ func TestAgentSessionEndpoints(t *testing.T) {
 	}
 }
 
+// sonnetUsage is a usage bucket priced by migration 0008's seed rate for
+// claude-sonnet-5 (standard, $2/$10 per MTok before 2026-09-01):
+// 1e6 input + 1e6 1h-cache-write + 1e7 cache read + 1e5 output = $9.000000.
+// The classes are deliberately unequal, so a handler that folded them into
+// one number could not produce this amount.
+var sonnetUsage = map[string]any{
+	"day": "2026-07-31", "model": "claude-sonnet-5",
+	"input_tokens": 1_000_000, "cache_write_1h_tokens": 1_000_000,
+	"cache_read_tokens": 10_000_000, "output_tokens": 100_000,
+}
+
+// sonnetUsagePrevDay bills 1e5 output tokens at the same rate: $1.000000, on
+// the day before sonnetUsage — the second day a window filter can exclude.
+var sonnetUsagePrevDay = map[string]any{
+	"day": "2026-07-30", "model": "claude-sonnet-5", "output_tokens": 100_000,
+}
+
+// endSessionWithUsage runs the whole path a project's recorded cost arrives
+// by: claim a task in project "proj", open an agent session, end it reporting
+// usage. It returns the task id, so callers can reopen the session.
+func endSessionWithUsage(t *testing.T, st *store.Store, h http.Handler, token string, usage []map[string]any) string {
+	t.Helper()
+	id := claimedTask(t, st, h, token)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("touch: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session/end", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1", "usage": usage})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("end with usage: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	return id
+}
+
+// TestAgentSessionUsageBuckets covers the reported breakdown reaching the
+// project rollup priced, and an end that omits usage leaving it alone.
+func TestAgentSessionUsageBuckets(t *testing.T) {
+	st, h, token := newTestServer(t)
+	id := endSessionWithUsage(t, st, h, token, []map[string]any{sonnetUsagePrevDay, sonnetUsage})
+
+	cost := projectCost(t, h, token, "/api/v1/projects/proj")
+	if len(cost.Days) != 2 {
+		t.Fatalf("days = %+v, want 2", cost.Days)
+	}
+	if cost.Days[0].Day != "2026-07-30" || cost.Days[0].CostAmount != "1.000000" {
+		t.Fatalf("first day = %+v, want 2026-07-30 at 1.000000", cost.Days[0])
+	}
+	d := cost.Days[1]
+	if d.Day != "2026-07-31" || d.Currency != "USD" || d.CostAmount != "9.000000" {
+		t.Fatalf("second day = %+v, want 2026-07-31 USD 9.000000", d)
+	}
+	if d.InputTokens != 1_000_000 || d.CacheWrite1hTokens != 1_000_000 ||
+		d.CacheReadTokens != 10_000_000 || d.OutputTokens != 100_000 {
+		t.Fatalf("second day tokens = %+v", d)
+	}
+	if d.UnpricedTokens != 0 {
+		t.Fatalf("unpriced_tokens = %d, want 0: claude-sonnet-5 has a seeded rate", d.UnpricedTokens)
+	}
+	if len(cost.Totals) != 1 || cost.Totals[0].Currency != "USD" || cost.Totals[0].CostAmount != "10.000000" {
+		t.Fatalf("totals = %+v, want one USD total of 10.000000", cost.Totals)
+	}
+
+	// A heartbeat reopens the closed session; ending it again without a usage
+	// field must leave what was already recorded in place.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session/end", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("end without usage: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	if again := projectCost(t, h, token, "/api/v1/projects/proj"); len(again.Days) != 2 ||
+		again.Totals[0].CostAmount != "10.000000" {
+		t.Fatalf("cost after an end with no usage = %+v, want unchanged", again)
+	}
+}
+
+// TestAgentSessionEndRejectsMalformedUsage checks a bad bucket is a 400 and
+// is rejected whole: the session stays open and endable afterwards.
+func TestAgentSessionEndRejectsMalformedUsage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	id := claimedTask(t, st, h, token)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("touch: got %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	for name, bucket := range map[string]map[string]any{
+		"malformed day": {"day": "31-07-2026", "model": "claude-sonnet-5", "output_tokens": 10},
+		"missing day":   {"model": "claude-sonnet-5", "output_tokens": 10},
+		"missing model": {"day": "2026-07-31", "output_tokens": 10},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session/end", token,
+				map[string]any{"agent": "claude-code", "session_id": "sess-1", "usage": []map[string]any{bucket}})
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("got %d, want 400, body %s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session/end", token,
+		map[string]any{"agent": "claude-code", "session_id": "sess-1", "usage": []map[string]any{sonnetUsage}})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("end after rejected usage: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	if cost := projectCost(t, h, token, "/api/v1/projects/proj"); len(cost.Days) != 1 ||
+		cost.Days[0].CostAmount != "9.000000" {
+		t.Fatalf("cost = %+v, want only the accepted bucket", cost)
+	}
+}
+
 func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)

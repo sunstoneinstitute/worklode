@@ -94,6 +94,133 @@ func listedDoneState(t *testing.T, h http.Handler, token, repo string) string {
 	return ""
 }
 
+// projectDetailBody is the decoded shape of GET /api/v1/projects/{id}: the
+// list-shape fields plus the cost window.
+type projectDetailBody struct {
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Key   string   `json:"key"`
+	Focus []string `json:"focus"`
+	Repos []struct {
+		Repo      string `json:"repo"`
+		DoneState string `json:"done_state"`
+	} `json:"repos"`
+	Cost projectCostBody `json:"cost"`
+}
+
+type projectCostBody struct {
+	Days []struct {
+		Day                string `json:"day"`
+		Currency           string `json:"currency"`
+		InputTokens        int64  `json:"input_tokens"`
+		CacheWrite5mTokens int64  `json:"cache_write_5m_tokens"`
+		CacheWrite1hTokens int64  `json:"cache_write_1h_tokens"`
+		CacheReadTokens    int64  `json:"cache_read_tokens"`
+		OutputTokens       int64  `json:"output_tokens"`
+		CostAmount         string `json:"cost_amount"`
+		UnpricedTokens     int64  `json:"unpriced_tokens"`
+	} `json:"days"`
+	Totals []struct {
+		Currency   string `json:"currency"`
+		CostAmount string `json:"cost_amount"`
+	} `json:"totals"`
+}
+
+// projectCost GETs a project detail path (query string and all) and returns
+// its cost half.
+func projectCost(t *testing.T, h http.Handler, token, path string) projectCostBody {
+	t.Helper()
+	rr := doReq(t, h, "GET", path, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, body %s", path, rr.Code, rr.Body.String())
+	}
+	var body projectDetailBody
+	decodeInto(t, rr, &body)
+	return body.Cost
+}
+
+// TestGetProject covers GET /api/v1/projects/{id}: the project's own fields,
+// the empty cost window a project with no recorded usage has, and 404 on an
+// unknown id.
+func TestGetProject(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
+		t.Fatalf("add repo: %v", err)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/projects/proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var body projectDetailBody
+	decodeInto(t, rr, &body)
+	if body.ID != "proj" || body.Key != "WL" {
+		t.Fatalf("project = %+v", body)
+	}
+	if len(body.Repos) != 1 || body.Repos[0].Repo != "acme/widgets" {
+		t.Fatalf("repos = %+v", body.Repos)
+	}
+
+	// A project with no usage reports empty arrays, not nulls: a client
+	// iterating days must not have to special-case a missing window.
+	cost, _ := decodeMap(t, rr)["cost"].(map[string]any)
+	for _, field := range []string{"days", "totals"} {
+		if arr, ok := cost[field].([]any); !ok || len(arr) != 0 {
+			t.Fatalf("cost.%s = %v, want empty array", field, cost[field])
+		}
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/projects/nosuch", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown project status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetProjectCostWindow covers the from/to bounds on the cost window.
+func TestGetProjectCostWindow(t *testing.T) {
+	st, h, token := newTestServer(t)
+	endSessionWithUsage(t, st, h, token, []map[string]any{sonnetUsagePrevDay, sonnetUsage})
+
+	for name, tc := range map[string]struct {
+		query string
+		days  []string
+		total string
+	}{
+		"unbounded":  {"", []string{"2026-07-30", "2026-07-31"}, "10.000000"},
+		"from only":  {"?from=2026-07-31", []string{"2026-07-31"}, "9.000000"},
+		"to only":    {"?to=2026-07-30", []string{"2026-07-30"}, "1.000000"},
+		"both ends":  {"?from=2026-07-31&to=2026-07-31", []string{"2026-07-31"}, "9.000000"},
+		"past usage": {"?from=2026-08-01", nil, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cost := projectCost(t, h, token, "/api/v1/projects/proj"+tc.query)
+			if len(cost.Days) != len(tc.days) {
+				t.Fatalf("days = %+v, want %v", cost.Days, tc.days)
+			}
+			for i, want := range tc.days {
+				if cost.Days[i].Day != want {
+					t.Fatalf("days[%d] = %q, want %q", i, cost.Days[i].Day, want)
+				}
+			}
+			if tc.total == "" {
+				if len(cost.Totals) != 0 {
+					t.Fatalf("totals = %+v, want none", cost.Totals)
+				}
+				return
+			}
+			if len(cost.Totals) != 1 || cost.Totals[0].CostAmount != tc.total {
+				t.Fatalf("totals = %+v, want a single %s", cost.Totals, tc.total)
+			}
+		})
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/projects/proj?from=31-07-2026", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("malformed from status = %d, want 400; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestAddRepoDoneState covers the optional done_state field on POST
 // /api/v1/projects/{id}/repos.
 func TestAddRepoDoneState(t *testing.T) {

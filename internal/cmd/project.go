@@ -3,8 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,7 +20,8 @@ func newProjectCmd() *cobra.Command {
 		Short: "Manage projects and their repos",
 	}
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
-		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectResolveCmd())
+		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectResolveCmd(),
+		newProjectShowCmd())
 	return cmd
 }
 
@@ -274,6 +278,122 @@ func newProjectResolveCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-query the server instead of using the cached answer")
 	return cmd
+}
+
+// defaultCostDays is the cost window `lode project show` uses when --days is
+// not given.
+const defaultCostDays = 30
+
+func newProjectShowCmd() *cobra.Command {
+	var project string
+	var days int
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show a project's repos, focus, and token cost",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id := project
+			if id == "" {
+				wd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
+				}
+				id = cli.ResolveScope(cmd.Context(), c, cfg, wd).Project
+			}
+			if id == "" {
+				o := cmd.OutOrStdout()
+				fmt.Fprintln(o, "no current project: pass --project <id> to name one")
+				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
+				return nil
+			}
+
+			from, to := costWindow(days)
+			detail, raw, err := c.ProjectDetail(cmd.Context(), id, from, to)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			printProjectDetail(cmd, detail, costWindowLabel(days))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&project, "project", "", "project id (default: the current project)")
+	cmd.Flags().IntVar(&days, "days", defaultCostDays, "cost window in days, counting today; 0 for all history")
+	return cmd
+}
+
+// costWindow turns --days into the [from, to] the API takes. Both ends are
+// zero for days <= 0, which asks the server for all history.
+func costWindow(days int) (from, to time.Time) {
+	if days <= 0 {
+		return time.Time{}, time.Time{}
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	return today.AddDate(0, 0, -(days - 1)), today
+}
+
+func costWindowLabel(days int) string {
+	if days <= 0 {
+		return "all time"
+	}
+	return fmt.Sprintf("last %d days", days)
+}
+
+// printProjectDetail renders `lode project show`: the project's identity,
+// focus, and repos, then one cost block per currency.
+func printProjectDetail(cmd *cobra.Command, d cli.ProjectDetail, window string) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "%s%s — %s\n", d.ID, keySuffix(d.Key), d.Name)
+	printFocus(cmd, d.Focus)
+	if len(d.Repos) > 0 {
+		fmt.Fprintln(out, "repos:")
+		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		for _, r := range d.Repos {
+			fmt.Fprintf(tw, "  %s\tdone: %s\n", r.Repo, r.DoneState)
+		}
+		tw.Flush()
+	}
+	printCost(out, d.Cost, window)
+}
+
+// printCost writes one block per currency: a headline total, a row per day,
+// and — when some tokens were billed on a model with no price on file — the
+// shortfall that headline therefore omits.
+func printCost(out io.Writer, cost cli.ProjectCost, window string) {
+	if len(cost.Totals) == 0 {
+		fmt.Fprintf(out, "\ncost, %s: none recorded\n", window)
+		return
+	}
+	// No currency symbol: a vendor need not bill in dollars, and one block per
+	// currency already names it in the header. "$12.000000 EUR" is the kind of
+	// wrong a symbol table earns you.
+	for _, total := range cost.Totals {
+		fmt.Fprintf(out, "\ncost, %s: %s %s\n", window, cli.Money(total.CostAmount), total.Currency)
+		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		for _, d := range cost.Days {
+			if d.Currency != total.Currency {
+				continue
+			}
+			fmt.Fprintf(tw, "  %s\t%s\tin %s\tcache-w %s\tcache-r %s\tout %s\n",
+				d.Day, cli.Money(d.CostAmount),
+				cli.HumanTokens(d.InputTokens),
+				cli.HumanTokens(d.CacheWrite5m+d.CacheWrite1h),
+				cli.HumanTokens(d.CacheRead),
+				cli.HumanTokens(d.OutputTokens))
+		}
+		tw.Flush()
+		if total.UnpricedTokens > 0 {
+			fmt.Fprintf(out, "note: %s tokens from models with no price on file are excluded from the total.\n",
+				cli.HumanTokens(total.UnpricedTokens))
+		}
+	}
 }
 
 // keySuffix renders " (WL)" for a known task-id key, or nothing.

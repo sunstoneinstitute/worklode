@@ -75,6 +75,16 @@ agents in one directory; it is harmless and not worth a constraint.
 Token and cost columns ship nullable and unpopulated. Nothing computes them in
 this cut; they are in the migration so the table is shaped right.
 
+**Superseded by migration `0008_session_cost`.** Two token columns turned out
+not to be a shape cost can be computed from: a vendor prices a prompt in four
+separate classes (uncached input, a cache write at each of two TTLs, and a
+cache read) at rates spanning 0.1x to 2x base input, and one session mixes
+models at several-fold different rates. These columns survive as the session's
+headline rollup — `input_tokens` is every prompt-side class summed — and the
+billable detail moved to `agent_session_usage`, keyed by (session, day, model,
+speed) and priced from the effective-dated `model_prices` table. See the
+comments at the head of that migration for the model.
+
 `agent_version` is likewise reserved: it is plumbed through every layer, but
 the Claude Code hook payload carries no version, so it is always empty today.
 It is there for agents that do report one.
@@ -317,10 +327,15 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
 
 ## Out of scope
 
-- Computing tokens and cost. The numbers are only reachable by parsing Claude
-  Code's transcript JSONL, which is tool-specific; the columns wait. The
-  `Stop` and `SessionEnd` payloads both carry `transcript_path`, so the hooks
-  wired here are already standing where that work will go.
+- ~~Computing tokens and cost.~~ **Done** — see migration `0008_session_cost`,
+  `internal/transcript`, and `lode project show`. It landed where this spec
+  predicted: `session-end` and `worktree-exit` parse the `transcript_path` the
+  payload already carries, and report per-model, per-day token classes that the
+  server prices. The transcript needs deduplicating on message id — one
+  assistant message is written once per content block, each line repeating the
+  whole usage block — and filtering by the working directory each turn ran in,
+  so a session that moves between worktrees does not bill the same tokens to
+  two leases.
 - A `lode sessions` listing command and any web UI surface.
 - Fixing the session marker's pid. `writeSessionMarker` records
   `os.Getpid()` — the pid of the short-lived `lode hook` process, which is dead
