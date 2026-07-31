@@ -736,7 +736,10 @@ func printBrief(cmd *cobra.Command, b cli.Brief) {
 		fmt.Fprintln(out)
 		cli.Markdown(out, b.Body)
 	}
-	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 {
+	// Warnings alone still print the section: a user who misspelled every pin
+	// would otherwise see nothing at all, which is exactly the case the
+	// warnings exist for.
+	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 || len(b.Skills.Warnings) > 0 {
 		fmt.Fprintln(out, "\nSkills:")
 		for _, p := range b.Skills.Pinned {
 			fmt.Fprintf(out, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)

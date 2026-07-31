@@ -157,29 +157,16 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 
 	pinnedNames := map[string]bool{}
 	if len(pins) > 0 {
-		skills, err := s.st.SkillsByNames(ctx, pins)
+		// Store.ResolvePins is the one implementation, shared with the brief
+		// (store.Brief resolves its own pins through it). Duplicating the
+		// dedupe and the warning strings here is how the two drift apart.
+		pinned, warnings, err := s.st.ResolvePins(ctx, pins)
 		if err != nil {
 			return nil, err
 		}
-		found := map[string]store.Skill{}
-		for _, sk := range skills {
-			found[sk.Name] = sk
-		}
-		seen := map[string]bool{}
-		for _, name := range pins {
-			if seen[name] {
-				continue // SkillsByNames dedupes the lookup, not the caller's list.
-			}
-			seen[name] = true
-			sk, ok := found[name]
-			if !ok {
-				rec.Warnings = append(rec.Warnings, "pinned skill not found: "+name)
-				continue
-			}
-			if sk.Deleted {
-				rec.Warnings = append(rec.Warnings, "pinned skill removed from its source repo: "+name)
-			}
-			pinnedNames[name] = true
+		rec.Warnings = append(rec.Warnings, warnings...)
+		for _, sk := range pinned {
+			pinnedNames[sk.Name] = true
 			rec.Pinned = append(rec.Pinned, toPinnedSkillJSON(sk))
 		}
 	}
