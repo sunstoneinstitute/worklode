@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -167,5 +168,128 @@ func TestImportWithoutAppReturns503(t *testing.T) {
 	s.importInbox(rr, req)
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
+	}
+}
+
+func TestImportDoesNotClobberPromotedRow(t *testing.T) {
+	app := importGitHub(t, []map[string]any{openIssue(1, "renamed upstream")}, nil)
+	st, post := importServer(t, app)
+	ctx := context.Background()
+
+	post(map[string]any{"repo": "acme/widgets", "state": "open"})
+
+	if err := st.CreateActor(ctx, "someone", "human", "Someone", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	// Promote it, then re-import with a changed upstream title.
+	var taskID string
+	err := st.Tx(ctx, func(tx *sql.Tx) error {
+		task, err := store.PromoteIssue(tx, st.Now(), "acme/widgets", 1, store.TaskInput{
+			ProjectID: "proj", Title: "kept", Priority: "low", Kind: "bug", CreatedBy: "someone",
+		}, nil)
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+
+	post(map[string]any{"repo": "acme/widgets", "state": "open"})
+
+	issues, err := st.ListIssues(ctx, "", "")
+	if err != nil {
+		t.Fatalf("list issues: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("got %d issues, want 1", len(issues))
+	}
+	got := issues[0]
+	if got.TriageState != "promoted" {
+		t.Errorf("triage_state = %q, want promoted — re-import must not reset triage", got.TriageState)
+	}
+	if got.TaskID == nil || *got.TaskID != taskID {
+		t.Errorf("task_id = %v, want %s — re-import must not drop the task link", got.TaskID, taskID)
+	}
+	if got.Title != "renamed upstream" {
+		t.Errorf("title = %q, want the refreshed upstream title", got.Title)
+	}
+}
+
+func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
+	// The pulls fixture below must embed a real task id in head.ref for the
+	// PR to correlate (see store.UpsertPR / store.TaskIDFromRef), and that id
+	// has to exist before importGitHub bakes the fixture into its fake
+	// server's response. So, unlike the other tests here, this one can't use
+	// importGitHub/importServer in their usual order (app, then store, then
+	// task) — it builds the store and task first, then the app, wiring the
+	// server by hand exactly as importServer does.
+	st0 := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st0.CreateProject(ctx, "proj", "Proj", "PR"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st0.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+		t.Fatalf("add repo: %v", err)
+	}
+	if err := st0.CreateActor(ctx, "someone", "human", "Someone", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	var taskID string
+	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
+		task, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
+			ProjectID: "proj", Title: "unrelated", Priority: "low", Kind: "bug", CreatedBy: "someone",
+		})
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	pulls := []map[string]any{{
+		"number": 1, "title": "old merged work", "state": "closed",
+		"html_url": "https://gh/pr/1", "created_at": "2026-01-01T00:00:00Z",
+		"updated_at": "2026-01-02T00:00:00Z", "merged_at": "2026-01-02T00:00:00Z",
+		"merge_commit_sha": "deadbeef",
+		"head":             map[string]any{"ref": store.BranchPrefix() + taskID + "-old", "sha": "cafe"},
+	}}
+	app := importGitHub(t, nil, pulls)
+	s := &server{st: st0, cfg: Config{}, log: slog.Default(), appAuth: app}
+	post := func(body map[string]any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/api/v1/inbox/import", bytes.NewReader(b))
+		rr := httptest.NewRecorder()
+		s.importInbox(rr, req)
+		return rr
+	}
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "all", "include_prs": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+
+	// Prove the correlation actually happened — otherwise the state
+	// assertion below would pass vacuously even if import replayed the
+	// lifecycle, because there would be no correlated task to replay it on.
+	pr, err := st0.GetPR(ctx, "acme/widgets", 1)
+	if err != nil {
+		t.Fatalf("get pr: %v", err)
+	}
+	if pr.TaskID == nil || *pr.TaskID != taskID {
+		t.Fatalf("pr task_id = %v, want %s — the fixture's head_ref must correlate to the task for this test to mean anything", pr.TaskID, taskID)
+	}
+
+	task, err := st0.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.State != "ready" {
+		t.Fatalf("task state = %q, want ready — importing a merged PR must not replay the delivery lifecycle", task.State)
 	}
 }
