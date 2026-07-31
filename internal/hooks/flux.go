@@ -72,6 +72,8 @@ type fluxEvent struct {
 }
 
 func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Every exit records exactly one delivery; result stays "error" unless a
+	// branch below sets it, so new early returns default to error, not silence.
 	result := "error"
 	defer func() { h.metrics.event("flux", "flux", result) }()
 

@@ -91,6 +91,8 @@ func validSignature(secret string, body []byte, header string) bool {
 }
 
 func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Every exit records exactly one delivery; result stays "error" unless a
+	// branch below sets it, so new early returns default to error, not silence.
 	result := "error"
 	defer func() {
 		h.metrics.event("github", eventLabel(r.Header.Get("X-GitHub-Event")), result)
@@ -210,6 +212,15 @@ func HandledEvents() []string {
 	out := make([]string, len(handledEvents))
 	copy(out, handledEvents)
 	return out
+}
+
+// eventLabel bounds the metric's event label to the handled GitHub events;
+// anything else (including an empty header) is "other".
+func eventLabel(event string) string {
+	if slices.Contains(handledEvents, event) {
+		return event
+	}
+	return "other"
 }
 
 // applyFunc routes a mapped-repo event to its per-event apply callback.

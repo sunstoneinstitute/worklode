@@ -42,11 +42,17 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 		t.Fatalf("unknown-event status = %d, want 200", rr.Code)
 	}
 
+	// Redelivering d-1 dedupes: !inserted wins over ignored, so it counts ok.
+	if rr := deliverBody(t, h, "issues", "d-1", body); rr.Code != 200 {
+		t.Fatalf("redelivery status = %d, want 200", rr.Code)
+	}
+
 	for _, tc := range []struct {
 		event, result string
 		want          float64
 	}{
 		{"issues", "ignored", 1},
+		{"issues", "ok", 1},
 		{"issues", "rejected", 1},
 		{"other", "ignored", 1},
 	} {
@@ -65,10 +71,7 @@ func TestFluxWebhookMetrics(t *testing.T) {
 
 	// Ignored kind.
 	body := []byte(`{"involvedObject":{"kind":"GitRepository","name":"x"},"reason":"Ready"}`)
-	req := httptest.NewRequest("POST", "/hooks/flux", bytes.NewReader(body))
-	req.Header.Set("X-Signature", fluxSign(body))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
+	rr := fluxDeliverBody(t, h, body)
 	if rr.Code != 200 {
 		t.Fatalf("flux status = %d, want 200", rr.Code)
 	}
