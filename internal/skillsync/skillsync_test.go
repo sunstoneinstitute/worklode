@@ -664,6 +664,41 @@ func TestSyncAllRetriesFailedEmbed(t *testing.T) {
 	}
 }
 
+// A re-embed that fails must not leave the previous version's vectors
+// behind. The skill's content hash matches from then on, so no later sync
+// would replace them and the skill would be recommended forever against text
+// it no longer contains. Dropping them first makes it a skill with no
+// vectors, which the convergence pass repairs — here, in the same pass.
+func TestSyncAllFailedReembedDropsStaleVectors(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	const head = "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\n"
+	md := head + "v1 body."
+	sy := &Syncer{Store: st, Fetch: func(ctx context.Context, repo, ref string) ([]byte, error) {
+		return tarballOf(t, "acme-p-aaa111", map[string]string{"skills/tdd/SKILL.md": md}), nil
+	}}
+	src := []Source{testSource}
+
+	sy.Embed = &fakeEmbed{id: "fake:a", vec: []float32{1, 0, 0}}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("v1 sync: %v", err)
+	}
+
+	// v2 arrives and the embed at upsert time fails; convergence retries it.
+	md = head + "v2 body."
+	sy.Embed = &fakeEmbed{id: "fake:a", vec: []float32{0, 1, 0}, fails: 1}
+	if _, err := sy.SyncAll(ctx, src); err != nil {
+		t.Fatalf("v2 sync: %v", err)
+	}
+	if got, _ := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); len(got) != 0 {
+		t.Fatalf("v1 vectors survived a failed re-embed of v2: %+v", got)
+	}
+	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
+	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+		t.Fatalf("v2 not embedded by the same pass: %+v err=%v", got, err)
+	}
+}
+
 // With no provider configured nothing recommends, so stored vectors are
 // inert rather than wrong — and wiping them would destroy data an operator
 // may be about to re-enable.

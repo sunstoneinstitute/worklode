@@ -181,7 +181,7 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 		if changed {
 			sum.Changed++
 			if sy.Embed != nil {
-				if err := sy.embedSkill(ctx, id, u.Description, u.SkillMD); err != nil {
+				if err := sy.reembed(ctx, id, u.Description, u.SkillMD); err != nil {
 					sy.warn(src, "skill embed failed", "skill", u.Name, "err", err)
 				}
 			}
@@ -225,6 +225,19 @@ func (sy *Syncer) liveCount(ctx context.Context, repo string) int {
 		}
 	}
 	return n
+}
+
+// reembed replaces the vectors of a skill whose content just changed. The
+// old vectors go first, so a provider failure leaves the skill with none and
+// embedMissing retries it later in this same SyncAll pass. Embedding in place
+// instead would, on failure, leave vectors describing content the skill no
+// longer has — and its content hash now matches, so nothing would ever
+// replace them. Missing vectors are repairable; stale ones are invisible.
+func (sy *Syncer) reembed(ctx context.Context, skillID int64, description, skillMD string) error {
+	if err := sy.Store.ReplaceSkillEmbeddings(ctx, skillID, nil); err != nil {
+		return err
+	}
+	return sy.embedSkill(ctx, skillID, description, skillMD)
 }
 
 func (sy *Syncer) embedSkill(ctx context.Context, skillID int64, description, skillMD string) error {
