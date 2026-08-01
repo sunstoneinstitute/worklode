@@ -70,13 +70,11 @@ once an instance is running (dogfooding); until then this file is the list.
   `internal/api` and `internal/hooks`; consolidate if a third copy appears.
 - **Notifications** (Slack/email) and the HornDB/RDF projection remain
   deliberate non-goals until the tracker has real usage.
-- **`wlc:TaskKind` and `tasks.kind` disagree in both directions.** The scheme
-  has `feature, bug, chore, spec, review, spike` (014 §8); the CHECK constraint
-  has `feature, bug, chore, spec, epic` (migration `0006_task_hierarchy`). So
-  `epic` (spec 018) never reached the scheme, and 014 §8's widening migration for
-  `review`/`spike` never landed. Decide whether `epic` is a task kind in the
-  vocabulary — it is a structural marker, so it may belong elsewhere — then
-  reconcile both ends in one migration.
+- **`wlc:TaskKind` is ahead of `tasks.kind` by `review` and `spike`.** The scheme
+  now carries all seven kinds; the CHECK constraint has five
+  (`0006_task_hierarchy`). Closing it is 014 §8's widening migration, which lands
+  with 014 — no rows change. Until then a task cannot be created with either
+  kind, and nothing projects them.
 - **`wl:taskState` duplicates the `tasks.state` enum** in `ns/shapes.ttl`
   (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
   The transitions are not duplicated — they stay in `internal/store/tasks.go`.
