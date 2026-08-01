@@ -1,8 +1,11 @@
+---
+status: accepted
+issued: 2026-07-25
+amends:
+  ".":
+    - 004-execution-backbone.md#sec-lease-lifecycle
+---
 # Spec 012 — Agent sessions
-
-**Date**: 2026-07-25
-**Status**: Approved design, pending implementation plan
-**Umbrella**: `000-umbrella-architecture.md`
 
 ## Problem
 

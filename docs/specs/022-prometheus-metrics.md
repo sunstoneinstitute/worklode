@@ -1,7 +1,11 @@
+---
+status: draft
+requires:
+  - 004-execution-backbone.md
+  - 011-delivery-lifecycle.md
+  - 016-org-wide-skills.md
+---
 # Spec 022 — Prometheus domain metrics
-
-**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` ·
-**Depends on:** 004 (execution backbone — leases), 011 (delivery lifecycle), 016 (org-wide skills — sync + embeddings)
 
 ## Purpose & scope
 
@@ -24,7 +28,7 @@ changes, dashboards and alerts.
 
 ---
 
-## 1. Registry plumbing
+## 1. Registry plumbing {#sec-1}
 
 The registry moves out of `api.NewServer` (`internal/api/server.go:305`) into
 `internal/cmd/serve.go`, which becomes the composition root for metrics:
@@ -45,7 +49,7 @@ reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{
 Every new metric is prefixed `worklode_`. The existing unprefixed `http_*` pair keeps
 its names.
 
-## 2. Process and DB-pool collectors
+## 2. Process and DB-pool collectors {#sec-2}
 
 `store.Open` gains a functional option `store.WithMetrics(reg prometheus.Registerer)`.
 When present it registers:
@@ -54,7 +58,7 @@ When present it registers:
   The pool is capped at 16 connections; wait counts are the saturation signal.
 - The store's domain metrics (§3).
 
-## 3. Lease and claim metrics (`internal/store`)
+## 3. Lease and claim metrics (`internal/store`) {#sec-3}
 
 | Metric | Type | Labels |
 |---|---|---|
@@ -75,7 +79,7 @@ leases at scrape time with a 2-second timeout; on query failure it emits
 `prometheus.NewInvalidMetric` rather than a stale zero. Scrapes hit the admin listener
 only, so this is one trivial query per scrape interval.
 
-## 4. Background jobs
+## 4. Background jobs {#sec-4}
 
 **Lease sweeper** (`internal/cmd/serve.go:101`): the 60s loop owns
 `worklode_lease_sweeper_runs_total{result="ok"|"error"}`, registered directly in
@@ -93,7 +97,7 @@ the api server struct alongside the HTTP metrics.
 Item counts come from the `skillsync.Summary` that `SyncAll` already returns; a partial
 sync (summary plus error) records both its items and an `error` run.
 
-## 5. Webhooks (`internal/hooks`)
+## 5. Webhooks (`internal/hooks`) {#sec-5}
 
 `worklode_webhook_events_total{source, event, result}` — one CounterVec shared by both
 handlers via their constructors.
@@ -105,7 +109,7 @@ handlers via their constructors.
 - `result`: `ok` | `rejected` (signature/auth failure) | `ignored` (event type or action
   the handler drops) | `error`.
 
-## 6. Embeddings (`internal/embed`)
+## 6. Embeddings (`internal/embed`) {#sec-6}
 
 The `OpenAI` provider (`embed.go:104`) gains an optional registerer and wraps `Embed`:
 
@@ -116,7 +120,7 @@ The `OpenAI` provider (`embed.go:104`) gains an optional registerer and wraps `E
 
 One observation per `Embed` call (which may batch many texts), not per text.
 
-## 7. Testing
+## 7. Testing {#sec-7}
 
 - Per-package unit tests pass a fresh `prometheus.NewRegistry()` and assert with
   `prometheus/testutil` (`ToFloat64`, `CollectAndCount`) after driving the operation —
@@ -128,7 +132,7 @@ One observation per `Embed` call (which may batch many texts), not per text.
 - `newTestServer`/`newTestServerAdmin` construct the registry themselves, mirroring
   `serve.go`, so the `NewServer` signature change is absorbed in the helpers.
 
-## 8. Maintenance instructions
+## 8. Maintenance instructions {#sec-8}
 
 Metrics rot when new server code ships without them. The top-level `CLAUDE.md` gains a
 short **Metrics** section stating the rule and pointing here for details:

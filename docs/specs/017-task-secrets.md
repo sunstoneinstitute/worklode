@@ -1,8 +1,12 @@
+---
+status: accepted
+issued: 2026-07-28
+requires:
+  - 004-execution-backbone.md
+  - 008-worklode-plugin.md
+  - 016-org-wide-skills.md
+---
 # Spec 017 — Task-declared secrets
-
-**Date:** 2026-07-28 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
-**Depends on:** 004 (execution backbone), 008 (worklode plugin — claim hooks, `lode task brief`),
-016 (org-wide skills — the pin pattern this mirrors; doc-frontmatter pins ride 014)
 
 ## Purpose & scope
 

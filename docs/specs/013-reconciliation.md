@@ -1,10 +1,24 @@
+---
+status: accepted
+requires:
+  - 004-execution-backbone.md
+  - 011-delivery-lifecycle.md
+amendedBy:
+  "#sec-purpose":
+    - 014-design-documents-as-graph-objects.md#sec-6
+isReplacedBy:
+  "#sec-engine-3":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-data-model":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-testing":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-acceptance-criteria":
+    - 014-design-documents-as-graph-objects.md#sec-6
+---
 # Spec 013 — Reconciliation & setup diagnosis
 
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 004 (execution
-backbone), the delivery lifecycle already shipped in `internal/store/delivery_resolve.go`.
-**Amended by:** 014 (design docs as graph objects — supersedes engine 3 and `task_docs`)
-
-## Purpose & scope
+## Purpose & scope {#sec-purpose}
 
 Worklode learns about reality through webhooks. When a webhook never arrives — the GitHub App
 isn't installed, the repo isn't mapped to a project yet, the secret is wrong, the server was
@@ -127,7 +141,7 @@ reconcile observed it, not because a webhook arrived.
 `--repo` are the intended controls for large orgs; an unscoped run over every non-terminal task is
 the scheduled case.
 
-### Engine 3 — spec-doc drift
+### Engine 3 — spec-doc drift {#sec-engine-3}
 
 > **Superseded by 014 §6.** The git-mtime heuristic is replaced by the exact, section-scoped stale-claim query over `.worklode/implements.yaml`; engine 3 should be removed rather than built.
 
@@ -150,7 +164,7 @@ One report per run, per engine: what was repaired, what was found. `--json` for 
 
 ---
 
-## Data model
+## Data model {#sec-data-model}
 
 **`task_docs`** — a table rather than a column, because a spec task can govern several files:
 
@@ -194,7 +208,7 @@ a token belongs to.
 
 ---
 
-## Testing
+## Testing {#sec-testing}
 
 - **Replay:** seed `*.ignored` events (the existing tests at `internal/hooks/github_test.go:566`
   and `push_test.go:230` already produce those rows), map the repo, replay, assert the typed tables
@@ -239,7 +253,7 @@ No dependency on 006, 007, or 009.
    it should run continuously, does it become a server loop — and does that need the sweeper's
    single-instance election (004, open Q4)?
 
-## Acceptance criteria
+## Acceptance criteria {#sec-acceptance-criteria}
 
 - **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
   exactly the typed-table and `state_log` result a live delivery would have; the resulting

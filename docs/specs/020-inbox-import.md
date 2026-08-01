@@ -1,13 +1,13 @@
+---
+status: accepted
+issued: 2026-07-31
+requires:
+  - 002-github-app-auth.md
+  - 011-delivery-lifecycle.md
+  - 018-task-hierarchy.md
+  - 019-project-scoping.md
+---
 # Spec 020 — Inbox import (onboarding a repo with history)
-
-**Date:** 2026-07-31 · **Status:** spec ·
-**Umbrella:** `000-umbrella-architecture.md`
-**Area:** spec 002 (GitHub App auth — the installation token), spec 011
-(delivery lifecycle — what import must *not* replay), spec 018 (task
-hierarchy — where a backlog lands), spec 019 (project scoping — the repo →
-project mapping)
-
-Closes issue #25.
 
 ## Why
 

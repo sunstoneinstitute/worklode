@@ -1,8 +1,13 @@
+---
+status: accepted
+issued: 2026-07-27
+requires:
+  - 004-execution-backbone.md
+  - 008-worklode-plugin.md
+  - 006-knowledge-graph.md
+  - 014-design-documents-as-graph-objects.md
+---
 # Spec 016 — Org-wide agent skills
-
-**Date:** 2026-07-27 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
-**Depends on:** 004 (execution backbone), 008 (worklode plugin, `lode task brief`),
-006 (knowledge graph), 014 (design documents as graph objects, draft)
 
 ## Purpose & scope
 

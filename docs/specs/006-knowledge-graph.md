@@ -1,9 +1,45 @@
+---
+status: accepted
+wasDerivedFrom: 003-platform-graph-design.md (D4, D6, D7, D11)
+requires:
+  - 004-execution-backbone.md
+isRequiredBy:
+  - 007-drift-and-overview.md
+  - 009-data-platform-kg-requirements.md
+amendedBy:
+  "#sec-reuse-vs-mint":
+    - 014-design-documents-as-graph-objects.md
+    - 015-runtime-layer.md
+  "#sec-classes":
+    - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-status-scheme":
+    - 014-design-documents-as-graph-objects.md#sec-5
+  "#sec-taskkind-scheme":
+    - 014-design-documents-as-graph-objects.md#sec-8
+  "#sec-layer-2":
+    - 015-runtime-layer.md#sec-7
+  "#sec-deliverable":
+    - 015-runtime-layer.md#sec-7
+  "#sec-acceptance-criteria":
+    - 014-design-documents-as-graph-objects.md
+    - 015-runtime-layer.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+isReplacedBy:
+  "#sec-vocabulary":
+    - 014-design-documents-as-graph-objects.md#sec-1
+  "#sec-decomposition":
+    - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-layer-3":
+    - 015-runtime-layer.md#sec-2
+    - 015-runtime-layer.md#sec-6
+  "#sec-partial-supersession":
+    - 014-design-documents-as-graph-objects.md#sec-3
+  "#sec-acceptance-criteria":
+    - 014-design-documents-as-graph-objects.md#sec-acceptance-criteria
+---
 # Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
-
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source decisions:**
-`003-platform-graph-design.md` (D4, D6, D7, D11) · **Depends on:** 004
-(backbone) · **Consumed by:** 007 (drift/query), 009 (data-platform hosts the IRIs defined here).
-**Amended by:** 014 (design docs as graph objects), 015 (runtime layer)
 
 ## Purpose & scope
 
@@ -37,7 +73,7 @@ supply-chain term — a TRAP; software `ls:Component` is minted fresh.
 
 ---
 
-## The `ls:` vocabulary
+## The `ls:` vocabulary {#sec-vocabulary}
 
 > **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
 
@@ -60,7 +96,7 @@ so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 ```
 
-### Reuse vs mint
+### Reuse vs mint {#sec-reuse-vs-mint}
 
 > **Amended by 014.** `wl:Plan` and `wl:supersededSection` leave the mint set; `wl:Section` and `wl:lastRevisedIn` join it, and `wl:status` widens to Sections.
 
@@ -104,7 +140,7 @@ where nothing does.
 
 Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not now.
 
-### Classes & subclassing
+### Classes & subclassing {#sec-classes}
 
 > **Amended by 014 §2.** `wl:Plan` is removed and `wl:Section` added; both disjointness axioms change accordingly, and 015 §2 adds a third for the runtime classes.
 
@@ -264,7 +300,7 @@ Note `ls:status` domain is `ls:DesignDoc`, inherited by all three subclasses. **
 execution-state is NOT `ls:status`** — the task state machine is backbone-owned (spec 004); the
 graph mirrors it as a projected literal, it does not fork the enum (Open Q3).
 
-### Status SKOS scheme (D4)
+### Status SKOS scheme (D4) {#sec-status-scheme}
 
 > **Amended by 014 §5.** `implemented` leaves the enum — the order is `draft → proposed → accepted → superseded` — and implementation becomes a derived coverage query.
 
@@ -292,7 +328,7 @@ lsc:DesignDocStatusOrder a skos:OrderedCollection ;
 now data (the `skos:memberList` above), but RDF still doesn't *enforce* legal transitions — the
 transition rules (which move is allowed from where) live with the authoring skill (spec 008).
 
-### Task-kind & model-layer SKOS schemes
+### Task-kind & model-layer SKOS schemes {#sec-taskkind-scheme}
 
 > **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike`, matching the widened `tasks.kind` constraint.
 
@@ -323,7 +359,7 @@ Every minted class/property carries an `ls:layer` tag (e.g. `ls:Component ls:lay
 by layer. `ls:taskKind` is backbone-projected like the rest of the Task node; `lsc:spike` is the
 time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 005), not free text.
 
-### Decomposition & dependency
+### Decomposition & dependency {#sec-decomposition}
 
 > **Obsolete (014 §2).** There is no Plan node: a Spec decomposes straight into an ordered task subtree in the backbone.
 
@@ -395,7 +431,7 @@ authored there (see Projection).
 Intent edges: `ls:governs` (DesignDoc→Component), `ls:reviewer` (Component→Agent, notify on PRs),
 `ls:deliveredBy` (Deliverable→Component), `dct:hasPart`, `dct:requires`, `dct:replaces`.
 
-### Layer 2 — Execution · VCS (observed; mostly projected)
+### Layer 2 — Execution · VCS (observed; mostly projected) {#sec-layer-2}
 
 > **Amended by 015 §7.** WorkflowRun is dropped (subsumed by `wl:Build`) and Commit is promoted to v1 as `wl:Commit`.
 
@@ -412,7 +448,7 @@ Execution edges: `ls:implements` (→ DesignDoc/Deliverable/Component), `ls:affe
 (Task→Workstream), `ls:dependsOn`/`ls:blocks` (Task↔Task, transitive), `dct:isPartOf`
 (child_of), `prov:wasAttributedTo` (→ author `foaf:Agent`).
 
-### Layer 3 — Runtime · Deploy (observed; projected)
+### Layer 3 — Runtime · Deploy (observed; projected) {#sec-layer-3}
 
 > **Superseded by 015 §2 and §6.** Artifact/Deployment/Environment get real PROV-anchored classes there, `wl:Commit` joins v1, and §6 states which nodes actually have a v1 projection source.
 
@@ -429,7 +465,7 @@ confirmation of Deliverables by probing artifacts/deployments is **v2** (D7).
 
 ---
 
-## Deliverable — declared definition-of-done (D7)
+## Deliverable — declared definition-of-done (D7) {#sec-deliverable}
 
 > **Amended by 015 §7.** The declared `dct:relation` targets are now typed nodes (`wl:Artifact`, `wl:Environment`), not bare IRIs; auto-confirmation stays v2.
 
@@ -584,7 +620,7 @@ spec 007).
 
 ---
 
-## Partial supersession (review add-on)
+## Partial supersession (review add-on) {#sec-partial-supersession}
 
 > **Superseded by 014 §3.** Sections are addressable `wlid:section/<doc-slug>/<anchor>` nodes; partial supersession is `dct:isReplacedBy` between sections, and `wl:supersededSection` is retired.
 
@@ -695,7 +731,7 @@ lsid:deviation/pfas-reads-ingest-cache
    (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
 6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
 
-## Acceptance criteria
+## Acceptance criteria {#sec-acceptance-criteria}
 
 1. `ls:` ontology authored as `rdf/ls/ontology.ttl` (1.1) + `rdf/ls/ontology.1-2.ttl` (1.2
    annotations) + `rdf/ls/concept.ttl` (SKOS) + `rdf/shapes/ls-shapes.ttl` (SHACL),

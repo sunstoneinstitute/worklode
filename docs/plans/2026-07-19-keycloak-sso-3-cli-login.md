@@ -1,8 +1,14 @@
+---
+implements: docs/specs/001-keycloak-sso.md
+requires:
+  - 2026-07-19-keycloak-sso-1-server-core.md
+isReplacedBy:
+  ".":
+    - 2026-07-20-provider-neutral-cli-login-design.md
+---
 # Keycloak SSO — Plan 3: CLI `wl login` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Depends on:** Plan 1 (server core) — this plan calls the `GET /auth/oidc/config` and `POST /auth/oidc/token` endpoints and reuses the `internal/oidc` package and the `oidctest` fake issuer.
 
 **Goal:** Add `wl login`: an auth-code + PKCE flow against Keycloak with a localhost redirect listener, exchanging the resulting ID token at the worklode server for a 30-day `wl_` token, which is written to `~/.config/worklode/config.toml`.
 
