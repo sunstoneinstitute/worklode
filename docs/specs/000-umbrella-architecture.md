@@ -14,7 +14,7 @@ replaces:
 ---
 # Spec 000 — Worklode architecture & spec map (umbrella)
 
-**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`017`);
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`024`);
 cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
@@ -95,6 +95,13 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **015 — Runtime layer** | Types Artifact, Deployment and Environment as graph objects for the deploy deriver and Deliverable definition-of-done. | 006, 007, 014 |
 | **016 — Org-wide agent skills** | Git-synced org skill registry in the backbone; embeddings + recommendation endpoint; task/doc pins; brief delivery and content-addressed local install. | 004, 006, 008, 014 |
 | **017 — Task-declared secrets** | Tasks declare org-catalog secret names; a claim-time `op run` ceremony materializes values into the OS keystore for unattended `lode secrets exec`. | 004, 008, 016 |
+| **018 — Task hierarchy** | Epics and tracking tasks: parent/child task edges and how decomposition interacts with the pickup gate. | 004, 005, 011 |
+| **019 — Repo-scoped CLI commands** | Per-repo config resolving which project a command acts on, so task identity does not have to be typed. | 004, 008, 010 |
+| **020 — Inbox import** | Onboarding a repo that already has history, replaying it through the webhook store path so re-running is safe. | 002, 011, 018, 019 |
+| **021 — Images on tasks** | Blob storage and serving for images and attachments referenced from `tasks.body`. | 004, 008, 020 |
+| **022 — Prometheus domain metrics** | Domain-level metrics (leases, delivery, skill sync) on the server's existing Prometheus registry. | 004, 011, 016 |
+| **023 — Keycloak-primary auth** | Keycloak as the primary identity provider with GitHub account linking; supersedes the login half of 002. | 001, 002 |
+| **024 — Multi-harness integration** | Harness adapters behind one `lode install`: skill delivery via the shared `.agents/skills` convention, per-harness hook binding, the Claude Code status line, and OTLP ingest. | 008, 012, 016, 022 |
 
 ---
 
