@@ -7,41 +7,44 @@ isRequiredBy:
   - 007-drift-and-overview.md
   - 009-data-platform-kg-requirements.md
 amendedBy:
-  "#sec-reuse-vs-mint":
+  "#sec-1.1":
     - 014-design-documents-as-graph-objects.md
     - 015-runtime-layer.md
-  "#sec-classes":
+    - 016-org-wide-skills.md#sec-1
+  "#sec-1.2":
     - 014-design-documents-as-graph-objects.md#sec-2
-  "#sec-status-scheme":
+    - 016-org-wide-skills.md#sec-1
+  "#sec-1.4":
     - 014-design-documents-as-graph-objects.md#sec-5
-  "#sec-taskkind-scheme":
+  "#sec-1.5":
     - 014-design-documents-as-graph-objects.md#sec-8
-  "#sec-layer-2":
+  "#sec-3.2":
     - 015-runtime-layer.md#sec-7
-  "#sec-deliverable":
+  "#sec-4":
     - 015-runtime-layer.md#sec-7
-  "#sec-acceptance-criteria":
+  "#sec-11":
     - 014-design-documents-as-graph-objects.md
     - 015-runtime-layer.md
+    - 016-org-wide-skills.md#sec-1
 replaces:
   ".":
     - 003-platform-graph-design.md
 isReplacedBy:
-  "#sec-vocabulary":
+  "#sec-1":
     - 014-design-documents-as-graph-objects.md#sec-1
-  "#sec-decomposition":
+  "#sec-1.6":
     - 014-design-documents-as-graph-objects.md#sec-2
-  "#sec-layer-3":
+  "#sec-3.3":
     - 015-runtime-layer.md#sec-2
     - 015-runtime-layer.md#sec-6
-  "#sec-partial-supersession":
+  "#sec-7":
     - 014-design-documents-as-graph-objects.md#sec-3
-  "#sec-acceptance-criteria":
+  "#sec-11":
     - 014-design-documents-as-graph-objects.md#sec-acceptance-criteria
 ---
 # Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Defines the *knowledge* half of Worklode: the `ls:` RDF vocabulary, the entity model across
 the three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, and the
@@ -73,7 +76,7 @@ supply-chain term — a TRAP; software `ls:Component` is minted fresh.
 
 ---
 
-## The `ls:` vocabulary {#sec-vocabulary}
+## 1. The `ls:` vocabulary {#sec-1}
 
 > **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
 
@@ -96,11 +99,13 @@ so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 ```
 
-### Reuse vs mint {#sec-reuse-vs-mint}
+### 1.1 Reuse vs mint {#sec-1.1}
 
 > **Amended by 014.** `wl:Plan` and `wl:supersededSection` leave the mint set; `wl:Section` and `wl:lastRevisedIn` join it, and `wl:status` widens to Sections.
 
 > **Amended by 015.** Six runtime classes (`wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`, `wl:RuntimeEvent`), four SKOS schemes and seven properties join the mint set.
+
+> **Amended by 016 §1.** `wl:Skill` (execution layer) and `wl:recommendsSkill` (intent layer, DesignDoc→Skill) join the mint set; 016 declares both.
 
 Standards-first: reuse a community term wherever one carries the intended meaning; mint only
 where nothing does.
@@ -132,6 +137,7 @@ where nothing does.
 | Edge a deviation names, un-asserted | `rdf:subject` / `rdf:predicate` / `rdf:object` | **reuse** — RDF reification names a triple without asserting it |
 | **Workstream** grouping (named-graph anchor) | `ls:Workstream` → `ls:Project` / `ls:OngoingMaintenance` | **MINT** — work-grouping a Task belongs to (≥1); anchors projection named graphs |
 | Task kind | `ls:taskKind` (+ `lsc:TaskKind` SKOS) | **MINT** — feature/bug/chore/review/spike |
+| Task execution-state mirror | `ls:taskState` (literal, no SKOS scheme) | **MINT** — projected literal mirroring the backbone enum, so the graph does not fork the state machine (Open Q3, §Projection). Legal values are `tasks.state`'s `CHECK`; transitions stay in `internal/store/tasks.go` and are not modelled |
 | Component reviewer (notify on PRs) | `ls:reviewer` | **MINT** — Component → `foaf:Agent` (GitHub user/team IRI) |
 | Model-layer tag on vocabulary terms | `ls:layer` (+ `lsc:ModelLayer` SKOS) | **MINT** — intent/execution/runtime; lets you list all intent classes |
 | Task ↔ GitHub issue mirror | `ls:mirrors` | **MINT** — symmetric Task↔Issue; PR→Task join piggybacks GitHub `Closes #N` |
@@ -140,9 +146,11 @@ where nothing does.
 
 Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not now.
 
-### Classes & subclassing {#sec-classes}
+### 1.2 Classes & subclassing {#sec-1.2}
 
 > **Amended by 014 §2.** `wl:Plan` is removed and `wl:Section` added; both disjointness axioms change accordingly, and 015 §2 adds a third for the runtime classes.
+
+> **Amended by 016 §1.** `wl:Skill` joins the top-level disjointness axiom.
 
 ```turtle
 ls:Component  a owl:Class ;
@@ -195,7 +203,7 @@ ls:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (
 `foaf:Document` gives design docs a standard super-type; a later SPAR/`fabio:` alignment is
 optional and additive (Open Q).
 
-### Properties
+### 1.3 Properties {#sec-1.3}
 
 > **`ls:implements` amended by 014 §6 and 015.** The Task/PR/Issue→DesignDoc form declared below is
 > superseded. Implementation is one statement, not three ranges:
@@ -300,7 +308,7 @@ Note `ls:status` domain is `ls:DesignDoc`, inherited by all three subclasses. **
 execution-state is NOT `ls:status`** — the task state machine is backbone-owned (spec 004); the
 graph mirrors it as a projected literal, it does not fork the enum (Open Q3).
 
-### Status SKOS scheme (D4) {#sec-status-scheme}
+### 1.4 Status SKOS scheme (D4) {#sec-1.4}
 
 > **Amended by 014 §5.** `implemented` leaves the enum — the order is `draft → proposed → accepted → superseded` — and implementation becomes a derived coverage query.
 
@@ -328,7 +336,7 @@ lsc:DesignDocStatusOrder a skos:OrderedCollection ;
 now data (the `skos:memberList` above), but RDF still doesn't *enforce* legal transitions — the
 transition rules (which move is allowed from where) live with the authoring skill (spec 008).
 
-### Task-kind & model-layer SKOS schemes {#sec-taskkind-scheme}
+### 1.5 Task-kind & model-layer SKOS schemes {#sec-1.5}
 
 > **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike`, matching the widened `tasks.kind` constraint.
 
@@ -359,7 +367,7 @@ Every minted class/property carries an `ls:layer` tag (e.g. `ls:Component ls:lay
 by layer. `ls:taskKind` is backbone-projected like the rest of the Task node; `lsc:spike` is the
 time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 005), not free text.
 
-### Decomposition & dependency {#sec-decomposition}
+### 1.6 Decomposition & dependency {#sec-1.6}
 
 > **Obsolete (014 §2).** There is no Plan node: a Spec decomposes straight into an ordered task subtree in the backbone.
 
@@ -381,7 +389,7 @@ closure (spec 007) is expressible as property paths. Task→Workstream membershi
 
 ---
 
-## Reasoning architecture (OWL / SHACL / SPARQL)
+## 2. Reasoning architecture (OWL / SHACL / SPARQL) {#sec-2}
 
 Reasoning runs in **three tiers**; each idiom pays off in exactly one, so the vocabulary is built
 to the tier that can use it.
@@ -412,13 +420,13 @@ re-derived live via SPARQL property paths — never baked into `dist/`.
 
 ---
 
-## Entity model by layer (D6)
+## 3. Entity model by layer (D6) {#sec-3}
 
 Three layers, joined vertically at **Deliverable**. `[v2]` = deferred. "Projected" = the node
 already exists relationally in the Worklode backbone / ingest and is mirrored into the graph, not
 authored there (see Projection).
 
-### Layer 1 — Intent (declared; authored graph-side, crit-reviewed)
+### 3.1 Layer 1 — Intent (declared; authored graph-side, crit-reviewed) {#sec-3.1}
 
 | Node | Class | v1/v2 | Origin |
 |---|---|---|---|
@@ -431,7 +439,7 @@ authored there (see Projection).
 Intent edges: `ls:governs` (DesignDoc→Component), `ls:reviewer` (Component→Agent, notify on PRs),
 `ls:deliveredBy` (Deliverable→Component), `dct:hasPart`, `dct:requires`, `dct:replaces`.
 
-### Layer 2 — Execution · VCS (observed; mostly projected) {#sec-layer-2}
+### 3.2 Layer 2 — Execution · VCS (observed; mostly projected) {#sec-3.2}
 
 > **Amended by 015 §7.** WorkflowRun is dropped (subsumed by `wl:Build`) and Commit is promoted to v1 as `wl:Commit`.
 
@@ -448,7 +456,7 @@ Execution edges: `ls:implements` (→ DesignDoc/Deliverable/Component), `ls:affe
 (Task→Workstream), `ls:dependsOn`/`ls:blocks` (Task↔Task, transitive), `dct:isPartOf`
 (child_of), `prov:wasAttributedTo` (→ author `foaf:Agent`).
 
-### Layer 3 — Runtime · Deploy (observed; projected) {#sec-layer-3}
+### 3.3 Layer 3 — Runtime · Deploy (observed; projected) {#sec-3.3}
 
 > **Superseded by 015 §2 and §6.** Artifact/Deployment/Environment get real PROV-anchored classes there, `wl:Commit` joins v1, and §6 states which nodes actually have a v1 projection source.
 
@@ -465,13 +473,13 @@ confirmation of Deliverables by probing artifacts/deployments is **v2** (D7).
 
 ---
 
-## Deliverable — declared definition-of-done (D7) {#sec-deliverable}
+## 4. Deliverable — declared definition-of-done (D7) {#sec-4}
 
 > **Amended by 015 §7.** The declared `dct:relation` targets are now typed nodes (`wl:Artifact`, `wl:Environment`), not bare IRIs; auto-confirmation stays v2.
 
 > **Amended by the implementation statement (§Properties).** A Deliverable also declares the
 > **Component** that delivers it (`ls:deliveredBy`, ≥1, SHACL-enforced), closing the
-> Component→Section → Deliverable → Environment join. The `ls:task … ls:implements … deliverable` line below is the
+> Component→Section → Deliverable → Environment join. The `lsid:task … ls:implements … deliverable` line below is the
 > superseded Task→intent form; the Deliverable's own `dct:hasPart` from its Spec is unaffected.
 
 A `ls:Deliverable` is the **declared target** that reconciles intent with prod reality: the
@@ -534,7 +542,7 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 
 ---
 
-## Canonical IRI scheme (rdf-registry ADR-0006)
+## 5. Canonical IRI scheme (rdf-registry ADR-0006) {#sec-5}
 
 > **Artifact IRI superseded by 015 §5.** The pattern is kind-first — `id/artifact/<kind>/<name>/<version>` — and 015 adds Deployment, Environment, Commit and Build patterns.
 
@@ -574,7 +582,7 @@ rdf-registry `id/` convention.
 
 ---
 
-## Projection: backbone → graph
+## 6. Projection: backbone → graph {#sec-6}
 
 **Authority stays split** (D2/D3): the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,
@@ -620,7 +628,7 @@ spec 007).
 
 ---
 
-## Partial supersession (review add-on) {#sec-partial-supersession}
+## 7. Partial supersession (review add-on) {#sec-7}
 
 > **Superseded by 014 §3.** Sections are addressable `wlid:section/<doc-slug>/<anchor>` nodes; partial supersession is `dct:isReplacedBy` between sections, and `wl:supersededSection` is retired.
 
@@ -659,7 +667,7 @@ triple term). Range is a literal section reference (`"§4.2"`, a heading string)
 
 ---
 
-## Accepted deviations — drift suppression (resolves spec 007 Open Q3)
+## 8. Accepted deviations — drift suppression (resolves spec 007 Open Q3) {#sec-8}
 
 Some observed-but-unasserted edges are **intentional** — a sanctioned coupling the architecture
 tolerates but never elevated to intent. Without suppression, spec 007's violation query reports them
@@ -698,7 +706,7 @@ lsid:deviation/pfas-reads-ingest-cache
 - **Scope.** Predicate-general (names any `s/p/o`); in v1 only spec 007's 4.1 `dct:requires`
   violation query consumes it.
 
-## Dependencies
+## 9. Dependencies {#sec-9}
 
 - **Spec 004 (backbone):** owns Task state, leases, `blocks`/`child_of`; emits the event/outbox
   stream the projector consumes.
@@ -713,7 +721,7 @@ lsid:deviation/pfas-reads-ingest-cache
   closure test in the **ADR-0004** style (Jena `infer` is RDFS-only, can't prove OWL closure), and
   add `ls` to the `/rdf/` DCAT/VoID index (ADR-0006 §5).
 
-## Open questions
+## 10. Open questions {#sec-10}
 
 1. ~~Deliverable minting~~ — **CONFIRMED:** mint `ls:Deliverable` (no standard for "declared
    definition-of-done").
@@ -731,7 +739,7 @@ lsid:deviation/pfas-reads-ingest-cache
    (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
 6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
 
-## Acceptance criteria {#sec-acceptance-criteria}
+## 11. Acceptance criteria {#sec-11}
 
 1. `ls:` ontology authored as `rdf/ls/ontology.ttl` (1.1) + `rdf/ls/ontology.1-2.ttl` (1.2
    annotations) + `rdf/ls/concept.ttl` (SKOS) + `rdf/shapes/ls-shapes.ttl` (SHACL),
@@ -744,7 +752,7 @@ lsid:deviation/pfas-reads-ingest-cache
    `lsc:TaskKind`, `lsc:ModelLayer`; everything else reuses
    `dcterms`/`foaf`/`prov`/`doap`/`skos`/`rdf`/`owl`. **No gtio term appears.**
 
-> **Amended by 014 and 015.** The mint set loses `Plan` and `supersededSection`, gains `Section`/`lastRevisedIn`, and gains the six runtime classes plus their schemes and properties.
+> **Amended by 014, 015 and 016.** The mint set loses `Plan` and `supersededSection`, gains `Section`/`lastRevisedIn`, gains the six runtime classes plus their schemes and properties, gains `Skill`/`recommendsSkill` (016 §1), and includes the `taskState` literal this spec's own §Projection already emits. The extracted Turtle is `ns/ontology.ttl`, `ns/concept.ttl` and `ns/shapes.ttl`.
 
 3. The IRI grammar for Component / DesignDoc / Task / Deliverable / Issue / PR / Artifact /
    Deployment / Environment is documented and branch-free (ADR-0006 §3); spec 009 can host it.

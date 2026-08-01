@@ -7,7 +7,7 @@ requires:
 ---
 # Spec 021 — Images and attachments on tasks
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 `tasks.body` is markdown, and markdown already has image syntax. What is missing is somewhere
 for the bytes to live and a path that gets them there without the author thinking about it.

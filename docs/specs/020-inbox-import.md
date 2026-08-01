@@ -9,7 +9,7 @@ requires:
 ---
 # Spec 020 — Inbox import (onboarding a repo with history)
 
-## Why
+## 0. Why {#sec-0}
 
 The inbox is fed only by live webhooks. Everything that existed before a repo
 was registered stays invisible to Worklode forever.
@@ -51,7 +51,7 @@ Three gaps compound it, all reachable from the same command:
   remedy today is abandoning all 35 and re-promoting, losing their priorities,
   concerns, and 12 `blocks` edges.
 
-## How the gap stayed invisible
+## 1. How the gap stayed invisible {#sec-1}
 
 Every repo's inbox was empty in every triage state, including `worklode`'s.
 The `sunstonework` App had the Issues *permission* but had never been
@@ -60,7 +60,7 @@ way. `deployment_status` was missing too, which would have stranded tasks at
 `merged` for any repo whose `done_state` is `deployed_dev`/`deployed_prod`.
 Nothing surfaced the mismatch; the cost was diagnosis time, not data.
 
-## Decisions
+## 2. Decisions {#sec-2}
 
 Taken here with rationale.
 
@@ -77,7 +77,7 @@ Taken here with rationale.
 | `triage_state` for a link | `promoted` — no new value, no migration |
 | Event-subscription mismatch | Warn on `add-repo`; never gate |
 
-### Import is inventory, not replay
+### 2.1 Import is inventory, not replay {#sec-2.1}
 
 This is the load-bearing decision. `applyPullRequest`
 (`internal/hooks/github.go:253`) does two things: it upserts the PR row, and
@@ -93,7 +93,7 @@ state as well. Import therefore calls the two `Upsert*` functions directly and
 nothing else. Correlation still happens, because it lives inside `UpsertPR`
 (head_ref, then body) and no-ops when the task does not exist.
 
-### Synchronous and capped
+### 2.2 Synchronous and capped {#sec-2.2}
 
 `POST /api/v1/inbox/import` pages GitHub inline and returns counts. The cap is
 20 pages of 100 per kind, so a repo with 2000 issues and 2000 PRs completes
@@ -115,7 +115,7 @@ issues truncate. A truncated PR list cannot be resumed via `--since` at all
 them client-side); the CLI instead tells the caller to narrow the run, e.g.
 `--state open`. The CLI prints the exact rerun for issues.
 
-### `--state open` by default
+### 2.3 `--state open` by default {#sec-2.3}
 
 Whether closed and merged history is worth importing is a per-repo judgement,
 so it is opt-in. It also has a trap: `--state all` on a mature repo drops
@@ -123,9 +123,9 @@ hundreds of rows into `triage_state = 'new'`, and `lode inbox dismiss` takes
 one issue at a time. Bulk dismiss is a follow-up, not part of this spec —
 which is the second reason the default stays narrow.
 
-## Design
+## 3. Design {#sec-3}
 
-### Fetch — `internal/githubauth/list.go`
+### 3.1 Fetch — `internal/githubauth/list.go` {#sec-3.1}
 
 Two functions beside `DiscoverDoneState` (`app.go:138`), reusing
 `InstallationToken` (`app.go:94`) and `githubJSON` (`githubauth.go:93`):
@@ -148,7 +148,7 @@ every PR in the repo lands in the inbox as an issue. `/pulls` has no `since`
 parameter, so `--since` is applied server-side for issues and filtered on
 `updated_at` client-side for PRs.
 
-### API — `POST /api/v1/inbox/import`
+### 3.2 API — `POST /api/v1/inbox/import` {#sec-3.2}
 
 ```json
 {"repo": "owner/name", "state": "open", "include_prs": false,
@@ -184,7 +184,7 @@ either.
 CLI: `lode inbox import <repo> [--state open|closed|all] [--include-prs]
 [--since <date>] [--dry-run]`.
 
-### Staging what was imported
+### 3.3 Staging what was imported {#sec-3.3}
 
 Three changes to `promoteRequest` (`internal/api/admin.go:411`),
 `cli.PromoteInput`, and the `lode inbox promote` flags:
@@ -209,7 +209,7 @@ Three changes to `promoteRequest` (`internal/api/admin.go:411`),
 for a bulk-promoted backlog. They need no change here; noted so the two are
 not reinvented separately.
 
-### Link — `lode inbox link <repo> <number> <task-id>`
+### 3.4 Link — `lode inbox link <repo> <number> <task-id>` {#sec-3.4}
 
 The third triage outcome: *this issue is already covered by task X.*
 
@@ -222,7 +222,7 @@ CHECK allows `new`, `promoted`, `dismissed`
 `promoted` means — so no migration. `POST /api/v1/inbox/link`, event type
 `issue.linked`.
 
-### Event-subscription check
+### 3.5 Event-subscription check {#sec-3.5}
 
 `AppAuth.SubscribedEvents(ctx)` reads `events` from `GET /app` under the App
 JWT. `hooks.HandledEvents()` exports the seven strings `applyFunc` routes
@@ -235,7 +235,7 @@ field, which `lode project add-repo` prints. Non-gating, the same posture as
 `discoverDoneState` (`internal/api/admin.go:231`): the mapping is already
 committed and a slow or failing GitHub must not hold the response.
 
-## Testing
+## 4. Testing {#sec-4}
 
 `internal/api/appauth_test.go:55-82` already stands up a fake GitHub behind an
 overridable `BaseURL`; import tests extend it with paged issue and pull
@@ -257,7 +257,7 @@ fixtures.
 | `LinkIssue` | Happy path; already-promoted → `ErrBadTransition`; missing task → `ErrNotFound` |
 | `SubscribedEvents` missing `issues` | `add-repo` warns, mapping still created |
 
-## What this spec does not cover
+## 5. What this spec does not cover {#sec-5}
 
 Spec 014 §*Adoption is out of scope* forward-declares a spec 020 that onboards
 an existing project wholesale: issues → Tasks, `docs/specs/**` and
@@ -283,7 +283,7 @@ One asset survives for later: `AppAuth.Tarball`
 right mechanism for pulling `docs/specs/**` out of a repo. When 014 lands,
 fetching is solved and only the mapping is new.
 
-## Follow-ups this leaves open
+## 6. Follow-ups this leaves open {#sec-6}
 
 - **Bulk dismiss.** `--state all` on a mature repo makes one-at-a-time
   dismissal untenable. Not in scope; the narrow default is the mitigation,

@@ -1,0 +1,139 @@
+# Worklode concept schemes — the `wlc:` SKOS vocabularies.
+#
+# Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
+# fixed enum; the runtime four each mirror a CHECK constraint that already
+# exists in the schema (015 §3). Sources: spec 006 §1.4/§1.5, spec 014 §5/§8
+# (status enum and task kinds), spec 015 §3 (runtime enums).
+
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+<https://worklode.io/ns/concept/>
+    dct:title "Worklode concept schemes" ;
+    dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-014> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-015> .
+
+
+# ---------------------------------------------------------------------------
+# DesignDoc lifecycle — purely editorial. `implemented` was removed by 014 §5:
+# implementation is per-section and derived, so a document-level status would be
+# a hand-maintained, lossy summary of something computable.
+# ---------------------------------------------------------------------------
+
+wlc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
+
+wlc:draft a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "draft" ;
+    skos:definition "Being written; not yet proposed for review." .
+wlc:proposed a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "proposed" ;
+    skos:definition "Submitted for crit review; awaiting resolution." .
+wlc:accepted a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
+    skos:definition "Crit-resolved and approved as intent." .
+wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
+    skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
+
+# The order is data, so "is X before Y" is queryable. RDF still does not enforce
+# legal transitions; those rules live with the authoring skill (spec 008).
+wlc:DesignDocStatusOrder a skos:OrderedCollection ;
+    skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded ) .
+
+
+# ---------------------------------------------------------------------------
+# Task kind — the union reconciled by 014 §8, matching the tasks.kind CHECK
+# constraint. Kinds describe the nature of work, not the artifact produced.
+# ---------------------------------------------------------------------------
+
+wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
+
+wlc:feature a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "feature" ;
+    skos:definition "New capability or behaviour." .
+wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
+    skos:definition "Fix incorrect existing behaviour." .
+wlc:chore a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "chore" ;
+    skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
+wlc:spec a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spec" ;
+    skos:definition "Write or revise a design document; the document it produced is reachable by prov:wasGeneratedBy." .
+wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review" ;
+    skos:definition "Review/evaluate someone else's work." .
+wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
+    skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
+
+
+# ---------------------------------------------------------------------------
+# Model layer — the wl:layer tag on every minted term.
+# ---------------------------------------------------------------------------
+
+wlc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
+
+wlc:intent a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "intent" ;
+    skos:definition "Declared design layer — what should be true." .
+wlc:execution a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "execution" ;
+    skos:definition "Observed execution/VCS layer — tasks, issues, PRs." .
+wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runtime" ;
+    skos:definition "Observed runtime/deploy layer — artifacts, deployments, environments." .
+
+
+# ---------------------------------------------------------------------------
+# Artifact kind (015 §3). In v1 only git_tag rows are ever created; the other
+# three are grammar, not data (015 §6).
+# ---------------------------------------------------------------------------
+
+wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
+
+wlc:docker_image a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "docker image" ;
+    skos:definition "An OCI container image in a registry, identified by name, tag and digest." .
+wlc:pypi a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "PyPI package" ;
+    skos:definition "A Python distribution published to a package index." .
+wlc:git_tag a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "git tag" ;
+    skos:definition "A published release tag on a repository." .
+wlc:binary a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "binary release" ;
+    skos:definition "A compiled executable published as a release asset." .
+
+
+# ---------------------------------------------------------------------------
+# Deployment status (015 §3).
+# ---------------------------------------------------------------------------
+
+wlc:DeploymentStatus a skos:ConceptScheme ; skos:prefLabel "Deployment status" .
+
+wlc:pending a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "pending" ;
+    skos:definition "Target known; no reconciliation observed yet." .
+wlc:reconciling a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "reconciling" ;
+    skos:definition "Rollout in progress." .
+wlc:deployed a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "deployed" ;
+    skos:definition """Reconciliation succeeded; what the deployment used — an artifact, or a commit
+        for IaC/GitOps targets — is live on this target.""" .
+wlc:failed a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "failed" ;
+    skos:definition "Reconciliation failed; the target is not serving the intended artifact." .
+
+
+# ---------------------------------------------------------------------------
+# Deployment target kind (015 §3). wlc:pypi_target is spelled apart from
+# wlc:pypi deliberately: the artifact kind and the target kind are different
+# concepts that happen to share a name in the relational schema.
+# ---------------------------------------------------------------------------
+
+wlc:DeployTargetKind a skos:ConceptScheme ; skos:prefLabel "Deployment target kind" .
+
+wlc:flux_kustomization a skos:Concept ; skos:inScheme wlc:DeployTargetKind ;
+    skos:prefLabel "Flux Kustomization" ;
+    skos:definition """A Flux-reconciled target. v1 files HelmRelease events here too; the
+        distinction survives in the event type, not the target kind.""" .
+wlc:pypi_target a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel "PyPI publish" ;
+    skos:definition "Publication to a package index as the delivery target." .
+wlc:manual a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel "manual" ;
+    skos:definition "A target tracked by hand, with no automated reconciliation signal." .
+
+
+# ---------------------------------------------------------------------------
+# Runtime event kind (015 §3).
+# ---------------------------------------------------------------------------
+
+wlc:RuntimeEventKind a skos:ConceptScheme ; skos:prefLabel "Runtime event kind" .
+
+wlc:crashloop a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "crashloop" .
+wlc:oom a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "OOM kill" .
+wlc:flux_failure a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux failure" .
+wlc:flux_recovery a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux recovery" .

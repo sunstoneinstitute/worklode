@@ -8,7 +8,7 @@ requires:
 ---
 # Spec 017 — Task-declared secrets
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Tasks declare which secrets they need, by symbolic name, the same way they pin skills (016).
 Machinery resolves the names against an org-wide catalog and materializes the values — through a
@@ -35,7 +35,7 @@ materialized set for remote executors. **v2** adds deferred grants via mobile ap
 (Google Chat). Only v1 is normative below; the later phases are sketched so v1 artifacts stay
 forward-compatible.
 
-## Names & catalog
+## 1. Names & catalog {#sec-1}
 
 **Namespace.** Secret names are env-var style (`^[A-Z][A-Z0-9_]*$`) and **org-unique** — never
 per-project, because a repo may participate in multiple projects. Examples: `GIT_SIGNING_KEY`,
@@ -67,7 +67,7 @@ description = "Kubernetes access to the hzdev cluster, for troubleshooting tasks
 - The catalog carries no values and no per-user state. Per-operator resolution falls out of
   `op://Employee/…` naming.
 
-## Declaration
+## 2. Declaration {#sec-2}
 
 Mirrors 016's skill pins exactly:
 
@@ -81,7 +81,7 @@ Mirrors 016's skill pins exactly:
 Declaring is the **planner's** job: writing plans includes deciding, per task, which catalog
 names the executor will need. The `lode-secrets` skill (below) makes that a standing instruction.
 
-## Claim-time ceremony & materialization
+## 3. Claim-time ceremony & materialization {#sec-3}
 
 Claim time is the one moment a human is guaranteed present (they just ran `/lode-next`), so that
 is when consent and decryption happen — everything after may be unattended.
@@ -119,7 +119,7 @@ re-runs steps 1–5 if items are missing or the declaration changed. The lease-e
 server-side and cannot purge a laptop keystore; stale items are removed by the next local hook
 that notices the lease is gone (resume, exit, or `lode doctor`).
 
-## Execution: `lode secrets exec`
+## 4. Execution: `lode secrets exec` {#sec-4}
 
 ```
 lode secrets exec [--] <command> [args…]
@@ -144,7 +144,7 @@ Supporting commands:
 `/lode-block` all purge the task's items. Materialized lifetime therefore equals worktree
 lifetime, matching the lease.
 
-## The `lode-secrets` skill
+## 5. The `lode-secrets` skill {#sec-5}
 
 The convention travels as a skill loaded in **both** contexts the feature touches:
 
@@ -160,7 +160,7 @@ The skill contains no `op://` refs — only the convention — so it is safe whe
 public or not. v1 ships it in the worklode plugin's skill set (008); once 016 is running it can
 also be a pinned org-wide skill, which is what "always loaded" ultimately means there.
 
-## Degradation
+## 6. Degradation {#sec-6}
 
 | Condition | Behavior |
 |---|---|
@@ -171,7 +171,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 | Keystore read fails unattended | `lode secrets exec` exits non-zero with the missing name; the skill directs the agent to `/lode-block`, not to retry or work around. |
 | Lease expires, worktree remains | Items persist until the next local hook purges or re-materializes; server cannot reach the laptop keystore. |
 
-## Later phases (non-normative)
+## 7. Later phases (non-normative) {#sec-7}
 
 - **v1.5 — remote executors.** Pack = resolve `.worklode/secrets.env` via the same single
   `op run` ceremony, encrypt the resolved set to the remote executor's public key (age), ship it
@@ -182,7 +182,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
   channel for the operator to run the ceremony remotely; out of scope until remote execution
   exists.
 
-## Dependencies
+## 8. Dependencies {#sec-8}
 
 - **004 (backbone)** — `secrets` field on Task; `secrets_materialized` event.
 - **008 (plugin)** — claim/resume/exit hooks host the ceremony and purge; brief carries the
@@ -192,7 +192,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 - **External** — 1Password CLI (`op`) on every executing laptop; the deployment repo hosting the
   catalog ConfigMap; macOS keychain / ssh-agent.
 
-## Open questions
+## 9. Open questions {#sec-9}
 
 - **Q17.1 — Consent granularity.** v1 consents to the non-baseline set with one yes/no. Is
   per-name consent worth the extra friction once catalogs grow?
@@ -204,7 +204,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
   promote to a backbone table + admin CLI the same way 016 indexes git — without ever storing
   values.
 
-## Acceptance criteria
+## 10. Acceptance criteria {#sec-10}
 
 1. `lode task add --secrets KUBECONFIG_HZDEV,OPENALEX_API_KEY …` stores the list; the task brief
    shows it; a name absent from the catalog surfaces as a brief warning, not an error.

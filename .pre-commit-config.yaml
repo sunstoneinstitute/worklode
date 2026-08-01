@@ -12,12 +12,14 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
-      # Docs-only PRs skip CI, so this hook is the primary enforcement for
-      # section numbering. It only normalises what is already numbered, and
-      # refuses (exit 2) rather than move an anchor an accepted spec published.
+      # Rewrites like gofmt above: fixes the files, lists them and fails, so the
+      # author can `git add` and commit again. Docs-only PRs skip CI, so this is
+      # the primary enforcement. It only normalises numbering that already
+      # exists, and refuses (exit 2) rather than move an anchor an accepted spec
+      # has published.
       - id: section-numbers
         name: section numbers & anchors
-        entry: scripts/secfmt.py -w
+        entry: scripts/secfmt.py -l -w
         language: script
         files: ^docs/specs/.*\.md$
       # always_run: a rebase can create a collision in a commit that touches no

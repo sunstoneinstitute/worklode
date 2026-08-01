@@ -3,10 +3,10 @@ status: accepted
 issued: 2026-07-21
 wasDerivedFrom: 003-platform-graph-design.md (D1–D15)
 amendedBy:
-  "#sec-v1-v2-scope":
+  "#sec-2":
     - 014-design-documents-as-graph-objects.md#sec-2
     - 015-runtime-layer.md#sec-7
-  "#sec-shared-conventions":
+  "#sec-4":
     - 014-design-documents-as-graph-objects.md#sec-1
 replaces:
   ".":
@@ -34,7 +34,7 @@ Visual model: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d
 
 ---
 
-## Architecture in one screen
+## 1. Architecture in one screen {#sec-1}
 
 **Two stores, authority split — no fact has two owners:**
 - **Execution backbone** — Worklode · **Postgres**. Task state, leases (worktree-bound), provenance
@@ -55,7 +55,7 @@ observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are re
 
 ---
 
-## v1 / v2 scope {#sec-v1-v2-scope}
+## 2. v1 / v2 scope {#sec-2}
 
 > **Amended by 014 §2 and 015 §7.** Plan is no longer a DesignDoc subclass (plan-shaped work is a
 > task subtree), and Commit moves from v2 to v1.
@@ -70,7 +70,7 @@ deploy view; finer VCS/runtime nodes; weighted critical path; an operational ont
 
 ---
 
-## Spec map
+## 3. Spec map {#sec-3}
 
 Decomposed to the **~100k-token "smart zone"** (D15) so each sub-spec's *implementation* fits a
 single context. Each is an independent spec → plan → implementation cycle.
@@ -98,7 +98,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 
 ---
 
-## Shared conventions (binding on all sub-specs) {#sec-shared-conventions}
+## 4. Shared conventions (binding on all sub-specs) {#sec-4}
 
 > **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/`;
 > rdf-registry sources move `rdf/ls/` → `rdf/wl/`. The published base carries no
@@ -114,7 +114,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 - **Determinism lens (D14):** push coordination into deterministic, token-free machinery
   (compiled hooks, CLI+`--json`, server-side selection); spend model tokens only on judgment.
 
-## Decision index (record → owning spec)
+## 5. Decision index (record → owning spec) {#sec-5}
 
 D1–D3 authority split → 000/004/006 · D4 vocabulary/entity model → 006 · D5 two-layer/drift → 007 ·
 D6 three layers → 000/006/007 · D7 Deliverable → 006 · D8 lease/heartbeat/claim-next → 004/005/008 ·
@@ -123,7 +123,7 @@ D13 naming → 000 · D14 plugin → 008 · D15 task sizing → 005/008.
 
 ---
 
-## Open questions across specs (to resolve before implementation)
+## 6. Open questions across specs (to resolve before implementation) {#sec-6}
 
 **Cross-cutting / blockers (decide first):**
 - _None open._ The last cross-cutting blocker — [007] drift suppression — is resolved below.

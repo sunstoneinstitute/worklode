@@ -2,21 +2,21 @@
 status: accepted
 issued: 2026-07-19
 amendedBy:
-  "#sec-why":
+  "#sec-0":
     - 002-github-app-auth.md
-  "#sec-decisions":
-    - 002-github-app-auth.md#sec-d
-  "#sec-web-ui-sessions":
-    - 002-github-app-auth.md#sec-b
+  "#sec-1":
+    - 002-github-app-auth.md#sec-3.4
+  "#sec-3.2":
+    - 002-github-app-auth.md#sec-3.2
   ".":
     - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
 isReplacedBy:
-  "#sec-cli-login":
+  "#sec-4":
     - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
 ---
 # Spec 001 — Keycloak SSO for worklode
 
-## Why {#sec-why}
+## 0. Why {#sec-0}
 
 > **Amended by 002.** Keycloak is no longer the only front door; GitHub App login is an additional provider alongside it, and this spec is otherwise unchanged.
 
@@ -26,7 +26,7 @@ Humans should instead authenticate against the org Keycloak
 token from their SSO identity. The read-only web UI must also be gated behind
 the same OAuth2 login. Agent/service token issuance is unchanged.
 
-## Decisions (settled) {#sec-decisions}
+## 1. Decisions (settled) {#sec-1}
 
 | Decision | Choice |
 |---|---|
@@ -40,7 +40,7 @@ the same OAuth2 login. Agent/service token issuance is unchanged.
 
 > **Authorization amended by 002 §D.** Keycloak client roles govern only Keycloak-authenticated actors; GitHub-authenticated actors derive `user`/`admin` from org and team membership.
 
-## Keycloak configuration (admin-cluster repo)
+## 2. Keycloak configuration (admin-cluster repo) {#sec-2}
 
 In `clusters/admin/keycloak-config/rbac.yaml` (GitOps only — never the admin
 console, except for group memberships):
@@ -58,7 +58,7 @@ console, except for group memberships):
   `/apps/worklode/admins` carries `worklode:admin`.
   Memberships are managed in the admin console (runtime data).
 
-## Server
+## 3. Server {#sec-3}
 
 New env (all optional; feature disabled when issuer/client unset):
 
@@ -73,7 +73,7 @@ ID-token verification uses `github.com/coreos/go-oidc/v3` (JWKS fetch +
 cache; checks signature, `iss`, `aud`, `exp`). Shared by both flows below.
 Claims used: `preferred_username`, `name`, `groups`.
 
-### Token exchange (CLI flow)
+### 3.1 Token exchange (CLI flow) {#sec-3.1}
 
 `POST /auth/oidc/token`, body `{"id_token": "..."}` — registered outside the
 `/api/v1` auth middleware, like `/healthz` and `/hooks/*`. Returns 404 when
@@ -87,7 +87,7 @@ OIDC is unconfigured.
    `sso login for <user> at <RFC3339 timestamp>`. Return `{"token": ...}`
    once. Re-login after expiry; no refresh tokens.
 
-### Web UI sessions {#sec-web-ui-sessions}
+### 3.2 Web UI sessions {#sec-3.2}
 
 > **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path.
 
@@ -106,7 +106,7 @@ unconfigured the UI stays open as today.
   `SameSite=Lax`. No server-side session state. No logout endpoint —
   cookies expire.
 
-## CLI: `lode login` {#sec-cli-login}
+## 4. CLI: `lode login` {#sec-4}
 
 > **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). The CLI no longer speaks OIDC; it opens the server's `/auth/cli/login` and redeems a one-time code at `/auth/cli/token`.
 
@@ -119,7 +119,7 @@ unconfigured the UI stays open as today.
 5. Write the returned `wl_` token to `~/.config/worklode/config.toml` and print
    the actor id and token expiry.
 
-## Testing
+## 5. Testing {#sec-5}
 
 - Fake OIDC issuer in unit tests (local JWKS endpoint + locally signed test
   tokens): valid login mints a token; missing `user` role → 403; admin flag
@@ -129,7 +129,7 @@ unconfigured the UI stays open as today.
   the fake issuer; tampered/expired cookie → redirect.
 - CLI callback flow tested against a stubbed Keycloak (httptest).
 
-## Out of scope
+## 6. Out of scope {#sec-6}
 
 - Refresh tokens (re-run `lode login`), logout, device flow (not enabled in
   this Keycloak), web-UI write actions, per-user authz beyond the existing

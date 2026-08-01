@@ -70,19 +70,13 @@ once an instance is running (dogfooding); until then this file is the list.
   `internal/api` and `internal/hooks`; consolidate if a third copy appears.
 - **Notifications** (Slack/email) and the HornDB/RDF projection remain
   deliberate non-goals until the tracker has real usage.
-- **`internal/api` metrics shape is the outlier** (spec 022): store, hooks, and
-  embed each own a nil-safe package-private metrics struct; api hangs its
-  instruments off `*server` and the HTTP middleware is not nil-safe. Extract an
-  `apiMetrics` struct, or document the exception in spec 022 §1.
-- **`worklode_lease_sweeper_runs_total` has no test**: the sweeper loop is
-  built inline in `serve.go`'s `RunE` closure; extract it to a testable
-  function to cover the counter.
-- **Alert on `promhttp_metric_handler_errors_total`**: the /metrics handler
-  serves partial output on collector failure (`ContinueOnError`); this counter
-  is the only signal a collector is broken. Dashboards/alerts are out of scope
-  for spec 022, so wire it when those land.
-- **Provisioning doc fix** (other repo): `provisioning/context/metrics.md`
-  shows bare `prometheus.io/*` annotations and a ServiceMonitor example without
-  saying the annotations must sit on the *Service* (the hzdev collector's
-  `k8s-service-endpoints` job) and that no Prometheus operator exists — exactly
-  the trap worklode fell into before spec 022 §9.
+- **Two loose ends in the `wl:` vocabulary**, surfaced by extracting it to
+  `ns/`. Neither blocks the specs; both need a decision before the rdf-registry
+  PR. (1) Issue and PullRequest are "projected node, reuse `doap:`" in 006 §3.2
+  with no class chosen, so `wl:mirrors` can declare neither domain nor range.
+  (2) `wl:lastRevisedIn` points at a document version (`wlid:doc/<slug>/vN`,
+  014 §4), which is an IRI shape with no class, so the property has no range.
+- **`wl:taskState` duplicates the `tasks.state` enum** in `ns/shapes.ttl`
+  (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
+  The transitions are not duplicated — they stay in `internal/store/tasks.go`.
+  Worth a check in CI if the graph ever ships.

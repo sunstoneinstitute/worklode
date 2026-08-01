@@ -6,23 +6,23 @@ requires:
   - 014-design-documents-as-graph-objects.md
 amends:
   ".":
-    - 006-knowledge-graph.md#sec-reuse-vs-mint
-    - 006-knowledge-graph.md#sec-acceptance-criteria
+    - 006-knowledge-graph.md#sec-1.1
+    - 006-knowledge-graph.md#sec-11
     - 007-drift-and-overview.md#sec-3.4
   "#sec-7":
-    - 000-umbrella-architecture.md#sec-v1-v2-scope
-    - 003-platform-graph-design.md#sec-resolved-decisions
-    - 006-knowledge-graph.md#sec-layer-2
-    - 006-knowledge-graph.md#sec-deliverable
+    - 000-umbrella-architecture.md#sec-2
+    - 003-platform-graph-design.md#sec-1
+    - 006-knowledge-graph.md#sec-3.2
+    - 006-knowledge-graph.md#sec-4
 replaces:
   "#sec-2":
-    - 006-knowledge-graph.md#sec-layer-3
+    - 006-knowledge-graph.md#sec-3.3
   "#sec-6":
-    - 006-knowledge-graph.md#sec-layer-3
+    - 006-knowledge-graph.md#sec-3.3
 ---
 # Spec 015 — Runtime layer: artifacts, builds, deployments & environments
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Spec 006 lists Artifact, Deployment and Environment as **v1 projected nodes** in its Layer 3 table
 and gives them instance IRIs — but never assigns them a class. They exist in the IRI grammar and as
