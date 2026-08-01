@@ -36,6 +36,8 @@ amends:
   "#sec-8":
     - 004-execution-backbone.md#sec-1.1
     - 006-knowledge-graph.md#sec-1.5
+  "#sec-9":
+    - 006-knowledge-graph.md#sec-3.2
   "#sec-10":
     - 007-drift-and-overview.md#sec-6
 replaces:
@@ -153,7 +155,7 @@ is nothing to drift.
 ### Resulting class hierarchy
 
 ```turtle
-wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document ;
+wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:intent .
 wl:ADR   rdfs:subClassOf wl:DesignDoc .
 wl:Spec  rdfs:subClassOf wl:DesignDoc .
@@ -169,6 +171,10 @@ wl:Section a owl:Class ;               # §3
 
 `wl:Section` joins the top-level disjointness axiom in 006 alongside `wl:Component`, `wl:DesignDoc`,
 `wl:Task`, `wl:Deliverable` and `wl:Workstream`.
+
+`prov:Entity` is not decoration: §4 and §9 assert `prov:wasGeneratedBy`, `prov:wasRevisionOf` and
+`prov:wasAttributedTo` on documents, and each has `prov:Entity` as its domain. Without the parent,
+every provenanced document is an OWL violation the moment 006's `owlrl` pass runs.
 
 ---
 
@@ -281,12 +287,19 @@ wlid:doc/spec-worklode-014
                            wlid:doc/spec-worklode-014/v3 .
 
 wlid:doc/spec-worklode-014/v3
+    a wl:Spec ;                        # a snapshot is an instance of the same class
     dcat:version        "3" ;
     dcat:previousVersion wlid:doc/spec-worklode-014/v2 ;
     prov:wasRevisionOf   wlid:doc/spec-worklode-014/v2 ;
     prov:wasAttributedTo wlid:agent/stig ;
     dct:issued "2026-07-26"^^xsd:date .
 ```
+
+**A version snapshot carries the document's own class**, so no version class is minted — DCAT's
+pattern, where `dcat:hasVersion` relates a resource to a resource. This is what gives
+`wl:lastRevisedIn` a range, below. **Ordering is `dcat:version`, never the
+IRI:** `…/v10` does not sort after `…/v3` as a string, so a staleness test reads
+`?sec wl:lastRevisedIn/dcat:version ?n` and compares numbers.
 
 > **To verify when authoring the Turtle:** the exact sub-property axioms DCAT 3 declares for
 > `dcat:previousVersion` (relative to `dct:replaces`) should be read off the specification rather
@@ -328,12 +341,13 @@ the document version in which it last changed:
 
 ```turtle
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
-    rdfs:domain wl:Section ;
+    rdfs:domain wl:Section ; rdfs:range wl:DesignDoc ;   # the versioned snapshot, typed above
     rdfs:comment "The document version in which this section's content last changed. Lets a claim "
                  "pinned at version N be tested for staleness without per-section version IRIs." .
 ```
 
-A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn > v3`. Editing §9
+A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` names a snapshot whose
+`dcat:version` exceeds 3. Editing §9
 therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
 precision, one property.
 
@@ -592,6 +606,11 @@ wlid:doc/spec-worklode-014 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
 Zero mints, and it cleanly separates authoring from executing — the same task graph can now answer
 "which task produced this spec?" and "which tasks implement it?" without conflating them.
 
+One consequence, because PROV declares `prov:Activity` and `prov:Entity` **disjoint**: a Task's own
+author is `prov:wasAssociatedWith` (Activity→Agent), not `prov:wasAttributedTo`, whose domain is
+`prov:Entity`. 006 §Layer 2 listed the latter for every execution node; it stays correct for Issue
+and PullRequest and is wrong for Task, which this section is what makes an Activity.
+
 ---
 
 ## 10. Surfaces {#sec-10}
@@ -679,7 +698,7 @@ their own right.
 
 | Spec | Change |
 |---|---|
-| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected) |
+| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected); anchor `wl:DesignDoc` on `prov:Entity` so §4's and §9's provenance edges are domain-correct, and correct Task authorship to `prov:wasAssociatedWith` (§9) |
 | 007 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries; **supersede §4.3** — the stale-claim query replaces its `dct:modified`-vs-task-closure heuristic — and re-point §4.4's Task-join at the Component→Section edge |
 | 008 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
 | 013 | Remove engine 3 and `task_docs`; close open question 2 |

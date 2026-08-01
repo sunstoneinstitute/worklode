@@ -18,6 +18,7 @@
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
 @prefix dct:  <http://purl.org/dc/terms/> .
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
@@ -66,6 +67,14 @@ wl:SectionShape a sh:NodeShape ;
         sh:path wl:status ;
         sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
         sh:message "A Section's wl:status is drawn from wlc:DesignDocStatus (014 §5)." ;
+    ] ;
+    # The version snapshot a claim is tested against is itself a DesignDoc, and
+    # it is ordered by dcat:version — never by comparing version IRIs (014 §4).
+    sh:property [
+        sh:path wl:lastRevisedIn ;
+        sh:class wl:DesignDoc ;
+        sh:node [ sh:property [ sh:path dcat:version ; sh:minCount 1 ] ] ;
+        sh:message "wl:lastRevisedIn names a versioned DesignDoc snapshot carrying dcat:version (014 §4)." ;
     ] ;
     # 014 §7.2 — a superseded section explains itself: a successor, or a reason it
     # went away. A bare superseded section is a broken promise to whoever linked
@@ -162,6 +171,14 @@ wl:TaskShape a sh:NodeShape ;
         sh:class wl:Workstream ;
         sh:minCount 1 ;
         sh:message "A Task belongs to at least one Workstream — its quads live in each Workstream's named graph (006 §2)." ;
+    ] ;
+    # wl:mirrors is symmetric, so OWL can only give it a Task-or-Issue union for
+    # both domain and range (see its rdfs:comment). The intended pairing is
+    # closed-world, which is exactly SHACL's job.
+    sh:property [
+        sh:path wl:mirrors ;
+        sh:class wl:Issue ;
+        sh:message "A Task mirrors a tracker Issue, not another Task (006 §1.1)." ;
     ] .
 
 

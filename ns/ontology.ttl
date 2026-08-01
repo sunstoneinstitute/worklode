@@ -50,10 +50,12 @@ wl:Component a owl:Class ;
         gtio-sc:Component, which is a supply-chain term (006 §1.1).""" .
 
 wl:DesignDoc a owl:Class ;
-    rdfs:subClassOf foaf:Document ;
+    rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:intent ;
     rdfs:comment """A statement of intent that stays true after implementation: what drift is
-        measured against. Superseded, never consumed (014 §2).""" .
+        measured against. Superseded, never consumed (014 §2). prov:Entity because 014 asserts
+        prov:wasGeneratedBy (§9, the task that wrote it), prov:wasRevisionOf and
+        prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
 
 wl:ADR a owl:Class ;
     rdfs:subClassOf wl:DesignDoc ;
@@ -89,6 +91,7 @@ wl:Effect a owl:Class ;
         rather than an attribute because the edges differ, not just the coordinates.""" .
 
 wl:AcceptedDeviation a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
     wl:layer wlc:intent ;
     rdfs:comment """A tolerated architectural deviation that drift queries suppress. Names the
         accepted edge via RDF reification (rdf:subject/rdf:predicate/rdf:object) WITHOUT asserting
@@ -108,7 +111,10 @@ wl:Task a owl:Class ;
         document can name the task that wrote it via prov:wasGeneratedBy, which is distinct from
         the tasks that wl:implements its sections (014 §9). Task execution-state is NOT wl:status:
         the state machine is backbone-owned (spec 004) and the graph mirrors it as a projected
-        literal rather than forking the enum.""" .
+        literal rather than forking the enum. Being an Activity, a Task names its author with
+        prov:wasAssociatedWith (Activity→Agent) and never prov:wasAttributedTo, whose domain is
+        prov:Entity: PROV declares Activity and Entity disjoint, so the latter would make every
+        authored Task inconsistent.""" .
 
 wl:Workstream a owl:Class ;
     wl:layer wlc:execution ;
@@ -124,6 +130,23 @@ wl:OngoingMaintenance a owl:Class ;
     rdfs:subClassOf wl:Workstream ;
     wl:layer wlc:execution ;
     rdfs:comment "An unbounded, continuous Workstream." .
+
+wl:Issue a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A tracker issue in a hosting provider, projected from VCS ingest and mirrored to
+        a Task by wl:mirrors. Minted: 006 §3.2 pencilled in "reuse doap:", but DOAP has only
+        doap:bug-database — a property pointing at a tracker's URL, not a class for one issue —
+        and no surveyed vocabulary carries the concept (OSLC CM is the nearest, and 015 §1 already
+        rejected OSLC as not a standard mainstream tooling recognises). prov:Entity because 006
+        §3.2 asserts prov:wasAttributedTo for the author.""" .
+
+wl:PullRequest a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A proposed change against a repository, projected from VCS ingest. Joins its
+        Task the GitHub-native way, by closing the Issue the Task wl:mirrors. Minted and
+        prov:Entity for the same reasons as wl:Issue.""" .
 
 wl:Skill a owl:Class ;
     wl:layer wlc:execution ;
@@ -190,7 +213,8 @@ wl:RuntimeEvent a owl:Class ;
 # ---------------------------------------------------------------------------
 
 [] a owl:AllDisjointClasses ;
-   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream wl:Skill ) .
+   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream
+                 wl:Skill wl:Issue wl:PullRequest ) .
 
 [] a owl:AllDisjointClasses ;
    owl:members ( wl:ADR wl:Spec ) .
@@ -234,10 +258,14 @@ wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
     rdfs:domain wl:Section ;
+    rdfs:range wl:DesignDoc ;
     rdfs:comment """The document version in which this section's content last changed. Lets a claim
-        pinned at version N be tested for staleness without per-section version IRIs: a claim pinned
-        at vN is stale iff the section wl:lastRevisedIn a later version. Range is a versioned
-        document IRI (wlid:doc/<slug>/vN, 014 §4); no class is minted for a document version.""" .
+        pinned at version N be tested for staleness without per-section version IRIs. Range is
+        wl:DesignDoc because a versioned snapshot (wlid:doc/<slug>/v3) is an instance of the same
+        class as its canonical document — DCAT's own pattern, where dcat:hasVersion relates a
+        resource to a resource — so no version class is minted. Ordering comes from dcat:version on
+        the snapshot, never from comparing IRIs: a claim pinned at v3 is stale iff
+        ?sec wl:lastRevisedIn/dcat:version ?n with ?n > 3.""" .
 
 wl:sanctionedBy a owl:ObjectProperty ;
     wl:layer wlc:intent ;
@@ -321,10 +349,14 @@ wl:inWorkstream a owl:ObjectProperty ;
 
 wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
     wl:layer wlc:execution ;
-    rdfs:comment """Bidirectional mirror between a backbone Task and a GitHub Issue. The PR→Task
+    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:Task wl:Issue ) ] ;
+    rdfs:range  [ a owl:Class ; owl:unionOf ( wl:Task wl:Issue ) ] ;
+    rdfs:comment """Bidirectional mirror between a backbone Task and a tracker Issue. The PR→Task
         join piggybacks GitHub's native Closes #N (the PR closes the mirrored Issue). Domain and
-        range are unstated because 006 §3.2 leaves Issue and PullRequest as projected nodes with no
-        class chosen.""" .
+        range are the SAME union, not Task→Issue: a symmetric property whose domain and range
+        differ entails that every Issue is a Task, which contradicts their disjointness. OWL
+        therefore states the pair; shapes.ttl pins the intended direction (a Task mirrors an
+        Issue).""" .
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +433,10 @@ wl:layer a owl:AnnotationProperty ;
 #   dct:created / modified / issued / date / valid / identifier
 #   foaf:Document                      super-type of DesignDoc and Section
 #   foaf:Agent / prov:Agent            owner, author, reviewer
-#   prov:wasAttributedTo / wasGeneratedBy / wasDerivedFrom / wasRevisionOf
+#   prov:wasAttributedTo               author of an Entity (Issue, PullRequest,
+#                                      DesignDoc, AcceptedDeviation)
+#   prov:wasAssociatedWith             author of an Activity (Task) — see wl:Task
+#   prov:wasGeneratedBy / wasDerivedFrom / wasRevisionOf
 #   prov:used                          Deployment → Artifact or Commit
 #   prov:startedAtTime / endedAtTime / generatedAtTime
 #   doap:Project                       repository grouping (with dct:hasPart)

@@ -19,6 +19,7 @@ amendedBy:
   "#sec-1.5":
     - 014-design-documents-as-graph-objects.md#sec-8
   "#sec-3.2":
+    - 014-design-documents-as-graph-objects.md#sec-9
     - 015-runtime-layer.md#sec-7
   "#sec-4":
     - 015-runtime-layer.md#sec-7
@@ -140,7 +141,8 @@ where nothing does.
 | Task execution-state mirror | `ls:taskState` (literal, no SKOS scheme) | **MINT** — projected literal mirroring the backbone enum, so the graph does not fork the state machine (Open Q3, §Projection). Legal values are `tasks.state`'s `CHECK`; transitions stay in `internal/store/tasks.go` and are not modelled |
 | Component reviewer (notify on PRs) | `ls:reviewer` | **MINT** — Component → `foaf:Agent` (GitHub user/team IRI) |
 | Model-layer tag on vocabulary terms | `ls:layer` (+ `lsc:ModelLayer` SKOS) | **MINT** — intent/execution/runtime; lets you list all intent classes |
-| Task ↔ GitHub issue mirror | `ls:mirrors` | **MINT** — symmetric Task↔Issue; PR→Task join piggybacks GitHub `Closes #N` |
+| Task ↔ GitHub issue mirror | `ls:mirrors` | **MINT** — symmetric; domain and range are the same `Task ∪ Issue` union, because a symmetric property with differing domain and range entails every Issue is a Task. SHACL pins the intended pairing. PR→Task join piggybacks GitHub `Closes #N` |
+| **Issue** / **PullRequest** | `ls:Issue`, `ls:PullRequest` | **MINT** — §Layer 2 pencilled in "reuse `doap:`", but DOAP offers only `doap:bug-database` (a URL of a tracker, not a class for one issue) and OSLC CM is rejected on the grounds 015 §1 gives. Both `prov:Entity`, so `prov:wasAttributedTo` is domain-correct |
 | Task→Task dependency (transitive) | `ls:dependsOn` / `ls:blocks` | **MINT** — type-homogeneous `owl:TransitiveProperty` (ADR-0004); runtime reachability via property paths |
 | Task→Workstream membership | `ls:inWorkstream` | **MINT** — split from `dct:isPartOf` to keep the Task→Task closure type-homogeneous |
 
@@ -447,14 +449,17 @@ Intent edges: `ls:governs` (DesignDoc→Component), `ls:reviewer` (Component→A
 |---|---|---|---|
 | Task | `ls:Task` | v1 | **projected from backbone** (D11); carries `ls:taskKind` |
 | Workstream | `ls:Project` / `ls:OngoingMaintenance` | v1 | projected from backbone; **named-graph anchor**; a Task `ls:inWorkstream` ≥1 |
-| Issue | reuse `doap:` / projected node | v1 | projected from VCS ingest; `ls:mirrors` its Task |
-| PullRequest | projected node | v1 | projected from VCS ingest |
+| Issue | `ls:Issue` ⊂ `prov:Entity` | v1 | projected from VCS ingest; `ls:mirrors` its Task |
+| PullRequest | `ls:PullRequest` ⊂ `prov:Entity` | v1 | projected from VCS ingest |
 | Branch, Commit, WorkflowRun, Event | — | **v2** | finer VCS granularity |
 
 Execution edges: `ls:implements` (→ DesignDoc/Deliverable/Component), `ls:affects`
 (→ Component), `ls:taskKind` (→ kind), `ls:mirrors` (Task↔Issue), `ls:inWorkstream`
 (Task→Workstream), `ls:dependsOn`/`ls:blocks` (Task↔Task, transitive), `dct:isPartOf`
-(child_of), `prov:wasAttributedTo` (→ author `foaf:Agent`).
+(child_of), and authorship: `prov:wasAttributedTo` from an Issue or PullRequest, but
+**`prov:wasAssociatedWith` from a Task** — 014 §9 makes Task a `prov:Activity`, PROV declares
+Activity and Entity disjoint, and `prov:wasAttributedTo` has an Entity domain, so using it on a
+Task makes every authored Task inconsistent.
 
 ### 3.3 Layer 3 — Runtime · Deploy (observed; projected) {#sec-3.3}
 
