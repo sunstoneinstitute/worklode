@@ -6,57 +6,57 @@ requires:
   - 004-execution-backbone.md
 amends:
   ".":
-    - 003-platform-graph-design.md#sec-resolved-decisions
-    - 006-knowledge-graph.md#sec-acceptance-criteria
-    - 006-knowledge-graph.md#sec-reuse-vs-mint
-    - 008-worklode-plugin.md#sec-acceptance-criteria
+    - 003-platform-graph-design.md#sec-1
+    - 006-knowledge-graph.md#sec-11
+    - 006-knowledge-graph.md#sec-1.1
+    - 008-worklode-plugin.md#sec-13
     - 009-data-platform-kg-requirements.md
     - rdf-registry:ADR-0006
   "#sec-1":
-    - 000-umbrella-architecture.md#sec-shared-conventions
+    - 000-umbrella-architecture.md#sec-4
     - 003-platform-graph-design.md
     - 008-worklode-plugin.md
   "#sec-2":
-    - 000-umbrella-architecture.md#sec-v1-v2-scope
-    - 003-platform-graph-design.md#sec-d15
-    - 006-knowledge-graph.md#sec-classes
-    - 008-worklode-plugin.md#sec-slash-commands
-    - 008-worklode-plugin.md#sec-skills
+    - 000-umbrella-architecture.md#sec-2
+    - 003-platform-graph-design.md#sec-6
+    - 006-knowledge-graph.md#sec-1.2
+    - 008-worklode-plugin.md#sec-7
+    - 008-worklode-plugin.md#sec-8
   "#sec-3":
-    - 008-worklode-plugin.md#sec-task-brief
+    - 008-worklode-plugin.md#sec-6
   "#sec-5":
-    - 006-knowledge-graph.md#sec-status-scheme
+    - 006-knowledge-graph.md#sec-1.4
     - 007-drift-and-overview.md#sec-4.4
   "#sec-6":
     - 007-drift-and-overview.md#sec-2.1
     - 007-drift-and-overview.md#sec-3
     - 007-drift-and-overview.md#sec-4
     - 007-drift-and-overview.md#sec-4.4
-    - 013-reconciliation.md#sec-purpose
+    - 013-reconciliation.md#sec-0
   "#sec-8":
-    - 004-execution-backbone.md#sec-tasks
-    - 006-knowledge-graph.md#sec-taskkind-scheme
+    - 004-execution-backbone.md#sec-1.1
+    - 006-knowledge-graph.md#sec-1.5
   "#sec-10":
     - 007-drift-and-overview.md#sec-6
 replaces:
   "#sec-1":
-    - 006-knowledge-graph.md#sec-vocabulary
+    - 006-knowledge-graph.md#sec-1
   "#sec-2":
-    - 006-knowledge-graph.md#sec-decomposition
+    - 006-knowledge-graph.md#sec-1.6
   "#sec-3":
-    - 006-knowledge-graph.md#sec-partial-supersession
+    - 006-knowledge-graph.md#sec-7
   "#sec-6":
     - 007-drift-and-overview.md#sec-4.3
-    - 013-reconciliation.md#sec-engine-3
-    - 013-reconciliation.md#sec-data-model
-    - 013-reconciliation.md#sec-testing
-    - 013-reconciliation.md#sec-acceptance-criteria
+    - 013-reconciliation.md#sec-2.3
+    - 013-reconciliation.md#sec-3
+    - 013-reconciliation.md#sec-5
+    - 013-reconciliation.md#sec-8
   "#sec-acceptance-criteria":
-    - 006-knowledge-graph.md#sec-acceptance-criteria
+    - 006-knowledge-graph.md#sec-11
 ---
 # Spec 014 — Design documents as graph objects
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Spec 006 already decided that design documents are **graph-authored, never projected** — a Spec or
 ADR is an intent-layer object, not a file. The implementation never caught up: superpowers writes
@@ -645,7 +645,7 @@ directories. Appending a fragment narrows it to a section:
 replaces:
   "#sec-6":
     - 007-drift-and-overview.md#sec-4.3
-    - 013-reconciliation.md#sec-engine-3
+    - 013-reconciliation.md#sec-2.3
 ```
 
 The fragment is the §3 anchor — `#sec-<number>` numbered, `#sec-<slug>` unnumbered — so a

@@ -1,0 +1,429 @@
+# Worklode ontology — the `wl:` vocabulary (classes, properties, axioms).
+#
+# Extracted from the specs, which remain authoritative: spec 006 (§1) defines
+# the vocabulary, spec 014 amends it (prefix rename, wl:Section, versioning,
+# status enum), spec 015 adds the runtime layer and spec 016 asks 006 to mint
+# two skill-registry terms. Where a spec section is cited below, that section is
+# the reason the term exists.
+#
+# This file is a reference, not a deployment: the graph is not implemented, and
+# publication under https://worklode.io/ns/ belongs to rdf-registry (006 §9).
+# It is also the parseable form — the Turtle blocks in the specs are
+# illustrative and do not parse, because they concatenate adjacent string
+# literals and leave slashes unescaped in prefixed names (wlid:doc/spec-006).
+# SKOS concept schemes live in the sibling concept.ttl; SHACL shapes
+# (wl-shapes.ttl) are specified but not written.
+
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://worklode.io/ns/ontology>
+    a owl:Ontology ;
+    dct:title "Worklode ontology" ;
+    rdfs:comment """Intent, execution and runtime vocabulary for Worklode. Standards-first: a
+        term is minted only where no community vocabulary carries the intended meaning.""" ;
+    dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-014> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-015> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-016> ;
+    owl:versionInfo "unpublished draft, extracted from docs/specs" .
+
+
+# ---------------------------------------------------------------------------
+# Layer 1 — intent (declared, authored graph-side, crit-reviewed)
+# ---------------------------------------------------------------------------
+
+wl:Component a owl:Class ;
+    wl:layer wlc:intent ;
+    rdfs:comment """A software component — the atomic unit of the platform graph. Repo/project
+        (doap:Project) is a coarser grouping via dct:hasPart. Minted rather than reusing
+        gtio-sc:Component, which is a supply-chain term (006 §1.1).""" .
+
+wl:DesignDoc a owl:Class ;
+    rdfs:subClassOf foaf:Document ;
+    wl:layer wlc:intent ;
+    rdfs:comment """A statement of intent that stays true after implementation: what drift is
+        measured against. Superseded, never consumed (014 §2).""" .
+
+wl:ADR a owl:Class ;
+    rdfs:subClassOf wl:DesignDoc ;
+    wl:layer wlc:intent .
+
+wl:Spec a owl:Class ;
+    rdfs:subClassOf wl:DesignDoc ;
+    wl:layer wlc:intent .
+
+wl:Section a owl:Class ;
+    rdfs:subClassOf foaf:Document ;
+    wl:layer wlc:intent ;
+    rdfs:comment """An addressable, individually linkable part of a DesignDoc. Stable for the life
+        of the document; never deleted once the document is accepted. IRI is
+        wlid:section/<doc-slug>/<anchor>, the anchor assigned at first publication and recorded in
+        the document source (014 §3).""" .
+
+wl:Deliverable a owl:Class ;
+    wl:layer wlc:intent ;
+    rdfs:comment """A declared definition-of-done: the vertical join point where a Spec's ambition
+        meets a running system. Declares its targets as dct:relation to an Artifact and an
+        Environment, and its delivering Component via wl:deliveredBy (006 §4).""" .
+
+wl:Effect a owl:Class ;
+    rdfs:subClassOf wl:Deliverable ;
+    wl:layer wlc:intent ;
+    rdfs:comment """A deliverable whose definition-of-done is a state of an existing system, not the
+        existence and placement of an artifact — 'admin-cluster has Keycloak SSO configured'.
+        Declares its target as a Deployment IRI (stable: environment + target kind + target name)
+        and MUST NOT declare an Artifact. Witnessed by that Deployment reaching wlc:deployed over a
+        Commit on the delivering component's default branch — the commit is discovered, never
+        declared: its IRI carries a SHA (015 §5) and so cannot be named in advance. A subclass
+        rather than an attribute because the edges differ, not just the coordinates.""" .
+
+wl:AcceptedDeviation a owl:Class ;
+    wl:layer wlc:intent ;
+    rdfs:comment """A tolerated architectural deviation that drift queries suppress. Names the
+        accepted edge via RDF reification (rdf:subject/rdf:predicate/rdf:object) WITHOUT asserting
+        it — the edge stays out of the intent layer. Carries wl:sanctionedBy and an optional
+        dct:valid expiry; past the expiry the violation re-surfaces (006 §8).""" .
+
+
+# ---------------------------------------------------------------------------
+# Layer 2 — execution · VCS (observed; Task and Workstream projected from the
+# backbone, which stays authoritative for state, leases, blocks and child_of)
+# ---------------------------------------------------------------------------
+
+wl:Task a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A unit of work, projected read-only from the backbone. prov:Activity so a
+        document can name the task that wrote it via prov:wasGeneratedBy, which is distinct from
+        the tasks that wl:implements its sections (014 §9). Task execution-state is NOT wl:status:
+        the state machine is backbone-owned (spec 004) and the graph mirrors it as a projected
+        literal rather than forking the enum.""" .
+
+wl:Workstream a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A grouping of work a Task belongs to. Projection named graphs are anchored per
+        Workstream; a Task in several Workstreams appears in several graphs (006 §1.2).""" .
+
+wl:Project a owl:Class ;
+    rdfs:subClassOf wl:Workstream ;
+    wl:layer wlc:execution ;
+    rdfs:comment "A bounded, goal-oriented Workstream. Distinct from doap:Project, which is a repository." .
+
+wl:OngoingMaintenance a owl:Class ;
+    rdfs:subClassOf wl:Workstream ;
+    wl:layer wlc:execution ;
+    rdfs:comment "An unbounded, continuous Workstream." .
+
+wl:Skill a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """One org-wide agent skill: identity only — name, description and source-repo
+        IRI — so a design document can pin it with wl:recommendsSkill. Content, versions and
+        embeddings stay in the backbone; the graph gets identity, not blobs. Execution layer
+        because the node mirrors git through the backbone, like Issue and PullRequest — the pin
+        that names it is the declared half (016 §1). IRI is wlid:skill/<name>.""" .
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 — runtime · deploy (observed; projected from ingest). Every class is
+# anchored on a PROV-O parent where a truthful anchor exists, so PROV-aware
+# tooling traverses the layer with no Worklode-specific knowledge (015 §1).
+# ---------------------------------------------------------------------------
+
+wl:Artifact a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    wl:layer wlc:runtime ;
+    rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Software/Package> ;
+    rdfs:comment """One built, versioned unit deployed elsewhere: a container image, a PyPI package,
+        a git tag or a binary release. Kind is an attribute (wl:artifactKind), not a subclass — the
+        kinds differ in coordinates, not in the edges they carry.""" .
+
+wl:Build a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    wl:layer wlc:runtime ;
+    rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Build/Build> ;
+    rdfs:comment """The activity that produced an Artifact — a CI workflow run. No v1 projection
+        source exists (015 §6); declared now so wl:Artifact can carry prov:wasGeneratedBy without a
+        later breaking change.""" .
+
+wl:Deployment a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    wl:layer wlc:runtime ;
+    rdfs:comment """The rollout of an Artifact OR a Commit to one target in one Environment — a Flux
+        Kustomization, a PyPI publish, or a manually tracked target. prov:used binds an Artifact for
+        built units and a Commit for IaC/GitOps repos, which ship nothing and reconcile a git
+        revision instead (the wl:Effect case). Mirrors current state, one node per (environment,
+        target kind, target name); rollout history is v2.""" .
+
+wl:Environment a owl:Class ;
+    wl:layer wlc:runtime ;
+    rdfs:comment """A deployment stage. Deliberately parentless: no surveyed vocabulary models a
+        deployment stage, and prov:Location is spatial in intent. The instance set is closed to dev
+        and prod by SHACL, matching the normalisation the delivery handlers already enforce.""" .
+
+wl:Commit a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    wl:layer wlc:runtime ;
+    rdfs:comment """One commit on a repository's default branch. Promoted from v2 (006) because
+        delivery resolution is defined in terms of commit coverage (015 §2).""" .
+
+wl:RuntimeEvent a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    wl:layer wlc:runtime ;
+    rdfs:comment """An observed runtime incident affecting a deployed Artifact — a crashloop, an OOM
+        kill, a Flux reconciliation failure or recovery. Declared but unprojectable until it has a
+        natural key (015 open question 1).""" .
+
+
+# ---------------------------------------------------------------------------
+# Disjointness — proved by owlrl in CI, never published as closure (ADR-0004).
+# ---------------------------------------------------------------------------
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream wl:Skill ) .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:ADR wl:Spec ) .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:Project wl:OngoingMaintenance ) .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .
+
+
+# ---------------------------------------------------------------------------
+# Properties — intent
+# ---------------------------------------------------------------------------
+
+wl:governs a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:DesignDoc ;
+    rdfs:range wl:Component ;
+    rdfs:comment "This design doc governs the architecture of that component." .
+
+wl:deliveredBy a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Deliverable ;
+    rdfs:range wl:Component ;
+    rdfs:comment """The component that delivers this deliverable. Deliberately NOT functional: a
+        deliverable may be delivered by several components, each advancing at its own pace. Closes
+        the Component→Section → Deliverable → Environment join that makes 'component A implemented
+        section B by deploying deliverable C to environment D' answerable per environment. Declared
+        rather than derived because the derivable route (Artifact→Build→Commit→paths→Component)
+        needs wl:Build, which has no v1 projection source (015 §6). SHACL enforces >=1.""" .
+
+wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Section ) ] ;
+    rdfs:range skos:Concept ;
+    rdfs:comment """Editorial lifecycle status in wlc:DesignDocStatus, applying to a DesignDoc or a
+        single Section (014 §5). Functional catches >1; SHACL enforces >=1. Implementation is not a
+        status — it is a coverage query over wl:implements (014 §6).""" .
+
+wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Section ;
+    rdfs:comment """The document version in which this section's content last changed. Lets a claim
+        pinned at version N be tested for staleness without per-section version IRIs: a claim pinned
+        at vN is stale iff the section wl:lastRevisedIn a later version. Range is a versioned
+        document IRI (wlid:doc/<slug>/vN, 014 §4); no class is minted for a document version.""" .
+
+wl:sanctionedBy a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:AcceptedDeviation ;
+    rdfs:range wl:DesignDoc ;
+    rdfs:comment "The DesignDoc/ADR that authorises this accepted deviation." .
+
+wl:recommendsSkill a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:DesignDoc ;
+    rdfs:range wl:Skill ;
+    rdfs:comment """A design document pins this skill, declared from its `skills:` frontmatter when
+        the document is ingested (016 §3). Task pins are a backbone field on the Task, not this
+        edge; brief resolution unions the two.""" .
+
+wl:reviewer a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Component ;
+    rdfs:range foaf:Agent ;
+    rdfs:comment "Agent (GitHub user/team IRI) to notify about PRs affecting this component." .
+
+
+# ---------------------------------------------------------------------------
+# Properties — execution
+# ---------------------------------------------------------------------------
+
+wl:implements a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:Section wl:Deliverable wl:Component ) ] ;
+    rdfs:comment """Realisation of intent. Domain is deliberately unstated: a Component claims a
+        Section (derived by observed/repo-implements from .worklode/implements.yaml, 014 §6), while
+        a Task, Issue or PullRequest realises a Deliverable or Component. The DesignDoc range of
+        006 §1.3 is re-pointed to Section by 014 §6 — coverage is a count query over sections, so
+        no wl:fullyImplements is minted. Union range is machine-readable; SHACL enforces presence.""" .
+
+wl:affects a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:range wl:Component ;
+    rdfs:comment "A Task/Issue/PullRequest touches/changes that component." .
+
+wl:taskState a owl:DatatypeProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range xsd:string ;
+    rdfs:comment """The task's execution state, projected as a literal mirror of the backbone enum:
+        one of draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released,
+        abandoned. Deliberately NOT wl:status and deliberately not a SKOS scheme — the state machine
+        is backbone-owned (spec 004), and modelling it here would fork it (006 Open Q3). The legal
+        values are the tasks.state CHECK constraint (migration 0005_delivery); the legal
+        transitions between them live in internal/store/tasks.go and are not modelled at all.
+        shapes.ttl enumerates the values, so widening the CHECK means widening that shape.""" .
+
+wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Kind of task; see wlc:TaskKind. A fixed enum, never free text." .
+
+wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    rdfs:subPropertyOf dct:requires ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Task ;
+    rdfs:comment """This task needs that task done first (backbone blocks/dependency mirror).
+        Transitive, so reachability is a SPARQL property path (?t wl:dependsOn+ ?x) with no
+        reasoner, and CI/owlrl proves the closure. Type-homogeneous by ADR-0004.""" .
+
+wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    owl:inverseOf wl:dependsOn ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Task ;
+    rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
+
+wl:inWorkstream a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Workstream ;
+    rdfs:comment """Membership of a Task in a Workstream. Split from dct:isPartOf so the Task→Task
+        decomposition stays type-homogeneous and cleanly transitive.""" .
+
+wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
+    wl:layer wlc:execution ;
+    rdfs:comment """Bidirectional mirror between a backbone Task and a GitHub Issue. The PR→Task
+        join piggybacks GitHub's native Closes #N (the PR closes the mirrored Issue). Domain and
+        range are unstated because 006 §3.2 leaves Issue and PullRequest as projected nodes with no
+        class chosen.""" .
+
+
+# ---------------------------------------------------------------------------
+# Properties — runtime (015 §4)
+# ---------------------------------------------------------------------------
+
+wl:artifactKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Artifact ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Kind of artifact; see wlc:ArtifactKind. Functional catches >1, SHACL catches 0." .
+
+wl:digest a owl:DatatypeProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Artifact ;
+    rdfs:range xsd:string ;
+    rdfs:comment """Content digest as an opaque prefixed string, e.g. "sha256:abc…". Minted rather
+        than reusing spdx:checksum: that is a class requiring an algorithm/value node, and the
+        ingested value is a single opaque string. A spdx:Checksum alignment is additive if SBOM
+        interop is ever wanted.""" .
+
+wl:covers a owl:ObjectProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Artifact ;
+    rdfs:range wl:Commit ;
+    rdfs:comment """This artifact carries every commit up to and including that commit — the
+        delivery frontier of a published release. Domain is Artifact, not Deployment: the
+        per-environment frontier has no node (015 §6).""" .
+
+wl:toEnvironment a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Deployment ;
+    rdfs:range wl:Environment ;
+    rdfs:comment "The environment this deployment targets." .
+
+wl:deploymentStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Deployment ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Current rollout status; see wlc:DeploymentStatus." .
+
+wl:targetKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:Deployment ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Kind of deployment target; see wlc:DeployTargetKind." .
+
+wl:runtimeEventKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:runtime ;
+    rdfs:domain wl:RuntimeEvent ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Kind of runtime incident; see wlc:RuntimeEventKind." .
+
+
+# ---------------------------------------------------------------------------
+# Annotation property
+# ---------------------------------------------------------------------------
+
+wl:layer a owl:AnnotationProperty ;
+    rdfs:range skos:Concept ;
+    rdfs:comment """Model-layer membership (wlc:ModelLayer: intent/execution/runtime) of a
+        vocabulary term, so all intent classes etc. can be listed. Annotation only, and untagged
+        itself: a self-applied wl:layer would name no layer truthfully.""" .
+
+
+# ---------------------------------------------------------------------------
+# Reused, not minted. Listed so the boundary is visible.
+#
+#   dct:requires / dct:isRequiredBy    dependency
+#   dct:hasPart / dct:isPartOf         decomposition; child_of mirror
+#   dct:replaces / dct:isReplacedBy    supersession, whole document or section
+#   dct:title / description            labels; Deliverable acceptance criteria
+#   dct:relation                       Deliverable → declared Artifact/Environment target
+#   dct:created / modified / issued / date / valid / identifier
+#   foaf:Document                      super-type of DesignDoc and Section
+#   foaf:Agent / prov:Agent            owner, author, reviewer
+#   prov:wasAttributedTo / wasGeneratedBy / wasDerivedFrom / wasRevisionOf
+#   prov:used                          Deployment → Artifact or Commit
+#   prov:startedAtTime / endedAtTime / generatedAtTime
+#   doap:Project                       repository grouping (with dct:hasPart)
+#   owl:versionInfo                    artifact version string
+#   skos:Concept / ConceptScheme / inScheme / OrderedCollection / memberList
+#   rdf:subject / predicate / object   names an AcceptedDeviation's edge un-asserted
+#   dcat:hasCurrentVersion / hasVersion / version / previousVersion   (014 §4)
+#
+# Deliberately absent — do not reintroduce:
+#
+#   wl:Plan                    dropped (014 §2): plan-shaped work is an ordered
+#                              task subtree in the backbone, not a document.
+#   wl:supersededSection       retired (014 §3): sections are addressable, so
+#                              partial supersession is dct:isReplacedBy between
+#                              them. Nothing else needed RDF 1.2, so there is no
+#                              ontology.1-2.ttl companion (cf. 006 §0).
+#   wl:fullyImplements,        never minted (014 §3): declared coverage is a
+#   wl:partiallyImplements     second source of truth that goes stale.
+#   wl:Release                 never minted (015 §2): a release is a wl:Artifact
+#                              of kind wlc:git_tag plus a wl:covers edge.
+#   wl:Milestone               v2 (006 §1.1).
+#   wlc:TaskState              no SKOS scheme for task state: wl:taskState is a
+#                              literal mirror, so the backbone keeps the enum
+#                              and the transitions (006 Open Q3).
+# ---------------------------------------------------------------------------

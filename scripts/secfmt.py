@@ -5,12 +5,15 @@ Sections are identity (spec 014 §3): the anchor carries the section number, and
 an inbound claim pins `<file>.md#sec-4.3`. This formatter derives both from
 position so they cannot drift apart by hand.
 
-Usage: secfmt.py [-l] [-w] [-d] [--force] [--update-refs] [--depth N] [path...]
+Usage: secfmt.py [-l] [-w] [-d] [--assign] [--start N] [--force]
+                 [--update-refs] [--depth N] [path...]
 
   -l              list files whose numbering differs (CI mode; exit 1 if any)
   -w              write the result back to the file
   -d              print a unified diff
   --force         allow renumbering an accepted/superseded document
+  --assign        number a document that has no numbering yet (one-time)
+  --start N       with --assign, first top-level number (0 or 1; default 1)
   --update-refs   with -w, repoint inbound `file.md#sec-old` references
   --depth N       deepest addressable level (default 3, per 014 §7)
 
@@ -25,8 +28,14 @@ Two rules the numbering obeys, both from 014 §3:
     re-points published anchors at different subject matter. Frozen documents
     are reported and skipped unless --force.
 
-Documents whose sections are not numbered at all are left alone; they are
-addressed by slug anchors instead and there is nothing to derive.
+Top-level numbering normally starts at 1. A document may number its orientation
+section `0.` ("0. Purpose & scope") so the body still starts at 1; writing that 0
+by hand is enough, the sequence follows it.
+
+Numbers are normalised, never introduced: an unnumbered heading stays
+unnumbered, so a document that keeps an unnumbered preamble above numbered body
+sections keeps it. A document with no numbering at all is left alone unless
+--assign is passed, which is the one-time migration that numbers every section.
 """
 
 import argparse
@@ -100,8 +109,13 @@ def headings(body):
             yield i, m
 
 
-def renumber(text, depth, force=False):
+def renumber(text, depth, force=False, assign=False, start=1):
     """Return (new_text, moves) where moves maps old anchor -> new anchor.
+
+    Numbers are normalised, never introduced: a heading the author left
+    unnumbered stays unnumbered, so a document that mixes numbered body sections
+    with an unnumbered preamble keeps it. `assign` is the one-time migration for
+    a document with no numbering at all — it numbers every section.
 
     Raises Refusal listing every existing number or anchor that would change in
     a frozen document, unless force suspends that check.
@@ -109,35 +123,50 @@ def renumber(text, depth, force=False):
     front, body = split_front_matter(text)
     lines = body.splitlines(keepends=True)
 
-    # Numbers are normalised, never introduced: a heading the author left
-    # unnumbered stays unnumbered. Every numbered spec here opens with an
-    # unnumbered "Purpose & scope" and starts the sequence at the first body
-    # section, so imposing numbers by position would renumber all of them.
-    counters = [0] * depth
+    hs = list(headings(body))
+    numbering = assign and not any(
+        m["num"] for _, m in hs if len(m["hashes"]) - 1 <= depth
+    )
+
+    # Top-level numbering starts at 1. It starts at 0 when the author numbered
+    # the first section `0.` — the orientation section ("Purpose & scope") is
+    # numbered 0 so the body still starts at 1. Only the top level may start at
+    # 0; subsections always start at 1.
+    if numbering:
+        first = start
+    else:
+        tops = [m["num"] for _, m in hs if len(m["hashes"]) - 1 == 1 and m["num"]]
+        first = 0 if tops and tops[0] == "0" else 1
+
+    counters = [first - 1] + [0] * (depth - 1)
+    # `seen` tracks whether a level has been numbered yet, which `counters`
+    # cannot express once 0 is a legal section number.
+    seen = [False] * depth
     moves, breaks, defects = {}, [], []
 
-    for i, m in headings(body):
+    for i, m in hs:
         level = len(m["hashes"]) - 1  # H2 is level 1
         if level > depth:
             continue  # legal, but not addressable (014 §7)
 
-        if not m["num"]:
+        if not m["num"] and not numbering:
             # Opens an unnumbered section; any deeper sequence restarts under it.
             for j in range(level, depth):
-                counters[j] = 0
+                counters[j], seen[j] = 0, False
             continue
 
-        prefix = counters[: level - 1]
-        if any(c == 0 for c in prefix):
+        if not all(seen[: level - 1]):
             defects.append(
                 f"  §{m['num']} {m['text']!r} is numbered but its parent is not — "
                 f"the prefix cannot be derived"
             )
             continue
+        prefix = counters[: level - 1]
 
-        if re.search(r"[a-z]$", m["num"]):
+        if m["num"] and re.search(r"[a-z]$", m["num"]):
             # A letter-suffixed insert (014 §3) keeps its number and consumes no slot.
             number = m["num"]
+            seen[level - 1] = True
             parent = number.rsplit(".", 1)[0] if "." in number else ""
             if parent != ".".join(str(c) for c in prefix):
                 defects.append(
@@ -147,13 +176,15 @@ def renumber(text, depth, force=False):
                 continue
         else:
             counters[level - 1] += 1
+            seen[level - 1] = True
             for j in range(level, depth):
-                counters[j] = 0
+                counters[j], seen[j] = 0, False
             number = ".".join(str(c) for c in counters[:level])
 
         anchor = f"sec-{number}"
         if m["num"] != number:
-            breaks.append(f"  §{m['num']} -> §{number}  ({m['text']})")
+            was = f"§{m['num']}" if m["num"] else "unnumbered"
+            breaks.append(f"  {was} -> §{number}  ({m['text']})")
         if m["anchor"] and m["anchor"] != anchor:
             breaks.append(f"  #{m['anchor']} -> #{anchor}  ({m['text']})")
             moves[m["anchor"]] = anchor
@@ -168,20 +199,35 @@ def renumber(text, depth, force=False):
     return retarget_own_keys(front, moves) + "".join(lines), moves
 
 
+def anchor_alternation(moves):
+    """One regex branch per moved anchor, longest first.
+
+    Applied in a single pass: replacing sequentially would re-rewrite anchors a
+    previous substitution had just produced, so shifting §4->§5 and §5->§6 in a
+    document would land both on §6.
+
+    The lookaheads stop `sec-4` matching the leading part of `sec-4.3` or
+    `sec-10` without swallowing a sentence-ending period, so a reference at the
+    end of a sentence still matches.
+    """
+    keys = sorted(moves, key=len, reverse=True)
+    return "(" + "|".join(re.escape(k) for k in keys) + r")(?![\w-])(?!\.\w)"
+
+
 def retarget_own_keys(front, moves):
     """Follow a moved anchor in this document's own frontmatter subject keys.
 
     A bare `"#sec-4.3":` key is scoped to this document (014 §11); a qualified
     `other.md#sec-4.3` value belongs to another one and is left for update_refs.
     """
-    for old, new in moves.items():
-        front = re.sub(
-            rf'^(\s*)["\']?#{re.escape(old)}["\']?(\s*:)',
-            rf'\g<1>"#{new}"\g<2>',
-            front,
-            flags=re.M,
-        )
-    return front
+    if not moves:
+        return front
+    return re.sub(
+        rf'^(\s*)["\']?#{anchor_alternation(moves)}["\']?(\s*:)',
+        lambda m: f'{m.group(1)}"#{moves[m.group(2)]}"{m.group(3)}',
+        front,
+        flags=re.M,
+    )
 
 
 def collect(paths):
@@ -197,12 +243,14 @@ def collect(paths):
 
 def update_refs(roots, basename, moves):
     """Repoint `basename#old` -> `basename#new` across every doc. Returns hits."""
+    if not moves:
+        return []
+    # Bare-name and path-qualified references both end in the basename.
+    pat = re.compile(re.escape(basename) + "#" + anchor_alternation(moves))
     hits = []
     for f in collect(roots):
         text = original = f.read_text()
-        for old, new in moves.items():
-            # Bare-name and path-qualified references both end in the basename.
-            text = text.replace(f"{basename}#{old}", f"{basename}#{new}")
+        text = pat.sub(lambda m: f"{basename}#{moves[m.group(1)]}", text)
         if text != original:
             f.write_text(text)
             hits.append(f)
@@ -216,6 +264,10 @@ def main():
     ap.add_argument("-w", action="store_true", help="write result to file")
     ap.add_argument("-d", action="store_true", help="print a unified diff")
     ap.add_argument("--force", action="store_true", help="renumber frozen docs")
+    ap.add_argument("--assign", action="store_true",
+                    help="one-time: number a document that has no numbering yet")
+    ap.add_argument("--start", type=int, choices=(0, 1), default=1,
+                    help="with --assign, first top-level number (default 1)")
     ap.add_argument("--update-refs", action="store_true", help="repoint inbound anchors")
     ap.add_argument("--depth", type=int, default=3, help="addressable depth (default 3)")
     a = ap.parse_args()
@@ -231,7 +283,7 @@ def main():
     for f in files:
         original = f.read_text()
         try:
-            formatted, moves = renumber(original, a.depth, a.force)
+            formatted, moves = renumber(original, a.depth, a.force, a.assign, a.start)
         except Refusal as e:
             refused.append((f, str(e)))
             continue
@@ -299,7 +351,7 @@ def main():
         )
         return 2
 
-    return 1 if (differed and (a.l or a.d)) else 0
+    return 1 if (differed and (a.l or a.d or a.w)) else 0
 
 
 if __name__ == "__main__":

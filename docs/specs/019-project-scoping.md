@@ -8,7 +8,7 @@ requires:
 ---
 # Spec 019 — Repo-scoped CLI commands
 
-## Why
+## 0. Why {#sec-0}
 
 Working from a worktree, `lode` should already know which project you mean.
 Today it half does.
@@ -28,7 +28,7 @@ where someone hand-wrote `.worklode/config.toml`, so a fresh clone or a new
 worktree is unscoped until it is configured — the mapping the server already
 holds in `project_repos` is never consulted by the CLI.
 
-## Decisions
+## 1. Decisions {#sec-1}
 
 Taken here with rationale, pending sign-off.
 
@@ -64,7 +64,7 @@ and the client for a case nobody has asked for. `--project=` already covers
 server keeps the CLI to `git remote get-url origin` plus an HTTP call, and
 means a normalization fix ships without a CLI upgrade.
 
-## Resolution chain
+## 2. Resolution chain {#sec-2}
 
 Every project-aware command resolves its scope the same way, first hit wins:
 
@@ -84,9 +84,9 @@ unscoped (`task add`) reports the missing project itself, as it does today.
 
 `--project` and `--repo` together is an error: they name the same thing.
 
-## Server changes
+## 3. Server changes {#sec-3}
 
-### `GET /api/v1/projects/resolve?remote=<url>`
+### 3.1 `GET /api/v1/projects/resolve?remote=<url>` {#sec-3.1}
 
 Returns the project a remote URL maps to, or 404 when the repo is unmapped.
 Accepts every form `git remote get-url` emits, plus a bare `owner/name` so
@@ -116,7 +116,7 @@ Read-only, so plain `s.auth` — no `requireAdmin`. Registered before
 `POST /api/v1/projects/{id}/repos`; Go's mux prefers the literal segment over
 `{id}`, so `resolve` cannot be shadowed by a project named `resolve`.
 
-### `GET /api/v1/inbox?project=<id>`
+### 3.2 `GET /api/v1/inbox?project=<id>` {#sec-3.2}
 
 `listInbox` (`internal/api/admin.go:371`) gains a `project` query param
 alongside `state`. Empty or absent keeps today's org-wide behavior. The store
@@ -129,15 +129,15 @@ JOIN project_repos pr ON pr.repo = i.repo AND pr.project_id = $n
 An unknown project id yields an empty list, matching how `GET /api/v1/tasks`
 treats one.
 
-### Unchanged
+### 3.3 Unchanged {#sec-3.3}
 
 `GET /api/v1/board?project=` and `GET /api/v1/tasks?project=` already do
 one-or-all. No migration: no schema or store-filter shape changes beyond the
 inbox join.
 
-## Client changes
+## 4. Client changes {#sec-4}
 
-### Resolution and the cache
+### 4.1 Resolution and the cache {#sec-4.1}
 
 A new `internal/cli` resolver owns steps 2–5 of the chain and its cache. The
 cache is `~/.cache/worklode/remotes.json`, mode 0600, written atomically
@@ -182,7 +182,7 @@ cache is `~/.cache/worklode/remotes.json`, mode 0600, written atomically
   fails a command — the lookup just does not persist.
 - An explicit `--project`/`--repo` bypasses the cache entirely.
 
-### `lode project resolve [--refresh]`
+### 4.2 `lode project resolve [--refresh]` {#sec-4.2}
 
 Prints the project the working directory resolves to and which step of the
 chain produced it, so scoping is inspectable instead of magic:
@@ -195,7 +195,7 @@ worklode (WL) — from git remote git@github.com:sunstoneinstitute/worklode.git 
 `--refresh` re-queries the server and rewrites the entry. This is the
 supported way to fix a stale mapping; nobody should be told to `rm` a file.
 
-### Bare task numbers
+### 4.3 Bare task numbers {#sec-4.3}
 
 `lode task show 12` resolves to `WL-12` using the current project's key. One
 client-side choke point handles it for every id-taking command: an argument
@@ -214,7 +214,7 @@ pass a full id like WL-12, or set current_project
 The alternative — teaching every `/api/v1/tasks/{id}` endpoint to accept
 `?project=` — touches all fifteen task routes for the same result.
 
-### Command surface
+### 4.4 Command surface {#sec-4.4}
 
 | Command | Change |
 |---|---|
@@ -232,7 +232,7 @@ The alternative — teaching every `/api/v1/tasks/{id}` endpoint to accept
 Every command taking `--project` also takes `--repo`, and both carry help text
 naming the default source.
 
-## Testing
+## 5. Testing {#sec-5}
 
 - **Normalization** — table test over every URL form above plus the 400 cases
   (one segment, three segments, empty owner, garbage).
@@ -253,7 +253,7 @@ naming the default source.
 - **e2e** — a fresh clone with no `.worklode/config.toml` scopes `task list`
   and `board` off its git remote alone.
 
-## Non-goals
+## 6. Non-goals {#sec-6}
 
 - Multi-project selection (`--project a,b`).
 - A task-to-repo association, or repo-level task filtering.

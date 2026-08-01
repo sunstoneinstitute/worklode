@@ -7,7 +7,7 @@ requires:
 ---
 # Spec 022 — Prometheus domain metrics
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 The server already carries the Prometheus scaffolding: a private registry with the Go
 collector, `http_requests_total` / `http_request_duration_seconds` middleware with

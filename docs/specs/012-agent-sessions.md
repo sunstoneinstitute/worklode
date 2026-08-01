@@ -3,11 +3,11 @@ status: accepted
 issued: 2026-07-25
 amends:
   ".":
-    - 004-execution-backbone.md#sec-lease-lifecycle
+    - 004-execution-backbone.md#sec-2
 ---
 # Spec 012 — Agent sessions
 
-## Problem
+## 0. Problem {#sec-0}
 
 Worklode knows which actor holds a lease on a task, but not which coding-agent
 session is actually working in it. Claude Code's `session_id` already reaches
@@ -24,7 +24,7 @@ cannot answer:
 Worklode is not Claude-Code-specific, so the model must fit other coding
 agents.
 
-## Schema
+## 1. Schema {#sec-1}
 
 One new table; `leases` is unchanged.
 
@@ -105,7 +105,7 @@ supplied without a currency is stored as USD.
 Converting between currencies is a reporting concern and needs a rate source
 with a date — out of scope here; the table records what the vendor charged.
 
-## Lifecycle
+## 2. Lifecycle {#sec-2}
 
 - A row is created on the first heartbeat from a session and belongs to
   whichever lease was active at that moment.
@@ -127,7 +127,7 @@ with a date — out of scope here; the table records what the vendor charged.
   transition, so `started`/`ended` pairs in the event stream are deliberately
   unbalanced.
 
-## Store and API
+## 3. Store and API {#sec-3}
 
 Two store functions, shaped like the existing `Claim` / `Renew` / `Release`
 family. Both resolve the active lease with `activeLeaseTx` and require the
@@ -192,7 +192,7 @@ round-trips exactly. It is validated in Go against the column's shape, like
 Everything is named `agent-session`, never `session`: `internal/api/session.go`
 already owns "session" for web and CLI auth.
 
-## Hook wiring
+## 4. Hook wiring {#sec-4}
 
 `hookrun.Payload.SessionID` already carries the value. `lode hook` gains three
 events (`heartbeat`, `worktree-enter`, `worktree-exit`) and `session-end` gains
@@ -303,7 +303,7 @@ Agent identity comes from the `LODE_AGENT` environment variable, defaulting to
 Both calls inherit the package's two standing rules — every backbone call under
 the 2s `backboneTimeout`, and no hook ever fails its triggering event.
 
-## Error handling
+## 5. Error handling {#sec-5}
 
 - An unreachable or erroring backbone degrades to a stderr warning; the coding
   session proceeds unaffected.
@@ -313,7 +313,7 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
 - Repeat heartbeats are idempotent by construction (deterministic event
   external id + `ON CONFLICT DO NOTHING`).
 
-## Testing
+## 6. Testing {#sec-6}
 
 - Store tests: start/heartbeat idempotency, non-holder rejection, re-claim of
   the same session id under a new lease, `ended_at` stamped by lease close and
@@ -328,7 +328,7 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
   path, where the column DEFAULT does not apply); a non-ISO currency code is
   rejected.
 
-## Out of scope
+## 7. Out of scope {#sec-7}
 
 - ~~Computing tokens and cost.~~ **Done** — see migration `0008_session_cost`,
   `internal/transcript`, and `lode project show`. It landed where this spec

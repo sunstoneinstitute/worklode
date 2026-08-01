@@ -1,13 +1,14 @@
 ---
 status: accepted
 issued: 2026-07-24
+task: WL-12
 amends:
   ".":
     - 004-execution-backbone.md
 ---
 # Spec 010 — Per-project task keys (Jira-style IDs)
 
-## Why
+## 0. Why {#sec-0}
 
 Task IDs are `WL-<n>` for every project: the prefix is the literal `"WL-"`
 (`internal/store/tasks.go:93`) and `<n>` comes from a single global counter
@@ -15,7 +16,7 @@ Task IDs are `WL-<n>` for every project: the prefix is the literal `"WL-"`
 `WL-12`, not its own code counting from 1. We want Jira-style per-project codes:
 `WL-1…` for worklode, `SW-1…` for the next project.
 
-## Decisions (settled)
+## 1. Decisions (settled) {#sec-1}
 
 | Decision | Choice |
 |---|---|
@@ -29,7 +30,7 @@ Task IDs are `WL-<n>` for every project: the prefix is the literal `"WL-"`
 Immutable because the key is baked into permanent task IDs, `wl/<id>` branch
 names, and `WL-Task:` PR markers — changing it would orphan those references.
 
-## Data model — migration `0003_project_keys`
+## 2. Data model — migration `0003_project_keys` {#sec-2}
 
 ```sql
 ALTER TABLE projects ADD COLUMN key text;
@@ -60,7 +61,7 @@ DROP TABLE task_seq;
 The `.down.sql` recreates `task_seq` (seeded from `max(next_task_num)`), drops
 the two columns, and reverses the constraints.
 
-## ID generation — `internal/store/tasks.go`
+## 3. ID generation — `internal/store/tasks.go` {#sec-3}
 
 `CreateTask` replaces the global-sequence read with a per-project one, in the
 same transaction:
@@ -74,7 +75,7 @@ then `id := fmt.Sprintf("%s-%d", key, n)`. IDs stay globally unique (unique key
 × per-project number). A missing project row surfaces the existing
 `ErrInvalidInput`/not-found path.
 
-## API / CLI
+## 4. API / CLI {#sec-4}
 
 - `store.CreateProject(ctx, id, name, key)` — new `key` param
   (`internal/store/projects.go:35`).
@@ -85,7 +86,7 @@ then `id := fmt.Sprintf("%s-%d", key, n)`. IDs stay globally unique (unique key
 - `lode project add <id> --name … --key WL` — new required `--key` flag
   (`internal/cmd/project.go:38`); `project list` gains a `KEY` column.
 
-## Generalize the hardcoded `WL-` parsers
+## 5. Generalize the hardcoded `WL-` parsers {#sec-5}
 
 Replace the literal `WL-` with `[A-Z][A-Z0-9]*-\d+`:
 
@@ -100,7 +101,7 @@ Replace the literal `WL-` with `[A-Z][A-Z0-9]*-\d+`:
 Branch naming already interpolates the id, so it becomes `wl/<id>-<slug>` (e.g.
 `wl/SW-3-…`) with no code change beyond the regex.
 
-## Testing
+## 6. Testing {#sec-6}
 
 - Per-project counters: two projects each start at 1 and increment independently.
 - Key validation: rejects bad format, duplicate key, and missing key.
@@ -110,7 +111,7 @@ Branch naming already interpolates the id, so it becomes `wl/<id>-<slug>` (e.g.
 - Update existing tests that assert literal `WL-` where a second project is now
   in play.
 
-## Out of scope
+## 7. Out of scope {#sec-7}
 
 Renaming/re-keying an existing project (immutable by decision); renumbering
 existing IDs; any UI beyond the `KEY` column in `project list`.
