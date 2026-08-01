@@ -1,3 +1,6 @@
+---
+implements: docs/specs/008-worklode-plugin.md
+---
 # Worklode plugin — acceptance walkthrough (spec 008)
 
 Scripted verification of the seven spec-008 acceptance criteria. Items marked

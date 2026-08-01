@@ -1,8 +1,17 @@
+---
+status: accepted
+issued: 2026-07-21
+wasDerivedFrom: 003-platform-graph-design.md (D8, D9, D10, D12, D15)
+requires:
+  - 004-execution-backbone.md
+amendedBy:
+  ".":
+    - 018-task-hierarchy.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 005 — Prioritization & pickup
-
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
-**Design record:** `003-platform-graph-design.md` (D8, D9, D10, D12, D15)
-**Depends on:** 004 (execution backbone — task state machine, worktree-bound leases, `blocks`/`child_of` edges, the `claim` transaction).
 
 ## Purpose & scope
 

@@ -1,8 +1,11 @@
+---
+status: accepted
+issued: 2026-07-24
+amends:
+  ".":
+    - 004-execution-backbone.md
+---
 # Spec 010 — Per-project task keys (Jira-style IDs)
-
-**Date:** 2026-07-24 · **Status:** design · **Task:** WL-12 ·
-**Umbrella:** `000-umbrella-architecture.md`
-**Area:** spec 004 (execution backbone — task identity)
 
 ## Why
 

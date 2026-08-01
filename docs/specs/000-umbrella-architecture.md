@@ -1,9 +1,18 @@
+---
+status: accepted
+issued: 2026-07-21
+wasDerivedFrom: 003-platform-graph-design.md (D1–D15)
+amendedBy:
+  "#sec-v1-v2-scope":
+    - 014-design-documents-as-graph-objects.md#sec-2
+    - 015-runtime-layer.md#sec-7
+  "#sec-shared-conventions":
+    - 014-design-documents-as-graph-objects.md#sec-1
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 000 — Worklode architecture & spec map (umbrella)
-
-**Date:** 2026-07-21 · **Status:** spec · **Source:** graduated from the approved design
-record `003-platform-graph-design.md` (D1–D15; full rationale there).
-
-**Amended by:** 014, 015
 
 **Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`017`);
 cross-spec references below use those numbers.
@@ -46,7 +55,7 @@ observed edges (derived from code/PRs/deploys). Overview, gaps, and drift are re
 
 ---
 
-## v1 / v2 scope
+## v1 / v2 scope {#sec-v1-v2-scope}
 
 > **Amended by 014 §2 and 015 §7.** Plan is no longer a DesignDoc subclass (plan-shaped work is a
 > task subtree), and Commit moves from v2 to v1.
@@ -89,7 +98,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 
 ---
 
-## Shared conventions (binding on all sub-specs)
+## Shared conventions (binding on all sub-specs) {#sec-shared-conventions}
 
 > **Amended by 014 §1.** The prefix is `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/`;
 > rdf-registry sources move `rdf/ls/` → `rdf/wl/`. The published base carries no

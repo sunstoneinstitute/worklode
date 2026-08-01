@@ -1,8 +1,19 @@
+---
+status: accepted
+issued: 2026-07-25
+amends:
+  ".":
+    - 003-platform-graph-design.md#sec-d14
+    - 004-execution-backbone.md#sec-postgres-schema
+    - 004-execution-backbone.md#sec-cli-api-surface
+amendedBy:
+  ".":
+    - 018-task-hierarchy.md
+replaces:
+  ".":
+    - 004-execution-backbone.md#sec-task-state-machine
+---
 # Spec 011 — Delivery lifecycle
-
-**Date**: 2026-07-25
-**Status**: Approved; implementation plan in `docs/plans/2026-07-25-delivery-lifecycle.md`
-**Umbrella**: `000-umbrella-architecture.md`
 
 ## Problem
 

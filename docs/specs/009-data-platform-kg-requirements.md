@@ -1,8 +1,13 @@
+---
+status: accepted
+amendedBy:
+  ".":
+    - 014-design-documents-as-graph-objects.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 009 — Data-platform requirements for the Worklode KG
-
-**Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `000-umbrella-architecture.md`
-
-**Amended by:** 014
 
 Worklode's **knowledge graph** (the declared architecture graph + the projected work graph)
 lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**

@@ -1,8 +1,60 @@
+---
+status: draft
+requires:
+  - 006-knowledge-graph.md
+  - 007-drift-and-overview.md
+  - 004-execution-backbone.md
+amends:
+  ".":
+    - 003-platform-graph-design.md#sec-resolved-decisions
+    - 006-knowledge-graph.md#sec-acceptance-criteria
+    - 006-knowledge-graph.md#sec-reuse-vs-mint
+    - 008-worklode-plugin.md#sec-acceptance-criteria
+    - 009-data-platform-kg-requirements.md
+    - rdf-registry:ADR-0006
+  "#sec-1":
+    - 000-umbrella-architecture.md#sec-shared-conventions
+    - 003-platform-graph-design.md
+    - 008-worklode-plugin.md
+  "#sec-2":
+    - 000-umbrella-architecture.md#sec-v1-v2-scope
+    - 003-platform-graph-design.md#sec-d15
+    - 006-knowledge-graph.md#sec-classes
+    - 008-worklode-plugin.md#sec-slash-commands
+    - 008-worklode-plugin.md#sec-skills
+  "#sec-3":
+    - 008-worklode-plugin.md#sec-task-brief
+  "#sec-5":
+    - 006-knowledge-graph.md#sec-status-scheme
+    - 007-drift-and-overview.md#sec-4.4
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-2.1
+    - 007-drift-and-overview.md#sec-3
+    - 007-drift-and-overview.md#sec-4
+    - 007-drift-and-overview.md#sec-4.4
+    - 013-reconciliation.md#sec-purpose
+  "#sec-8":
+    - 004-execution-backbone.md#sec-tasks
+    - 006-knowledge-graph.md#sec-taskkind-scheme
+  "#sec-10":
+    - 007-drift-and-overview.md#sec-6
+replaces:
+  "#sec-1":
+    - 006-knowledge-graph.md#sec-vocabulary
+  "#sec-2":
+    - 006-knowledge-graph.md#sec-decomposition
+  "#sec-3":
+    - 006-knowledge-graph.md#sec-partial-supersession
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-4.3
+    - 013-reconciliation.md#sec-engine-3
+    - 013-reconciliation.md#sec-data-model
+    - 013-reconciliation.md#sec-testing
+    - 013-reconciliation.md#sec-acceptance-criteria
+  "#sec-acceptance-criteria":
+    - 006-knowledge-graph.md#sec-acceptance-criteria
+---
 # Spec 014 — Design documents as graph objects
-
-**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 006 (knowledge
-graph — amends it), 007 (drift & overview — supplies a new deriver), 004 (execution backbone) ·
-**Amends:** 006, 007, 008, 013, and rdf-registry ADR-0006.
 
 ## Purpose & scope
 
@@ -36,7 +88,7 @@ scope*).
 
 ---
 
-## 1. Prefix rename: `ls:` → `wl:`
+## 1. Prefix rename: `ls:` → `wl:` {#sec-1}
 
 `ls:` predates the rename from *lodespar* to *Worklode*. No occurrence survives outside
 documentation (187 occurrences across 11 Markdown files; zero in Go, SQL or YAML), and the `ls:`
@@ -60,7 +112,7 @@ as one product.
 
 ---
 
-## 2. What is, and is not, a design document
+## 2. What is, and is not, a design document {#sec-2}
 
 ### Plans are demoted
 
@@ -120,7 +172,7 @@ wl:Section a owl:Class ;               # §3
 
 ---
 
-## 3. Sections as first-class nodes
+## 3. Sections as first-class nodes {#sec-3}
 
 Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
 is one requirement: **sections must be addressable nodes.**
@@ -206,7 +258,7 @@ stale. See §6.
 
 ---
 
-## 4. Versioning
+## 4. Versioning {#sec-4}
 
 ### Canonical plus versioned IRIs
 
@@ -287,7 +339,7 @@ precision, one property.
 
 ---
 
-## 5. Editorial lifecycle and revisions
+## 5. Editorial lifecycle and revisions {#sec-5}
 
 ### `implemented` leaves the status enum
 
@@ -331,7 +383,7 @@ that survives into draft, because inbound links do not care that a document is m
 
 ---
 
-## 6. Implementation coverage
+## 6. Implementation coverage {#sec-6}
 
 ### Three objects, previously conflated
 
@@ -456,7 +508,7 @@ edge rather than asking whether any Task ever pointed at the document.
 
 ---
 
-## 7. Constraints on accepted documents
+## 7. Constraints on accepted documents {#sec-7}
 
 Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
 graphs:
@@ -504,7 +556,7 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 
 ---
 
-## 8. Task kinds
+## 8. Task kinds {#sec-8}
 
 Two enumerations exist today and disagree:
 
@@ -527,7 +579,7 @@ No kind is added for plans, planning, speccing, or reconciliation:
 
 ---
 
-## 9. Authorship
+## 9. Authorship {#sec-9}
 
 `wl:implements` covers Task → DesignDoc ("realises this intent"). Nothing expresses "this task
 *wrote* that document," which is what a `spec`-kind task actually does. Reuse rather than mint:
@@ -542,7 +594,7 @@ Zero mints, and it cleanly separates authoring from executing — the same task 
 
 ---
 
-## 10. Surfaces
+## 10. Surfaces {#sec-10}
 
 | Surface | Purpose |
 |---|---|
@@ -565,6 +617,61 @@ extends spec 007's read-only overview surface rather than introducing a new appl
 The on-disk path of a document ceases to be its identity. Until documents move into the graph,
 tracked paths stay per-project configuration — which is spec 013's open question 2, now answered:
 configuration, not convention, and temporary either way.
+
+---
+
+## 11. Document frontmatter {#sec-11}
+
+Every design document opens with YAML frontmatter whose **keys are ontology property local
+names**, so the frontmatter is never a second vocabulary to maintain. A key with no term behind it
+is a signal that the ontology is missing one, not licence for a private extension.
+
+| Key | Term | Value |
+|---|---|---|
+| `status` | `wl:status` | one `wlc:DesignDocStatus` concept (§5) |
+| `issued` | `dct:issued` | ISO date of first publication |
+| `implements` | `wl:implements` | the governing Spec/ADR, authored on the *implementing* document |
+| `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
+| `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
+| `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
+| `amends` / `amendedBy` | — | doc-level amendment; see below |
+
+### References carry the section
+
+A reference is a bare filename within the same directory and a repo-relative path across
+directories. Appending a fragment narrows it to a section:
+
+```yaml
+replaces:
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-4.3
+    - 013-reconciliation.md#sec-engine-3
+```
+
+The fragment is the §3 anchor — `#sec-<number>` numbered, `#sec-<slug>` unnumbered — so a
+frontmatter reference and an in-document link resolve to the same
+`wlid:section/<doc-slug>/<anchor>` node, and both survive a heading reword. A fragment naming an
+anchor absent from the target's source is a broken reference and fails the same CI check §4
+applies to the section-IRI set.
+
+**Amendment and supersession are section-scoped on both ends**, because "spec 014 amends spec 006"
+is too coarse to act on — the reader needs to know *which* section still binds. The value is
+therefore a map whose keys are the **subject document's own** anchors, with `"."` for the document
+as a whole; each entry names the *other* document's section. A range or genuinely doc-wide
+amendment stays doc-level rather than being expanded into a false list of sections.
+
+### Amendment references are bidirectional
+
+`amends`/`amendedBy` and `replaces`/`isReplacedBy` are maintained on both documents. This
+duplicates the edge, which this spec otherwise refuses to do (§6). The justification is read cost:
+an agent asking "what still constrains this section?" must answer it from the file it already has
+open, and a one-directional edge turns that into a scan of every sibling — a real token cost on
+every read, against a one-line authoring cost on the rare write. CI checks that both ends agree.
+
+Neither `amends` nor `amendedBy` has an ontology term, deliberately. Doc-level amendment is not
+`dct:replaces`; §3's section-level `dct:isReplacedBy` is the modelled form. Both keys are in-repo
+indexing metadata that projection reads and reduces to section-level edges — never a graph edge in
+their own right.
 
 ---
 
@@ -630,7 +737,7 @@ Two pieces of work follow from this spec without belonging to it:
    number, so their depth is nominal. Treating them as depth 1 is the obvious reading; confirm it
    against a document with a deeply structured appendix.
 
-## Acceptance criteria
+## Acceptance criteria {#sec-acceptance-criteria}
 
 1. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
    `rdf/wl/` and publish under `https://worklode.io/ns/`.

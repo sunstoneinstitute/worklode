@@ -1,11 +1,27 @@
-# Spec 004 — Execution backbone
-
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
-(shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
-`003-platform-graph-design.md`.
-**Amended by:** 010 (task keys), 011 (delivery states), 012 (agent sessions), 014 (task kinds)
-
 ---
+status: accepted
+issued: 2026-07-21
+wasDerivedFrom: 003-platform-graph-design.md (D1–D3, D8, D11, D12, D14)
+amendedBy:
+  ".":
+    - 010-per-project-task-keys.md
+    - 018-task-hierarchy.md
+  "#sec-tasks":
+    - 014-design-documents-as-graph-objects.md#sec-8
+  "#sec-lease-lifecycle":
+    - 012-agent-sessions.md
+  "#sec-postgres-schema":
+    - 011-delivery-lifecycle.md
+  "#sec-cli-api-surface":
+    - 011-delivery-lifecycle.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+isReplacedBy:
+  "#sec-task-state-machine":
+    - 011-delivery-lifecycle.md
+---
+# Spec 004 — Execution backbone
 
 ## Purpose & scope
 
@@ -41,7 +57,7 @@ Target Postgres schema for the backbone tables this spec owns. Conventions:
 **`timestamptz`** timestamps; **`bigint GENERATED ALWAYS AS IDENTITY`** keys; **`boolean`**
 flags; partial unique indexes and `CHECK` constraints.
 
-### tasks
+### tasks {#sec-tasks}
 
 > **Task identity superseded by spec 010.** `task_seq` is dropped; ids are `<PROJECT-KEY>-<n>` from a per-project `projects.next_task_num` counter (migration 0003).
 
@@ -68,7 +84,7 @@ next + 1 WHERE id = 1 RETURNING next - 1` is valid Postgres and preserves the ga
 `WT-<n>` allocation semantics. (A bare `SEQUENCE` was rejected: it gaps on rollback
 and complicates the `WT-` prefix. Keeping the table is a zero-behavior-change carry.)
 
-### Task state machine
+### Task state machine {#sec-task-state-machine}
 
 > **Superseded by spec 011.** `done` is renamed `merged` and the machine continues to `deployed_dev`/`deployed_prod`/`released`, driven by delivery facts up to each repo's `done_state`.
 
@@ -204,7 +220,7 @@ marshal via `encoding/json`.
 
 ---
 
-## Lease lifecycle
+## Lease lifecycle {#sec-lease-lifecycle}
 
 > **Amended by spec 012.** Closing a lease (release, expiry sweep, completion) also stamps `ended_at` on every open `agent_sessions` row for it, without its own event.
 
@@ -278,7 +294,7 @@ agnostic to how the candidate was chosen.)
 
 ---
 
-## Postgres schema & data layer
+## Postgres schema & data layer {#sec-postgres-schema}
 
 > **Amended by spec 011.** `projects.deploy_gated` is dropped; delivery gating is per-repo `done_state` plus the fact tables.
 
@@ -313,7 +329,7 @@ double-sweeps; if a single sweeper is wanted, gate it with a Postgres advisory l
 
 ---
 
-## CLI / API surface touched
+## CLI / API surface touched {#sec-cli-api-surface}
 
 > **Amended by spec 011.** Claim and claim-next responses also carry a server-derived `branch`; the CLI only falls back to `lode/` against an older server.
 

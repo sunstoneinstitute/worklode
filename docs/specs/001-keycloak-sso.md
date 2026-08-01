@@ -1,11 +1,22 @@
+---
+status: accepted
+issued: 2026-07-19
+amendedBy:
+  "#sec-why":
+    - 002-github-app-auth.md
+  "#sec-decisions":
+    - 002-github-app-auth.md#sec-d
+  "#sec-web-ui-sessions":
+    - 002-github-app-auth.md#sec-b
+  ".":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+isReplacedBy:
+  "#sec-cli-login":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+---
 # Spec 001 — Keycloak SSO for worklode
 
-**Status:** approved design
-**Date:** 2026-07-19
-**Umbrella:** `000-umbrella-architecture.md`
-**Amended by:** 002 (GitHub App auth, additional provider); CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`
-
-## Why
+## Why {#sec-why}
 
 > **Amended by 002.** Keycloak is no longer the only front door; GitHub App login is an additional provider alongside it, and this spec is otherwise unchanged.
 
@@ -15,7 +26,7 @@ Humans should instead authenticate against the org Keycloak
 token from their SSO identity. The read-only web UI must also be gated behind
 the same OAuth2 login. Agent/service token issuance is unchanged.
 
-## Decisions (settled)
+## Decisions (settled) {#sec-decisions}
 
 | Decision | Choice |
 |---|---|
@@ -76,7 +87,7 @@ OIDC is unconfigured.
    `sso login for <user> at <RFC3339 timestamp>`. Return `{"token": ...}`
    once. Re-login after expiry; no refresh tokens.
 
-### Web UI sessions
+### Web UI sessions {#sec-web-ui-sessions}
 
 > **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path.
 
@@ -95,7 +106,7 @@ unconfigured the UI stays open as today.
   `SameSite=Lax`. No server-side session state. No logout endpoint —
   cookies expire.
 
-## CLI: `lode login`
+## CLI: `lode login` {#sec-cli-login}
 
 > **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). The CLI no longer speaks OIDC; it opens the server's `/auth/cli/login` and redeems a one-time code at `/auth/cli/token`.
 

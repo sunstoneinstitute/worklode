@@ -1,3 +1,6 @@
+---
+implements: docs/specs/007-drift-and-overview.md
+---
 # Drift & overview 3/3 (spec 007): overview engine & surfaces — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

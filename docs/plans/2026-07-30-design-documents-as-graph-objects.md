@@ -1,3 +1,6 @@
+---
+implements: docs/specs/014-design-documents-as-graph-objects.md
+---
 # Design documents as graph objects (spec 014) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

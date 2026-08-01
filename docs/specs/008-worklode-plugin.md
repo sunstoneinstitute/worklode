@@ -1,8 +1,28 @@
+---
+status: accepted
+wasDerivedFrom: 003-platform-graph-design.md (D13, D14, D15)
+requires:
+  - 004-execution-backbone.md
+  - 005-prioritization-and-pickup.md
+amends:
+  ".":
+    - 003-platform-graph-design.md#sec-d14
+amendedBy:
+  ".":
+    - 014-design-documents-as-graph-objects.md#sec-1
+  "#sec-task-brief":
+    - 014-design-documents-as-graph-objects.md#sec-3
+  "#sec-slash-commands":
+    - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-skills":
+    - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-acceptance-criteria":
+    - 014-design-documents-as-graph-objects.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 008 — Worklode plugin (Claude Code integration)
-
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source:** D13, D14, D15 ·
-**Depends on:** 004 (execution backbone, worktree-bound leases), 005 (`claim --next`, `concern`/`focus`)
-**Amended by:** 014 (design docs as graph objects)
 
 > **Prefix renamed by 014 §1.** Read `ls:governs` / `ls:affects` below as `wl:governs` / `wl:affects`.
 
@@ -109,7 +129,7 @@ Notes:
   still run. Installer is idempotent (detect an already-installed Worklode link; re-point, don't
   duplicate).
 
-## `lode task brief <id> --json`
+## `lode task brief <id> --json` {#sec-task-brief}
 
 > **Amended by 014.** The brief carries the governing **Spec section** (a `wl:Section` node, bounded by construction), not a Spec/Plan excerpt.
 
@@ -130,7 +150,7 @@ Injected by `SessionStart`/resume and by `/lode-next` right after claim. **No fi
 brief is the context contract. If the brief is insufficient, that's a signal the task needs
 decomposition (D15), not that the agent should go reading the repo.
 
-## Slash commands
+## Slash commands {#sec-slash-commands}
 
 | Command | Action |
 |---|---|
@@ -146,7 +166,7 @@ decomposition (D15), not that the agent should go reading the repo.
 Renewal has **no** slash command — it's hook-enforced (heartbeat). Commands are thin wrappers over
 `lode … --json`; the judgment lives in the skills, not the commands.
 
-## Skills (judgment only)
+## Skills (judgment only) {#sec-skills}
 
 > **Amended by 014 §2.** There is no Plan artifact: the graduated output is {nothing, task subtree, Spec/ADR}, and durable rationale is promoted into a Spec or ADR before the tasks close.
 
@@ -214,7 +234,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
   drives the PR→Task join (spec 007). Open: create the Issue on task-create or on first PR; how the
   hook authenticates to the GitHub API; reconciling manual Issue edits.
 
-## Acceptance criteria
+## Acceptance criteria {#sec-acceptance-criteria}
 
 1. `/lode-next` in a repo produces a `wt/<id>-<slug>` worktree with a backbone-bound lease and an injected
    brief; the same flow in a plain checkout (no claim) leaves the session completely untouched.

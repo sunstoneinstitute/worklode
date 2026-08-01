@@ -1,9 +1,12 @@
+---
+status: accepted
+issued: 2026-07-30
+requires:
+  - 004-execution-backbone.md
+  - 010-per-project-task-keys.md
+  - 008-worklode-plugin.md
+---
 # Spec 019 — Repo-scoped CLI commands
-
-**Date:** 2026-07-30 · **Status:** design ·
-**Umbrella:** `000-umbrella-architecture.md`
-**Area:** spec 004 (execution backbone — task identity), spec 010 (per-project
-task keys), spec 008 (worklode plugin — the per-repo config)
 
 ## Why
 
