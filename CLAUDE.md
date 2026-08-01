@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this is
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
@@ -16,12 +14,8 @@ check it before filing something as new.
 ## Commands
 
 ```bash
-go build ./...                      # build everything
-go install ./cmd/lode               # install the CLI
-go test ./...                       # unit + store tests
 go test ./internal/store -run TestClaim   # single test
 go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
-gofmt -l . && go vet ./...          # lint (what CI runs)
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ```
