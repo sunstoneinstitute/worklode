@@ -574,14 +574,22 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 
 Two enumerations exist today and disagree:
 
-- `deploy/base/migrations/0001_baseline.up.sql:53` → `('feature','bug','chore','spec')`
+- `deploy/base/migrations/0006_task_hierarchy.up.sql:6` →
+  `('feature','bug','chore','spec','epic')`
 - Spec 006 `lsc:TaskKind` → `feature / bug / chore / review / spike`
 
-`spec` is absent from the SKOS scheme; `review` and `spike` are absent from the database. This is a
-live inconsistency independent of everything else in this spec.
+`spec` and `epic` are absent from the SKOS scheme; `review` and `spike` are absent from the
+database. This is a live inconsistency independent of everything else in this spec.
 
-**Resolution: reconcile to the union** — `feature, bug, chore, spec, review, spike` — in both the
-`CHECK` constraint and `wlc:TaskKind`. A migration widens the constraint; no rows change.
+**Resolution: reconcile to the union** — `feature, bug, chore, spec, review, spike, epic` — in both
+the `CHECK` constraint and `wlc:TaskKind`. A migration widens the constraint to add `review` and
+`spike`; no rows change, and no kind is removed.
+
+`epic` (spec 018) is the one structural member, and it does sit awkwardly beside the rule below: an
+epic is a declared container whose state follows its children, not a nature of work. It stays a
+kind because the backbone already declares it that way and the whole point of this scheme is to
+mirror the constraint. A scheme that quietly omitted a value the database accepts would be the
+worse failure — projection would emit a `wl:taskKind` that resolves to nothing.
 
 No kind is added for plans, planning, speccing, or reconciliation:
 
@@ -795,7 +803,7 @@ Two pieces of work follow from this spec without belonging to it:
    `draft → proposed → accepted → superseded`.
 10. A revision of an accepted document leaves the accepted version current and drift queries
     unaffected until crit resolves; the accepted version's anchors are protected throughout.
-11. `tasks.kind` accepts all of `feature, bug, chore, spec, review, spike`, `wlc:TaskKind` contains
-    exactly the same six, and the migration round-trips up and down.
+11. `tasks.kind` accepts all of `feature, bug, chore, spec, review, spike, epic`, `wlc:TaskKind`
+    contains exactly the same seven, and the migration round-trips up and down.
 12. A `spec`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
     distinguishable from the tasks that `wl:implements` that document's sections.

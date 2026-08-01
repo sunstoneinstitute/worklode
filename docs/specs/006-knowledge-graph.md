@@ -340,7 +340,7 @@ transition rules (which move is allowed from where) live with the authoring skil
 
 ### 1.5 Task-kind & model-layer SKOS schemes {#sec-1.5}
 
-> **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike`, matching the widened `tasks.kind` constraint.
+> **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike, epic`, matching the `tasks.kind` constraint. `epic` is spec 018's declared container task — structural rather than a nature of work, and in the scheme because the constraint carries it.
 
 ```turtle
 lsc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
