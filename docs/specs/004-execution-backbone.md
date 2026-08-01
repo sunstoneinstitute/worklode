@@ -77,7 +77,7 @@ CREATE TABLE tasks (
 );
 ```
 
-> **Amended by 014 §8 (not yet migrated).** The kind enum widens by `review` and `spike`, reaching `feature, bug, chore, spec, review, spike, epic` to match `wlc:TaskKind`. `epic` is already there, added by 018's migration `0006`.
+> **Amended by 014 §8.** The kind enum is `feature, bug, chore, spec, epic, review, spike`, matching `wlc:TaskKind`. `epic` came from 018's migration `0006`; `review` and `spike` from `0009_task_kinds`.
 
 `task_seq` (single-row counter) is retained verbatim: `UPDATE task_seq SET next =
 next + 1 WHERE id = 1 RETURNING next - 1` is valid Postgres and preserves the gapless

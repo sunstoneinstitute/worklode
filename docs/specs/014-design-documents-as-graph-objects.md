@@ -582,8 +582,13 @@ Two enumerations exist today and disagree:
 database. This is a live inconsistency independent of everything else in this spec.
 
 **Resolution: reconcile to the union** — `feature, bug, chore, spec, review, spike, epic` — in both
-the `CHECK` constraint and `wlc:TaskKind`. A migration widens the constraint to add `review` and
-`spike`; no rows change, and no kind is removed.
+the `CHECK` constraint and `wlc:TaskKind`. Migration `0009_task_kinds` widens the constraint to add
+`review` and `spike`; no rows change, and no kind is removed.
+
+The enum is now spelled in three places — the constraint, `validKinds` in `internal/api/tasks.go`,
+and `wlc:TaskKind` in `ns/concept.ttl`. `TestTaskKindsAgreeAcrossSources` holds them together by
+creating a task of every kind through the API (which exercises the first two) and reading the third
+off disk.
 
 `epic` (spec 018) is the one structural member, and it does sit awkwardly beside the rule below: an
 epic is a declared container whose state follows its children, not a nature of work. It stays a
