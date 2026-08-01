@@ -102,3 +102,12 @@ the `can-be-tested` label forces a run.
   parse. The specs stay authoritative and the graph is unimplemented;
   publication under `https://worklode.io/ns/` belongs to rdf-registry. Amend the
   spec first, then mirror the term here (`riot --validate ns/*.ttl`).
+
+## Metrics
+
+Server-side changes that add an HTTP endpoint, background loop, outbound
+call, or store operation with meaningful outcomes must add or extend
+`worklode_*` Prometheus metrics in the owning package, with tests. Follow the
+conventions in `docs/specs/022-prometheus-metrics.md`: nil-safe metrics
+struct in the owning package's `metrics.go`, `prometheus.Registerer`
+threaded from `serve.go`, bounded label values, `worklode_` prefix.
