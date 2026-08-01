@@ -4,13 +4,13 @@ issued: 2026-07-21
 amendedBy:
   ".":
     - 014-design-documents-as-graph-objects.md#sec-1
-  "#sec-resolved-decisions":
+  "#sec-1":
     - 014-design-documents-as-graph-objects.md
     - 015-runtime-layer.md#sec-7
-  "#sec-d14":
+  "#sec-5":
     - 008-worklode-plugin.md
     - 011-delivery-lifecycle.md
-  "#sec-d15":
+  "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-2
 isReplacedBy:
   ".":
@@ -39,7 +39,7 @@ Visual: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d4c
 
 ---
 
-## Resolved decisions {#sec-resolved-decisions}
+## 1. Resolved decisions {#sec-1}
 
 **D1 — Two stores, not one monolith.** An *execution* store and a *knowledge* store,
 joined by IRI.
@@ -104,7 +104,7 @@ artifacts/deployments is v2.
 
 ---
 
-## Decisions from round 1 (crit)
+## 2. Decisions from round 1 (crit) {#sec-2}
 
 **D9 — `claim --next` ranking.** Default sort key `(is_critical, concern_rank, priority, blocking fan-out)`.
 - **Critical bypasses focus by default** — a `critical` task is picked regardless of
@@ -130,7 +130,7 @@ proxied by unit-weight chain length + blocking fan-out.
 
 ---
 
-## Minimum data-platform support required (OPEN — to nail in round 2)
+## 3. Minimum data-platform support required (OPEN — to nail in round 2) {#sec-3}
 
 Because leases/execution stay on the Postgres backbone, `graph-server` only has to host the
 *knowledge* graph. Minimum for wl v1:
@@ -148,7 +148,7 @@ descriptors live in graph-server).
 
 ---
 
-## Naming — DECIDED: **Worklode**
+## 4. Naming — DECIDED: **Worklode** {#sec-4}
 
 **D13 — Product name = Worklode**  Guides "what to work on next" — the north star this
 whole design serves. **CLI = `lode`.** Repo rename is an optional follow-up, not decided here.
@@ -165,7 +165,7 @@ Shortlist considered:
 
 ---
 
-## D14 — Claude Code integration: the Worklode plugin {#sec-d14}
+## 5. D14 — Claude Code integration: the Worklode plugin {#sec-5}
 
 > **Amended by 008 and 011.** The worktree directory is `wt/<id>-<slug>`; the *branch* carries the configurable prefix (`LODE_BRANCH_PREFIX`, default `lode/`). `wl/` is legacy-recognised only.
 
@@ -227,7 +227,7 @@ definition-of-done + branch. No file spelunking.
 
 **Subagent (optional):** `lode-worker` for headless 24/7 loops.
 
-## D15 — Task sizing & graduated decomposition {#sec-d15}
+## 6. D15 — Task sizing & graduated decomposition {#sec-6}
 
 > **Amended by 014 §2.** There is no Plan document: plan-shaped work is an ordered task subtree, so graduation now runs {nothing → task subtree → Spec/ADR}.
 

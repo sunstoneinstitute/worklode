@@ -6,17 +6,17 @@ requires:
   - 005-prioritization-and-pickup.md
 amends:
   ".":
-    - 003-platform-graph-design.md#sec-d14
+    - 003-platform-graph-design.md#sec-5
 amendedBy:
   ".":
     - 014-design-documents-as-graph-objects.md#sec-1
-  "#sec-task-brief":
+  "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-3
-  "#sec-slash-commands":
+  "#sec-7":
     - 014-design-documents-as-graph-objects.md#sec-2
-  "#sec-skills":
+  "#sec-8":
     - 014-design-documents-as-graph-objects.md#sec-2
-  "#sec-acceptance-criteria":
+  "#sec-13":
     - 014-design-documents-as-graph-objects.md
 replaces:
   ".":
@@ -26,7 +26,7 @@ replaces:
 
 > **Prefix renamed by 014 §1.** Read `ls:governs` / `ls:affects` below as `wl:governs` / `wl:affects`.
 
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 The Claude Code integration for Worklode: how an agent (or human in an agent session) picks up
 work, holds it, and puts it down — with coordination pushed entirely into deterministic machinery
@@ -38,7 +38,7 @@ subagent.
 (005), the lease transaction and Postgres schema (004), the graph model and projection (006). This spec
 *calls* `lode task claim --next` and `lode task brief`; it does not implement them.
 
-## Design lens (D14)
+## 1. Design lens (D14) {#sec-1}
 
 **Push coordination into deterministic, token-free machinery; spend model tokens only on judgment.**
 Three applications, in force throughout:
@@ -56,11 +56,11 @@ The division of labor: **machinery** does acquire / bind / renew / resume / rele
 The **model** does only done / block / release-judgment and design authoring. Everything a hook can do
 deterministically, a hook does.
 
-## CLI naming (D13)
+## 2. CLI naming (D13) {#sec-2}
 
 Product = **Worklode**. CLI = **`lode`**. Slash commands and skills use the `lode-` prefix.
 
-## Worktree-bound lease lifecycle
+## 3. Worktree-bound lease lifecycle {#sec-3}
 
 **The worktree is the unit of Worklode work. The lease binds to the git worktree, not the session.**
 This is the core mechanic and the reason Worklode is strictly opt-in: a plain Claude Code session,
@@ -89,7 +89,7 @@ Lifecycle:
 **Guard invariant:** *no bound worktree ⇒ no Worklode behavior.* Everything keys off the deterministic
 worktree name and the backbone's worktree→lease binding.
 
-## Hooks
+## 4. Hooks {#sec-4}
 
 Every hook is a **NOP outside a Worklode worktree** (uniform guard: parse cwd for a `wt/<id>-<slug>`
 worktree with a backbone-bound lease; absent ⇒ `exit 0` immediately). Worklode is invisible to ordinary
@@ -114,7 +114,7 @@ Notes:
 - **`SessionStart` outside-worktree scan must stay fast** — a compiled `lode` scan of existing worktrees
   plus lease state; no graph reads, no model call beyond a script-level Haiku prompt.
 
-## Hook implementation & coexistence
+## 5. Hook implementation & coexistence {#sec-5}
 
 - **Compiled Go binaries.** Hook executables are compiled Go (fast startup, no interpreter warmup on
   every editor event). They share the `lode` codebase; the hook binary is effectively `lode hook <event>`.
@@ -129,7 +129,7 @@ Notes:
   still run. Installer is idempotent (detect an already-installed Worklode link; re-point, don't
   duplicate).
 
-## `lode task brief <id> --json` {#sec-task-brief}
+## 6. `lode task brief <id> --json` {#sec-6}
 
 > **Amended by 014.** The brief carries the governing **Spec section** (a `wl:Section` node, bounded by construction), not a Spec/Plan excerpt.
 
@@ -150,7 +150,7 @@ Injected by `SessionStart`/resume and by `/lode-next` right after claim. **No fi
 brief is the context contract. If the brief is insufficient, that's a signal the task needs
 decomposition (D15), not that the agent should go reading the repo.
 
-## Slash commands {#sec-slash-commands}
+## 7. Slash commands {#sec-7}
 
 | Command | Action |
 |---|---|
@@ -166,7 +166,7 @@ decomposition (D15), not that the agent should go reading the repo.
 Renewal has **no** slash command — it's hook-enforced (heartbeat). Commands are thin wrappers over
 `lode … --json`; the judgment lives in the skills, not the commands.
 
-## Skills (judgment only) {#sec-skills}
+## 8. Skills (judgment only) {#sec-8}
 
 > **Amended by 014 §2.** There is no Plan artifact: the graduated output is {nothing, task subtree, Spec/ADR}, and durable rationale is promoted into a Spec or ADR before the tasks close.
 
@@ -192,7 +192,7 @@ Skills carry only what needs model judgment; anything deterministic is a hook or
 Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `brainstorming`,
 `subagent-driven-development`), re-emitting the results as `lode` tasks with `concern` + `priority`.
 
-## Subagent (optional)
+## 9. Subagent (optional) {#sec-9}
 
 **`lode-worker`** — a headless subagent for 24/7 unattended loops: `claim --next` → work → `done`/`block`
 → repeat, with no human in the loop. Safe *because* the coordination is deterministic — the atomic
@@ -200,14 +200,14 @@ Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `b
 commit-cadence heartbeat mean many workers can run in parallel on a well-spec'd project without
 stepping on each other. Optional in v1; the plugin works fully in interactive sessions without it.
 
-## No MCP in v1 (Q14.1)
+## 10. No MCP in v1 (Q14.1) {#sec-10}
 
 v1 is **CLI + hooks only**. No MCP server. Rationale: MCP would put per-tool JSON schemas into every
 agent's context (token cost) for no coordination benefit over `lode --json`, whose output is
 deterministic and greppable. An **MCP shim is deferred** to a later spec for *non–Claude-Code* clients
 that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, not replace them.
 
-## Dependencies
+## 11. Dependencies {#sec-11}
 
 - **Spec 004** — worktree-bound lease model (bind/expire/sweeper/release), task state machine, events.
   This spec assumes the backbone can record a worktree→lease binding and expire it.
@@ -218,7 +218,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 - **External** — Claude Code hook events (`EnterWorktree`, `SessionStart`, `SessionEnd`, `ExitWorktree`,
   `PreToolUse`), the `--next`/`execve` daisy-chain contract, and (optionally) the `pre-commit` framework.
 
-## Open questions
+## 12. Open questions {#sec-12}
 
 - **Q008.1 — Worktree removal vs. `/lode-done` ordering.** When a session `/lode-done`s, does the plugin
   remove `wt/<id>-<slug>` itself, or leave removal to the human/finishing-a-branch flow? Auto-release
@@ -234,7 +234,7 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
   drives the PR→Task join (spec 007). Open: create the Issue on task-create or on first PR; how the
   hook authenticates to the GitHub API; reconciling manual Issue edits.
 
-## Acceptance criteria {#sec-acceptance-criteria}
+## 13. Acceptance criteria {#sec-13}
 
 1. `/lode-next` in a repo produces a `wt/<id>-<slug>` worktree with a backbone-bound lease and an injected
    brief; the same flow in a plain checkout (no claim) leaves the session completely untouched.
