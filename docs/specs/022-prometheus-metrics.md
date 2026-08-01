@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 requires:
   - 004-execution-backbone.md
   - 011-delivery-lifecycle.md
@@ -162,7 +162,7 @@ short **Metrics** section stating the rule and pointing here for details:
 
 The paragraph stays short — the conventions live in this spec, not in `CLAUDE.md`.
 
-## 9. Scrape path
+## 9. Scrape path {#sec-9}
 
 The deploy manifests carried `prometheus.io/*` annotations on the pod
 template, but the hzdev ClickStack collector discovers targets by *Service*

@@ -11,9 +11,16 @@ amends:
 amendedBy:
   ".":
     - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+  "#sec-3.5":
+    - 023-keycloak-primary-auth.md#sec-3.5
 isReplacedBy:
+  "#sec-3.2":
+    - 023-keycloak-primary-auth.md#sec-3.1
   "#sec-3.3":
     - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 023-keycloak-primary-auth.md#sec-3.1
+  "#sec-3.4":
+    - 023-keycloak-primary-auth.md#sec-3.1
 ---
 # Spec 002 — GitHub App authentication for worklode
 
@@ -88,6 +95,8 @@ the GitHub web-login callback.
 
 ### 3.2 B. Web login — new GitHub provider (alongside Keycloak) {#sec-3.2}
 
+> **Superseded by spec 023.** Keycloak is the sole web login; GitHub is demoted to a link-only OAuth flow.
+
 New GitHub-specific routes are added; the existing `/auth/login` and
 `/auth/callback` Keycloak routes are untouched. The login page offers both
 options ("Sign in with Keycloak" / "Sign in with GitHub").
@@ -114,6 +123,8 @@ handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 
 > **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). No device flow was built; `lode login` uses a server-mediated browser loopback with a one-time code, for both providers.
 
+> **Superseded by spec 023.** GitHub is no longer a CLI login provider at all; `lode login` authenticates against Keycloak only.
+
 A new GitHub device-flow login is added; the existing Keycloak loopback
 `lode login` path stays (e.g. selected via `lode login --github` or a prompt). The
 device flow runs **through worklode** so the GitHub App client secret and the
@@ -135,6 +146,8 @@ The CLI never holds a GitHub token.
 
 ### 3.4 D. Authorization {#sec-3.4}
 
+> **Superseded by spec 023.** Authorization hangs off the Keycloak actor, not a GitHub identity.
+
 For **GitHub-authenticated** users (Keycloak users keep their Keycloak-role
 evaluation, unchanged). Evaluated on every GitHub login (web and CLI), matching
 today's role-refresh behavior:
@@ -148,6 +161,8 @@ Membership is read with the user-to-server token:
 (App must have Members: read).
 
 ### 3.5 E. Identity and token storage {#sec-3.5}
+
+> **Amended by spec 023.** Token storage and the attribution goal are retained, and completed there against a linked GitHub account.
 
 - **Actor key:** the immutable GitHub **numeric user ID**, namespaced as
   `github:<id>` so GitHub actors cannot collide with Keycloak actors keyed on
