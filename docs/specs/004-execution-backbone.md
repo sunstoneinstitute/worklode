@@ -1,13 +1,29 @@
+---
+status: accepted
+issued: 2026-07-21
+wasDerivedFrom: 003-platform-graph-design.md (D1–D3, D8, D11, D12, D14)
+amendedBy:
+  ".":
+    - 010-per-project-task-keys.md
+    - 018-task-hierarchy.md
+  "#sec-1.1":
+    - 014-design-documents-as-graph-objects.md#sec-8
+  "#sec-2":
+    - 012-agent-sessions.md
+  "#sec-4":
+    - 011-delivery-lifecycle.md
+  "#sec-5":
+    - 011-delivery-lifecycle.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+isReplacedBy:
+  "#sec-1.2":
+    - 011-delivery-lifecycle.md
+---
 # Spec 004 — Execution backbone
 
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
-(shared conventions binding). Source decisions: D1–D3, D8, D11, D12, D14 of
-`003-platform-graph-design.md`.
-**Amended by:** 010 (task keys), 011 (delivery states), 012 (agent sessions), 014 (task kinds)
-
----
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 The execution backbone is the ACID core Worklode's pickup loop turns on: task state,
 worktree-bound leases, the append-only event log, and the two edge types
@@ -35,13 +51,13 @@ they exist in the Postgres schema.
 
 ---
 
-## Data model
+## 1. Data model {#sec-1}
 
 Target Postgres schema for the backbone tables this spec owns. Conventions:
 **`timestamptz`** timestamps; **`bigint GENERATED ALWAYS AS IDENTITY`** keys; **`boolean`**
 flags; partial unique indexes and `CHECK` constraints.
 
-### tasks
+### 1.1 tasks {#sec-1.1}
 
 > **Task identity superseded by spec 010.** `task_seq` is dropped; ids are `<PROJECT-KEY>-<n>` from a per-project `projects.next_task_num` counter (migration 0003).
 
@@ -61,14 +77,14 @@ CREATE TABLE tasks (
 );
 ```
 
-> **Amended by 014 §8 (not yet migrated).** The kind enum widens to `feature, bug, chore, spec, review, spike` to match `wlc:TaskKind`.
+> **Amended by 014 §8.** The kind enum is `feature, bug, chore, spec, epic, review, spike`, matching `wlc:TaskKind`. `epic` came from 018's migration `0006`; `review` and `spike` from `0009_task_kinds`.
 
 `task_seq` (single-row counter) is retained verbatim: `UPDATE task_seq SET next =
 next + 1 WHERE id = 1 RETURNING next - 1` is valid Postgres and preserves the gapless
 `WT-<n>` allocation semantics. (A bare `SEQUENCE` was rejected: it gaps on rollback
 and complicates the `WT-` prefix. Keeping the table is a zero-behavior-change carry.)
 
-### Task state machine
+### 1.2 Task state machine {#sec-1.2}
 
 > **Superseded by spec 011.** `done` is renamed `merged` and the machine continues to `deployed_dev`/`deployed_prod`/`released`, driven by delivery facts up to each repo's `done_state`.
 
@@ -108,7 +124,7 @@ atomically inside the caller's tx, then bumps `updated_at` and appends a `state_
 row attributed to `eventID`. Unknown task → `ErrNotFound`; wrong from-state →
 `ErrBadTransition`.
 
-### leases (rebound to the worktree)
+### 1.3 leases (rebound to the worktree) {#sec-1.3}
 
 The lease is keyed by **git-worktree identity, not `session_id`** (D8/D11/D14). It
 outlives any single session and dies with the worktree.
@@ -143,7 +159,7 @@ worktree's lifetime and unique per live worktree. *(Open Q2.)*
 no wall-clock timer. Missing the heartbeat (session died, machine slept) lets the
 lease lapse; the sweeper reclaims it.
 
-### task_edges
+### 1.4 task_edges {#sec-1.4}
 
 ```sql
 CREATE TABLE task_edges (
@@ -164,7 +180,7 @@ CREATE TABLE task_edges (
   `ErrEdgeExists`. (BFS is retained; a Postgres `WITH RECURSIVE` variant is an optional
   later optimization, not required for v1.)
 
-### events + state_log (append-only log, provenance)
+### 1.5 events + state_log (append-only log, provenance) {#sec-1.5}
 
 ```sql
 CREATE TABLE events (
@@ -204,7 +220,7 @@ marshal via `encoding/json`.
 
 ---
 
-## Lease lifecycle
+## 2. Lease lifecycle {#sec-2}
 
 > **Amended by spec 012.** Closing a lease (release, expiry sweep, completion) also stamps `ended_at` on every open `agent_sessions` row for it, without its own event.
 
@@ -232,7 +248,7 @@ a dropped heartbeat) is what ends it.
 
 ---
 
-## The claim transaction
+## 3. The claim transaction {#sec-3}
 
 One serialized transaction performs the whole pickup: **verify the task is claimable +
 insert the lease + advance state**, with no read-then-write window for a racing claimer
@@ -278,7 +294,7 @@ agnostic to how the candidate was chosen.)
 
 ---
 
-## Postgres schema & data layer
+## 4. Postgres schema & data layer {#sec-4}
 
 > **Amended by spec 011.** `projects.deploy_gated` is dropped; delivery gating is per-repo `done_state` plus the fact tables.
 
@@ -313,7 +329,7 @@ double-sweeps; if a single sweeper is wanted, gate it with a Postgres advisory l
 
 ---
 
-## CLI / API surface touched
+## 5. CLI / API surface touched {#sec-5}
 
 > **Amended by spec 011.** Claim and claim-next responses also carry a server-derived `branch`; the CLI only falls back to `lode/` against an older server.
 
@@ -332,7 +348,7 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
 
 ---
 
-## Dependencies
+## 6. Dependencies {#sec-6}
 
 - **Upstream:** none — this is the foundation spec. External: pgx v5, golang-migrate
   Postgres driver, a running Postgres (CNPG). Sunstone skills:
@@ -343,7 +359,7 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
 
 ---
 
-## Open questions
+## 7. Open questions {#sec-7}
 
 1. ~~Reopen target~~ — **RESOLVED: `done → ready`** (forces a fresh claim; keeps the
    invariant "no `in_progress` without a live lease").
@@ -362,7 +378,7 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
 
 ---
 
-## Acceptance criteria
+## 8. Acceptance criteria {#sec-8}
 
 1. `store` runs on Postgres via pgx (`database/sql`/`stdlib`) with a real connection pool
    (no single-writer cap). The full `internal/store` test suite passes against an

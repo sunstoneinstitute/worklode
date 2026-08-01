@@ -1,15 +1,20 @@
+---
+status: accepted
+amendedBy:
+  ".":
+    - 014-design-documents-as-graph-objects.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 009 — Data-platform requirements for the Worklode KG
-
-**Status:** spec · **Owner hand-off:** data-platform team · **Umbrella:** `000-umbrella-architecture.md`
-
-**Amended by:** 014
 
 Worklode's **knowledge graph** (the declared architecture graph + the projected work graph)
 lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**
 (tasks, leases, events) stays in Worklode's own Postgres — so the data-platform only has to host
 the *knowledge* half. This spec is the minimum the data-platform must ship for that.
 
-## Context (verified against data-platform `graph-server`, 2026-07)
+## 0. Context (verified against data-platform `graph-server`, 2026-07) {#sec-0}
 
 Built and deployed in **dev**: named-graph writes with a genuine single-writer serialization point
 (`SELECT … FOR UPDATE` per-branch + one ACID Postgres txn), O(1) copy-on-write branch create,
@@ -22,7 +27,7 @@ is proven end-to-end in dev by data-platform's runbook
 Still open: **prod** (no graph-server manifests under `deploy/overlays/prod/`; the prod-deploy plan
 is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL override.
 
-## Must-have (v1 blockers)
+## 1. Must-have (v1 blockers) {#sec-1}
 
 1. **Prod deployment of `graph-server`** — **open**. Dev-only today; no graph-server manifests in
    `deploy/overlays/prod/`, and data-platform's prod-deploy plan is deferred until the Hetzner prod
@@ -55,7 +60,7 @@ is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL over
    (sibling branches are invisible to each other, which would hide cross-project edges). The runbook
    commits to the fixed `main` branch and reads it back.
 
-## Should-have (soon; not v1 blockers)
+## 2. Should-have (soon; not v1 blockers) {#sec-2}
 
 6. **`If-Match` / ETag CAS on GSP writes** (their spec's v1.1). With a *single* Worklode projector
    plus the per-branch lock, lost-update risk is already contained, so this is non-blocking — but
@@ -63,14 +68,14 @@ is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL over
 7. **Per-branch / per-namespace write ACLs** (their first future-enforcement candidate). Lets
    Worklode's writes be access-scoped from other data-platform writers. Fine to defer for v1.
 
-## Explicitly NOT required from the data-platform (Worklode owns these)
+## 3. Explicitly NOT required from the data-platform (Worklode owns these) {#sec-3}
 
 - The **lease/claim/job primitive** (`graph.job` + `SKIP LOCKED`) — stays on the Worklode backbone.
 - **Branch merge/diff** — design-review branches can defer merge to CI-side conflict detection.
 - **Markdown-as-asset** — design content stays as files in the designs repo; only RDF *descriptors*
   (IRI, status, `governs`/`requires` edges) live in `graph-server`.
 
-## Acceptance
+## 4. Acceptance {#sec-4}
 
 Worklode's projector can, against prod `graph-server`: authenticate, `PUT` a Worklode named graph
 to the fixed branch under the agreed IRI scheme, and read it back via a SPARQL query that answers

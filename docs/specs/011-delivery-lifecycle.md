@@ -1,10 +1,21 @@
+---
+status: accepted
+issued: 2026-07-25
+amends:
+  ".":
+    - 003-platform-graph-design.md#sec-5
+    - 004-execution-backbone.md#sec-4
+    - 004-execution-backbone.md#sec-5
+amendedBy:
+  ".":
+    - 018-task-hierarchy.md
+replaces:
+  ".":
+    - 004-execution-backbone.md#sec-1.2
+---
 # Spec 011 — Delivery lifecycle
 
-**Date**: 2026-07-25
-**Status**: Approved; implementation plan in `docs/plans/2026-07-25-delivery-lifecycle.md`
-**Umbrella**: `000-umbrella-architecture.md`
-
-## Problem
+## 0. Problem {#sec-0}
 
 The task state machine ends at `merged`, reached only from `in_review` (PR-merge
 auto-transition or manual `lode task done`). This misses two realities:
@@ -19,7 +30,7 @@ auto-transition or manual `lode task done`). This misses two realities:
 The goal is one generic, event-driven mechanism for all sunstoneinstitute
 repos — no per-repo lifecycle configuration.
 
-## State machine
+## 1. State machine {#sec-1}
 
 ```
 draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod
@@ -80,7 +91,7 @@ that can never advance a task.
 
 `projects.deploy_gated` is retired; this mechanism replaces it.
 
-## Fact tables
+## 2. Fact tables {#sec-2}
 
 Four tables, written inside the same `RecordEvent` transaction as the
 webhook that produced them:
@@ -145,7 +156,7 @@ contains; `target_commitish` is often a branch name (UI-created tags), which
 does not resolve, and the frontier then falls back to main's head as of the
 webhook's arrival — right for release-on-merge. Forward-only per tag.
 
-## Handlers and resolver
+## 3. Handlers and resolver {#sec-3}
 
 All handlers use the existing HMAC/idempotency plumbing in `internal/hooks`.
 
@@ -198,7 +209,7 @@ delivery tracking is future work.
 **Deployment config** (not code): Flux notification-controller in every
 cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
 
-## Surface changes
+## 4. Surface changes {#sec-4}
 
 - New states flow through existing surfaces: task JSON, `lode task list`
   filters, web UI badges.
@@ -222,13 +233,13 @@ still tracks delivery only through its primary repo in v1. Multi-repo task
 delivery — possibly spotted by watching Flux events for the companion repos —
 is future work.
 
-## Migration
+## 5. Migration {#sec-5}
 
 One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 `release_frontiers`; extend the `tasks.state` CHECK constraint; drop
 `projects.deploy_gated`. Existing `merged` tasks stay `merged` — no backfill.
 
-## Coordination with WL-12
+## 6. Coordination with WL-12 {#sec-6}
 
 The branch pattern is a configurable PREFIX (default `lode/`, replacing the
 hardcoded `wl/`) followed by a task key: `<prefix><task-key>[-slug]`. Task
@@ -237,7 +248,7 @@ lands; both changes touch the same regexes. Possible later exception: ADRs
 and SPECs addressable through a `<PROJECTKEY>-{ADR,SPEC}-<n>` alias (e.g.
 `WL-ADR-1`, `WL-SPEC-14`), the numbers drawn from the same sequence as tasks.
 
-## Error handling
+## 7. Error handling {#sec-7}
 
 - A failed correlation never fails a delivery (existing principle).
 - An unresolvable SHA is dropped, not parked — v1 has no pending-facts store.
@@ -249,7 +260,7 @@ and SPECs addressable through a `<PROJECTKEY>-{ADR,SPEC}-<n>` alias (e.g.
 - Idempotent under redelivery: facts are natural-key upserts; transitions are
   forward-only.
 
-## Known limitations (v1)
+## 8. Known limitations (v1) {#sec-8}
 
 - **Push payloads carry at most 20 commits.** GitHub truncates the `commits`
   array; a larger push silently drops the rest from `main_commits`. A task
@@ -264,7 +275,7 @@ and SPECs addressable through a `<PROJECTKEY>-{ADR,SPEC}-<n>` alias (e.g.
   environment or starts cutting releases keeps its old `done_state` until
   `lode project set-repo --done-state`.
 
-## Testing
+## 9. Testing {#sec-9}
 
 - Fixture-based handler tests for `push` and `deployment_status`
   (`testdata/github` style).

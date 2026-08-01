@@ -1,11 +1,15 @@
+---
+status: accepted
+issued: 2026-07-29
+amends:
+  ".":
+    - 004-execution-backbone.md
+    - 005-prioritization-and-pickup.md
+    - 011-delivery-lifecycle.md
+---
 # Spec 018 — Task hierarchy (epics and tracking tasks)
 
-**Date:** 2026-07-29 · **Status:** spec ·
-**Umbrella:** `000-umbrella-architecture.md`
-**Area:** spec 004 (execution backbone — task edges), spec 005 (pickup — the
-decomposition gate), spec 011 (delivery lifecycle — the state machine)
-
-## Why
+## 0. Why {#sec-0}
 
 `child_of` is half-built. The edge type exists and is cycle-checked, the HTTP
 API accepts it, and the web task page renders Parent/Children — but nothing
@@ -26,7 +30,7 @@ phases, so decomposition output arrives as a flat list of unrelated tasks. And
 `needs_decomposition` (spec 005) is a dead-end flag: it removes an oversized
 task from the pickup loop with no supported way to split it.
 
-## Decisions
+## 1. Decisions {#sec-1}
 
 Taken here with rationale.
 
@@ -61,7 +65,7 @@ task decompose`). There is no `lode task edit --kind`.
 and the tree walks that feed roll-up and breadcrumbs are unbounded without one.
 Cycle detection already walks the chain; the cap is the walk length.
 
-## Data model — migration `0006_task_hierarchy`
+## 2. Data model — migration `0006_task_hierarchy` {#sec-2}
 
 ```sql
 ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;
@@ -82,9 +86,9 @@ CREATE INDEX task_edges_children
 The `.down.sql` drops both indexes and restores the four-kind CHECK, failing if
 any `kind = 'epic'` row survives.
 
-## Epic semantics
+## 3. Epic semantics {#sec-3}
 
-### Never claimable
+### 3.1 Never claimable {#sec-3.1}
 
 One predicate in the `readyCandidates` query (`ranking.go:62-72`):
 
@@ -96,7 +100,7 @@ The worktree is the unit of Worklode work (spec 008) and an epic has nothing to
 check out, so `lode next` must never hand an agent a container. Decomposition
 work that genuinely needs a worktree becomes a child task.
 
-### Restricted state machine
+### 3.2 Restricted state machine {#sec-3.2}
 
 An epic's state is driven entirely by its children. `legalTransitions`
 (`tasks.go:66`) is global, so the epic restriction is enforced in `Transition`
@@ -121,7 +125,7 @@ correct with no change, so a completed epic stops blocking whatever points at
 it. `0005_delivery` deliberately removed the old `done` state; this spec does
 not revive it. For an epic, read `merged` as "all children delivered".
 
-### Roll-up
+### 3.3 Roll-up {#sec-3.3}
 
 Two distinct mechanisms. Conflating them is the usual failure mode.
 
@@ -143,7 +147,7 @@ Edge cases the resolver must get right:
 - **Reopen.** A child returning to `ready` puts the epic back to `ready` via
   the existing reopen transition. Asymmetric roll-up produces boards that lie.
 
-## Roll-up hooks into `Transition`, not its callers
+## 4. Roll-up hooks into `Transition`, not its callers {#sec-4}
 
 There are eleven `Transition` call sites across `internal/api`,
 `internal/hooks`, and `internal/store`. Hooking each one would leave the
@@ -157,7 +161,7 @@ timeline explains itself with no synthetic event.
 Recursion terminates: a subtask resolves its epic, the epic resolves nothing
 (depth cap 2), and cycles are impossible by `AddEdge`'s existing check.
 
-## API
+## 5. API {#sec-5}
 
 - `POST /api/v1/tasks/{id}/edges` gains validation for `child_of`: reject a
   second parent (409, `ErrEdgeExists` shape), a cross-project edge (422), and
@@ -170,7 +174,7 @@ Recursion terminates: a subtask resolves its epic, the epic resolves nothing
   state, or null) and `progress` (`{closed, total}`), both derived.
 - `POST /api/v1/tasks/{id}/decompose` — see below.
 
-## CLI
+## 6. CLI {#sec-6}
 
 Symmetric with the existing `block`/`unblock` pair:
 
@@ -186,7 +190,7 @@ lode task decompose <id> --into "A" "B"  see below
 `lode task show` gains a `Parent:` line and, for an epic, `Progress: 3/7`.
 `lode board` groups an epic's children under it.
 
-## Brief — exactly one hop up
+## 7. Brief — exactly one hop up {#sec-7}
 
 `store.Brief` (`brief.go:18`) gains `Parent *Task`, populated with ID, title,
 and state only. An agent should know its task belongs to "Delivery lifecycle"
@@ -194,7 +198,7 @@ without spelunking; the full ancestry and the sibling list are both unbounded
 and stay out. The field follows the reserved-shape convention already used for
 `GoverningDesign`/`AffectedComponents`/`DefinitionOfDone`.
 
-## Decomposition — closing the loop from spec 005
+## 8. Decomposition — closing the loop from spec 005 {#sec-8}
 
 ```
 lode task decompose <id> --into "Title A" "Title B" "Title C"
@@ -209,7 +213,7 @@ This is what makes the `needs_decomposition` gate actionable: an oversized task
 becomes its own tracking task plus the pieces, in place, keeping its id and
 every reference to it.
 
-## Testing
+## 9. Testing {#sec-9}
 
 - Single parent: a second `child_of` out of one task is rejected; the existing
   `UNIQUE (from_task,to_task,type)` still rejects an exact duplicate.
@@ -231,7 +235,7 @@ every reference to it.
   rejected under an active lease.
 - Brief: `Parent` populated one hop, absent for a root task.
 
-## Out of scope
+## 10. Out of scope {#sec-10}
 
 - **Child ordering / rank.** Roll-up and progress do not need it.
 - **Blocker inheritance.** `blocks` edges compose already; children do not
@@ -241,7 +245,7 @@ every reference to it.
 - **Epic-level estimates or burndown.** Progress is a count of children.
 - **Graph projection.** The `wl:` vocabulary for hierarchy belongs to spec 006.
 
-## Resolved
+## 11. Resolved {#sec-11}
 
 - **Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a
   final integration or documentation step is a child task rather than a reason

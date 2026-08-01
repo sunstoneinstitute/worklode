@@ -1,0 +1,246 @@
+# Worklode SHACL shapes — closed-world constraints over the `wl:` vocabulary.
+#
+# Extracted from the node-shape sketches in spec 006 §2, spec 014 §7 and spec
+# 015 §7; those specs remain authoritative. Published by rdf-registry as
+# rdf/shapes/wl-shapes.ttl behind the SHACL gate (ADR-0003).
+#
+# The load-bearing split (006 §2): OWL is open-world with no unique names, so it
+# never flags a missing required field. owl:FunctionalProperty catches *more than
+# one*; these shapes catch *zero*. Do not restate functionality here.
+#
+# What SHACL cannot express, and where it lives instead: three of 014 §7's six
+# constraints on accepted documents — anchors are append-only, anchors are never
+# renumbered, and wl:lastRevisedIn is set only on sections that changed — are
+# diffs between the current and candidate version graphs, evaluated at
+# publication (014 §4). The anchor-depth limit is likewise a publication check
+# against a server setting. Only §7.2, the superseded-section explanation, is a
+# single-graph constraint, and it is below.
+
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Shape names sit in the `wl:` namespace (wl:TaskShape …) because the specs name
+# shapes only informally — 015 §7 calls them "Artifact", "Deployment". If
+# rdf-registry would rather not have shape IRIs in a published term namespace,
+# a `wlsh:` namespace is the drop-in alternative; nothing here depends on it.
+#
+# Concept membership is checked as `skos:inScheme <scheme>` rather than an
+# sh:in list of concepts, so growing a scheme (as 014 §8 grew wlc:TaskKind)
+# never means editing this file. wl:taskState and wl:Environment are the two
+# exceptions: neither has a scheme, and both mirror a closed set elsewhere.
+
+
+# ---------------------------------------------------------------------------
+# Intent
+# ---------------------------------------------------------------------------
+
+wl:ComponentShape a sh:NodeShape ;
+    sh:targetClass wl:Component ;
+    sh:property [
+        sh:path wl:reviewer ;
+        sh:class foaf:Agent ;
+        sh:minCount 1 ;
+        sh:message "A Component needs at least one wl:reviewer to notify about PRs (006 §2)." ;
+    ] .
+
+wl:DesignDocShape a sh:NodeShape ;
+    sh:targetClass wl:DesignDoc ;
+    sh:property [
+        sh:path wl:status ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
+        sh:message "A DesignDoc carries exactly one wl:status from wlc:DesignDocStatus." ;
+    ] .
+
+wl:SectionShape a sh:NodeShape ;
+    sh:targetClass wl:Section ;
+    sh:property [
+        sh:path wl:status ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
+        sh:message "A Section's wl:status is drawn from wlc:DesignDocStatus (014 §5)." ;
+    ] ;
+    # The version snapshot a claim is tested against is itself a DesignDoc, and
+    # it is ordered by dcat:version — never by comparing version IRIs (014 §4).
+    sh:property [
+        sh:path wl:lastRevisedIn ;
+        sh:class wl:DesignDoc ;
+        sh:node [ sh:property [ sh:path dcat:version ; sh:minCount 1 ] ] ;
+        sh:message "wl:lastRevisedIn names a versioned DesignDoc snapshot carrying dcat:version (014 §4)." ;
+    ] ;
+    # 014 §7.2 — a superseded section explains itself: a successor, or a reason it
+    # went away. A bare superseded section is a broken promise to whoever linked
+    # it. Read as an implication: not superseded, OR one of the two explanations.
+    sh:or (
+        [ sh:not [ sh:property [ sh:path wl:status ; sh:hasValue wlc:superseded ] ] ]
+        [ sh:property [ sh:path dct:isReplacedBy ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path dct:description ; sh:minCount 1 ] ]
+    ) ;
+    sh:message "A superseded Section needs dct:isReplacedBy or a dct:description saying why it went away (014 §7.2)." .
+
+wl:DeliverableShape a sh:NodeShape ;
+    # Targets wl:Effect too: sh:targetClass follows rdfs:subClassOf*.
+    sh:targetClass wl:Deliverable ;
+    sh:property [
+        sh:path dct:description ;
+        sh:minCount 1 ;
+        sh:message "A Deliverable states its definition-of-done in dct:description (006 §4)." ;
+    ] ;
+    sh:property [
+        sh:path dct:relation ;
+        sh:minCount 1 ;
+        sh:message "A Deliverable declares at least one target (Artifact + Environment, or a Deployment for an Effect)." ;
+    ] ;
+    sh:property [
+        sh:path wl:deliveredBy ;
+        sh:class wl:Component ;
+        sh:minCount 1 ;
+        sh:message "A Deliverable names the Component that delivers it, closing the Component→Section join (006 §Properties)." ;
+    ] .
+
+wl:EffectShape a sh:NodeShape ;
+    # Adds to wl:DeliverableShape, which already targets Effect by subclass.
+    sh:targetClass wl:Effect ;
+    sh:property [
+        sh:path dct:relation ;
+        sh:qualifiedValueShape [ sh:class wl:Deployment ] ;
+        sh:qualifiedMinCount 1 ;
+        sh:message "An Effect declares a Deployment target — its IRI is predictable, a Commit's is not (006 §4)." ;
+    ] ;
+    sh:property [
+        sh:path dct:relation ;
+        sh:qualifiedValueShape [ sh:class wl:Artifact ] ;
+        sh:qualifiedMaxCount 0 ;
+        sh:message "An Effect ships nothing: an Effect that names an Artifact is a plain Deliverable." ;
+    ] .
+
+wl:AcceptedDeviationShape a sh:NodeShape ;
+    sh:targetClass wl:AcceptedDeviation ;
+    # RDF reification names the tolerated edge WITHOUT asserting it (006 §8).
+    sh:property [ sh:path rdf:subject   ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rdf:predicate ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rdf:object    ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [
+        sh:path wl:sanctionedBy ;
+        sh:class wl:DesignDoc ;
+        sh:minCount 1 ;
+        sh:message "A deviation names the decision that authorises it; removing that ADR removes the suppression." ;
+    ] ;
+    sh:property [
+        sh:path dct:valid ;
+        sh:datatype xsd:date ;
+        sh:maxCount 1 ;
+        sh:message "Optional expiry; absent means indefinite, but never invisible (006 §8)." ;
+    ] .
+
+
+# ---------------------------------------------------------------------------
+# Execution
+# ---------------------------------------------------------------------------
+
+wl:TaskShape a sh:NodeShape ;
+    sh:targetClass wl:Task ;
+    sh:property [
+        sh:path wl:taskKind ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:TaskKind ] ] ;
+        sh:message "A Task carries exactly one wl:taskKind from wlc:TaskKind." ;
+    ] ;
+    # The projected state literal. This list mirrors the tasks.state CHECK
+    # constraint (migration 0005_delivery) and must be widened with it; the legal
+    # transitions stay in internal/store/tasks.go and are not modelled (006 Open Q3).
+    sh:property [
+        sh:path wl:taskState ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "draft" "ready" "in_progress" "in_review" "merged"
+                "deployed_dev" "deployed_prod" "released" "abandoned" ) ;
+        sh:message "A Task mirrors exactly one backbone state literal from the tasks.state CHECK set." ;
+    ] ;
+    sh:property [
+        sh:path wl:inWorkstream ;
+        sh:class wl:Workstream ;
+        sh:minCount 1 ;
+        sh:message "A Task belongs to at least one Workstream — its quads live in each Workstream's named graph (006 §2)." ;
+    ] ;
+    # wl:mirrors is symmetric, so OWL can only give it a Task-or-Issue union for
+    # both domain and range (see its rdfs:comment). The intended pairing is
+    # closed-world, which is exactly SHACL's job.
+    sh:property [
+        sh:path wl:mirrors ;
+        sh:class wl:Issue ;
+        sh:message "A Task mirrors a tracker Issue, not another Task (006 §1.1)." ;
+    ] .
+
+
+# ---------------------------------------------------------------------------
+# Runtime (015 §7)
+# ---------------------------------------------------------------------------
+
+wl:ArtifactShape a sh:NodeShape ;
+    sh:targetClass wl:Artifact ;
+    sh:property [
+        sh:path wl:artifactKind ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:ArtifactKind ] ] ;
+        sh:message "An Artifact carries exactly one wl:artifactKind from wlc:ArtifactKind." ;
+    ] ;
+    sh:property [ sh:path owl:versionInfo ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:identifier  ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+wl:DeploymentShape a sh:NodeShape ;
+    sh:targetClass wl:Deployment ;
+    sh:property [
+        sh:path wl:toEnvironment ;
+        sh:class wl:Environment ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path wl:targetKind ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DeployTargetKind ] ] ;
+    ] ;
+    sh:property [
+        sh:path wl:deploymentStatus ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DeploymentStatus ] ] ;
+    ] ;
+    # One node per (environment, target kind, target name) mirrors current state,
+    # so a Deployment uses at most one thing: an Artifact, or a Commit for
+    # IaC/GitOps targets. Rollout history is v2.
+    sh:property [
+        sh:path prov:used ;
+        sh:maxCount 1 ;
+        sh:message "A Deployment uses at most one Artifact or Commit; per-rollout history is v2 (015 §4)." ;
+    ] .
+
+wl:EnvironmentShape a sh:NodeShape ;
+    sh:targetClass wl:Environment ;
+    # Closed to what the delivery handlers normalise to. 015 open question 3 asks
+    # whether this closure survives per-cluster preview environments.
+    sh:in ( <https://worklode.io/ns/id/environment/dev>
+            <https://worklode.io/ns/id/environment/prod> ) ;
+    sh:message "The Environment instance set is closed to dev and prod (015 §7)." .
+
+wl:CommitShape a sh:NodeShape ;
+    sh:targetClass wl:Commit ;
+    sh:property [
+        sh:path dct:identifier ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "A Commit carries exactly one dct:identifier, the sha (015 §7)." ;
+    ] .
+
+# No shape for wl:Build, wl:RuntimeEvent or wl:Skill: 015 specifies none for the
+# first two (neither has a v1 projection, and RuntimeEvent has no natural key —
+# 015 open question 1), and 016 specifies none for Skill.

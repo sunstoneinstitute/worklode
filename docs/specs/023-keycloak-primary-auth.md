@@ -1,12 +1,18 @@
+---
+status: proposed
+issued: 2026-07-31
+replaces:
+  "#sec-3.1":
+    - 002-github-app-auth.md#sec-3.2
+    - 002-github-app-auth.md#sec-3.3
+    - 002-github-app-auth.md#sec-3.4
+amends:
+  "#sec-3.5":
+    - 002-github-app-auth.md#sec-3.5
+---
 # Spec 023 — Keycloak-primary auth and GitHub account linking
 
-**Date:** 2026-07-31
-**Status:** Design — approved shape, pending spec review
-**Umbrella:** `000-umbrella-architecture.md`
-**Supersedes:** the login half of spec 002 (GitHub as an identity provider);
-002's token-storage and attribution goals are retained and completed here.
-
-## Summary
+## 0. Summary {#sec-0}
 
 Keycloak becomes the **sole** login mechanism for web and CLI. GitHub is
 demoted from a parallel identity provider to a **link-only** OAuth flow: an
@@ -19,7 +25,7 @@ attributed as "SunstoneWork on behalf of `<user>`". The link is verified
 storage, refresh — verified end to end; the first feature that writes to
 GitHub as a user is a follow-up spec.
 
-## Motivation
+## 1. Motivation {#sec-1}
 
 - **One actor per person.** Spec 002's dual-provider model creates two actor
   rows for the same human (`preferred_username` and `github:<id>`), which it
@@ -36,7 +42,7 @@ GitHub as a user is a follow-up spec.
 - **Roles from one source.** GitHub org/team role derivation duplicated what
   Keycloak groups already provide.
 
-## Current state (what changes)
+## 2. Current state (what changes) {#sec-2}
 
 - Two login paths coexist: Keycloak (`/auth/login`) and GitHub
   (`/auth/github/login`), with `/auth/choose` between them
@@ -51,9 +57,9 @@ GitHub as a user is a follow-up spec.
 - `lode login` performs the provider-neutral browser loopback
   (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`).
 
-## Design
+## 3. Design {#sec-3}
 
-### A. Keycloak is the only login
+### 3.1 A. Keycloak is the only login {#sec-3.1}
 
 - Remove `/auth/choose`, GitHub web login, GitHub actor provisioning, and
   org/team role derivation. `/auth/github/*` routes survive only as the link
@@ -66,7 +72,7 @@ GitHub as a user is a follow-up spec.
   not in production; nothing meaningful references them). Cleanup is recorded
   in `docs/follow-ups.md` when this ships.
 
-### B. Expected GitHub identity from Keycloak
+### 3.2 B. Expected GitHub identity from Keycloak {#sec-3.2}
 
 - The realm's worklode client gains a protocol mapper exposing the user
   attribute `github_username` as a claim in ID tokens (deployment
@@ -80,7 +86,7 @@ GitHub as a user is a follow-up spec.
   later: the link flow runs long after login, when no Keycloak token is in
   hand (sessions are stateless cookies).
 
-### C. Link flow (web)
+### 3.3 C. Link flow (web) {#sec-3.3}
 
 1. `GET /auth/github/link` (authenticated) redirects to GitHub's authorize
    endpoint with signed state, as the login flow does today (confidential
@@ -100,7 +106,7 @@ GitHub as a user is a follow-up spec.
    §E) repeats the same flow; GitHub skips the consent screen for an
    already-authorized App.
 
-### D. CLI — `lode auth` command group
+### 3.4 D. CLI — `lode auth` command group {#sec-3.4}
 
 - `lode login` moves to `lode auth login`; the old spelling remains as a
   hidden alias. The loopback flow itself is unchanged.
@@ -112,7 +118,7 @@ GitHub as a user is a follow-up spec.
 - `lode auth status`: shows the logged-in identity, token expiry, and GitHub
   link state (unlinked / linked as `<login>` / broken — reconnect).
 
-### E. Token storage and refresh
+### 3.5 E. Token storage and refresh {#sec-3.5}
 
 `github_user_tokens` is reworked (new migration) so the token row **is** the
 link — a link exists iff a row exists, unlink = delete the row:
@@ -135,7 +141,7 @@ callers translate that into "reconnect GitHub" guidance. No background
 refresher — on-demand refresh suffices given the ~6-month refresh-token
 lifetime.
 
-### F. GitHub App constraints (ops-side, recorded as requirements)
+### 3.6 F. GitHub App constraints (ops-side, recorded as requirements) {#sec-3.6}
 
 - **Permission ceiling:** Repository → Contents: **read**, Actions: **read**,
   Deployments: **read**, Pull requests: **read**; Issues: **write** when the
@@ -157,7 +163,7 @@ Config after this spec: `LODE_GITHUB_APP_CLIENT_ID`,
 `LODE_GITHUB_APP_PRIVATE_KEY`, `LODE_GITHUB_WEBHOOK_SECRET` stay;
 `LODE_GITHUB_ORG` and `LODE_GITHUB_ADMIN_TEAM` are removed.
 
-## Non-goals
+## 4. Non-goals {#sec-4}
 
 - Any feature that writes to GitHub as a user (issue mirror, comment relay)
   — own spec, first consumer of `store.UserToken`.
@@ -166,7 +172,7 @@ Config after this spec: `LODE_GITHUB_APP_CLIENT_ID`,
 - Cleanup migration for orphaned `github:<id>` actors (follow-up).
 - hzprod rollout (with the `worklode-prod` App, as in spec 002).
 
-## Error handling
+## 5. Error handling {#sec-5}
 
 - Link with missing `expected_github_login` → refused: "no GitHub username on
   your Keycloak account".
@@ -177,7 +183,7 @@ Config after this spec: `LODE_GITHUB_APP_CLIENT_ID`,
 - CLI link nonce expired/consumed → clear terminal error, re-run to retry.
 - Actor-kind conflict paths are unchanged (`errActorKindConflict`).
 
-## Testing
+## 6. Testing {#sec-6}
 
 - **Store:** link upsert and uniqueness (`github_user_id`), delete-as-unlink,
   refresh rotation persisting the new pair, the concurrent-refresh race
@@ -194,7 +200,7 @@ Config after this spec: `LODE_GITHUB_APP_CLIENT_ID`,
   callback → `lode auth status` shows linked; admin diagnostics report link
   and token validity. Public surfaces only, per `e2e/` policy.
 
-## Open questions
+## 7. Open questions {#sec-7}
 
 None blocking. The claim name is fixed to `github_username`; make it
 configurable only if a second realm ever needs a different mapping.

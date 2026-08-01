@@ -1,10 +1,24 @@
+---
+status: accepted
+requires:
+  - 004-execution-backbone.md
+  - 011-delivery-lifecycle.md
+amendedBy:
+  "#sec-0":
+    - 014-design-documents-as-graph-objects.md#sec-6
+isReplacedBy:
+  "#sec-2.3":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-3":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-5":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-8":
+    - 014-design-documents-as-graph-objects.md#sec-6
+---
 # Spec 013 — Reconciliation & setup diagnosis
 
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 004 (execution
-backbone), the delivery lifecycle already shipped in `internal/store/delivery_resolve.go`.
-**Amended by:** 014 (design docs as graph objects — supersedes engine 3 and `task_docs`)
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Worklode learns about reality through webhooks. When a webhook never arrives — the GitHub App
 isn't installed, the repo isn't mapped to a project yet, the secret is wrong, the server was
@@ -32,7 +46,7 @@ must stay distinct.
 
 ---
 
-## Command surface
+## 1. Command surface {#sec-1}
 
 | Command | Audience | Auth | Job |
 |---|---|---|---|
@@ -43,7 +57,7 @@ must stay distinct.
 The split is a permission boundary, not a cosmetic one: `doctor` is what every developer runs when
 their client misbehaves and must need no privileges; the other two read across the whole org.
 
-### `lode doctor`
+### 1.1 `lode doctor` {#sec-1.1}
 
 Runs entirely client-side and must produce useful output with the server unreachable. Checks, in
 order, each reporting pass/fail **and the fix for that failure**:
@@ -57,7 +71,7 @@ order, each reporting pass/fail **and the fix for that failure**:
 
 Exits non-zero if any check fails, so it is usable from a hook or CI step.
 
-### `lode project doctor [repo]`
+### 1.2 `lode project doctor [repo]` {#sec-1.2}
 
 Per mapped repo, reported from the server:
 
@@ -71,7 +85,7 @@ delivery predates its mapping, is the signal that sends an operator to `lode rec
 
 ---
 
-## `lode reconcile`
+## 2. `lode reconcile` {#sec-2}
 
 Three engines behind one command, run in order, cheapest first. Facts are repaired; findings are
 reported. `--dry-run` suppresses the writes of engines 1 and 2; engine 3 never writes.
@@ -85,7 +99,7 @@ pagination and rate-limit work; engine 3 depends on `task_docs` and its backfill
 `lode project doctor` can land alongside any phase — `project doctor` is most useful before
 engine 1, since it is what tells an operator to run reconcile at all.
 
-### Engine 1 — replay stored events
+### 2.1 Engine 1 — replay stored events {#sec-2.1}
 
 Events already in the database that were recorded with a nil apply: `*.ignored` (the repo was not
 mapped when the delivery arrived, `internal/hooks/github.go:126`) and unhandled actions. The
@@ -104,7 +118,7 @@ applied late.
 applies are idempotent (upserts, and `Transition` guards on the from-state), so re-running is
 harmless; the marker exists so reconcile can find outstanding work without rescanning history.
 
-### Engine 2 — poll GitHub
+### 2.2 Engine 2 — poll GitHub {#sec-2.2}
 
 Candidate tasks: not `done`/`abandoned`, plus tasks that have landed but sit below their repo's
 `done_state`. For each, mint an installation token and ask GitHub the current truth about the
@@ -127,7 +141,7 @@ reconcile observed it, not because a webhook arrived.
 `--repo` are the intended controls for large orgs; an unscoped run over every non-terminal task is
 the scheduled case.
 
-### Engine 3 — spec-doc drift
+### 2.3 Engine 3 — spec-doc drift {#sec-2.3}
 
 > **Superseded by 014 §6.** The git-mtime heuristic is replaced by the exact, section-scoped stale-claim query over `.worklode/implements.yaml`; engine 3 should be removed rather than built.
 
@@ -144,13 +158,13 @@ Specs are already first-class here: `kind='spec'` is a task kind
 graph is required. What is missing is the structured link — today a spec task names its file only
 in prose (`Source: docs/specs/007-drift-and-overview.md` in the body).
 
-### Output
+### 2.4 Output {#sec-2.4}
 
 One report per run, per engine: what was repaired, what was found. `--json` for scheduled callers.
 
 ---
 
-## Data model
+## 3. Data model {#sec-3}
 
 **`task_docs`** — a table rather than a column, because a spec task can govern several files:
 
@@ -175,7 +189,7 @@ The down migration drops both; the repo's `migrate up`/`down` round-trip check c
 
 ---
 
-## API
+## 4. API {#sec-4}
 
 All under the existing `s.auth(...)` bearer middleware.
 
@@ -194,7 +208,7 @@ a token belongs to.
 
 ---
 
-## Testing
+## 5. Testing {#sec-5}
 
 - **Replay:** seed `*.ignored` events (the existing tests at `internal/hooks/github_test.go:566`
   and `push_test.go:230` already produce those rows), map the repo, replay, assert the typed tables
@@ -216,7 +230,7 @@ a token belongs to.
 
 ---
 
-## Dependencies
+## 6. Dependencies {#sec-6}
 
 - **004 — execution backbone:** tasks, events, `state_log`, `Transition`.
 - **`internal/hooks/`:** the apply routing engine 1 extracts and reuses.
@@ -225,7 +239,7 @@ a token belongs to.
 
 No dependency on 006, 007, or 009.
 
-## Open questions
+## 7. Open questions {#sec-7}
 
 1. **Candidate set for engine 2.** "Not terminal, or landed but below `done_state`" may still be
    too large for an org-wide unscoped run. Confirm against real task counts before assuming
@@ -239,7 +253,7 @@ No dependency on 006, 007, or 009.
    it should run continuously, does it become a server loop — and does that need the sweeper's
    single-instance election (004, open Q4)?
 
-## Acceptance criteria
+## 8. Acceptance criteria {#sec-8}
 
 - **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
   exactly the typed-table and `state_log` result a live delivery would have; the resulting

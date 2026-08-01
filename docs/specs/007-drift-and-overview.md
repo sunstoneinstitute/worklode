@@ -1,8 +1,28 @@
+---
+status: accepted
+wasDerivedFrom: 003-platform-graph-design.md (D5, D6, D12)
+amendedBy:
+  "#sec-2.1":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-3":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-3.4":
+    - 015-runtime-layer.md
+  "#sec-4":
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-4.4":
+    - 014-design-documents-as-graph-objects.md#sec-5
+    - 014-design-documents-as-graph-objects.md#sec-6
+  "#sec-6":
+    - 014-design-documents-as-graph-objects.md#sec-10
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+isReplacedBy:
+  "#sec-4.3":
+    - 014-design-documents-as-graph-objects.md#sec-6
+---
 # Spec 007 — Drift & overview
-
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` · **Source decisions:** D5, D6,
-D12 (design record `003-platform-graph-design.md`).
-**Amended by:** 014 (design docs as graph objects), 015 (runtime layer)
 
 > **Dependency note:** the entity model, `ls:` vocabulary, and IRI scheme this spec queries are
 > owned by **spec 006 — knowledge graph**, which has since been written and confirms the
@@ -11,7 +31,14 @@ D12 (design record `003-platform-graph-design.md`).
 
 > **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:`.
 
-## Purpose & scope
+> **Sections numbered and frozen at anchor assignment.** The derivers were previously numbered
+> `1`–`4` while the standing queries ran `4.1`–`4.5`, so `4` and `4.3` sat in the same document
+> with different parents. Numbering every section makes the standing queries' existing `4.x`
+> correct rather than discarding it: the derivers become `3.1`–`3.4`, and *deriver N* is `§3.N`
+> throughout. This was the one moment the change was legal — 014 §3 freezes numbering once anchors
+> are published, and these anchors are assigned here for the first time. It does not happen again.
+
+## 1. Purpose & scope {#sec-1}
 
 This is the payoff of the whole design (D5): **development work as ambition reconciliation.**
 Intent is *declared*; reality is *observed*; every gap between them is a query over the diff.
@@ -31,7 +58,7 @@ the execution backbone (004); the plugin (008); the data-platform deploy of the 
 
 ---
 
-## The two-layer model
+## 2. The two-layer model {#sec-2}
 
 Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliverables from 006):
 
@@ -44,7 +71,7 @@ Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliv
 **Drift = the set difference between the two layers, per predicate.** Every struggle-list item
 (D5) is a read over that diff — never a bespoke report, always a standing query.
 
-### Representation: named graphs per source
+### 2.1 Representation: named graphs per source {#sec-2.1}
 
 > **Amended by 014 §6.** The table gains `…/graph/observed/repo-implements`, written by the implements-manifest deriver.
 
@@ -68,7 +95,7 @@ with a `ls:layer` — heavier to query and to replace atomically than one graph 
 
 ---
 
-## Observed-layer derivers
+## 3. Observed-layer derivers {#sec-3}
 
 > **Amended by 014 §6.** A fifth deriver, `observed/repo-implements`, reads `.worklode/implements.yaml` and emits `<component> wl:implements <section>` under this same contract.
 
@@ -80,7 +107,7 @@ All derivers share a contract:
   hash of the inputs short-circuits a no-op `PUT`.
 - **Confined** to its own named graph (above).
 
-### 1. Dependency edges — Go imports / `go.mod` / package manifests
+### 3.1 Dependency edges — Go imports / `go.mod` / package manifests {#sec-3.1}
 
 - **Input:** for each repo, the resolved import graph. Go: `go list -deps -json ./...` +
   `go.mod` module paths. Other stacks: `package.json`, `pyproject.toml`/import scan, etc.
@@ -90,7 +117,7 @@ All derivers share a contract:
 - **Output graph:** `observed/go-imports`.
 - This layer is the ground truth that architectural-drift queries compare declared intent against.
 
-### 2. `component lives-in repo` — filesystem + component-boundary manifest
+### 3.2 `component lives-in repo` — filesystem + component-boundary manifest {#sec-3.2}
 
 - **Input:** repo filesystem + a **per-repo component-boundary manifest** (new authoring burden
   accepted in D5), e.g. `.worklode/components.yaml`, mapping path globs → Component IRIs. Needed
@@ -116,7 +143,7 @@ components:
 # first-match-wins; unmatched paths belong to no component (reported as a gap)
 ```
 
-### 3. `task affects component` — PR paths
+### 3.3 `task affects component` — PR paths {#sec-3.3}
 
 - **Input:** merged/open PR changed-file lists (already ingested by `internal/hooks/github.go`).
 - **Join PR → Task:** via the deterministic worktree/branch name `wt/<id>-<slug>` (D14) or an
@@ -126,7 +153,7 @@ components:
 - **Output graph:** `observed/pr-affects`.
 - Feeds unimplemented/drifted-spec queries (a Task that touched a component the Spec governs).
 
-### 4. deploy / runtime — existing Worklode hooks
+### 3.4 deploy / runtime — existing Worklode hooks {#sec-3.4}
 
 > **Amended by 015.** This deriver's output vocabulary, IRI grammar and per-node v1/v2 status are specified in 015 §2–§6 — including which nodes have no v1 source.
 
@@ -141,7 +168,7 @@ components:
 
 ---
 
-## Standing queries
+## 4. Standing queries {#sec-4}
 
 > **Amended by 014 §6.** Two standing queries arrive over the implements manifest: document
 > coverage, and claims pinned at a version the section has since outgrown. The stale-claim query
@@ -152,7 +179,7 @@ Each is a SPARQL-shaped read over the graph. Sketches use `ls:` for vocabulary, 
 names above, and elide the IRI prefix boilerplate 006 defines. Layer comparison is expressed with
 `GRAPH` clauses; `UNION` across sibling `observed/*` graphs is implied where written as one graph.
 
-### 4.1 Architectural drift
+### 4.1 Architectural drift {#sec-4.1}
 
 Two directions, both surfaced:
 
@@ -188,7 +215,7 @@ SELECT ?from ?to WHERE {
 }
 ```
 
-### 4.2 Missing ADRs / doc gaps — Component with no governing DesignDoc
+### 4.2 Missing ADRs / doc gaps — Component with no governing DesignDoc {#sec-4.2}
 
 ```sparql
 SELECT ?c WHERE {
@@ -198,7 +225,7 @@ SELECT ?c WHERE {
 ```
 Also reports repo paths matched to no component (from deriver 2) as coverage gaps.
 
-### 4.3 Drifted specs — DesignDoc modified after its last implementing Task
+### 4.3 Drifted specs — DesignDoc modified after its last implementing Task {#sec-4.3}
 
 > **Superseded by 014 §6 (stale-claim query).** The `dct:modified`-vs-task-closure comparison below
 > is an mtime heuristic: it fires on typo fixes and misses semantic changes to a section nobody
@@ -216,7 +243,7 @@ GROUP BY ?doc ?docMod
 HAVING (?docMod > MAX(?done))
 ```
 
-### 4.4 Unimplemented specs — accepted DesignDoc with no implementing Task/PR
+### 4.4 Unimplemented specs — accepted DesignDoc with no implementing Task/PR {#sec-4.4}
 
 > **Amended by 014 §5–§6.** The status enum ends at `superseded`; "unimplemented" is a per-section
 > coverage query over the Component→Section `wl:implements` edge, not a doc-level status or the
@@ -230,7 +257,7 @@ SELECT ?doc WHERE {
 ```
 (`ls:status` SKOS scheme `draft→proposed→accepted→superseded→implemented`, D4.)
 
-### 4.5 The ready frontier — ready + unblocked tasks
+### 4.5 The ready frontier — ready + unblocked tasks {#sec-4.5}
 
 The set that feeds `claim --next` (005). "Frontier" = the **leading edge of actionable work** — the
 tasks right at the boundary between done/blocked and not-yet-startable. A Task is on the frontier
@@ -262,7 +289,7 @@ cross-store **critical path** (below) over `blocks` + `dct:requires`; this enric
 
 ---
 
-## Critical path v1 (D12)
+## 5. Critical path v1 (D12) {#sec-5}
 
 **Estimate-free.** No effort weights in v1 (D12 — effort estimation judged unlikely to add
 signal). Criticality is proxied by two unit-weight graph measures over the combined dependency
@@ -288,7 +315,7 @@ Weighted critical path stays **v2** (optional, low priority — D12).
 
 ---
 
-## Overview / CLI surface
+## 6. Overview / CLI surface {#sec-6}
 
 > **Amended by 014 §10.** `lode drift --docs` joins this table, the `lode doc …` family is added, and the read-only web view gains per-section coverage badges and version history.
 
@@ -315,7 +342,7 @@ frontier**. Read-only by construction — the only ways to change the graph are 
 
 ---
 
-## Dependencies
+## 7. Dependencies {#sec-7}
 
 - **006 — knowledge graph**: entity model, `ls:` vocabulary
   (`Component`/`DesignDoc`/`Task`/`governs`/`implements`/`affects`), Deliverable, `ls:status` SKOS
@@ -330,7 +357,7 @@ frontier**. Read-only by construction — the only ways to change the graph are 
 - **`internal/hooks/`** (`flux.go`, `github.go`): existing ingestion the deploy and PR-affects
   derivers project from.
 
-## Open questions
+## 8. Open questions {#sec-8}
 
 1. ~~PR → Task join reliability~~ — **RESOLVED.** Tasks mirror **bidirectionally** to GitHub
    Issues (`ls:mirrors`, spec 006); a PR joins its Task the GitHub-native way — `Closes #N` in the
@@ -355,7 +382,7 @@ frontier**. Read-only by construction — the only ways to change the graph are 
    stored attribute. (The atomic `claim --next` sorts by the columns the backbone owns; the enriched
    cross-store critical path is overview-only — see below.)
 
-## Acceptance criteria
+## 9. Acceptance criteria {#sec-9}
 
 - **Two-layer wiring:** declared and `observed/*` named graphs exist and are populated; a deriver
   re-run fully replaces its own graph and touches no other. A planted declared edge and a planted

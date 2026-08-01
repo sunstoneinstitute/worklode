@@ -15,13 +15,16 @@ var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
 
+// validKinds mirrors the tasks.kind CHECK constraint (migration 0009) and
+// wlc:TaskKind in ns/concept.ttl; all three carry the same seven kinds.
 var validKinds = map[string]bool{
 	"feature": true, "bug": true, "chore": true, "spec": true, "epic": true,
+	"review": true, "spike": true,
 }
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
 // message cannot drift from the map when a kind is added.
-const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, or epic"
+const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, epic, review, or spike"
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true,

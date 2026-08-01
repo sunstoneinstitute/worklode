@@ -89,7 +89,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
-	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, epic")
+	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, review, spike, epic")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")

@@ -1,10 +1,19 @@
+---
+status: accepted
+issued: 2026-07-21
+wasDerivedFrom: 003-platform-graph-design.md (D8, D9, D10, D12, D15)
+requires:
+  - 004-execution-backbone.md
+amendedBy:
+  ".":
+    - 018-task-hierarchy.md
+replaces:
+  ".":
+    - 003-platform-graph-design.md
+---
 # Spec 005 — Prioritization & pickup
 
-**Date:** 2026-07-21 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md`
-**Design record:** `003-platform-graph-design.md` (D8, D9, D10, D12, D15)
-**Depends on:** 004 (execution backbone — task state machine, worktree-bound leases, `blocks`/`child_of` edges, the `claim` transaction).
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 This spec defines **what Worklode picks next and why** — the task properties that carry
 priority signal (`concern`, `priority`), the per-project steering knob (`project.focus`), the
@@ -32,7 +41,7 @@ read-only overview frontier (**007**); plugin slash commands and hooks (**008**)
 computes its ranking **authoritatively on the backbone** (004 data) — 007's frontier is the
 eventually-consistent **overview mirror**, never the atomic source.
 
-## `concern` & `priority` model (D10)
+## 1. `concern` & `priority` model (D10) {#sec-1}
 
 Two orthogonal task properties carry prioritization signal. Both are **fixed, closed enums** that
 grow only by explicit schema change (same discipline as today's `priority`).
@@ -57,7 +66,7 @@ null sorts last in `concern_rank`).
 `concern` and `priority` are independent: a `security` task may be `low`, a `usability` task may
 be `critical`. Neither derives from the other.
 
-## `project.focus` semantics (D9)
+## 2. `project.focus` semantics (D9) {#sec-2}
 
 `project.focus` is a per-project, **ordered list of concerns** — the project's current steering,
 e.g. `focus = [security, completeness]`. It is a **soft filter**, and softness is the whole
@@ -75,7 +84,7 @@ contract:
 `concern_rank(task)` = the task's index in `project.focus` (0 = first/highest); any concern **not
 listed** in `focus`, and a null concern, share the worst rank (sort last, stable among themselves).
 
-## The ranking function (D9, D12)
+## 3. The ranking function (D9, D12) {#sec-3}
 
 `claim --next` selects from the **ready set** — tasks that are, per spec 004/007:
 **ready** (all `blocks` dependencies satisfied) **AND unblocked** (no open blocker) **AND
@@ -102,7 +111,7 @@ task id) so ordering is reproducible and starvation-free.
 
 The server takes the **top row** and leases it in the same transaction (below).
 
-### Worked example
+### 3.1 Worked example {#sec-3.1}
 
 Project `focus = [security, completeness]`. Ready set:
 
@@ -131,7 +140,7 @@ Under **`--strict-focus`** (drop `is_critical`; key `(concern_rank, priority, fa
 becomes **T2, T4, T1, T3, T5** — T3's critical no longer preempts; it sorts by its off-focus
 concern, though still ahead of nothing by priority within its rank.
 
-## `claim --next` CLI & behaviour (D8)
+## 4. `claim --next` CLI & behaviour (D8) {#sec-4}
 
 ```
 lode task claim --next [--project <id>] [--strict-focus] [--dry-run] [--json]
@@ -165,7 +174,7 @@ the other gets "none ready"). This is the property that enables safe 24/7 parall
 The lease binds to the **git worktree, not the session** (D14); its lifecycle, renewal
 (commit-cadence heartbeat), and expiry/sweep are **004**.
 
-## `--strict-focus` (D9)
+## 5. `--strict-focus` (D9) {#sec-5}
 
 `--strict-focus` **suppresses the critical-first jump** so `project.focus` governs **even critical
 tasks**. It drops `is_critical` from the key:
@@ -181,7 +190,7 @@ critical work in other concerns yanking agents away.
 Default (flag absent) = critical-first. The flag is an explicit, per-invocation opt-out; there is
 no persistent project-level "always strict" setting in v1 (see open questions).
 
-## Task sizing & `needs-decomposition` (D15)
+## 6. Task sizing & `needs-decomposition` (D15) {#sec-6}
 
 Not every task is claimable. **`needs-decomposition`** is a task **label** meaning the task's scope
 exceeds the context **"smart zone"** — the effective-reasoning region well below the model's hard
@@ -203,7 +212,7 @@ limit.
 - Clearing the label (after the split lands) makes the parent's children — not the parent — the
   claimable units.
 
-## Dependencies
+## 7. Dependencies {#sec-7}
 
 - **004 — Execution backbone:** task state machine, `concern`/`priority`/label storage, the `blocks`
   and `child_of` edges, the atomic lease transaction, worktree-bound lease lifecycle & heartbeat.
@@ -215,7 +224,7 @@ limit.
 - **008 — Plugin:** `/lode-next`, `/lode-status`, and the worktree that receives the lease consume
   this command surface.
 
-## Open questions
+## 8. Open questions {#sec-8}
 
 1. **`--strict-focus` name — RESOLVED: `--strict-focus`.** It reads as "make focus strict (a hard
    ordering) rather than soft," which is exactly the semantic (focus governs even critical) and pairs
@@ -230,7 +239,7 @@ limit.
    projects uniformly. Is an in-focus/in-project task's fan_out worth more than a cross-project
    one? v1 treats them equally; flag if starvation appears.
 
-## Acceptance criteria
+## 9. Acceptance criteria {#sec-9}
 
 1. **Atomicity / no collision.** N concurrent `claim --next` calls against a ready set of M tasks
    yield **min(N, M) distinct** claims and **zero double-claims** — verified under contention.

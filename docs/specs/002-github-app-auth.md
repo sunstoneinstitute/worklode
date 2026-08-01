@@ -1,14 +1,30 @@
+---
+status: proposed
+issued: 2026-07-20
+amends:
+  ".":
+    - 001-keycloak-sso.md#sec-0
+  "#sec-3.2":
+    - 001-keycloak-sso.md#sec-3.2
+  "#sec-3.4":
+    - 001-keycloak-sso.md#sec-1
+amendedBy:
+  ".":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+  "#sec-3.5":
+    - 023-keycloak-primary-auth.md#sec-3.5
+isReplacedBy:
+  "#sec-3.2":
+    - 023-keycloak-primary-auth.md#sec-3.1
+  "#sec-3.3":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 023-keycloak-primary-auth.md#sec-3.1
+  "#sec-3.4":
+    - 023-keycloak-primary-auth.md#sec-3.1
+---
 # Spec 002 — GitHub App authentication for worklode
 
-**Date:** 2026-07-20
-**Status:** Design — approved shape, pending spec review
-**Umbrella:** `000-umbrella-architecture.md`
-**Amended by:** CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`.
-GitHub as a *login provider* (sections B–D) superseded by spec 023 — Keycloak
-is the sole login; GitHub becomes a link-only flow. Token storage (§E) and the
-attribution goal are retained and completed by 023.
-
-## Summary
+## 0. Summary {#sec-0}
 
 Add a GitHub App as an **additional** identity provider for the web UI and CLI,
 **alongside** the existing Keycloak OIDC (which is left in place, unchanged).
@@ -21,7 +37,7 @@ Scope for this project: **hzdev only**. hzprod is migrated later (no cluster yet
 No migration of existing users — worklode is not yet in production use, so
 Keycloak-provisioned actors are not mapped to GitHub identities.
 
-## Motivation
+## 1. Motivation {#sec-1}
 
 - A GitHub App acting on behalf of the user gives correct attribution when
   worklode interacts with GitHub (comment on PRs/issues, set commit status).
@@ -29,7 +45,7 @@ Keycloak-provisioned actors are not mapped to GitHub identities.
 - GitHub org/team membership is already the source of truth for who works here,
   removing a layer of Keycloak role plumbing.
 
-## Current state (what changes)
+## 2. Current state (what changes) {#sec-2}
 
 - **Web login:** `GET /auth/login` → `GET /auth/callback`, auth-code + PKCE
   against Keycloak (`internal/api/oidcweb.go`, `internal/oidc/oidc.go`).
@@ -49,9 +65,9 @@ reusing the shared `provisionActor` upsert shape and the "re-evaluate roles on
 every login" behavior. What is new: an `internal/githubauth` package, GitHub-
 specific routes, encrypted token storage, and outbound GitHub calls.
 
-## Design
+## 3. Design {#sec-3}
 
-### A. GitHub App(s) — one per environment
+### 3.1 A. GitHub App(s) — one per environment {#sec-3.1}
 
 Create `worklode-dev` now (`worklode-prod` later). One App per env
 because a GitHub App has a single webhook URL and single set of callback URLs;
@@ -77,7 +93,9 @@ App configuration:
 The "Identifying and authorizing users" callback URL — previously unused — is now
 the GitHub web-login callback.
 
-### B. Web login — new GitHub provider (alongside Keycloak)
+### 3.2 B. Web login — new GitHub provider (alongside Keycloak) {#sec-3.2}
+
+> **Superseded by spec 023.** Keycloak is the sole web login; GitHub is demoted to a link-only OAuth flow.
 
 New GitHub-specific routes are added; the existing `/auth/login` and
 `/auth/callback` Keycloak routes are untouched. The login page offers both
@@ -101,9 +119,11 @@ construction, code exchange, identity + membership fetch), paralleling
 `internal/oidc` without touching it. A new `githubweb.go` holds the GitHub route
 handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 
-### C. CLI login (device flow, server-mediated)
+### 3.3 C. CLI login (device flow, server-mediated) {#sec-3.3}
 
 > **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). No device flow was built; `lode login` uses a server-mediated browser loopback with a one-time code, for both providers.
+
+> **Superseded by spec 023.** GitHub is no longer a CLI login provider at all; `lode login` authenticates against Keycloak only.
 
 A new GitHub device-flow login is added; the existing Keycloak loopback
 `lode login` path stays (e.g. selected via `lode login --github` or a prompt). The
@@ -124,7 +144,9 @@ user-to-server token never reach the client:
 
 The CLI never holds a GitHub token.
 
-### D. Authorization
+### 3.4 D. Authorization {#sec-3.4}
+
+> **Superseded by spec 023.** Authorization hangs off the Keycloak actor, not a GitHub identity.
 
 For **GitHub-authenticated** users (Keycloak users keep their Keycloak-role
 evaluation, unchanged). Evaluated on every GitHub login (web and CLI), matching
@@ -138,7 +160,9 @@ Membership is read with the user-to-server token:
 `GET /user/memberships/orgs/{org}` and `GET /orgs/{org}/teams/{team}/memberships/{username}`
 (App must have Members: read).
 
-### E. Identity and token storage
+### 3.5 E. Identity and token storage {#sec-3.5}
+
+> **Amended by spec 023.** Token storage and the attribution goal are retained, and completed there against a linked GitHub account.
 
 - **Actor key:** the immutable GitHub **numeric user ID**, namespaced as
   `github:<id>` so GitHub actors cannot collide with Keycloak actors keyed on
@@ -156,7 +180,7 @@ Membership is read with the user-to-server token:
   the access token is within a skew window of expiry; refresh failure forces
   re-login.
 
-### F. Config and secrets (hzdev)
+### 3.6 F. Config and secrets (hzdev) {#sec-3.6}
 
 New env vars, **added** to the existing Keycloak/OIDC config (nothing removed):
 
@@ -175,7 +199,7 @@ Deployment impact: the app-deployment **Keycloak/SSO wiring stays**; the GitHub
 App is added alongside the existing Keycloak client (not a replacement).
 `LODE_GITHUB_WEBHOOK_SECRET` is unchanged.
 
-## Non-goals
+## 4. Non-goals {#sec-4}
 
 - hzprod migration (later project; create `worklode-prod` App then).
 - Migrating existing Keycloak actors (fresh start).
@@ -183,7 +207,7 @@ App is added alongside the existing Keycloak client (not a replacement).
   design establishes the *capability* (stored user tokens + App permissions); the
   first concrete outbound action is a follow-up.
 
-## Error handling
+## 5. Error handling {#sec-5}
 
 - Non-org-member login → 403, "must be a member of the sunstoneinstitute org".
 - GitHub code exchange / API failure → 502 with a retriable message; no session set.
@@ -193,7 +217,7 @@ App is added alongside the existing Keycloak client (not a replacement).
 - Actor id conflict with a non-human actor (e.g. bootstrap admin) → 409, reusing
   the existing `errActorKindConflict` path.
 
-## Testing
+## 6. Testing {#sec-6}
 
 - `internal/githubauth`: unit tests for authorize-URL construction, code
   exchange, and membership → role mapping (against a stubbed GitHub API), mirroring
@@ -205,7 +229,7 @@ App is added alongside the existing Keycloak client (not a replacement).
   storage behind an interface with a memory fake, plus the file fallback.
 - Token store: AES-GCM round-trip and lazy-refresh-before-expiry tests.
 
-## Open questions
+## 7. Open questions {#sec-7}
 
 None blocking. The exact repository write permissions (Section A) are trimmed to
 the first outbound feature when it is specified.

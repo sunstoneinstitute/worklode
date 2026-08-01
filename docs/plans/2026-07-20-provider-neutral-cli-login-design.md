@@ -1,8 +1,17 @@
+---
+status: accepted
+issued: 2026-07-20
+amends:
+  ".":
+    - docs/specs/001-keycloak-sso.md
+    - docs/specs/002-github-app-auth.md
+replaces:
+  ".":
+    - docs/specs/001-keycloak-sso.md#sec-4
+    - docs/specs/002-github-app-auth.md#sec-3.3
+    - 2026-07-19-keycloak-sso-3-cli-login.md
+---
 # Provider-Neutral `wl login` — Design
-
-**Status:** Design (approved for planning)
-**Date:** 2026-07-20
-**Supersedes the CLI half of:** `2026-07-19-keycloak-sso-3-cli-login.md` (Keycloak-only, in-CLI PKCE).
 
 ## Problem
 

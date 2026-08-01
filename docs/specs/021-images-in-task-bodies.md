@@ -1,10 +1,13 @@
+---
+status: accepted
+requires:
+  - 004-execution-backbone.md
+  - 008-worklode-plugin.md
+  - 020-inbox-import.md
+---
 # Spec 021 — Images and attachments on tasks
 
-**Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
-**Depends on:** 004 (execution backbone — `tasks.body`), 008 (worklode plugin — `lode task brief`),
-020 (inbox import — supplies untrusted body text and remote image URLs)
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 `tasks.body` is markdown, and markdown already has image syntax. What is missing is somewhere
 for the bytes to live and a path that gets them there without the author thinking about it.
@@ -33,7 +36,7 @@ reference table, later); the alt-text lint (§14, v2); inline terminal rendering
 
 ---
 
-## 1. Storage
+## 1. Storage {#sec-1}
 
 Bytes live in **Hetzner Object Storage** (S3-compatible, path-style addressing, the same
 service the fleet already uses for CNPG and Velero backups). Postgres holds the index and the
@@ -98,7 +101,7 @@ error rather than into a broken image.
 
 ---
 
-## 2. Reference syntax and serving
+## 2. Reference syntax and serving {#sec-2}
 
 Bodies store a **root-relative, permanent URL**:
 
@@ -141,7 +144,7 @@ external behaviour, and it costs the app egress and a held connection per downlo
 
 ---
 
-## 3. Surfaces
+## 3. Surfaces {#sec-3}
 
 | Surface | Purpose |
 |---|---|
@@ -161,7 +164,7 @@ rewriting is what people will actually use for images, because it requires knowi
 
 ---
 
-## 4. Auth
+## 4. Auth {#sec-4}
 
 `/blob/{hash}` must serve both a browser `<img>` (session cookie, `s.webAuth`) and a CLI or
 agent fetch (bearer token, `s.auth`). One middleware covers it:
@@ -197,7 +200,7 @@ subresource loads, so an attacker page embedding `<img src="https://worklode/blo
 
 ---
 
-## 5. Upload
+## 5. Upload {#sec-5}
 
 **Stream; never buffer the payload in memory.** Content addressing means the hash is not known
 until the last byte, so the handler cannot decide where bytes belong until it has seen them
@@ -249,7 +252,7 @@ script inside it.
 
 ---
 
-## 6. Serving hardening
+## 6. Serving hardening {#sec-6}
 
 A blob is bytes an authenticated user uploaded. The redirect target is a different origin from
 the app, which is itself a useful boundary — a hostile SVG or HTML payload executes in the
@@ -282,7 +285,7 @@ since that is where the redirect lands.
 
 ---
 
-## 7. Reference rewriting
+## 7. Reference rewriting {#sec-7}
 
 The feature that makes the rest of it invisible. An author writes ordinary markdown next to
 their screenshots:
@@ -320,7 +323,7 @@ content, and `embedded` reconciliation (§1) sees the rewritten body.
 
 ---
 
-## 8. Rendering
+## 8. Rendering {#sec-8}
 
 ### Web UI
 
@@ -379,7 +382,7 @@ shape to build, and inline escape-sequence images are not.
 
 ---
 
-## 9. Attachments
+## 9. Attachments {#sec-9}
 
 Non-embeddable files are why `lode task attach` earns its place. A crash report is a core dump
 and a log; a rendering bug is a HAR file; a data bug is the CSV that triggers it. All are
@@ -397,7 +400,7 @@ for an image the author wants attached but not shown inline.
 
 ---
 
-## 10. Brief integration
+## 10. Brief integration {#sec-10}
 
 Agents must not parse markdown to find pictures. `lode task brief --json` gains:
 
@@ -429,7 +432,7 @@ Alt text stays in the body markdown, where it belongs, and is not duplicated her
 
 ---
 
-## 11. Lifecycle and garbage collection
+## 11. Lifecycle and garbage collection {#sec-11}
 
 Two sweeps, both in `lode admin blob gc`, both with a **24-hour grace period** so neither can
 race an upload in flight.
@@ -469,7 +472,7 @@ blobs collectable on the next sweep unless another task shares them.
 
 ---
 
-## 12. Mirroring on import
+## 12. Mirroring on import {#sec-12}
 
 Imported GitHub issue bodies reference `https://user-images.githubusercontent.com/…`. Those
 URLs need GitHub auth for private repos and do not last forever, so an imported bug report's
@@ -495,7 +498,7 @@ SSRF guard:
 
 ---
 
-## 13. Configuration
+## 13. Configuration {#sec-13}
 
 Server config (env, and the deployment's ConfigMap plus an ESO-provisioned secret):
 
@@ -516,7 +519,7 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
 ---
 
-## 14. Open questions
+## 14. Open questions {#sec-14}
 
 - **Q021.1 — Alt text as an accessibility contract.** `lode task attach` defaults the appended
   alt text to the file basename, which is not alt text. A `--alt` flag is cheap; a lint that

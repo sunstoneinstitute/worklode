@@ -1,10 +1,64 @@
+---
+status: draft
+requires:
+  - 006-knowledge-graph.md
+  - 007-drift-and-overview.md
+  - 004-execution-backbone.md
+amends:
+  ".":
+    - 003-platform-graph-design.md#sec-1
+    - 006-knowledge-graph.md#sec-11
+    - 006-knowledge-graph.md#sec-1.1
+    - 008-worklode-plugin.md#sec-13
+    - 009-data-platform-kg-requirements.md
+    - rdf-registry:ADR-0006
+  "#sec-1":
+    - 000-umbrella-architecture.md#sec-4
+    - 003-platform-graph-design.md
+    - 008-worklode-plugin.md
+  "#sec-2":
+    - 000-umbrella-architecture.md#sec-2
+    - 003-platform-graph-design.md#sec-6
+    - 006-knowledge-graph.md#sec-1.2
+    - 008-worklode-plugin.md#sec-7
+    - 008-worklode-plugin.md#sec-8
+  "#sec-3":
+    - 008-worklode-plugin.md#sec-6
+  "#sec-5":
+    - 006-knowledge-graph.md#sec-1.4
+    - 007-drift-and-overview.md#sec-4.4
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-2.1
+    - 007-drift-and-overview.md#sec-3
+    - 007-drift-and-overview.md#sec-4
+    - 007-drift-and-overview.md#sec-4.4
+    - 013-reconciliation.md#sec-0
+  "#sec-8":
+    - 004-execution-backbone.md#sec-1.1
+    - 006-knowledge-graph.md#sec-1.5
+  "#sec-9":
+    - 006-knowledge-graph.md#sec-3.2
+  "#sec-10":
+    - 007-drift-and-overview.md#sec-6
+replaces:
+  "#sec-1":
+    - 006-knowledge-graph.md#sec-1
+  "#sec-2":
+    - 006-knowledge-graph.md#sec-1.6
+  "#sec-3":
+    - 006-knowledge-graph.md#sec-7
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-4.3
+    - 013-reconciliation.md#sec-2.3
+    - 013-reconciliation.md#sec-3
+    - 013-reconciliation.md#sec-5
+    - 013-reconciliation.md#sec-8
+  "#sec-acceptance-criteria":
+    - 006-knowledge-graph.md#sec-11
+---
 # Spec 014 — Design documents as graph objects
 
-**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 006 (knowledge
-graph — amends it), 007 (drift & overview — supplies a new deriver), 004 (execution backbone) ·
-**Amends:** 006, 007, 008, 013, and rdf-registry ADR-0006.
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Spec 006 already decided that design documents are **graph-authored, never projected** — a Spec or
 ADR is an intent-layer object, not a file. The implementation never caught up: superpowers writes
@@ -36,7 +90,7 @@ scope*).
 
 ---
 
-## 1. Prefix rename: `ls:` → `wl:`
+## 1. Prefix rename: `ls:` → `wl:` {#sec-1}
 
 `ls:` predates the rename from *lodespar* to *Worklode*. No occurrence survives outside
 documentation (187 occurrences across 11 Markdown files; zero in Go, SQL or YAML), and the `ls:`
@@ -60,7 +114,7 @@ as one product.
 
 ---
 
-## 2. What is, and is not, a design document
+## 2. What is, and is not, a design document {#sec-2}
 
 ### Plans are demoted
 
@@ -101,7 +155,7 @@ is nothing to drift.
 ### Resulting class hierarchy
 
 ```turtle
-wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document ;
+wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:intent .
 wl:ADR   rdfs:subClassOf wl:DesignDoc .
 wl:Spec  rdfs:subClassOf wl:DesignDoc .
@@ -118,9 +172,13 @@ wl:Section a owl:Class ;               # §3
 `wl:Section` joins the top-level disjointness axiom in 006 alongside `wl:Component`, `wl:DesignDoc`,
 `wl:Task`, `wl:Deliverable` and `wl:Workstream`.
 
+`prov:Entity` is not decoration: §4 and §9 assert `prov:wasGeneratedBy`, `prov:wasRevisionOf` and
+`prov:wasAttributedTo` on documents, and each has `prov:Entity` as its domain. Without the parent,
+every provenanced document is an OWL violation the moment 006's `owlrl` pass runs.
+
 ---
 
-## 3. Sections as first-class nodes
+## 3. Sections as first-class nodes {#sec-3}
 
 Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
 is one requirement: **sections must be addressable nodes.**
@@ -206,7 +264,7 @@ stale. See §6.
 
 ---
 
-## 4. Versioning
+## 4. Versioning {#sec-4}
 
 ### Canonical plus versioned IRIs
 
@@ -229,12 +287,19 @@ wlid:doc/spec-worklode-014
                            wlid:doc/spec-worklode-014/v3 .
 
 wlid:doc/spec-worklode-014/v3
+    a wl:Spec ;                        # a snapshot is an instance of the same class
     dcat:version        "3" ;
     dcat:previousVersion wlid:doc/spec-worklode-014/v2 ;
     prov:wasRevisionOf   wlid:doc/spec-worklode-014/v2 ;
     prov:wasAttributedTo wlid:agent/stig ;
     dct:issued "2026-07-26"^^xsd:date .
 ```
+
+**A version snapshot carries the document's own class**, so no version class is minted — DCAT's
+pattern, where `dcat:hasVersion` relates a resource to a resource. This is what gives
+`wl:lastRevisedIn` a range, below. **Ordering is `dcat:version`, never the
+IRI:** `…/v10` does not sort after `…/v3` as a string, so a staleness test reads
+`?sec wl:lastRevisedIn/dcat:version ?n` and compares numbers.
 
 > **To verify when authoring the Turtle:** the exact sub-property axioms DCAT 3 declares for
 > `dcat:previousVersion` (relative to `dct:replaces`) should be read off the specification rather
@@ -276,18 +341,19 @@ the document version in which it last changed:
 
 ```turtle
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
-    rdfs:domain wl:Section ;
+    rdfs:domain wl:Section ; rdfs:range wl:DesignDoc ;   # the versioned snapshot, typed above
     rdfs:comment "The document version in which this section's content last changed. Lets a claim "
                  "pinned at version N be tested for staleness without per-section version IRIs." .
 ```
 
-A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn > v3`. Editing §9
+A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` names a snapshot whose
+`dcat:version` exceeds 3. Editing §9
 therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
 precision, one property.
 
 ---
 
-## 5. Editorial lifecycle and revisions
+## 5. Editorial lifecycle and revisions {#sec-5}
 
 ### `implemented` leaves the status enum
 
@@ -331,7 +397,7 @@ that survives into draft, because inbound links do not care that a document is m
 
 ---
 
-## 6. Implementation coverage
+## 6. Implementation coverage {#sec-6}
 
 ### Three objects, previously conflated
 
@@ -456,7 +522,7 @@ edge rather than asking whether any Task ever pointed at the document.
 
 ---
 
-## 7. Constraints on accepted documents
+## 7. Constraints on accepted documents {#sec-7}
 
 Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
 graphs:
@@ -504,18 +570,31 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 
 ---
 
-## 8. Task kinds
+## 8. Task kinds {#sec-8}
 
 Two enumerations exist today and disagree:
 
-- `deploy/base/migrations/0001_baseline.up.sql:53` → `('feature','bug','chore','spec')`
+- `deploy/base/migrations/0006_task_hierarchy.up.sql:6` →
+  `('feature','bug','chore','spec','epic')`
 - Spec 006 `lsc:TaskKind` → `feature / bug / chore / review / spike`
 
-`spec` is absent from the SKOS scheme; `review` and `spike` are absent from the database. This is a
-live inconsistency independent of everything else in this spec.
+`spec` and `epic` are absent from the SKOS scheme; `review` and `spike` are absent from the
+database. This is a live inconsistency independent of everything else in this spec.
 
-**Resolution: reconcile to the union** — `feature, bug, chore, spec, review, spike` — in both the
-`CHECK` constraint and `wlc:TaskKind`. A migration widens the constraint; no rows change.
+**Resolution: reconcile to the union** — `feature, bug, chore, spec, review, spike, epic` — in both
+the `CHECK` constraint and `wlc:TaskKind`. Migration `0009_task_kinds` widens the constraint to add
+`review` and `spike`; no rows change, and no kind is removed.
+
+The enum is now spelled in three places — the constraint, `validKinds` in `internal/api/tasks.go`,
+and `wlc:TaskKind` in `ns/concept.ttl`. `TestTaskKindsAgreeAcrossSources` holds them together by
+creating a task of every kind through the API (which exercises the first two) and reading the third
+off disk.
+
+`epic` (spec 018) is the one structural member, and it does sit awkwardly beside the rule below: an
+epic is a declared container whose state follows its children, not a nature of work. It stays a
+kind because the backbone already declares it that way and the whole point of this scheme is to
+mirror the constraint. A scheme that quietly omitted a value the database accepts would be the
+worse failure — projection would emit a `wl:taskKind` that resolves to nothing.
 
 No kind is added for plans, planning, speccing, or reconciliation:
 
@@ -527,7 +606,7 @@ No kind is added for plans, planning, speccing, or reconciliation:
 
 ---
 
-## 9. Authorship
+## 9. Authorship {#sec-9}
 
 `wl:implements` covers Task → DesignDoc ("realises this intent"). Nothing expresses "this task
 *wrote* that document," which is what a `spec`-kind task actually does. Reuse rather than mint:
@@ -540,9 +619,14 @@ wlid:doc/spec-worklode-014 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
 Zero mints, and it cleanly separates authoring from executing — the same task graph can now answer
 "which task produced this spec?" and "which tasks implement it?" without conflating them.
 
+One consequence, because PROV declares `prov:Activity` and `prov:Entity` **disjoint**: a Task's own
+author is `prov:wasAssociatedWith` (Activity→Agent), not `prov:wasAttributedTo`, whose domain is
+`prov:Entity`. 006 §Layer 2 listed the latter for every execution node; it stays correct for Issue
+and PullRequest and is wrong for Task, which this section is what makes an Activity.
+
 ---
 
-## 10. Surfaces
+## 10. Surfaces {#sec-10}
 
 | Surface | Purpose |
 |---|---|
@@ -568,11 +652,66 @@ configuration, not convention, and temporary either way.
 
 ---
 
+## 11. Document frontmatter {#sec-11}
+
+Every design document opens with YAML frontmatter whose **keys are ontology property local
+names**, so the frontmatter is never a second vocabulary to maintain. A key with no term behind it
+is a signal that the ontology is missing one, not licence for a private extension.
+
+| Key | Term | Value |
+|---|---|---|
+| `status` | `wl:status` | one `wlc:DesignDocStatus` concept (§5) |
+| `issued` | `dct:issued` | ISO date of first publication |
+| `implements` | `wl:implements` | the governing Spec/ADR, authored on the *implementing* document |
+| `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
+| `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
+| `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
+| `amends` / `amendedBy` | — | doc-level amendment; see below |
+
+### References carry the section
+
+A reference is a bare filename within the same directory and a repo-relative path across
+directories. Appending a fragment narrows it to a section:
+
+```yaml
+replaces:
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-4.3
+    - 013-reconciliation.md#sec-2.3
+```
+
+The fragment is the §3 anchor — `#sec-<number>` numbered, `#sec-<slug>` unnumbered — so a
+frontmatter reference and an in-document link resolve to the same
+`wlid:section/<doc-slug>/<anchor>` node, and both survive a heading reword. A fragment naming an
+anchor absent from the target's source is a broken reference and fails the same CI check §4
+applies to the section-IRI set.
+
+**Amendment and supersession are section-scoped on both ends**, because "spec 014 amends spec 006"
+is too coarse to act on — the reader needs to know *which* section still binds. The value is
+therefore a map whose keys are the **subject document's own** anchors, with `"."` for the document
+as a whole; each entry names the *other* document's section. A range or genuinely doc-wide
+amendment stays doc-level rather than being expanded into a false list of sections.
+
+### Amendment references are bidirectional
+
+`amends`/`amendedBy` and `replaces`/`isReplacedBy` are maintained on both documents. This
+duplicates the edge, which this spec otherwise refuses to do (§6). The justification is read cost:
+an agent asking "what still constrains this section?" must answer it from the file it already has
+open, and a one-directional edge turns that into a scan of every sibling — a real token cost on
+every read, against a one-line authoring cost on the rare write. CI checks that both ends agree.
+
+Neither `amends` nor `amendedBy` has an ontology term, deliberately. Doc-level amendment is not
+`dct:replaces`; §3's section-level `dct:isReplacedBy` is the modelled form. Both keys are in-repo
+indexing metadata that projection reads and reduces to section-level edges — never a graph edge in
+their own right.
+
+---
+
 ## Amendments to existing specs
 
 | Spec | Change |
 |---|---|
-| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected) |
+| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected); anchor `wl:DesignDoc` on `prov:Entity` so §4's and §9's provenance edges are domain-correct, and correct Task authorship to `prov:wasAssociatedWith` (§9) |
 | 007 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries; **supersede §4.3** — the stale-claim query replaces its `dct:modified`-vs-task-closure heuristic — and re-point §4.4's Task-join at the Component→Section edge |
 | 008 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
 | 013 | Remove engine 3 and `task_docs`; close open question 2 |
@@ -630,7 +769,7 @@ Two pieces of work follow from this spec without belonging to it:
    number, so their depth is nominal. Treating them as depth 1 is the obvious reading; confirm it
    against a document with a deeply structured appendix.
 
-## Acceptance criteria
+## Acceptance criteria {#sec-acceptance-criteria}
 
 1. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
    `rdf/wl/` and publish under `https://worklode.io/ns/`.
@@ -669,7 +808,7 @@ Two pieces of work follow from this spec without belonging to it:
    `draft → proposed → accepted → superseded`.
 10. A revision of an accepted document leaves the accepted version current and drift queries
     unaffected until crit resolves; the accepted version's anchors are protected throughout.
-11. `tasks.kind` accepts all of `feature, bug, chore, spec, review, spike`, `wlc:TaskKind` contains
-    exactly the same six, and the migration round-trips up and down.
+11. `tasks.kind` accepts all of `feature, bug, chore, spec, review, spike, epic`, `wlc:TaskKind`
+    contains exactly the same seven, and the migration round-trips up and down.
 12. A `spec`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
     distinguishable from the tasks that `wl:implements` that document's sections.

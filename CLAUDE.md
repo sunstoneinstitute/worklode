@@ -23,6 +23,7 @@ go test ./internal/store -run TestClaim   # single test
 go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
 gofmt -l . && go vet ./...          # lint (what CI runs)
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
+./scripts/secfmt.py -l              # spec section numbering + anchor check
 ```
 
 Store tests need a reachable Postgres with **pgvector**
@@ -87,6 +88,20 @@ the `can-be-tested` label forces a run.
   on branch names.
 - `MODEL_SELECTION.md` defines which Claude model tier each agent role uses
   when working this repo with subagents.
+- Specs and plans carry YAML frontmatter whose keys are ontology property
+  names, and spec sections carry `{#sec-N}` anchors that are **frozen once the
+  spec is accepted** — amend or supersede a section, never renumber it. Before
+  creating or editing anything in `docs/specs/` or `docs/plans/`, read
+  `docs/authoring-design-docs.md`: filenames, the frontmatter schema, and how
+  to amend/supersede. `scripts/secfmt.py` enforces the numbering (pre-commit
+  hook; docs-only PRs skip CI, so the hook is the real gate).
+- `ns/` holds the `wl:` ontology extracted from specs 006/014/015/016:
+  `ontology.ttl` (classes, properties, axioms), `concept.ttl` (SKOS enums),
+  `shapes.ttl` (SHACL). It is the vocabulary the frontmatter keys come from, and
+  the parseable form — the specs' own Turtle blocks are illustrative and do not
+  parse. The specs stay authoritative and the graph is unimplemented;
+  publication under `https://worklode.io/ns/` belongs to rdf-registry. Amend the
+  spec first, then mirror the term here (`riot --validate ns/*.ttl`).
 
 ## Metrics
 

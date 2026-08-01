@@ -3,6 +3,11 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -621,5 +626,45 @@ func TestSetTaskSkills(t *testing.T) {
 	rr = doReq(t, h, "PUT", "/api/v1/tasks/WL-999/skills", token, map[string]any{"skills": []string{"tdd"}})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("set skills on unknown task status = %d, want 404", rr.Code)
+	}
+}
+
+// TestTaskKindsAgreeAcrossSources pins the three places the kind enum is
+// spelled — the API's validKinds, the tasks.kind CHECK constraint, and
+// wlc:TaskKind in ns/concept.ttl — to the same set. Each is exercised by
+// creating a task of every kind: the handler rejects anything outside
+// validKinds, and the insert rejects anything outside the CHECK, so a
+// disagreement between those two fails here. The .ttl is read directly,
+// since nothing else in the Go build knows it exists.
+func TestTaskKindsAgreeAcrossSources(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	kinds := []string{"feature", "bug", "chore", "spec", "epic", "review", "spike"}
+	for _, k := range kinds {
+		t.Run(k, func(t *testing.T) {
+			rr := doReq(t, h, "POST", "/api/v1/tasks", token,
+				map[string]any{"project": "proj", "title": "t", "priority": "high", "kind": k})
+			if rr.Code != http.StatusCreated {
+				t.Fatalf("create kind %q status = %d, want 201; body %s", k, rr.Code, rr.Body.String())
+			}
+		})
+	}
+
+	ttl, err := os.ReadFile(filepath.Join("..", "..", "ns", "concept.ttl"))
+	if err != nil {
+		t.Fatalf("read ns/concept.ttl: %v", err)
+	}
+	// Every wlc:<name> declared in scheme wlc:TaskKind.
+	re := regexp.MustCompile(`wlc:(\w+) a skos:Concept ; skos:inScheme wlc:TaskKind`)
+	var inTTL []string
+	for _, m := range re.FindAllStringSubmatch(string(ttl), -1) {
+		inTTL = append(inTTL, m[1])
+	}
+	sort.Strings(inTTL)
+	want := append([]string(nil), kinds...)
+	sort.Strings(want)
+	if !slices.Equal(inTTL, want) {
+		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with validKinds and the CHECK constraint)", inTTL, want)
 	}
 }

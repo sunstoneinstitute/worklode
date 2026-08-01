@@ -1,10 +1,28 @@
+---
+status: draft
+requires:
+  - 006-knowledge-graph.md
+  - 007-drift-and-overview.md
+  - 014-design-documents-as-graph-objects.md
+amends:
+  ".":
+    - 006-knowledge-graph.md#sec-1.1
+    - 006-knowledge-graph.md#sec-11
+    - 007-drift-and-overview.md#sec-3.4
+  "#sec-7":
+    - 000-umbrella-architecture.md#sec-2
+    - 003-platform-graph-design.md#sec-1
+    - 006-knowledge-graph.md#sec-3.2
+    - 006-knowledge-graph.md#sec-4
+replaces:
+  "#sec-2":
+    - 006-knowledge-graph.md#sec-3.3
+  "#sec-6":
+    - 006-knowledge-graph.md#sec-3.3
+---
 # Spec 015 — Runtime layer: artifacts, builds, deployments & environments
 
-**Status:** draft · **Umbrella:** `000-umbrella-architecture.md` · **Depends on:** 006 (knowledge
-graph — amends it), 007 (drift & overview — supplies the vocabulary its deploy deriver emits),
-014 (prefix rename) · **Amends:** 006, 007.
-
-## Purpose & scope
+## 0. Purpose & scope {#sec-0}
 
 Spec 006 lists Artifact, Deployment and Environment as **v1 projected nodes** in its Layer 3 table
 and gives them instance IRIs — but never assigns them a class. They exist in the IRI grammar and as
@@ -39,7 +57,7 @@ queries and the deriver contract (007); Deliverable auto-confirmation (v2, 006 �
 
 ---
 
-## 1. Reuse survey
+## 1. Reuse survey {#sec-1}
 
 Binding convention from the umbrella: standards-first, **mint sparingly**. Every candidate below was
 checked against its published specification, not from memory. The result is unusual — the runtime
@@ -65,7 +83,7 @@ knowledge. `wl:Environment` alone has no parent — a wrong parent is worse than
 
 ---
 
-## 2. Classes
+## 2. Classes {#sec-2}
 
 ```turtle
 wl:Artifact a owl:Class ; rdfs:subClassOf prov:Entity ;
@@ -125,7 +143,7 @@ reaches. `release_frontiers` projects as that edge, not as a node.
 
 ---
 
-## 3. SKOS schemes
+## 3. SKOS schemes {#sec-3}
 
 Four fixed enums, each mirroring a `CHECK` constraint that already exists in the schema. Per the
 umbrella convention these are controlled vocabularies, never free text.
@@ -174,7 +192,7 @@ kind are different concepts that happen to share a name in the relational schema
 
 ---
 
-## 4. Properties
+## 4. Properties {#sec-4}
 
 Seven mints. Everything a standard covers truthfully is reused.
 
@@ -238,7 +256,7 @@ shows current state only; per-rollout history needs a second node type and is v2
 
 ---
 
-## 5. IRI grammar
+## 5. IRI grammar {#sec-5}
 
 **Principle: an instance IRI mirrors the relational natural key.** Projection is then a pure
 function of the row, which is what makes 007's deriver contract (deterministic, idempotent,
@@ -265,7 +283,7 @@ Slashes inside a local id remain permissible (slash namespace, opaque path), as 
 
 ---
 
-## 6. Projection
+## 6. Projection {#sec-6}
 
 Feeds 007's `observed/deploy` named graph. Authority is unchanged: the backbone and ingest own every
 runtime fact, the graph mirrors them read-only.
@@ -321,7 +339,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 
 ---
 
-## 7. Amendments to existing specs
+## 7. Amendments to existing specs {#sec-7}
 
 | Spec | Change |
 |---|---|

@@ -30,3 +30,5 @@ configMapGenerator:
       - migrations/0007_skills.down.sql
       - migrations/0008_session_cost.up.sql
       - migrations/0008_session_cost.down.sql
+      - migrations/0009_task_kinds.up.sql
+      - migrations/0009_task_kinds.down.sql

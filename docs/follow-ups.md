@@ -86,3 +86,7 @@ once an instance is running (dogfooding); until then this file is the list.
   saying the annotations must sit on the *Service* (the hzdev collector's
   `k8s-service-endpoints` job) and that no Prometheus operator exists — exactly
   the trap worklode fell into before spec 022 §9.
+- **`wl:taskState` duplicates the `tasks.state` enum** in `ns/shapes.ttl`
+  (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
+  The transitions are not duplicated — they stay in `internal/store/tasks.go`.
+  Worth a check in CI if the graph ever ships.
