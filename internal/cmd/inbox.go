@@ -111,7 +111,9 @@ func newInboxPromoteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "task title (default: the issue's title)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low (required)")
-	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, spec")
+	// epic is omitted deliberately: promote rejects it, since a childless epic
+	// could never leave its rolled-up state (spec 018).
+	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, spec, review, spike")
 	cmd.Flags().StringVar(&appliesTo, "applies-to", "", "comma-separated versions this issue applies to, e.g. v1.2,v1.3")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create the task as a draft (not claimable until `lode task ready`)")
 	cmd.Flags().StringVar(&parent, "parent", "", "make the new task a child of this epic")
