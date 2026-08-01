@@ -1,3 +1,6 @@
+---
+implements: docs/specs/006-knowledge-graph.md
+---
 # Knowledge graph 1/2 (spec 006): vocabulary, IRIs & the graph layer — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

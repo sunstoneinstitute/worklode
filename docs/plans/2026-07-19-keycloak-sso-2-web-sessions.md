@@ -1,8 +1,11 @@
+---
+implements: docs/specs/001-keycloak-sso.md
+requires:
+  - 2026-07-19-keycloak-sso-1-server-core.md
+---
 # Keycloak SSO — Plan 2: Web UI Sessions Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Depends on:** Plan 1 (server core) — this plan uses `s.oidc`, `s.cfg.SessionSecret`, `s.cfg.PublicURL`, the `provisionActor` helper, and the `oidctest` fake issuer, all introduced there.
 
 **Goal:** Gate the read-only web UI behind an OIDC login when SSO is enabled: an auth-code + PKCE redirect flow (`/auth/login`, `/auth/callback`), HMAC-signed session cookies with no server-side state, and middleware that 302s unauthenticated web requests to login. When OIDC is unconfigured the web UI stays open exactly as today.
 

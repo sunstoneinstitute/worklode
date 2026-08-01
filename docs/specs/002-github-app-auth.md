@@ -1,12 +1,21 @@
+---
+status: proposed
+issued: 2026-07-20
+amends:
+  ".":
+    - 001-keycloak-sso.md#sec-why
+  "#sec-b":
+    - 001-keycloak-sso.md#sec-web-ui-sessions
+  "#sec-d":
+    - 001-keycloak-sso.md#sec-decisions
+amendedBy:
+  ".":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+isReplacedBy:
+  "#sec-c":
+    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+---
 # Spec 002 — GitHub App authentication for worklode
-
-**Date:** 2026-07-20
-**Status:** Design — approved shape, pending spec review
-**Umbrella:** `000-umbrella-architecture.md`
-**Amended by:** CLI login superseded by `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`.
-GitHub as a *login provider* (sections B–D) superseded by spec 023 — Keycloak
-is the sole login; GitHub becomes a link-only flow. Token storage (§E) and the
-attribution goal are retained and completed by 023.
 
 ## Summary
 
@@ -51,7 +60,7 @@ specific routes, encrypted token storage, and outbound GitHub calls.
 
 ## Design
 
-### A. GitHub App(s) — one per environment
+### A. GitHub App(s) — one per environment {#sec-a}
 
 Create `worklode-dev` now (`worklode-prod` later). One App per env
 because a GitHub App has a single webhook URL and single set of callback URLs;
@@ -77,7 +86,7 @@ App configuration:
 The "Identifying and authorizing users" callback URL — previously unused — is now
 the GitHub web-login callback.
 
-### B. Web login — new GitHub provider (alongside Keycloak)
+### B. Web login — new GitHub provider (alongside Keycloak) {#sec-b}
 
 New GitHub-specific routes are added; the existing `/auth/login` and
 `/auth/callback` Keycloak routes are untouched. The login page offers both
@@ -101,7 +110,7 @@ construction, code exchange, identity + membership fetch), paralleling
 `internal/oidc` without touching it. A new `githubweb.go` holds the GitHub route
 handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 
-### C. CLI login (device flow, server-mediated)
+### C. CLI login (device flow, server-mediated) {#sec-c}
 
 > **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). No device flow was built; `lode login` uses a server-mediated browser loopback with a one-time code, for both providers.
 
@@ -124,7 +133,7 @@ user-to-server token never reach the client:
 
 The CLI never holds a GitHub token.
 
-### D. Authorization
+### D. Authorization {#sec-d}
 
 For **GitHub-authenticated** users (Keycloak users keep their Keycloak-role
 evaluation, unchanged). Evaluated on every GitHub login (web and CLI), matching

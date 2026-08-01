@@ -1,8 +1,28 @@
+---
+status: superseded
+issued: 2026-07-21
+amendedBy:
+  ".":
+    - 014-design-documents-as-graph-objects.md#sec-1
+  "#sec-resolved-decisions":
+    - 014-design-documents-as-graph-objects.md
+    - 015-runtime-layer.md#sec-7
+  "#sec-d14":
+    - 008-worklode-plugin.md
+    - 011-delivery-lifecycle.md
+  "#sec-d15":
+    - 014-design-documents-as-graph-objects.md#sec-2
+isReplacedBy:
+  ".":
+    - 000-umbrella-architecture.md
+    - 004-execution-backbone.md
+    - 005-prioritization-and-pickup.md
+    - 006-knowledge-graph.md
+    - 007-drift-and-overview.md
+    - 008-worklode-plugin.md
+    - 009-data-platform-kg-requirements.md
+---
 # Spec 003 — worklode → platform knowledge graph design record
-
-**Date:** 2026-07-21 · **Status:** design record (graduated into specs 000, 004–009) · **partially implemented**
-**Umbrella:** `000-umbrella-architecture.md`
-**Amended by:** 008, 011, 014, 015
 
 > **Status corrected.** D1–D15 are no longer unimplemented: the backbone, ranking, per-project task keys, delivery lifecycle and agent sessions all shipped (migrations 0001–0005).
 
@@ -19,7 +39,7 @@ Visual: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d4c
 
 ---
 
-## Resolved decisions
+## Resolved decisions {#sec-resolved-decisions}
 
 **D1 — Two stores, not one monolith.** An *execution* store and a *knowledge* store,
 joined by IRI.
@@ -145,7 +165,7 @@ Shortlist considered:
 
 ---
 
-## D14 — Claude Code integration: the Worklode plugin
+## D14 — Claude Code integration: the Worklode plugin {#sec-d14}
 
 > **Amended by 008 and 011.** The worktree directory is `wt/<id>-<slug>`; the *branch* carries the configurable prefix (`LODE_BRANCH_PREFIX`, default `lode/`). `wl/` is legacy-recognised only.
 
@@ -207,7 +227,7 @@ definition-of-done + branch. No file spelunking.
 
 **Subagent (optional):** `lode-worker` for headless 24/7 loops.
 
-## D15 — Task sizing & graduated decomposition
+## D15 — Task sizing & graduated decomposition {#sec-d15}
 
 > **Amended by 014 §2.** There is no Plan document: plan-shaped work is an ordered task subtree, so graduation now runs {nothing → task subtree → Spec/ADR}.
 

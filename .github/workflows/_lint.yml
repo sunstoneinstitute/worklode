@@ -42,3 +42,13 @@ jobs:
         run: go vet ./...
       - name: migration numbers
         run: ./scripts/check-migrations.sh --no-fix
+      # Only reached on mixed or `can-be-tested` PRs — docs-only PRs skip this
+      # workflow, so the pre-commit hook is the primary gate.
+      - name: section numbers
+        run: |
+          out=$(./scripts/secfmt.py -l) || status=$?
+          if [ -n "$out" ]; then
+            echo "secfmt needs to be run on:" >&2
+            echo "$out" >&2
+          fi
+          exit "${status:-0}"

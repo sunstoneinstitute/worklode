@@ -12,6 +12,14 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
+      # Docs-only PRs skip CI, so this hook is the primary enforcement for
+      # section numbering. It only normalises what is already numbered, and
+      # refuses (exit 2) rather than move an anchor an accepted spec published.
+      - id: section-numbers
+        name: section numbers & anchors
+        entry: scripts/secfmt.py -w
+        language: script
+        files: ^docs/specs/.*\.md$
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.
       - id: migration-numbers

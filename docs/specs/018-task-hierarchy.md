@@ -1,9 +1,13 @@
+---
+status: accepted
+issued: 2026-07-29
+amends:
+  ".":
+    - 004-execution-backbone.md
+    - 005-prioritization-and-pickup.md
+    - 011-delivery-lifecycle.md
+---
 # Spec 018 — Task hierarchy (epics and tracking tasks)
-
-**Date:** 2026-07-29 · **Status:** spec ·
-**Umbrella:** `000-umbrella-architecture.md`
-**Area:** spec 004 (execution backbone — task edges), spec 005 (pickup — the
-decomposition gate), spec 011 (delivery lifecycle — the state machine)
 
 ## Why
 
