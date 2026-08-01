@@ -7,10 +7,10 @@ the executor can be.
 | Role | Model | Rationale |
 |---|---|---|
 | Planning: spec reading, scope decisions, writing implementation plans | Fable 5 | Highest reasoning tier; its job is to make plans precise enough that cheaper models can execute them. |
-| Execution coordination (subagent-driven-development loop) | Opus 4.8 | Judgment across tasks: sequencing, reviewing results, handling plan-vs-reality deviations. |
+| Execution coordination (subagent-driven-development loop) | Opus | Judgment across tasks: sequencing, reviewing results, handling plan-vs-reality deviations. |
 | Implementation subagents — plan task is fully specified (exact files, code, tests; no spikes, no open design decisions) | Sonnet | Precise plans make implementation mechanical; Sonnet executes them reliably at lower cost. |
-| Implementation subagents — task involves unknowns (debugging, spikes, design gaps, plan conflicts with reality) | Opus 4.8 | Ambiguity needs judgment; escalate rather than let Sonnet improvise. |
-| Spec review / code review between tasks | Opus 4.8 | Review is judgment, not mechanics. |
+| Implementation subagents — task involves unknowns (debugging, spikes, design gaps, plan conflicts with reality) | Opus | Ambiguity needs judgment; escalate rather than let Sonnet improvise. |
+| Spec review / code review between tasks | Opus | Review is judgment, not mechanics. |
 | Exploration / fact-finding (codebase mapping, doc lookups) | Agent-definition default (Explore, claude-code-guide, ...) | Read-only; the default tier is sufficient. |
 
 Rules of thumb:
@@ -21,6 +21,20 @@ Rules of thumb:
   driving), silently running mechanical work on the most expensive tier.
   Reviewers: `model: "opus"`. Coordinators: dispatched with `model: "opus"`.
   Fully-specified implementation: `model: "sonnet"`.
+- **"Agent-definition default" (the Exploration row) only applies when you set
+  `subagent_type` to a dedicated read-only agent that itself pins a cheaper
+  model (Explore, claude-code-guide).** A generic dispatch — no
+  `subagent_type`, or `subagent_type: "claude"`/`"general-purpose"` — has no
+  such pinned default, so the omission rule above applies and it runs on the
+  expensive top-level model. If a step is genuinely trivial (a single
+  `cat`/`grep`/file read, no synthesis), the cheapest fix is not to dispatch a
+  subagent at all — do it directly with Read/Bash/Grep in the current agent.
+  If a subagent boundary is still required (e.g. subagent-driven-development
+  forces one per task), set `model: "sonnet"` explicitly.
+- **Exception: forks (`subagent_type: "fork"`) always run on the parent
+  model and ignore `model` overrides** — that's how they share the parent's
+  prompt cache. This is correct and expected; don't try to force a fork onto
+  Sonnet, and don't flag fork model usage as a violation of the rule above.
 - A coordinator dispatches Sonnet implementers by default when the plan task
   meets the "fully specified" bar, and escalates that task to Opus on the
   first sign the plan doesn't match reality.
