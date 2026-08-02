@@ -205,3 +205,22 @@ Two refusals, neither of which you should paper over with `--force`:
 - **"numbers a section whose parent is unnumbered"** — decide whether the parent
   gets a number or the child loses one. The choice changes which numbers inbound
   references use, so it is never made automatically.
+
+## The section index and the current view
+
+```bash
+./scripts/secindex.py           # regenerate docs/{specs,plans}/index.yaml
+./scripts/seccurrent.py         # print what still holds, after supersession
+```
+
+`index.yaml` is every document's sections keyed by anchor — the lookup that
+answers "which section covers X" without opening 26 specs. It is generated; a
+pre-commit hook rewrites it and fails so you re-stage, like `secfmt.py`.
+
+`seccurrent.py` reads that index plus the amendment and supersession
+frontmatter and prints the corpus as it currently stands: superseded documents
+and replaced sections drop out, amended sections carry a note. A `replaces`
+claim only takes effect once the document making it is `accepted`, so a draft's
+claim shows as `pending` on the target; `--with-drafts` shows the corpus as it
+will be once the open drafts land. It also names references that point at
+sections which do not exist.
