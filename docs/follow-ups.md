@@ -90,3 +90,14 @@ once an instance is running (dogfooding); until then this file is the list.
   (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
   The transitions are not duplicated — they stay in `internal/store/tasks.go`.
   Worth a check in CI if the graph ever ships.
+- **`rdf-registry:ADR-0006` is unresolvable** (spec 014's frontmatter, the corpus's
+  only cross-project reference). It predates the `<KEY>-<TYPE>-<n>` shorthand
+  (014 §11.3) and no reference form parses the colon syntax. The target is
+  `rdf-registry/docs/adr/0006-iri-namespace-scheme.md`. Rewrite it to `<KEY>-ADR-6`
+  once rdf-registry is registered as a worklode project and has a key; until then
+  026 §4.2 reports it.
+- **Adjacent repos are not registered as worklode projects**, so no cross-project
+  shorthand resolves. rdf-registry, admin-cluster and provisioning carry
+  `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
+  `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
+  dormant into useful, and it needs 025's `docs` rows first.

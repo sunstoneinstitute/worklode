@@ -5,6 +5,9 @@ requires:
   - 004-execution-backbone.md
   - 010-per-project-task-keys.md
   - 008-worklode-plugin.md
+amendedBy:
+  "#sec-2":
+    - 026-design-doc-queries.md#sec-4.2
 ---
 # Spec 019 — Repo-scoped CLI commands
 
@@ -65,6 +68,11 @@ server keeps the CLI to `git remote get-url origin` plus an HTTP call, and
 means a normalization fix ships without a CLI upgrade.
 
 ## 2. Resolution chain {#sec-2}
+
+> **Amended by spec 026 §4.2.** `.worklode/config.toml` gains an optional `project_key`
+> alongside `current_project`. It is not part of this chain — the resolution below is
+> unchanged — but it lets a commit hook know the project's key without the server or the
+> §4.1 cache, which a fresh clone does not have.
 
 Every project-aware command resolves its scope the same way, first hit wins:
 

@@ -5,6 +5,9 @@ task: WL-12
 amends:
   ".":
     - 004-execution-backbone.md
+amendedBy:
+  "#sec-2":
+    - 014-design-documents-as-graph-objects.md#sec-11.3
 ---
 # Spec 010 — Per-project task keys (Jira-style IDs)
 
@@ -31,6 +34,11 @@ Immutable because the key is baked into permanent task IDs, `wl/<id>` branch
 names, and `WL-Task:` PR markers — changing it would orphan those references.
 
 ## 2. Data model — migration `0003_project_keys` {#sec-2}
+
+> **Amended by spec 014 §11.3.** `SPEC` and `ADR` are reserved and rejected as project keys:
+> they are the type token of the `<PROJECTKEY>-<TYPE>-<n>` document shorthand, and a project
+> holding one would make a reference ambiguous. The format CHECK below gains
+> `AND key NOT IN ('SPEC','ADR')`.
 
 ```sql
 ALTER TABLE projects ADD COLUMN key text;
