@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: draft
 issued: 2026-07-31
 replaces:
   "#sec-3.1":
