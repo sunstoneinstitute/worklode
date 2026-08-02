@@ -16,7 +16,7 @@ replaces:
 ---
 # Spec 000 — Worklode architecture & spec map (umbrella)
 
-**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`025`);
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`026`);
 cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
@@ -110,6 +110,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **023 — Keycloak-primary auth** | Keycloak as the primary identity provider with GitHub account linking; supersedes the login half of 002. | 001, 002 |
 | **024 — Multi-harness integration** | Harness adapters behind one `lode install`: skill delivery via the shared `.agents/skills` convention, per-harness hook binding, the Claude Code status line, and OTLP ingest. | 008, 012, 016, 022 |
 | **025 — Documents in the backbone** | Docs (spec/ADR/plan) as backbone objects, projected to the graph; plan acceptance mints its execution subtree; `epic` removed (`design`/`plan` kinds); Project as umbrella, Workstream collapsed; `ns/` as codegen'd schema source. | 004, 006, 014, 018 |
+| **026 — `lode doc` queries** | The read-only half of 025's document surface, answered from the git mirror now: which specs need planning, which plans need execution, and a spec with its amendments inlined. | 014, 019, 025 |
 
 ---
 
