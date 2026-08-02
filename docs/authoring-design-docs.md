@@ -5,6 +5,10 @@ so it passes `scripts/secfmt.py`. Spec 014 §3 and §11 own the *why*; this file
 is the operational checklist. Read it before adding a spec, adding a plan, or
 amending an existing section.
 
+> **Direction (spec 025):** these files move into the backbone — docs as
+> Worklode objects, frontmatter as columns, plan acceptance minting the task
+> subtree. Until 025 is implemented, this checklist governs unchanged.
+
 ## Which tree
 
 | | `docs/specs/` | `docs/plans/` |
@@ -28,7 +32,7 @@ three specs.
 
 | Key | Term | Shape | On |
 |---|---|---|---|
-| `status` | `wl:status` | one of `draft`, `proposed`, `accepted`, `superseded` | specs, design records |
+| `status` | `wl:status` | one of `draft`, `accepted`, `superseded` (`proposed` retired by 025 §3 — a doc under review stays `draft`) | specs, design records |
 | `issued` | `dct:issued` | `YYYY-MM-DD` of first publication | specs, design records |
 | `implements` | `wl:implements` | scalar or list of spec references | **plans** |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | list of references | both |
@@ -38,7 +42,8 @@ three specs.
 | `task` | — | `WL-<n>` | transitional only |
 
 `task` records the lode task that implements a spec while plans still live in
-git. It is not an ontology term and goes away when plans become task subtrees.
+git. It is not an ontology term and goes away when plans become task subtrees
+(spec 025 §5 — the binding becomes the accept-minted root's doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
