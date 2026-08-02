@@ -5,6 +5,9 @@ requires:
   - 014-design-documents-as-graph-objects.md
   - 019-project-scoping.md
   - 025-documents-in-the-backbone.md
+amends:
+  "#sec-4.2":
+    - 019-project-scoping.md#sec-2
 ---
 # Spec 026 — `lode doc` queries over the document corpus
 
@@ -165,8 +168,11 @@ reading path of §3.2.
 lode doc show <ref> [--resolved] [--section <anchor>]
 ```
 
-`<ref>` is a path, a bare filename, or a spec number (`014`, `014-design-documents`) that
-matches exactly one document; an ambiguous ref is an error listing the candidates. Without
+`<ref>` is a path, a bare filename, a spec number (`014`, `014-design-documents`), or 014
+§11.3's shorthand (`WL-SPEC-14`, and `WL-SPEC-14#sec-2.1` as sugar for `--section sec-2.1`)
+that matches exactly one document; an ambiguous ref is an error listing the candidates.
+A shorthand naming another project is reported unresolved rather than fetched — §4.2's tier 2
+is dormant until 025. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
 the same ref forms as everything else.
 
@@ -379,6 +385,67 @@ deleted with the files rather than ported.
 A document with no baseline — newly added in this commit — is unfrozen by construction and
 checked only for references.
 
+### 4.2 Shorthand references resolve in three tiers {#sec-4.2}
+
+014 §11.3 adds `<PROJECTKEY>-<TYPE>-<n>` alongside §4's path forms. Which tier applies is
+decided by the key, never by the caller:
+
+| Tier | Reference | Resolved by | An unresolvable one is |
+|---|---|---|---|
+| 1 | key is the current project — §1's `.worklode/config.toml` walk | glob `<n>` against this corpus's filenames, which §1 fixes as `docs/specs/NNN-*.md` | a **defect**, exactly as §4 treats a dangling path |
+| 2 | key is another project, backbone reachable | the `docs` rows of 025 §4 | a **defect** — the key is known and the document is not |
+| 3 | key is another project, backbone unreachable | shape validation alone | **`unresolved: project <KEY> not known here`** — printed, exit code unaffected |
+
+014 §11.3 has `<TYPE>` checked against the target's kind, and no document declares one until
+025's `docs.kind` column exists. Until then a document under `docs/specs/` is a spec unless its
+frontmatter carries `kind: adr` — an optional key only ADRs need, so no file is backfilled and
+the corpus (which has no ADR today) is untouched. `WL-ADR-7` naming a document without it is a
+kind mismatch, and a defect.
+
+Tier 1 needs the current project's **key**, and `.worklode/config.toml` holds only
+`current_project`, which is an id. It gains one optional line:
+
+```toml
+current_project = "worklode"
+project_key = "WL"
+```
+
+019 §4.1's key cache does not substitute for it: the cache is in `~/.cache`, and a fresh clone
+has none. Committing the key to the repo is safe because 010 §1 makes it immutable, and it is
+what buys tier-1 checking. Where the key is absent every shorthand falls to tier 3, so the line
+stays optional and an un-migrated repo degrades rather than failing.
+
+**Tier 2 is dormant in this spec's window.** It reads the `docs` rows, and 025 has not landed;
+§1's "this spec adds no endpoint" stands, and nothing here builds one. Until then every foreign
+key falls to tier 3, and the tier exists in the table so that landing 025 changes which branch
+runs rather than what a reference means.
+
+It also cannot be shortcut by reading the other repo off disk, even where one is checked out
+beside this repo. No two corpora in the org share a layout: worklode numbers specs and ADRs
+together under `docs/specs/`, rdf-registry and provisioning keep four-digit ADRs in `docs/adr/`,
+and all four adjacent repos put specs under `docs/superpowers/specs/`. A resolver that guessed
+would need every one of those conventions and a way to find the checkout. The backbone knows a
+document's identity without knowing anyone's directory layout, which is the whole reason tier 2
+is where it is.
+
+Tier 3 is the case every git hook is in, and it is why the shorthand can be admitted at all.
+§0 fixes that a commit-time gate must run in a fresh checkout, mid-rebase, before anything is
+built; a check that reaches another repository or the server fails precisely when the tree is
+worth checking. The degradation is therefore a rule rather than each caller's judgement:
+
+> A check that cannot reach the authority for a reference reports it unresolved. It never
+> fails, and it never guesses which document was meant.
+
+This is the only exception to §4's "a reference that does not resolve is a defect", and it is
+narrow: it needs the shape to have validated and the key to name a project this checkout has
+no way to reach. A malformed shorthand, a tier-1 miss, and a tier-2 miss are all defects.
+`--strict-refs` promotes tier-3 to a defect for the one caller that can afford it — a CI job
+with the backbone reachable. No hook passes it.
+
+The corpus's one existing cross-project reference, 014's `amends: rdf-registry:ADR-0006`, is
+in a colon form no tier parses. It stays a reported defect until rdf-registry has a project
+key and it becomes `<KEY>-ADR-6`.
+
 ## 5. Plans carry `status` and `task` {#sec-5}
 
 Two frontmatter keys move from optional to expected on plans.
@@ -402,8 +469,9 @@ Neither key is backfilled across the existing corpus (§2.2).
 `docs/authoring-design-docs.md`:
 
 - the frontmatter table gains `status` on plans and `task` on plans, with §5's meanings;
-- the references section gains the four reference forms of §4, and a line requiring
-  section-scoped `implements` on new plans, with §2.1's reason;
+- the references section gains the four reference forms of §4, 014 §11.3's shorthand with the
+  rule that distance decides the canonical form, and a line requiring section-scoped
+  `implements` on new plans, with §2.1's reason;
 - a line on writing amendments as self-contained, section-shaped payloads, so they
   consolidate cleanly (§3.2) instead of reading as a diff against text the reader cannot see;
 - a short section pointing at `lode doc` as the way to answer these questions — orientation
@@ -424,7 +492,9 @@ nobody expects the `gofmt`-shaped fix-and-retry loop the other doc hooks have (�
 | `internal/designdoc/query.go` | `NeedsPlanning`, `NeedsExecution` (taking task states as an argument, not fetching them), `CurrentSections`, the effectiveness gate and coverage set arithmetic |
 | `internal/designdoc/resolved.go` | the §3 rendering: the §3.2 fixpoint, body-once set, cycle detection, attribution |
 | `internal/designdoc/check.go` | §4's reference and mirror-edge reporting, used by every query |
+| `internal/designdoc/shorthand.go` | §4.2: parse, normalise, tier selection, `kind` verification |
 | `internal/cmd/doc.go` | cobra commands, ref forms, table and `--json` output |
+| `scripts/secfmt.py` | the same shorthand grammar; tier-1 resolution and canonical-form rewriting in frontmatter |
 | `scripts/secfrozen.py` | §4.1's gate: baseline diff against `HEAD`, reference integrity, acyclicity; refuses |
 
 The query layer takes task states as input rather than reaching for a client, so every
@@ -434,6 +504,11 @@ does the one API call.
 Parsing is `designdoc.Parse`, which already round-trips the corpus byte for byte and shares
 its heading grammar with `secfmt.py`.
 
+The shorthand grammar exists twice for the same reason the heading grammar does: the hook is
+Python and cannot depend on a build (§0). `testdata/shorthand.yaml` — input, expected parse
+or expected error, expected canonical form — is read by both test suites, so a divergence is
+a test failure rather than a corpus that means two things.
+
 ## 8. Testing {#sec-8}
 
 - Golden fixture corpus (a handful of small specs and plans in `testdata/`) covering: all
@@ -441,6 +516,14 @@ its heading grammar with `secfmt.py`.
   supersession, a dangling ref, a missing mirror edge.
 - Reference resolution: a bare path resolves from the repo root and a `../` path from the
   referring document's directory, on the same target, from the same file.
+- Shorthand (§4.2), Go and Python both driven by `testdata/shorthand.yaml`: `WL-SPEC-23` and
+  `WL-SPEC-023` resolve to the same document and normalise to the same string; a fragment
+  survives the round trip; `WL-23`, `wl-spec-23` and `WL-PLAN-3` are rejected as malformed;
+  `WL-SPEC-999` is a tier-1 defect; `WL-ADR-23` against a `kind: spec` target is a defect
+  naming the kind mismatch; `CMS-SPEC-4` with no backbone is reported unresolved and leaves
+  the exit code at 0, and becomes a defect under `--strict-refs`.
+- Canonical form: `secfmt.py` rewrites a within-project shorthand to the target's filename and
+  leaves a foreign one alone; running it twice changes nothing the second time.
 - `NeedsPlanning`: whole-document claim covers a later-added section; section claim covers
   only its own; a spec with no plan lists every section; a draft spec never appears.
 - `NeedsExecution`: no `task` → listed; open task → listed; closed task → absent; no
@@ -507,6 +590,11 @@ is the whole of what makes them possible, and it is what ships here.
    into `.pre-commit-config.yaml`, never rewrites a file, and runs with no `lode` binary
    present.
 6. Every query is computed without contacting the server except `--needs-execution`.
+7. `lode doc show WL-SPEC-14#sec-2.1` prints 014 §11.1, and `secfmt.py` rewrites a
+   `requires: WL-SPEC-4` in a worklode document to `004-execution-backbone.md` while leaving
+   a foreign `CMS-SPEC-4` untouched.
+8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
+   defect is an unresolvable foreign shorthand, and both name it on stderr.
 7. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
    script — and only that one — is deleted in the same change; `secfmt.py` and
    `secindex.py` keep their hooks.
