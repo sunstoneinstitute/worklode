@@ -43,7 +43,7 @@ script, and the Go commands are the **read surface only** — they report the de
 encounter so a query never quietly lies, but nothing here makes them a precondition for
 committing.
 
-`scripts/seccurrent.py` is different: it is a reporting tool rather than a hook, and it
+`scripts/currentspec.py` is different: it is a reporting tool rather than a hook, and it
 established the semantics §3 and §4 adopt — most importantly that a claim is only effective
 once the claiming document is accepted. It retires into `lode doc sections`.
 
@@ -152,7 +152,7 @@ lode doc sections [--with-drafts] [--show-dropped]
 A section is dropped when an effective `replaces` (§3.1) names it, and a whole document is
 dropped when its own status is `superseded`; both are summarised in a footer rather than
 silently vanishing. A section an effective `amends` names is kept and annotated — an amended
-section still states the design, just not alone. This is `scripts/seccurrent.py`'s output
+section still states the design, just not alone. This is `scripts/currentspec.py`'s output
 contract, and the script's tests become this command's.
 
 It is the orientation map for anyone entering the corpus: one screen naming where each
@@ -456,7 +456,7 @@ its heading grammar with `secfmt.py`.
 - The §3.1 gate: a draft document's `replaces` leaves its target listed and marked
   `pending`; the same claim from an accepted document drops it; `--with-drafts` flips the
   first case to the second; a claim from a document with no status is effective.
-- `lode doc sections` reproduces `scripts/seccurrent.py`'s output on the real corpus, which
+- `lode doc sections` reproduces `scripts/currentspec.py`'s output on the real corpus, which
   is what lets the script be deleted rather than left to drift.
 - A test over the **real** `docs/` tree asserting zero unresolvable references and zero
   mirror-edge disagreements. It fails the build when someone lands a broken reference, which
@@ -507,7 +507,7 @@ is the whole of what makes them possible, and it is what ships here.
    into `.pre-commit-config.yaml`, never rewrites a file, and runs with no `lode` binary
    present.
 6. Every query is computed without contacting the server except `--needs-execution`.
-7. `lode doc sections` matches `scripts/seccurrent.py` on the current corpus, and that
+7. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
    script — and only that one — is deleted in the same change; `secfmt.py` and
    `secindex.py` keep their hooks.
 8. Spec 025 being `draft` leaves 018's sections listed as current and marked `pending`;
