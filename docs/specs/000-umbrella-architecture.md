@@ -3,6 +3,8 @@ status: accepted
 issued: 2026-07-21
 wasDerivedFrom: 003-platform-graph-design.md (D1–D15)
 amendedBy:
+  "#sec-1":
+    - 025-documents-in-the-backbone.md#sec-2
   "#sec-2":
     - 014-design-documents-as-graph-objects.md#sec-2
     - 015-runtime-layer.md#sec-7
@@ -14,7 +16,7 @@ replaces:
 ---
 # Spec 000 — Worklode architecture & spec map (umbrella)
 
-**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`024`);
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`025`);
 cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
@@ -35,6 +37,11 @@ Visual model: https://claude.ai/code/artifact/f66372e2-af75-4ea7-a8c1-73f6783b4d
 ---
 
 ## 1. Architecture in one screen {#sec-1}
+
+> **Amended by 025 §2.** Design documents (specs, ADRs, plans) are authored in the **backbone**
+> and projected into the graph like tasks; "design facts flow graph → backbone" no longer
+> describes documents. The graph remains the derived, queryable view — never an authoring
+> surface for documents.
 
 **Two stores, authority split — no fact has two owners:**
 - **Execution backbone** — Worklode · **Postgres**. Task state, leases (worktree-bound), provenance
@@ -102,6 +109,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **022 — Prometheus domain metrics** | Domain-level metrics (leases, delivery, skill sync) on the server's existing Prometheus registry. | 004, 011, 016 |
 | **023 — Keycloak-primary auth** | Keycloak as the primary identity provider with GitHub account linking; supersedes the login half of 002. | 001, 002 |
 | **024 — Multi-harness integration** | Harness adapters behind one `lode install`: skill delivery via the shared `.agents/skills` convention, per-harness hook binding, the Claude Code status line, and OTLP ingest. | 008, 012, 016, 022 |
+| **025 — Documents in the backbone** | Docs (spec/ADR/plan) as backbone objects, projected to the graph; plan acceptance mints its execution subtree; `epic` removed (`design`/`plan` kinds); Project as umbrella, Workstream collapsed; `ns/` as codegen'd schema source. | 004, 006, 014, 018 |
 
 ---
 

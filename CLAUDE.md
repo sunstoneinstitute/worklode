@@ -61,9 +61,31 @@ agent's own transcript (`internal/transcript`, `store/pricing` — rates are
 effective-dated rows in `model_prices`, never hardcoded), and the org skill
 registry with pgvector embeddings (`internal/skillsync`, `skillstore`).
 
-The backbone (this repo, Postgres) owns execution facts only; design/
-architecture facts belong to the data-platform knowledge graph (spec 003/006).
+The backbone (this repo, Postgres) owns execution facts and — once spec 025
+is implemented — design-document artifacts (specs, ADRs, plans); derived
+architecture facts and the queryable view of both belong to the data-platform
+knowledge graph (specs 003/006/025), which receives documents by projection.
 No fact has two owners — keep new state on the right side of that split.
+
+## Specs, plans, tasks
+
+The model (spec 025; files under `docs/` are the transitional mirror until it
+is implemented):
+
+- A **spec** is a durable document. Writing or revising one is an ordinary
+  claimable task (`kind = 'spec'`, renamed `design` by 025) that closes when
+  the document is accepted. "Is the spec implemented?" is a coverage query,
+  never a task state — do not create long-lived umbrella tasks per spec.
+- A **plan** is an executable document; its execution is a task subtree —
+  root task (`kind = 'epic'` today, `plan` after 025) plus children, minted
+  when the plan is accepted. The root is never claimable and rolls up from
+  its children (spec 018). Do not create free-standing epics.
+- **Groupings are queries, not rows** (025 §1): one plan's tasks = its
+  subtree; cross-plan "ships together" = Milestone over Deliverables (v2);
+  everything in a repo set = the project. There is no sprint concept and no
+  spec-level container above plan roots — order plan roots with `blocks`.
+- Spec → plan decomposition is always an explicit human act; skills may
+  offer it, never perform it unasked.
 
 `e2e/` drives the stack through public surfaces only (HTTP API, signed
 webhooks, web pages) — never direct store writes. Keep it that way; it exists
@@ -93,9 +115,10 @@ the `can-be-tested` label forces a run.
   `ontology.ttl` (classes, properties, axioms), `concept.ttl` (SKOS enums),
   `shapes.ttl` (SHACL). It is the vocabulary the frontmatter keys come from, and
   the parseable form — the specs' own Turtle blocks are illustrative and do not
-  parse. The specs stay authoritative and the graph is unimplemented;
-  publication under `https://worklode.io/ns/` belongs to rdf-registry. Amend the
-  spec first, then mirror the term here (`riot --validate ns/*.ttl`).
+  parse. `ns/` owns the shared schema and the specs own the rationale
+  (025 §9); until the codegen step exists, amend the spec first, then mirror
+  the term here (`riot --validate ns/*.ttl`) — and never edit `wlc:TaskKind`
+  apart from the migration and `validKinds`, which a test holds together.
 
 ## Metrics
 

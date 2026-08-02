@@ -55,10 +55,28 @@ replaces:
     - 013-reconciliation.md#sec-8
   "#sec-acceptance-criteria":
     - 006-knowledge-graph.md#sec-11
+amendedBy:
+  "#sec-0":
+    - 025-documents-in-the-backbone.md#sec-2
+  "#sec-2":
+    - 025-documents-in-the-backbone.md#sec-4
+  "#sec-4":
+    - 025-documents-in-the-backbone.md#sec-2
+  "#sec-5":
+    - 025-documents-in-the-backbone.md#sec-3
+  "#sec-10":
+    - 025-documents-in-the-backbone.md#sec-2
+isReplacedBy:
+  "#sec-8":
+    - 025-documents-in-the-backbone.md#sec-6
 ---
 # Spec 014 — Design documents as graph objects
 
 ## 0. Purpose & scope {#sec-0}
+
+> **Amended by 025 §2.** The authoritative store is the backbone, not the graph: documents are
+> authored as backbone objects and **projected into** the graph like tasks. The logical model
+> below — sections, anchors, versioning, coverage, constraints — is unchanged by that move.
 
 Spec 006 already decided that design documents are **graph-authored, never projected** — a Spec or
 ADR is an intent-layer object, not a file. The implementation never caught up: superpowers writes
@@ -115,6 +133,11 @@ as one product.
 ---
 
 ## 2. What is, and is not, a design document {#sec-2}
+
+> **Amended by 025 §4.** Plans return to the document store as a **sibling** of `wl:DesignDoc` —
+> reviewable and accept-gated, but mutable and anchor-free, so the argument below (the section
+> lock must never bind a plan) is preserved. Acceptance mints the execution subtree (025 §5);
+> the subtree remains what a plan's *execution* is.
 
 ### Plans are demoted
 
@@ -266,6 +289,10 @@ stale. See §6.
 
 ## 4. Versioning {#sec-4}
 
+> **Amended by 025 §2.** The IRI shapes and `wl:lastRevisedIn` survive as the graph *projection*
+> of the backbone document store; the named-graph publication transaction becomes an ordinary
+> backbone transaction, with the §7 constraints enforced server-side at accept time.
+
 ### Canonical plus versioned IRIs
 
 Every design document has a **version-free canonical IRI** that always denotes the current version,
@@ -354,6 +381,10 @@ precision, one property.
 ---
 
 ## 5. Editorial lifecycle and revisions {#sec-5}
+
+> **Amended by 025 §3.** `proposed` also leaves the scheme: a document under review is a draft
+> with an open review task, and the candidate version of a revision carries `draft`. The order
+> is `draft → accepted → superseded`, and acceptance is a manual, assignee-gated act.
 
 ### `implemented` leaves the status enum
 
@@ -572,6 +603,10 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 
 ## 8. Task kinds {#sec-8}
 
+> **Superseded by 025 §6.** The reconciliation below shipped (migration 0009) and is history;
+> the forward rules — `epic` stays, no kind for plans — are replaced: `epic` is removed,
+> `spec` is renamed `design`, and `plan` is minted as the one structural kind.
+
 Two enumerations exist today and disagree:
 
 - `deploy/base/migrations/0006_task_hierarchy.up.sql:6` →
@@ -627,6 +662,9 @@ and PullRequest and is wrong for Task, which this section is what makes an Activ
 ---
 
 ## 10. Surfaces {#sec-10}
+
+> **Amended by 025 §10.** The surface is backed by the backbone document store and gains
+> `lode doc new`, `lode doc accept`, `--resolved`, `--needs-planning` and `--needs-execution`.
 
 | Surface | Purpose |
 |---|---|

@@ -11,13 +11,18 @@ amendedBy:
     - 014-design-documents-as-graph-objects.md
     - 015-runtime-layer.md
     - 016-org-wide-skills.md#sec-1
+    - 025-documents-in-the-backbone.md#sec-8
   "#sec-1.2":
     - 014-design-documents-as-graph-objects.md#sec-2
     - 016-org-wide-skills.md#sec-1
+    - 025-documents-in-the-backbone.md#sec-8
+  "#sec-1.3":
+    - 025-documents-in-the-backbone.md#sec-8
   "#sec-1.4":
     - 014-design-documents-as-graph-objects.md#sec-5
   "#sec-1.5":
     - 014-design-documents-as-graph-objects.md#sec-8
+    - 025-documents-in-the-backbone.md#sec-6
   "#sec-3.2":
     - 014-design-documents-as-graph-objects.md#sec-9
     - 015-runtime-layer.md#sec-7
@@ -104,6 +109,8 @@ so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
 
 > **Amended by 014.** `wl:Plan` and `wl:supersededSection` leave the mint set; `wl:Section` and `wl:lastRevisedIn` join it, and `wl:status` widens to Sections.
 
+> **Amended by 025 §8.** `wl:Workstream`, `wl:OngoingMaintenance` and `wl:inWorkstream` leave the mint set; `wl:Project` is redefined as the unbounded umbrella over a set of repos (the backbone's `projects` table) and `wl:inProject` (Task→Project, exactly one, derived) replaces the Workstream membership row. 025 §4 also returns `wl:Plan` as a non-DesignDoc document class.
+
 > **Amended by 015.** Six runtime classes (`wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`, `wl:RuntimeEvent`), four SKOS schemes and seven properties join the mint set.
 
 > **Amended by 016 §1.** `wl:Skill` (execution layer) and `wl:recommendsSkill` (intent layer, DesignDoc→Skill) join the mint set; 016 declares both.
@@ -153,6 +160,8 @@ Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not 
 > **Amended by 014 §2.** `wl:Plan` is removed and `wl:Section` added; both disjointness axioms change accordingly, and 015 §2 adds a third for the runtime classes.
 
 > **Amended by 016 §1.** `wl:Skill` joins the top-level disjointness axiom.
+
+> **Amended by 025 §8 and §4.** `wl:Workstream` and `wl:OngoingMaintenance` are deleted; `wl:Project` (redefined, unbounded umbrella) takes Workstream's slot in the top-level disjointness axiom and the `(Project OngoingMaintenance)` axiom goes away. `wl:Plan` returns as a sibling of `wl:DesignDoc` — a mutable, anchor-free, executable document (025 §4).
 
 ```turtle
 ls:Component  a owl:Class ;
@@ -206,6 +215,8 @@ ls:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (
 optional and additive (Open Q).
 
 ### 1.3 Properties {#sec-1.3}
+
+> **Amended by 025 §8.** `ls:inWorkstream` is replaced by `wl:inProject` — Task→Project, functional, derived from `tasks.project_id`.
 
 > **`ls:implements` amended by 014 §6 and 015.** The Task/PR/Issue→DesignDoc form declared below is
 > superseded. Implementation is one statement, not three ranges:
@@ -341,6 +352,8 @@ transition rules (which move is allowed from where) live with the authoring skil
 ### 1.5 Task-kind & model-layer SKOS schemes {#sec-1.5}
 
 > **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike, epic`, matching the `tasks.kind` constraint. `epic` is spec 018's declared container task — structural rather than a nature of work, and in the scheme because the constraint carries it.
+
+> **Amended by 025 §6.** The scheme becomes `feature, bug, chore, design, review, spike, plan`: `epic` is removed, `spec` is renamed `design` (authoring any Worklode document), and `plan` is the one structural member — the container minted by plan acceptance or decompose.
 
 ```turtle
 lsc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .

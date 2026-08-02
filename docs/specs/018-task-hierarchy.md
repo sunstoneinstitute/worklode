@@ -6,8 +6,17 @@ amends:
     - 004-execution-backbone.md
     - 005-prioritization-and-pickup.md
     - 011-delivery-lifecycle.md
+amendedBy:
+  ".":
+    - 025-documents-in-the-backbone.md#sec-6
 ---
 # Spec 018 — Task hierarchy (epics and tracking tasks)
+
+> **Amended by spec 025 (doc-wide).** `kind = 'epic'` is renamed `plan`: the container is a
+> plan's execution root, minted by `lode doc accept` on a plan document or by `lode task
+> decompose` — never by `lode task add`. Every mechanism below (ready-set exclusion, restricted
+> state machine, roll-up, depth cap, single parent, brief) applies to the plan root unchanged;
+> read *epic* as *plan root*. The rationale for a declared container (§1) stands.
 
 ## 0. Why {#sec-0}
 
