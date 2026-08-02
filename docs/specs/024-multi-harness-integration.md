@@ -1,8 +1,13 @@
+---
+status: draft
+issued: 2026-08-01
+requires:
+  - 008-worklode-plugin.md
+  - 012-agent-sessions.md
+  - 016-org-wide-skills.md
+  - 022-prometheus-metrics.md
+---
 # Spec 024 — Multi-harness agent integration
-
-**Date:** 2026-08-01 · **Status:** spec · **Umbrella:** `000-umbrella-architecture.md` ·
-**Depends on:** 008 (worklode plugin, hooks + brief), 012 (agent sessions), 016 (org-wide
-skills), 022 (Prometheus domain metrics)
 
 ## Purpose & scope
 
