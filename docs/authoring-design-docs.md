@@ -67,6 +67,36 @@ requires:
 Every reference must resolve, and every fragment must name an anchor that exists
 in the target's source. A dangling fragment is a broken reference.
 
+### The `WL-SPEC-23` shorthand
+
+No path crosses a repository, so a reference into another project's corpus uses
+the shorthand spec 014 §11.3 defines:
+
+```
+<PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
+```
+
+`WL-SPEC-23` · `WL-SPEC-14#sec-2.1` · `WL-ADR-7` · `CMS-SPEC-4`
+
+`<PROJECTKEY>` is the project's key (the `WL` in `WL-42`), and `<n>` is the
+document's own number, unpadded — `023-keycloak-primary-auth.md` is
+`WL-SPEC-23`. The `SPEC`/`ADR` token is what keeps `WL-SPEC-23` from reading as
+task `WL-23`; it is checked against the document's kind, so it has to be right.
+
+**Distance decides which form is canonical.** Within one corpus, write the
+filename — it carries the slug, so the reference says what it points at. Across
+corpora, write the shorthand. Both parse in either position and `secfmt.py`
+rewrites each to its canonical form, so getting it wrong costs a re-stage rather
+than a review comment.
+
+Plans have no shorthand: they have no number. Reference a plan by path, or —
+once it is accepted and has minted its execution subtree — by its root task id.
+
+A shorthand naming a project this checkout cannot reach is reported as
+`unresolved`, not as an error. Commit hooks run without a network or a built
+`lode`, so a cross-project reference is never hard-checked at commit time; `lode
+doc show <ref>` is what verifies one.
+
 ## Section numbering and anchors
 
 Every section of every spec is numbered, and the anchor is the number. The
@@ -101,6 +131,13 @@ Write a new spec numbered from `## 0.` or `## 1.`. If you inherit an unnumbered
 draft, run `secfmt.py --assign -w` once to number it (add `--start 0` to begin at
 `0.`); `--assign` only fires on a document with no numbering at all, so it can
 never re-number an existing scheme.
+
+For a draft numbered only part-way down — numbered `##`, unnumbered `###` —
+`--assign` is a no-op for exactly that reason. Use `secfmt.py --assign-all -w
+--update-refs` instead: it numbers every heading down to `--depth`, keeping the
+document's existing first top-level number unless you override it with
+`--start`. Unlike `--assign` it *can* move anchors that were already published,
+so run it with `-d` first and keep `--update-refs` on.
 
 `secfmt.py` otherwise **normalises but never introduces** numbering: a heading
 you leave unnumbered stays unnumbered.

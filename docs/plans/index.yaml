@@ -509,3 +509,42 @@ docs/plans/2026-07-31-prometheus-domain-metrics.md:
     task-6-webhook-metrics: "### Task 6: Webhook metrics"
     task-7-embedding-call-metrics: "### Task 7: Embedding call metrics"
     task-8-claudemd-maintenance-rule-full-verification: "### Task 8: CLAUDE.md maintenance rule + full verification"
+docs/plans/2026-08-02-keycloak-primary-auth-1-keycloak-only.md:
+  sections:
+    file-structure: "## File structure"
+    task-1-expected-github-login-on-actors: "## Task 1: `expected_github_login` on actors"
+    task-2-carry-github-username-from-the-id-token: "## Task 2: Carry `github_username` from the ID token"
+    task-3-github-stops-being-a-cli-login-provider: "## Task 3: GitHub stops being a CLI login provider"
+    task-4-delete-github-web-login: "## Task 4: Delete GitHub web login"
+    task-5-remove-the-orgteam-configuration: "## Task 5: Remove the org/team configuration"
+    done-when: "## Done when"
+docs/plans/2026-08-02-keycloak-primary-auth-2-link-and-tokens.md:
+  sections:
+    file-structure: "## File structure"
+    task-1-the-link-row: "## Task 1: The link row"
+    task-2-githubauthclientrefresh: "## Task 2: `githubauth.Client.Refresh`"
+    task-3-storeusertoken: "## Task 3: `store.UserToken`"
+    task-4-the-web-link-flow: "## Task 4: The web link flow"
+    task-5-profile-see-and-start-a-link: "## Task 5: `/profile` — see and start a link"
+    task-6-metrics-for-the-link-flow-and-token-refresh: "## Task 6: Metrics for the link flow and token refresh"
+    done-when: "## Done when"
+docs/plans/2026-08-02-keycloak-primary-auth-3-cli-and-e2e.md:
+  sections:
+    file-structure: "## File structure"
+    task-1-the-link-nonce: "## Task 1: The link nonce"
+    task-2-nonce-authenticated-link-start-and-the-api-endpoints: "## Task 2: Nonce-authenticated link start and the API endpoints"
+    task-3-cli-client-and-polling: "## Task 3: CLI client and polling"
+    task-4-lode-auth: "## Task 4: `lode auth`"
+    task-5-end-to-end: "## Task 5: End-to-end"
+    task-6-close-out-the-docs: "## Task 6: Close out the docs"
+    done-when: "## Done when"
+docs/plans/2026-08-03-spec-shorthand-references.md:
+  sections:
+    file-structure: "## File structure"
+    task-1-the-shared-grammar-fixture: "## Task 1: The shared grammar fixture"
+    task-2-shorthand-in-go: "## Task 2: `Shorthand` in Go"
+    task-3-tier-resolution-in-go: "## Task 3: Tier resolution in Go"
+    task-4-secfmtpy-the-python-half: "## Task 4: `secfmt.py` — the Python half"
+    task-5-reserve-spec-and-adr-as-project-keys: "## Task 5: Reserve `SPEC` and `ADR` as project keys"
+    task-6-commit-project-key-and-close-the-docs: "## Task 6: Commit `project_key` and close the docs"
+    done-when: "## Done when"

@@ -40,6 +40,9 @@ amends:
     - 006-knowledge-graph.md#sec-3.2
   "#sec-10":
     - 007-drift-and-overview.md#sec-6
+  "#sec-11.3":
+    - 010-per-project-task-keys.md#sec-2
+    - 011-delivery-lifecycle.md#sec-6
 replaces:
   "#sec-1":
     - 006-knowledge-graph.md#sec-1
@@ -53,7 +56,7 @@ replaces:
     - 013-reconciliation.md#sec-3
     - 013-reconciliation.md#sec-5
     - 013-reconciliation.md#sec-8
-  "#sec-acceptance-criteria":
+  "#sec-16":
     - 006-knowledge-graph.md#sec-11
 amendedBy:
   "#sec-0":
@@ -139,7 +142,7 @@ as one product.
 > lock must never bind a plan) is preserved. Acceptance mints the execution subtree (025 §5);
 > the subtree remains what a plan's *execution* is.
 
-### Plans are demoted
+### 2.1 Plans are demoted {#sec-2.1}
 
 Spec 006 places `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That is wrong, and
 spec 008 already contradicts it:
@@ -175,7 +178,7 @@ incomplete.
 This also dissolves the `docs/superpowers/plans/` drift completely: there is no plan file, so there
 is nothing to drift.
 
-### Resulting class hierarchy
+### 2.2 Resulting class hierarchy {#sec-2.2}
 
 ```turtle
 wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity ;
@@ -216,7 +219,7 @@ That trade-off inverts here. A maintained addressable-section namespace is preci
 external link durable, so the cost 006 avoided is now the feature. This spec supersedes that choice
 and, with it, retires `wl:supersededSection`.
 
-### Anchors
+### 3.1 Anchors {#sec-3.1}
 
 Anchors are written in the source with **Pandoc/extended-Markdown attribute syntax**, and are
 therefore explicit, author-visible, and portable to any Pandoc-compatible renderer:
@@ -241,7 +244,7 @@ heading text it labels may be freely reworded; the anchor may not change.
 both need escaping) and an ambiguous URL fragment. `{#sec-2.1}` costs four characters and avoids
 the escaping entirely. Unnumbered sections take a slug on the same pattern (`{#sec-purpose}`).
 
-### Numbering is identity, so numbering is frozen
+### 3.2 Numbering is identity, so numbering is frozen {#sec-3.2}
 
 Deriving the anchor from the section number buys readable links and matches how people cite specs
 in conversation. It costs one freedom, and the cost must be stated plainly:
@@ -267,7 +270,7 @@ The suffix convention is long-established in legislative drafting for exactly th
 sorts correctly both for a reader and for a naive lexical sort. A reader encountering `2.1a` learns
 something true and useful: that section was added after the document was first accepted.
 
-### What one mint buys
+### 3.3 What one mint buys {#sec-3.3}
 
 With `wl:Section` in place, nearly every remaining requirement is expressible in terms that already
 exist:
@@ -293,7 +296,7 @@ stale. See §6.
 > of the backbone document store; the named-graph publication transaction becomes an ordinary
 > backbone transaction, with the §7 constraints enforced server-side at accept time.
 
-### Canonical plus versioned IRIs
+### 4.1 Canonical plus versioned IRIs {#sec-4.1}
 
 Every design document has a **version-free canonical IRI** that always denotes the current version,
 and one **immutable versioned IRI** per published version:
@@ -332,7 +335,7 @@ IRI:** `…/v10` does not sort after `…/v3` as a string, so a staleness test r
 > `dcat:previousVersion` (relative to `dct:replaces`) should be read off the specification rather
 > than assumed. The property *names* are settled; their axiomatisation is not restated here.
 
-### Relationship to ADR-0006
+### 4.2 Relationship to ADR-0006 {#sec-4.2}
 
 ADR-0006 requires version-free instance IRIs, and spec 006 restates this ("`<localid>` opaque &
 stable, **never** carrying a git branch or version"). Versioned IRIs are compatible with that
@@ -344,7 +347,7 @@ requirement but the reconciliation must be explicit, because it is not self-evid
 This needs a small amendment to rdf-registry ADR-0006 permitting the versioned sibling under a
 named exception, rather than a silent local deviation.
 
-### Publication is one transaction
+### 4.3 Publication is one transaction {#sec-4.3}
 
 Each version is its own **immutable named graph**; the canonical document node lives in a small
 mutable graph holding little more than the current-version pointer:
@@ -361,7 +364,7 @@ document whose current-version pointer disagrees with its content.
 Immutable version graphs also make the §3 immutability constraint nearly free: it is a set diff
 between two graphs at publish time (§7), not a bespoke checker over Markdown.
 
-### Section-level staleness without section-level versions
+### 4.4 Section-level staleness without section-level versions {#sec-4.4}
 
 Versioning at section granularity would multiply the namespace badly. Instead, each section records
 the document version in which it last changed:
@@ -386,7 +389,7 @@ precision, one property.
 > with an open review task, and the candidate version of a revision carries `draft`. The order
 > is `draft → accepted → superseded`, and acceptance is a manual, assignee-gated act.
 
-### `implemented` leaves the status enum
+### 5.1 `implemented` leaves the status enum {#sec-5.1}
 
 Spec 006's `lsc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
 implemented`, which asserts that *superseded* precedes *implemented* — incoherent on its face. The
@@ -404,7 +407,7 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
 `wlc:implemented` is removed. "Is this spec implemented?" is a coverage query (§6), never a stored
 status. `wl:status` applies to both `wl:DesignDoc` and `wl:Section`; its domain widens accordingly.
 
-### Revising an accepted document
+### 5.2 Revising an accepted document {#sec-5.2}
 
 Because the canonical IRI is version-free and `wl:status` is functional, "drafting v2" can be
 neither a new document IRI (inbound `wlid:section/…` links would silently continue to denote the
@@ -430,7 +433,7 @@ that survives into draft, because inbound links do not care that a document is m
 
 ## 6. Implementation coverage {#sec-6}
 
-### Three objects, previously conflated
+### 6.1 Three objects, previously conflated {#sec-6.1}
 
 The intuition that an unimplemented spec is future work rather than repository content resolves
 once three distinct objects are separated:
@@ -446,7 +449,7 @@ whose truth is a function of the working tree. The commit log cannot substitute,
 commit can silently invalidate an earlier one's claim, and reconstructing the current picture by
 replaying history is both expensive and unreliable.
 
-### `.worklode/implements.yaml`
+### 6.2 `.worklode/implements.yaml` {#sec-6.2}
 
 Spec 007 already establishes `.worklode/components.yaml` (path globs → Component IRIs). Its natural
 sibling declares which intent the repository satisfies:
@@ -465,7 +468,7 @@ implements:
 Machine-readable, not prose. Maintained by coding agents as part of the work that satisfies a
 section, and reviewable in the same diff as the code that justifies it.
 
-### The component is derived, never declared
+### 6.3 The component is derived, never declared {#sec-6.3}
 
 A claim is made **by a Component**, not by a repository: a repository is a packaging accident,
 whereas a component is the unit the architecture is actually described in.
@@ -486,7 +489,7 @@ Consequences:
   already reports unmatched paths as a gap; here it is fatal, because a claim that cannot be
   attributed is a claim that cannot be checked.
 
-### Single-component repositories
+### 6.4 Single-component repositories {#sec-6.4}
 
 Most repositories hold one component, and they should never have to say so. The clean model already
 exists in 006, which defines the Component IRI as `id/component/<slug>` where the slug is *"manifest
@@ -508,7 +511,7 @@ already maintains. The implicit component is promoted to an explicit one the mom
 `components.yaml` declares it, and the IRI is unchanged by that promotion — so adopting
 `components.yaml` later never invalidates existing claims.
 
-### Deriver: `observed/repo-implements`
+### 6.5 Deriver: `observed/repo-implements` {#sec-6.5}
 
 The manifest is a hand-maintained *claim about code*, so it enters the **observed** layer under
 spec 007's existing deriver contract — idempotent, full-replace, confined to its own named graph:
@@ -536,7 +539,7 @@ implemented Section B by deploying Deliverable C to Environment D"** — so cove
 environment rather than as one boolean. The join runs through `wl:deliveredBy`
 (Deliverable→Component), minted in 006 §Properties.
 
-### This replaces spec 013's engine 3
+### 6.6 This replaces spec 013's engine 3 {#sec-6.6}
 
 Spec 013 engine 3 detects spec drift by comparing a document file's last commit date against a
 task's closure time — a git-mtime heuristic that fires on typo fixes and misses semantic changes to
@@ -573,7 +576,7 @@ graphs:
    that touches it on unchanged sections mass-invalidates valid claims and is rejected.
 6. **Anchor depth respects the configured limit** (§7.1 below), evaluated at publication.
 
-### Anchor depth
+### 7.1 Anchor depth {#sec-7.1}
 
 Markdown permits six heading levels. Worklode addresses fewer, because every addressable level is a
 level someone can pin a claim to, and claims at excessive granularity age badly.
@@ -706,7 +709,7 @@ is a signal that the ontology is missing one, not licence for a private extensio
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
 | `amends` / `amendedBy` | — | doc-level amendment; see below |
 
-### References carry the section
+### 11.1 References carry the section {#sec-11.1}
 
 A reference is a bare filename within the same directory and a repo-relative path across
 directories. Appending a fragment narrows it to a section:
@@ -730,7 +733,7 @@ therefore a map whose keys are the **subject document's own** anchors, with `"."
 as a whole; each entry names the *other* document's section. A range or genuinely doc-wide
 amendment stays doc-level rather than being expanded into a false list of sections.
 
-### Amendment references are bidirectional
+### 11.2 Amendment references are bidirectional {#sec-11.2}
 
 `amends`/`amendedBy` and `replaces`/`isReplacedBy` are maintained on both documents. This
 duplicates the edge, which this spec otherwise refuses to do (§6). The justification is read cost:
@@ -743,20 +746,77 @@ Neither `amends` nor `amendedBy` has an ontology term, deliberately. Doc-level a
 indexing metadata that projection reads and reduces to section-level edges — never a graph edge in
 their own right.
 
+### 11.3 The `<KEY>-<TYPE>-<n>` shorthand {#sec-11.3}
+
+A filename is addressable only from inside its own repository, so a reference into another
+project's corpus has no form under §11.1. `wl:` cannot supply one — §1 binds it to the ontology
+namespace, and `wl:SPEC-23` would read as a term. The shorthand reuses the project key spec 010
+already mints:
+
+```
+<PROJECTKEY>-<TYPE>-<n>[#sec-<anchor>]
+
+^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)(#sec-.+)?$
+```
+
+`WL-SPEC-23` · `WL-SPEC-14#sec-2.1` · `WL-ADR-7` · `CMS-SPEC-4`
+
+| Part | Value |
+|---|---|
+| `<PROJECTKEY>` | the project's key (010 §1), the same namespace task ids draw from. 019 §1 makes the project the unit; a repo only names one |
+| `<TYPE>` | `SPEC` or `ADR` |
+| `<n>` | the document's own number as an integer: `023-keycloak-primary-auth.md` is `WL-SPEC-23`, and `023` parses and normalises to `23`. Zero-padding is a filename convention each corpus sets for itself — three digits here, four in rdf-registry — so the canonical form carries none |
+| fragment | unchanged from §11.1 |
+
+`<TYPE>` earns its place by keeping `WL-SPEC-23` from reading as task `WL-23`; a document
+reference must never parse as a task id. Whether it also *selects* is a property of the corpus,
+not of the grammar. Worklode holds specs and ADRs in one flat sequence, so `WL-SPEC-23` and
+`WL-ADR-23` cannot both exist and the token is pure disambiguation. rdf-registry gives ADRs their
+own directory and their own numbering (`docs/adr/0006-iri-namespace-scheme.md`), where `RDF-ADR-6`
+and a `RDF-SPEC-6` would be different documents. In both layouts the token is verified against the
+target's `kind` rather than trusted: reclassifying a document breaks every inbound reference that
+named the old kind, which is correct, because the reference named something that no longer exists.
+
+Two consequences:
+
+- **`SPEC` and `ADR` are reserved project keys**, so the middle token can never also be a project.
+  010 §2's key CHECK gains the exclusion.
+- **Document numbers are not drawn from the task sequence.** 011 §6 floated
+  `<PROJECTKEY>-{ADR,SPEC}-<n>` with the numbers "drawn from the same sequence as tasks", which
+  costs a lookup on every write and is what this section amends. The number is the one already in
+  the filename.
+
+Plans get no shorthand. They carry no number (§2.1), they are not DesignDocs, and 025 §5 binds an
+accepted plan to its execution root task — `WL-42` is the plan's handle once it has one, and the
+repo-relative path is its handle before.
+
+**Distance decides which form is canonical.** A reference within one corpus stays a filename: it
+carries the slug, so `requires: 004-execution-backbone.md` says what it depends on without a
+lookup, and it resolves offline. A reference across corpora is the shorthand, because no path
+crosses a repository. Both forms parse in either position, and `secfmt.py` rewrites each to its
+canonical form the way it already normalises numbering. Resolution and its failure modes are 026
+§4.2.
+
+The corpus holds exactly one cross-project reference today — this document's own
+`amends: rdf-registry:ADR-0006`, in a colon form §11.1 cannot resolve. It becomes `<KEY>-ADR-6`
+once rdf-registry is registered as a project and has a key.
+
 ---
 
-## Amendments to existing specs
+## 12. Amendments to existing specs {#sec-12}
 
 | Spec | Change |
 |---|---|
 | 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected); anchor `wl:DesignDoc` on `prov:Entity` so §4's and §9's provenance edges are domain-correct, and correct Task authorship to `prov:wasAssociatedWith` (§9) |
 | 007 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries; **supersede §4.3** — the stale-claim query replaces its `dct:modified`-vs-task-closure heuristic — and re-point §4.4's Task-join at the Component→Section edge |
 | 008 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
+| 010 | Reserve `SPEC` and `ADR` as project keys in §2's key CHECK, so a project key can never occupy the shorthand's type token (§11.3) |
+| 011 | §6's `<PROJECTKEY>-{ADR,SPEC}-<n>` alias is adopted, with `<n>` the document's own filename number rather than the task sequence (§11.3) |
 | 013 | Remove engine 3 and `task_docs`; close open question 2 |
 | Migration | Widen the `tasks.kind` CHECK constraint (§8) |
 | ADR-0006 | Permit the versioned sibling IRI under a named exception (§4) |
 
-## Dependencies
+## 13. Dependencies {#sec-13}
 
 - **Spec 006** — the vocabulary this amends; the SHACL gate and `owlrl` closure tests extend to the
   new terms.
@@ -766,7 +826,7 @@ their own right.
   as the 006 ontology, never after it.
 - **crit** — review of proposed revisions.
 
-## Adoption is out of scope
+## 14. Adoption is out of scope {#sec-14}
 
 The constraints in §7 bind **from a document's first publication onward**. Markdown that has never
 been published is unconstrained, so this spec can ship without touching a single existing file, and
@@ -785,7 +845,7 @@ Two pieces of work follow from this spec without belonging to it:
   whether a first publication of legacy prose should be `accepted` or `draft`. Spec 014 defines the
   target state; spec 020 would define how an existing project reaches it.
 
-## Open questions
+## 15. Open questions {#sec-15}
 
 1. ~~Anchor assignment ergonomics~~ — **RESOLVED:** Pandoc attribute syntax, `{#sec-2.1}`, carrying
    the section number with a `sec-` prefix (§3).
@@ -807,7 +867,7 @@ Two pieces of work follow from this spec without belonging to it:
    number, so their depth is nominal. Treating them as depth 1 is the obvious reading; confirm it
    against a document with a deeply structured appendix.
 
-## Acceptance criteria {#sec-acceptance-criteria}
+## 16. Acceptance criteria {#sec-16}
 
 1. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
    `rdf/wl/` and publish under `https://worklode.io/ns/`.

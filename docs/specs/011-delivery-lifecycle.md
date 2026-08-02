@@ -9,6 +9,8 @@ amends:
 amendedBy:
   ".":
     - 018-task-hierarchy.md
+  "#sec-6":
+    - 014-design-documents-as-graph-objects.md#sec-11.3
 replaces:
   ".":
     - 004-execution-backbone.md#sec-1.2
@@ -240,6 +242,10 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 `projects.deploy_gated`. Existing `merged` tasks stay `merged` — no backfill.
 
 ## 6. Coordination with WL-12 {#sec-6}
+
+> **Amended by spec 014 §11.3.** The `<PROJECTKEY>-{ADR,SPEC}-<n>` alias below is adopted,
+> with `<n>` taken from the document's own filename number instead of the task sequence — the
+> shorthand exists so a reference is typeable without a lookup.
 
 The branch pattern is a configurable PREFIX (default `lode/`, replacing the
 hardcoded `wl/`) followed by a task key: `<prefix><task-key>[-slug]`. Task
