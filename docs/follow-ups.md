@@ -109,6 +109,17 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
+- **`graphserver.Select` has no result-set size ceiling**: fine for the e2e
+  harness and a first-party Keycloak-authenticated peer, but a caller running
+  inside a long-lived `lode serve` could issue a `SELECT` with no `LIMIT`.
+  Wrap the body in `io.LimitReader(resp.Body, 32<<20)` before decoding once a
+  server-side caller lands.
+- **`graphserver` response bodies are never drained before `Close`**: the 200
+  path of `Select` stops reading at the JSON decoder's closing brace, and
+  `httpError`'s excerpt is capped at 512 bytes, so `net/http` can't reuse
+  those connections. Consistent with the rest of the repo (no
+  `io.Copy(io.Discard, ...)` anywhere), but the e2e harness pays a fresh TLS
+  handshake on each of up to 30 polls.
 
 ## From the 2026-08-04 architecture grilling
 

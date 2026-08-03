@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -134,5 +135,64 @@ func TestDeleteGraphNotFound(t *testing.T) {
 	err := authed(srv.URL).DeleteGraph(context.Background(), "main", graphIRI)
 	if !errors.Is(err, graphserver.ErrNotFound) {
 		t.Fatalf("error = %v; want ErrNotFound", err)
+	}
+}
+
+func TestSelect(t *testing.T) {
+	srv, rec := recordingServer(t, http.StatusOK, `{
+		"head": {"vars": ["component"]},
+		"results": {"bindings": [
+			{"component": {"type": "uri", "value": "https://worklode.io/ns/id/component/comp-b"}}
+		]}
+	}`)
+	rows, err := authed(srv.URL).Select(context.Background(), "SELECT ?component WHERE {}")
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if rec.method != http.MethodPost || rec.path != "/sparql" {
+		t.Fatalf("request = %s %s; want POST /sparql", rec.method, rec.path)
+	}
+	if rec.contentType != "application/sparql-query" {
+		t.Fatalf("content type = %q; want application/sparql-query", rec.contentType)
+	}
+	if rec.accept != "application/sparql-results+json" {
+		t.Fatalf("accept = %q", rec.accept)
+	}
+	if rec.body != "SELECT ?component WHERE {}" {
+		t.Fatalf("body = %q; want the raw query", rec.body)
+	}
+	want := []map[string]string{{"component": "https://worklode.io/ns/id/component/comp-b"}}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %v; want %v", rows, want)
+	}
+}
+
+func TestSelectUnavailable(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusServiceUnavailable, "oxigraph unavailable")
+	_, err := authed(srv.URL).Select(context.Background(), "SELECT * WHERE {}")
+	if !errors.Is(err, graphserver.ErrSPARQLUnavailable) {
+		t.Fatalf("error = %v; want ErrSPARQLUnavailable", err)
+	}
+}
+
+func TestSelectBadGatewayRetryable(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusBadGateway, "upstream connect error")
+	_, err := authed(srv.URL).Select(context.Background(), "SELECT * WHERE {}")
+	if !errors.Is(err, graphserver.ErrSPARQLUnavailable) {
+		t.Fatalf("error = %v; want ErrSPARQLUnavailable on 502", err)
+	}
+}
+
+func TestSelectBadRequestNotRetryable(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusBadRequest, "bad query")
+	_, err := authed(srv.URL).Select(context.Background(), "SELECT bogus")
+	if err == nil {
+		t.Fatal("Select on 400: want an error")
+	}
+	if errors.Is(err, graphserver.ErrSPARQLUnavailable) {
+		t.Fatalf("error = %v; a 400 must not be retryable", err)
+	}
+	if !strings.Contains(err.Error(), "400") || !strings.Contains(err.Error(), "bad query") {
+		t.Fatalf("error = %v; want status and body", err)
 	}
 }
