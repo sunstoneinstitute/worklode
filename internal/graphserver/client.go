@@ -16,6 +16,7 @@ package graphserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,8 +32,9 @@ import (
 // requested branch.
 var ErrNotFound = errors.New("graph not found")
 
-// ErrSPARQLUnavailable is returned when /sparql answers 503 — Oxigraph or
-// its materializer is not serving (yet). Callers may retry.
+// ErrSPARQLUnavailable is returned when /sparql is not serving: 503 from
+// graph-server when Oxigraph or its materializer is down, or 502/504 from
+// the ingress while graph-server itself is coming up. Callers may retry.
 var ErrSPARQLUnavailable = errors.New("sparql endpoint unavailable")
 
 // Client talks to one graph-server instance.
@@ -130,6 +132,52 @@ func (c *Client) DeleteGraph(ctx context.Context, branch, graphIRI string) error
 	default:
 		return httpError("DELETE graph", resp)
 	}
+}
+
+// Select runs a SPARQL SELECT against /sparql (the Oxigraph read path) and
+// returns one map per solution, variable name → bound value. Unbound
+// variables are absent from the map, so row[v] yields the empty string;
+// use the two-value index form to tell an unbound variable from an empty
+// literal. ErrSPARQLUnavailable means Oxigraph or its materializer is not
+// serving.
+func (c *Client) Select(ctx context.Context, query string) ([]map[string]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/sparql", strings.NewReader(query))
+	if err != nil {
+		return nil, fmt.Errorf("build select request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/sparql-query")
+	req.Header.Set("Accept", "application/sparql-results+json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("select: %w", err)
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK: // fall through to the decode below
+	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
+		return nil, fmt.Errorf("select: %w", ErrSPARQLUnavailable)
+	default:
+		return nil, httpError("select", resp)
+	}
+	var out struct {
+		Results struct {
+			Bindings []map[string]struct {
+				Value string `json:"value"`
+			} `json:"bindings"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("select: decode results: %w", err)
+	}
+	rows := make([]map[string]string, 0, len(out.Results.Bindings))
+	for _, b := range out.Results.Bindings {
+		row := make(map[string]string, len(b))
+		for v, cell := range b {
+			row[v] = cell.Value
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // httpError folds a non-2xx response into one error carrying status and a
