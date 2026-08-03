@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-8
 implements: docs/specs/006-knowledge-graph.md
 ---
 # Knowledge graph 1/2 (spec 006): vocabulary, IRIs & the graph layer — Implementation Plan

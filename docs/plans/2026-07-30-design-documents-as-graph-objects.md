@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-4
 implements: docs/specs/014-design-documents-as-graph-objects.md
 ---
 # Design documents as graph objects (spec 014) — Implementation Plan

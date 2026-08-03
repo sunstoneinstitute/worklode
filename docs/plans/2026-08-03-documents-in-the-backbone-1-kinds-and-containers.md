@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 implements:
   - docs/specs/025-documents-in-the-backbone.md#sec-5
   - docs/specs/025-documents-in-the-backbone.md#sec-6

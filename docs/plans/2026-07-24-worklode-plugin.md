@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/008-worklode-plugin.md
 ---
 # Worklode Plugin (spec 008) Implementation Plan

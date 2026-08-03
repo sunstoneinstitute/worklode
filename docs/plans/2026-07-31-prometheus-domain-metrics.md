@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/022-prometheus-metrics.md
 ---
 # Prometheus Domain Metrics Implementation Plan

@@ -66,9 +66,18 @@ backbone `docs` tables, graph projection.
 | What amends or replaces a section | `amends`/`amendedBy`/`replaces`/`isReplacedBy` maps | `doc_edges` |
 | Whether a claim is in force yet | `status` of the *claiming* document (§3.1) | `docs.status` |
 
-Only the third needs the server, and it uses the existing task API — this spec adds no
-endpoint, no background loop, and no store operation, so it adds no `worklode_*` metrics.
-Everything else is local file reading and answers offline.
+Only the third needs the server, and it uses the existing task API. Everything else is local
+file reading and answers offline.
+
+**This spec is a stated exception to the metrics rule** (022; `CLAUDE.md`), which requires
+`worklode_*` metrics of any change adding an HTTP endpoint, background loop, outbound call, or
+store operation with meaningful outcomes. `--needs-execution`'s task-state fetch is an outbound
+call, and is the one thing here that reads as a trigger — but the rule governs **server-side**
+changes, and everything this spec adds runs in the CLI, where no `prometheus.Registerer` is
+threaded: it reaches `lode serve` alone. So no endpoint, no background loop, no store
+operation, and no metric. An implementer who adds one has misread this section; the exception
+is recorded here rather than left to be re-derived, because the absence otherwise reads as an
+oversight to every later reviewer.
 
 The corpus root is the directory holding the repo-local `.worklode/config.toml` (spec 019's
 walk, which already ran to resolve the project), with `specs/` and `plans/` under `docs/`.
@@ -87,8 +96,8 @@ lode doc list --needs-execution     accepted plans with no closed execution task
 
 Filters compose. `--json` (the root persistent flag) emits the same rows as objects.
 
-The default listing shows `status` as `—` for a document that carries none, which is how a
-plan that predates §5 is visible without a separate selector.
+Every document in the corpus carries a `status` (§2.2), so the listing has no "unset" case: a
+document without one is a defect (§4), reported rather than quietly rendered as `—`.
 
 ### 2.1 `--needs-planning` {#sec-2.1}
 
@@ -109,7 +118,15 @@ docs/specs/000-umbrella-architecture.md   accepted   6/6 unplanned   sec-1 sec-2
 
 `--needs-planning` implies `status: accepted` — planning follows acceptance (025 §3), and a
 draft spec is not a planning gap. Combining it with a conflicting `--status` is an error
-rather than an empty result, because an empty result would read as "nothing to plan".
+rather than an empty result, because an empty result would read as "nothing to plan". So is
+combining it with `--needs-execution`: the two select disjoint kinds, so the conjunction is
+always empty, and it is the same silent lie in a different flag.
+
+The acceptance test applies to the **spec**, not to the plan doing the claiming: a draft
+plan's `implements` counts as coverage, because the planning work it represents has been done
+and listing the spec again would ask for it twice. §3.1's effectiveness gate governs
+`amends`/`replaces` — where a premature claim would misstate the design — and does not reach
+`implements`, where it would only misstate who still owes work.
 
 **Known weakness, stated rather than papered over.** No plan in the corpus today carries a
 section-scoped `implements` — all 36 claim whole documents — so on the current tree this
@@ -136,12 +153,14 @@ A plan needs execution when its frontmatter carries `status: accepted` and eithe
 than degrading if the server is unreachable, since a plan whose task state is unknown is
 exactly the case the caller is asking about.
 
-Plans carrying no `status` are legacy — authored before §5 required one — and are never
-listed by this selector. That is deliberate: the alternative is backfilling forty files with
-a status nobody reviewed, or reporting twenty-five already-shipped plans as outstanding
-work. They remain visible in the default listing with `status: —`, so the omission is
-discoverable, and §6 makes `status` part of the plan authoring checklist so no new plan
-falls into the legacy bucket.
+**Every plan carries a `status`; there is no legacy bucket.** An earlier draft of this spec
+exempted the forty-odd plans authored before §5 required one, on the grounds that backfilling
+them meant either inventing statuses nobody reviewed or reporting twenty-five shipped plans as
+outstanding. The exemption was the more expensive answer: it put a permanent branch in the
+query, a `status: —` case in the output, and a class of document the corpus had to keep
+explaining. The plans were backfilled instead — a **spent** plan is `superseded` (025 §4: a
+plan is spent once executed), an authorised but unexecuted one is `accepted` — so the selector
+is the plain reading of the frontmatter and a statusless plan is simply a defect.
 
 ### 2.3 `lode doc sections` {#sec-2.3}
 
@@ -218,9 +237,17 @@ says so in its header.
 
 `--section <anchor>` prints one section, its subsections, and — with `--resolved` — that
 section's consolidation. This is the cheap form: an agent that needs `011 §4` should not pay
-for 011. On an anchor that has been replaced it **forward-resolves**, printing the
-consolidation of what replaced it, so a citation that has gone stale still yields current
-text rather than superseded text or an error.
+for 011. A section is always its whole subtree: inlining `#sec-2` carries `#sec-2.1` and
+`#sec-2.3` with it, each consolidated in its own right, because a claim against a parent is a
+claim against what it contains.
+
+With `--resolved`, an anchor that has been replaced **forward-resolves**: the consolidation
+printed is that of what replaced it, so a citation that has gone stale still yields current
+text rather than superseded text or an error, and a split forwards to every replacement in
+the §3.2 order. A *pending* replacement never forwards (§3.1). Without `--resolved`,
+`--section` stays `cat` semantics and prints the anchor asked for, whatever has happened to
+it — the two flags mean "give me this text" and "tell me what is true", and only the second
+should follow an edge.
 
 ### 3.1 A claim takes effect when its author is accepted {#sec-3.1}
 
@@ -251,8 +278,19 @@ a different corpus shape, and it is defined here.
 section-scoped edge targeting `s`, inline the acting section's *own consolidation*,
 recursively. Where `s` is replaced, `s`'s body is kept and each replacement's consolidation
 is inlined beneath it, marked: a superseded section keeps its text and its anchor, so the
-reader sees what was replaced next to what replaced it. Document-scoped (`"."`) edges stay
-banners and are never inlined — they carry no section-shaped payload.
+reader sees what was replaced next to what replaced it. **Document-scoped** edges — either end
+lacking a section, whether the acting key is `"."` or the value carries no fragment — stay
+banners and are never inlined; they carry no section-shaped payload.
+
+**Backfill: the traversal runs both ways.** For each effective section-scoped edge on which
+`s` is the *acting* end, the target's consolidation is inlined beneath `s` as marked context.
+Without this the walk follows target→actor only, so entering the newer document of an
+amendment pair never surfaces the still-live older text, and the root-independence claimed
+below would hold for replacement chains and fail for every amendment. A backfilled block's
+marker names the section whose body it carries — `**[amended text 006#sec-1.2]:**` — because
+in this direction the acting section is the one the reader is already inside. Backfill is
+skipped where the target is already on the current expansion path, and obeys body-once like
+everything else.
 
 **Consolidation of a document** — its preamble, then each section's consolidation in source
 order.
@@ -260,8 +298,9 @@ order.
 Three rules make that total and bounded without a depth limit:
 
 - **Deterministic order.** Multiple edges onto one section are inlined by the acting
-  document's `issued` date, then filename, then anchor. Two effective replacements of one
-  section is a *split*, not a defect: both are shown, ordered and attributed.
+  document's `issued` date, then filename, then anchor; a document carrying no `issued` sorts
+  first. Two effective replacements of one section is a *split*, not a defect: both are shown,
+  ordered and attributed.
 - **Body-once.** Within one rendering a section's body is emitted at its first occurrence;
   every later occurrence is a back-reference marker. This is what bounds a diamond — one
   amendment targeting two sections, or two documents amending one — and it caps output at
@@ -271,9 +310,12 @@ Three rules make that total and bounded without a depth limit:
   §4's defect machinery. Acting edges point new→old, so cycles are near-impossible today and
   become constructible under revision; the visited set is cheaper than the incident.
 
-Because every emitted body is either live or shown beside its successor, the choice of root
-document changes only the narrative order, never the content — entering spec 006's
-consolidation and entering 014's surfaces the same live text. That is what makes "start from
+Because every emitted body is either live or shown beside its successor, and because backfill
+makes the traversal symmetric, the choice of root document changes *where* a body appears,
+never *whether* it appears: entering spec 006's consolidation and entering 014's surface the
+same live sections of the lineage they share. The property is over that shared component and
+not over the corpus — a section no edge touches is reachable only from its own document, so
+each root necessarily also carries material the other cannot. That is what makes "start from
 the newest document touching a subject and backfill" and "start from the oldest and follow
 forward" the same answer, so neither needs to be a mode.
 
@@ -307,6 +349,12 @@ Every frontmatter reference resolves through one function, by the shape of its p
 
 `#sec-N` narrows any of them to an anchor that must exist in the target's source.
 
+A reference may carry a **trailing parenthetical annotation** — `wasDerivedFrom:
+003-platform-graph-design.md (D1–D15)`, naming which of that document's decisions were
+inherited. It is stripped before resolution and otherwise ignored. Six accepted specs (000,
+004, 005, 006, 007, 008) already write it, so the alternative to admitting it is editing
+frozen documents to satisfy a parser.
+
 The rule is exhaustive and has no legacy branch: a path with a `/` in it is repo-relative
 unless it explicitly says otherwise with `./` or `../`. That is what the corpus's 36
 cross-directory references already mean, so nothing needs rewriting, and it leaves exactly
@@ -317,6 +365,12 @@ Both commands print unresolvable references to stderr with the referring file an
 exit non-zero when any exist, after printing the results they could compute. Silently
 skipping a dangling `implements` would understate `--needs-planning` — precisely the failure
 mode these commands exist to remove.
+
+The single exception is a reference naming **a project this checkout cannot reach**, which is
+`unresolved` rather than a defect and leaves the exit code alone (§4.2). It covers any syntax,
+including the pre-shorthand colon form: what makes such a reference unresolvable is the
+absence of an authority to ask, not a mistake by its author, and nothing in the referring
+repository can repair it.
 
 Mirror-edge disagreement (an `amends` with no matching `amendedBy`) is reported the same
 way, and does not change any answer — §3.1's union already registers the claim from
@@ -443,8 +497,13 @@ no way to reach. A malformed shorthand, a tier-1 miss, and a tier-2 miss are all
 with the backbone reachable. No hook passes it.
 
 The corpus's one existing cross-project reference, 014's `amends: rdf-registry:ADR-0006`, is
-in a colon form no tier parses. It stays a reported defect until rdf-registry has a project
-key and it becomes `<KEY>-ADR-6`.
+in a colon form no tier parses. It is **reported `unresolved`, exit code unaffected** — the
+tier-3 treatment, reached by §4's exception rather than by a tier, since the syntax never
+parses far enough to select one. Making it a defect would be unenforceable as well as wrong:
+no edit to this repository can make the reference *resolve* while rdf-registry has no project
+key — only delete the claim or leave it — and a §4.1 gate that refused on it would block every
+commit to the corpus in the meantime. It becomes an ordinary tier-2 reference, and an ordinary
+defect when it dangles, once that key exists and it is rewritten `<KEY>-ADR-6`.
 
 ## 5. Plans carry `status` and `task` {#sec-5}
 
@@ -463,7 +522,8 @@ tracker — the git-mirror stand-in for the `plan_doc` reference 025 §5's accep
 put on each of the plan's tasks, which is why a single id suffices here and nothing is built on
 it being one row. It retires with the files, as 025 §11 already records.
 
-Neither key is backfilled across the existing corpus (§2.2).
+Both keys are backfilled across the existing corpus (§2.2): every plan carries a `status`, and
+the seventeen with a stand-in execution task carry a `task` naming it.
 
 ## 6. Documentation changes {#sec-6}
 
@@ -527,15 +587,21 @@ a test failure rather than a corpus that means two things.
   leaves a foreign one alone; running it twice changes nothing the second time.
 - `NeedsPlanning`: whole-document claim covers a later-added section; section claim covers
   only its own; a spec with no plan lists every section; a draft spec never appears.
-- `NeedsExecution`: no `task` → listed; open task → listed; closed task → absent; no
-  `status` → absent regardless of `task`.
+- `NeedsExecution`: `accepted` with no `task` → listed; `accepted` with an open task →
+  listed; closed task → absent; `superseded` (spent) → absent regardless of `task`; a plan
+  carrying no `status` at all → reported as a defect, not silently skipped.
 - `--resolved`: section-scoped inlining, doc-scoped banner, superseded body retained beside
   its replacement, attribution on every borrowed block.
 - Consolidation (§3.2): an amendment of an amendment is expanded transitively; a diamond
   emits the body once and a back-reference thereafter; a constructed cycle emits the cycle
   marker, is reported as a defect, and terminates; two effective replacements of one section
   both render, in the defined order.
-- Root-independence: the consolidations of 006 and of 014 contain the same live bodies.
+- Root-independence: the consolidations of 006 and of 014 surface the same set of live
+  sections **within the lineage they share** — compared as a set of `<doc>#anchor` keys
+  (emitted or back-referenced), not as rendered strings, since body-once means the two
+  orderings legitimately differ. Sections outside the shared component are excluded rather
+  than expected to match. 014 is `draft`, so this runs with `--with-drafts`; without it the
+  edges under test are `pending` and the assertion is vacuous.
 - `--section` on a replaced anchor forward-resolves to its replacement's consolidation.
 - The §3.1 gate: a draft document's `replaces` leaves its target listed and marked
   `pending`; the same claim from an accepted document drops it; `--with-drafts` flips the
@@ -563,7 +629,9 @@ a test failure rather than a corpus that means two things.
   planning half only; the two must not be conflated in output or in prose.
 - **Write verbs.** Nothing here creates, accepts or revises a document; acceptance stays a
   deliberate human act (025 §3).
-- **Backfilling the corpus** with `status`, `task`, or section-scoped `implements`.
+- **Backfilling section-scoped `implements`** across the existing plans. `status` and `task`
+  *were* backfilled (§2.2, §5) — that is what removed the legacy branch — but re-deriving
+  which sections each shipped plan actually covered is the guesswork §2.1 refuses.
 - **The backbone `docs` tables** and the graph projection — 025 owns both, and this spec is
   written so that landing them changes one layer.
 - **The web view rendering consolidations by default**, with a view-source toggle. It is the
@@ -579,8 +647,9 @@ is the whole of what makes them possible, and it is what ships here.
 
 1. `lode doc list --needs-planning` against the current tree lists exactly
    `000-umbrella-architecture.md` with 6 unplanned sections, and exits 0.
-2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task`
-   is absent or open, and no plan lacking a `status`.
+2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task` is
+   absent or open, and no `superseded` plan; every plan in the corpus carries a `status`, and
+   one that does not is a reported defect.
 3. `lode doc show 018 --resolved` shows 025 §6's doc-wide amendment as a banner and labels
    its output a consolidated view naming its sources; in the fixture corpus a chain of three
    section-scoped amendments is fully expanded, and no rendering is depth-truncated.
@@ -595,11 +664,15 @@ is the whole of what makes them possible, and it is what ships here.
    `requires: WL-SPEC-4` in a worklode document to `004-execution-backbone.md` while leaving
    a foreign `CMS-SPEC-4` untouched.
 8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
-   defect is an unresolvable foreign shorthand, and both name it on stderr.
-7. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
+   unresolvable references name unreachable projects — including 014's colon-form
+   `rdf-registry:ADR-0006` — and both name them on stderr as `unresolved`.
+9. Entering the consolidation of 006 and of 014 surfaces the same live sections of the lineage
+   they share, under `--with-drafts`, with backfill supplying the older text when the newer
+   document is the root.
+10. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
    script — and only that one — is deleted in the same change; `secfmt.py` keeps its hook and
    `secindex.py` stays a manual regeneration.
-8. Spec 025 being `draft` leaves 018's sections listed as current and marked `pending`;
+11. Spec 025 being `draft` leaves 018's sections listed as current and marked `pending`;
    `--with-drafts` drops the ones 025 replaces.
 9. The verb names, flags and semantics match 025 §10 and §7, so replacing `LoadCorpus` with
    a store-backed loader is the whole of the migration.

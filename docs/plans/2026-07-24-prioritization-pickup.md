@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/005-prioritization-and-pickup.md
 ---
 # Prioritization & Pickup (spec 005) Implementation Plan

@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/002-github-app-auth.md
 ---
 # GitHub App Auth — Web Login Core Implementation Plan
