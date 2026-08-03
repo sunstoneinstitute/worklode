@@ -9,6 +9,9 @@ dependencies. The directory is published as-is.
 | `styles.css` | All styling. Light theme only, by design |
 | `app.js` | Reveal-on-scroll only; the page is fully readable without it |
 | `logo.svg` | The mark — nav, hero, footer and tab icon. Not square: 1340×1150 |
+| `logo-512.png` | Square raster of the mark; the source every icon below is cut from |
+| `favicon.ico` | Tab-icon fallback for browsers that ignore SVG icons — 48/32/16 |
+| `apple-touch-icon.png` | 180×180 home-screen icon for iOS, white background |
 | `CNAME` | Custom domain for GitHub Pages — do not delete |
 
 ## Preview locally
@@ -50,7 +53,29 @@ drift model — update both.
 `logo.svg` is the mark: a faceted lodestone crystal between two magnetic field
 lines. Its viewBox is 1340×1150, so it is *not* square — set `width` and
 `height` at a 1.165:1 ratio (35×30 in the nav, 30×26 in the footer) or it
-distorts. It is also the tab icon, so there is exactly one logo file.
+distorts. It is also the tab icon in every browser that supports SVG icons.
+
+### Icons
+
+`favicon.ico` and `apple-touch-icon.png` are cut from `logo-512.png` with
+ImageMagick. Regenerate both after changing the mark:
+
+```bash
+cd www
+for s in 48 32 16; do
+  magick logo-512.png -crop 306x442+103+36 +repage -background none \
+    -gravity center -extent 470x470 -filter Lanczos -resize ${s}x${s} /tmp/i$s.png
+done
+magick /tmp/i48.png /tmp/i32.png /tmp/i16.png favicon.ico
+magick logo-512.png -resize 148x148 -background white -alpha remove -alpha off \
+  -gravity center -extent 180x180 apple-touch-icon.png
+```
+
+The `.ico` crops to the **crystal alone**. At 16 px the field lines eat the
+frame and the whole mark reduces to a blob; cropping them away buys back enough
+pixels for the crystal to read. The apple-touch icon keeps the full mark — it
+renders at 180 px, where nothing is lost — on white, because iOS composites
+transparency onto black.
 
 ### Regenerating the mark
 
