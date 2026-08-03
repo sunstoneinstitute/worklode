@@ -82,7 +82,7 @@ Dedup is free — the same screenshot on five tasks is one object and one `blobs
 `blobs` is deliberately not task-scoped, so spec 014 document sections can reference the same
 bytes through a `section_blobs` table without a migration or a copy.
 
-### Why two booleans instead of a kind enum
+### 1.1 Why two booleans instead of a kind enum {#sec-1.1}
 
 `embedded` is **derived**: on every task create and update, the body is parsed, its
 `/blob/<hash>` references are extracted, and `embedded` is reconciled to match in the same
@@ -230,7 +230,7 @@ which §11 sweeps. The reverse order would leave a `blobs` row pointing at nothi
 renders as a permanently broken image. Both failure modes are possible; only one is recoverable
 without a human, so the design fails toward that one.
 
-### Media types
+### 5.1 Media types {#sec-5.1}
 
 The server sniffs with `http.DetectContentType` over the first 512 bytes and stores the result.
 A client's `Content-Type` header is advisory and never persisted — a payload labelled
@@ -325,7 +325,7 @@ content, and `embedded` reconciliation (§1) sees the rewritten body.
 
 ## 8. Rendering {#sec-8}
 
-### Web UI
+### 8.1 Web UI {#sec-8.1}
 
 `templates/task.html` renders `<pre>{{.Task.Body}}</pre>` today. Images require real markdown
 rendering, which turns the body into HTML — and **task bodies are untrusted**. Spec 020's
@@ -362,7 +362,7 @@ The board and project pages keep showing titles only.
 The UI is, in the reviewer's words, horrible. Making it less so is not this spec's job, and
 rendered markdown with inline screenshots will move it in the right direction on its own.
 
-### CLI
+### 8.2 CLI {#sec-8.2}
 
 `cli.Markdown` already routes through glamour. Two changes:
 
@@ -437,7 +437,7 @@ Alt text stays in the body markdown, where it belongs, and is not duplicated her
 Two sweeps, both in `lode admin blob gc`, both with a **24-hour grace period** so neither can
 race an upload in flight.
 
-### Unreferenced blobs
+### 11.1 Unreferenced blobs {#sec-11.1}
 
 A `blobs` row with no `task_blobs` row sharing its hash is garbage:
 
@@ -456,7 +456,7 @@ dangling rows.
 When spec 014 adds `section_blobs`, the `NOT EXISTS` grows a second clause. That is the one
 place adding a reference table touches GC, and it is worth a comment in the migration saying so.
 
-### Orphan objects
+### 11.2 Orphan objects {#sec-11.2}
 
 The other direction, which should find nothing and will occasionally find something, because
 the write path deliberately creates orphans on partial failure. List the bucket under
@@ -542,7 +542,7 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
 ---
 
-## Acceptance criteria
+## 15. Acceptance criteria {#sec-15}
 
 1. `POST /api/v1/blobs` with a PNG returns a hash; re-posting identical bytes returns the same
    hash, creates no second row, and issues no second `PutObject`.

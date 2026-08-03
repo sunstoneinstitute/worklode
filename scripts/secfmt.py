@@ -5,7 +5,7 @@ Sections are identity (spec 014 §3): the anchor carries the section number, and
 an inbound claim pins `<file>.md#sec-4.3`. This formatter derives both from
 position so they cannot drift apart by hand.
 
-Usage: secfmt.py [-l] [-w] [-d] [--assign] [--start N] [--force]
+Usage: secfmt.py [-l] [-w] [-d] [--assign|--assign-all] [--start N] [--force]
                  [--update-refs] [--depth N] [path...]
 
   -l              list files whose numbering differs (CI mode; exit 1 if any)
@@ -13,7 +13,10 @@ Usage: secfmt.py [-l] [-w] [-d] [--assign] [--start N] [--force]
   -d              print a unified diff
   --force         allow renumbering an accepted/superseded document
   --assign        number a document that has no numbering yet (one-time)
-  --start N       with --assign, first top-level number (0 or 1; default 1)
+  --assign-all    number every heading down to --depth, including a document
+                  that is already partly numbered (one-time)
+  --start N       first top-level number (0 or 1); defaults to 1 for --assign
+                  and to the document's existing first number for --assign-all
   --update-refs   with -w, repoint inbound `file.md#sec-old` references
   --depth N       deepest addressable level (default 3, per 014 §7)
 
@@ -34,15 +37,26 @@ by hand is enough, the sequence follows it.
 
 Numbers are normalised, never introduced: an unnumbered heading stays
 unnumbered, so a document that keeps an unnumbered preamble above numbered body
-sections keeps it. A document with no numbering at all is left alone unless
---assign is passed, which is the one-time migration that numbers every section.
+sections keeps it. Two one-time migrations introduce numbering: --assign for a
+document with no numbering at all, and --assign-all for one whose numbering
+stops short of --depth (numbered `##`, unnumbered `###`). Both number every
+heading down to --depth, so --assign-all can move anchors an existing scheme
+already published — pair it with --update-refs.
 """
 
 import argparse
 import difflib
+import os
 import re
 import sys
 from pathlib import Path
+
+
+def err(message):
+    """Print a diagnostic to stderr, red when a terminal is there to read it."""
+    if sys.stderr.isatty() and not os.environ.get("NO_COLOR"):
+        message = f"\033[31m{message}\033[0m"
+    print(message, file=sys.stderr)
 
 # Plans are not DesignDocs (014 §2), so their sections are not addressable
 # nodes. Pass docs/plans explicitly if a design record kept there needs anchors.
@@ -109,13 +123,18 @@ def headings(body):
             yield i, m
 
 
-def renumber(text, depth, force=False, assign=False, start=1):
+def renumber(text, depth, force=False, assign=False, start=None, assign_all=False):
     """Return (new_text, moves) where moves maps old anchor -> new anchor.
 
     Numbers are normalised, never introduced: a heading the author left
     unnumbered stays unnumbered, so a document that mixes numbered body sections
     with an unnumbered preamble keeps it. `assign` is the one-time migration for
-    a document with no numbering at all — it numbers every section.
+    a document with no numbering at all, `assign_all` the one for a document
+    numbered only down to some level above `depth`; both number every heading.
+
+    `start` fixes the first top-level number, defaulting to the number the
+    document already opens with (so `assign_all` keeps an existing `0.`) and to
+    1 for a document with nothing to read it from.
 
     Raises Refusal listing every existing number or anchor that would change in
     a frozen document, unless force suspends that check.
@@ -124,18 +143,18 @@ def renumber(text, depth, force=False, assign=False, start=1):
     lines = body.splitlines(keepends=True)
 
     hs = list(headings(body))
-    numbering = assign and not any(
-        m["num"] for _, m in hs if len(m["hashes"]) - 1 <= depth
+    tops = [m["num"] for _, m in hs if len(m["hashes"]) - 1 == 1 and m["num"]]
+    numbering = assign_all or (
+        assign and not any(m["num"] for _, m in hs if len(m["hashes"]) - 1 <= depth)
     )
 
     # Top-level numbering starts at 1. It starts at 0 when the author numbered
     # the first section `0.` — the orientation section ("Purpose & scope") is
     # numbered 0 so the body still starts at 1. Only the top level may start at
     # 0; subsections always start at 1.
-    if numbering:
+    if start is not None:
         first = start
     else:
-        tops = [m["num"] for _, m in hs if len(m["hashes"]) - 1 == 1 and m["num"]]
         first = 0 if tops and tops[0] == "0" else 1
 
     counters = [first - 1] + [0] * (depth - 1)
@@ -266,16 +285,23 @@ def main():
     ap.add_argument("--force", action="store_true", help="renumber frozen docs")
     ap.add_argument("--assign", action="store_true",
                     help="one-time: number a document that has no numbering yet")
-    ap.add_argument("--start", type=int, choices=(0, 1), default=1,
-                    help="with --assign, first top-level number (default 1)")
+    ap.add_argument("--assign-all", action="store_true",
+                    help="one-time: number every heading down to --depth, even "
+                         "where the document is already partly numbered")
+    ap.add_argument("--start", type=int, choices=(0, 1), default=None,
+                    help="first top-level number; defaults to the document's "
+                         "existing first number, else 1")
     ap.add_argument("--update-refs", action="store_true", help="repoint inbound anchors")
     ap.add_argument("--depth", type=int, default=3, help="addressable depth (default 3)")
     a = ap.parse_args()
 
+    if a.start is not None and not (a.assign or a.assign_all):
+        ap.error("--start only applies with --assign or --assign-all")
+
     roots = a.paths or list(DEFAULT_ROOTS)
     files = collect(roots)
     if not files:
-        print("secfmt: no markdown files found", file=sys.stderr)
+        err("secfmt: no markdown files found")
         return 2
 
     differed, refused, defective, all_moves = [], [], [], {}
@@ -283,7 +309,9 @@ def main():
     for f in files:
         original = f.read_text()
         try:
-            formatted, moves = renumber(original, a.depth, a.force, a.assign, a.start)
+            formatted, moves = renumber(
+                original, a.depth, a.force, a.assign, a.start, a.assign_all
+            )
         except Refusal as e:
             refused.append((f, str(e)))
             continue
@@ -320,34 +348,29 @@ def main():
                     print(f"repointed {hit}: {basename}#{old} -> #{new}", file=sys.stderr)
 
     for f, why in defective:
-        print(f"secfmt: {f} numbers a section whose parent is unnumbered:", file=sys.stderr)
-        print(why, file=sys.stderr)
+        err(f"secfmt: {f} numbers a section whose parent is unnumbered:\n{why}")
     if defective:
-        print(
+        err(
             "\nA subsection number implies a parent number. Either number the parent\n"
             "section or drop the number from the subsection — the choice changes which\n"
-            "numbers inbound references must use, so it is not made automatically.",
-            file=sys.stderr,
+            "numbers inbound references must use, so it is not made automatically."
         )
 
     for f, why in refused:
-        print(f"secfmt: {f} is accepted; renumbering would move published anchors:", file=sys.stderr)
-        print(why, file=sys.stderr)
+        err(f"secfmt: {f} is accepted; renumbering would move published anchors:\n{why}")
     if refused:
-        print(
+        err(
             "\nSections are frozen once accepted (014 §3). Insert with a letter suffix\n"
             "(2.1a) instead, or re-run with --force --update-refs if the anchors have\n"
-            "never been published.",
-            file=sys.stderr,
+            "never been published."
         )
     if refused or defective:
         return 2
 
     if all_moves and not a.update_refs:
-        print(
+        err(
             "secfmt: anchors moved; inbound references are now stale. "
-            "Re-run with --update-refs.",
-            file=sys.stderr,
+            "Re-run with --update-refs."
         )
         return 2
 

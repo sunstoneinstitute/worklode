@@ -46,7 +46,7 @@ isReplacedBy:
   "#sec-7":
     - 014-design-documents-as-graph-objects.md#sec-3
   "#sec-11":
-    - 014-design-documents-as-graph-objects.md#sec-acceptance-criteria
+    - 014-design-documents-as-graph-objects.md#sec-16
 ---
 # Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
 
