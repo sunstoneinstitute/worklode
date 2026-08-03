@@ -4,6 +4,9 @@ issued: 2026-07-25
 amends:
   ".":
     - 004-execution-backbone.md#sec-2
+amendedBy:
+  "#sec-1":
+    - 024-multi-harness-integration.md#sec-5
 ---
 # Spec 012 — Agent sessions
 
@@ -25,6 +28,10 @@ Worklode is not Claude-Code-specific, so the model must fit other coding
 agents.
 
 ## 1. Schema {#sec-1}
+
+> **Amended by spec 024 §5.** The `agent` CHECK gains `copilot` — the one-line migration this
+> section reserves for a new tool — becoming
+> `('claude-code','codex','copilot','cursor','aider','opencode','pi','amp','other')`.
 
 One new table; `leases` is unchanged.
 
