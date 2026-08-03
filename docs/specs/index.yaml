@@ -396,6 +396,7 @@ docs/specs/025-documents-in-the-backbone.md:
     sec-2: "## 2. Documents move into the backbone"
     sec-3: "## 3. Editorial lifecycle"
     sec-4: "## 4. Plans are documents"
+    sec-4.1: "### 4.1 Task declarations — the `## Tasks` section"
     sec-5: "## 5. Acceptance mints the plan's tasks"
     sec-6: "## 6. Task kinds"
     sec-7: "## 7. Spec fan-out is a query"

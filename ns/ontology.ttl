@@ -278,8 +278,9 @@ wl:recommendsSkill a owl:ObjectProperty ;
     rdfs:domain wl:DesignDoc ;
     rdfs:range wl:Skill ;
     rdfs:comment """A design document pins this skill, declared from its `skills:` frontmatter when
-        the document is ingested (016 §3). Task pins are a backbone field on the Task, not this
-        edge; brief resolution unions the two.""" .
+        the document is ingested (016 §3). Task pins are the backbone tasks.skills field,
+        projected as wl:requiresSkill (025 §4.1), not this edge; brief resolution unions the
+        two.""" .
 
 wl:reviewer a owl:ObjectProperty ;
     wl:layer wlc:intent ;
@@ -346,6 +347,16 @@ wl:inWorkstream a owl:ObjectProperty ;
     rdfs:range wl:Workstream ;
     rdfs:comment """Membership of a Task in a Workstream. Split from dct:isPartOf so the Task→Task
         decomposition stays type-homogeneous and cleanly transitive.""" .
+
+wl:requiresSkill a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Skill ;
+    rdfs:comment """The executing agent loads this skill before starting: the task pin of 016 §3,
+        projected from the backbone tasks.skills field and minted onto the task by plan
+        acceptance (025 §4.1). Distinct from wl:recommendsSkill because the owners differ — the
+        pin on a task is execution-layer fact, the pin in a design document declared intent;
+        brief resolution unions the two.""" .
 
 wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
     wl:layer wlc:execution ;
