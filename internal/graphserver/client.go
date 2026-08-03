@@ -8,9 +8,10 @@
 //     (PUT answers 201 on create, 204 on replace);
 //   - a read-only POST /sparql proxying the Oxigraph materialization.
 //
-// There is no SPARQL Update endpoint: writes replace or merge whole named
-// graphs. IRIs are opaque strings here; minting is owned elsewhere
-// (internal/kg/iri once the platform-graph-design plan lands).
+// This client covers PUT/GET/DELETE; POST (merge) is deliberately
+// unimplemented. There is no SPARQL Update endpoint: writes replace or merge
+// whole named graphs. IRIs are opaque strings here; minting is owned
+// elsewhere (internal/kg/iri once the platform-graph-design plan lands).
 package graphserver
 
 import (
@@ -45,6 +46,10 @@ type Client struct {
 
 // graph-server writes commit through Nessie/Iceberg and can be slow under
 // load; the timeout bounds a hung connection without tripping normal writes.
+// The authenticated path (New with a non-nil ts) inherits this timeout only
+// because oauth2.NewClient copies Timeout from the ctx-provided http.Client
+// (verified against golang.org/x/oauth2@v0.36.0); a future bump of that
+// dependency could drop it silently.
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 
 // New returns a client for the graph-server at base
