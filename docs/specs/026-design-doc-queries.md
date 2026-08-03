@@ -62,7 +62,7 @@ backbone `docs` tables, graph projection.
 |---|---|---|
 | What documents exist, and their status | frontmatter in the git tree | `docs` rows |
 | Which spec sections a plan claims | `implements` in plan frontmatter | `doc_edges` |
-| Whether a plan has been executed | `task` in plan frontmatter, resolved against the tracker | the root task bound to the doc |
+| Whether a plan has been executed | `task` in plan frontmatter, resolved against the tracker | the state of the tasks referencing the doc |
 | What amends or replaces a section | `amends`/`amendedBy`/`replaces`/`isReplacedBy` maps | `doc_edges` |
 | Whether a claim is in force yet | `status` of the *claiming* document (§3.1) | `docs.status` |
 
@@ -458,9 +458,10 @@ no addressable sections. A plan is `draft` while it is being written and reviewe
 `accepted` from the moment its execution is authorised.
 
 **`task`** — already documented as transitional (`docs/authoring-design-docs.md`), already
-carried by one spec. On a plan it names the plan's execution root, which is the git-mirror
-stand-in for the doc-bound root that 025 §5's accept transaction will mint. It retires with
-the files, as 025 §11 already records.
+carried by one spec. On a plan it names the task the plan's execution hangs off in today's
+tracker — the git-mirror stand-in for the `plan_doc` reference 025 §5's accept transaction will
+put on each of the plan's tasks, which is why a single id suffices here and nothing is built on
+it being one row. It retires with the files, as 025 §11 already records.
 
 Neither key is backfilled across the existing corpus (§2.2).
 
