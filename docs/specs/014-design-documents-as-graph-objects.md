@@ -607,8 +607,8 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 ## 8. Task kinds {#sec-8}
 
 > **Superseded by 025 §6.** The reconciliation below shipped (migration 0009) and is history;
-> of the forward rules, `epic` stays is replaced — `epic` is removed and `spec` is renamed
-> `design` — while no kind is added for plans survives, since 025 §5 mints no container for a
+> of the forward rules, "`epic` stays" is replaced — `epic` is removed and `spec` is renamed
+> `design` — while "no kind is added for plans" survives, since 025 §5 mints no container for a
 > plan for a kind to mark.
 
 Two enumerations exist today and disagree:
@@ -787,9 +787,9 @@ Two consequences:
   costs a lookup on every write and is what this section amends. The number is the one already in
   the filename.
 
-Plans get no shorthand. They carry no number (§2.1), they are not DesignDocs, and 025 §5 binds an
-accepted plan to its execution root task — `WL-42` is the plan's handle once it has one, and the
-repo-relative path is its handle before.
+Plans get no shorthand. They carry no number (§2.1), they are not DesignDocs, and 025 §5 mints no
+root task an id could borrow — an accepted plan's tasks reference the document, so the plan's
+handle is its repo-relative path (its backbone doc id once 025 is implemented).
 
 **Distance decides which form is canonical.** A reference within one corpus stays a filename: it
 carries the slug, so `requires: 004-execution-backbone.md` says what it depends on without a

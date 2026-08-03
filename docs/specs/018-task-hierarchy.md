@@ -12,11 +12,15 @@ amendedBy:
 ---
 # Spec 018 — Task hierarchy (epics and tracking tasks)
 
-> **Amended by spec 025 (doc-wide).** `kind = 'epic'` is renamed `plan`: the container is a
-> plan's execution root, minted by `lode doc accept` on a plan document or by `lode task
-> decompose` — never by `lode task add`. Every mechanism below (ready-set exclusion, restricted
-> state machine, roll-up, depth cap, single parent, brief) applies to the plan root unchanged;
-> read *epic* as *plan root*. The rationale for a declared container (§1) stands.
+> **Amended by spec 025 (doc-wide).** `kind = 'epic'` is dropped, not renamed: a plan is a
+> document, not a task, and accepting it mints its tasks directly — grouped by their reference
+> to the plan document, with no root row above them (025 §5). What survives here is the
+> `child_of` machinery, narrowed to decomposing an oversized task (§8), the only way a task
+> acquires children. Every mechanism below (ready-set exclusion, restricted state machine,
+> roll-up, depth cap, single parent, brief) applies to *a task that has children*, with no kind
+> to declare: §1 chose declared over inferred because an epic had to exist before its children
+> did, and with `decompose` creating parent-hood and children in one transaction, "has
+> children" is exactly as sharp as a column.
 
 ## 0. Why {#sec-0}
 
