@@ -14,6 +14,10 @@ dependencies. The directory is published as-is.
 | `apple-touch-icon.png` | 180×180 home-screen icon for iOS, white background |
 | `CNAME` | Custom domain for GitHub Pages — do not delete |
 
+The one external dependency is the analytics tag in `index.html`, pointing at
+Sunstone's self-hosted instance at `analytics.prod.sunstoneinstitute.ai`. It is
+deferred, so it never blocks rendering, and the page works with it blocked.
+
 ## Preview locally
 
 ```bash
