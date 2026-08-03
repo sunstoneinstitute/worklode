@@ -120,6 +120,30 @@ once an instance is running (dogfooding); until then this file is the list.
   those connections. Consistent with the rest of the repo (no
   `io.Copy(io.Discard, ...)` anywhere), but the e2e harness pays a fresh TLS
   handshake on each of up to 30 polls.
+- **`graphserver.PutGraph` has no compare-and-swap**: it returns only a
+  created/replaced bool and discards the `ETag`/`x-sunstone-txn` headers
+  graph-server returns, and no method sends `If-Match`. graph-server has
+  honoured If-Match compare-and-swap since 2026-07-25
+  (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
+  Needed before a second work-graph writer exists; spec 009 should-have 6.
+  Adding it changes `PutGraph`'s signature.
+- **A docs-only commit can break Go tests**: the CI gate skips checks when a
+  PR touches only `*.md`/`docs/`/`www/`, but `internal/designdoc` tests read
+  real files under `docs/specs/`. Commit `8fdd7e1` accepted spec 025 and
+  broke `TestParseFrontmatterRealSpec` on main with no CI signal. Either give
+  that test a checked-in fixture, or carve `docs/specs/*.md` out of the
+  docs-only skip.
+- **`ns/concept.ttl` still carries the retired `proposed` status**: it defines
+  `wlc:proposed` in `wlc:DesignDocStatus` and lists it in
+  `wlc:DesignDocStatusOrder`, but spec 025 §3 retired that status —
+  `docs/authoring-design-docs.md` now documents only `draft`/`accepted`/
+  `superseded`, with a doc under review staying `draft`. The vocabulary
+  should follow the accepted spec.
+- **Retryability is asymmetric in `internal/graphserver`**: only `Select`
+  maps 502/503/504 to `ErrSPARQLUnavailable`; `PutGraph`/`GetGraph`/
+  `DeleteGraph` fold the same ingress statuses into an opaque `httpError`.
+  During a graph-server rollout the acceptance harness patiently retries the
+  query but hard-fails the PUT.
 
 ## From the 2026-08-04 architecture grilling
 
