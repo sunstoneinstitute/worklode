@@ -125,6 +125,12 @@ Acceptance is always a deliberate human act (`lode doc accept`), never automatic
 side effect. The same applies one step later: decomposing an accepted spec into plans is
 explicitly chosen — skills may *offer* the step, never take it.
 
+Minting a task that *asks for* review or planning is not the act it asks for, so 027's
+watchers do not breach this: `lode doc submit` emits an event that mints the review task, and
+acceptance mints a task to decide how the spec becomes plans. Whether it becomes one plan or
+four, and what they say, remains entirely the assignee's — and neither watcher ever accepts a
+document.
+
 ## 4. Plans are documents {#sec-4}
 
 014 §2 demoted plans out of the document model because a plan must stay freely mutable — the
@@ -292,6 +298,7 @@ is therefore one commit touching the Turtle, the generated code, and the migrati
 
 ```
 lode doc new --kind spec|adr|plan     author a draft (skill-guided)
+lode doc submit <id>                  hand a draft to review; mints the review task (027 §5)
 lode doc show <id> [--resolved]       --resolved inlines amendments and supersessions
 lode doc accept <id>                  the manual commit; on a plan, mints its tasks (§5)
 lode doc list --needs-planning        accepted specs with unplanned accepted sections
