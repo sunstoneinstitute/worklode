@@ -538,6 +538,85 @@ docs/plans/2026-08-02-keycloak-primary-auth-3-cli-and-e2e.md:
     task-5-end-to-end: "## Task 5: End-to-end"
     task-6-close-out-the-docs: "## Task 6: Close out the docs"
     done-when: "## Done when"
+docs/plans/2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md:
+  sections:
+    what-exists-vs-what-this-builds: "## What exists vs. what this builds"
+    tasks: "## Tasks"
+    task-1-add-ns-codegen-and-internalns: "### Task 1 — Add `ns/` codegen and `internal/ns`"
+    task-2-re-key-the-container-guards-to-has-children: "### Task 2 — Re-key the container guards to \"has children\""
+    task-3-drop-the-kind-flip-from-decompose: "### Task 3 — Drop the kind flip from decompose"
+    task-4-make-decompose-the-only-child-acquisition-path: "### Task 4 — Make decompose the only child-acquisition path"
+    task-5-swap-the-task-kinds-in-one-commit: "### Task 5 — Swap the task kinds in one commit"
+    task-6-apply-the-ontology-edits-project-workstream-plan-proposed: "### Task 6 — Apply the ontology edits: Project, Workstream, Plan, `proposed`"
+    task-7-rework-the-e2e-hierarchy-loop-without-epics: "### Task 7 — Rework the e2e hierarchy loop without epics"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+docs/plans/2026-08-03-documents-in-the-backbone-2-document-store.md:
+  sections:
+    decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-add-migration-0012-docs: "### Task 1 — Add migration `0012_docs`"
+    task-2-implement-designdoccomparesections-the-7-gate: "### Task 2 — Implement `designdoc.CompareSections`, the §7 gate"
+    task-3-build-internalstoredocsgo-rows-sections-edges: "### Task 3 — Build `internal/store/docs.go`: rows, sections, edges"
+    task-4-implement-the-editorial-lifecycle-accept-revise-supersede: "### Task 4 — Implement the editorial lifecycle: accept, revise, supersede"
+    task-5-serve-the-api-and-web-read-surface: "### Task 5 — Serve the API and web read surface"
+    task-6-prove-the-spec-lifecycle-end-to-end: "### Task 6 — Prove the spec lifecycle end to end"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
+  sections:
+    decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-parse-the-plan-task-format-in-designdocplantasks: "### Task 1 — Parse the plan task format in `designdoc.PlanTasks`"
+    task-2-mint-the-tasks-in-the-accept-transaction: "### Task 2 — Mint the tasks in the accept transaction"
+    task-3-surface-plan-doc-on-tasks: "### Task 3 — Surface `plan_doc` on tasks"
+    task-4-gate-the-ready-set-on-plan-to-plan-blocks: "### Task 4 — Gate the ready set on plan-to-plan `blocks`"
+    task-5-ship-the-lode-doc-verbs: "### Task 5 — Ship the `lode doc` verbs"
+    task-6-prove-plan-acceptance-end-to-end: "### Task 6 — Prove plan acceptance end to end"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+docs/plans/2026-08-03-documents-in-the-backbone-4-corpus-cutover.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-build-lode-doc-import: "### Task 1 — Build `lode doc import`"
+    task-2-import-the-real-corpus-and-verify: "### Task 2 — Import the real corpus and verify"
+    task-3-delete-the-mirror-retire-the-guards: "### Task 3 — Delete the mirror, retire the guards"
+    task-4-catch-the-written-record-up: "### Task 4 — Catch the written record up"
+    done-when: "## Done when"
+docs/plans/2026-08-03-multi-harness-1-adapter-core.md:
+  sections:
+    what-exists-vs-what-this-builds: "## What exists vs. what this builds"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-build-internalharness-types-registry-claude-code-adapter: "### Task 1 — Build `internal/harness`: types, registry, claude-code adapter"
+    task-2-grow-lode-installs-harness-dimension: "### Task 2 — Grow `lode install`'s harness dimension"
+    task-3-widen-the-agent-sessionsagent-check: "### Task 3 — Widen the `agent_sessions.agent` CHECK"
+    task-4-add-harness-payload-normalization-to-lode-hook: "### Task 4 — Add `--harness` payload normalization to `lode hook`"
+    task-5-add-the-codex-adapter: "### Task 5 — Add the codex adapter"
+    task-6-add-the-copilot-adapter: "### Task 6 — Add the copilot adapter"
+    task-7-add-the-amp-adapter: "### Task 7 — Add the amp adapter"
+    task-8-write-the-agentsmd-managed-block: "### Task 8 — Write the `AGENTS.md` managed block"
+    done-when-part-1: "## Done when (part 1)"
+docs/plans/2026-08-03-multi-harness-2-skill-delivery.md:
+  sections:
+    what-exists-vs-what-this-builds: "## What exists vs. what this builds"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-move-the-store-out-of-the-linked-directory: "### Task 1 — Move the store out of the linked directory"
+    task-2-publish-directory-link-per-skill-links-copy-fallback: "### Task 2 — Publish: directory link, per-skill links, copy fallback"
+    task-3-wire-lode-install-skills-and-lode-skills-install-link: "### Task 3 — Wire `lode install --skills` and `lode skills install --link`"
+    task-4-link-brief-skills-into-the-worktree: "### Task 4 — Link brief skills into the worktree"
+    done-when-part-2: "## Done when (part 2)"
+docs/plans/2026-08-03-multi-harness-3-statusline.md:
+  sections:
+    what-exists-vs-what-this-builds: "## What exists vs. what this builds"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-record-the-lease-marker: "### Task 1 — Record the lease marker"
+    task-2-render-lode-statusline-and-spool-the-cost: "### Task 2 — Render `lode statusline` and spool the cost"
+    task-3-apply-harness-reported-cost-on-touch-store-and-api: "### Task 3 — Apply harness-reported cost on touch (store and API)"
+    task-4-flush-the-spool-on-the-heartbeat-client: "### Task 4 — Flush the spool on the heartbeat (client)"
+    task-5-install-the-status-line-on-demand: "### Task 5 — Install the status line on demand"
+    done-when-part-3: "## Done when (part 3)"
 docs/plans/2026-08-03-spec-shorthand-references.md:
   sections:
     file-structure: "## File structure"
