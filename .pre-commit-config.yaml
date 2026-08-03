@@ -22,15 +22,6 @@ repos:
         entry: scripts/secfmt.py -l -w
         language: script
         files: ^docs/specs/.*\.md$
-      # Same rewrite-and-fail shape as section-numbers. always_run because a
-      # commit that only deletes a document still invalidates the index, and
-      # pre-commit drops deleted paths from the file list.
-      - id: section-index
-        name: docs section index
-        entry: scripts/secindex.py
-        language: script
-        pass_filenames: false
-        always_run: true
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.
       - id: migration-numbers

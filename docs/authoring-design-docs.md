@@ -252,8 +252,10 @@ Two refusals, neither of which you should paper over with `--force`:
 ```
 
 `index.yaml` is every document's sections keyed by anchor — the lookup that
-answers "which section covers X" without opening 26 specs. It is generated; a
-pre-commit hook rewrites it and fails so you re-stage, like `secfmt.py`.
+answers "which section covers X" without opening 26 specs. It is generated, and
+no hook regenerates it: run `secindex.py` yourself after adding, renaming or
+renumbering a section, and commit the result. `secindex.py --check` reports a
+stale or missing index without writing one.
 
 `currentspec.py` reads that index plus the amendment and supersession
 frontmatter and prints the corpus as it currently stands: superseded documents

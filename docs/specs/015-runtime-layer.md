@@ -360,7 +360,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 
 ---
 
-## Dependencies
+## 8. Dependencies {#sec-8}
 
 - **Spec 006** — the vocabulary this extends; the `wl:layer` convention, the SHACL gate and the
   `owlrl` closure test all widen to the new terms.
@@ -372,7 +372,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
   — the ingest whose rows project into these nodes.
 - **rdf-registry** — ADR-0006 (IRI scheme), ADR-0003 (SHACL gate), ADR-0004 (`owlrl` closure test).
 
-## Open questions
+## 9. Open questions {#sec-9}
 
 1. **`wl:RuntimeEvent` has no natural key.** `runtime_events` has only a surrogate id, so no
    deterministic IRI can be derived from a row and 007's idempotent full-replace contract cannot be
@@ -395,7 +395,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
    determines whether the runtime layer ships with a populated `prov:used` edge or an empty one —
    worth deciding deliberately rather than discovering at projection time.
 
-## Acceptance criteria
+## 10. Acceptance criteria {#sec-10}
 
 1. `rdf/wl/ontology.ttl` and `rdf/wl/concept.ttl` declare all six classes, seven properties and
    four SKOS schemes; every class and property carries `wl:layer wlc:runtime`, so
