@@ -607,8 +607,9 @@ These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR
 ## 8. Task kinds {#sec-8}
 
 > **Superseded by 025 §6.** The reconciliation below shipped (migration 0009) and is history;
-> the forward rules — `epic` stays, no kind for plans — are replaced: `epic` is removed,
-> `spec` is renamed `design`, and `plan` is minted as the one structural kind.
+> of the forward rules, `epic` stays is replaced — `epic` is removed and `spec` is renamed
+> `design` — while no kind is added for plans survives, since 025 §5 mints no container for a
+> plan for a kind to mark.
 
 Two enumerations exist today and disagree:
 

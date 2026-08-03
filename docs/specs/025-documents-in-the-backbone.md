@@ -39,8 +39,8 @@ unrelated tasks, and something had to hold the set together.
 
 This spec removes the epic by removing its reason to exist. Documents — specs, ADRs, plans —
 become first-class objects in the backbone, authored and reviewed there, with git files as a
-transitional mirror only. A plan's acceptance mints its execution subtree directly, so the
-container is the plan itself rather than a proxy borrowed from Jira. The remaining jobs the
+transitional mirror only. A plan's acceptance mints its tasks directly, each referencing the
+document, so the container is the plan itself rather than a proxy row. The remaining jobs the
 epic might have done are either already owned (cross-plan "ships together" is `wl:Milestone`,
 reserved since 006) or were never legitimate rows at all (§1).
 
@@ -51,26 +51,26 @@ Alongside the epic, this resolves three collisions found on the way:
 - The `--kind spec` task was drifting toward "umbrella open while the spec is unimplemented",
   which stores a coverage query as a row. Spec-kind tasks are authoring work only (§6).
 - Plan documents carry `- [ ]` checkboxes — execution state, ticked in git — while tasks also
-  track execution state. Two owners of one fact; the plan subtree ends it (§5).
+  track execution state. Two owners of one fact; the plan's task set ends it (§5).
 
 ## 1. Principle: rows are things someone made; groupings are queries {#sec-1}
 
 A row exists because an act created it: a task row because work was defined, a document row
-because an artifact was authored, a `child_of` edge because one accept or decompose transaction
-wired it. Everything cross-cutting is derived — a plan's task set, a spec's coverage, a
-milestone's membership, "all plans derived from spec N with unfinished work". This is 014 §6's
-"coverage is computed, never stored", applied to execution grouping.
+because an artifact was authored, a `child_of` edge because one decompose transaction wired it.
+Everything cross-cutting is derived — a plan's task set, a spec's coverage, a milestone's
+membership, "all plans derived from spec N with unfinished work". This is 014 §6's "coverage is
+computed, never stored", applied to execution grouping.
 
 The rule decides concrete cases:
 
 | Candidate row | Verdict |
 |---|---|
-| Epic grouping one plan's tasks | Query (the subtree the plan's acceptance created) — row deleted |
-| Spec-level container over its plans' roots | Query over `implements` + root states — never minted |
+| Epic grouping one plan's tasks | Query over the tasks' document reference — row deleted |
+| Plan root task | Query — same grouping, same verdict; the plan document is the only identity the set needs (§5) |
+| Spec-level container over its plans | Query over `implements` + the plans' task-set states — never minted |
 | Spec-umbrella task, open while unimplemented | Coverage query — never minted |
 | Sprint / iteration container | Never minted; time-boxing is ranking and deadlines |
 | Milestone | Row (declared intent: these deliverables ship together), membership derived |
-| Plan root task | Row — created by the acceptance act, owns execution state |
 
 ## 2. Documents move into the backbone {#sec-2}
 
@@ -86,7 +86,9 @@ exactly as it receives tasks (006 §6). One authoring path, one review surface, 
 - `doc_sections`: anchor, heading, depth, `last_revised_in` — specs and ADRs only (§4).
   Anchors follow 014 §3 unchanged: assigned at first acceptance, frozen, letter-suffix inserts.
 - `doc_edges`: `implements`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped
-  where the ends are sections. Both directions stored, checked for agreement (014 §11).
+  where the ends are sections. Both directions stored, checked for agreement (014 §11). Plans
+  additionally take `blocks`/`blockedBy` between whole documents — the ordering edge that would
+  otherwise need a container row to attach to (§7).
 
 014 §4's canonical + versioned IRIs, `dcat:hasVersion` shape and `wl:lastRevisedIn` survive as
 the **projection** of this store; its named-graph publication transaction becomes an ordinary
@@ -142,60 +144,73 @@ wl:Plan a owl:Class ;
     rdfs:comment "An executable document: a bundle of task definitions with instructions
         attached. Reviewable and accept-gated like a DesignDoc, but spent once executed,
         freely mutable, and carrying no frozen section anchors — nothing may pin a claim
-        to a plan (014 §2's argument, preserved). Acceptance mints its execution subtree
-        (025 §5)." .
+        to a plan (014 §2's argument, preserved). Acceptance mints its tasks (025 §5)." .
 ```
 
 Plan documents take no `doc_sections` rows and no anchors. Nothing addresses into a plan;
 `implements` on a plan names spec sections, exactly as plan frontmatter does today.
 
-## 5. Acceptance mints the execution subtree {#sec-5}
+## 5. Acceptance mints the plan's tasks {#sec-5}
 
-`lode doc accept` on a plan runs one transaction: mint a root task with `kind = 'plan'` bound
-1:1 to the document, create the plan's tasks as its children (`draft`), and wire the
-`child_of` edges. The root is born past its own draft phase — editorial drafting happened
-doc-side, so `doc.status = accepted ⟺ root exists`, by construction, with nothing to keep in
-sync by hand.
+`lode doc accept` on a plan runs one transaction: create the plan's tasks (`draft`), each
+carrying a reference to the document. **Nothing is minted above them.** The invariant is
+`doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
+hand.
 
-Three entities, each owning one fact, all created by acts:
+A plan's task set is the query `tasks WHERE plan_doc = <doc>` — §1's rule applied to the case
+that most tempted a row. A root task would own no fact of its own: its state was computed from
+its children (018 §3.3), its body restated the document's, it was never claimable and never
+held a commit. With the plan itself a real object in the same store, everything a root carried
+is either **on the document** (identity, title, body, editorial status, ordering) or **derived
+from the task set** (progress, completion). Minting it would store a grouping as a row, which
+is what §0 removes the epic for.
+
+Two acts, three things, each owning one fact:
 
 | Entity | Owns | Created by |
 |---|---|---|
 | Authoring task (`kind = 'design'`) | The work of writing the plan | whoever picks up the planning |
-| Plan document | Content + editorial status | the authoring work |
-| Root task (`kind = 'plan'`) + children | Execution state + roll-up | the accept transaction |
+| Plan document | Content, editorial status, and the identity of the set | the authoring work |
+| Tasks + their `plan_doc` reference | Execution state | the accept transaction |
 
-Everything 018 built for the epic re-targets the plan root unchanged: never claimable and
-excluded from the ready set, delivery states forbidden, closure by roll-up (018 §3.3, both
-directions), progress derived on read, single parent, depth cap 2, cross-project children
-rejected, brief showing one hop up. Where 018 says *epic*, read *plan root*.
+`plan_doc` is nullable: tasks that no plan authored — an inbox promotion, a one-off chore —
+carry none, and their absence from every plan's task set is the correct answer rather than a
+special case.
 
-`lode task decompose` (018 §8) survives as the second mint path: converting an oversized task
-in place creates a plan root with a **null document reference** — an inline plan. It is
-tracker-native, skips the review gate, and that is honest: no reviewable artifact was
-authored. If a decomposition deserves review, it deserves a plan document.
+**What this leaves of 018.** The `child_of` machinery survives, narrowed to its other job:
+decomposing an oversized task into subtasks (018 §8), which stays the only way a task acquires
+children. Its guards — never claimable, excluded from the ready set, delivery states forbidden,
+closure by roll-up in both directions, progress derived on read, single parent, cross-project
+children rejected, brief showing one hop up — all still apply, but now to *a task that has
+children* rather than to a declared kind. 018 §1 chose declared over inferred because an epic
+had to exist before its children did (`task add --kind epic` created an empty one); with that
+path gone and `decompose` creating parent-hood and children in the same transaction, there is
+no window in which the two disagree, and the predicate "has children" is exactly as sharp as a
+column. The depth cap of 2 (018 §3.2) is unchanged and no longer half-spent on a container:
+task → subtask is the whole of it.
 
-The plan-doc `- [ ]` checkbox convention retires with the files: children's task state is the
-only execution state.
+The plan-doc `- [ ]` checkbox convention retires with the files: the tasks' state is the only
+execution state.
 
 ## 6. Task kinds {#sec-6}
 
 ```sql
 -- target CHECK; ships with the concept.ttl edit and regenerated code, atomically
-CHECK (kind IN ('feature','bug','chore','design','review','spike','plan'))
+CHECK (kind IN ('feature','bug','chore','design','review','spike'))
 ```
 
-- **`epic` is removed.** No jobs remain: one-plan grouping is the subtree (§5), cross-plan
-  grouping is `wl:Milestone` (§8), everything else is a query (§1).
+- **`epic` is removed.** No jobs remain: one-plan grouping is the document reference (§5),
+  cross-plan grouping is `wl:Milestone` (§8), everything else is a query (§1).
 - **`spec` is renamed `design`** and widened to every document kind: *author or revise a
   Worklode document (spec, ADR, or plan); the document produced is reachable via
   `prov:wasGeneratedBy`* (014 §9's mechanism, unchanged). A design task is claimable, real
   work, and closes when its document is accepted — it is never an umbrella held open against
   coverage. "Is the spec implemented?" is `lode doc coverage`, not a task state.
-- **`plan` is added**, the one structural kind: the container minted by accept or decompose.
-  014 §8 ruled "no kind is added for plans" while plans were pure subtrees and the only
-  candidate container was the epic; with the plan root as a real object carrying real guards,
-  the kind is how the guards attach (declared, not inferred — 018 §1's argument stands).
+- **No structural kind replaces `epic`.** With no container row minted for a plan (§5), the
+  only remaining container is a decomposed parent, and its container-ness follows from having
+  children. So 014 §8's ruling — task kinds describe the nature of work, and no kind is added
+  for plans — stands rather than being overturned, and the scheme is left with six kinds that
+  all mean the same sort of thing.
 
 Migration: `UPDATE tasks SET kind = 'design' WHERE kind = 'spec'`; forbid `epic` (no rows
 exist); swap the CHECK; regenerate `validKinds` and `wlc:TaskKind` from `ns/` (§9) in the same
@@ -203,20 +218,26 @@ commit so `TestTaskKindsAgreeAcrossSources` never sees the sources disagree.
 
 ## 7. Spec fan-out is a query {#sec-7}
 
-A spec producing several plans gets no container above the plan roots. Each need is owned:
+A spec producing several plans gets no container above their tasks. Each need is owned:
 
 | Need | Owner |
 |---|---|
-| "How far along is spec N?" | `lode doc coverage` — accepted sections × plans × root states |
+| "How far along is spec N?" | `lode doc coverage` — accepted sections × plans × task-set states |
 | "Which specs need planning?" | accepted sections not named by any accepted plan's `implements` |
-| "Which plans need execution?" | accepted plan docs whose root is absent or unmerged |
-| Plan B after plan A | `blocks` edge between the roots |
+| "Which plans need execution?" | accepted plan docs whose task set is unminted or unfinished |
+| Plan B after plan A | `blocks` edge between the two plan documents (§2) |
 | "These land together" | Milestone over their deliverables (§8) |
-| Task Y waits on part of spec N | Y blocks on the specific plan root(s) |
+| Task Y waits on part of spec N | Y blocks on the plan document(s) covering that section, or on individual tasks when the wait is narrower |
+
+The document-level `blocks` edge is what makes dropping the root affordable: ordering is a
+statement about plans, and a plan is now a real object, so the edge attaches to it directly
+instead of to a proxy task. The ready-set query expands it — a task is blocked while any task
+in a blocking plan's set is open — which is the same predicate 005 §3 already runs, evaluated
+over a set rather than a row.
 
 "All of spec N is done" is not a completion event — coverage grows under amendment — so no row
-may claim to be it. This also keeps the depth cap at 2: plan root → task → decomposed subtask;
-a spec-level parent would force 3.
+may claim to be it. And with no container level to spend, the depth cap of 2 covers task →
+decomposed subtask alone; a plan- or spec-level parent would spend it again for nothing.
 
 ## 8. Project, Workstream, Milestone {#sec-8}
 
@@ -251,7 +272,7 @@ confirmed by this spec's principle: a milestone **groups Deliverables** — the 
 that a set of outcomes ships together, typically ending with a release. Task membership is
 derived through the existing `wl:implements` (whose range already includes Deliverable), so
 milestone progress is a coverage query and no task→milestone edge is ever stored. Bounded
-short-horizon grouping needs no further concept: one intent's tasks are its plan subtree; a
+short-horizon grouping needs no further concept: one intent's tasks are its plan's task set; a
 cross-plan set that must land together is a (small) milestone. A calendar-boxed sprint
 container is deliberately unrepresentable.
 
@@ -272,9 +293,9 @@ is therefore one commit touching the Turtle, the generated code, and the migrati
 ```
 lode doc new --kind spec|adr|plan     author a draft (skill-guided)
 lode doc show <id> [--resolved]       --resolved inlines amendments and supersessions
-lode doc accept <id>                  the manual commit; on a plan, mints the subtree (§5)
+lode doc accept <id>                  the manual commit; on a plan, mints its tasks (§5)
 lode doc list --needs-planning        accepted specs with unplanned accepted sections
-lode doc list --needs-execution      accepted plans with no live root
+lode doc list --needs-execution      accepted plans whose task set is unminted or unfinished
 lode doc coverage <id>                per-section implemented / unimplemented / stale
 lode doc revise | anchors             as 014 §10
 ```
@@ -288,10 +309,10 @@ ceremony lives in skills while every state change is one of the deterministic ve
 | Spec | Change |
 |---|---|
 | 000 | §1 authority split: backbone owns doc artifacts; graph is projection (§2) |
-| 006 | §1.1/§1.2/§1.3: Workstream/OngoingMaintenance/inWorkstream out, Project redefined, inProject in (§8); §1.5 TaskKind: `epic` out, `spec`→`design`, `plan` in (§6) |
-| 014 | §0/§4/§10 store moves to backbone, graph becomes projection (§2); §5 `proposed` dropped (§3); §2 plans return as non-DesignDoc documents (§4); §8 superseded (§6) |
-| 018 | Doc-wide: `epic` reads `plan root`; container minted by accept/decompose, never `task add --kind epic`; machinery otherwise intact (§5, §6) |
-| Migration | Kind swap (§6); `docs`/`doc_sections`/`doc_edges` (§2); root→doc reference on tasks |
+| 006 | §1.1/§1.2/§1.3: Workstream/OngoingMaintenance/inWorkstream out, Project redefined, inProject in (§8); §1.5 TaskKind: `epic` out, `spec`→`design` (§6) |
+| 014 | §0/§4/§10 store moves to backbone, graph becomes projection (§2); §5 `proposed` dropped (§3); §2 plans return as non-DesignDoc documents (§4); §8 superseded, though its "no kind for plans" ruling survives the replacement (§6) |
+| 018 | §1's declared container narrows to "has children", the only path being `decompose`; `task add --kind epic` and `--kind` on `task parent` go; roll-up, ready-set exclusion, single parent, depth cap intact (§5, §6) |
+| Migration | Kind swap (§6); `docs`/`doc_sections`/`doc_edges` (§2); nullable `plan_doc` on tasks |
 | CLAUDE.md / authoring docs | Ownership sentence, spec→plan→task model, `task:` key retirement |
 
 ## 12. Out of scope {#sec-12}
@@ -306,15 +327,17 @@ ceremony lives in skills while every state change is one of the deterministic ve
 
 ## 13. Acceptance criteria {#sec-13}
 
-1. `kind = 'epic'` is absent from the CHECK, `validKinds`, and `wlc:TaskKind`; `design` and
-   `plan` are present in all three; the sources are generated from `ns/` and CI fails on
-   drift.
-2. Accepting a plan document mints root + children + edges in one transaction; the root is
-   never claimable, rolls up per 018 §3.3, and `doc accept` is the only path that creates a
-   doc-bound root.
-3. `lode task decompose` mints a docless plan root; `lode task add --kind plan` is rejected.
-4. A spec with two accepted plans has no row above the two roots; `lode doc coverage`,
-   `--needs-planning` and `--needs-execution` answer from queries alone.
+1. `epic` is absent from the CHECK, `validKinds`, and `wlc:TaskKind` and no structural kind
+   replaces it; `design` is present in all three; the sources are generated from `ns/` and CI
+   fails on drift.
+2. Accepting a plan document mints its tasks and their `plan_doc` references in one
+   transaction and creates no row above them; the set is reachable only by query, and
+   `doc.status = accepted ⟺ the tasks exist` holds in both directions.
+3. `lode task decompose` is the only path by which a task acquires children; the container
+   guards apply exactly while a task has them, with no kind to declare.
+4. A spec with two accepted plans has no row above either plan's tasks, and a plan-to-plan
+   `blocks` edge orders them; `lode doc coverage`, `--needs-planning` and `--needs-execution`
+   answer from queries alone.
 5. A document under review is `draft` with an open review task; `proposed` appears nowhere;
    `lode doc accept` is manual and assignee-gated.
 6. Plan documents carry no section anchors and accept mid-execution edits; spec documents
