@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 issued: 2026-07-20
 amends:
   ".":

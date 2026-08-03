@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/012-agent-sessions.md
 ---
 # Agent Sessions Implementation Plan

@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/001-keycloak-sso.md
 ---
 # Keycloak SSO — Plan 1: Server Core Implementation Plan

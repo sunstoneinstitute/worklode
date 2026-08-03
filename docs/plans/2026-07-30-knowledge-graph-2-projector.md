@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-9
 implements: docs/specs/006-knowledge-graph.md
 ---
 # Knowledge graph 2/2 (spec 006): the backbone→graph projector — Implementation Plan

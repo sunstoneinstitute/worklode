@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/019-project-scoping.md
 ---
 # Repo-scoped CLI commands — Implementation Plan

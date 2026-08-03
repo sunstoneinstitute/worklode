@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/018-task-hierarchy.md
 ---
 # Task Hierarchy Implementation Plan

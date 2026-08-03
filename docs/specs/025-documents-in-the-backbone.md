@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 issued: 2026-08-02
 requires:
   - 004-execution-backbone.md
@@ -161,7 +161,10 @@ Plan documents take no `doc_sections` rows and no anchors. Nothing addresses int
 ### 4.1 Task declarations — the `## Tasks` section {#sec-4.1}
 
 A plan body declares the tasks its acceptance mints (§5) in exactly one `## Tasks` section,
-containing nothing but one `### Task <N> — <title>` subsection per task. `N` enumerates from 1
+containing nothing but one `### Task <N> — <title>` subsection per task; prose sitting
+directly under the heading, outside any task, fails the accept rather than being dropped — it
+is text an author meant for some task's body, and losing it silently is the same failure as
+silently dropping an unknown key. `N` enumerates from 1
 in document order, without gaps, **within each plan file**: a plan series shares no sequence —
 every part restarts at 1 — and `N` never crosses a file. Each subsection opens with a fenced
 YAML metadata block, then prose (what to do, which files, the test that proves it), then an
@@ -216,7 +219,10 @@ document-level `blocks` edge (§2, §7) — never a task number.
 A **skill identifier** is the org skill-registry name (016 §1), written in the
 `plugin:skill` form the skill repos already use (`superpowers:test-driven-development`) when
 the skill ships in a plugin; resolution falls back to the segment after the colon where the
-registry name is unqualified. Accept does not require the name to resolve — a pin naming an
+registry name is unqualified. The fallback is a **second** attempt, never a first: an exact
+match on the written identifier wins outright and the after-colon form is not consulted, so a
+registry holding both `superpowers:tdd` and a bare `tdd` resolves the qualified pin to the
+qualified row. Accept does not require the name to resolve — a pin naming an
 unknown skill is a brief warning, never a failure (016 §3). The key is `skills`, matching the
 doc-frontmatter pin key and the backbone Task field, both from 016 §3; the projected term is
 minted here, amending 016 §1's mint set:
