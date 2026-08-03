@@ -353,7 +353,7 @@ transition rules (which move is allowed from where) live with the authoring skil
 
 > **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike, epic`, matching the `tasks.kind` constraint. `epic` is spec 018's declared container task — structural rather than a nature of work, and in the scheme because the constraint carries it.
 
-> **Amended by 025 §6.** The scheme becomes `feature, bug, chore, design, review, spike, plan`: `epic` is removed, `spec` is renamed `design` (authoring any Worklode document), and `plan` is the one structural member — the container minted by plan acceptance or decompose.
+> **Amended by 025 §6.** The scheme becomes `feature, bug, chore, design, review, spike`: `epic` is removed with no structural member replacing it — a plan is a document, not a task, and its tasks are grouped by their reference to the plan document rather than under a container row — and `spec` is renamed `design` (authoring any Worklode document). Every kind left in the scheme names a nature of work.
 
 ```turtle
 lsc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
