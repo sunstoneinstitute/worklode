@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-5
 implements: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 1/3 (spec 007): graph wiring & repo-local derivers — Implementation Plan

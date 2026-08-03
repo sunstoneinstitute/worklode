@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-11
 implements: docs/specs/013-reconciliation.md
 ---
 # Reconciliation 2/3: endpoints & CLI surface — Implementation Plan

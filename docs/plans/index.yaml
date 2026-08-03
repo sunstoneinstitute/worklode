@@ -538,6 +538,44 @@ docs/plans/2026-08-02-keycloak-primary-auth-3-cli-and-e2e.md:
     task-5-end-to-end: "## Task 5: End-to-end"
     task-6-close-out-the-docs: "## Task 6: Close out the docs"
     done-when: "## Done when"
+docs/plans/2026-08-03-design-doc-queries-1-corpus-and-list.md:
+  sections:
+    file-structure: "## File structure"
+    the-fixed-contract: "## The fixed contract"
+    semantics-decisions-read-before-implementing: "## Semantics decisions (read before implementing)"
+    tasks: "## Tasks"
+    task-1-fixture-corpora-and-loadcorpus: "### Task 1 — Fixture corpora and `LoadCorpus`"
+    task-2-corpusresolve-the-four-reference-forms: "### Task 2 — `Corpus.Resolve`: the four reference forms"
+    task-3-corpuscheck-and-the-real-corpus-integrity-test: "### Task 3 — `Corpus.Check` and the real-corpus integrity test"
+    task-4-needsplanning-and-needsexecution: "### Task 4 — `NeedsPlanning` and `NeedsExecution`"
+    task-5-currentsections: "### Task 5 — `CurrentSections`"
+    task-6-lode-doc-list: "### Task 6 — `lode doc list`"
+    task-7-lode-doc-sections-and-currentspecpy-retires: "### Task 7 — `lode doc sections`, and `currentspec.py` retires"
+    task-8-wlstatus-widening-and-the-6-documentation-edits: "### Task 8 — `wl:status` widening and the §6 documentation edits"
+    done-when: "## Done when"
+docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md:
+  sections:
+    consumed-surfaces-assumed-reconcile-dont-redefine: "## Consumed surfaces (assumed — reconcile, don't redefine)"
+    design-decisions-pinned-implementers-do-not-re-litigate-these: "## Design decisions (pinned — implementers do not re-litigate these)"
+    marker-grammar-exact-strings-tests-assert-them-byte-for-byte: "## Marker grammar (exact strings — tests assert them byte for byte)"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-fixture-corpora-for-consolidation: "### Task 1 — Fixture corpora for consolidation"
+    task-2-edge-index-and-the-31-gate-applied: "### Task 2 — Edge index and the §3.1 gate applied"
+    task-3-the-consolidation-fixpoint: "### Task 3 — The consolidation fixpoint"
+    task-4-banners-pending-references-sources-dangling-refs: "### Task 4 — Banners, pending references, sources, dangling refs"
+    task-5-section-slice-and-forward-resolution: "### Task 5 — `--section` slice and forward-resolution"
+    task-6-root-independence-fixture-and-real-corpus: "### Task 6 — Root-independence, fixture and real corpus"
+    task-7-lode-doc-show-resolved-in-the-command: "### Task 7 — `lode doc show --resolved` in the command"
+    done-when: "## Done when"
+docs/plans/2026-08-03-design-doc-queries-3-permanence-gate.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-fixture-harness-and-the-anchor-permanence-core: "### Task 1 — Fixture harness and the anchor-permanence core"
+    task-2-reference-integrity-and-mirror-edges-in-the-same-pass: "### Task 2 — Reference integrity and mirror edges in the same pass"
+    task-3-refuse-a-cycle-in-the-section-level-amendsreplaces-graph: "### Task 3 — Refuse a cycle in the section-level amends/replaces graph"
+    task-4-wire-the-gate-pre-commit-entry-and-ci: "### Task 4 — Wire the gate: pre-commit entry and CI"
+    done-when: "## Done when"
 docs/plans/2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md:
   sections:
     what-exists-vs-what-this-builds: "## What exists vs. what this builds"
@@ -573,6 +611,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
     task-4-gate-the-ready-set-on-plan-to-plan-blocks: "### Task 4 — Gate the ready set on plan-to-plan `blocks`"
     task-5-ship-the-lode-doc-verbs: "### Task 5 — Ship the `lode doc` verbs"
     task-6-prove-plan-acceptance-end-to-end: "### Task 6 — Prove plan acceptance end to end"
+    task-7-resolve-qualified-skill-pins-with-the-after-colon-fallback: "### Task 7 — Resolve qualified skill pins with the after-colon fallback"
     done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
 docs/plans/2026-08-03-documents-in-the-backbone-4-corpus-cutover.md:
   sections:
@@ -582,6 +621,33 @@ docs/plans/2026-08-03-documents-in-the-backbone-4-corpus-cutover.md:
     task-3-delete-the-mirror-retire-the-guards: "### Task 3 — Delete the mirror, retire the guards"
     task-4-catch-the-written-record-up: "### Task 4 — Catch the written record up"
     done-when: "## Done when"
+docs/plans/2026-08-03-event-watchers-1-ordered-log.md:
+  sections:
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-migration-eventstxid-and-event-subscribers: "### Task 1 — Migration: `events.txid` and `event_subscribers`"
+    task-2-store-horizon-read-and-monotonic-ack: "### Task 2 — Store: horizon read and monotonic ack"
+    task-3-store-the-subscriber-lock-on-a-dedicated-connection: "### Task 3 — Store: the subscriber lock on a dedicated connection"
+    task-4-event-vocabulary-ns-terms-and-the-go-mirror: "### Task 4 — Event vocabulary: `ns/` terms and the Go mirror"
+    task-5-typed-emission-deterministic-ids-json-ld-payloads-validation: "### Task 5 — Typed emission: deterministic ids, JSON-LD payloads, validation"
+    task-6-the-consumer-loop-and-the-eventbus-metrics: "### Task 6 — The consumer loop and the eventbus metrics"
+    task-7-read-surfaces-store-queries-api-cli: "### Task 7 — Read surfaces: store queries, API, CLI"
+    task-8-e2e-the-log-is-readable-through-public-surfaces: "### Task 8 — e2e: the log is readable through public surfaces"
+    task-9-docs-amend-004-fix-027s-citation-claudemd: "### Task 9 — Docs: amend 004, fix 027's citation, CLAUDE.md"
+    done-when-maps-to-027-13: "## Done when (maps to 027 §13)"
+docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
+  sections:
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-migration-tasksabout-doc: "### Task 1 — Migration: `tasks.about_doc`"
+    task-2-store-and-api-the-doc-reference-and-the-guard-query: "### Task 2 — Store and API: the doc reference and the guard query"
+    task-3-typed-document-events-and-lode-doc-submit: "### Task 3 — Typed document events and `lode doc submit`"
+    task-4-the-rules-pure-internalwatcher: "### Task 4 — The rules, pure: `internal/watcher`"
+    task-5-the-executor-and-the-wired-subscriber: "### Task 5 — The executor and the wired subscriber"
+    task-6-e2e-the-lifecycle-through-public-surfaces-only: "### Task 6 — e2e: the lifecycle through public surfaces only"
+    task-7-7-the-planning-skill-claims-its-task-claude-plugins-repo: "### Task 7 — §7: the planning skill claims its task (claude-plugins repo)"
+    task-8-docs-claudemd-and-the-indexes: "### Task 8 — Docs: CLAUDE.md and the indexes"
+    done-when-maps-to-027-13: "## Done when (maps to 027 §13)"
 docs/plans/2026-08-03-multi-harness-1-adapter-core.md:
   sections:
     what-exists-vs-what-this-builds: "## What exists vs. what this builds"

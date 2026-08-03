@@ -1,4 +1,6 @@
 ---
+status: accepted
+task: WL-15
 implements: docs/specs/017-task-secrets.md
 ---
 # Task secrets 2/3: CLI runtime — Implementation Plan

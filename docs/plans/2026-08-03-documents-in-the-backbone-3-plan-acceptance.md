@@ -1,7 +1,8 @@
 ---
-status: draft
+status: accepted
 implements:
   - docs/specs/025-documents-in-the-backbone.md#sec-4
+  - docs/specs/025-documents-in-the-backbone.md#sec-4.1
   - docs/specs/025-documents-in-the-backbone.md#sec-5
   - docs/specs/025-documents-in-the-backbone.md#sec-7
   - docs/specs/025-documents-in-the-backbone.md#sec-10
@@ -12,14 +13,15 @@ requires:
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Series:** Part 3 of 4 (6 tasks; numbering restarts at 1 per part). See
+**Series:** Part 3 of 4 (7 tasks; numbering restarts at 1 per part). See
 part 1 for the series map. Part 2 must be merged first.
 
-**Goal:** Implement 025 §4, §5, §7 and §10: accepting a plan document mints
-its execution tasks from the plan task format — draft rows carrying
-`plan_doc`, kind/priority/skills/blocking read from each task's metadata
-block, nothing minted above them — plan-to-plan `blocks` edges gate the
-ready set, and the `lode doc` verbs land, store-backed.
+**Goal:** Implement 025 §4, §4.1, §5, §7 and §10: accepting a plan document
+mints its execution tasks from the §4.1 `## Tasks` declarations — draft rows
+carrying `plan_doc`, kind/priority/skills/blocking read from each task's
+metadata block, nothing minted above them — plan-to-plan `blocks` edges gate
+the ready set, the `lode doc` verbs land store-backed, and qualified skill
+pins resolve with §4.1's after-colon fallback.
 
 **Architecture:** `lode doc accept` on a plan runs one `RecordEvent`
 transaction: parse the plan body's task definitions, `CreateTask` each as a
@@ -35,9 +37,9 @@ evaluated over a set (025 §7) — expressed as one SQL condition shared by
 
 **Tech Stack:** Go 1.25+, Postgres, cobra CLI.
 
-**Spec:** `docs/specs/025-documents-in-the-backbone.md` §4, §5, §7, §10
+**Spec:** `docs/specs/025-documents-in-the-backbone.md` §4, §4.1, §5, §7, §10
 
-**The plan task format** (canonical definition lands in spec 025 and
+**The plan task format** (canonical definition: 025 §4.1, mirrored in
 `docs/authoring-design-docs.md`; this is what Task 1 parses):
 
 ````markdown
@@ -58,14 +60,18 @@ Prose: what to do, which files to touch, the test that proves it.
 - [ ] step
 ````
 
-`N` enumerates from 1 within each plan file; `blockedBy` holds task numbers
-within the same file only and becomes `blocks` edges between the minted
-tasks; `skills` names real `plugin:skill` ids and lands in the existing
-`tasks.skills` pinned-skills column.
+`N` enumerates from 1 in document order without gaps, within each plan file;
+`blockedBy` holds task numbers within the same file only and becomes
+`blocks` edges between the minted tasks; `kind` takes only the four kinds a
+plan may mint (never `review`/`spike`, §4.1); `skills` names `plugin:skill`
+ids that land in the existing `tasks.skills` pinned-skills column and
+resolve with §4.1's after-colon fallback (Task 7).
 
 **Read first:**
-- 025 §5 (the two-acts table and the nullable `plan_doc`), §7 (the query
-  table), §10 (the verb set), §13 AC2/AC4
+- 025 §4.1 (the format's normative definition — the metadata-key table,
+  numbering, heading and cycle rules, the skill-identifier fallback), §5
+  (the two-acts table and the nullable `plan_doc`), §7 (the query table),
+  §10 (the verb set), §13 AC2/AC4
 - `internal/store/docs.go` (part 2 — `AcceptDoc`'s plan stub is what Task 2
   here replaces)
 - `internal/store/tasks.go:36-46` (`TaskInput` — `Skills` already exists;
@@ -103,6 +109,15 @@ Milestone (v2, 025 §12); tier-2 shorthand resolution for foreign corpora
   an unminted set unfinished, so the edge blocks until the blocking plan's
   tasks all close. Stated here because the literal §7 sentence would read an
   empty set as unblocked.
+- **Content inside `## Tasks` that is not a task subsection is an accept
+  error.** §4.1 says the section holds "nothing but" task subsections
+  without ruling on violations; dropping stray prose silently would lose
+  text the author meant to mint, so the parser refuses — the same stance
+  §4.1 takes on unknown metadata keys.
+- **An exact registry name beats the after-colon fallback.** §4.1 orders
+  resolution ("falls back") without saying what wins when a pin could match
+  both a qualified and an unqualified registry row; exact-first keeps the
+  qualified row authoritative for its own name.
 
 ## File structure
 
@@ -111,6 +126,7 @@ Milestone (v2, 025 §12); tier-2 shorthand resolution for foreign corpora
 | `internal/designdoc/plantasks.go` (+ test) (new) | plan-task-format parsing |
 | `internal/store/docs.go` | the plan branch of `AcceptDoc`; `NeedsPlanning`/`NeedsExecution` queries |
 | `internal/store/tasks.go`, `ranking.go` | `planBlockedCondition`; `TaskInput.PlanDoc`; filters |
+| `internal/store/brief.go` (+ test) | `ResolvePins` after-colon fallback (§4.1) |
 | `internal/store/metrics.go` | `worklode_doc_plan_tasks_minted_total` |
 | `internal/api/docs.go`, `tasks.go` | accept response gains the minted set; `plan_doc` on task JSON; list filters |
 | `internal/cli/client.go` (new methods), `internal/cmd/doc.go` (new) | the `lode doc` verbs |
@@ -140,13 +156,18 @@ Table-driven over plan bodies in the format above:
 | Body | Expectation |
 |---|---|
 | a `## Tasks` section holding three `### Task N — Title` sections, each opening with a `yaml` fence | three defs in source order; titles are the text after the em dash; each def carries the fence's kind, priority, skills, blockedBy; the prose after the fence is the body |
-| a task section with **no** yaml fence, or a fence missing keys | defaults: `kind: feature`, `priority: medium`, no skills, no blockers |
+| a fence carrying only `kind` | defaults: `priority: medium`, no skills, no blockers |
+| a task section with **no** yaml fence, or a fence without `kind` | error naming the task — `kind` is required and has no default (§4.1's key table) |
 | `blockedBy: [1]` on Task 2 | `BlockedBy = []int{1}` |
-| `blockedBy` naming a task number not in the file, or a task's own number | error naming the task and the number |
-| unknown `kind` or `priority` in the fence | error naming the task and the value (validated against `ns.TaskKinds` and the priority set) |
+| `blockedBy` naming a number not in the file, or a task's own number | error naming the task and the number |
+| `blockedBy` forming a cycle (Task 1 ← 2, Task 2 ← 1) | error naming the tasks on the cycle |
+| `kind: review` or `kind: spike` | error naming the task and the value — plans mint only the §4.1 subset; likewise a kind or priority outside its set entirely |
+| numbers `1, 3` (gap), `2, 1` (order), `1, 1` (duplicate), or starting at 2 | error — `N` runs 1, 2, 3… in document order without gaps (§4.1) |
+| a `###` heading in `## Tasks` not matching `Task <N> — <title>` — hyphen or en dash for the em dash, or an empty title | error quoting the heading and the expected form |
+| non-blank content between `## Tasks` and its first task heading | error — see the decisions section |
+| two `## Tasks` sections | error — exactly one (§4.1) |
 | task headings outside a `## Tasks` section | ignored — only the `## Tasks` section enumerates |
 | a plan with a `## Tasks` section but no task headings, or no `## Tasks` section | error: "plan defines no tasks" — accepting it would mint nothing and break AC2's ⟺ |
-| duplicate task numbers | error — `blockedBy` references would be ambiguous |
 
 - [ ] **Step 2: Implement**
 
@@ -158,7 +179,7 @@ type PlanTask struct {
 	Number    int
 	Title     string   // heading text after "Task N — "
 	Body      string   // the section's own content, yaml fence excluded
-	Kind      string   // default "feature"
+	Kind      string   // required; one of the §4.1 mintable four
 	Priority  string   // default "medium"
 	Skills    []string // plugin:skill ids the executing agent loads
 	BlockedBy []int    // task numbers within this plan
@@ -166,20 +187,32 @@ type PlanTask struct {
 
 var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
+// planMintableKinds is the subset of task kinds a plan may mint (025 §4.1):
+// review tasks are created by the review lifecycle and spikes are inputs to
+// planning, so neither is plan-declarable.
+var planMintableKinds = []string{"feature", "bug", "chore", "design"}
+
 // PlanTasks extracts the task definitions the accept transaction mints:
-// the `### Task N — Title` sections under the `## Tasks` heading, each
-// optionally opening with a yaml metadata fence (kind, priority, skills,
-// blockedBy). Validation errors name the task; the numbers label tasks for
-// blockedBy and must be unique, but need not be contiguous.
+// the `### Task N — Title` sections under the single `## Tasks` heading,
+// each opening with a yaml metadata fence (kind required; priority, skills,
+// blockedBy optional). Validation errors name the task; the numbers run
+// 1, 2, 3… in document order without gaps, and blockedBy must be acyclic
+// (025 §4.1).
 func PlanTasks(d *Document) ([]PlanTask, error)
 ```
 
-Parsing notes: the metadata fence is the first fenced block of the section
-*only if* it starts the section body (blank lines aside) and its info string
-is `yaml` — decode with `yaml.v3` + `KnownFields(true)` so a typoed key is
-an error, matching `parseFrontmatter`'s stance. The section body minus the
-fence becomes `Body`. Heading matching accepts `-`/`–` as well as `—` (em
-dash), normalising rather than rejecting on dash width.
+Parsing notes: the section body must open (blank lines aside) with a fenced
+block whose info string is `yaml` — decode with `yaml.v3` +
+`KnownFields(true)` so a typoed key is an error, matching
+`parseFrontmatter`'s stance; a fence appearing later is ordinary body
+content. The section body minus the fence becomes `Body`. Heading matching
+requires the em dash — §4.1 makes it part of the format — and the near-miss
+error quotes the offending heading and the expected `Task <N> — <title>`
+shape, so the fix is obvious at accept time. Cycle detection is a
+depth-first walk over `BlockedBy` after the defs are collected; the error
+lists the numbers on the cycle. The test asserts `planMintableKinds` equals
+`ns.TaskKinds` minus `review` and `spike`, so the subset cannot drift from
+part 1's generated list.
 
 - [ ] **Step 3: Verify and commit**
 
@@ -219,8 +252,9 @@ blockedBy: [1]
 - The invariant both ways (AC2): before accept, zero tasks carry the doc's
   id; after, the count equals the definition count; a second accept is
   `ErrInvalidInput` (already accepted), so the set can never double-mint.
-- A plan whose body fails `PlanTasks` (no tasks, dangling `blockedBy`, bad
-  kind) refuses to accept with the parser's error; status stays `draft`.
+- A plan whose body fails `PlanTasks` (no tasks, dangling or cyclic
+  `blockedBy`, missing or unmintable kind) refuses to accept with the
+  parser's error; status stays `draft`.
 - Assignee gating applies to plans exactly as to specs.
 - `worklode_doc_plan_tasks_minted_total` increments by the minted count.
 
@@ -445,6 +479,63 @@ go test -race -count=1 -tags e2e ./e2e/
 
 ---
 
+### Task 7 — Resolve qualified skill pins with the after-colon fallback
+
+```yaml
+kind: feature
+priority: medium
+skills:
+  - superpowers:test-driven-development
+blockedBy: [ ]
+```
+
+§4.1's skill-identifier rule: a pin in `plugin:skill` form resolves exactly
+when the registry name is qualified, and falls back to the segment after the
+colon where the registry name is unqualified; an unresolvable pin stays a
+brief warning, never a failure (016 §3). `ResolvePins` today matches exactly
+only, so a plugin-qualified pin against an unqualified registry name warns
+spuriously — in the brief and in `POST /api/v1/skills/recommend`, which
+share it. Independent of the doc machinery, so no `blockedBy`.
+
+**Files:**
+- Modify: `internal/store/brief.go` (`ResolvePins`, line ~106)
+- Test: `internal/store/brief_test.go`
+
+- [ ] **Step 1: Write the failing tests**
+
+Registry fixture: unqualified `test-driven-development`, qualified
+`superpowers:writing-plans`.
+
+- Pin `superpowers:test-driven-development` resolves to
+  `test-driven-development` via the fallback, content included, no warning.
+- Pin `superpowers:writing-plans` resolves exactly; an exact hit never
+  consults the fallback.
+- Pin `other:absent` (no row under either name) warns
+  `pinned skill not found: other:absent`, exactly as today.
+- Pin `absent` (no colon) gets no fallback and warns.
+- The fallback lands only on unqualified names: with registry `b:x` and no
+  `x`, pin `a:x` warns rather than matching `b:x`.
+- A fallback hit on a soft-deleted skill returns content plus the
+  removed-from-source warning, matching exact-match behaviour.
+
+- [ ] **Step 2: Implement**
+
+In `ResolvePins`, after the exact `SkillsByNames` pass: collect the
+still-unresolved pins containing a colon, `strings.Cut` each after its first
+colon, query `SkillsByNames` once with the deduped suffixes, and accept a
+hit only for the pin's own suffix. Returned `Skill` entries carry the
+registry name; warnings keep naming the pin as written. Extend the function
+comment with the 025 §4.1 citation. No new metrics: no new store operation,
+and the warning surface is unchanged.
+
+- [ ] **Step 3: Verify and commit**
+
+```bash
+go test ./internal/store/ -run TestResolvePins -count=1 -v
+```
+
+---
+
 ## Done when (maps to 025 §13)
 
 1. AC2: accept mints the tasks and their `plan_doc` references in one
@@ -457,3 +548,10 @@ go test -race -count=1 -tags e2e ./e2e/
 3. AC5: `lode doc accept` is manual and assignee-gated end to end.
 4. The plan-doc `- [ ]` checkbox convention is now replaceable: the tasks'
    state is the execution state (the files retire in part 4).
+5. §4.1 conformance is total: one `## Tasks` section, contiguous numbering
+   from 1, em-dash headings, required `kind` from the mintable four, acyclic
+   `blockedBy`, unknown metadata keys refused — and qualified skill pins
+   resolve through the after-colon fallback everywhere `ResolvePins` is
+   consulted. `wl:requiresSkill` itself is already minted in
+   `ns/ontology.ttl` with 016 §1's amendment note; its graph projection is
+   out of scope (025 §12).

@@ -18,7 +18,7 @@ and sits unplanned because deciding to decompose it is a separate act that no ro
 Both are cheap to mint and expensive to miss, and both are deterministic functions of a state
 change that the backbone already witnesses.
 
-The backbone has an append-only `events` table (004 §2) that everything is derived from, and
+The backbone has an append-only `events` table (004 §1.5) that everything is derived from, and
 nothing reads it. It is written in the same transaction as the change it records, and then it
 is only ever a provenance trail. This spec turns it into a log with **subscribers**: ordered,
 offset-tracked, at-least-once, so a state change can have consequences beyond the transaction
@@ -106,7 +106,7 @@ The model is Kafka's, with the durable parts of a consumer group in one row:
 
 That is at-least-once with in-order delivery, and it makes handler idempotency a requirement
 rather than a nicety (§5). Events are never deleted or compacted — the log is provenance
-(004 §2) and outlives every subscriber's interest in it.
+(004 §1.5) and outlives every subscriber's interest in it.
 
 **One active consumer per subscriber.** In-order delivery means exactly one process may hold
 the stream, the same constraint a Kafka partition has. The consuming loop takes a dedicated
@@ -114,6 +114,13 @@ pool connection and `pg_try_advisory_lock(hashtext('wl:subscriber:' || name))` o
 lifetime; a second `lode serve` replica fails the lock, idles, and retries on an interval. A
 crashed process drops its connection, Postgres releases the lock, and the standby takes over
 on its next attempt — failover with no lease table and no heartbeat.
+
+**Releasing is not `Close()`.** A session-scoped advisory lock outlives `(*sql.Conn).Close()`,
+which returns the session to the pool still holding it — the lock would then leak into an
+unrelated query's connection and no replica could ever take over. Release therefore
+`pg_advisory_unlock`s explicitly and then *destroys* the session rather than returning it, so
+a failed unlock dies with the connection instead of poisoning the pool. Any error on the lock
+path is treated as "lock not held", never as "probably still held".
 
 The loop polls (default 1s). `LISTEN`/`NOTIFY` would cut the latency and is deliberately not
 used: a poll is correct when a notification is missed, and nothing here is latency-sensitive
@@ -172,6 +179,12 @@ existing event rather than a duplicate acceptance.
 Emission is a thin typed helper per event type rather than a generic one: the payload is
 generated-code-checked against `ns/`, so a missing property fails at compile time.
 
+The payload's `@id` is `wlid:event/<id>`, which the row does not know at `INSERT` under an
+identity column. The id is therefore **reserved before the insert** — `nextval` on the
+identity's sequence, inserted with `OVERRIDING SYSTEM VALUE` — so the JSON-LD node names the
+row that carries it. Without that the event's own IRI would have to be patched in afterwards,
+which is a second write to an append-only table.
+
 ## 5. The `doc-lifecycle` subscriber {#sec-5}
 
 Two rules, hardcoded in Go behind `Evaluate(event) → []Action`:
@@ -181,12 +194,17 @@ Two rules, hardcoded in Go behind `Evaluate(event) → []Action`:
 | `wl:DocumentSubmitted` | mint `kind = 'review'`, state `ready`, referencing the document | no open review task references it |
 | `wl:DocumentAccepted` where the document is a spec | mint `kind = 'design'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open design task references it |
 
-Both guards are queries over open tasks referencing the document, not stored state (025 §1).
-Minted tasks take the document's project and carry `prov:wasInformedBy` back to the event that
-caused them, so "why does this task exist" is answerable from the task.
+"Referencing the document" needs a column, and `plan_doc` (025 §5) is not it — that one says
+*this task was minted by that plan*, whereas a review or design task is *about* a document it
+has not executed. So tasks gain a nullable **`about_doc`**, and both guards are queries over
+open tasks carrying it — a query, not stored state (025 §1). Minted tasks take the document's
+project and carry `prov:wasInformedBy` back to the event that caused them, so "why does this
+task exist" is answerable from the task.
 
 **Idempotency** has two layers, because it defends against two different things. Redelivery of
-one event is a no-op through an `(event_id, subscriber)` key on the action. A *legitimate*
+one event is a no-op through the log's own key: an action is itself recorded as an event with
+`external_id = <subscriber>:<rule>:<event-id>`, so `(source, external_id)` refuses the second
+attempt and no side-effect table is needed to remember what was done. A *legitimate*
 repeat — 014 §5's revision flow accepting the same document a second time — is handled by the
 guard: while the planning task is still open the acceptance is absorbed and noted on it;
 once it has closed, a further acceptance mints a fresh task, which is correct, because
@@ -278,7 +296,7 @@ first affects one subscriber and the second affects all of them.
 | `internal/watcher/doclifecycle.go` | `Evaluate(event) → []Action` and the two rules of §5 |
 | `internal/cmd/event.go` | `lode event tail\|subscribers\|seek` |
 | `ns/ontology.ttl` | `wl:Event`, its subclasses, `wl:subject` and the per-type properties |
-| `deploy/base/migrations` | `events.txid`, `event_subscribers` |
+| `deploy/base/migrations` | `events.txid`, `event_subscribers`, `tasks.about_doc` (§5) |
 
 `internal/watcher` takes an event and returns actions, with no store handle and no HTTP, so the
 rules are testable as a pure function and the loop is testable without rules.
@@ -294,7 +312,7 @@ line in a skill.
 | Spec | Change |
 |---|---|
 | 025 | §3 gains a sentence: minting a task that asks for review or planning is not the act it asks for, so it does not breach "acceptance and decomposition are deliberate human acts". §10 gains `lode doc submit`. Both are direct edits — 025 is `draft` (§0). |
-| 004 | §2's `events` table gains `txid`; the log gains subscribers, and stops being write-only |
+| 004 | §1.5's `events` table gains `txid`; the log gains subscribers, and stops being write-only |
 | `ns/` | `wl:Event` and subclasses, per §3; generated Go constants per 025 §9 |
 | lode plugin | the planning skill claims its task before writing (§7) |
 

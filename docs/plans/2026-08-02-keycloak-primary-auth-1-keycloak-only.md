@@ -1,4 +1,5 @@
 ---
+status: accepted
 implements: docs/specs/023-keycloak-primary-auth.md
 ---
 # Keycloak-Primary Auth 1 — Keycloak is the only login

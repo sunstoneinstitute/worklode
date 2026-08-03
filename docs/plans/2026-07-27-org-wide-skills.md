@@ -1,4 +1,5 @@
 ---
+status: superseded
 implements: docs/specs/016-org-wide-skills.md
 ---
 # Org-wide Agent Skills Implementation Plan
