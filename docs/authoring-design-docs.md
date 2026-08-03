@@ -6,8 +6,8 @@ is the operational checklist. Read it before adding a spec, adding a plan, or
 amending an existing section.
 
 > **Direction (spec 025):** these files move into the backbone — docs as
-> Worklode objects, frontmatter as columns, plan acceptance minting the task
-> subtree. Until 025 is implemented, this checklist governs unchanged.
+> Worklode objects, frontmatter as columns, plan acceptance minting the plan's
+> tasks. Until 025 is implemented, this checklist governs unchanged.
 
 ## Which tree
 
@@ -20,6 +20,45 @@ amending an existing section.
 
 A plan carrying durable rationale means the spec was incomplete: promote the
 reasoning into the governing spec or a new ADR rather than preserving the plan.
+
+## Declaring a plan's tasks
+
+A plan body carries exactly one `## Tasks` section, holding nothing but one
+`### Task <N> — <title>` subsection per task (em dash; the text after it is the
+task's title). `N` runs 1, 2, 3… in document order **within this file** — every
+part of a plan series restarts at 1. Each subsection is a YAML metadata block,
+then prose (what to do, which files, the test that proves it), then optional
+`- [ ]` steps. Spec 025 §4.1 owns the semantics; accepting the plan mints one
+task per subsection.
+
+````markdown
+### Task 1 — Short imperative title
+
+```yaml
+kind: feature            # feature | bug | chore | design
+priority: medium         # critical | high | medium | low
+skills:                  # skills the executing agent loads before starting
+  - superpowers:test-driven-development
+blockedBy: [ ]           # task numbers within this plan
+```
+
+Prose: files to touch, the test that proves it.
+
+- [ ] step
+- [ ] step
+````
+
+| Key | Required | Default | Values |
+|---|---|---|---|
+| `kind` | yes | — | `feature`, `bug`, `chore`, `design` — never `review`/`spike`, which plans don't mint |
+| `priority` | no | `medium` | `critical`, `high`, `medium`, `low` |
+| `skills` | no | none | skill-registry names, `plugin:skill` form where plugin-shipped |
+| `blockedBy` | no | none | task numbers **in this file**; becomes `blocks` edges at mint |
+
+No other keys. The prose after the block is the task body verbatim; the steps
+are executor guidance, never tracked state — the minted task's state is the
+only execution state. Ordering across files (series parts, other plans) is a
+document-level `blocks` edge, never a task number.
 
 ## Frontmatter
 
@@ -42,8 +81,8 @@ three specs.
 | `task` | — | `WL-<n>` | transitional only |
 
 `task` records the lode task that implements a spec while plans still live in
-git. It is not an ontology term and goes away when plans become task subtrees
-(spec 025 §5 — the binding becomes the accept-minted root's doc reference).
+git. It is not an ontology term and goes away when plan acceptance mints the
+tasks (spec 025 §5 — the binding becomes the minted tasks' doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
@@ -89,8 +128,9 @@ corpora, write the shorthand. Both parse in either position and `secfmt.py`
 rewrites each to its canonical form, so getting it wrong costs a re-stage rather
 than a review comment.
 
-Plans have no shorthand: they have no number. Reference a plan by path, or —
-once it is accepted and has minted its execution subtree — by its root task id.
+Plans have no shorthand: they have no number, and no root task exists to stand
+in for one (025 §5 mints nothing above a plan's tasks). Reference a plan by
+path.
 
 A shorthand naming a project this checkout cannot reach is reported as
 `unresolved`, not as an error. Commit hooks run without a network or a built

@@ -11,6 +11,9 @@ amends:
     - 006-knowledge-graph.md#sec-1.1
     - 006-knowledge-graph.md#sec-1.2
     - 006-knowledge-graph.md#sec-11
+amendedBy:
+  "#sec-1":
+    - 025-documents-in-the-backbone.md#sec-4.1
 ---
 # Spec 016 — Org-wide agent skills
 
@@ -35,6 +38,10 @@ joined via `agent_sessions`), federation beyond a simple repo list, non-skill pl
 > `https://worklode.io/ns/ontology#`.
 
 ## 1. Registry & git sync {#sec-1}
+
+> **Amended by 025 §4.1.** The mint set below gains `wl:requiresSkill` (Task → Skill,
+> execution layer): the §3 task pin, backbone-only here, becomes projectable — declared in a
+> plan's task metadata and minted onto the task at plan accept.
 
 **Source of truth stays git.** Server config lists skill source repos (e.g. `claude-plugins`)
 with a ref and path globs (`plugins/*/skills/*/SKILL.md`, `skills/*/SKILL.md`). Authoring and

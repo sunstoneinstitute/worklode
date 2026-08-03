@@ -16,6 +16,8 @@ amends:
     - 014-design-documents-as-graph-objects.md#sec-5
   "#sec-4":
     - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-4.1":
+    - 016-org-wide-skills.md#sec-1
   "#sec-6":
     - 006-knowledge-graph.md#sec-1.5
     - 018-task-hierarchy.md
@@ -156,10 +158,89 @@ wl:Plan a owl:Class ;
 Plan documents take no `doc_sections` rows and no anchors. Nothing addresses into a plan;
 `implements` on a plan names spec sections, exactly as plan frontmatter does today.
 
+### 4.1 Task declarations — the `## Tasks` section {#sec-4.1}
+
+A plan body declares the tasks its acceptance mints (§5) in exactly one `## Tasks` section,
+containing nothing but one `### Task <N> — <title>` subsection per task. `N` enumerates from 1
+in document order, without gaps, **within each plan file**: a plan series shares no sequence —
+every part restarts at 1 — and `N` never crosses a file. Each subsection opens with a fenced
+YAML metadata block, then prose (what to do, which files, the test that proves it), then an
+optional `- [ ]` step list. Canonical shape:
+
+````markdown
+## Tasks
+
+### Task 1 — Short imperative title
+
+```yaml
+kind: feature            # feature | bug | chore | design
+priority: medium         # critical | high | medium | low
+skills:                  # skills the executing agent loads before starting
+  - superpowers:test-driven-development
+blockedBy: [ ]           # task numbers within this plan
+```
+
+Prose: files to touch, the test that proves it.
+
+- [ ] step
+- [ ] step
+````
+
+The metadata keys, like frontmatter keys, name the backbone column or ontology term that
+receives them; an unknown key is an accept error, never silently dropped:
+
+| Key | Required | Default | Value → destination |
+|---|---|---|---|
+| `kind` | yes | — | one of `feature`, `bug`, `chore`, `design` → `tasks.kind`, projected as `wl:taskKind` |
+| `priority` | no | `medium` | one of `critical`, `high`, `medium`, `low` → `tasks.priority` (ranking input, spec 005; backbone-only, not projected) |
+| `skills` | no | none | list of skill identifiers → the task pin of 016 §3, projected as `wl:requiresSkill` (below) |
+| `blockedBy` | no | none | list of task numbers in this file → `blocks` edges between the minted tasks |
+
+`kind` takes the subset of `wlc:TaskKind` (§6) a plan may mint: `review` tasks are created by
+the review lifecycle (§3), and a spike's outcome is an input to planning, so both are
+authored outside plans.
+
+The task's **title** is the heading text after `Task <N> — ` (em dash, required, non-empty)
+and becomes `tasks.title`. Everything between the metadata block and the next task heading —
+or the section's end — becomes `tasks.body` verbatim. The step list is part of that body:
+executor guidance, never execution state — nothing reads the boxes, and the task's state
+remains the only execution state (§5).
+
+**`blockedBy` becomes edges at mint.** For each number `m` it lists, the accept transaction
+(§5) wires a `blocks` edge from this plan's task `m` to the declaring task — `task_edges`
+rows, backbone-authoritative (004), projected as `wl:blocks` / `wl:dependsOn`. A number
+naming no task in this file, a self-reference, or a cycle fails the accept, naming the tasks
+at fault. Ordering across the files of a plan series, like all cross-plan ordering, is the
+document-level `blocks` edge (§2, §7) — never a task number.
+
+A **skill identifier** is the org skill-registry name (016 §1), written in the
+`plugin:skill` form the skill repos already use (`superpowers:test-driven-development`) when
+the skill ships in a plugin; resolution falls back to the segment after the colon where the
+registry name is unqualified. Accept does not require the name to resolve — a pin naming an
+unknown skill is a brief warning, never a failure (016 §3). The key is `skills`, matching the
+doc-frontmatter pin key and the backbone Task field, both from 016 §3; the projected term is
+minted here, amending 016 §1's mint set:
+
+```turtle
+wl:requiresSkill a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range wl:Skill ;
+    rdfs:comment "The executing agent loads this skill before starting: the task pin of
+        016 §3, projected from the backbone Task's skills field and minted onto the task by
+        plan acceptance (025 §4.1). Brief resolution unions it with the governing design's
+        wl:recommendsSkill; the two stay distinct because their owners differ — the pin on a
+        task is execution-layer fact, the pin in a design document a declared intent." .
+```
+
+Until this spec is implemented, plans under `docs/plans/` carry the same section and humans
+mint the tasks from it by hand; the format is identical so acceptance can take the minting
+over unchanged.
+
 ## 5. Acceptance mints the plan's tasks {#sec-5}
 
-`lode doc accept` on a plan runs one transaction: create the plan's tasks (`draft`), each
-carrying a reference to the document. **Nothing is minted above them.** The invariant is
+`lode doc accept` on a plan runs one transaction: create the tasks its `## Tasks` section
+declares (§4.1), `draft`, each carrying a reference to the document, and wire the declared
+`blockedBy` numbers as `blocks` edges between them. **Nothing is minted above them.** The invariant is
 `doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
 hand.
 
@@ -318,6 +399,7 @@ ceremony lives in skills while every state change is one of the deterministic ve
 | 000 | §1 authority split: backbone owns doc artifacts; graph is projection (§2) |
 | 006 | §1.1/§1.2/§1.3: Workstream/OngoingMaintenance/inWorkstream out, Project redefined, inProject in (§8); §1.5 TaskKind: `epic` out, `spec`→`design` (§6) |
 | 014 | §0/§4/§10 store moves to backbone, graph becomes projection (§2); §5 `proposed` dropped (§3); §2 plans return as non-DesignDoc documents (§4); §8 superseded, though its "no kind for plans" ruling survives the replacement (§6) |
+| 016 | §1's mint set gains `wl:requiresSkill` (Task → Skill): the task pin, backbone-only until now, becomes projectable and plan-declarable (§4.1) |
 | 018 | §1's declared container narrows to "has children", the only path being `decompose`; `task add --kind epic` and `--kind` on `task parent` go; roll-up, ready-set exclusion, single parent, depth cap intact (§5, §6) |
 | Migration | Kind swap (§6); `docs`/`doc_sections`/`doc_edges` (§2); nullable `plan_doc` on tasks |
 | CLAUDE.md / authoring docs | Ownership sentence, spec→plan→task model, `task:` key retirement |
