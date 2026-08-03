@@ -21,8 +21,12 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	if fm == nil {
 		t.Fatal("Frontmatter is nil")
 	}
-	if fm.Status != "accepted" {
-		t.Errorf("Status = %q, want accepted", fm.Status)
+	// Status moves as the document is accepted; pin the parsed shape
+	// (a recognised value), not the current lifecycle state.
+	switch fm.Status {
+	case "draft", "accepted", "superseded":
+	default:
+		t.Errorf("Status = %q, want one of draft/accepted/superseded", fm.Status)
 	}
 	if fm.Issued != "2026-08-02" {
 		t.Errorf("Issued = %q, want 2026-08-02", fm.Issued)
