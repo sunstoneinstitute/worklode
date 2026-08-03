@@ -181,6 +181,14 @@ func TestTaskListStatusFiltering(t *testing.T) {
 		t.Fatalf("abandon: %v", err)
 	}
 
+	// Isolate from whatever repo config this test happens to run inside
+	// (e.g. this repo's own .worklode/config.toml scopes to a different
+	// project) so `lode task list`'s --project default resolves to "proj"
+	// as the test intends.
+	setupRepoConfig(t, "proj")
+	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
+	resetProjectFlag(t, "task", "list")
+
 	sorted := func(ids ...string) []string {
 		sort.Strings(ids)
 		return ids
