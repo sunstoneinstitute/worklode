@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 issued: 2026-08-01
 requires:
   - 008-worklode-plugin.md
