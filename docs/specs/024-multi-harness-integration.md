@@ -9,7 +9,7 @@ requires:
 ---
 # Spec 024 — Multi-harness agent integration
 
-## Purpose & scope
+## 1. Purpose & scope {#sec-1}
 
 Worklode's agent integration is Claude-Code-shaped. `lode install --agent claude-code` is the
 only accepted value, and it writes hook bindings into `.claude/settings*.json`. Everything else
@@ -36,13 +36,13 @@ usage feedback loop that 016 §v2 defers.
 
 ---
 
-## Findings — what the harnesses expose (August 2026)
+## 2. Findings — what the harnesses expose (August 2026) {#sec-2}
 
 Verified against primary sources: the Claude Code docs, the `openai/codex` and
 `earendil-works/pi` sources, and the GitHub Docs content repo. Cells marked *(unverified)* come
 from secondary sources only and must be confirmed before an adapter ships against them.
 
-### The one thing that changed: `SKILL.md` became a standard
+### 2.1 The one thing that changed: `SKILL.md` became a standard {#sec-2.1}
 
 `SKILL.md` — YAML frontmatter with `name` + `description`, a Markdown body, sibling files
 alongside — is now an open standard (agentskills.io), and a **shared discovery convention has
@@ -55,7 +55,7 @@ only.
 That is the single highest-leverage fact in this spec: **one symlink of the Worklode skill store
 into `~/.agents/skills/` serves four harnesses at once**, and Claude Code needs one more.
 
-### Table 1 — Skill and instruction delivery
+### 2.2 Table 1 — Skill and instruction delivery {#sec-2.2}
 
 | | Project skill dirs | Personal skill dirs | Reads `.agents/` | Symlinks followed | Instruction file |
 |---|---|---|---|---|---|
@@ -77,7 +77,7 @@ Two adapter-relevant notes:
   `settings.json`, Codex via its layer stack. Pointing a harness at `~/.worklode/skills` directly
   is an alternative to symlinking, harness by harness.
 
-### Table 2 — Lifecycle hooks
+### 2.3 Table 2 — Lifecycle hooks {#sec-2.3}
 
 | | Mechanism | Config location | Events Worklode cares about | Can block? |
 |---|---|---|---|---|
@@ -94,7 +94,7 @@ The split is clean: **six harnesses take a shell command**, so the existing comp
 `lode hook <event>` binary is the whole integration. **Two take TypeScript**, so they need a
 ~30-line shim that shells out to the same binary — still no second coordination model.
 
-### Table 3 — Observability and UI surfaces
+### 2.4 Table 3 — Observability and UI surfaces {#sec-2.4}
 
 | | Status line | OpenTelemetry | Session id reachable from a hook | Transcript on disk |
 |---|---|---|---|---|
@@ -106,7 +106,7 @@ The split is clean: **six harnesses take a shell command**, so the existing comp
 | **opencode** | *(unverified)* | *(not found)* | Yes | Yes |
 | **Amp** | *(not found)* | *(not found)* | Yes (thread id) | Threads sync to ampcode.com |
 
-### What this buys Worklode
+### 2.5 What this buys Worklode {#sec-2.5}
 
 Three tiers, in descending order of value per unit of work:
 
@@ -125,9 +125,9 @@ Three tiers, in descending order of value per unit of work:
 
 ---
 
-## Design
+## 3. Design {#sec-3}
 
-### The harness adapter
+### 3.1 The harness adapter {#sec-3.1}
 
 A new `internal/harness` package holds one adapter per harness plus a registry keyed by id
 (`claude-code`, `codex`, `copilot`, `cursor`, `gemini`, `amp`, `opencode`, `pi`). An adapter is
@@ -165,7 +165,7 @@ type Harness interface {
 verbatim; the file's settings-merge machinery (`stripLodeHooks`, `appendBinding`,
 `isLodeHookEntry`) moves into the adapter unchanged. **This spec adds no new hook semantics.**
 
-### `lode install` grows a harness dimension
+### 3.2 `lode install` grows a harness dimension {#sec-3.2}
 
 ```
 lode install   [--vcs git] [--no-vcs] [--agent <id>|auto|all]... [--no-agent]
@@ -193,7 +193,7 @@ JSON entry lists (Claude Code, Codex, Copilot, Cursor), a settings array (Amp), 
 outright (the TypeScript shims). No adapter is allowed to rewrite a config file it cannot
 round-trip.
 
-### Skill delivery — one store, many doorways
+### 3.3 Skill delivery — one store, many doorways {#sec-3.3}
 
 The 016 store is unchanged: `~/.worklode/skills/.store/<hash>/` is canonical and immutable,
 `~/.worklode/skills/<name>` symlinks to the most recent version. What changes is that Worklode
@@ -228,7 +228,7 @@ still gets exactly the skills its task named, in a directory five harnesses read
 `lode skills install <name>` gains `--link <harness>|all` for the same publication step
 standalone.
 
-### Hook delivery
+### 3.4 Hook delivery {#sec-3.4}
 
 Six harnesses take a shell command, so the compiled binary is the integration and the adapter is
 a table. Two do not:
@@ -259,7 +259,7 @@ The event map, per harness, for the events 008 defines:
 including the ones with no session hooks at all. **A harness with no usable event mapping still
 gets the git heartbeat**, which is the coverage floor 008 already accepts.
 
-### Status line (Claude Code first)
+### 3.5 Status line (Claude Code first) {#sec-3.5}
 
 `lode statusline` reads Claude Code's JSON on stdin and prints one line: the current task key and
 title, lease state, heartbeat freshness, and context/cost from the payload itself. Installed by
@@ -275,7 +275,7 @@ and token facts thus reach `agent_sessions` continuously, from the harness's own
 without a second network path and without touching the transcript pricing in 012 — which stays
 authoritative, with the spool as a live approximation between flushes.
 
-### Telemetry ingest (v2)
+### 3.6 Telemetry ingest (v2) {#sec-3.6}
 
 `lode serve` gains an OTLP/HTTP receiver at `/api/v1/otlp/v1/logs` and
 `/api/v1/otlp/v1/metrics`, authenticated by the same `wl_` bearer token as the rest of the API.
@@ -301,7 +301,7 @@ all — which is why the usage loop is **v2 and gated on Q024.4** below, not ass
 Codex and Gemini CLI export OTLP to the same endpoint with different attribute names; a
 per-source mapper at the ingest boundary keeps one storage shape. No harness-specific table.
 
-### Instruction files
+### 3.7 Instruction files {#sec-3.7}
 
 `lode install` writes a **marker-delimited managed block** into `AGENTS.md` at the repo root —
 the file six of the eight harnesses read — containing the two facts an agent needs before a
@@ -316,7 +316,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 
 ---
 
-## Degradation
+## 4. Degradation {#sec-4}
 
 | Condition | Behavior |
 |---|---|
@@ -329,7 +329,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 | Status line spool cannot be written | `lode statusline` still prints; the cost line is simply absent. It never fails the harness's render. |
 | Two harnesses on one worktree | Both bind hooks; both produce `agent_sessions` rows against the same lease. 012 explicitly permits concurrent open sessions on one lease. |
 
-## Dependencies
+## 5. Dependencies {#sec-5}
 
 - **008 (plugin)** — the event vocabulary, the `--next` daisy-chain contract, and the coexistence
   rule this spec generalizes. `lode hook` gains `--harness`; nothing else changes.
@@ -342,7 +342,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 - **External** — the harness config formats in Tables 1–3, each of which is a moving target; see
   Q024.1.
 
-## Open questions
+## 6. Open questions {#sec-6}
 
 - **Q024.1 — Verification cadence for the capability tables.** These formats change monthly.
   Does `lode doctor` gain a check that each adapter's assumptions still hold on the installed
@@ -364,7 +364,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
   which is what Worklode creates. Confirm `wt/<id>-<slug>` is recoverable from `cwd` alone before
   the status line depends on anything else.
 
-## Acceptance criteria
+## 7. Acceptance criteria {#sec-7}
 
 1. `lode install` in a repo with Claude Code and Codex configured installs both, writes each
    harness's own config format, and preserves every pre-existing entry in both files. Re-running
@@ -383,7 +383,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 7. `lode install --telemetry` sets no content-logging variable, and an unreachable OTLP endpoint
    changes nothing about claiming, briefing, or releasing a task.
 
-## Sources
+## 8. Sources {#sec-8}
 
 Primary, consulted 2026-08-01:
 

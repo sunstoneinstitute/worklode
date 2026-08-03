@@ -41,8 +41,8 @@ frontmatter keys the queries depend on, tests.
 **The commit-time gates stay Python scripts and `lode` is never one of them.** A git hook
 must run in a fresh checkout, mid-rebase, before anything is built; depending on a build
 artifact makes the gate fail exactly when the tree is in the state worth checking. So
-`secfmt.py` and `secindex.py` keep their jobs, §4.1's permanence check joins them as a third
-script, and the Go commands are the **read surface only** — they report the defects they
+`secfmt.py` keeps its hook, §4.1's permanence check joins it as a second script, and the Go
+commands are the **read surface only** — they report the defects they
 encounter so a query never quietly lies, but nothing here makes them a precondition for
 committing.
 
@@ -364,8 +364,8 @@ renderer that hangs or recurses without bound on a corpus in that state is worse
 that names the loop and continues. The gate is where a cycle is *prevented*; the marker is
 how the reader survives one that got through.
 
-It runs as a `.pre-commit-config.yaml` entry alongside `section-numbers` and
-`section-index`, but unlike those two it **refuses rather than rewrites**: there is no
+It runs as a `.pre-commit-config.yaml` entry alongside `section-numbers`, but unlike it
+**refuses rather than rewrites**: there is no
 correct automatic repair for a deleted published anchor, and inventing one would paper over
 the exact mistake the check exists to surface.
 
@@ -596,8 +596,8 @@ is the whole of what makes them possible, and it is what ships here.
 8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
    defect is an unresolvable foreign shorthand, and both name it on stderr.
 7. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
-   script — and only that one — is deleted in the same change; `secfmt.py` and
-   `secindex.py` keep their hooks.
+   script — and only that one — is deleted in the same change; `secfmt.py` keeps its hook and
+   `secindex.py` stays a manual regeneration.
 8. Spec 025 being `draft` leaves 018's sections listed as current and marked `pending`;
    `--with-drafts` drops the ones 025 replaces.
 9. The verb names, flags and semantics match 025 §10 and §7, so replacing `LoadCorpus` with
