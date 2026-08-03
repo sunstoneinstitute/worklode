@@ -76,14 +76,14 @@ is implemented):
   claimable task (`kind = 'spec'`, renamed `design` by 025) that closes when
   the document is accepted. "Is the spec implemented?" is a coverage query,
   never a task state — do not create long-lived umbrella tasks per spec.
-- A **plan** is an executable document; its execution is a task subtree —
-  root task (`kind = 'epic'` today, `plan` after 025) plus children, minted
-  when the plan is accepted. The root is never claimable and rolls up from
-  its children (spec 018). Do not create free-standing epics.
-- **Groupings are queries, not rows** (025 §1): one plan's tasks = its
-  subtree; cross-plan "ships together" = Milestone over Deliverables (v2);
-  everything in a repo set = the project. There is no sprint concept and no
-  spec-level container above plan roots — order plan roots with `blocks`.
+- A **plan** is an executable document; its execution is the set of tasks
+  minted when the plan is accepted. Today that set hangs off a `kind =
+  'epic'` root (spec 018); 025 §5 drops the root and groups the tasks by a
+  reference to the plan document instead. Do not create free-standing epics.
+- **Groupings are queries, not rows** (025 §1): one plan's tasks = the tasks
+  referencing it; cross-plan "ships together" = Milestone over Deliverables
+  (v2); everything in a repo set = the project. There is no sprint concept
+  and no container above a plan's tasks — order plans with `blocks`.
 - Spec → plan decomposition is always an explicit human act; skills may
   offer it, never perform it unasked.
 
