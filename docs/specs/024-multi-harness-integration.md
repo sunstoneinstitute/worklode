@@ -6,6 +6,9 @@ requires:
   - 012-agent-sessions.md
   - 016-org-wide-skills.md
   - 022-prometheus-metrics.md
+amends:
+  "#sec-5":
+    - 012-agent-sessions.md#sec-1
 ---
 # Spec 024 — Multi-harness agent integration
 
@@ -41,6 +44,7 @@ usage feedback loop that 016 §v2 defers.
 Verified against primary sources: the Claude Code docs, the `openai/codex` and
 `earendil-works/pi` sources, and the GitHub Docs content repo. Cells marked *(unverified)* come
 from secondary sources only and must be confirmed before an adapter ships against them.
+Gemini CLI is absent from every table: Google discontinued it, so no adapter targets it.
 
 ### 2.1 The one thing that changed: `SKILL.md` became a standard {#sec-2.1}
 
@@ -66,7 +70,6 @@ into `~/.agents/skills/` serves four harnesses at once**, and Claude Code needs 
 | **opencode** | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/` | `~/.config/opencode/skills/`, `~/.claude/skills/`, `~/.agents/skills/` | **Yes** | *(unverified)* | `AGENTS.md` (wins over `CLAUDE.md` when both exist) |
 | **Amp** | `.amp/skills/`, `.agents/skills/` *(unverified)* | `~/.amp/skills/` *(unverified)* | *(unverified)* | *(unverified)* | `AGENTS.md`, falls back to `CLAUDE.md` |
 | **Cursor CLI** | `.cursor/skills/` *(unverified)* | `~/.cursor/skills/` *(unverified)* | *(unverified)* | *(unverified)* | `AGENTS.md`, `.cursor/rules/*.mdc` |
-| **Gemini CLI** | extension `skills/<n>/SKILL.md` | *(unverified)* | *(unverified)* | *(unverified)* | `GEMINI.md` |
 
 Two adapter-relevant notes:
 
@@ -84,13 +87,12 @@ Two adapter-relevant notes:
 | **Claude Code** | JSON bindings; handler types `command`, `prompt`, `agent`, `http`, `mcp_tool`; sync or background | `~/.claude/settings.json`, `.claude/settings.json`, `.claude/settings.local.json`, plugin `hooks/hooks.json`, skill/agent frontmatter | ~30 events. Currently used: `SessionStart`, `SessionEnd`, `Stop`, `StopFailure`, `SubagentStop`, `Notification`, `PostToolUse:EnterWorktree`. **Unused and relevant:** `CwdChanged`, `FileChanged`, `InstructionsLoaded`, `PreCompact`/`PostCompact`, `TaskCreated`/`TaskCompleted`, `UserPromptSubmit`, `Setup` | Yes (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`) |
 | **Codex CLI** | `hooks.json` layered through the config stack; `/hooks` TUI toggles them; legacy `notify` still fires on turn completion | `~/.codex/hooks.json` and project/managed layers; `allow_managed_hooks_only` in `requirements.toml` | 11 events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `SubagentStart`, `SubagentStop`, `Stop` | Yes (`PreToolUse`, `PermissionRequest`) |
 | **Copilot CLI** | JSON files, one `bash` and one `powershell` key per handler, plus `cwd`, `env`, `timeoutSec` | `.github/hooks/*.json` (repo), `~/.copilot/hooks/*.json` (personal) | `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `agentStop`, `subagentStop`, `errorOccurred` | Yes (`preToolUse` approves/denies) |
-| **Gemini CLI** | `hooks/hooks.json` inside an extension directory; documented migration path from Claude Code hooks | extension dir (not the `gemini-extension.json` manifest) | *(event list unverified)* | *(unverified)* |
 | **Amp** | `amp.hooks` array of `{event, action}` in the settings JSON | `~/.config/amp/settings.json`, or `$AMP_SETTINGS_FILE` | `tool:pre-execute`, `tool:post-execute`; actions include `send-user-message`, `redact-tool-input` | Yes, by interrupting with a user message |
 | **Cursor CLI** | `.cursor/hooks.json` *(unverified)* | project `.cursor/` | *(unverified)* | *(unverified)* |
 | **opencode** | **TypeScript plugin**, not shell hooks; dozens of events (`session.idle`, `tool.execute.before`, `file.edited`, …) | `.opencode/plugins/`, `~/.config/opencode/plugins/`, or npm packages listed in `opencode.json` | Session + tool + file events | Yes (mutates tool args in `tool.execute.before`) |
 | **pi** | **TypeScript extension**, not shell hooks; `pi.on(event, handler)` over session/agent/model/tool/input event families | `~/.pi/agent/extensions/`, `.pi/extensions/`, or `packages`/`extensions` entries in `settings.json` | `session_start`, `session_shutdown`, `tool_call`, model/agent events | Yes (block or modify tool calls) |
 
-The split is clean: **six harnesses take a shell command**, so the existing compiled
+The split is clean: **five harnesses take a shell command**, so the existing compiled
 `lode hook <event>` binary is the whole integration. **Two take TypeScript**, so they need a
 ~30-line shim that shells out to the same binary — still no second coordination model.
 
@@ -100,7 +102,6 @@ The split is clean: **six harnesses take a shell command**, so the existing comp
 |---|---|---|---|---|
 | **Claude Code** | **Yes** — `statusLine.command` gets a rich JSON payload on stdin: `session_id`, `prompt_id`, `cost.total_cost_usd`, `cost.total_lines_added/removed`, `context_window.*`, `rate_limits.five_hour/seven_day`, `model.id`, `workspace.git_worktree`, `pr.number`, `worktree.*`. `refreshInterval` and `padding` supported | **Yes** — metrics (`claude_code.session.count`, `cost.usage`, `token.usage`, `lines_of_code.count`, `commit.count`, `pull_request.count`, `active_time.total`), events (incl. **`claude_code.skill_activated`**), traces (beta). Configured entirely by env vars | Yes (`session_id` on every payload) | Yes (`transcript_path` on every payload) |
 | **Codex CLI** | *(not found)* | **Yes** — `otlp-grpc` / `otlp-http` exporters for traces and metrics, with headers and mTLS | Yes | Yes (rollout files under `$CODEX_HOME`) |
-| **Gemini CLI** | *(unverified)* | **Yes** — OTLP, configured through `.gemini/settings.json` | *(unverified)* | *(unverified)* |
 | **Copilot CLI** | *(not found)* | *(not found)* | Yes (hook payload) | *(unverified)* |
 | **pi** | **Yes** — `ctx.ui.setStatus(id, text)` / `setFooter` from an extension | *(not found)* | Yes | Yes (session tree files) |
 | **opencode** | *(unverified)* | *(not found)* | Yes | Yes |
@@ -130,7 +131,7 @@ Three tiers, in descending order of value per unit of work:
 ### 3.1 The harness adapter {#sec-3.1}
 
 A new `internal/harness` package holds one adapter per harness plus a registry keyed by id
-(`claude-code`, `codex`, `copilot`, `cursor`, `gemini`, `amp`, `opencode`, `pi`). An adapter is
+(`claude-code`, `codex`, `copilot`, `cursor`, `amp`, `opencode`, `pi`). An adapter is
 data plus a small amount of file-writing behaviour, not a strategy hierarchy:
 
 ```go
@@ -230,7 +231,7 @@ standalone.
 
 ### 3.4 Hook delivery {#sec-3.4}
 
-Six harnesses take a shell command, so the compiled binary is the integration and the adapter is
+Five harnesses take a shell command, so the compiled binary is the integration and the adapter is
 a table. Two do not:
 
 - **opencode and pi get a shim.** `lode install --agent opencode` writes a single TypeScript file
@@ -298,13 +299,13 @@ placeholder `"custom_skill"` for user and third-party plugin skills. Worklode-di
 are read from a path rather than registered (016 §Purpose), so they are unlikely to appear at
 all — which is why the usage loop is **v2 and gated on Q024.4** below, not assumed to work.
 
-Codex and Gemini CLI export OTLP to the same endpoint with different attribute names; a
-per-source mapper at the ingest boundary keeps one storage shape. No harness-specific table.
+Codex exports OTLP to the same endpoint with different attribute names; a per-source mapper at
+the ingest boundary keeps one storage shape. No harness-specific table.
 
 ### 3.7 Instruction files {#sec-3.7}
 
 `lode install` writes a **marker-delimited managed block** into `AGENTS.md` at the repo root —
-the file six of the eight harnesses read — containing the two facts an agent needs before a
+the file six of the seven harnesses read — containing the two facts an agent needs before a
 brief exists: that this repo is Worklode-tracked, and that work is entered through
 `lode task claim`. Content outside the markers is never touched, and a repo with no `AGENTS.md`
 gets one created.
@@ -321,7 +322,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 | Condition | Behavior |
 |---|---|
 | Harness not installed on the machine | `--agent auto` skips it silently. Nothing is written for a harness that isn't there. |
-| Harness has no session hooks (Cursor, Gemini until verified) | Skills and the git `PreCommit` heartbeat still install; the report names what was skipped and why. |
+| Harness has no session hooks (Cursor until verified) | Skills and the git `PreCommit` heartbeat still install; the report names what was skipped and why. |
 | Harness event map lacks `SessionStart` | No auto-resume for that harness — exactly the coverage 008 Q008.2 already accepts, now stated per harness instead of globally. |
 | A skill-target directory exists as a real directory, not a symlink | Worklode links per-skill inside it rather than replacing it, and never deletes a path it did not create. |
 | Symlinks unavailable (Windows without Developer Mode) | Skill delivery falls back to copying the resolved store dir, and `lode skills install` reports the copy so a stale copy is diagnosable. |
@@ -333,8 +334,11 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 
 - **008 (plugin)** — the event vocabulary, the `--next` daisy-chain contract, and the coexistence
   rule this spec generalizes. `lode hook` gains `--harness`; nothing else changes.
-- **012 (agent sessions)** — `agent_sessions.agent` already accepts the harness ids; the status
-  line spool and OTLP ingest both write through it.
+- **012 (agent sessions)** — the status line spool and OTLP ingest both write through
+  `agent_sessions`, but its `agent` CHECK (migration `0004`) does **not** yet accept every
+  harness id: `copilot` is missing. This spec amends 012 §1 to add it — the one-line migration
+  012 reserves for exactly this — widening the CHECK to
+  `('claude-code','codex','copilot','cursor','aider','opencode','pi','amp','other')`.
 - **016 (org skills)** — the store, the brief's lazy fetch, and the v2 usage-signal placeholder
   this spec proposes to fill. The store root moves one level down (`~/.worklode/store/`).
 - **022 (Prometheus metrics)** — the OTLP receiver's own health counters ride the existing
@@ -351,7 +355,7 @@ suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing
 - **Q024.2 — Store relocation migration.** Moving `.store` out of `~/.worklode/skills/` orphans
   existing installs. Does `lode install` migrate silently, or does `lode doctor` report and
   `lode skills install` re-fetch? Re-fetch is content-addressed and therefore safe, just slower.
-- **Q024.3 — Adapter ownership.** Eight adapters is eight surfaces to keep current. Should the
+- **Q024.3 — Adapter ownership.** Seven adapters is seven surfaces to keep current. Should the
   four with fully verified sources (Claude Code, Codex, Copilot, pi) be supported, and the rest
   ship as community-contributable tables — a data file rather than Go code?
 - **Q024.4 — Whether skill telemetry can work at all.** `claude_code.skill_activated` fires for
@@ -404,5 +408,4 @@ Primary, consulted 2026-08-01:
 - Agent Skills standard — [agentskills.io](https://agentskills.io/specification)
 
 Secondary (cells marked *unverified* above): [opencode docs](https://opencode.ai/docs/skills/),
-[Amp Owner's Manual](https://ampcode.com/manual), [Gemini CLI
-docs](https://geminicli.com/docs/extensions/), Cursor community documentation.
+[Amp Owner's Manual](https://ampcode.com/manual), Cursor community documentation.
