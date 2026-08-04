@@ -185,7 +185,7 @@ h1 em {
 }
 
 .lede {
-  max-width: 660px;
+  max-width: 760px;
   margin: 0 auto 34px;
   font-size: 1.13rem;
   color: var(--slate);
@@ -300,7 +300,7 @@ h3 {
 }
 
 .section-lede {
-  max-width: 660px;
+  max-width: 880px;
   margin: 0 0 48px;
   font-size: 1.06rem;
   color: var(--slate);
@@ -313,7 +313,7 @@ h3 {
 }
 
 .section-note {
-  max-width: 720px;
+  max-width: 880px;
   margin: 40px 0 0;
   font-size: .97rem;
   color: var(--muted);
@@ -371,7 +371,8 @@ h3 {
 
 .diagram { margin: 0; }
 
-.diagram svg {
+.diagram svg,
+.diagram img {
   width: 100%;
   height: auto;
   display: block;
@@ -380,6 +381,10 @@ h3 {
   border-radius: var(--radius);
   padding: 8px;
 }
+
+.diagram img { padding: 0; }
+
+.diagram + .diagram { margin-top: 40px; }
 
 .lyr rect {
   fill: var(--white);
@@ -428,7 +433,7 @@ h3 {
 }
 
 .diagram figcaption {
-  max-width: 720px;
+  max-width: 880px;
   margin: 18px 0 0;
   font-size: .93rem;
   color: var(--muted);
@@ -471,7 +476,7 @@ h3 {
 .eq { color: var(--ink); }
 
 .formula-note {
-  max-width: 720px;
+  max-width: 880px;
   margin: 18px 0 48px;
   font-size: .95rem;
   color: var(--muted);
