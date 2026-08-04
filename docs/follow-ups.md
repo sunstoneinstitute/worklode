@@ -101,3 +101,47 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
+
+## From the 2026-08-04 architecture grilling
+
+Design items landed in spec 028. These are the mechanical leftovers.
+
+- **Multi-operator: `leases_active_worktree` is `UNIQUE (worktree)`** on a bare
+  path string (0001_baseline). Two operators whose worktrees resolve to the same
+  absolute path — devcontainers, shared layout conventions — collide across
+  machines, and the error reads as "someone holds this lease" for a task nobody
+  claimed. Change to `UNIQUE (actor_id, worktree)`. The only item in this list
+  that corrupts state rather than annoying someone.
+- **Bare `claim --next` spans every project.** With one operator that is a
+  feature; with several, an overnight loop silently drains someone else's focused
+  project. Default `--project` from the repo's `.worklode` config (019 already
+  resolves `current_project`) and require `--all-projects` to span.
+- **`claim --next --concern <c>`** as a caller-side soft preference, ranking
+  above `concern_rank` and below `is_critical`. `project.focus` is team-wide
+  state, so today the only way for one operator to steer their own queue is to
+  change everyone's ranking.
+- **Compose gets its own graph-server**, sharing the Postgres instance on a
+  separate database. Requires vendoring graph-server's migrations. Severs the
+  dependency on the data-platform prod deployment (009 §1's only v1 blocker), so
+  006/007/014/015 become testable in `docker compose up` and in e2e.
+- **Review API before review UI.** Embedding crit in the worklode web UI is the
+  plan; agents review too (Claude reviews Codex's work and vice versa), so
+  comment/thread/resolve/approve must exist as API + `lode doc` verbs with the
+  web UI as one client. Building web handlers first produces a human-only review
+  system inside an agent-first product.
+- **Review tasks take an assignee.** Choosing a reviewer stays social, but "I
+  asked Kim to review it" has to be visible — routing, not authority.
+- **Capture the initiating prompt** on a document's creation event. Specs are
+  generated from a brainstorming or grilling prompt; the prompt is ~200 tokens
+  and answers "why does this exist" long after the session is gone. Not the
+  transcript.
+- **One door for authoring.** A worklode skill owns the terminal write step and
+  delegates the interview to `superpowers:brainstorming` / `grill-with-docs`;
+  `/lode:spec` is the entry point; a pre-commit script rejects *new* files under
+  `docs/specs/` and `docs/plans/` once the store is authoritative; `lode doc
+  export` regenerates the tree as a read-only artifact so git history and grep
+  survive. Customising or hook-patching the brainstorming skill is the wrong
+  lever — it forks a skill we do not own, or makes behaviour depend on invisible
+  mutation.
+- **CLAUDE.md says the web UI is unauthenticated.** `internal/api/oidcweb.go`
+  gates the web pages behind Keycloak when OIDC is enabled. Fix the sentence.
