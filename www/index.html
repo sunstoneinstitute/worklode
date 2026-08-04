@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Worklode — the coordination layer for multi-player, multi-agent work</title>
-<meta name="description" content="Worklode is an open-source coordination layer for multi-player, multi-agent work. Many people, many agents and many repos share one graph, holding both what the team intended and what actually happened.">
+<title>Worklode — a work tracker for running several coding agents at once</title>
+<meta name="description" content="Worklode is an open-source work tracker for multi-agent, multi-repo development. Task state, worktree-bound leases and design documents live in Postgres, pickup is a single transaction, and accepting a plan creates the tasks it describes.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 <script defer src="https://sunstone.institute/umami/script.js" data-website-id="481d4ace-b6ae-4e27-94c0-1431d7358edf"></script>
 <meta property="og:type" content="website">
-<meta property="og:title" content="Worklode — the coordination layer for multi-player, multi-agent work">
-<meta property="og:description" content="Many people. Many agents. One shared graph. The coordination layer for multi-player, multi-agent work.">
+<meta property="og:title" content="Worklode — a work tracker for running several coding agents at once">
+<meta property="og:description" content="Task state, worktree-bound leases and design documents in Postgres. Pickup is a single transaction, and accepting a plan creates the tasks it describes.">
 <meta property="og:url" content="https://worklode.io/">
 </head>
 <body>
@@ -27,10 +27,10 @@
     </a>
     <nav class="nav-links">
       <a href="#idea">The idea</a>
-      <a href="#layers">Layers</a>
-      <a href="#drift">Drift</a>
-      <a href="#stores">Architecture</a>
+      <a href="#docs">Documents</a>
+      <a href="#layers">The model</a>
       <a href="#coordination">Coordination</a>
+      <a href="#ladder">Escalation</a>
       <a class="nav-cta" href="https://github.com/sunstoneinstitute/worklode">GitHub</a>
     </nav>
   </div>
@@ -66,11 +66,12 @@
     <div class="wrap hero-inner">
       <img class="hero-mark" src="logo.svg" alt="" width="112" height="96">
       <p class="eyebrow">Open source · Sunstone Institute</p>
-      <h1>Many people. Many agents.<br><em>One shared graph.</em></h1>
+      <h1>A work tracker for running <em>several coding agents</em> at once</h1>
       <p class="lede">
-        Worklode is the coordination layer for <strong>multi-player, multi-agent</strong> work.
-        Most agentic tooling still assumes one human and one agent in one repo. Worklode assumes
-        a crowd, and gives everyone in it the same state to read and write.
+        Worklode keeps task state, leases and design documents in Postgres, so that every agent
+        and every person working on a project reads and writes the same state. Pickup is a single
+        transaction, leases are bound to git worktrees rather than to sessions, and accepting a
+        plan creates the tasks it describes.
       </p>
       <p class="cta-row">
         <a class="btn btn-primary" href="https://github.com/sunstoneinstitute/worklode">View on GitHub</a>
@@ -83,56 +84,134 @@
   <!-- ── The idea ─────────────────────────────────────────────────────── -->
   <section id="idea" class="band">
     <div class="wrap">
-      <p class="kicker">The thesis</p>
-      <h2>Intent is declared.<br>Reality is observed.<br><em>The gap is a query.</em></h2>
+      <p class="kicker">The bottleneck</p>
+      <h2>The supply of ready work</h2>
       <p class="section-lede">
-        Development work as ambition reconciliation. Coordination only works if the state
-        everyone shares is actually true — so Worklode stores two versions of it: what the team
-        <strong>said</strong> it would build, and what the repos and clusters
-        <strong>actually did</strong>. The difference is the product.
+        Worklode started as a lock. Two agents kept reaching for the same task, so work had to be
+        handed out one item at a time and nothing could run unattended. Making pickup atomic
+        removed that limit and revealed the next one. An agent finishes a well-specified task in
+        about twenty minutes and then needs another one that touches different files, waits on
+        nothing unmerged, and carries enough context to be finished without supervision.
+        Producing work in that shape is the current constraint, and most of what follows is built
+        around it.
       </p>
 
       <ol class="beats">
         <li class="beat reveal">
           <span class="beat-n">01</span>
-          <h3>Declare</h3>
+          <h3>Specify</h3>
           <p>
-            Design documents, specs and ADRs declare intent: which components exist, what
-            depends on what, and what <em>done</em> means. They are authored into the graph and
-            reviewed like code, so they stay live objects the rest of the system reads.
+            Specifications and plans are records in the tracker rather than files on a branch
+            that was never merged. A plan is reviewed like anything else, and accepting it
+            creates one task per item it describes, with dependencies wired and context attached.
           </p>
         </li>
         <li class="beat reveal">
           <span class="beat-n">02</span>
-          <h3>Observe</h3>
+          <h3>Execute</h3>
           <p>
-            Derivers read ground truth: commits, pull requests, reviews, CI runs, artifacts,
-            deployments and environments. Nobody hand-maintains this layer, so nobody can
-            forget to.
+            <code>claim --next</code> ranks the ready set and takes a lease in one transaction,
+            server-side. The lease is bound to a git worktree, so it survives restarts, cleared
+            context, and a person taking over from an agent halfway through.
           </p>
         </li>
         <li class="beat reveal">
           <span class="beat-n">03</span>
           <h3>Reconcile</h3>
           <p>
-            Drift, documentation gaps, unimplemented specs and the ready frontier stop being
-            standing meetings. They are all reads over the difference between the two layers.
+            Execution reports back. A gap in a plan is escalated, a defect in a specification is
+            recorded against the section it affects, and accepted design that nobody has acted on
+            is reviewed again or closed.
           </p>
         </li>
       </ol>
     </div>
   </section>
 
+  <!-- ── Documents ────────────────────────────────────────────────────── -->
+  <section id="docs" class="band band-mist">
+    <div class="wrap">
+      <p class="kicker">Design documents</p>
+      <h2>The artifacts people actually review</h2>
+      <p class="section-lede">
+        Design documents are first-class objects in Worklode rather than files that happen to sit
+        in a repository. They have kinds, a lifecycle, review policies that differ by kind, stable
+        identifiers, and commands for amending and retiring them. They are also the part of the
+        system where human attention is the point: agents draft, execute and report, and people
+        decide what the design should say.
+      </p>
+
+      <div class="grid-2">
+        <div class="card reveal">
+          <h3>Specifications and ADRs</h3>
+          <p>
+            Durable statements that stay true after the work is finished. They are reviewed
+            section by section by assigned reviewers, and accepted once all of them approve.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Plans</h3>
+          <p>
+            Executable and disposable. A plan is reviewed as a whole rather than line by line,
+            and when the design underneath it changes the plan is regenerated rather than
+            patched.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Stable identifiers</h3>
+          <p>
+            An accepted document has a URI, and each of its sections has a fragment that never
+            moves. A reference can therefore name one section of one document, which is what
+            makes amendment, supersession and coverage queries expressible at all.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Kept out of the repositories</h3>
+          <p>
+            A design document usually describes work that does not exist in version control yet,
+            so a branch is the wrong home for it. One global view keeps drafts findable across
+            every project, and stable identifiers require it.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Acceptance is not the end</h3>
+          <p>
+            Execution amends design that turns out to be wrong. A section changed after
+            acceptance is marked as such and returned to the people who approved the original.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Stale design is retired</h3>
+          <p>
+            Accepted design that nobody acts on misleads the next reader. After thirty days it is
+            flagged, left out of agent briefings, and queued for revision or closure.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Three layers ─────────────────────────────────────────────────── -->
-  <section id="layers" class="band band-mist">
+  <section id="layers" class="band">
     <div class="wrap">
       <p class="kicker">The model</p>
       <h2>Three layers on one graph</h2>
       <p class="section-lede">
-        One layer is declared by people. Two are observed by machines. <strong>Deliverable</strong>
-        is the vertical reconciliation point — where a declared definition-of-done meets what is
-        actually running in production.
+        Intent is declared by people. Execution and runtime are derived from what the repositories
+        and clusters actually did — commits, pull requests, CI runs, artifacts, deployments — so
+        neither layer is hand-maintained. Deliverable is the vertical join, where a declared
+        definition of done meets what is running in production.
       </p>
+
+      <figure class="diagram reveal">
+        <img src="img/factory.png" width="2752" height="1536" loading="lazy"
+             alt="Isometric illustration of the three layers. On the top tier, two people review a stack of document sheets. On the middle tier, robots at separate workbenches each hold a token linked to a slot on a central blue crystal, and conveyors carry blocks through a gate. On the bottom tier, an arm stacks containers into cabinets. Lines run from every tier into the crystal, and one runs from a robot back up to the review desk.">
+        <figcaption>
+          People declare intent at the top. Agents take exclusive claims from the centre and turn
+          them into commits. Deployments settle at the bottom, and every tier reports back to the
+          same store — including the line that runs from an executing agent back up to review.
+        </figcaption>
+      </figure>
 
       <figure class="diagram reveal">
         <svg viewBox="0 0 880 380" role="img" aria-labelledby="layers-title">
@@ -184,15 +263,155 @@
     </div>
   </section>
 
-  <!-- ── Drift ────────────────────────────────────────────────────────── -->
-  <section id="drift" class="band">
+  <!-- ── For agents ───────────────────────────────────────────────────── -->
+  <section id="coordination" class="band band-mist">
     <div class="wrap">
-      <p class="kicker">The payoff</p>
-      <h2>Drift is a diff, not a meeting</h2>
+      <p class="kicker">More than one worker</p>
+      <h2>Coordination that does not spend tokens</h2>
       <p class="section-lede">
-        Every architectural relationship exists twice: as a <strong>declared edge</strong> someone
-        authored alongside a design document, and as an <strong>observed edge</strong> derived from
-        code, pull requests and deploys. Compare them and drift falls out.
+        The features below exist because more than one worker is in the repository at the same
+        time. Atomic pickup matters when two agents start together. Leases matter when a person
+        takes over work an agent left unfinished. Session visibility matters once you can no
+        longer see everyone who is working.
+      </p>
+
+      <div class="grid-2">
+        <div class="card reveal">
+          <h3>Atomic pickup</h3>
+          <p>
+            <code>claim --next</code> ranks and takes the next ready task in a single
+            transaction, server-side. Two agents starting in the same second cannot land on the
+            same task, and no model has to reason about which one to pick.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Worktree-bound leases</h3>
+          <p>
+            A lease is bound to a git worktree. It survives restarts and cleared context, renews
+            from a compiled pre-commit hook, and expires on its own when work is genuinely
+            abandoned.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Session visibility</h3>
+          <p>
+            The backbone records which coding-agent session holds which lease, across Claude
+            Code, Codex, Copilot, Amp and others, so “what is running right now” is answerable.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Work routed by tier</h3>
+          <p>
+            Mechanical tasks go to cheap models and design work to stronger ones. A
+            <code>concern</code> dimension and a per-project <code>focus</code> steer what comes
+            next. There are no story points and no estimates.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Skills delivered, not registered</h3>
+          <p>
+            Org-wide agent skills live in the backbone. The server selects the relevant ones for
+            a task using embeddings and explicit pins, then delivers them as files the agent
+            reads. Nothing is registered with any harness, so no skill costs context until it is
+            actually chosen.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Cost attributed to work</h3>
+          <p>
+            Each session is priced from the agent's own transcript against effective-dated rate
+            rows, so spend is attributed to a task, a session and a project rather than estimated
+            after the fact.
+          </p>
+        </div>
+      </div>
+
+      <p class="section-note">
+        Coordination is pushed into deterministic machinery: compiled hooks, a CLI with
+        <code>--json</code>, and server-side selection. Model tokens are spent on judgement.
+      </p>
+
+      <div class="term-block reveal">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">agent picking up work</span></div>
+<pre><code><span class="c">// claim the next ready task, create its worktree, bind the lease</span>
+<span class="p">/lode:next</span>
+<span class="c">// re-acquire the task already bound to this worktree</span>
+<span class="p">/lode:resume</span>
+<span class="c">// record a defect against the section that is wrong, and continue</span>
+<span class="p">/lode:note</span> WL-SPEC-14#sec-3 --body <span class="s">"empty case undefined"</span>
+<span class="c">// the plan needs a decision — hand it up and block this task</span>
+<span class="p">/lode:escalate</span> --to plan
+<span class="c">// finish, release, clean up</span>
+<span class="p">/lode:done</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Escalation ───────────────────────────────────────────────────── -->
+  <section id="ladder" class="band">
+    <div class="wrap">
+      <p class="kicker">Escalation</p>
+      <h2>When the plan turns out to be wrong</h2>
+      <p class="section-lede">
+        Plans are written by the strongest model available so that cheaper models can execute
+        them mechanically. That arrangement only works if the executor has somewhere to go when
+        the plan does not cover the case in front of it, because the fix is a change to the plan,
+        and changing the plan is not the executor's decision to make. Worklode defines that path
+        and keeps a person out of it until a judgement call is actually required.
+      </p>
+
+      <div class="grid-2">
+        <div class="card reveal">
+          <h3>Gaps are recorded</h3>
+          <p>
+            An executor that meets something the plan does not cover records it and stops rather
+            than guessing. The discovery becomes an event in the backbone instead of a line in a
+            session transcript.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>A stronger model fixes it</h3>
+          <p>
+            A subagent running at the tier the fix requires amends the plan, or the specification
+            above it, and hands control back. The executor waits for a subagent rather than for
+            someone to pick up a ticket, so the delay is bounded.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Substantive changes go back for review</h3>
+          <p>
+            A patch that adds a dependency, changes an interface, touches the ontology or alters
+            a definition of done counts as substantive by rule. The server applies those rules,
+            rather than the agent that would like to carry on.
+          </p>
+        </div>
+        <div class="card reveal">
+          <h3>Judgement is requested explicitly</h3>
+          <p>
+            When the fix needs a decision rather than a stronger model, escalation creates a
+            design task assigned to whoever wrote the plan, and blocks the original work until it
+            is resolved.
+          </p>
+        </div>
+      </div>
+
+      <p class="section-note">
+        The general rule: a subagent handles work where the only missing ingredient is a stronger
+        model, and a queued task handles work that needs a person. Both are preferable to a
+        session sitting idle.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Drift ────────────────────────────────────────────────────────── -->
+  <section id="drift" class="band band-mist">
+    <div class="wrap">
+      <p class="kicker">Reconciliation</p>
+      <h2>Every relationship is recorded twice</h2>
+      <p class="section-lede">
+        Each architectural relationship exists as an edge someone declared alongside a design
+        document, and as an edge derived from code, pull requests and deployments. The difference
+        between the two sets is drift, and it is a query rather than a meeting.
       </p>
 
       <div class="formula reveal">
@@ -205,137 +424,28 @@
         <span class="term term-drift">drift</span>
       </div>
       <p class="formula-note">
-        A deviation you meant to keep is not a violation. Mark it accepted with a node that names
-        the tolerated edge, is sanctioned by an ADR, and can be set to expire — reviewed and
+        Deviations that are intentional are recorded as accepted: a node names the tolerated edge,
+        cites the ADR that sanctions it, and can be given an expiry date. It is reviewed and
         provenanced like any other declaration.
       </p>
 
       <div class="grid-4">
         <div class="card reveal">
           <h3>Architectural drift</h3>
-          <p>A component depends on something your design never said it could.</p>
+          <p>A component depends on something the design never said it could.</p>
         </div>
         <div class="card reveal">
           <h3>Documentation gaps</h3>
           <p>Code that exists in the observed layer with no design document behind it.</p>
         </div>
         <div class="card reveal">
-          <h3>Unimplemented specs</h3>
-          <p>Intent that was written down, accepted, and then never showed up in a repo.</p>
+          <h3>Unimplemented specifications</h3>
+          <p>Intent that was written down, accepted, and then never showed up in a repository.</p>
         </div>
         <div class="card reveal">
           <h3>Ready frontier</h3>
-          <p>What is genuinely unblocked right now, computed from the graph — never cached stale.</p>
+          <p>What is genuinely unblocked right now, computed from the graph rather than cached.</p>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Two stores ───────────────────────────────────────────────────── -->
-  <section id="stores" class="band band-mist">
-    <div class="wrap">
-      <p class="kicker">The architecture</p>
-      <h2>Two stores. No fact has two owners.</h2>
-      <p class="section-lede">
-        Transactional work needs locks and ACID guarantees. Architectural knowledge needs
-        versioning, branches and time travel. Those are different jobs, so Worklode uses
-        different stores and splits authority cleanly between them.
-      </p>
-
-      <div class="stores reveal">
-        <div class="store">
-          <p class="store-kind">Execution backbone</p>
-          <h3>PostgreSQL</h3>
-          <p>
-            Task state, worktree-bound leases, an append-only provenance event for every state
-            change, and the <code>blocks</code> / <code>child_of</code> edges that gate pickup.
-            Claiming a task is one ACID transaction.
-          </p>
-        </div>
-        <div class="join" aria-hidden="true">
-          <span class="join-line"></span>
-          <span class="join-label">IRI is the join</span>
-          <span class="join-line"></span>
-        </div>
-        <div class="store">
-          <p class="store-kind">Knowledge graph</p>
-          <h3>RDF quad store</h3>
-          <p>
-            Named graphs, versioning, time travel and branches. Components, design documents,
-            architectural relationships and drift. Standards-first vocabulary — Dublin Core,
-            PROV, DOAP, SKOS — with new terms minted sparingly.
-          </p>
-        </div>
-      </div>
-
-      <p class="section-note">
-        Work arrives on its own: a GitHub App feeds issues, pull requests, reviews, CI runs and
-        releases; a Flux webhook reports deployments; a Kubernetes watcher reports crash loops and
-        OOM kills. Reconciliation replays anything a webhook missed.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── For agents ───────────────────────────────────────────────────── -->
-  <section id="coordination" class="band">
-    <div class="wrap">
-      <p class="kicker">Multi-player by default</p>
-      <h2>Coordination should not cost tokens</h2>
-      <p class="section-lede">
-        Everything below exists because more than one worker is in the repo at once. Atomic
-        pickup matters when two agents start simultaneously. Leases matter when a human takes
-        over what an agent left half-done. Session visibility matters once you can no longer see
-        everyone who is working.
-      </p>
-
-      <blockquote class="pull reveal">
-        Push coordination into deterministic, token-free machinery — compiled hooks, a CLI with
-        <code>--json</code>, server-side selection. Spend model tokens only on judgment.
-      </blockquote>
-
-      <div class="grid-2">
-        <div class="card reveal">
-          <h3>Atomic pickup</h3>
-          <p>
-            <code>claim --next</code> ranks and takes the next ready task in a single
-            transaction, server-side. Two agents starting at once cannot land on the same task,
-            and no model has to reason about which one to pick.
-          </p>
-        </div>
-        <div class="card reveal">
-          <h3>Worktree-bound leases</h3>
-          <p>
-            A lease is bound to a git worktree. It survives restarts and context clears, renews
-            from a compiled pre-commit hook, and expires on its own when work is genuinely
-            abandoned.
-          </p>
-        </div>
-        <div class="card reveal">
-          <h3>Session visibility</h3>
-          <p>
-            The backbone knows which coding-agent session holds which lease right now — across
-            Claude Code, Codex, Copilot, Amp and others — so “what is running?” has an answer.
-          </p>
-        </div>
-        <div class="card reveal">
-          <h3>Ranking that fits people</h3>
-          <p>
-            A <code>concern</code> dimension and a per-project <code>focus</code> steer what comes
-            next, with a strict mode when a project needs undivided attention. No story points.
-          </p>
-        </div>
-      </div>
-
-      <div class="term-block reveal">
-        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">agent picking up work</span></div>
-<pre><code><span class="c">// claim the next ready task, create its worktree, bind the lease</span>
-<span class="p">/lode:next</span>
-<span class="c">// re-acquire the task already bound to this worktree</span>
-<span class="p">/lode:resume</span>
-<span class="c">// record a real blocker and release the lease</span>
-<span class="p">/lode:block</span> --on WL-42
-<span class="c">// finish, release, clean up</span>
-<span class="p">/lode:done</span></code></pre>
       </div>
     </div>
   </section>
