@@ -16,7 +16,7 @@ replaces:
 ---
 # Spec 000 — Worklode architecture & spec map (umbrella)
 
-**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`029`);
+**Conventions:** all specs live flat in `docs/specs/`, numbered chronologically (`000`–`030`);
 cross-spec references below use those numbers.
 
 **Worklode** (product; CLI `lode`) is Sunstone's platform work +
@@ -114,6 +114,7 @@ single context. Each is an independent spec → plan → implementation cycle.
 | **027 — Event watchers** | The `events` log gains ordered, offset-tracked subscribers below a commit horizon, so a state change can have consequences beyond its own transaction; `doc-lifecycle` is the first. | 004, 006, 012, 022, 025 |
 | **028 — Escalation & document lifecycle** | The upward path when an executor outruns its plan: fixer subagent, in-place amendment with server-enforced substantivity, escalation to a human, and grooming of accepted documents nobody builds. | 004, 014, 025, 026, 027 |
 | **029 — Reading diffs** | `meat` as a library: a diff abridged to what a reviewer must read, produced off the event log, content-addressed and cached org-wide, priced from `model_prices`. A rendering, never the artifact of record. | 004, 011, 012, 022, 027, 028 |
+| **030 — The review surface** | Review as an API over documents and changes alike — anchored threads, the read-only question, guided review, multi-reviewer verdicts — with galley's contract copied, galley itself run as the interim desk, and the record owned by the backbone. | 004, 005, 008, 011, 014, 022, 023, 025, 027, 028, 029 |
 
 ---
 
