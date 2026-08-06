@@ -48,21 +48,21 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 }
 
 // UnassignTask clears taskID's assignee inside the given transaction,
-// recording provenance via LogChange. Same guards as AssignTask (an epic or
-// a closed task rejects the change with ErrInvalidInput); a missing task is
-// ErrNotFound.
+// recording provenance via LogChange. A closed task (see closedStateSet)
+// rejects the change with ErrInvalidInput — it has nothing left to own.
+// Unlike AssignTask/StartTask there is no epic guard: an epic is never
+// assigned by this package, but clearing a stray assignee (e.g. left over
+// from before a task's kind changed) must not be blocked by the very fact
+// that needs cleaning up. A missing task is ErrNotFound.
 func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
-	var state, kind string
+	var state string
 	if err := tx.QueryRow(
-		`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &kind); err != nil {
+		`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		return fmt.Errorf("lock task %s: %w", id, err)
-	}
-	if kind == kindEpic {
-		return fmt.Errorf("task %s is an epic and cannot be assigned: %w", id, ErrInvalidInput)
 	}
 	if closedStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
@@ -78,16 +78,27 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 }
 
 // StartTask moves taskID from ready to in_progress on behalf of actorID
-// without taking a lease: a human owns the task by assignment instead. If
-// the task is unassigned, actorID is assigned to it first (recorded via
+// without taking a lease: a human owns the task by assignment instead.
+// actorID must name an existing actor (ErrNotFound otherwise, the same check
+// AssignTask makes — without it an unknown actor would surface as a raw
+// tasks.assignee foreign-key violation and poison the caller's transaction).
+// If the task is unassigned, actorID is assigned to it first (recorded via
 // LogChange); if it is already assigned to someone else, StartTask refuses
-// with ErrInvalidInput rather than silently reassigning. Blocked tasks and
-// epics are rejected the same way (ErrInvalidInput) — see IsBlocked and
-// Claim for the equivalent lease-based guards. A missing task is
-// ErrNotFound. Returns the assignee the task settled on (actorID, whether it
-// was already assigned or just auto-assigned here), so a caller that
-// auto-assigned can tell.
+// with ErrInvalidInput rather than silently reassigning. An epic, a closed
+// task (see closedStateSet), or a blocked task are rejected the same way
+// (ErrInvalidInput) — see IsBlocked and Claim for the equivalent lease-based
+// guards. A missing task is ErrNotFound. Returns the assignee the task
+// settled on (actorID, whether it was already assigned or just
+// auto-assigned here), so a caller that auto-assigned can tell.
 func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (string, error) {
+	var one int
+	if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, actorID).Scan(&one); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("actor %s: %w", actorID, ErrNotFound)
+		}
+		return "", fmt.Errorf("check actor %s: %w", actorID, err)
+	}
+
 	var state, kind, assignee string
 	if err := tx.QueryRow(
 		`SELECT state, kind, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
@@ -99,6 +110,9 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 	}
 	if kind == kindEpic {
 		return "", fmt.Errorf("task %s is an epic and cannot be started: %w", id, ErrInvalidInput)
+	}
+	if closedStateSet[state] {
+		return "", fmt.Errorf("task %s is %s: cannot start: %w", id, state, ErrInvalidInput)
 	}
 	if assignee != "" && assignee != actorID {
 		return "", fmt.Errorf("task %s: assigned to %s; unassign first: %w", id, assignee, ErrInvalidInput)
@@ -135,7 +149,9 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 // StopTask moves taskID from in_progress back to ready on behalf of actorID,
 // the assignment-based counterpart to Release. actorID must be the task's
 // current assignee and the task must be in_progress, or StopTask refuses
-// with ErrInvalidInput. A task with an active lease must be released through
+// with ErrInvalidInput (the two conditions are checked and reported
+// separately, so the error names the actual state/assignee rather than just
+// echoing the caller). A task with an active lease must be released through
 // Release instead (ErrInvalidInput) — StopTask never touches a lease. A
 // missing task is ErrNotFound.
 func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) error {
@@ -148,8 +164,11 @@ func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) erro
 		}
 		return fmt.Errorf("lock task %s: %w", id, err)
 	}
-	if state != "in_progress" || assignee != actorID {
-		return fmt.Errorf("task %s is not in_progress and assigned to %s: %w", id, actorID, ErrInvalidInput)
+	if state != "in_progress" {
+		return fmt.Errorf("task %s is %s, not in_progress: %w", id, state, ErrInvalidInput)
+	}
+	if assignee != actorID {
+		return fmt.Errorf("task %s is assigned to %q, not %s: %w", id, assignee, actorID, ErrInvalidInput)
 	}
 
 	leased, err := hasActiveLease(tx, id)

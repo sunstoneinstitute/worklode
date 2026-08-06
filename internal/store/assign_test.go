@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -179,6 +180,7 @@ func TestStartTaskAlreadyAssignedToCaller(t *testing.T) {
 	if assignee != "stig" {
 		t.Fatalf("StartTask returned assignee %q, want stig", assignee)
 	}
+	mustState(t, s, task.ID, "in_progress")
 }
 
 func TestStartTaskAssignedToSomeoneElse(t *testing.T) {
@@ -219,6 +221,30 @@ func TestStartTaskUnknownTask(t *testing.T) {
 	}
 }
 
+func TestStartTaskUnknownActor(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, err := startTask(t, s, taskTestNow, task.ID, "ghost"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("start by unknown actor: want ErrNotFound, got %v", err)
+	}
+	mustState(t, s, task.ID, "ready")
+}
+
+// TestStartTaskTerminalStateRejected pins StartTask's terminal-state guard
+// to ErrInvalidInput, matching AssignTask/UnassignTask: without the explicit
+// closedStateSet check, a merged task would instead fail Transition's
+// from-state check with ErrBadTransition.
+func TestStartTaskTerminalStateRejected(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+	walkTo(t, s, task.ID, "merged")
+
+	if _, err := startTask(t, s, taskTestNow, task.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("start on merged task: want ErrInvalidInput, got %v", err)
+	}
+}
+
 func TestStopTaskHappyPath(t *testing.T) {
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -248,15 +274,29 @@ func TestStopTaskNonAssigneeRejected(t *testing.T) {
 	mustState(t, s, task.ID, "in_progress")
 }
 
+// TestStopTaskWhileLeasedRejected proves the active-lease guard itself
+// fires, not just the state/assignee guard ahead of it: the task is assigned
+// to stig *before* being claimed, so by the time StopTask runs, state is
+// in_progress and assignee == actorID — the only way to reach ErrInvalidInput
+// is through the active-lease check. Asserting on the error message (not
+// just the sentinel) is what makes that provable; errors.Is alone can't tell
+// this apart from the earlier guard.
 func TestStopTaskWhileLeasedRejected(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+	if err := assignTask(t, s, leaseTestNow, task.ID, "stig"); err != nil {
+		t.Fatalf("AssignTask: %v", err)
+	}
 	if _, err := s.Claim(t.Context(), task.ID, "stig", "host:/wt", 0); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 
-	if err := stopTask(t, s, leaseTestNow, task.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+	err := stopTask(t, s, leaseTestNow, task.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("stop while leased: want ErrInvalidInput, got %v", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "active lease") {
+		t.Fatalf("stop while leased: error %v does not mention the active lease", err)
 	}
 	mustState(t, s, task.ID, "in_progress")
 }
@@ -276,8 +316,10 @@ func TestListTasksFilterByAssignee(t *testing.T) {
 	}
 	mine := createTask(t, s, taskTestNow, defaultTaskInput())
 	bobs := createTask(t, s, taskTestNow, defaultTaskInput())
+	// unassigned has no assignee at all — it must be excluded from the
+	// "stig" filter for that reason, not merely because it belongs to
+	// someone else, which is what bobs alone would prove.
 	unassigned := createTask(t, s, taskTestNow, defaultTaskInput())
-	_ = unassigned
 	if err := assignTask(t, s, taskTestNow, mine.ID, "stig"); err != nil {
 		t.Fatalf("AssignTask mine: %v", err)
 	}
@@ -291,5 +333,10 @@ func TestListTasksFilterByAssignee(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != mine.ID {
 		t.Fatalf("ListTasks{Assignee: stig}: got %v, want [%s]", got, mine.ID)
+	}
+	for _, task := range got {
+		if task.ID == unassigned.ID || task.ID == bobs.ID {
+			t.Fatalf("ListTasks{Assignee: stig} leaked %s, which is not stig's", task.ID)
+		}
 	}
 }
