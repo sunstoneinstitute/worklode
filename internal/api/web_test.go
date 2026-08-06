@@ -45,6 +45,24 @@ func TestBoardPageOrgBoard(t *testing.T) {
 		t.Fatalf("add blocking edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
+	// A human-owned in-progress task: assigned to and started by "dana", an
+	// actor distinct from "alice" (the leased task's holder) so the rendered
+	// Assignee column can't be mistaken for the Holder column's value.
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj1", "title": "Human-owned task", "priority": "medium", "kind": "feature",
+	})
+	if err := st.CreateActor(context.Background(), "dana", "human", "Dana", false); err != nil {
+		t.Fatalf("create actor dana: %v", err)
+	}
+	danaToken, err := st.CreateToken(context.Background(), "dana", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token for dana: %v", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/start", danaToken, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("start WL-4 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
 	// A runtime failure, recorded directly through the store (as the
 	// watcher would via POST /api/v1/runtime-events).
 	seedEvent(t, st, "runtime-1", func(tx *sql.Tx, _ int64) error {
@@ -76,6 +94,8 @@ func TestBoardPageOrgBoard(t *testing.T) {
 		"Blocked", "Blocked task", // the blocked bucket + the blocked task's title
 		"CrashLoopBackOff on app", // recent-failures message
 		"Inbox: 1 new issue",      // inbox count
+		"Human-owned task",        // the human-owned in_progress task's title
+		"<td>dana</td>",           // its Assignee column cell — proves the column renders the value, not just the header
 	)
 }
 
@@ -136,6 +156,38 @@ func TestTaskPage(t *testing.T) {
 		"Artifact",                   // timeline: artifact entry label
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
+	// WL-1 is leased but has no assignee: the "Assigned to" paragraph must
+	// not render for it.
+	if strings.Contains(body, "Assigned to") {
+		t.Fatalf("unassigned task page unexpectedly shows an assignee:\n%s", body)
+	}
+
+	// A second, human-started task: assigned to and started by "erin"
+	// without a lease. Holder must stay empty (no "Held by") while Assignee
+	// renders — the Holder/Assignee distinction this feature exists to show.
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Human task", "priority": "medium", "kind": "feature",
+	})
+	if err := st.CreateActor(context.Background(), "erin", "human", "Erin", false); err != nil {
+		t.Fatalf("create actor erin: %v", err)
+	}
+	erinToken, err := st.CreateToken(context.Background(), "erin", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token for erin: %v", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/start", erinToken, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("start WL-2 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body = rr.Body.String()
+	bodyContains(t, body, "Assigned to erin")
+	if strings.Contains(body, "Held by") {
+		t.Fatalf("human-started task page unexpectedly shows a lease holder:\n%s", body)
+	}
 
 	rr = doReq(t, h, "GET", "/tasks/WL-99", "", nil)
 	if rr.Code != http.StatusNotFound {
