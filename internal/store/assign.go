@@ -1,0 +1,164 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// AssignTask sets taskID's assignee to assignee inside the given
+// transaction, recording provenance via LogChange. assignee must name an
+// existing actor (ErrNotFound otherwise); a missing task is also
+// ErrNotFound. An epic, or a task in a closed state (see closedStateSet),
+// cannot be assigned (ErrInvalidInput) — an epic's ownership follows its
+// children, and a closed task has nothing left to own.
+func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) error {
+	var one int
+	if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, assignee).Scan(&one); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("actor %s: %w", assignee, ErrNotFound)
+		}
+		return fmt.Errorf("check actor %s: %w", assignee, err)
+	}
+
+	var state, kind string
+	if err := tx.QueryRow(
+		`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &kind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", id, ErrNotFound)
+		}
+		return fmt.Errorf("lock task %s: %w", id, err)
+	}
+	if kind == kindEpic {
+		return fmt.Errorf("task %s is an epic and cannot be assigned: %w", id, ErrInvalidInput)
+	}
+	if closedStateSet[state] {
+		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE tasks SET assignee = $1, updated_at = $2 WHERE id = $3`,
+		assignee, now.UTC(), id,
+	); err != nil {
+		return fmt.Errorf("assign task %s: %w", id, err)
+	}
+	return LogChange(tx, "task", id, eventID, map[string]string{"field": "assignee", "new": assignee})
+}
+
+// UnassignTask clears taskID's assignee inside the given transaction,
+// recording provenance via LogChange. Same guards as AssignTask (an epic or
+// a closed task rejects the change with ErrInvalidInput); a missing task is
+// ErrNotFound.
+func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
+	var state, kind string
+	if err := tx.QueryRow(
+		`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &kind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", id, ErrNotFound)
+		}
+		return fmt.Errorf("lock task %s: %w", id, err)
+	}
+	if kind == kindEpic {
+		return fmt.Errorf("task %s is an epic and cannot be assigned: %w", id, ErrInvalidInput)
+	}
+	if closedStateSet[state] {
+		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE tasks SET assignee = NULL, updated_at = $1 WHERE id = $2`,
+		now.UTC(), id,
+	); err != nil {
+		return fmt.Errorf("unassign task %s: %w", id, err)
+	}
+	return LogChange(tx, "task", id, eventID, map[string]string{"field": "assignee", "new": ""})
+}
+
+// StartTask moves taskID from ready to in_progress on behalf of actorID
+// without taking a lease: a human owns the task by assignment instead. If
+// the task is unassigned, actorID is assigned to it first (recorded via
+// LogChange); if it is already assigned to someone else, StartTask refuses
+// with ErrInvalidInput rather than silently reassigning. Blocked tasks and
+// epics are rejected the same way (ErrInvalidInput) — see IsBlocked and
+// Claim for the equivalent lease-based guards. A missing task is
+// ErrNotFound. Returns the assignee the task settled on (actorID, whether it
+// was already assigned or just auto-assigned here), so a caller that
+// auto-assigned can tell.
+func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (string, error) {
+	var state, kind, assignee string
+	if err := tx.QueryRow(
+		`SELECT state, kind, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &kind, &assignee); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("task %s: %w", id, ErrNotFound)
+		}
+		return "", fmt.Errorf("lock task %s: %w", id, err)
+	}
+	if kind == kindEpic {
+		return "", fmt.Errorf("task %s is an epic and cannot be started: %w", id, ErrInvalidInput)
+	}
+	if assignee != "" && assignee != actorID {
+		return "", fmt.Errorf("task %s: assigned to %s; unassign first: %w", id, assignee, ErrInvalidInput)
+	}
+
+	blocked, err := IsBlocked(tx, id)
+	if err != nil {
+		return "", err
+	}
+	if blocked {
+		return "", fmt.Errorf("task %s is blocked: %w", id, ErrInvalidInput)
+	}
+
+	if assignee == "" {
+		if _, err := tx.Exec(
+			`UPDATE tasks SET assignee = $1, updated_at = $2 WHERE id = $3`,
+			actorID, now.UTC(), id,
+		); err != nil {
+			return "", fmt.Errorf("assign task %s: %w", id, err)
+		}
+		if err := LogChange(tx, "task", id, eventID,
+			map[string]string{"field": "assignee", "new": actorID}); err != nil {
+			return "", err
+		}
+		assignee = actorID
+	}
+
+	if err := Transition(tx, now, id, "ready", "in_progress", eventID); err != nil {
+		return "", err
+	}
+	return assignee, nil
+}
+
+// StopTask moves taskID from in_progress back to ready on behalf of actorID,
+// the assignment-based counterpart to Release. actorID must be the task's
+// current assignee and the task must be in_progress, or StopTask refuses
+// with ErrInvalidInput. A task with an active lease must be released through
+// Release instead (ErrInvalidInput) — StopTask never touches a lease. A
+// missing task is ErrNotFound.
+func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) error {
+	var state, assignee string
+	if err := tx.QueryRow(
+		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &assignee); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", id, ErrNotFound)
+		}
+		return fmt.Errorf("lock task %s: %w", id, err)
+	}
+	if state != "in_progress" || assignee != actorID {
+		return fmt.Errorf("task %s is not in_progress and assigned to %s: %w", id, actorID, ErrInvalidInput)
+	}
+
+	leased, err := hasActiveLease(tx, id)
+	if err != nil {
+		return err
+	}
+	if leased {
+		return fmt.Errorf("task %s: held by an active lease; use release: %w", id, ErrInvalidInput)
+	}
+
+	return Transition(tx, now, id, "in_progress", "ready", eventID)
+}
