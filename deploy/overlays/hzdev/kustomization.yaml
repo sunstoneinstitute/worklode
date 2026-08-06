@@ -32,6 +32,12 @@ patches:
       - op: replace
         path: /data/LODE_SKILL_SOURCES
         value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
+      - op: add
+        path: /data/LODE_OIDC_ISSUER
+        value: "https://auth.sunstoneinstitute.ai/realms/sunstone"
+      - op: add
+        path: /data/LODE_OIDC_CLIENT_ID
+        value: "worklode-dev"
   - target:
       kind: Ingress
       name: worklode-ingress
