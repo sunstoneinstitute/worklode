@@ -43,6 +43,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// for the sweeper).
 	s.syncRuns.WithLabelValues("ok")
 	s.syncRuns.WithLabelValues("error")
+	for _, action := range []string{"assign", "unassign", "start", "stop"} {
+		s.assignments.WithLabelValues(action)
+	}
 }
 
 // observeSkillSync records one sync pass, called from both syncOnce

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -52,7 +53,13 @@ func TestUnassign(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Unassign me", "priority": "high", "kind": "feature",
 	})
-	doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, nil)
+	setup := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, nil)
+	if setup.Code != http.StatusOK {
+		t.Fatalf("setup assign status = %d, body %s", setup.Code, setup.Body.String())
+	}
+	if got := decodeMap(t, setup)["assignee"]; got != "alice" {
+		t.Fatalf("setup assignee = %v, want alice", got)
+	}
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/unassign", token, nil)
 	if rr.Code != http.StatusOK {
@@ -97,11 +104,17 @@ func TestStartAssignedToAnother(t *testing.T) {
 		"project": "proj", "title": "Bob's task", "priority": "high", "kind": "feature",
 	})
 	secondActor(t, st, "bob")
-	doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
+	setup := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
+	if setup.Code != http.StatusOK {
+		t.Fatalf("setup assign status = %d, body %s", setup.Code, setup.Body.String())
+	}
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/start", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("start status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "bob") {
+		t.Fatalf("start 422 body = %q, want it to name the current assignee bob", body)
 	}
 }
 
@@ -134,7 +147,10 @@ func TestStopClaimedTask(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Leased", "priority": "high", "kind": "feature",
 	})
-	doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, nil)
+	setup := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, nil)
+	if setup.Code != http.StatusOK {
+		t.Fatalf("setup assign status = %d, body %s", setup.Code, setup.Body.String())
+	}
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
@@ -143,6 +159,9 @@ func TestStopClaimedTask(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/stop", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("stop status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "held by an active lease") {
+		t.Fatalf("stop 422 body = %q, want it to mention the lease guard", body)
 	}
 }
 
