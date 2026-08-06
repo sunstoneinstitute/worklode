@@ -11,16 +11,6 @@ import (
 	"testing"
 )
 
-// TestMain removes the shared lode binary's temp dir, which outlives any
-// single test's t.TempDir().
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if lodeBinary.path != "" {
-		os.RemoveAll(filepath.Dir(lodeBinary.path))
-	}
-	os.Exit(code)
-}
-
 // repoRoot returns this module's root, derived from this test file's own
 // location (internal/cmd/githooks_test.go) so it works regardless of
 // `go test`'s working directory.
