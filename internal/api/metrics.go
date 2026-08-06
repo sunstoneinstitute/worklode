@@ -33,7 +33,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_skill_sync_items_total",
 		Help: "Skills touched by sync passes, by action.",
 	}, []string{"action"})
-	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems)
+	s.assignments = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_task_assignments_total",
+		Help: "Task assignment actions, by action (assign, unassign, start, stop).",
+	}, []string{"action"})
+	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -64,4 +68,14 @@ func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Durat
 	} {
 		s.syncItems.WithLabelValues(action).Add(float64(n))
 	}
+}
+
+// observeAssignment records one assignment action (assign, unassign, start,
+// stop). Called on success only.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeAssignment(action string) {
+	if s.assignments == nil {
+		return
+	}
+	s.assignments.WithLabelValues(action).Inc()
 }
