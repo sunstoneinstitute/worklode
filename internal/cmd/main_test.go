@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +40,19 @@ func runTests(m *testing.M) int {
 		if err := os.Mkdir(d, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "create %s: %v\n", d, err)
 			return 1
+		}
+	}
+	// GOCACHE defaults to a path under HOME, so the temp HOME below would give
+	// buildLodeBinary's `go build` an empty cache and recompile the stdlib on
+	// every run (~25s). Pin the real cache before HOME moves.
+	if os.Getenv("GOCACHE") == "" {
+		if out, err := exec.Command("go", "env", "GOCACHE").Output(); err == nil {
+			if cache := strings.TrimSpace(string(out)); cache != "" {
+				if err := os.Setenv("GOCACHE", cache); err != nil {
+					fmt.Fprintf(os.Stderr, "set GOCACHE: %v\n", err)
+					return 1
+				}
+			}
 		}
 	}
 	if err := os.Setenv("HOME", home); err != nil {
