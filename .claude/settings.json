@@ -19,7 +19,8 @@
     ]
   },
   "enabledPlugins": {
-    "lode@sunstone-public": true
+    "lode@sunstone-public": true,
+    "mattpocock-skills@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "sunstone-public": {
