@@ -153,6 +153,12 @@ func TestTaskEditBodyErrors(t *testing.T) {
 
 func TestTaskListStatusFiltering(t *testing.T) {
 	st, c := lifecycleTestServer(t)
+	// This repo's own .worklode/config.toml (current_project = "worklode")
+	// would otherwise leak into `lode task list`'s default scope when the
+	// test binary's cwd falls under this checkout; pin cwd/HOME to an
+	// isolated repo scoped to "proj" instead, matching
+	// TestTaskHierarchyCommands below.
+	setupRepoConfig(t, "proj")
 	setupProject(t, c)
 	ctx := context.Background()
 
@@ -201,6 +207,166 @@ func TestTaskListStatusFiltering(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// taskAssignee returns the stored assignee of a task via `lode task show
+// --json`.
+func taskAssignee(t *testing.T, id string) string {
+	t.Helper()
+	out, err := runLode(t, "task", "show", "--json", id)
+	if err != nil {
+		t.Fatalf("lode task show: %v\noutput: %s", err, out)
+	}
+	var task struct {
+		Assignee string `json:"assignee"`
+	}
+	if err := json.Unmarshal([]byte(out), &task); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	return task.Assignee
+}
+
+func TestTaskAssignUnassign(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+	task := createTestTask(t, c, "Assignable task")
+
+	// No --to: assigns to the caller (alice, per lifecycleTestServer).
+	if _, err := runLode(t, "task", "assign", task.ID); err != nil {
+		t.Fatalf("task assign (self): %v", err)
+	}
+	if got := taskAssignee(t, task.ID); got != "alice" {
+		t.Fatalf("assignee after self-assign = %q, want alice", got)
+	}
+
+	// --to reassigns to a named actor.
+	if _, err := runLode(t, "task", "assign", task.ID, "--to", "bob"); err != nil {
+		t.Fatalf("task assign --to bob: %v", err)
+	}
+	if got := taskAssignee(t, task.ID); got != "bob" {
+		t.Fatalf("assignee after --to bob = %q, want bob", got)
+	}
+
+	if _, err := runLode(t, "task", "unassign", task.ID); err != nil {
+		t.Fatalf("task unassign: %v", err)
+	}
+	if got := taskAssignee(t, task.ID); got != "" {
+		t.Fatalf("assignee after unassign = %q, want empty", got)
+	}
+}
+
+func TestTaskStartStopSubmit(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Lease-free task")
+
+	// start assigns the caller (unassigned task) and moves it to in_progress.
+	out, err := runLode(t, "task", "start", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("task start: %v\noutput: %s", err, out)
+	}
+	var started cli.Task
+	if err := json.Unmarshal([]byte(out), &started); err != nil {
+		t.Fatalf("decode task start output %q: %v", out, err)
+	}
+	if started.State != "in_progress" || started.Assignee != "alice" {
+		t.Fatalf("task start result = %+v, want in_progress/alice", started)
+	}
+
+	// stop returns it to ready, keeping the assignment.
+	out, err = runLode(t, "task", "stop", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("task stop: %v\noutput: %s", err, out)
+	}
+	var stopped cli.Task
+	if err := json.Unmarshal([]byte(out), &stopped); err != nil {
+		t.Fatalf("decode task stop output %q: %v", out, err)
+	}
+	if stopped.State != "ready" || stopped.Assignee != "alice" {
+		t.Fatalf("task stop result = %+v, want ready/alice (assignment kept)", stopped)
+	}
+
+	// Re-start, then submit moves it to in_review.
+	if _, err := runLode(t, "task", "start", task.ID); err != nil {
+		t.Fatalf("task re-start: %v", err)
+	}
+	out, err = runLode(t, "task", "submit", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("task submit: %v\noutput: %s", err, out)
+	}
+	var submitted cli.Task
+	if err := json.Unmarshal([]byte(out), &submitted); err != nil {
+		t.Fatalf("decode task submit output %q: %v", out, err)
+	}
+	if submitted.State != "in_review" {
+		t.Fatalf("task submit result state = %q, want in_review", submitted.State)
+	}
+}
+
+func TestTaskListAssigneeFilterAndRendering(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	// See the comment in TestTaskListStatusFiltering: `task list` needs a
+	// scoped project, or this repo's own ambient .worklode/config.toml wins.
+	setupRepoConfig(t, "proj")
+	setupProject(t, c)
+	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+	mine := createTestTask(t, c, "Alice's task")
+	bobs := createTestTask(t, c, "Bob's task")
+	if _, err := runLode(t, "task", "assign", mine.ID); err != nil {
+		t.Fatalf("assign mine: %v", err)
+	}
+	if _, err := runLode(t, "task", "assign", bobs.ID, "--to", "bob"); err != nil {
+		t.Fatalf("assign bobs: %v", err)
+	}
+
+	if got := taskListIDs(t, "--assignee", "bob"); len(got) != 1 || got[0] != bobs.ID {
+		t.Fatalf("list --assignee bob = %v, want [%s]", got, bobs.ID)
+	}
+	if got := taskListIDs(t, "--assignee", "alice"); len(got) != 1 || got[0] != mine.ID {
+		t.Fatalf("list --assignee alice = %v, want [%s]", got, mine.ID)
+	}
+
+	// Rendered (non-JSON) list shows an ASSIGNEE column with the right value.
+	out, err := runLode(t, "task", "list")
+	if err != nil {
+		t.Fatalf("task list: %v", err)
+	}
+	if !strings.Contains(out, "ASSIGNEE") {
+		t.Fatalf("task list output missing ASSIGNEE column:\n%s", out)
+	}
+	// The row must exist *and* carry "bob" in the ASSIGNEE column. Checking
+	// the whole line would also match the title, and a loop with no `found`
+	// flag would pass if the row disappeared entirely. Columns are
+	// tabwriter-padded and all single-token up to TITLE, so field 5 is
+	// ASSIGNEE.
+	var found bool
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, bobs.ID) {
+			continue
+		}
+		found = true
+		fields := strings.Fields(line)
+		if len(fields) < 6 || fields[5] != "bob" {
+			t.Fatalf("task list row for %s has assignee column %v, want bob:\n%s", bobs.ID, fields, out)
+		}
+	}
+	if !found {
+		t.Fatalf("task list output has no row for %s:\n%s", bobs.ID, out)
+	}
+
+	// Rendered (non-JSON) show has an "assignee:" line.
+	show, err := runLode(t, "task", "show", bobs.ID)
+	if err != nil {
+		t.Fatalf("task show: %v", err)
+	}
+	if !strings.Contains(show, "assignee: bob") {
+		t.Fatalf("task show output missing assignee line:\n%s", show)
 	}
 }
 

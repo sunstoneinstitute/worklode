@@ -32,7 +32,7 @@ var validEdgeTypes = map[string]bool{
 
 // taskJSON is the wire form of a task: every store.Task field, so a client
 // reading JSON sees the same record the server holds. Concern is "" when the
-// task has none.
+// task has none. Assignee is "" when the task is unassigned.
 type taskJSON struct {
 	ID                 string    `json:"id"`
 	Project            string    `json:"project"`
@@ -47,6 +47,7 @@ type taskJSON struct {
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	Skills             []string  `json:"skills"`
+	Assignee           string    `json:"assignee"`
 }
 
 func toTaskJSON(t *store.Task) taskJSON {
@@ -68,6 +69,7 @@ func toTaskJSON(t *store.Task) taskJSON {
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,
 		Skills:             skills,
+		Assignee:           t.Assignee,
 	}
 }
 
@@ -268,8 +270,9 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// listTasks handles GET /api/v1/tasks?project=&state=&priority=&kind=&parent=.
-// state is repeatable and/or comma-separated.
+// listTasks handles
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=. state
+// is repeatable and/or comma-separated.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -286,6 +289,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Priority: q.Get("priority"),
 		Kind:     q.Get("kind"),
 		Parent:   q.Get("parent"),
+		Assignee: q.Get("assignee"),
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -312,16 +316,20 @@ type patchTaskRequest struct {
 // patchStateFrom maps the states PATCH may move a task into to the required
 // current state. Only lease-free transitions are allowed here: "ready"
 // publishes a draft, "in_progress" reworks a task whose review requested
-// changes. Every other transition has a dedicated endpoint (claim, release,
-// done, abandon, reopen) that also manages the task's lease.
+// changes, "in_review" is the human submit-for-review manual route (a task
+// with no PR, moved by assign/start rather than claim). The GitHub PR webhook
+// (internal/hooks/github.go) is the automatic route to in_review for
+// PR-backed tasks. Every other transition has a dedicated endpoint (claim,
+// release, done, abandon, reopen) that also manages the task's lease.
 var patchStateFrom = map[string]string{
 	"ready":       "draft",
 	"in_progress": "in_review",
+	"in_review":   "in_progress",
 }
 
 // patchTask handles PATCH /api/v1/tasks/{id}: updates only the sent fields.
 // An optional "state" field requests a state transition in the same event;
-// see patchStateFrom for the two transitions PATCH may perform.
+// see patchStateFrom for the three transitions PATCH may perform.
 func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req patchTaskRequest
@@ -352,7 +360,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		stateFrom, ok = patchStateFrom[*req.State]
 		if !ok {
 			writeErr(w, http.StatusUnprocessableEntity,
-				`state must be "ready" (from draft) or "in_progress" (from in_review); use the claim, release, done, or abandon endpoints for other transitions`)
+				`state must be "ready" (from draft), "in_progress" (from in_review), or "in_review" (from in_progress); use the claim, release, done, or abandon endpoints for other transitions`)
 			return
 		}
 	}

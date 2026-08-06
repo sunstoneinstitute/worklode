@@ -9,7 +9,7 @@
   <h3>In progress</h3>
   {{if .InProgress}}
   <table>
-    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th></tr>
+    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th><th>Assignee</th></tr>
     {{range .InProgress}}
     <tr>
       <td><span class="badge state-in_progress">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td>
@@ -17,6 +17,7 @@
       <td>{{.Priority}}</td>
       <td>{{if .Holder}}{{.Holder.ActorID}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
       <td>{{if .Holder}}{{fmtTime .Holder.ExpiresAt}}{{end}}</td>
+      <td>{{.Assignee}}</td>
     </tr>
     {{end}}
   </table>
@@ -25,9 +26,9 @@
   <h3>In review</h3>
   {{if .InReview}}
   <table>
-    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
     {{range .InReview}}
-    <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td><td>{{.Assignee}}</td></tr>
     {{end}}
   </table>
   {{else}}<p class="muted">None</p>{{end}}
@@ -35,9 +36,9 @@
   <h3>Ready</h3>
   {{if .Ready}}
   <table>
-    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
     {{range .Ready}}
-    <tr><td><span class="badge state-ready">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    <tr><td><span class="badge state-ready">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td><td>{{.Assignee}}</td></tr>
     {{end}}
   </table>
   {{else}}<p class="muted">None</p>{{end}}
@@ -45,9 +46,9 @@
   <h3>Blocked</h3>
   {{if .Blocked}}
   <table>
-    <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+    <tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
     {{range .Blocked}}
-    <tr><td><span class="badge state-blocked">blocked</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+    <tr><td><span class="badge state-blocked">blocked</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td><td>{{.Assignee}}</td></tr>
     {{end}}
   </table>
   {{else}}<p class="muted">None</p>{{end}}
