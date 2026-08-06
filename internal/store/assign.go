@@ -22,10 +22,10 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 		return fmt.Errorf("check actor %s: %w", assignee, err)
 	}
 
-	var state, kind string
+	var state, kind, prev string
 	if err := tx.QueryRow(
-		`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &kind); err != nil {
+		`SELECT state, kind, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &kind, &prev); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
@@ -44,7 +44,8 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 	); err != nil {
 		return fmt.Errorf("assign task %s: %w", id, err)
 	}
-	return LogChange(tx, "task", id, eventID, map[string]string{"field": "assignee", "new": assignee})
+	return LogChange(tx, "task", id, eventID,
+		map[string]string{"field": "assignee", "old": prev, "new": assignee})
 }
 
 // UnassignTask clears taskID's assignee inside the given transaction,
@@ -55,17 +56,17 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 // from before a task's kind changed) must not be blocked by the very fact
 // that needs cleaning up. A missing task is ErrNotFound.
 func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
-	var state string
+	var state, prev string
 	if err := tx.QueryRow(
-		`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state); err != nil {
+		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &prev); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		return fmt.Errorf("lock task %s: %w", id, err)
 	}
 	if closedStateSet[state] {
-		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
+		return fmt.Errorf("task %s is %s: cannot unassign: %w", id, state, ErrInvalidInput)
 	}
 
 	if _, err := tx.Exec(
@@ -74,7 +75,8 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 	); err != nil {
 		return fmt.Errorf("unassign task %s: %w", id, err)
 	}
-	return LogChange(tx, "task", id, eventID, map[string]string{"field": "assignee", "new": ""})
+	return LogChange(tx, "task", id, eventID,
+		map[string]string{"field": "assignee", "old": prev, "new": ""})
 }
 
 // StartTask moves taskID from ready to in_progress on behalf of actorID
@@ -133,8 +135,10 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 		); err != nil {
 			return "", fmt.Errorf("assign task %s: %w", id, err)
 		}
+		// old is always "" here: this branch only runs when the task was
+		// unassigned.
 		if err := LogChange(tx, "task", id, eventID,
-			map[string]string{"field": "assignee", "new": actorID}); err != nil {
+			map[string]string{"field": "assignee", "old": "", "new": actorID}); err != nil {
 			return "", err
 		}
 		assignee = actorID

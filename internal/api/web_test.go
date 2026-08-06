@@ -188,6 +188,24 @@ func TestTaskPage(t *testing.T) {
 	if strings.Contains(body, "Held by") {
 		t.Fatalf("human-started task page unexpectedly shows a lease holder:\n%s", body)
 	}
+	// The auto-assign wrote {"field":"assignee","old":"","new":"erin"}, which
+	// summarizeStateChange renders as a "set to" line.
+	bodyContains(t, body, "assignee set to erin")
+
+	// Reassigning records the previous assignee, so the timeline renders the
+	// old -> new form instead.
+	if err := st.CreateActor(context.Background(), "frank", "human", "Frank", false); err != nil {
+		t.Fatalf("create actor frank: %v", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/assign", token, map[string]any{"assignee": "frank"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reassign WL-2 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "assignee: erin -&gt; frank")
 
 	rr = doReq(t, h, "GET", "/tasks/WL-99", "", nil)
 	if rr.Code != http.StatusNotFound {

@@ -2,11 +2,43 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+// assigneeChanges returns the task's "assignee" state_log payloads, oldest
+// first, so a test can assert the recorded old -> new provenance.
+func assigneeChanges(t *testing.T, s *Store, id string) []map[string]string {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT change FROM state_log WHERE entity_kind = 'task' AND entity_id = $1 ORDER BY id`, id)
+	if err != nil {
+		t.Fatalf("read state_log for %s: %v", id, err)
+	}
+	defer rows.Close()
+	var out []map[string]string
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			t.Fatalf("scan state_log: %v", err)
+		}
+		var change map[string]string
+		if err := json.Unmarshal([]byte(raw), &change); err != nil {
+			t.Fatalf("unmarshal change %q: %v", raw, err)
+		}
+		if change["field"] == "assignee" {
+			out = append(out, change)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate state_log: %v", err)
+	}
+	return out
+}
 
 // assignTask drives AssignTask through RecordEvent, the way production code
 // will use it.
@@ -132,6 +164,73 @@ func TestUnassignTaskClears(t *testing.T) {
 	}
 	if got.Assignee != "" {
 		t.Fatalf("Assignee after unassign: got %q, want empty", got.Assignee)
+	}
+}
+
+// TestAssignmentChangesRecordPreviousAssignee pins the state_log provenance
+// for the three write paths: without "old", a reassignment loses who held the
+// task before, and the web timeline degrades to "assignee set to ...".
+func TestAssignmentChangesRecordPreviousAssignee(t *testing.T) {
+	s := openTaskStore(t)
+	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("CreateActor bob: %v", err)
+	}
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	// unassigned -> stig: old is the empty string, not a missing key.
+	if err := assignTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
+		t.Fatalf("AssignTask stig: %v", err)
+	}
+	// stig -> bob: the previous assignee is carried.
+	if err := assignTask(t, s, taskTestNow, task.ID, "bob"); err != nil {
+		t.Fatalf("AssignTask bob: %v", err)
+	}
+	// bob -> unassigned.
+	if err := unassignTask(t, s, taskTestNow, task.ID); err != nil {
+		t.Fatalf("UnassignTask: %v", err)
+	}
+
+	got := assigneeChanges(t, s, task.ID)
+	want := []map[string]string{
+		{"field": "assignee", "old": "", "new": "stig"},
+		{"field": "assignee", "old": "stig", "new": "bob"},
+		{"field": "assignee", "old": "bob", "new": ""},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("assignee state_log:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestStartTaskAutoAssignRecordsEmptyOld covers StartTask's auto-assign path,
+// the third LogChange call site.
+func TestStartTaskAutoAssignRecordsEmptyOld(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, err := startTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
+		t.Fatalf("StartTask: %v", err)
+	}
+
+	got := assigneeChanges(t, s, task.ID)
+	want := []map[string]string{{"field": "assignee", "old": "", "new": "stig"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("assignee state_log:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestUnassignTaskTerminalStateRejected also pins the verb in the message:
+// it read "cannot assign" while the caller was unassigning.
+func TestUnassignTaskTerminalStateRejected(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+	walkTo(t, s, task.ID, "merged")
+
+	err := unassignTask(t, s, taskTestNow, task.ID)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unassign on merged task: want ErrInvalidInput, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "cannot unassign") {
+		t.Fatalf("unassign error %v does not say \"cannot unassign\"", err)
 	}
 }
 
