@@ -32,6 +32,11 @@ func newTaskCmd() *cobra.Command {
 		newTaskClaimCmd(),
 		newTaskRenewCmd(),
 		newTaskReleaseCmd(),
+		newTaskAssignCmd(),
+		newTaskUnassignCmd(),
+		newTaskStartCmd(),
+		newTaskStopCmd(),
+		newTaskSubmitCmd(),
 		newTaskDoneCmd(),
 		newTaskAbandonCmd(),
 		newTaskBlockCmd(),
@@ -100,7 +105,7 @@ func newTaskAddCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
-	var priority, parent string
+	var priority, parent, assignee string
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -116,7 +121,7 @@ func newTaskListCmd() *cobra.Command {
 				return err
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-				Project: sc.Project, States: states, Priority: priority, Parent: parent,
+				Project: sc.Project, States: states, Priority: priority, Parent: parent, Assignee: assignee,
 			})
 			if err != nil {
 				return err
@@ -133,6 +138,11 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this epic")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
+	// --mine is not implemented: the CLI has no stored notion of "who am I"
+	// (Config has no actor id, and there is no `lode whoami`). Wiring --mine
+	// to a guess would be inventing an identity mechanism the plan did not
+	// specify; --assignee <actor> covers the same query explicitly.
+	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
 	return cmd
 }
 
@@ -588,6 +598,153 @@ func newTaskReleaseCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "released %s\n", id)
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskAssignCmd() *cobra.Command {
+	var to string
+	cmd := &cobra.Command{
+		Use:   "assign <id> [--to <actor>]",
+		Short: "Assign a task to an actor (default: yourself)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.AssignTask(cmd.Context(), id, to)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&to, "to", "", "actor id to assign the task to (default: yourself)")
+	return cmd
+}
+
+func newTaskUnassignCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unassign <id>",
+		Short: "Clear a task's assignee",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.UnassignTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskStartCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "start <id>",
+		Short: "Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.StartTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskStopCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stop <id>",
+		Short: "Put a started task back to ready; keeps the assignment.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.StopTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskSubmitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "submit <id>",
+		Short: "Move your in-progress task to review.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.SubmitTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
 			return nil
 		},
 	}

@@ -270,8 +270,9 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// listTasks handles GET /api/v1/tasks?project=&state=&priority=&kind=&parent=.
-// state is repeatable and/or comma-separated.
+// listTasks handles
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=. state
+// is repeatable and/or comma-separated.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -288,6 +289,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Priority: q.Get("priority"),
 		Kind:     q.Get("kind"),
 		Parent:   q.Get("parent"),
+		Assignee: q.Get("assignee"),
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

@@ -378,6 +378,7 @@ type Task struct {
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	Skills             []string  `json:"skills"`
+	Assignee           string    `json:"assignee"`
 }
 
 // Lease is the wire form of a lease.
@@ -469,6 +470,8 @@ type TaskListFilter struct {
 	Kind     string
 	// Parent narrows to the direct children of this task id.
 	Parent string
+	// Assignee narrows to tasks assigned to this actor id.
+	Assignee string
 }
 
 // TaskListResponse is the response body of ListTasks.
@@ -493,6 +496,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListRespo
 	}
 	if f.Parent != "" {
 		q.Set("parent", f.Parent)
+	}
+	if f.Assignee != "" {
+		q.Set("assignee", f.Assignee)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
@@ -885,6 +891,46 @@ func (c *Client) ReadyTask(ctx context.Context, id string) (Task, []byte, error)
 // task under review back to in_progress after a review requested changes.
 func (c *Client) ReworkTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "in_progress")
+}
+
+// SubmitTask calls PATCH /api/v1/tasks/{id} with state "in_review": move the
+// caller's in_progress task to review.
+func (c *Client) SubmitTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.patchTaskState(ctx, id, "in_review")
+}
+
+// AssignTask calls POST /api/v1/tasks/{id}/assign: sets the task's assignee.
+// An empty assignee assigns the task to the calling actor.
+func (c *Client) AssignTask(ctx context.Context, id, assignee string) (Task, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/assign",
+		map[string]string{"assignee": assignee})
+	if err != nil {
+		return Task{}, nil, err
+	}
+	var t Task
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+	}
+	return t, raw, nil
+}
+
+// UnassignTask calls POST /api/v1/tasks/{id}/unassign: clears the task's
+// assignee.
+func (c *Client) UnassignTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.taskAction(ctx, id, "unassign")
+}
+
+// StartTask calls POST /api/v1/tasks/{id}/start: moves the task to
+// in_progress on behalf of the caller without taking a lease, assigning the
+// caller when the task is unassigned.
+func (c *Client) StartTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.taskAction(ctx, id, "start")
+}
+
+// StopTask calls POST /api/v1/tasks/{id}/stop: moves the caller's
+// in_progress task back to ready, keeping the assignment.
+func (c *Client) StopTask(ctx context.Context, id string) (Task, []byte, error) {
+	return c.taskAction(ctx, id, "stop")
 }
 
 func (c *Client) patchTaskState(ctx context.Context, id, state string) (Task, []byte, error) {
