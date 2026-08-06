@@ -144,6 +144,16 @@ once an instance is running (dogfooding); until then this file is the list.
   `DeleteGraph` fold the same ingress statuses into an opaque `httpError`.
   During a graph-server rollout the acceptance harness patiently retries the
   query but hard-fails the PUT.
+- **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 009
+  must-have 3, publishing half): decided 2026-08-06 that this repo serves the
+  files from its own site, without rdf-registry (rdf-registry#31 closed).
+  `deploy-www.yml` uploads only `www/`, so `ns/` is not served today — the
+  deploy must include the ttl files and add `ns/**` to its path trigger. The
+  namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
+  fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
+  content-negotiate — pick a serving strategy deliberately. Specs 006 §9,
+  009 item 3, 014 §1 and the `ns/ontology.ttl` header still record the
+  rdf-registry approach and need amending.
 
 ## From the 2026-08-04 architecture grilling
 
