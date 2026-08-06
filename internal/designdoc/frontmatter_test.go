@@ -21,8 +21,8 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	if fm == nil {
 		t.Fatal("Frontmatter is nil")
 	}
-	if fm.Status != "draft" {
-		t.Errorf("Status = %q, want draft", fm.Status)
+	if fm.Status != "accepted" {
+		t.Errorf("Status = %q, want accepted", fm.Status)
 	}
 	if fm.Issued != "2026-08-02" {
 		t.Errorf("Issued = %q, want 2026-08-02", fm.Issued)
