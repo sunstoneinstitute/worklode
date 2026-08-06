@@ -693,3 +693,16 @@ docs/plans/2026-08-03-spec-shorthand-references.md:
     task-5-reserve-spec-and-adr-as-project-keys: "## Task 5: Reserve `SPEC` and `ADR` as project keys"
     task-6-commit-project-key-and-close-the-docs: "## Task 6: Commit `project_key` and close the docs"
     done-when: "## Done when"
+docs/plans/2026-08-06-human-assignment.md:
+  sections:
+    global-constraints: "## Global constraints"
+    semantics-shared-by-every-task-below: "## Semantics (shared by every task below)"
+    tasks: "## Tasks"
+    task-1-migration-tasksassignee: "### Task 1 — Migration: `tasks.assignee`"
+    task-2-store-assignee-on-task-assignunassignstartstop: "### Task 2 — Store: assignee on `Task`, assign/unassign/start/stop"
+    task-3-api-assignunassignstartstop-endpoints-submit-via-patch-metrics: "### Task 3 — API: assign/unassign/start/stop endpoints, submit via PATCH, metrics"
+    task-4-cli-lode-task-assignunassignstartstopsubmit-mine: "### Task 4 — CLI: `lode task assign/unassign/start/stop/submit`, `--mine`"
+    task-5-web-ui-assignee-on-board-and-task-pages: "### Task 5 — Web UI: assignee on board and task pages"
+    task-6-keycloak-worklode-client-and-roles-in-the-org-realm: "### Task 6 — Keycloak: `worklode` client and roles in the org realm"
+    task-7-deploy-point-worklode-at-keycloak-hzdev-then-hzprod: "### Task 7 — Deploy: point worklode at Keycloak (hzdev, then hzprod)"
+    task-8-e2e-the-human-lifecycle-through-public-surfaces: "### Task 8 — e2e: the human lifecycle through public surfaces"

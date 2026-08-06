@@ -7,6 +7,7 @@
   &nbsp;project: <a href="/projects/{{.Task.ProjectID}}">{{.Task.ProjectID}}</a>
 </p>
 <p class="muted">Created {{fmtTime .Task.CreatedAt}} by {{.Task.CreatedBy}} &mdash; updated {{fmtTime .Task.UpdatedAt}}</p>
+{{if .Task.Assignee}}<p class="muted">Assigned to {{.Task.Assignee}}</p>{{end}}
 
 {{if .Holder}}
 <p><strong>Held by:</strong> {{.Holder.ActorID}} (expires {{fmtTime .Holder.ExpiresAt}})</p>
