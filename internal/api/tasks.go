@@ -317,12 +317,10 @@ type patchTaskRequest struct {
 // current state. Only lease-free transitions are allowed here: "ready"
 // publishes a draft, "in_progress" reworks a task whose review requested
 // changes, "in_review" is the human submit-for-review manual route (a task
-// with no PR, moved by assign/start rather than claim). The PR webhook path
-// (internal/hooks/github.go, ~line 358) stays the automatic route to
-// in_review for code tasks — the two never race, since a claimed (leased)
-// task normally goes through that path, not this one. Every other
-// transition has a dedicated endpoint (claim, release, done, abandon,
-// reopen) that also manages the task's lease.
+// with no PR, moved by assign/start rather than claim). The GitHub PR webhook
+// (internal/hooks/github.go) is the automatic route to in_review for
+// PR-backed tasks. Every other transition has a dedicated endpoint (claim,
+// release, done, abandon, reopen) that also manages the task's lease.
 var patchStateFrom = map[string]string{
 	"ready":       "draft",
 	"in_progress": "in_review",

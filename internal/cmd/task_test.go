@@ -340,10 +340,24 @@ func TestTaskListAssigneeFilterAndRendering(t *testing.T) {
 	if !strings.Contains(out, "ASSIGNEE") {
 		t.Fatalf("task list output missing ASSIGNEE column:\n%s", out)
 	}
+	// The row must exist *and* carry "bob" in the ASSIGNEE column. Checking
+	// the whole line would also match the title, and a loop with no `found`
+	// flag would pass if the row disappeared entirely. Columns are
+	// tabwriter-padded and all single-token up to TITLE, so field 5 is
+	// ASSIGNEE.
+	var found bool
 	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, bobs.ID) && !strings.Contains(line, "bob") {
-			t.Fatalf("task list row for %s missing assignee bob:\n%s", bobs.ID, out)
+		if !strings.HasPrefix(line, bobs.ID) {
+			continue
 		}
+		found = true
+		fields := strings.Fields(line)
+		if len(fields) < 6 || fields[5] != "bob" {
+			t.Fatalf("task list row for %s has assignee column %v, want bob:\n%s", bobs.ID, fields, out)
+		}
+	}
+	if !found {
+		t.Fatalf("task list output has no row for %s:\n%s", bobs.ID, out)
 	}
 
 	// Rendered (non-JSON) show has an "assignee:" line.

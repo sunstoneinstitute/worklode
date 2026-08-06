@@ -138,10 +138,8 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this epic")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
-	// --mine is not implemented: the CLI has no stored notion of "who am I"
-	// (Config has no actor id, and there is no `lode whoami`). Wiring --mine
-	// to a guess would be inventing an identity mechanism the plan did not
-	// specify; --assignee <actor> covers the same query explicitly.
+	// No --mine: the CLI has no caller identity to resolve it to (see
+	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
 	return cmd
 }

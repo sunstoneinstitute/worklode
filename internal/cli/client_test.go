@@ -1495,10 +1495,13 @@ func TestImportInbox(t *testing.T) {
 // assignment-verb client method issues, against a fake server that always
 // answers with a fixed task JSON.
 func TestClientAssignmentCalls(t *testing.T) {
-	var gotMethod, gotPath, gotBody string
+	var gotMethod, gotPath, gotBody, gotAssigneeParam string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(body)
+		// r.URL.Path excludes the query string, so the assignee filter has to
+		// be read separately or nothing here would notice it going missing.
+		gotAssigneeParam = r.URL.Query().Get("assignee")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"id":"WL-1","assignee":"alice"}`))
 	}))
@@ -1579,6 +1582,9 @@ func TestClientAssignmentCalls(t *testing.T) {
 		}
 		if gotPath != "/api/v1/tasks" {
 			t.Fatalf("ListTasks path = %s, want /api/v1/tasks", gotPath)
+		}
+		if gotAssigneeParam != "bob" {
+			t.Fatalf("ListTasks assignee query param = %q, want bob", gotAssigneeParam)
 		}
 	})
 }

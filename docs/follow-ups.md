@@ -8,7 +8,15 @@ once an instance is running (dogfooding); until then this file is the list.
   names to commit SHAs; normalize OCI digests (`sha256:`) in flux
   `revisionSHA`. Today only `git_tag` artifacts are created, so the
   flux-revision → artifact → task chain rarely connects.
-- **`assignee` filter** on `GET /api/v1/tasks` (join active leases).
+- **`assignee` filter does not see leases**: `GET /api/v1/tasks?assignee=` matches
+  `tasks.assignee` only, so a task an agent claimed (lease holder, no assignee) is
+  invisible to it. Joining active leases would make "everything X is working on"
+  one query instead of two.
+- **`lode task list --mine`**: blocked on there being no caller identity in the
+  CLI — no `whoami` route, no `Client.WhoAmI`, and `cli.Config` stores no actor
+  id (`lode login` prints `res.ActorID` and discards it). Persisting the actor id
+  at login, or adding the route, unblocks it; until then `--assignee <actor>` is
+  the explicit form.
 - **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
 - **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
