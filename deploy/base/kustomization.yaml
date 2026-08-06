@@ -32,3 +32,5 @@ configMapGenerator:
       - migrations/0008_session_cost.down.sql
       - migrations/0009_task_kinds.up.sql
       - migrations/0009_task_kinds.down.sql
+      - migrations/0010_task_assignee.up.sql
+      - migrations/0010_task_assignee.down.sql

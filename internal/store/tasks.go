@@ -12,14 +12,17 @@ import (
 
 // Task is one unit of work, identified by a per-project <KEY>-<n> id.
 type Task struct {
-	ID                 string
-	ProjectID          string
-	Title              string
-	Body               string
-	Priority           string
-	Kind               string
-	State              string
-	Concern            string
+	ID        string
+	ProjectID string
+	Title     string
+	Body      string
+	Priority  string
+	Kind      string
+	State     string
+	Concern   string
+	// Assignee is the actor who owns the task without necessarily holding a
+	// lease on it ("" = unassigned). See assign.go.
+	Assignee           string
 	NeedsDecomposition bool
 	CreatedBy          string
 	CreatedAt          time.Time
@@ -53,6 +56,7 @@ type TaskFilter struct {
 	Priority string
 	Kind     string
 	Parent   string
+	Assignee string
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -317,7 +321,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // "jsonb NOT NULL DEFAULT '[]'" (see migration 0007), so a bare cast is
 // enough — no coalesce needed, and prefixedTaskColumns below requires each
 // entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, needs_decomposition, created_by, created_at, updated_at, skills::text`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -325,14 +329,15 @@ type rowScanner interface {
 
 func scanTask(row rowScanner) (*Task, error) {
 	var t Task
-	var body, createdBy, concern sql.NullString
+	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON string
 	if err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON); err != nil {
 		return nil, err
 	}
 	t.Body = body.String
 	t.Concern = concern.String
+	t.Assignee = assignee.String
 	t.CreatedBy = createdBy.String
 	t.CreatedAt = t.CreatedAt.UTC()
 	t.UpdatedAt = t.UpdatedAt.UTC()
@@ -476,6 +481,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	if f.Kind != "" {
 		args = append(args, f.Kind)
 		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+	}
+	if f.Assignee != "" {
+		args = append(args, f.Assignee)
+		conds = append(conds, fmt.Sprintf(`assignee = $%d`, len(args)))
 	}
 	if f.Parent != "" {
 		args = append(args, f.Parent)

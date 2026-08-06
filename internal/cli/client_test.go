@@ -1490,3 +1490,186 @@ func TestImportInbox(t *testing.T) {
 		t.Fatalf("request body since = %v, want 2026-01-01T00:00:00Z", gotBody["since"])
 	}
 }
+
+// TestClientAssignmentCalls asserts the exact method, path, and body each
+// assignment-verb client method issues, against a fake server that always
+// answers with a fixed task JSON.
+func TestClientAssignmentCalls(t *testing.T) {
+	var gotMethod, gotPath, gotBody, gotAssigneeParam string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(body)
+		// r.URL.Path excludes the query string, so the assignee filter has to
+		// be read separately or nothing here would notice it going missing.
+		gotAssigneeParam = r.URL.Query().Get("assignee")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":"WL-1","assignee":"alice"}`))
+	}))
+	defer srv.Close()
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
+	ctx := context.Background()
+
+	t.Run("AssignTask with explicit assignee", func(t *testing.T) {
+		task, _, err := c.AssignTask(ctx, "WL-1", "bob")
+		if err != nil {
+			t.Fatalf("AssignTask: %v", err)
+		}
+		if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/assign" {
+			t.Fatalf("AssignTask hit %s %s", gotMethod, gotPath)
+		}
+		if !strings.Contains(gotBody, `"assignee":"bob"`) {
+			t.Fatalf("AssignTask body = %s, want assignee=bob", gotBody)
+		}
+		if task.ID != "WL-1" || task.Assignee != "alice" {
+			t.Fatalf("AssignTask decoded task = %+v", task)
+		}
+	})
+
+	t.Run("AssignTask defaults to self (empty assignee)", func(t *testing.T) {
+		if _, _, err := c.AssignTask(ctx, "WL-1", ""); err != nil {
+			t.Fatalf("AssignTask: %v", err)
+		}
+		if !strings.Contains(gotBody, `"assignee":""`) {
+			t.Fatalf("AssignTask body = %s, want empty assignee carried through", gotBody)
+		}
+	})
+
+	t.Run("UnassignTask", func(t *testing.T) {
+		if _, _, err := c.UnassignTask(ctx, "WL-1"); err != nil {
+			t.Fatalf("UnassignTask: %v", err)
+		}
+		if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/unassign" {
+			t.Fatalf("UnassignTask hit %s %s", gotMethod, gotPath)
+		}
+	})
+
+	t.Run("StartTask", func(t *testing.T) {
+		if _, _, err := c.StartTask(ctx, "WL-1"); err != nil {
+			t.Fatalf("StartTask: %v", err)
+		}
+		if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/start" {
+			t.Fatalf("StartTask hit %s %s", gotMethod, gotPath)
+		}
+	})
+
+	t.Run("StopTask", func(t *testing.T) {
+		if _, _, err := c.StopTask(ctx, "WL-1"); err != nil {
+			t.Fatalf("StopTask: %v", err)
+		}
+		if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-1/stop" {
+			t.Fatalf("StopTask hit %s %s", gotMethod, gotPath)
+		}
+	})
+
+	t.Run("SubmitTask", func(t *testing.T) {
+		if _, _, err := c.SubmitTask(ctx, "WL-1"); err != nil {
+			t.Fatalf("SubmitTask: %v", err)
+		}
+		if gotMethod != http.MethodPatch || gotPath != "/api/v1/tasks/WL-1" {
+			t.Fatalf("SubmitTask hit %s %s", gotMethod, gotPath)
+		}
+		if !strings.Contains(gotBody, `"state":"in_review"`) {
+			t.Fatalf("SubmitTask body = %s, want state=in_review", gotBody)
+		}
+	})
+
+	t.Run("ListTasks with Assignee sets the assignee query param", func(t *testing.T) {
+		if _, _, err := c.ListTasks(ctx, cli.TaskListFilter{Assignee: "bob"}); err != nil {
+			t.Fatalf("ListTasks: %v", err)
+		}
+		if gotMethod != http.MethodGet {
+			t.Fatalf("ListTasks method = %s, want GET", gotMethod)
+		}
+		if gotPath != "/api/v1/tasks" {
+			t.Fatalf("ListTasks path = %s, want /api/v1/tasks", gotPath)
+		}
+		if gotAssigneeParam != "bob" {
+			t.Fatalf("ListTasks assignee query param = %q, want bob", gotAssigneeParam)
+		}
+	})
+}
+
+// TestClientAssignmentFlow exercises AssignTask, UnassignTask, StartTask,
+// StopTask, and SubmitTask against a real server and store, and checks
+// ListTasks' Assignee filter actually narrows results.
+func TestClientAssignmentFlow(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Assign me", Priority: "high", Kind: "feature"})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if task.Assignee != "" {
+		t.Fatalf("new task assignee = %q, want empty", task.Assignee)
+	}
+
+	assigned, _, err := c.AssignTask(ctx, task.ID, "bob")
+	if err != nil {
+		t.Fatalf("AssignTask: %v", err)
+	}
+	if assigned.Assignee != "bob" {
+		t.Fatalf("AssignTask result assignee = %q, want bob", assigned.Assignee)
+	}
+
+	list, _, err := c.ListTasks(ctx, cli.TaskListFilter{Project: "proj", Assignee: "bob"})
+	if err != nil {
+		t.Fatalf("ListTasks with Assignee: %v", err)
+	}
+	if len(list.Tasks) != 1 || list.Tasks[0].ID != task.ID {
+		t.Fatalf("ListTasks(Assignee=bob) = %+v, want just %s", list.Tasks, task.ID)
+	}
+	list, _, err = c.ListTasks(ctx, cli.TaskListFilter{Project: "proj", Assignee: "someone-else"})
+	if err != nil {
+		t.Fatalf("ListTasks with non-matching Assignee: %v", err)
+	}
+	if len(list.Tasks) != 0 {
+		t.Fatalf("ListTasks(Assignee=someone-else) = %+v, want none", list.Tasks)
+	}
+
+	unassigned, _, err := c.UnassignTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("UnassignTask: %v", err)
+	}
+	if unassigned.Assignee != "" {
+		t.Fatalf("UnassignTask result assignee = %q, want empty", unassigned.Assignee)
+	}
+
+	// AssignTask("") assigns to the caller (alice), then start moves it to
+	// in_progress without a lease, stop puts it back to ready keeping the
+	// assignment, and submit (after a re-start) moves it to in_review.
+	if _, _, err := c.AssignTask(ctx, task.ID, ""); err != nil {
+		t.Fatalf("AssignTask (self): %v", err)
+	}
+	started, _, err := c.StartTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("StartTask: %v", err)
+	}
+	if started.State != "in_progress" || started.Assignee != "alice" {
+		t.Fatalf("StartTask result = %+v, want in_progress/alice", started)
+	}
+
+	stopped, _, err := c.StopTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("StopTask: %v", err)
+	}
+	if stopped.State != "ready" || stopped.Assignee != "alice" {
+		t.Fatalf("StopTask result = %+v, want ready/alice (assignment kept)", stopped)
+	}
+
+	if _, _, err := c.StartTask(ctx, task.ID); err != nil {
+		t.Fatalf("re-StartTask: %v", err)
+	}
+	submitted, _, err := c.SubmitTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("SubmitTask: %v", err)
+	}
+	if submitted.State != "in_review" {
+		t.Fatalf("SubmitTask result state = %q, want in_review", submitted.State)
+	}
+}

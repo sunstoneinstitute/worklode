@@ -68,12 +68,17 @@ func Money(amount string) string {
 	return fmt.Sprintf("%d.%02d", units/100, units%100)
 }
 
-// TaskTable prints one row per task: id, priority, kind, state, project, title.
+// TaskTable prints one row per task: id, priority, kind, state, project,
+// assignee (- when unassigned), title.
 func TaskTable(w io.Writer, tasks []Task) {
 	tw := newTabwriter(w)
-	fmt.Fprintln(tw, "ID\tPRIORITY\tKIND\tSTATE\tPROJECT\tTITLE")
+	fmt.Fprintln(tw, "ID\tPRIORITY\tKIND\tSTATE\tPROJECT\tASSIGNEE\tTITLE")
 	for _, t := range tasks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Priority, t.Kind, t.State, t.Project, t.Title)
+		assignee := t.Assignee
+		if assignee == "" {
+			assignee = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Priority, t.Kind, t.State, t.Project, assignee, t.Title)
 	}
 	tw.Flush()
 }
@@ -86,6 +91,11 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
 	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
 	fmt.Fprintf(w, "  state:    %s\n", t.State)
+	assignee := t.Assignee
+	if assignee == "" {
+		assignee = "-"
+	}
+	fmt.Fprintf(w, "  assignee: %s\n", assignee)
 	if t.Hierarchy.Parent != nil {
 		fmt.Fprintf(w, "  parent:   %s  %s (%s)\n",
 			t.Hierarchy.Parent.ID, t.Hierarchy.Parent.Title, t.Hierarchy.Parent.State)

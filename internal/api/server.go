@@ -177,6 +177,10 @@ type server struct {
 	syncDuration prometheus.Histogram
 	syncItems    *prometheus.CounterVec
 
+	// assignments counts task assignment actions (assign, unassign, start,
+	// stop); see assign.go.
+	assignments *prometheus.CounterVec
+
 	// Web UI templates, parsed once at startup (template.Must panics on a
 	// parse error, so a broken template fails fast at boot, not on first
 	// request). One *template.Template per page — see parseWebTemplates.
@@ -372,6 +376,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("POST /api/v1/tasks/{id}/claim", s.auth(s.claimTask))
 	mux.Handle("POST /api/v1/tasks/{id}/renew", s.auth(s.renewLease))
 	mux.Handle("POST /api/v1/tasks/{id}/release", s.auth(s.releaseLease))
+	mux.Handle("POST /api/v1/tasks/{id}/assign", s.auth(s.assignTask))
+	mux.Handle("POST /api/v1/tasks/{id}/unassign", s.auth(s.unassignTask))
+	mux.Handle("POST /api/v1/tasks/{id}/start", s.auth(s.startTask))
+	mux.Handle("POST /api/v1/tasks/{id}/stop", s.auth(s.stopTask))
 	mux.Handle("POST /api/v1/tasks/{id}/lease/worktree", s.auth(s.rebindWorktree))
 	mux.Handle("POST /api/v1/tasks/{id}/agent-session", s.auth(s.touchAgentSession))
 	mux.Handle("POST /api/v1/tasks/{id}/agent-session/end", s.auth(s.endAgentSession))
