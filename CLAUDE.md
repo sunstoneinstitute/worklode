@@ -102,8 +102,8 @@ the `can-be-tested` label forces a run.
 - Task branches are `<prefix><task-id>-<slug>` (default prefix `lode/`;
   legacy `wl/` still recognized for correlation). The server is the authority
   on branch names.
-- `MODEL_SELECTION.md` defines which Claude model tier each agent role uses
-  when working this repo with subagents.
+- `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
+  reasoning effort each agent role uses when working this repo with subagents.
 - Specs and plans carry YAML frontmatter whose keys are ontology property
   names, and spec sections carry `{#sec-N}` anchors that are **frozen once the
   spec is accepted** — amend or supersede a section, never renumber it. Before
