@@ -117,7 +117,7 @@ func TestTaskPage(t *testing.T) {
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
-			HeadRef: "wl/WL-1-add-feature", HeadSHA: "headsha1",
+			HeadRef: "WL-1-add-feature", HeadSHA: "headsha1",
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(),
 		}, "")
 		return err
@@ -127,7 +127,7 @@ func TestTaskPage(t *testing.T) {
 		ms := mergeSHA
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
-			HeadRef: "wl/WL-1-add-feature", HeadSHA: "headsha1", MergeSHA: &ms,
+			HeadRef: "WL-1-add-feature", HeadSHA: "headsha1", MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(), MergedAt: &merged,
 		}, "")
 		return err

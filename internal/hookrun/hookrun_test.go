@@ -194,7 +194,7 @@ func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskI
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	slug := strings.TrimPrefix(resp.Branch, store.BranchPrefix()+task.ID+"-")
+	slug := strings.TrimPrefix(resp.Branch, task.ID+"-")
 	wtDir = filepath.Join(root, "wt", task.ID+"-"+slug)
 	if out, err := exec.Command("git", "-C", root, "worktree", "add", wtDir, "-b", resp.Branch).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)

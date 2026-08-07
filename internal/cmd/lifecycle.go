@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -153,8 +152,8 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		return err
 	}
 
-	// The server is the authority on the branch name (its prefix is
-	// server-configured), so both paths take it from the claim response.
+	// The server is the authority on the branch name (rendered from
+	// LODE_BRANCH_TEMPLATE), so both paths take it from the claim response.
 	var taskID, slug, branch string
 	switch {
 	case id != "":
@@ -182,7 +181,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		branch = resp.Task.Branch
 	}
 	if branch == "" {
-		branch = worktree.BranchName(store.DefaultBranchPrefix, taskID, slug)
+		branch = worktree.BranchName(taskID, slug)
 	}
 
 	dir := filepath.Join(root, worktree.DirName(taskID, slug))

@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -522,7 +521,7 @@ func newTaskClaimCmd() *cobra.Command {
 			// only covers a server too old to send one.
 			branch := resp.Task.Branch
 			if branch == "" {
-				branch = store.DefaultBranchPrefix + resp.Task.ID + "-" + resp.Task.Slug
+				branch = resp.Task.ID + "-" + resp.Task.Slug
 			}
 			if resp.DryRun {
 				fmt.Fprintf(out, "would claim %s (%s) — branch %s\n", resp.Task.ID, resp.Task.Slug, branch)

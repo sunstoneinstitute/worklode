@@ -227,7 +227,7 @@ func TestPushUnmappedRepoIgnored(t *testing.T) {
 	e := newEnv(t)
 	e.seedTask(t)
 	body := []byte(`{
-		"ref": "refs/heads/lode/WL-1-add-widget",
+		"ref": "refs/heads/WL-1-add-widget",
 		"repository": {"full_name": "other/repo", "default_branch": "main"},
 		"commits": [{"id": "1111111111111111111111111111111111111111", "message": "Add widget"}]
 	}`)
@@ -259,7 +259,7 @@ func TestPushUnrelatedRefsAreNoOps(t *testing.T) {
 		"d-tag": []byte(`{
 			"ref": "refs/tags/v1",
 			"repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
-			"commits": [{"id": "7777777777777777777777777777777777777777", "message": "Merge branch 'lode/WL-1-add-widget'"}]
+			"commits": [{"id": "7777777777777777777777777777777777777777", "message": "Merge branch 'WL-1-add-widget'"}]
 		}`),
 	}
 	for id, body := range bodies {

@@ -20,10 +20,10 @@ var dirRe = regexp.MustCompile(`^([A-Z][A-Z0-9]*-\d+)(?:-[a-z0-9-]+)?$`)
 // DirName returns the deterministic worktree directory name for a task.
 func DirName(taskID, slug string) string { return "wt/" + taskID + "-" + slug }
 
-// BranchName returns the branch name for a task's worktree. The prefix is
-// server-configured (LODE_BRANCH_PREFIX); callers with a server response
-// should use the branch it carries instead of rebuilding one here.
-func BranchName(prefix, taskID, slug string) string { return prefix + taskID + "-" + slug }
+// BranchName is the client-side fallback branch for a task, used only when a
+// server response carries no branch. The server is the authority: it renders
+// LODE_BRANCH_TEMPLATE and every response carries the result (spec 030 §1).
+func BranchName(taskID, slug string) string { return taskID + "-" + slug }
 
 // ParseDir returns the task id when path's last two segments are
 // wt/<WL-n>-<slug>. This is the uniform hook guard: ok=false ⇒ NOP.

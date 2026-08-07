@@ -45,7 +45,7 @@ func TestTaskTimeline(t *testing.T) {
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
-			HeadRef: "wl/WL-1-add-feature", HeadSHA: headSHA,
+			HeadRef: "WL-1-add-feature", HeadSHA: headSHA,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1),
 		}, "")
 		return err
@@ -80,7 +80,7 @@ func TestTaskTimeline(t *testing.T) {
 		ms := mergeSHA
 		_, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
-			HeadRef: "wl/WL-1-add-feature", HeadSHA: headSHA, MergeSHA: &ms,
+			HeadRef: "WL-1-add-feature", HeadSHA: headSHA, MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1), MergedAt: &merged,
 		}, "")
 		return err
