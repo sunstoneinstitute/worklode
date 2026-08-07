@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // The integrations `lode install`/`lode uninstall` know how to manage. Both
@@ -107,10 +109,19 @@ type agentUninstall struct {
 // installHooks installs every selected integration for the repo containing
 // dir. On error it still returns whatever integrations succeeded before the
 // failing one, so the caller can report what actually landed rather than
-// discarding it.
-func installHooks(dir string, targets hookTargets, scope string) (installResult, error) {
+// discarding it. cmd supplies the stream warnings go to.
+//
+// Enabling the worktree config extension is an enhancement to task-id
+// stamping, not a prerequisite for the hooks: a repo where it cannot be
+// enabled (a bare clone, say) still gets its pre-commit and agent hooks, so a
+// failure there warns and continues rather than aborting the run. `lode next`
+// treats the same failure the same way.
+func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope string) (installResult, error) {
 	var res installResult
 	if targets.vcs != "" {
+		if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: enable git worktree config extension: %v\n", err)
+		}
 		hooksDir, chainedTo, err := installGitHooks(dir)
 		if err != nil {
 			return res, err
@@ -178,7 +189,7 @@ func newInstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			res, err := installHooks(cwd, targets, scope)
+			res, err := installHooks(cmd, cwd, targets, scope)
 			if err != nil {
 				// Report whatever succeeded before failing: install is not
 				// atomic, and silently dropping that leaves the user thinking

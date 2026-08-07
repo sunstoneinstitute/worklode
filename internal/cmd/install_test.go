@@ -3,13 +3,25 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+// discardCmd is a throwaway command supplying the streams installHooks writes
+// warnings to, for tests that do not inspect them. Tests that do assert on a
+// warning build their own command with SetErr.
+func discardCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	return cmd
+}
 
 // targetsFor builds a bare command carrying the shared install/uninstall flags,
 // parses args against it, and resolves them — the same path both real commands
@@ -144,10 +156,76 @@ func TestInstallUninstallCmdFlags(t *testing.T) {
 	}
 }
 
+func TestInstallHooksEnablesWorktreeConfigExtension(t *testing.T) {
+	root := initGitRepo(t)
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal); err != nil {
+		t.Fatalf("installHooks: %v", err)
+	}
+	out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").Output()
+	if err != nil {
+		t.Fatalf("git config --get extensions.worktreeConfig: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "true" {
+		t.Fatalf("extensions.worktreeConfig = %q, want true", got)
+	}
+
+	// Re-running must stay idempotent — no error, still true.
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal); err != nil {
+		t.Fatalf("installHooks (second run): %v", err)
+	}
+}
+
+// TestInstallHooksWarnsButContinuesWhenExtensionRefused pins the enhancement's
+// blast radius: a repo where extensions.worktreeConfig cannot be enabled (here
+// one with core.worktree set, which EnableWorktreeConfigExtension refuses) must
+// still get its pre-commit and agent hooks, with the failure surfacing only as
+// a warning.
+func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
+	root := initGitRepo(t)
+	if out, err := exec.Command("git", "-C", root, "config", "core.worktree", root).CombinedOutput(); err != nil {
+		t.Fatalf("git config core.worktree: %v\n%s", err, out)
+	}
+
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(&stderr)
+
+	res, err := installHooks(cmd, root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks: %v (a refused worktree config extension must not abort the run)", err)
+	}
+	if res.VCS == nil || res.Agent == nil {
+		t.Fatalf("result = %+v, want both integrations installed", res)
+	}
+	if _, err := os.Stat(filepath.Join(res.VCS.HooksDir, "pre-commit")); err != nil {
+		t.Fatalf("stat pre-commit hook: %v", err)
+	}
+	if _, err := os.Stat(res.Agent.Path); err != nil {
+		t.Fatalf("stat agent settings %s: %v", res.Agent.Path, err)
+	}
+	if !strings.Contains(stderr.String(), "warning: enable git worktree config extension") {
+		t.Fatalf("stderr = %q, want a warning about the worktree config extension", stderr.String())
+	}
+	if out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
+		t.Fatalf("extensions.worktreeConfig = %q, want unset after a refusal", strings.TrimSpace(string(out)))
+	}
+}
+
+func TestInstallHooksNoVCSSkipsWorktreeConfigExtension(t *testing.T) {
+	root := initGitRepo(t)
+	if _, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, scopeLocal); err != nil {
+		t.Fatalf("installHooks --no-vcs: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
+		t.Fatalf("extensions.worktreeConfig = %q, want unset when --no-vcs", strings.TrimSpace(string(out)))
+	}
+}
+
 func TestInstallHooksBothIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 
-	res, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -172,7 +250,7 @@ func TestInstallHooksBothIntegrations(t *testing.T) {
 func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 
-	res, err := installHooks(root, hookTargets{vcs: vcsGit}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --no-agent: %v", err)
 	}
@@ -184,7 +262,7 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	}
 
 	root2 := initGitRepo(t)
-	res2, err := installHooks(root2, hookTargets{agent: agentClaudeCode}, scopeLocal)
+	res2, err := installHooks(discardCmd(), root2, hookTargets{agent: agentClaudeCode}, scopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --no-vcs: %v", err)
 	}
@@ -203,7 +281,7 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 func TestUninstallHooksUndoesInstall(t *testing.T) {
 	root := initGitRepo(t)
 	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
-	if _, err := installHooks(root, targets, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 
@@ -233,7 +311,7 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 // below for the real end-to-end check.
 func TestInstallHooksJSONOmitsSkippedIntegration(t *testing.T) {
 	root := initGitRepo(t)
-	res, err := installHooks(root, hookTargets{vcs: vcsGit}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -274,7 +352,7 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
 	writeCorruptSettings(t, root)
 
-	res, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
 	if err == nil {
 		t.Fatal("installHooks with corrupt settings: err = nil, want a parse error")
 	}
@@ -292,7 +370,7 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
 	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
-	if _, err := installHooks(root, targets, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	writeCorruptSettings(t, root)
@@ -335,7 +413,7 @@ func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 
 func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	writeCorruptSettings(t, root)
@@ -577,7 +655,7 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 // output, not just in the struct.
 func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	t.Chdir(root)
