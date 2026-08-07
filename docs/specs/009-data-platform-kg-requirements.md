@@ -1,5 +1,6 @@
 ---
 status: accepted
+issued: 2026-07-22
 amendedBy:
   ".":
     - 014-design-documents-as-graph-objects.md

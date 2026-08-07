@@ -55,7 +55,7 @@ GitHub as a user is a follow-up spec.
   (`internal/oidc/oidc.go`); no GitHub identity appears anywhere in the
   Keycloak path.
 - `lode login` performs the provider-neutral browser loopback
-  (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`).
+  (`docs/specs/031-provider-neutral-cli-login.md`).
 
 ## 3. Design {#sec-3}
 

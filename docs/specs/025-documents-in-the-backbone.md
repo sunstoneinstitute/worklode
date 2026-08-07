@@ -8,7 +8,6 @@ requires:
   - 018-task-hierarchy.md
 amends:
   "#sec-2":
-    - 000-umbrella-architecture.md#sec-1
     - 014-design-documents-as-graph-objects.md#sec-0
     - 014-design-documents-as-graph-objects.md#sec-4
     - 014-design-documents-as-graph-objects.md#sec-10
@@ -25,6 +24,11 @@ amends:
     - 006-knowledge-graph.md#sec-1.1
     - 006-knowledge-graph.md#sec-1.2
     - 006-knowledge-graph.md#sec-1.3
+amendedBy:
+  "#sec-3":
+    - 027-event-watchers.md#sec-5
+  "#sec-10":
+    - 027-event-watchers.md#sec-6
 replaces:
   "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-8
@@ -110,6 +114,10 @@ architecture model around them. Still no fact with two owners — the graph's co
 projection, never an authoring surface.
 
 ## 3. Editorial lifecycle {#sec-3}
+
+> **Amendment pending (spec 027 §5, draft).** Minting a task that asks for review or planning
+> is not the act it asks for, so the watchers do not breach "acceptance and decomposition are
+> deliberate human acts". Stated below; it becomes effective when 027 is accepted.
 
 ```
 draft ──(manual accept, assignee only)──▶ accepted ──▶ superseded
@@ -250,6 +258,20 @@ declares (§4.1), `draft`, each carrying a reference to the document, and wire t
 `doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
 hand.
 
+The invariant binds `lode doc accept`, which is the only act that mints. Two cases sit outside
+it, both deliberately:
+
+- **Historical import.** Backfilling a plan whose execution already happened — or never will —
+  records the document at the status it actually reached and mints nothing. The importer is
+  not `doc accept`; a plan can therefore arrive `accepted` with an empty task set, and that is
+  a faithful record rather than a broken invariant. Read the invariant as scoped to plans
+  accepted through the verb.
+- **Re-acceptance after an edit.** An accepted plan stays freely mutable (§4), so re-accepting
+  one mints the task declarations that have no row yet and leaves every existing row alone —
+  never mutating a body, never deleting a task whose declaration disappeared. A minted task is
+  execution fact and outlives the declaration it came from; withdrawing work is a task
+  transition, not a document edit.
+
 A plan's task set is the query `tasks WHERE plan_doc = <doc>` — §1's rule applied to the case
 that most tempted a row. A root task would own no fact of its own: its state was computed from
 its children (018 §3.3), its body restated the document's, it was never claimable and never
@@ -381,6 +403,10 @@ is therefore one commit touching the Turtle, the generated code, and the migrati
 
 ## 10. Surfaces {#sec-10}
 
+> **Amendment pending (spec 027 §6, draft).** `lode doc submit` is 027's verb; it is listed
+> here because the review task it mints is what replaces a `proposed` status (§3). The entry
+> becomes effective when 027 is accepted.
+
 014 §10's reserved surface, now backed by the backbone store, plus the verbs this spec adds:
 
 ```
@@ -389,7 +415,7 @@ lode doc submit <id>                  hand a draft to review; mints the review t
 lode doc show <id> [--resolved]       --resolved inlines amendments and supersessions
 lode doc accept <id>                  the manual commit; on a plan, mints its tasks (§5)
 lode doc list --needs-planning        accepted specs with unplanned accepted sections
-lode doc list --needs-execution      accepted plans whose task set is unminted or unfinished
+lode doc list --needs-execution       accepted plans whose task set is unminted or unfinished
 lode doc coverage <id>                per-section implemented / unimplemented / stale
 lode doc revise | anchors             as 014 §10
 ```

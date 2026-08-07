@@ -48,9 +48,12 @@ Apply the `can-be-tested` label to force a full run.
 
 ## Content
 
-The copy is derived from `docs/specs/000-umbrella-architecture.md`. When the
-architecture changes materially — the two-store split, the three layers, the
-drift model — update both.
+The copy was derived from the umbrella spec, which has since been removed
+(the corpus is its own map — `docs/specs/index.yaml`). The two-store split and
+the ambition-reconciliation thesis are stated in `docs/specs/003-platform-graph-design.md`
+and `docs/specs/006-knowledge-graph.md`; the layer model in
+`docs/specs/007-drift-and-overview.md`. When the architecture changes materially,
+update this copy too — nothing derives it automatically.
 
 ## Logo
 

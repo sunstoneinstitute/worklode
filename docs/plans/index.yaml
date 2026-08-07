@@ -99,20 +99,6 @@ docs/plans/2026-07-20-hzdev-ci-deploy.md:
     task-20-push-and-open-the-provisioning-pr: "### Task 20: Push and open the provisioning PR"
     manual-follow-ups-not-automated-by-this-plan: "## Manual follow-ups (not automated by this plan)"
     self-review-notes: "## Self-review notes"
-docs/plans/2026-07-20-provider-neutral-cli-login-design.md:
-  sections:
-    problem: "## Problem"
-    goal: "## Goal"
-    architecture-server-mediated-loopback: "## Architecture: server-mediated loopback"
-    server-changes: "## Server changes"
-    new-endpoints: "### New endpoints"
-    the-reuse-seam-finishlogin: "### The reuse seam: `finishLogin`"
-    one-time-code-store: "### One-time code store"
-    cli-changes: "## CLI changes"
-    token-storage-os-keychain: "## Token storage: OS keychain"
-    security: "## Security"
-    kept-removed: "## Kept / removed"
-    testing: "## Testing"
 docs/plans/2026-07-20-provider-neutral-cli-login.md:
   sections:
     file-structure: "## File Structure"

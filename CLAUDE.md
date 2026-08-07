@@ -7,7 +7,8 @@ multi-agent, multi-repo work. It ships as a single Go binary, `lode`, that is
 server (`lode serve`), CLI client, Kubernetes pod watcher (`lode watch`), and
 migrator (`lode migrate`) in one, backed by Postgres with an append-only event
 log for provenance. Design lives in `docs/specs/` (numbered, flat); start with
-`000-umbrella-architecture.md`, which maps all sub-specs. Implementation plans
+`004-execution-backbone.md`; `docs/specs/index.yaml` is the generated map of
+every document's sections. Implementation plans
 live in `docs/plans/`; `docs/follow-ups.md` holds known non-blocking gaps —
 check it before filing something as new.
 
@@ -132,13 +133,22 @@ ground without adding a Python stack to a Go repo.
   on branch names.
 - `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
   reasoning effort each agent role uses when working this repo with subagents.
-- Specs and plans carry YAML frontmatter whose keys are ontology property
-  names, and spec sections carry `{#sec-N}` anchors that are **frozen once the
-  spec is accepted** — amend or supersede a section, never renumber it. Before
-  creating or editing anything in `docs/specs/` or `docs/plans/`, read
+- **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
+  frontmatter — no exceptions.** A spec needs `status` and, once accepted,
+  `issued`. A plan needs `status` and `implements`; when no spec governs it,
+  write `implements: NO-SPEC` (the reserved "no governing spec" sentinel, which
+  takes no project key — 026 §4.2a) rather than omitting the key, because an
+  absent `implements` is
+  indistinguishable from a forgotten one. Frontmatter keys are ontology
+  property names, ordered lifecycle → `implements` → dependency → amendment →
+  supersession. `scripts/secmeta.py` checks all of this on commit; it reports
+  and never rewrites, so a failure is yours to decide, not to re-run.
+- Spec sections carry `{#sec-N}` anchors that are **frozen once the spec is
+  accepted** — amend or supersede a section, never renumber it. Before creating
+  or editing anything in `docs/specs/` or `docs/plans/`, read
   `docs/authoring-design-docs.md`: filenames, the frontmatter schema, and how
   to amend/supersede. `scripts/secfmt.py` enforces the numbering (pre-commit
-  hook; docs-only PRs skip CI, so the hook is the real gate).
+  hook; docs-only PRs skip CI, so the hooks are the real gate).
 - `ns/` holds the `wl:` ontology extracted from specs 006/014/015/016:
   `ontology.ttl` (classes, properties, axioms), `concept.ttl` (SKOS enums),
   `shapes.ttl` (SHACL). It is the vocabulary the frontmatter keys come from, and

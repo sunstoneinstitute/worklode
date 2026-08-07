@@ -1,7 +1,7 @@
 ---
 status: accepted
 issued: 2026-07-21
-wasDerivedFrom: 003-platform-graph-design.md (D8, D9, D10, D12, D15)
+wasDerivedFrom: 003-platform-graph-design.md  # D8, D9, D10, D12, D15
 requires:
   - 004-execution-backbone.md
 amendedBy:
