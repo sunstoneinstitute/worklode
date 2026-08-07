@@ -57,6 +57,16 @@ Projects gain two pieces of metadata:
   (§7). Nullable; engineering projects have none.
 - **Labels** — free-form key/value metadata, set at promotion, that classification
   rules act on (§6.2). `kind=sunstone-story` is the first label with meaning.
+- **`horizon`** — `bounded` or `standing`. An investigation is bounded: it ends.
+  A project holding an in-house infrastructure component is standing: it does not.
+
+`horizon` is an attribute, not a class. 025 §8 deleted `wl:OngoingMaintenance`, and
+that deletion stands — restoring it would make "unbounded" a *kind of thing* disjoint
+from Project, so a standing infrastructure project could not be a Project at all, and
+could not carry a project key, tasks or a focus. Being unbounded is something a
+project *is*, not something it *is instead of*. The task-level reading of the same
+word is separate and needs no term either: a task with no milestone is ongoing
+maintenance, which is the query `milestone_id IS NULL` (§2).
 
 ## 2. Milestones and deliverables replace the epic {#sec-2}
 
@@ -297,7 +307,7 @@ is performed against:
 |---|---|
 | 018 | Epic-as-container retired; `checkHierarchy` parent rule; decompose no longer converts to epic |
 | 025 §6 | Convergent (epic already dropped) — note only |
-| 025 §8 | `wl:OngoingMaintenance` deletion reversed: milestone-less tasks are the concept's carrier |
+| 025 §8 | Replaced, not amended — Project is redefined and `milestone_id` is stored (§1, §2). 025's deletion of `wl:OngoingMaintenance` **stands**: see §1's `horizon` |
 | 025 plans 2–4 | Re-planned: document identity moves to §4's per-kind sequences |
 | 028 §2 | Assignee exists (human-assignment plan) — requirement satisfied, note only |
 | 028 §6 | Reviewer sets re-expressed as §7.1 approval rows |

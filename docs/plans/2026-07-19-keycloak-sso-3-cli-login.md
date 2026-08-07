@@ -5,7 +5,7 @@ requires:
   - 2026-07-19-keycloak-sso-1-server-core.md
 isReplacedBy:
   ".":
-    - 2026-07-20-provider-neutral-cli-login-design.md
+    - docs/specs/031-provider-neutral-cli-login.md
 ---
 # Keycloak SSO — Plan 3: CLI `wl login` Implementation Plan
 

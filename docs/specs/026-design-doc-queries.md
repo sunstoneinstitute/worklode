@@ -113,8 +113,13 @@ Nothing here counts plans per spec or expects a partition. Overlap is legal and 
 two plans claiming the same section means two plans touch it, not a modelling error.
 
 ```
-docs/specs/000-umbrella-architecture.md   accepted   6/6 unplanned   sec-1 sec-2 sec-3 …
+docs/specs/007-drift-and-overview.md      accepted   2/9 unplanned   sec-3.4 sec-5
 ```
+
+A plan whose `implements` is **`NO-SPEC`** declares that no spec governs it (§4.2a). It
+contributes coverage to nothing and is never itself a planning gap — the sentinel is how a
+standalone plan says so out loud, instead of carrying no `implements` and being
+indistinguishable from one that forgot.
 
 `--needs-planning` implies `status: accepted` — planning follows acceptance (025 §3), and a
 draft spec is not a planning gap. Combining it with a conflicting `--status` is an error
@@ -129,8 +134,8 @@ and listing the spec again would ask for it twice. §3.1's effectiveness gate go
 `implements`, where it would only misstate who still owes work.
 
 **Known weakness, stated rather than papered over.** No plan in the corpus today carries a
-section-scoped `implements` — all 36 claim whole documents — so on the current tree this
-query lists exactly one spec (000, which no plan implements) and is otherwise vacuous. A
+section-scoped `implements` — all of them claim whole documents — so on the current tree this
+query is close to vacuous: it can only list a spec no plan names at all. A
 whole-document claim is a coverage assertion that can never go stale: sections added by
 later amendment are covered retroactively by a plan written before they existed. The fix is
 authoring, not code — `docs/authoring-design-docs.md` gains a line requiring section-scoped
@@ -259,8 +264,8 @@ cannot be status-checked and is trusted rather than dropped.
 
 `--with-drafts` treats draft claims as effective, which answers the other useful question:
 what the corpus says once the open drafts land. Both readings are legitimate and neither is
-safe as the only one — spec 025 is draft today, and reading its amendment of 018 as settled
-would have the corpus describe a task kind that does not exist.
+safe as the only one — specs 014 and 015 are draft today, and reading their claims on 000 §2
+and 005 §1 as settled would have the corpus describe a vocabulary that does not exist.
 
 Both directions of every edge are read and unioned (`amends` with `amendedBy`, `replaces`
 with `isReplacedBy`), so a half-maintained mirror still registers the claim; §4 reports the
@@ -505,6 +510,40 @@ key — only delete the claim or leave it — and a §4.1 gate that refused on i
 commit to the corpus in the meantime. It becomes an ordinary tier-2 reference, and an ordinary
 defect when it dangles, once that key exists and it is rewritten `<KEY>-ADR-6`.
 
+### 4.2a `NO-SPEC` means "no governing spec" {#sec-4.2a}
+
+Some plans answer to no spec — a mechanical refactor, a build fix, a convention change too
+small to design. Leaving `implements` off says nothing: it reads the same as a plan whose
+author forgot, and neither the coverage queries nor a reviewer can tell the two apart. Spec
+number **0** is reserved to say it explicitly, and it is written:
+
+```yaml
+implements: NO-SPEC
+```
+
+**The sentinel carries no project key.** Spec 0 is not one project's zeroth spec — it is the
+absence of a spec, and absence is the same fact in every corpus. So `NO-SPEC` is the canonical
+spelling in any project, and `<KEY>-SPEC-0` in any project *means* it: the tier table of §4.2
+never runs, because there is no key to dispatch on. A renderer showing a reference to spec 0
+prints `NO-SPEC` whatever the source wrote.
+
+It names no file **by construction** — there is no spec 0 and there will not be one — so it is
+the one reference that resolves to nothing without being a defect. Everything else about tier 1
+is unchanged: a `WL-SPEC-<n>` for any other `n` must hit a file in this corpus.
+
+Three constraints, all checked by `scripts/secmeta.py`:
+
+- **Only on a plan's `implements`.** On `requires`, `amends` or `replaces` it would assert a
+  relationship to a document that does not exist, which is a dangling reference wearing a
+  sentinel's clothes.
+- **Written `NO-SPEC`, not `<KEY>-SPEC-0`.** The keyed form is recognised and reported so it
+  can be corrected, rather than silently accepted into two spellings of one thing. Zero-padding
+  is moot here for the same reason it is an error elsewhere in worklode's shorthand (014
+  §11.3) — though a *foreign* key such as `rdf-registry:ADR-0006` pads by its own convention,
+  which is none of our business.
+- **It is not a wildcard.** A plan that does implement a spec and names the sentinel instead is
+  wrong in a way no tool can catch, which is the cost of having the sentinel at all.
+
 ## 5. Plans carry `status` and `task` {#sec-5}
 
 Two frontmatter keys move from optional to expected on plans.
@@ -645,8 +684,11 @@ is the whole of what makes them possible, and it is what ships here.
 
 ## 10. Acceptance criteria {#sec-10}
 
-1. `lode doc list --needs-planning` against the current tree lists exactly
-   `000-umbrella-architecture.md` with 6 unplanned sections, and exits 0.
+1. `lode doc list --needs-planning` exits 0 and lists every accepted spec having at least one
+   section no plan's `implements` union names, with the unplanned anchors and not merely a
+   count. It hardcodes no document: the criterion this replaced asserted one specific spec and
+   became untrue the moment that spec was deleted. A plan carrying `implements: NO-SPEC`
+   (§4.2a) is absent from the output and adds coverage to nothing.
 2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task` is
    absent or open, and no `superseded` plan; every plan in the corpus carries a `status`, and
    one that does not is a reported defect.
@@ -660,7 +702,7 @@ is the whole of what makes them possible, and it is what ships here.
    into `.pre-commit-config.yaml`, never rewrites a file, and runs with no `lode` binary
    present.
 6. Every query is computed without contacting the server except `--needs-execution`.
-7. `lode doc show WL-SPEC-14#sec-2.1` prints 014 §11.1, and `secfmt.py` rewrites a
+7. `lode doc show WL-SPEC-14#sec-2.1` prints 014 §2.1, and `secfmt.py` rewrites a
    `requires: WL-SPEC-4` in a worklode document to `004-execution-backbone.md` while leaving
    a foreign `CMS-SPEC-4` untouched.
 8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
@@ -672,7 +714,7 @@ is the whole of what makes them possible, and it is what ships here.
 10. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
    script — and only that one — is deleted in the same change; `secfmt.py` keeps its hook and
    `secindex.py` stays a manual regeneration.
-11. Spec 025 being `draft` leaves 018's sections listed as current and marked `pending`;
-   `--with-drafts` drops the ones 025 replaces.
-9. The verb names, flags and semantics match 025 §10 and §7, so replacing `LoadCorpus` with
+11. Specs 014 and 015 being `draft` leaves their targets' sections listed as current and
+   marked `pending`, for `amends` as much as for `replaces`; `--with-drafts` applies both.
+12. The verb names, flags and semantics match 025 §10 and §7, so replacing `LoadCorpus` with
    a store-backed loader is the whole of the migration.

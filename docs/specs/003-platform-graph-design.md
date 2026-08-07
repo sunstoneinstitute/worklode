@@ -14,7 +14,6 @@ amendedBy:
     - 014-design-documents-as-graph-objects.md#sec-2
 isReplacedBy:
   ".":
-    - 000-umbrella-architecture.md
     - 004-execution-backbone.md
     - 005-prioritization-and-pickup.md
     - 006-knowledge-graph.md
@@ -28,8 +27,8 @@ isReplacedBy:
 
 > **Prefix renamed by 014 §1.** Read every `ls:` / `lsc:` / `lsid:` below as `wl:` / `wlc:` / `wlid:` under `https://worklode.io/ns/`.
 
-This design record holds decisions D1–D15. Specs `000-umbrella-architecture.md`
-and `004`–`009` graduated out of it; D-ids are not renumbered.
+This design record holds decisions D1–D15. Specs `004`–`009` graduated out of
+it; D-ids are not renumbered.
 
 Thesis: **development work as ambition reconciliation.** Intent is *declared*; reality
 is *observed*; every gap between them — architectural drift, an unimplemented spec, a

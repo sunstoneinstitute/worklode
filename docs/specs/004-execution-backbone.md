@@ -1,7 +1,7 @@
 ---
 status: accepted
 issued: 2026-07-21
-wasDerivedFrom: 003-platform-graph-design.md (D1–D3, D8, D11, D12, D14)
+wasDerivedFrom: 003-platform-graph-design.md  # D1–D3, D8, D11, D12, D14
 amendedBy:
   ".":
     - 010-per-project-task-keys.md

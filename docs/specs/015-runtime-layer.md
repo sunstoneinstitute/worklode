@@ -10,7 +10,6 @@ amends:
     - 006-knowledge-graph.md#sec-11
     - 007-drift-and-overview.md#sec-3.4
   "#sec-7":
-    - 000-umbrella-architecture.md#sec-2
     - 003-platform-graph-design.md#sec-1
     - 006-knowledge-graph.md#sec-3.2
     - 006-knowledge-graph.md#sec-4

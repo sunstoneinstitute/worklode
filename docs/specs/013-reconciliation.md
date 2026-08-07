@@ -1,5 +1,6 @@
 ---
 status: accepted
+issued: 2026-07-25
 requires:
   - 004-execution-backbone.md
   - 011-delivery-lifecycle.md
