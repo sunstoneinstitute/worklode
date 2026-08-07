@@ -109,6 +109,15 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
+- **`DefaultLeaseTTL = 2h` may be wrong for human/agent alternation**: the TTL
+  was sized for a task an agent executes start to finish, where a missed
+  commit-cadence heartbeat really does mean the agent died. A task that
+  alternates between agent and human control idles for longer than that
+  routinely, and now that delivery transitions no longer close leases the
+  sweeper is the main thing ending them — so a too-short TTL is felt more
+  often. Deliberately not changed yet: observe which stale-lease cases
+  actually show up first, then decide between a longer default, a per-project
+  TTL, or a distinction between agent-held and human-held leases.
 - **`graphserver` response bodies are never drained before `Close`**: the 200
   path of `Select` stops reading at the JSON decoder's closing brace, and
   `httpError`'s excerpt is capped at 512 bytes, so `net/http` can't reuse
