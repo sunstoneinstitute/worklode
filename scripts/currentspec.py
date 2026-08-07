@@ -12,8 +12,9 @@ supersession frontmatter of every spec, then drops what no longer holds:
 Amendments do not drop a section; they annotate it, because an amended section
 still states the design, just not alone.
 
-A claim only takes effect once the document making it is `accepted`: a draft's
-`replaces` is a proposal, so its target stays current and is marked `pending`.
+A claim only takes effect once the document making it is `accepted`, and this
+gate applies to `amends` as much as to `replaces`: a draft's claim is a
+proposal, so its target stays current and the claim is marked `pending`.
 `--with-drafts` treats draft claims as effective, which answers the other
 question -- what the corpus looks like once the open drafts land.
 
@@ -159,8 +160,12 @@ def main():
         return st is None or st in EFFECTIVE or (a.with_drafts and st == "draft")
 
     def notes_for(path, anchor):
-        """Amendments, plus replacements whose author has not been accepted yet."""
-        n = [f"amended by {name(*s)}" for s in sources_for(amended, path, anchor)]
+        """Claims landing here: effective ones annotate, pending ones are named
+        as proposals. The gate applies to `amends` exactly as to `replaces`."""
+        n = [
+            f"amended by {name(*s)}" if effective(s[0]) else f"pending {name(*s)}"
+            for s in sources_for(amended, path, anchor)
+        ]
         n += [
             f"pending {name(*s)}"
             for s in sources_for(replaced, path, anchor)

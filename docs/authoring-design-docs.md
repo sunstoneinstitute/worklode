@@ -132,6 +132,15 @@ Plans have no shorthand: they have no number, and no root task exists to stand
 in for one (025 §5 mints nothing above a plan's tasks). Reference a plan by
 path.
 
+**`NO-SPEC` is reserved for "no governing spec".** A plan that answers to no
+spec — a mechanical refactor, a build fix, a convention too small to design —
+writes `implements: NO-SPEC` rather than omitting the key, because an absent
+`implements` reads identically to a forgotten one. There is no spec 0 and there
+will not be one, so it is the only reference that resolves to nothing without
+being a defect. It takes no project key in any corpus — absence of a spec is not
+one project's spec 0 — so `WL-SPEC-0` is recognised but reported: write
+`NO-SPEC`. Valid on a plan's `implements` and nowhere else (026 §4.2a).
+
 A shorthand naming a project this checkout cannot reach is reported as
 `unresolved`, not as an error. Commit hooks run without a network or a built
 `lode`, so a cross-project reference is never hard-checked at commit time; `lode
@@ -266,11 +275,21 @@ successors under `isReplacedBy` at `"."`; each successor records `replaces`.
 ./scripts/secfmt.py -l          # list docs whose numbering/anchors are off
 ./scripts/secfmt.py -d <file>   # diff what it would change
 ./scripts/secfmt.py -l -w       # fix them and report what changed
+./scripts/secmeta.py            # check frontmatter against this file's schema
 ```
 
 The pre-commit hook runs `-l -w`: like `gofmt`, it rewrites the files, names
 them and fails, so you `git add` and commit again. Docs-only PRs skip CI, so the
 hook is the real gate.
+
+`secmeta.py` is the second hook and the opposite kind of tool — it reports and
+never rewrites, because a frontmatter value is a claim about the corpus and a
+wrong one is fixed by deciding what it should say. It checks the key set and the
+tree each key belongs on, the `status` and `issued` rules above, that a
+scalar-reference key holds a bare reference rather than prose wrapped around one,
+that the map-shaped keys are keyed by a section of the document making the claim,
+and that every reference and `#sec-N` fragment resolves. A cross-project
+shorthand is reported on stderr as `unresolved` and does not fail the run.
 
 Exit codes: `1` means formatting differs (`-l`/`-d`); `2` means it refused.
 Two refusals, neither of which you should paper over with `--force`:

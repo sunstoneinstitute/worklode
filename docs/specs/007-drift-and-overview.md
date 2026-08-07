@@ -1,6 +1,7 @@
 ---
 status: accepted
-wasDerivedFrom: 003-platform-graph-design.md (D5, D6, D12)
+issued: 2026-07-22
+wasDerivedFrom: 003-platform-graph-design.md  # D5, D6, D12
 amendedBy:
   "#sec-2.1":
     - 014-design-documents-as-graph-objects.md#sec-6

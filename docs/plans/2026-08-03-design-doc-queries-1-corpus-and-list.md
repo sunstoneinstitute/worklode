@@ -968,10 +968,13 @@ go run ./cmd/lode doc list | head
 go run ./cmd/lode doc list --needs-planning
 ```
 
-`--needs-planning` must list exactly `docs/specs/000-umbrella-architecture.md`
-with `6/6 unplanned` and exit 0 (the stderr `unresolved` line for 014's
-colon ref is expected). If any other spec appears, stop: either the corpus
-gained an accepted spec nobody planned (fine — verify by hand and adjust the
+`--needs-planning` must exit 0 and list exactly those accepted specs no plan's
+`implements` union covers, naming the unplanned anchors (the stderr
+`unresolved` line for 014's colon ref is expected). Do not hardcode the
+expected document — the earlier version of this step named
+`000-umbrella-architecture.md`, which has since been deleted. Derive the
+expectation from the corpus, then verify it by hand. If it disagrees, stop:
+either the corpus gained an accepted spec nobody planned (fine — adjust the
 expectation) or the coverage arithmetic is wrong. Do not "fix" it by editing
 docs.
 
@@ -1121,8 +1124,10 @@ executes second skips what is already done.
 
 Maps to spec 026 §10 (this plan's share):
 
-1. `lode doc list --needs-planning` on the current tree lists exactly
-   `000-umbrella-architecture.md`, `6/6 unplanned`, exit 0 (criterion 1).
+1. `lode doc list --needs-planning` exits 0 and lists every accepted spec with a
+   section no plan's `implements` union names, with the unplanned anchors and
+   no hardcoded document; a plan carrying `implements: NO-SPEC` is absent
+   from the output and adds coverage to nothing (criterion 1, 026 §4.2a).
 2. `lode doc list --needs-execution` lists every `status: accepted` plan whose
    `task` is absent or open, and no status-less plan (criterion 2).
 3. A dangling reference anywhere in `docs/` fails

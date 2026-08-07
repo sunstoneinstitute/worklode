@@ -9,10 +9,10 @@ amendedBy:
   "#sec-3.2":
     - 002-github-app-auth.md#sec-3.2
   ".":
-    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 031-provider-neutral-cli-login.md
 isReplacedBy:
   "#sec-4":
-    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 031-provider-neutral-cli-login.md
 ---
 # Spec 001 — Keycloak SSO for worklode
 
@@ -108,7 +108,7 @@ unconfigured the UI stays open as today.
 
 ## 4. CLI: `lode login` {#sec-4}
 
-> **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). The CLI no longer speaks OIDC; it opens the server's `/auth/cli/login` and redeems a one-time code at `/auth/cli/token`.
+> **Superseded by spec 031** (`031-provider-neutral-cli-login.md`). The CLI no longer speaks OIDC; it opens the server's `/auth/cli/login` and redeems a one-time code at `/auth/cli/token`.
 
 1. Start a localhost callback listener on port 8000 (fallback 18000).
 2. Open the browser to the Keycloak authorize URL (auth-code + PKCE).

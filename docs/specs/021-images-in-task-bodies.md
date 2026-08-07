@@ -1,5 +1,6 @@
 ---
 status: accepted
+issued: 2026-07-31
 requires:
   - 004-execution-backbone.md
   - 008-worklode-plugin.md

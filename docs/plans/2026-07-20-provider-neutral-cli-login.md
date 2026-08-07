@@ -14,7 +14,7 @@ implements:
 
 **Tech Stack:** Go 1.25 stdlib (`net/http`, `net`, `crypto/*`), `github.com/spf13/cobra`, `github.com/zalando/go-keyring` (new), existing `internal/store`, `internal/oidc`, `internal/api` cookie/HMAC helpers.
 
-**Design doc:** `docs/plans/2026-07-20-provider-neutral-cli-login-design.md`
+**Design doc:** `docs/specs/031-provider-neutral-cli-login.md`
 
 ---
 
@@ -116,7 +116,7 @@ Create `internal/api/cliauth.go`:
 // a signed cookie, and a token endpoint that redeems a one-time code for a wl_
 // token. The one-time code is minted in finishLogin (shared by both web
 // callbacks) once the actor is provisioned. See
-// docs/plans/2026-07-20-provider-neutral-cli-login-design.md.
+// docs/specs/031-provider-neutral-cli-login.md.
 package api
 
 import (

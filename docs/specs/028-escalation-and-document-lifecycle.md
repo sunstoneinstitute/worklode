@@ -79,6 +79,14 @@ An accepted document may be edited in place — no amendment edge, no supersessi
 refers to the section being edited. The amendment machinery of 014 §11 exists to protect inbound
 claims, so where there are no inbound claims it is ceremony.
 
+This narrows 025 §3's accepted-version guarantee rather than breaking it. Read that guarantee
+as **accepted *and used***: what an inbound claim pins is the text it pinned, and a section
+nobody pins has pinned nothing. The revision flow of 014 §5 — candidate draft against a stable
+identity, accepted version authoritative throughout — remains the only path for every section
+that has a referrer, which is every section the guarantee was written to protect. §3.1's
+mechanically-substantive list makes "has a referrer" the first rule the server checks, so the
+narrowing is enforced rather than asserted.
+
 **Referrers, for this purpose,** are accepted documents claiming the section through
 `requires`, `implements`, `amends` or `replaces`, and tasks already claimed against a plan that
 implements it. Two things deliberately do not count:
@@ -151,6 +159,14 @@ the corpus assert things nobody decided.
 A plan that has not been executed and `implements`-refers to a section amended in place is
 regenerated, not patched: its status becomes `stale` and a re-planning task is minted against
 it.
+
+**`stale` is stored, not derived.** Deriving it from amendment timestamps would recompute a
+verdict that an agent session already reached at real cost, and would recompute it differently
+as the corpus moves underneath it — a plan judged stale in August would silently un-stale when
+the amendment that caused it was itself superseded. A stored status also gives the re-planning
+task something to close against. It is set by the §3 edit path and cleared by re-acceptance,
+and every transition lands in the event log (§9), so the derivation remains reconstructible
+without being the source of truth.
 
 The same treatment applies to the exemption in §3: the triggering plan's own tasks that were
 minted but not yet claimed were derived from pre-amendment text. They are re-derived with the
@@ -236,5 +252,3 @@ rests on. Escalations per plan is the same measurement per document.
   `doc.patched` events with a non-substantive verdict and re-judging at a higher tier.
 - Whether a note should be able to carry a proposed replacement text without becoming a draft
   amendment document (§4 forbids the latter).
-- Whether `stale` on a plan (§5) belongs in the plan status scheme or is derived from the
-  amendment timestamps of the sections it implements.
