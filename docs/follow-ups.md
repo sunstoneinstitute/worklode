@@ -109,6 +109,13 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
+- **The `lode` plugin still exists in claude-public-plugins** (`plugins/lode/`,
+  published as `lode@sunstone-public`). It was in-sourced here so it versions
+  with the binary; removing the public copy is deliberately a separate step,
+  once `lode@worklode` is confirmed installing on both Claude Code and Codex.
+  Until then two marketplaces publish the same plugin. Removing it also needs
+  the `sunstone-public` marketplace entry dropped and anyone still on
+  `lode@sunstone-public` migrated.
 - **`DefaultLeaseTTL = 2h` may be wrong for human/agent alternation**: the TTL
   was sized for a task an agent executes start to finish, where a missed
   commit-cadence heartbeat really does mean the agent died. A task that
