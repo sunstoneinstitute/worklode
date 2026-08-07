@@ -282,12 +282,21 @@ and SPECs addressable through a `<PROJECTKEY>-{ADR,SPEC}-<n>` alias (e.g.
 
 ## 8. Known limitations (v1) {#sec-8}
 
-- **Push payloads carry at most 20 commits.** GitHub truncates the `commits`
-  array; a larger push silently drops the rest from `main_commits`. A task
-  whose landing commit falls outside that window is never attributed and
-  strands at `in_review` until `lode task done`. Not handled in v1 — the fix
-  is fetching the full commit range through the App when the payload is
-  truncated.
+- **Push payloads carry at most 2048 commits.** A larger push drops the rest
+  from `main_commits`, so a task whose landing commit falls outside that
+  window is never attributed and strands at `in_review`. Those commits are
+  recoverable only by reconciliation (spec 013); fetching the full range
+  through the App is not worth its cost at this cap.
+
+  Truncation is at least never silent. There is no truncation flag on the
+  payload, but the `commits` array is every commit between `before` and
+  `after`, so an `after` absent from it proves the delivery was partial.
+  That case increments `worklode_webhook_push_truncated_total` and logs the
+  repo, ref and sha range. The delivery still applies the commits it did
+  carry — dropping it would lose those too.
+- **Pushes over 25 MB of payload are not delivered at all.** GitHub drops the
+  webhook rather than truncating it, so nothing arrives to detect and the
+  push is invisible until reconciliation.
 - **The `flux_seen` latch never releases** (see `env_deploys` above):
   a repo/env that once correlated a Flux revision requires both signals
   forever.
