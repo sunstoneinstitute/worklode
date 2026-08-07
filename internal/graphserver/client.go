@@ -33,10 +33,17 @@ import (
 // requested branch.
 var ErrNotFound = errors.New("graph not found")
 
-// ErrSPARQLUnavailable is returned when /sparql is not serving: 503 from
-// graph-server when Oxigraph or its materializer is down, or 502/504 from
-// the ingress while graph-server itself is coming up. Callers may retry.
-var ErrSPARQLUnavailable = errors.New("sparql endpoint unavailable")
+// ErrUnavailable marks a response that says "not serving right now" rather
+// than "your request was wrong": 503 from graph-server, or 502/504 from the
+// ingress while graph-server is rolling. Every method reports it, so a caller
+// retrying through a rollout can ask one question of any of them.
+var ErrUnavailable = errors.New("graph-server unavailable")
+
+// ErrSPARQLUnavailable is ErrUnavailable seen on /sparql, where 503 also
+// covers Oxigraph or its materializer being down while graph-server itself
+// answers. It wraps ErrUnavailable; test against that unless the distinction
+// matters.
+var ErrSPARQLUnavailable = fmt.Errorf("sparql endpoint: %w", ErrUnavailable)
 
 // Client talks to one graph-server instance.
 type Client struct {
@@ -51,6 +58,10 @@ type Client struct {
 // (verified against golang.org/x/oauth2@v0.36.0); a future bump of that
 // dependency could drop it silently.
 var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// maxSelectBytes bounds a SPARQL result set, so an unbounded SELECT issued
+// from a long-lived process cannot exhaust its memory.
+const maxSelectBytes = 32 << 20
 
 // New returns a client for the graph-server at base
 // (e.g. https://graph.dev.sunstoneinstitute.ai). A non-nil ts attaches a
@@ -160,7 +171,8 @@ func (c *Client) Select(ctx context.Context, query string) ([]map[string]string,
 	switch resp.StatusCode {
 	case http.StatusOK: // fall through to the decode below
 	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return nil, fmt.Errorf("select: %w", ErrSPARQLUnavailable)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("select: %s: %w", strings.TrimSpace(string(body)), ErrSPARQLUnavailable)
 	default:
 		return nil, httpError("select", resp)
 	}
@@ -171,7 +183,10 @@ func (c *Client) Select(ctx context.Context, query string) ([]map[string]string,
 			} `json:"bindings"`
 		} `json:"results"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	// A SELECT with no LIMIT can answer with an unbounded result set; cap what
+	// a caller can be made to buffer. Truncation surfaces as a decode error,
+	// not as a short result — a partial answer would be worse than none.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxSelectBytes)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("select: decode results: %w", err)
 	}
 	rows := make([]map[string]string, 0, len(out.Results.Bindings))
@@ -186,9 +201,14 @@ func (c *Client) Select(ctx context.Context, query string) ([]map[string]string,
 }
 
 // httpError folds a non-2xx response into one error carrying status and a
-// bounded body excerpt.
+// bounded body excerpt, marking the ingress/rollout statuses as retryable.
 func httpError(op string, resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	return fmt.Errorf("%s: %d %s: %s", op, resp.StatusCode,
+	detail := fmt.Sprintf("%s: %d %s: %s", op, resp.StatusCode,
 		http.StatusText(resp.StatusCode), strings.TrimSpace(string(body)))
+	switch resp.StatusCode {
+	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
+		return fmt.Errorf("%s: %w", detail, ErrUnavailable)
+	}
+	return errors.New(detail)
 }
