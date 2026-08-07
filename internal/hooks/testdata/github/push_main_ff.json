@@ -1,5 +1,7 @@
 {
   "ref": "refs/heads/main",
+  "before": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+  "after": "2222222222222222222222222222222222222222",
   "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
   "commits": [
     {"id": "1111111111111111111111111111111111111111", "message": "Add widget"},

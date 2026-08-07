@@ -4,9 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -303,5 +308,42 @@ func TestPushRedeliveryIsIdempotent(t *testing.T) {
 	}
 	if st := e.taskState(t, taskID); st != "merged" {
 		t.Fatalf("task state = %q, want merged", st)
+	}
+}
+
+// GitHub caps a push payload's commits array and sends no truncation flag,
+// so the only signal is that the pushed head is missing from the array. A
+// truncated delivery must still apply what it did carry — dropping it would
+// lose that too — while making the gap visible.
+func TestPushTruncationIsDetectedAndStillApplies(t *testing.T) {
+	e := newEnv(t)
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	h := hooks.NewGitHubHandler(e.st, testSecret, slog.Default(), nil, m)
+
+	// A push whose array reaches its own head is complete.
+	if rr := deliverBody(t, h, "push", "d-complete", fixture(t, "push_main_ff.json")); rr.Code != http.StatusOK {
+		t.Fatalf("complete push: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := testutil.ToFloat64(m.TruncatedPush()); got != 0 {
+		t.Fatalf("truncated counter = %v after a complete push; want 0", got)
+	}
+
+	// Same shape, but the head is absent from the array.
+	if rr := deliverBody(t, h, "push", "d-truncated", fixture(t, "push_main_truncated.json")); rr.Code != http.StatusOK {
+		t.Fatalf("truncated push: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := testutil.ToFloat64(m.TruncatedPush()); got != 1 {
+		t.Fatalf("truncated counter = %v after a truncated push; want 1", got)
+	}
+
+	// The commits it did carry are recorded regardless.
+	for _, sha := range []string{
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	} {
+		if id := e.mainCommitID(t, sha); id == 0 {
+			t.Fatalf("commit %s from a truncated push was not recorded", sha)
+		}
 	}
 }

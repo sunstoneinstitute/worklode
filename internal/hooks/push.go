@@ -16,10 +16,39 @@ import (
 // pushPayload is the part of a GitHub push event the handler needs.
 type pushPayload struct {
 	Ref     string `json:"ref"`
+	Before  string `json:"before"`
+	After   string `json:"after"`
 	Commits []struct {
 		ID      string `json:"id"`
 		Message string `json:"message"`
 	} `json:"commits"`
+}
+
+// zeroSHA is git's all-zeros object id, sent as before or after when a ref
+// is created or deleted.
+const zeroSHA = "0000000000000000000000000000000000000000"
+
+// truncated reports whether the commits array is missing the head of the
+// push, meaning the attribution below saw only part of what landed.
+//
+// GitHub caps the array (2048 commits) and sends no truncation flag, so
+// there is nothing to read directly. It does document the array as every
+// commit between before and after — so an after that is absent from it
+// proves we did not get them all. Testing for the head rather than for the
+// cap keeps this correct if the number ever changes.
+//
+// A ref create or delete carries a zero before or after and no useful commit
+// list; neither is truncation.
+func (p pushPayload) truncated() bool {
+	if p.After == "" || p.After == zeroSHA || len(p.Commits) == 0 {
+		return false
+	}
+	for _, c := range p.Commits {
+		if c.ID == p.After {
+			return false
+		}
+	}
+	return true
 }
 
 // mergeMessagePatterns extract the merged branch name from merge-commit
@@ -45,6 +74,15 @@ func (h *githubHandler) applyPush(tx *sql.Tx, eventID int64, repo, defaultBranch
 	branch, ok := strings.CutPrefix(p.Ref, "refs/heads/")
 	if !ok {
 		return nil // tag pushes etc.
+	}
+	// Report and carry on: a partial commit list still attributes what it
+	// does contain, and dropping the delivery would lose that too. The
+	// commits we never saw are recoverable only by reconciliation (spec 013).
+	if p.truncated() {
+		h.metrics.truncatedPushDelivery()
+		h.log.Warn("push payload truncated; some commits were not attributed",
+			"repo", repo, "ref", p.Ref, "before", p.Before, "after", p.After,
+			"commits_received", len(p.Commits))
 	}
 	now := h.st.Now()
 
