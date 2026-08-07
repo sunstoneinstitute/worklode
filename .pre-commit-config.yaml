@@ -30,3 +30,12 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+      # The Codex manifests are generated from the Claude ones. Checking rather
+      # than rewriting: an author who edited the generated file by hand should
+      # be told, not silently overwritten.
+      - id: codex-marketplace
+        name: codex marketplace mirrors claude
+        entry: scripts/sync-codex-marketplace.py --check
+        language: script
+        pass_filenames: false
+        files: ^(\.claude-plugin/|\.agents/|plugins/)

@@ -44,6 +44,8 @@ jobs:
         run: ./scripts/check-migrations.sh --no-fix
       # Only reached on mixed or `can-be-tested` PRs — docs-only PRs skip this
       # workflow, so the pre-commit hook is the primary gate.
+      - name: codex marketplace mirrors claude
+        run: ./scripts/sync-codex-marketplace.py --check
       - name: section numbers
         run: |
           out=$(./scripts/secfmt.py -l) || status=$?
