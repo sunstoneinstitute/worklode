@@ -43,17 +43,20 @@ func layoutFrom(dir string) (worktree.Layout, error) {
 	return worktree.NewLayout(cli.WorktreeDirFrom(dir))
 }
 
-// resolveWorktreeTask resolves dir to its enclosing git worktree root and the
-// task id encoded in its <base>/<branch> path. It errors when dir is not
-// inside a git repository, or when the repo root is not a Worklode worktree.
+// resolveWorktreeTask resolves dir to its enclosing git worktree root and its
+// task id — the explicit worklode.task-id git config when the worktree carries
+// one, else the <base>/<branch> path. It errors when dir is not inside a git
+// repository, or when the repo root is not a Worklode worktree by either rule.
 func resolveWorktreeTask(l worktree.Layout, dir string) (taskID, root string, err error) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return "", "", fmt.Errorf("%s is not inside a git repository", dir)
 	}
-	taskID, ok = l.ParseDir(root)
+	taskID, ok = l.TaskID(root)
 	if !ok {
-		return "", "", fmt.Errorf("%s is not a Worklode worktree (%s/<branch>); run this from inside one", root, l.Base())
+		return "", "", fmt.Errorf(
+			"%s is not a Worklode worktree (no worklode.task-id git config, and not %s/<branch>); "+
+				"run this from inside one", root, l.Base())
 	}
 	return taskID, root, nil
 }
@@ -160,7 +163,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 	if !ok {
 		return fmt.Errorf("not inside a git repository")
 	}
-	if inside, ok := layout.ParseDir(root); ok {
+	if inside, ok := layout.TaskID(root); ok {
 		return fmt.Errorf("already inside a worktree for %s; run `lode next` from the main repository, not from %s/", inside, layout.Base())
 	}
 
@@ -203,9 +206,17 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 
 	dir := layout.Dir(root, branch)
 
+	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: enable git worktree config extension: %v\n", err)
+	}
+
 	if err := addWorktree(root, dir, branch); err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)
 		return fmt.Errorf("set up worktree for %s: %w", taskID, err)
+	}
+
+	if err := worktree.SetTaskID(dir, taskID); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: stamp task id in worktree git config: %v\n", err)
 	}
 
 	identity, err := worktree.Identity(dir)

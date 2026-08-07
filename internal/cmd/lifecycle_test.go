@@ -176,6 +176,17 @@ func TestSlugFromBranch(t *testing.T) {
 	}
 }
 
+// testLayout is the default (.worktrees) layout, for tests that need to
+// resolve a worktree path the way the commands under test do.
+func testLayout(t *testing.T) worktree.Layout {
+	t.Helper()
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	return l
+}
+
 func TestResolveWorktreeTaskRejectsNonWorktree(t *testing.T) {
 	l, err := worktree.NewLayout("")
 	if err != nil {
@@ -463,6 +474,79 @@ func TestNextRollsBackOnWorktreeAddFailure(t *testing.T) {
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after rollback = %+v, want nil", detail.Lease)
+	}
+}
+
+func TestNextStampsTaskIDInWorktreeGitConfig(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Stamp task id")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+
+	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-stamp-task-id")
+	gotID, ok := testLayout(t).TaskID(wtDir)
+	if !ok || gotID != task.ID {
+		t.Fatalf("Layout.TaskID(%s) = (%q, %v), want (%q, true)", wtDir, gotID, ok, task.ID)
+	}
+
+	// Check the raw git config value too, not just TaskID's resolution — this
+	// is what proves it is the explicit field and not the directory-name
+	// fallback.
+	out, err := exec.Command("git", "-C", wtDir, "config", "--worktree", "--get", "worklode.task-id").Output()
+	if err != nil {
+		t.Fatalf("git config --worktree --get worklode.task-id: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != task.ID {
+		t.Fatalf("worklode.task-id = %q, want %q", got, task.ID)
+	}
+}
+
+// TestNextStampsTaskIDAcrossTwoWorktrees is the multi-worktree case
+// extensions.worktreeConfig exists for: a second `lode next` in the same repo
+// must stamp its own worktree without disturbing the first, once the repo
+// already has a worktree and the extension already enabled.
+func TestNextStampsTaskIDAcrossTwoWorktrees(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	first := createTestTask(t, c, "First stamp")
+	second := createTestTask(t, c, "Second stamp")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	if _, err := runLode(t, "next", first.ID, "--json"); err != nil {
+		t.Fatalf("lode next (first): %v", err)
+	}
+	if _, err := runLode(t, "next", second.ID, "--json"); err != nil {
+		t.Fatalf("lode next (second): %v", err)
+	}
+
+	l := testLayout(t)
+	for _, tc := range []struct{ dir, want string }{
+		{filepath.Join(root, worktree.DefaultBase, first.ID+"-first-stamp"), first.ID},
+		{filepath.Join(root, worktree.DefaultBase, second.ID+"-second-stamp"), second.ID},
+	} {
+		gotID, ok := l.TaskID(tc.dir)
+		if !ok || gotID != tc.want {
+			t.Errorf("Layout.TaskID(%s) = (%q, %v), want (%q, true)", tc.dir, gotID, ok, tc.want)
+		}
+		// Read the raw per-worktree config too: TaskID alone would also pass
+		// via the directory-name fallback, which proves nothing about
+		// isolation.
+		out, err := exec.Command("git", "-C", tc.dir, "config", "--worktree", "--get", "worklode.task-id").Output()
+		if err != nil {
+			t.Errorf("git config --worktree --get worklode.task-id in %s: %v", tc.dir, err)
+			continue
+		}
+		if got := strings.TrimSpace(string(out)); got != tc.want {
+			t.Errorf("worklode.task-id in %s = %q, want %q", tc.dir, got, tc.want)
+		}
 	}
 }
 
