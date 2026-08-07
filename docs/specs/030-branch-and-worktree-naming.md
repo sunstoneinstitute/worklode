@@ -157,18 +157,31 @@ previously asked whether a path's parent directory was named `wt`. It now asks:
 
 1. Is the path *exactly one segment* below a segment equal to the configured
    base directory?
-2. Does `[A-Z][A-Z0-9]*-[0-9]+` appear in that segment?
+2. Which task does that segment belong to?
 
-The first question is the guard; the second only extracts the id. The id search
-is a substring match rather than a whole-segment match, so it holds for
-templates that render the id adjacent to other text (`{{ .projectId }}-{{ .id
-}}`). Both questions are pure string operations — no template, no config beyond
-the base directory, no network call — which is what keeps the guard cheap
-enough to run on every hook event.
+The first question is the guard; the second only extracts the id. The guard is
+a pure string operation — no template, no config beyond the base directory, no
+network call — which is what keeps it cheap enough to run on every hook event,
+including on the paths nowhere near a worktree that make up almost all of them.
 
 The one-segment rule follows from the flat layout (§3.1) and is what makes the
 guard total: a path *inside* a worktree is not itself a worktree root, and the
 handlers that need to accept one resolve it through `worktree.Root` first.
+
+Id resolution — question 2 alone — reads the worktree's own git config, `git
+config --worktree --get worklode.task-id`, which `lode next` stamps at creation
+time, and falls back to the first `[A-Z][A-Z0-9]*-[0-9]+` in the segment. The
+fallback is a substring match rather than a whole-segment match, so it holds
+for templates that render the id adjacent to other text (`{{ .projectId }}-{{
+.id }}`); the explicit field covers what no pattern can, a worktree renamed
+after creation to a name carrying no id at all.
+
+That the two questions have different costs is why they must stay separable: a
+subprocess per path is affordable only for paths that already cleared the
+guard, i.e. only for events already headed for a backbone call. Widening it to
+answer question 1 would put a `git config` invocation on every keystroke-level
+hook event, and a stamped worktree outside the base is therefore still invisible
+to Worklode — the guard decides, and it decides on strings.
 
 Scanning for adoptable worktrees (`SessionStart` outside a worktree) reads the
 base directory one level deep. There is nothing deeper to find.
