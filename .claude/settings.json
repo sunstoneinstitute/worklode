@@ -19,14 +19,14 @@
     ]
   },
   "enabledPlugins": {
-    "lode@sunstone-public": true,
+    "lode@worklode": true,
     "mattpocock-skills@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
-    "sunstone-public": {
+    "worklode": {
       "source": {
         "source": "github",
-        "repo": "sunstoneinstitute/claude-public-plugins"
+        "repo": "sunstoneinstitute/worklode"
       }
     }
   }
