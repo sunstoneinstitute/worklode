@@ -109,11 +109,6 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
-- **`graphserver.Select` has no result-set size ceiling**: fine for the e2e
-  harness and a first-party Keycloak-authenticated peer, but a caller running
-  inside a long-lived `lode serve` could issue a `SELECT` with no `LIMIT`.
-  Wrap the body in `io.LimitReader(resp.Body, 32<<20)` before decoding once a
-  server-side caller lands.
 - **`graphserver` response bodies are never drained before `Close`**: the 200
   path of `Select` stops reading at the JSON decoder's closing brace, and
   `httpError`'s excerpt is capped at 512 bytes, so `net/http` can't reuse
@@ -127,23 +122,6 @@ once an instance is running (dogfooding); until then this file is the list.
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
   Needed before a second work-graph writer exists; spec 009 should-have 6.
   Adding it changes `PutGraph`'s signature.
-- **A docs-only commit can break Go tests**: the CI gate skips checks when a
-  PR touches only `*.md`/`docs/`/`www/`, but `internal/designdoc` tests read
-  real files under `docs/specs/`. Commit `8fdd7e1` accepted spec 025 and
-  broke `TestParseFrontmatterRealSpec` on main with no CI signal. Either give
-  that test a checked-in fixture, or carve `docs/specs/*.md` out of the
-  docs-only skip.
-- **`ns/concept.ttl` still carries the retired `proposed` status**: it defines
-  `wlc:proposed` in `wlc:DesignDocStatus` and lists it in
-  `wlc:DesignDocStatusOrder`, but spec 025 §3 retired that status —
-  `docs/authoring-design-docs.md` now documents only `draft`/`accepted`/
-  `superseded`, with a doc under review staying `draft`. The vocabulary
-  should follow the accepted spec.
-- **Retryability is asymmetric in `internal/graphserver`**: only `Select`
-  maps 502/503/504 to `ErrSPARQLUnavailable`; `PutGraph`/`GetGraph`/
-  `DeleteGraph` fold the same ingress statuses into an opaque `httpError`.
-  During a graph-server rollout the acceptance harness patiently retries the
-  query but hard-fails the PUT.
 - **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 009
   must-have 3, publishing half): decided 2026-08-06 that this repo serves the
   files from its own site, without rdf-registry (rdf-registry#31 closed).
