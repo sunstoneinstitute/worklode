@@ -13,11 +13,9 @@ amends:
     - 009-data-platform-kg-requirements.md
     - rdf-registry:ADR-0006
   "#sec-1":
-    - 000-umbrella-architecture.md#sec-4
     - 003-platform-graph-design.md
     - 008-worklode-plugin.md
   "#sec-2":
-    - 000-umbrella-architecture.md#sec-2
     - 003-platform-graph-design.md#sec-6
     - 006-knowledge-graph.md#sec-1.2
     - 008-worklode-plugin.md#sec-7

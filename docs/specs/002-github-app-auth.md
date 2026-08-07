@@ -10,14 +10,14 @@ amends:
     - 001-keycloak-sso.md#sec-1
 amendedBy:
   ".":
-    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 031-provider-neutral-cli-login.md
   "#sec-3.5":
     - 023-keycloak-primary-auth.md#sec-3.5
 isReplacedBy:
   "#sec-3.2":
     - 023-keycloak-primary-auth.md#sec-3.1
   "#sec-3.3":
-    - docs/plans/2026-07-20-provider-neutral-cli-login-design.md
+    - 031-provider-neutral-cli-login.md
     - 023-keycloak-primary-auth.md#sec-3.1
   "#sec-3.4":
     - 023-keycloak-primary-auth.md#sec-3.1
@@ -121,7 +121,7 @@ handlers and reuses the shared session helpers; `oidcweb.go` stays as-is.
 
 ### 3.3 C. CLI login (device flow, server-mediated) {#sec-3.3}
 
-> **Superseded by the provider-neutral CLI login design** (`docs/plans/2026-07-20-provider-neutral-cli-login-design.md`). No device flow was built; `lode login` uses a server-mediated browser loopback with a one-time code, for both providers.
+> **Superseded by spec 031** (`031-provider-neutral-cli-login.md`). No device flow was built; `lode login` uses a server-mediated browser loopback with a one-time code, for both providers.
 
 > **Superseded by spec 023.** GitHub is no longer a CLI login provider at all; `lode login` authenticates against Keycloak only.
 

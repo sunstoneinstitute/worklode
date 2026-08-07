@@ -22,6 +22,16 @@ repos:
         entry: scripts/secfmt.py -l -w
         language: script
         files: ^docs/specs/.*\.md$
+      # Reports, never rewrites: a frontmatter value is a claim about the corpus,
+      # so a wrong one is fixed by deciding what it should say. Runs over the
+      # whole corpus because a reference breaks from the far end — deleting an
+      # anchor dangles inbound refs in files this commit does not touch.
+      - id: doc-frontmatter
+        name: design-doc frontmatter
+        entry: scripts/secmeta.py
+        language: script
+        files: ^docs/(specs|plans)/.*\.md$
+        pass_filenames: false
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.
       - id: migration-numbers

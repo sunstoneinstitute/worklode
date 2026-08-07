@@ -1,6 +1,7 @@
 ---
 status: accepted
-wasDerivedFrom: 003-platform-graph-design.md (D13, D14, D15)
+issued: 2026-07-22
+wasDerivedFrom: 003-platform-graph-design.md  # D13, D14, D15
 requires:
   - 004-execution-backbone.md
   - 005-prioritization-and-pickup.md

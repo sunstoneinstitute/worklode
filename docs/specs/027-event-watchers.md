@@ -7,6 +7,11 @@ requires:
   - 012-agent-sessions.md
   - 022-prometheus-metrics.md
   - 025-documents-in-the-backbone.md
+amends:
+  "#sec-5":
+    - 025-documents-in-the-backbone.md#sec-3
+  "#sec-6":
+    - 025-documents-in-the-backbone.md#sec-10
 ---
 # Spec 027 — Event watchers
 
@@ -32,9 +37,10 @@ the graph would need underneath it either way.
 **On 025 §3.** Acceptance and spec→plan decomposition are deliberate human acts, and this spec
 does not automate either. It mints a task *asking for* the work; deciding whether spec N
 becomes one plan or four, and writing them, remains entirely the assignee's. A prompt is not
-the act, and 025 §3 is amended with a sentence saying so. 025 is still `draft`, so that
-sentence and the `lode doc submit` verb of §6 are folded into it directly rather than recorded
-as amendment edges — the amendment machinery exists for published documents.
+the act, and 025 §3 is amended with a sentence saying so. 025 is `accepted`, so that sentence
+and the `lode doc submit` verb of §6 are recorded as amendment edges (§11) rather than folded
+in as direct edits — its anchors are published and its accepted text is what other documents
+are reading.
 
 ## 1. The log is totally ordered {#sec-1}
 
@@ -311,7 +317,7 @@ line in a skill.
 
 | Spec | Change |
 |---|---|
-| 025 | §3 gains a sentence: minting a task that asks for review or planning is not the act it asks for, so it does not breach "acceptance and decomposition are deliberate human acts". §10 gains `lode doc submit`. Both are direct edits — 025 is `draft` (§0). |
+| 025 | §3 gains a sentence: minting a task that asks for review or planning is not the act it asks for, so it does not breach "acceptance and decomposition are deliberate human acts". §10 gains `lode doc submit`. 025 is `accepted`, so both land as amendment edges from this spec, not as direct edits (§0). |
 | 004 | §1.5's `events` table gains `txid`; the log gains subscribers, and stops being write-only |
 | `ns/` | `wl:Event` and subclasses, per §3; generated Go constants per 025 §9 |
 | lode plugin | the planning skill claims its task before writing (§7) |
