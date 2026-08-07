@@ -79,6 +79,13 @@ three specs.
 | `amends` / `amendedBy` | — (see 014 §11) | **map**, see below | both |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | **map**, see below | both |
 | `task` | — | `WL-<n>` | transitional only |
+| `kind` | — | `adr` on ADRs, absent on specs (026 §4.2) | specs, ADRs |
+
+`kind` here is the resolver's document kind — it distinguishes an ADR from a
+spec for the `WL-SPEC-<n>`/`WL-ADR-<n>` shorthand's `<TYPE>` check (026 §4.2,
+`internal/designdoc/resolve.go`). It is a different key from the plan-body
+task `kind` (`feature`/`bug`/`chore`/`design`) documented above; the two share
+a name and nothing else.
 
 `task` records the lode task that implements a spec while plans still live in
 git. It is not an ontology term and goes away when plan acceptance mints the
@@ -144,7 +151,7 @@ one project's spec 0 — so `WL-SPEC-0` is recognised but reported: write
 A shorthand naming a project this checkout cannot reach is reported as
 `unresolved`, not as an error. Commit hooks run without a network or a built
 `lode`, so a cross-project reference is never hard-checked at commit time; `lode
-doc show <ref>` is what verifies one.
+show <ref>` is what verifies one.
 
 ## Section numbering and anchors
 
