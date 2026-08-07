@@ -93,7 +93,9 @@ to prove the real user path works.
 
 `www/` is the static marketing site: own deploy workflow, shares no code with
 the Go build. Docs-only PRs (only `*.md`, `docs/`, `www/`) skip CI checks;
-the `can-be-tested` label forces a run.
+the `can-be-tested` label forces a run. `docs/specs/` and `docs/plans/` are
+exempt from that skip — `internal/designdoc` parses those files, so changing
+one is a code change.
 
 ## Conventions
 
