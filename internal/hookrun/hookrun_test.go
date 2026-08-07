@@ -95,6 +95,25 @@ func (p *pathRecorder) hitAny(substr string) bool {
 	return false
 }
 
+// reset drops everything recorded so far, so a test can set up state through
+// the API and then assert that the code under test made no calls at all.
+func (p *pathRecorder) reset() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.paths = nil
+}
+
+// testLayout is the default (.worktrees) layout, for tests that need to ask
+// the guard the same question the handlers do.
+func testLayout(t *testing.T) worktree.Layout {
+	t.Helper()
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	return l
+}
+
 func (p *pathRecorder) count(substr string) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -384,6 +403,106 @@ func TestPreCommitWithoutLeaseIsSilent(t *testing.T) {
 	}
 	if rec.hitAny("/agent-session") {
 		t.Fatalf("agent-session endpoint was hit with no lease held; paths: %v", rec.paths)
+	}
+}
+
+// TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename covers the case
+// the explicit worklode.task-id field exists for: a worktree renamed to a
+// directory name that carries no task id. It still sits one level below the
+// base, so it clears spec 030 §3.2's guard; only the stamped git config can
+// then say which task it belongs to.
+func TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Explicit id")
+
+	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	if err := worktree.SetTaskID(wtDir, taskID); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+
+	renamed := filepath.Join(root, worktree.DefaultBase, "no-id-in-this-name")
+	if out, err := exec.Command("git", "-C", root, "worktree", "move", wtDir, renamed).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree move: %v\n%s", err, out)
+	}
+	// Guard the guard: if the new name still carried an id, the fallback
+	// would resolve it and the test would prove nothing about the config.
+	if id, ok := testLayout(t).ParseDir(renamed); ok {
+		t.Fatalf("ParseDir(%s) = (%q, true), want ok=false — the renamed directory must not carry an id", renamed, id)
+	}
+
+	payload := payloadJSON(t, Payload{Cwd: renamed, HookEventName: "PreToolUse"})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "pre-commit",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	// Reaching the brief is the assertion: the handler only gets that far
+	// once the task id resolved, and the directory name can no longer supply
+	// it.
+	if !rec.hitAny("/tasks/" + taskID + "/brief") {
+		t.Fatalf("brief for %s was not fetched, so the task id did not resolve; paths: %v", taskID, rec.paths)
+	}
+	// The lease is not renewed, and that is correct rather than a gap here:
+	// lease ownership is keyed on worktree.Identity, which is the worktree's
+	// absolute path, so a moved worktree no longer holds the lease it claimed.
+	// Resolving the task id and owning the lease are separate questions.
+	if rec.hitAny("/renew") {
+		t.Fatalf("renew endpoint was hit for a lease bound to the pre-move path; paths: %v", rec.paths)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty (a lease bound elsewhere is not a warning)", stderr.String())
+	}
+}
+
+// TestPreCommitIgnoresStampedWorktreeOutsideTheBase pins the other half of
+// §3.2's split: the guard is a pure string question, and a stamped worktree
+// that fails it stays invisible to Worklode. Without this, the git-config
+// lookup would quietly widen the guard the spec deliberately keeps cheap.
+func TestPreCommitIgnoresStampedWorktreeOutsideTheBase(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Outside the base")
+
+	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	if err := worktree.SetTaskID(wtDir, taskID); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+
+	outside := filepath.Join(root, "elsewhere", taskID+"-outside-the-base")
+	if err := os.MkdirAll(filepath.Dir(outside), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", root, "worktree", "move", wtDir, outside).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree move: %v\n%s", err, out)
+	}
+
+	rec.reset()
+	payload := payloadJSON(t, Payload{Cwd: outside, HookEventName: "PreToolUse"})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "pre-commit",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if len(rec.paths) != 0 {
+		t.Fatalf("backbone was called for a path outside %s; paths: %v", worktree.DefaultBase, rec.paths)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty (a path outside the base is a silent NOP)", stderr.String())
 	}
 }
 
