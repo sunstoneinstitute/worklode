@@ -107,8 +107,9 @@ func newShowCmd() *cobra.Command {
 
 At most one of --task/--spec/--adr/--plan/--milestone/--project/
 --deliverable and --kind may be given, and never together with a
-positional id — the flag's value already is the id. --section narrows a
-spec or ADR render to one section (and its subsections), by anchor.`,
+positional id — the flag's value already is the id. --section (-s)
+narrows a spec or ADR render to one section (and its subsections) by
+anchor; -s 3 is shorthand for -s sec-3.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flagValues := map[string]string{
@@ -163,7 +164,7 @@ spec or ADR render to one section (and its subsections), by anchor.`,
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2); not showable yet (spec 029 §4)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet (spec 029 §4)")
-	cmd.Flags().StringVar(&section, "section", "", "print only this section (spec/adr only), by anchor (a leading # is optional)")
+	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	return cmd
 }
 

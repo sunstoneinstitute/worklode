@@ -190,8 +190,11 @@ reading path of §3.2.
 ## 3. Showing a document: `lode show` {#sec-3}
 
 ```
-lode show <ref> [--resolved] [--section <anchor>]
+lode show <ref> [--resolved] [--section|-s <anchor>]
 ```
+
+`--section` (short `-s`) takes an anchor in any of three spellings: `sec-3`, `#sec-3`,
+or the bare number `3`, which is expanded to `sec-3`.
 
 `<ref>` is a path, a bare filename, a spec number (`014`, `014-design-documents`), or 014
 §11.3's shorthand (`WL-SPEC-14`, and `WL-SPEC-14#sec-2.1` as sugar for `--section sec-2.1`)

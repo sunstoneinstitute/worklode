@@ -15,6 +15,19 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
+// normalizeSection turns a --section value into a canonical anchor. It drops
+// an optional leading '#' and expands the shortcut form — a bare section
+// number like "3" or "4.1a" becomes "sec-3" / "sec-4.1a", so `--section 3` is
+// an alias for `--section sec-3`. A value already in "sec-..." form, or empty,
+// is returned unchanged.
+func normalizeSection(s string) string {
+	s = strings.TrimPrefix(s, "#")
+	if s == "" || strings.HasPrefix(s, "sec-") {
+		return s
+	}
+	return "sec-" + s
+}
+
 // runDocShow renders a SPEC or ADR document, or one of its sections,
 // cat-style (spec 026 §3). It backs every SPEC/ADR path through `lode show`
 // (show.go): the typed-id dispatch (expectedKind "", since ResolveRef's own
@@ -32,7 +45,7 @@ import (
 // flag's kind must still be enforced even when there is no local shorthand
 // to route it through.
 func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
-	section = strings.TrimPrefix(section, "#")
+	section = normalizeSection(section)
 
 	cwd, err := os.Getwd()
 	if err != nil {

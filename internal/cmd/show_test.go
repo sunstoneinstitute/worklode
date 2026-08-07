@@ -200,13 +200,22 @@ func TestDocShowSectionFlag(t *testing.T) {
 		t.Fatalf("doc show --section sec-2 = %q; want %q", out, want)
 	}
 
-	// A leading # is accepted too.
-	out, err = runLode(t, "show", "WL-SPEC-14", "--section", "#sec-2")
-	if err != nil {
-		t.Fatalf("lode doc show --section #sec-2: %v\noutput: %s", err, out)
-	}
-	if out != want {
-		t.Fatalf("doc show --section #sec-2 = %q; want %q", out, want)
+	// Every equivalent spelling of section 2 yields the same output: a
+	// leading #, the bare-number shortcut, and the -s short flag (with both
+	// the anchor and shortcut forms).
+	for _, args := range [][]string{
+		{"show", "WL-SPEC-14", "--section", "#sec-2"},
+		{"show", "WL-SPEC-14", "--section", "2"},
+		{"show", "WL-SPEC-14", "-s", "sec-2"},
+		{"show", "WL-SPEC-14", "-s", "2"},
+	} {
+		out, err = runLode(t, args...)
+		if err != nil {
+			t.Fatalf("lode %v: %v\noutput: %s", args, err, out)
+		}
+		if out != want {
+			t.Fatalf("lode %v = %q; want %q", args, out, want)
+		}
 	}
 }
 
