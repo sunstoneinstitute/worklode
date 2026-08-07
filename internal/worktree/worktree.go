@@ -83,6 +83,22 @@ func (l Layout) Dir(root, branch string) string {
 // (or someone else's directory), not a worktree root. This is the uniform hook
 // guard: ok=false ⇒ NOP.
 func (l Layout) ParseDir(path string) (taskID string, ok bool) {
+	seg, ok := l.segmentBelowBase(path)
+	if !ok {
+		return "", false
+	}
+	id := idRe.FindString(seg)
+	if id == "" {
+		return "", false
+	}
+	return id, true
+}
+
+// segmentBelowBase is the guard half of ParseDir: the single directory name
+// one level below the base directory, or ok=false. It is a pure string
+// operation — no config, no subprocess — which is what lets it run on every
+// hook event (spec 030 §3.2).
+func (l Layout) segmentBelowBase(path string) (string, bool) {
 	if len(l.parts) == 0 {
 		return "", false
 	}
@@ -95,11 +111,7 @@ func (l Layout) ParseDir(path string) (taskID string, ok bool) {
 	if len(below) != 1 {
 		return "", false
 	}
-	id := idRe.FindString(below[0])
-	if id == "" {
-		return "", false
-	}
-	return id, true
+	return below[0], true
 }
 
 // lastIndexOf returns the starting index of the last occurrence of sub in
@@ -160,4 +172,84 @@ func GitDir(root string) (string, error) {
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", root, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// EnableWorktreeConfigExtension turns on extensions.worktreeConfig in root's
+// own local git config, idempotently. This must happen before a repo grows a
+// second worktree: git refuses `config --worktree` across multiple
+// worktrees unless the *local* repo config (not global — verified: a
+// global-only setting is silently ignored for this check) already has the
+// extension enabled. `lode install` calls this once per repo, and `lode
+// next` calls it again defensively right before creating a worktree, so
+// stamping works even in a repo nobody ran `lode install` in.
+//
+// It refuses to act on a bare repository or one with core.worktree set.
+// Enabling the extension changes how git scopes core.bare and core.worktree —
+// git's own enabler migrates those two keys into the main worktree's
+// config.worktree first, and skipping that migration silently breaks every
+// existing linked worktree of a bare clone ("fatal: this operation must be run
+// in a work tree"). Rather than perform that migration, this returns an error
+// and leaves the repo alone; callers treat the failure as a warning, and
+// TaskID's directory-name fallback keeps working there.
+func EnableWorktreeConfigExtension(root string) error {
+	if bare, err := exec.Command("git", "-C", root, "rev-parse", "--is-bare-repository").Output(); err == nil &&
+		strings.TrimSpace(string(bare)) == "true" {
+		return fmt.Errorf("refusing to enable extensions.worktreeConfig on the bare repository %s: "+
+			"it requires migrating core.bare/core.worktree into the main worktree's config.worktree first, "+
+			"which would otherwise break existing linked worktrees", root)
+	}
+	if cw, err := exec.Command("git", "-C", root, "config", "--get", "core.worktree").Output(); err == nil &&
+		strings.TrimSpace(string(cw)) != "" {
+		return fmt.Errorf("refusing to enable extensions.worktreeConfig on %s: core.worktree is set, "+
+			"so the extension requires migrating core.bare/core.worktree into the main worktree's "+
+			"config.worktree first, which would otherwise break existing linked worktrees", root)
+	}
+	out, err := exec.Command("git", "-C", root, "config", "extensions.worktreeConfig", "true").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git config extensions.worktreeConfig true: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// SetTaskID stamps dir's own worktree-private git config with its task id,
+// under the worklode.task-id key, so TaskID can resolve it explicitly instead of
+// parsing the directory name. Once a repo has more than one worktree, this
+// requires EnableWorktreeConfigExtension to have already run against it —
+// callers should treat a failure here as a warning, not fatal: TaskID's
+// ParseDir fallback keeps working from the directory name regardless.
+func SetTaskID(dir, taskID string) error {
+	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "worklode.task-id", taskID).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git config --worktree worklode.task-id %s: %s: %w", taskID, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// TaskID resolves the task id of a worktree root, preferring the explicit
+// worklode.task-id worktree config SetTaskID stamps over the id carried by the
+// directory name. Explicit wins, so a worktree renamed after creation — to
+// something the id pattern no longer matches — still resolves; the
+// directory-name fallback keeps worktrees created before this field existed
+// (or without extensions.worktreeConfig enabled) working unchanged.
+//
+// The guard is unchanged and still runs first: dir must be exactly one
+// directory below the base, on strings alone. Only once it has cleared that
+// does TaskID spend a git subprocess, so the reject-fast path every hook
+// event takes stays free of one (spec 030 §3.2).
+func (l Layout) TaskID(dir string) (taskID string, ok bool) {
+	seg, ok := l.segmentBelowBase(dir)
+	if !ok {
+		return "", false
+	}
+	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--get", "worklode.task-id").Output()
+	if err == nil {
+		if id := strings.TrimSpace(string(out)); id != "" {
+			return id, true
+		}
+	}
+	id := idRe.FindString(seg)
+	if id == "" {
+		return "", false
+	}
+	return id, true
 }

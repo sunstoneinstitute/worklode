@@ -163,12 +163,21 @@ func TestBranchNameFallback(t *testing.T) {
 	}
 }
 
-// initGitRepo creates a fresh git repo in a temp dir and returns its path.
+// initGitRepo creates a fresh git repo in a temp dir, with one initial commit
+// so HEAD is born (`git worktree add -b` requires this on git < 2.42, which
+// doesn't auto-infer --orphan), and returns its path.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	// commit.gpgsign=false: the developer's global config may enable signing,
+	// which a temp-repo test commit must not depend on.
+	if out, err := exec.Command("git", "-C", dir, "-c", "commit.gpgsign=false",
+		"-c", "user.email=test@example.com", "-c", "user.name=test",
+		"commit", "--allow-empty", "-m", "init").CombinedOutput(); err != nil {
+		t.Fatalf("git commit --allow-empty: %v\n%s", err, out)
 	}
 	return dir
 }
@@ -276,5 +285,215 @@ func TestGitDir(t *testing.T) {
 	}
 	if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
 		t.Fatalf("GitDir = %q, want an existing directory (stat err %v)", gitDir, err)
+	}
+}
+
+func TestEnableWorktreeConfigExtensionIdempotent(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension (second run): %v", err)
+	}
+	out, err := exec.Command("git", "-C", dir, "config", "--get", "extensions.worktreeConfig").Output()
+	if err != nil {
+		t.Fatalf("git config --get extensions.worktreeConfig: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "true" {
+		t.Fatalf("extensions.worktreeConfig = %q, want true", got)
+	}
+}
+
+// TestEnableWorktreeConfigExtensionRefusesBareRepo covers the bare-clone +
+// linked-worktree layout. Enabling extensions.worktreeConfig there without
+// git's own core.bare/core.worktree migration breaks every linked worktree,
+// so the function must refuse instead of writing the key.
+func TestEnableWorktreeConfigExtensionRefusesBareRepo(t *testing.T) {
+	src := initGitRepo(t)
+	base := t.TempDir()
+	bare := filepath.Join(base, "bare.git")
+	if out, err := exec.Command("git", "clone", "--bare", src, bare).CombinedOutput(); err != nil {
+		t.Fatalf("git clone --bare: %v\n%s", err, out)
+	}
+	linked := filepath.Join(base, "ctl")
+	if out, err := exec.Command("git", "-C", bare, "worktree", "add", linked).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", linked, "rev-parse", "--show-toplevel").CombinedOutput(); err != nil {
+		t.Fatalf("linked worktree broken before the test even started: %v\n%s", err, out)
+	}
+
+	if err := worktree.EnableWorktreeConfigExtension(bare); err == nil {
+		t.Fatal("EnableWorktreeConfigExtension on a bare repo: err = nil, want a refusal")
+	}
+
+	// The guard is only worth anything if the repo is untouched afterwards.
+	if out, err := exec.Command("git", "-C", bare, "config", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
+		t.Fatalf("extensions.worktreeConfig = %q, want unset after a refusal", strings.TrimSpace(string(out)))
+	}
+	if out, err := exec.Command("git", "-C", linked, "rev-parse", "--show-toplevel").CombinedOutput(); err != nil {
+		t.Fatalf("linked worktree broken after the refusal: %v\n%s", err, out)
+	}
+
+	// Prove the hazard is real rather than hypothetical: writing the key the
+	// way the unguarded version did breaks the very same linked worktree. If
+	// this ever stops failing, git changed and the guard should be revisited.
+	if out, err := exec.Command("git", "-C", bare, "config", "extensions.worktreeConfig", "true").CombinedOutput(); err != nil {
+		t.Fatalf("git config extensions.worktreeConfig true: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", linked, "rev-parse", "--show-toplevel").CombinedOutput(); err == nil {
+		t.Fatalf("setting extensions.worktreeConfig on the bare repo left the linked worktree working (%s) — "+
+			"the guard may no longer be needed on this git version", strings.TrimSpace(string(out)))
+	}
+}
+
+func TestEnableWorktreeConfigExtensionRefusesCoreWorktreeSet(t *testing.T) {
+	dir := initGitRepo(t)
+	if out, err := exec.Command("git", "-C", dir, "config", "core.worktree", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git config core.worktree: %v\n%s", err, out)
+	}
+	if err := worktree.EnableWorktreeConfigExtension(dir); err == nil {
+		t.Fatal("EnableWorktreeConfigExtension with core.worktree set: err = nil, want a refusal")
+	}
+	if out, err := exec.Command("git", "-C", dir, "config", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
+		t.Fatalf("extensions.worktreeConfig = %q, want unset after a refusal", strings.TrimSpace(string(out)))
+	}
+}
+
+// mustLayout builds the default (.worktrees) layout for a test.
+func mustLayout(t *testing.T) worktree.Layout {
+	t.Helper()
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	return l
+}
+
+// addWorktreeUnderBase creates <root>/.worktrees/<name> as a real linked
+// worktree, which is what a stamped worklode.task-id needs: `git config
+// --worktree` writes into the worktree's own config, and a bare directory has
+// none.
+func addWorktreeUnderBase(t *testing.T, root, name string) string {
+	t.Helper()
+	dir := filepath.Join(root, worktree.DefaultBase, name)
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-b", name, dir).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add %s: %v\n%s", dir, err, out)
+	}
+	return dir
+}
+
+func TestSetTaskIDAndTaskID(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	wt := addWorktreeUnderBase(t, dir, "WL-9-fix-thing")
+	if err := worktree.SetTaskID(wt, "WL-9"); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+	gotID, ok := mustLayout(t).TaskID(wt)
+	if !ok || gotID != "WL-9" {
+		t.Fatalf("TaskID = (%q, %v), want (\"WL-9\", true)", gotID, ok)
+	}
+}
+
+func TestTaskIDFallsBackToDirName(t *testing.T) {
+	dir := initGitRepo(t)
+	wt := filepath.Join(dir, worktree.DefaultBase, "WL-3-fix-thing")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	gotID, ok := mustLayout(t).TaskID(wt)
+	if !ok || gotID != "WL-3" {
+		t.Fatalf("TaskID = (%q, %v), want (\"WL-3\", true) from the directory-name fallback", gotID, ok)
+	}
+}
+
+// TestTaskIDExplicitWinsOverMismatchedDirName is the case the explicit field
+// exists for: a worktree renamed after creation to something the id pattern
+// no longer matches still resolves, because the stamp travels with the
+// worktree rather than with its name.
+func TestTaskIDExplicitWinsOverMismatchedDirName(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	wt := addWorktreeUnderBase(t, dir, "WL-3-fix-thing")
+	if err := worktree.SetTaskID(wt, "WL-99"); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+	gotID, ok := mustLayout(t).TaskID(wt)
+	if !ok || gotID != "WL-99" {
+		t.Fatalf("TaskID = (%q, %v), want (\"WL-99\", true) — explicit config must win over the WL-3 directory name", gotID, ok)
+	}
+}
+
+func TestTaskIDNeitherPresent(t *testing.T) {
+	dir := initGitRepo(t)
+	wt := filepath.Join(dir, worktree.DefaultBase, "no-id-here")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if _, ok := mustLayout(t).TaskID(wt); ok {
+		t.Fatalf("TaskID on an unstamped directory with no id in its name: ok = true, want false")
+	}
+}
+
+// TestTaskIDKeepsTheGuardPure pins the §3.2 split: a path that fails the
+// pure-string guard resolves to nothing even when it carries a stamped
+// worklode.task-id. The guard decides whether Worklode acts at all; only after it
+// passes may id resolution consult git config.
+func TestTaskIDIgnoresStampOutsideTheBase(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	outside := filepath.Join(dir, "elsewhere", "WL-7-fix-thing")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add", "-b", "WL-7-fix-thing", outside).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	if err := worktree.SetTaskID(outside, "WL-7"); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+	if id, ok := mustLayout(t).TaskID(outside); ok {
+		t.Fatalf("TaskID(%s) = (%q, true), want ok=false: the path is not one level below %s", outside, id, worktree.DefaultBase)
+	}
+}
+
+func TestSetTaskIDFailsOnSecondWorktreeWithoutExtension(t *testing.T) {
+	dir := initGitRepo(t)
+	wt := filepath.Join(dir, worktree.DefaultBase, "WL-1-fix-thing")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add", "-b", "WL-1-fix-thing", wt).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	if err := worktree.SetTaskID(wt, "WL-1"); err == nil {
+		t.Fatalf("SetTaskID on a second worktree without extensions.worktreeConfig: err = nil, want error")
+	}
+}
+
+func TestSetTaskIDIsolatedAcrossWorktreesAfterEnablingExtension(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	l := mustLayout(t)
+	one := addWorktreeUnderBase(t, dir, "WL-1-first")
+	two := addWorktreeUnderBase(t, dir, "WL-2-second")
+	if err := worktree.SetTaskID(one, "WL-1"); err != nil {
+		t.Fatalf("SetTaskID(one): %v", err)
+	}
+	if err := worktree.SetTaskID(two, "WL-2"); err != nil {
+		t.Fatalf("SetTaskID(two): %v", err)
+	}
+	// Each worktree reads back its own id, not the other's and not a shared
+	// write into .git/config — that isolation is the whole point of
+	// extensions.worktreeConfig.
+	if gotID, ok := l.TaskID(one); !ok || gotID != "WL-1" {
+		t.Fatalf("TaskID(one) = (%q, %v), want (\"WL-1\", true)", gotID, ok)
+	}
+	if gotID, ok := l.TaskID(two); !ok || gotID != "WL-2" {
+		t.Fatalf("TaskID(two) = (%q, %v), want (\"WL-2\", true)", gotID, ok)
 	}
 }
