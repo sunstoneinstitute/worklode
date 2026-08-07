@@ -521,6 +521,21 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) 
 	}
 }
 
+// handlePreCommit keeps this worktree's lease alive across a long working
+// session: every commit pushes the TTL out.
+//
+// It reads the brief first so it can tell the two cases apart. Committing in a
+// worktree that holds no lease of ours is ordinary — the lease was swept, or
+// released, or the task was already delivered (delivery does not close leases;
+// only release, abandon, reopen and the expiry sweep do) — and there is
+// nothing to renew and nothing to warn about. Re-claiming here is deliberately
+// not done: a git hook must not silently take a claim, and a claim on an
+// already-delivered task would fail anyway. Session start and worktree create
+// own re-acquisition (ensureLease).
+//
+// The session report is gated on the same answer: an agent session hangs off
+// the active lease, so with no lease of ours it would 404 for exactly the same
+// benign reason. Nothing here can block a commit.
 func handlePreCommit(ctx context.Context, opts Options, dir string) {
 	root, ok := worktree.Root(dir)
 	if !ok {
@@ -535,11 +550,26 @@ func handlePreCommit(ctx context.Context, opts Options, dir string) {
 		warn(opts, "load config: %v", err)
 		return
 	}
-	cctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	identity, err := worktree.Identity(root)
+	if err != nil {
+		warn(opts, "resolve worktree identity: %v", err)
+		return
+	}
+	bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	brief, _, err := c.Brief(bctx, taskID)
+	cancel()
+	if err != nil {
+		warn(opts, "fetch brief for %s: %v (commit not blocked)", taskID, err)
+		return
+	}
+	if brief.Lease == nil || brief.Lease.Worktree != identity {
+		return // no lease of ours: benign, and not ours to take
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if _, _, err := c.RenewLease(cctx, taskID, 0); err != nil {
-		// Expired-and-swept (e.g. 404) or any other failure must never block a
-		// commit.
+	if _, _, err := c.RenewLease(rctx, taskID, 0); err != nil {
+		// Any failure must never block a commit.
 		warn(opts, "renew lease on %s: %v (commit not blocked)", taskID, err)
 	}
 
