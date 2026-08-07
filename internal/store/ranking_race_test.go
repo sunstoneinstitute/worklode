@@ -30,7 +30,7 @@ func TestClaimNextNoCollisionUnderContention(t *testing.T) {
 			defer wg.Done()
 			results[i], errs[i] = s.ClaimNext(ctx, ClaimNextOpts{
 				ActorID:  "stig",
-				Worktree: fmt.Sprintf("h:/wt/%d", i),
+				Worktree: fmt.Sprintf("h:/.worktrees/%d", i),
 			})
 		}(i)
 	}

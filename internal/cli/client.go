@@ -22,21 +22,25 @@ import (
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server" and "current_project", e.g.:
+// recognized keys are "server", "current_project", and "worktree_dir", e.g.:
 //
 //	server = "https://wl.example.com"
 //	current_project = "sunstone-web"
+//	worktree_dir = ".worktrees"
 //
-// A repo-local config file overrides those per checkout — see
-// findRepoConfig — which is how current_project is normally set: one project
-// per repository.
+// A repo-local config file overrides current_project (and server) per
+// checkout — see findRepoConfig — which is how current_project is normally
+// set: one project per repository. worktree_dir is the one key this merge
+// deliberately excludes: it is repo-scoped only (spec 030 §4), read via
+// WorktreeDirFrom instead of through this struct — see WorktreeDir's doc.
 //
 // The token lives in the OS keychain, not the file. A legacy "token" key is
 // still accepted on read (as a deprecated fallback) so older config files keep
 // working until the next SaveConfig migrates the token into the keychain.
 //
-// The environment variables LODE_SERVER and LODE_TOKEN, when set, override the
-// files and the keychain.
+// The environment variables LODE_SERVER and LODE_TOKEN, when set, override
+// the files and the keychain. LODE_WORKTREE_DIR is a separate override,
+// applied only by WorktreeDirFrom (see its doc).
 type Config struct {
 	ServerURL      string
 	Token          string
@@ -46,6 +50,15 @@ type Config struct {
 	// commands can report which file set their scope. Empty when no file
 	// set it.
 	CurrentProjectPath string
+
+	// WorktreeDir carries the worktree_dir key when Config is produced
+	// directly by parseConfig — which is how WorktreeDirFrom reads it. It is
+	// NOT populated by LoadConfig/loadConfigFrom: worktree_dir is scoped to
+	// the repo-local config only (spec 030 §4, "the checkout owns it"), so a
+	// user-level setting must never reach here — see WorktreeDirFrom, which
+	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
+	// instead of this field.
+	WorktreeDir string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -98,6 +111,30 @@ func findRepoConfig(startDir string) (string, bool) {
 	}
 }
 
+// WorktreeDirFrom returns the worktree base directory configured for
+// startDir's repo (spec 030 §3.1): a repo-local .worklode/config.toml's
+// worktree_dir, with the LODE_WORKTREE_DIR env override applied on top, or ""
+// when neither is set. Deliberately keychain-free and independent of
+// LoadConfig/loadConfigFrom — it never touches the OS keychain or a token,
+// only the repo-local config file (plus one env var), so it is cheap enough
+// for a caller that must run on every hook event (internal/hookrun's guard).
+// A missing or malformed repo config yields "" rather than an error: this
+// never fails, it only ever degrades to "no override configured".
+func WorktreeDirFrom(startDir string) string {
+	var dir string
+	if repoPath, ok := findRepoConfig(startDir); ok {
+		if data, err := os.ReadFile(repoPath); err == nil {
+			if cfg, err := parseConfig(string(data)); err == nil {
+				dir = cfg.WorktreeDir
+			}
+		}
+	}
+	if v := os.Getenv("LODE_WORKTREE_DIR"); v != "" {
+		dir = v
+	}
+	return dir
+}
+
 // LoadConfig reads the config files (a missing file is not an error — its
 // fields are just left empty), merges the repo-local config found from the
 // working directory on top of the user config, and applies the
@@ -129,6 +166,10 @@ func loadConfigFrom(startDir string) (Config, error) {
 		if cfg.CurrentProject != "" {
 			cfg.CurrentProjectPath = path
 		}
+		// worktree_dir is repo-scoped only (spec 030 §4); a user-level file
+		// setting it must not leak into the merged Config — WorktreeDirFrom
+		// is the sole reader, and it never consults this path.
+		cfg.WorktreeDir = ""
 	case os.IsNotExist(err):
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
@@ -191,6 +232,8 @@ func parseConfig(data string) (Config, error) {
 			cfg.Token = val
 		case "current_project":
 			cfg.CurrentProject = val
+		case "worktree_dir":
+			cfg.WorktreeDir = val
 		default:
 			return Config{}, fmt.Errorf("line %d: unknown key %q", i+1, key)
 		}
@@ -230,6 +273,9 @@ func (cfg *Config) merge(repo Config, path string) {
 		cfg.CurrentProject = repo.CurrentProject
 		cfg.CurrentProjectPath = path
 	}
+	// worktree_dir is deliberately NOT merged here: it is repo-scoped only
+	// (spec 030 §4) and read exclusively through WorktreeDirFrom, which never
+	// goes through loadConfigFrom/merge.
 }
 
 // SaveConfig stores the token in the OS keychain and writes only the server URL

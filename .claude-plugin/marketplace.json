@@ -11,7 +11,7 @@
     {
       "name": "lode",
       "source": "./plugins/lode",
-      "description": "[code] Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its wt/<id>-<slug> worktree, bind the lease, and mark it done/blocked. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
+      "description": "[code] Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
       "version": "0.2.0",
       "author": {
         "name": "Stig Bakken",

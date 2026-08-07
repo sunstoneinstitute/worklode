@@ -5,8 +5,8 @@
 // Two rules govern every handler:
 //
 //   - Worklode's own action is GUARDED. Unless the working directory resolves
-//     to a wt/<id>-<slug> worktree (worktree.Root → worktree.ParseDir), the
-//     handler does nothing.
+//     to a Worklode worktree (worktree.Root → Layout.ParseDir), the handler
+//     does nothing.
 //   - Worklode NEVER fails the event. Every backbone call runs under a short
 //     timeout and any error (no config, network, 4xx/5xx) is downgraded to a
 //     stderr warning; the hook still exits 0. The only non-zero exit is the
@@ -119,6 +119,33 @@ func (o Options) now() time.Time {
 	return time.Now()
 }
 
+// layoutFor resolves the worktree layout for dir — the payload cwd (the same
+// directory resolveDir picks), never the process cwd. Spec 030 §3.1: a hook
+// running inside a worktree resolves the base directory from its OWN cwd,
+// because .worklode/config.toml is repo content checked out into every
+// worktree; resolving from os.Getwd() (as cli.LoadConfig does) can silently
+// pick up the wrong repo's config when the two diverge.
+//
+// This deliberately does not call cli.LoadConfig: LoadConfig's keychain
+// token lookup costs ~9ms of subprocess time (go-keyring -> `security
+// find-generic-password`), and this runs ahead of the ParseDir guard on
+// every hook event — including heartbeat, which fires per assistant turn.
+// cli.WorktreeDirFrom reads only the repo-local config file (plus one env
+// var); no keychain, no token, no network.
+//
+// Resolved once per Run(), not per handler or per ParseDir call. A malformed
+// worktree_dir (NewLayout rejects it, e.g. an absolute path) degrades to the
+// default layout with a warning rather than erroring out — a hook must never
+// fail an event.
+func layoutFor(opts Options, dir string) worktree.Layout {
+	l, err := worktree.NewLayout(cli.WorktreeDirFrom(dir))
+	if err != nil {
+		warn(opts, "resolve worktree layout: %v (using %s)", err, worktree.DefaultBase)
+		l, _ = worktree.NewLayout("")
+	}
+	return l
+}
+
 // defaultClient builds the backbone client from the on-disk config plus the
 // LODE_SERVER/LODE_TOKEN overrides.
 func defaultClient() (*cli.Client, error) {
@@ -157,7 +184,8 @@ func Run(ctx context.Context, opts Options) int {
 	_ = json.Unmarshal(raw, &payload) // tolerate empty / non-JSON stdin
 
 	dir := resolveDir(payload)
-	dispatch(ctx, opts, payload, dir)
+	l := layoutFor(opts, dir)
+	dispatch(ctx, opts, payload, dir, l)
 
 	if len(opts.Next) > 0 {
 		return runNext(opts, raw)
@@ -178,24 +206,24 @@ func resolveDir(p Payload) string {
 	return wd
 }
 
-func dispatch(ctx context.Context, opts Options, p Payload, dir string) {
+func dispatch(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	switch opts.Event {
 	case "session-start":
-		handleSessionStart(ctx, opts, p, dir)
+		handleSessionStart(ctx, opts, p, dir, l)
 	case "session-end":
-		handleSessionEnd(ctx, opts, p, dir)
+		handleSessionEnd(ctx, opts, p, dir, l)
 	case "pre-commit":
-		handlePreCommit(ctx, opts, dir)
+		handlePreCommit(ctx, opts, dir, l)
 	case "worktree-create":
-		handleWorktreeCreate(ctx, opts, p, dir)
+		handleWorktreeCreate(ctx, opts, p, dir, l)
 	case "worktree-remove":
-		handleWorktreeRemove(ctx, opts, p, dir)
+		handleWorktreeRemove(ctx, opts, p, dir, l)
 	case "heartbeat":
-		handleHeartbeat(ctx, opts, p, dir)
+		handleHeartbeat(ctx, opts, p, dir, l)
 	case "worktree-enter":
-		handleWorktreeEnter(ctx, opts, p, dir)
+		handleWorktreeEnter(ctx, opts, p, dir, l)
 	case "worktree-exit":
-		handleWorktreeExit(ctx, opts, p, dir)
+		handleWorktreeExit(ctx, opts, p, dir, l)
 	default:
 		warn(opts, "unknown hook event %q", opts.Event)
 	}
@@ -328,14 +356,14 @@ func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageB
 
 // --- event handlers ---------------------------------------------------------
 
-func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string) {
+func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return // not in a git repo ⇒ NOP
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
-		offerScan(ctx, opts, root)
+		offerScan(ctx, opts, root, l)
 		return
 	}
 
@@ -448,14 +476,18 @@ func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, ident
 	}
 }
 
-// offerScan runs at session start OUTSIDE a worktree: it looks at the sibling
-// wt/* directories under the repo root and, for up to five that parse as
-// Worklode worktrees, flags any whose lease is expired/absent and whose
-// session marker is stale/absent as adoptable. No claim, no model call.
-func offerScan(ctx context.Context, opts Options, repoRoot string) {
-	entries, err := os.ReadDir(filepath.Join(repoRoot, "wt"))
+// offerScan runs at session start OUTSIDE a worktree: it reads the configured
+// worktree base directory under the repo root and, for up to five entries that
+// parse as Worklode worktrees, flags any whose lease is expired/absent and
+// whose session marker is stale/absent as adoptable. No claim, no model call.
+//
+// One flat ReadDir, not a walk: the layout puts every worktree exactly one
+// level below the base (spec 030 §3.1), so there is nothing deeper to find.
+func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.Layout) {
+	base := filepath.Join(repoRoot, filepath.FromSlash(l.Base()))
+	entries, err := os.ReadDir(base)
 	if err != nil {
-		return // no wt/ dir ⇒ nothing to offer
+		return // no base dir ⇒ nothing to offer
 	}
 
 	c, err := opts.client()
@@ -471,8 +503,8 @@ func offerScan(ctx context.Context, opts Options, repoRoot string) {
 		if !e.IsDir() {
 			continue
 		}
-		wtDir := filepath.Join(repoRoot, "wt", e.Name())
-		taskID, ok := worktree.ParseDir(wtDir)
+		wtDir := filepath.Join(base, e.Name())
+		taskID, ok := l.ParseDir(wtDir)
 		if !ok {
 			continue
 		}
@@ -482,18 +514,18 @@ func offerScan(ctx context.Context, opts Options, repoRoot string) {
 		fetched++
 
 		bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		brief, _, err := c.Brief(bctx, taskID)
+		brief, _, briefErr := c.Brief(bctx, taskID)
 		cancel()
-		if err != nil {
+		if briefErr != nil {
 			continue // best-effort per worktree
 		}
 
 		leaseGone := brief.Lease == nil || brief.Lease.ExpiresAt.Before(now)
 		if leaseGone && !sessionMarkerFresh(wtDir) {
-			rel := "wt/" + e.Name()
+			shown := filepath.ToSlash(filepath.Join(l.Base(), e.Name()))
 			lines = append(lines, fmt.Sprintf(
 				"Worklode worktree %s (%s: %s) is abandoned — `/lode:resume %s` to adopt it.",
-				rel, taskID, brief.Task.Title, rel))
+				shown, taskID, brief.Task.Title, shown))
 		}
 	}
 
@@ -502,12 +534,12 @@ func offerScan(ctx context.Context, opts Options, repoRoot string) {
 	}
 }
 
-func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) {
+func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
 		return
 	}
@@ -536,12 +568,12 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string) 
 // The session report is gated on the same answer: an agent session hangs off
 // the active lease, so with no lease of ours it would 404 for exactly the same
 // benign reason. Nothing here can block a commit.
-func handlePreCommit(ctx context.Context, opts Options, dir string) {
+func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.Layout) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
 		return
 	}
@@ -579,11 +611,11 @@ func handlePreCommit(ctx context.Context, opts Options, dir string) {
 	}
 }
 
-func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir string) {
+func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	created := payloadPath(p, dir)
-	taskID, ok := worktree.ParseDir(created)
+	taskID, ok := l.ParseDir(created)
 	if !ok {
-		return // not a wt/ dir (or unknown path) ⇒ NOP
+		return // not under the worktree base dir (or unknown path) ⇒ NOP
 	}
 	c, err := opts.client()
 	if err != nil {
@@ -612,9 +644,9 @@ func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir stri
 	}
 }
 
-func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir string) {
+func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	removed := payloadPath(p, dir)
-	taskID, ok := worktree.ParseDir(removed)
+	taskID, ok := l.ParseDir(removed)
 	if !ok {
 		return
 	}
@@ -644,12 +676,12 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 // marker-only caller (pre-commit). Either case reports immediately — a
 // debounce window that was never actually started for this id is not one to
 // wait out.
-func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
+func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
 		return
 	}
@@ -686,13 +718,13 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string) {
 // in THIS worktree: without a marker, heartbeats here would debounce off
 // forever (no marker ⇒ nothing due) and sessionMarkerFresh would read this
 // worktree as abandoned while it is actively being worked.
-func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string) {
+func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	entered := payloadPath(p, dir)
 	root, ok := worktree.Root(entered)
 	if !ok {
 		return
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
 		return
 	}
@@ -721,7 +753,7 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 // returned TO, so the fallback would end the wrong session. A session that
 // leaves without an explicit exit still ages out — last_seen_at stops
 // advancing, and the lease close ends the row for good.
-func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string) {
+func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	exited := pathFromToolInput(p.ToolInput)
 	if exited == "" {
 		return
@@ -730,7 +762,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
-	taskID, ok := worktree.ParseDir(root)
+	taskID, ok := l.ParseDir(root)
 	if !ok {
 		return
 	}
@@ -749,7 +781,8 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 // payloadPath returns the created/removed worktree path from the payload's
 // tool_input, falling back to the resolved cwd (dir). The exact tool_input
 // field name is not contractually fixed, so pathFromToolInput searches
-// defensively; ParseDir then decides whether the result is a wt/ dir.
+// defensively; ParseDir then decides whether the result is under the
+// worktree base dir.
 func payloadPath(p Payload, dir string) string {
 	if path := pathFromToolInput(p.ToolInput); path != "" {
 		return path

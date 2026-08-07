@@ -228,10 +228,15 @@ tracking has no other stage. A cluster missing from the map falls back to
 
 ## Task branches
 
-Task branches are `<prefix><task-id>-<slug>`. The prefix is `LODE_BRANCH_PREFIX`
-on the server (default `lode/`); the legacy `wl/` prefix stays recognized for PR
-and push correlation regardless. The server is the authority: `lode next` and
-`lode task claim` use the branch the claim response returns.
+Task branches are rendered from `LODE_BRANCH_TEMPLATE` on the server (default
+`{{ .id }}-{{ .slug }}`, e.g. `WL-7-fix-the-thing`). The server is the
+authority: `lode next` and `lode task claim` use the branch the claim response
+returns. Worktrees live under `worktree_dir` (default `.worktrees`),
+configurable per repo in `.worklode/config.toml`. `LODE_WORKTREE_DIR` overrides
+`worktree_dir` on the client, but it is for one-off and CI use only: it does
+not persist anywhere, so a later session started without it will not
+recognise worktrees created with it set. Set `worktree_dir` in the repo config
+instead for anything durable.
 
 ## SSO (optional)
 
@@ -339,8 +344,9 @@ Claude Code bindings:
 `WorktreeCreate`/`WorktreeRemove` are delegation hooks: binding one makes it
 *the* worktree creator, replacing Claude Code's built-in `git worktree add`, and
 `EnterWorktree` then fails unless the hook prints the path it created. Both
-events stay available for scripts that do create Worklode's `wt/<task-id>`
-worktrees; invoke them as `lode hook worktree-create` / `worktree-remove`.
+events stay available for scripts that do create Worklode's own worktrees
+(under `.worktrees/` by default); invoke them as `lode hook worktree-create` /
+`worktree-remove`.
 
 Install these bindings into a repo with:
 
@@ -415,7 +421,7 @@ The Claude Code plugin (`lode` plugin, `plugins/lode/` in the
 plugins marketplace) provides a `/lode:*` slash-command flow for agents
 picking up work:
 
-- `/lode:next` — claim the next ready task, create its `wt/<id>-<slug>`
+- `/lode:next` — claim the next ready task, create its `.worktrees/<id>-<slug>`
   git worktree, bind the lease to it, and start from the injected task brief.
 - `/lode:resume` — re-acquire the task already bound to the current worktree.
 - `/lode:done` — mark the task done, release the lease, and print a

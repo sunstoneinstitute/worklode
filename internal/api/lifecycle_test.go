@@ -76,12 +76,12 @@ func TestSlugifyTitle(t *testing.T) {
 	}
 }
 
-// TestClaimBranchPrefix checks Config.BranchPrefix (LODE_BRANCH_PREFIX)
+// TestClaimBranchTemplate checks Config.BranchTemplate (LODE_BRANCH_TEMPLATE)
 // reaches the branch both claim endpoints hand out. The claim-next leg is
-// what pins the wire field down: under a default-prefix server the CLI's
+// what pins the wire field down: under a default-template server the CLI's
 // fallback reconstruction is indistinguishable from the server's branch.
-func TestClaimBranchPrefix(t *testing.T) {
-	t.Cleanup(func() { store.SetBranchPrefix("") })
+func TestClaimBranchTemplate(t *testing.T) {
+	t.Cleanup(func() { store.SetBranchTemplate("") })
 	st := newTestStore(t)
 	ctx := context.Background()
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
@@ -91,7 +91,7 @@ func TestClaimBranchPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	h, _, err := api.NewServer(st, api.Config{BranchPrefix: "team/"})
+	h, _, err := api.NewServer(st, api.Config{BranchTemplate: "team/{{ .id }}-{{ .slug }}"})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -126,6 +126,16 @@ func TestClaimBranchPrefix(t *testing.T) {
 	}
 }
 
+func TestNewServerRejectsBadBranchTemplate(t *testing.T) {
+	t.Cleanup(func() { store.SetBranchTemplate("") })
+	st := newTestStore(t)
+	for _, tmpl := range []string{"{{ .slug }}", "{{ .id ", "{{ .id }} {{ .slug }}"} {
+		if _, _, err := api.NewServer(st, api.Config{BranchTemplate: tmpl}); err == nil {
+			t.Errorf("NewServer accepted invalid branch template %q", tmpl)
+		}
+	}
+}
+
 func TestClaim(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -138,8 +148,8 @@ func TestClaim(t *testing.T) {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	if got["branch"] != "lode/WL-1-fix-the-thing" {
-		t.Fatalf("branch = %v, want lode/WL-1-fix-the-thing", got["branch"])
+	if got["branch"] != "WL-1-fix-the-thing" {
+		t.Fatalf("branch = %v, want WL-1-fix-the-thing", got["branch"])
 	}
 	lease, ok := got["lease"].(map[string]any)
 	if !ok {
