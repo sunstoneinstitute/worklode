@@ -3,6 +3,7 @@ package graphserver_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -180,6 +181,83 @@ func TestSelectBadGatewayRetryable(t *testing.T) {
 	_, err := authed(srv.URL).Select(context.Background(), "SELECT * WHERE {}")
 	if !errors.Is(err, graphserver.ErrSPARQLUnavailable) {
 		t.Fatalf("error = %v; want ErrSPARQLUnavailable on 502", err)
+	}
+}
+
+// A rollout answers every method with an ingress status, not just /sparql;
+// a caller retrying through one must not have to special-case the verb.
+func TestGraphStoreUnavailableIsRetryable(t *testing.T) {
+	for _, status := range []int{
+		http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout,
+	} {
+		for _, op := range []struct {
+			name string
+			call func(*graphserver.Client) error
+		}{
+			{"PutGraph", func(c *graphserver.Client) error {
+				_, err := c.PutGraph(context.Background(), "main", graphIRI, nil)
+				return err
+			}},
+			{"GetGraph", func(c *graphserver.Client) error {
+				_, err := c.GetGraph(context.Background(), "main", graphIRI)
+				return err
+			}},
+			{"DeleteGraph", func(c *graphserver.Client) error {
+				return c.DeleteGraph(context.Background(), "main", graphIRI)
+			}},
+		} {
+			t.Run(fmt.Sprintf("%s/%d", op.name, status), func(t *testing.T) {
+				srv, _ := recordingServer(t, status, "upstream connect error")
+				err := op.call(authed(srv.URL))
+				if !errors.Is(err, graphserver.ErrUnavailable) {
+					t.Fatalf("error = %v; want ErrUnavailable on %d", err, status)
+				}
+				if !strings.Contains(err.Error(), "upstream connect error") {
+					t.Fatalf("error = %v; want the body excerpt kept", err)
+				}
+			})
+		}
+	}
+}
+
+func TestGraphStoreForbiddenNotRetryable(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusForbidden, "missing readwrite role")
+	_, err := authed(srv.URL).PutGraph(context.Background(), "main", graphIRI, nil)
+	if errors.Is(err, graphserver.ErrUnavailable) {
+		t.Fatalf("error = %v; a 403 must not be retryable", err)
+	}
+}
+
+// ErrSPARQLUnavailable is the /sparql-specific face of ErrUnavailable, so a
+// caller that only asks "retryable?" can test the general one.
+func TestSelectUnavailableWrapsErrUnavailable(t *testing.T) {
+	srv, _ := recordingServer(t, http.StatusServiceUnavailable, "oxigraph unavailable")
+	_, err := authed(srv.URL).Select(context.Background(), "SELECT * WHERE {}")
+	if !errors.Is(err, graphserver.ErrUnavailable) {
+		t.Fatalf("error = %v; want ErrUnavailable", err)
+	}
+}
+
+// An oversized result set must fail loudly rather than return a short answer.
+func TestSelectResultSetCapped(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`{"head":{"vars":["s"]},"results":{"bindings":[`)
+	row := `{"s":{"type":"uri","value":"https://worklode.io/ns/id/pad/` + strings.Repeat("x", 1024) + `"}}`
+	for b.Len() < 33<<20 {
+		if b.Len() > len(`{"head":{"vars":["s"]},"results":{"bindings":[`) {
+			b.WriteString(",")
+		}
+		b.WriteString(row)
+	}
+	b.WriteString(`]}}`)
+
+	srv, _ := recordingServer(t, http.StatusOK, b.String())
+	rows, err := authed(srv.URL).Select(context.Background(), "SELECT ?s WHERE {}")
+	if err == nil {
+		t.Fatalf("Select on an oversized result set: want an error, got %d rows", len(rows))
+	}
+	if rows != nil {
+		t.Fatalf("rows = %d; want nil alongside the error", len(rows))
 	}
 }
 
