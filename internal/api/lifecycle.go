@@ -102,7 +102,7 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lease":  toLeaseJSON(lease),
-		"branch": s.branchPrefix + id + "-" + SlugifyTitle(t.Title),
+		"branch": store.BranchFor(t),
 	})
 }
 
@@ -132,7 +132,7 @@ func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) t
 	pick := taskPickJSON{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
-		Branch:   s.branchPrefix + t.ID + "-" + SlugifyTitle(t.Title),
+		Branch:   store.BranchFor(t),
 		Concern:  t.Concern,
 		Priority: t.Priority,
 		FanOut:   fanOut,

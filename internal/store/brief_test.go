@@ -39,7 +39,7 @@ func TestBrief(t *testing.T) {
 	if b.Task.ID != task.ID || b.Body != task.Body {
 		t.Fatalf("brief task = %+v, want id=%s body=%q", b.Task, task.ID, task.Body)
 	}
-	if want := "lode/" + task.ID + "-a-task"; b.Branch != want {
+	if want := task.ID + "-a-task"; b.Branch != want {
 		t.Fatalf("branch = %q, want %q", b.Branch, want)
 	}
 	if len(b.OpenBlockers) != 1 || b.OpenBlockers[0].ID != openBlocker.ID {

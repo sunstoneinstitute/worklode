@@ -1,6 +1,6 @@
 ---
 name: working-under-worklode
-description: Use when working inside a Worklode worktree (wt/<id>-<slug>) — the done/block/release judgment loop for leased tasks
+description: Use when working inside a Worklode worktree (under .worktrees/) — the done/block/release judgment loop for leased tasks
 ---
 
 # Working under Worklode

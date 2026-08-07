@@ -289,7 +289,7 @@ func TestPROpenedCorrelatesAndMovesToReview(t *testing.T) {
 	if pr.TaskID == nil || *pr.TaskID != taskID {
 		t.Fatalf("PR task id = %v, want %s", pr.TaskID, taskID)
 	}
-	if pr.State != "open" || pr.HeadRef != "wl/WL-1-x" || pr.MergeSHA != nil ||
+	if pr.State != "open" || pr.HeadRef != "WL-1-x" || pr.MergeSHA != nil ||
 		pr.Title != "Fix crash on load" || pr.OpenedAt.IsZero() {
 		t.Fatalf("PR = %+v", pr)
 	}

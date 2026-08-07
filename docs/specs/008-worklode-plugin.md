@@ -11,14 +11,23 @@ amends:
 amendedBy:
   ".":
     - 014-design-documents-as-graph-objects.md#sec-1
+  "#sec-3":
+    - 030-branch-and-worktree-naming.md
+  "#sec-4":
+    - 030-branch-and-worktree-naming.md
   "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-3
+    - 030-branch-and-worktree-naming.md
   "#sec-7":
     - 014-design-documents-as-graph-objects.md#sec-2
+    - 030-branch-and-worktree-naming.md
   "#sec-8":
     - 014-design-documents-as-graph-objects.md#sec-2
+  "#sec-12":
+    - 030-branch-and-worktree-naming.md
   "#sec-13":
     - 014-design-documents-as-graph-objects.md
+    - 030-branch-and-worktree-naming.md
 replaces:
   ".":
     - 003-platform-graph-design.md
@@ -63,6 +72,12 @@ Product = **Worklode**. CLI = **`lode`**. Slash commands and skills use the `lod
 
 ## 3. Worktree-bound lease lifecycle {#sec-3}
 
+> **Amended by spec 030.** The worktree is `<git-root>/<worktree_dir>/<branch>`
+> (default base `.worktrees`), and the branch is rendered from
+> `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`). Read `wt/<id>-<slug>`
+> below as that path. Determinism is unchanged — the path is still a pure
+> function of the task.
+
 **The worktree is the unit of Worklode work. The lease binds to the git worktree, not the session.**
 This is the core mechanic and the reason Worklode is strictly opt-in: a plain Claude Code session,
 in a normal checkout, never touches Worklode. You enter Worklode mode *only* by claiming, which spins
@@ -91,6 +106,10 @@ Lifecycle:
 worktree name and the backbone's worktree→lease binding.
 
 ## 4. Hooks {#sec-4}
+
+> **Amended by spec 030 §3.2.** The uniform guard asks whether the path lies
+> under the configured worktree base directory (default `.worktrees`) and
+> extracts the id from below it, rather than checking for a `wt/` parent.
 
 Every hook is a **NOP outside a Worklode worktree** (uniform guard: parse cwd for a `wt/<id>-<slug>`
 worktree with a backbone-bound lease; absent ⇒ `exit 0` immediately). Worklode is invisible to ordinary
@@ -134,6 +153,10 @@ Notes:
 
 > **Amended by 014.** The brief carries the governing **Spec section** (a `wl:Section` node, bounded by construction), not a Spec/Plan excerpt.
 
+> **Amended by spec 030.** "Branch" is the server-rendered `LODE_BRANCH_TEMPLATE` name (default
+> `{{ .id }}-{{ .slug }}`); the worktree path below it is `<worktree_dir>/<branch>` (default
+> `.worktrees/<id>-<slug>`), not `wt/<id>-<slug>`.
+
 **Deterministic context assembly — the biggest single token win.** One bounded, machine-assembled
 payload replaces the model spelunking through files to reconstruct what a task is about. Consumed from
 005/006; this spec specifies what the plugin injects and when.
@@ -152,6 +175,9 @@ brief is the context contract. If the brief is insufficient, that's a signal the
 decomposition (D15), not that the agent should go reading the repo.
 
 ## 7. Slash commands {#sec-7}
+
+> **Amended by spec 030.** `/lode-next` creates `<worktree_dir>/<branch>` (default
+> `.worktrees/<id>-<slug>`), not `wt/<id>-<slug>`.
 
 | Command | Action |
 |---|---|
@@ -221,6 +247,9 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
 
 ## 12. Open questions {#sec-12}
 
+> **Amended by spec 030.** Q008.1's `wt/<id>-<slug>` is now `<worktree_dir>/<branch>` (default
+> `.worktrees/<id>-<slug>`); the question itself is unaffected.
+
 - **Q008.1 — Worktree removal vs. `/lode-done` ordering.** When a session `/lode-done`s, does the plugin
   remove `wt/<id>-<slug>` itself, or leave removal to the human/finishing-a-branch flow? Auto-release
   fires on removal either way, but *who removes* affects whether a done-but-unmerged worktree lingers.
@@ -236,6 +265,9 @@ that can't drive a CLI + editor hooks; it would wrap the same `lode` commands, n
   hook authenticates to the GitHub API; reconciling manual Issue edits.
 
 ## 13. Acceptance criteria {#sec-13}
+
+> **Amended by spec 030.** Criterion 1's `wt/<id>-<slug>` worktree is now `<worktree_dir>/<branch>`
+> (default `.worktrees/<id>-<slug>`).
 
 1. `/lode-next` in a repo produces a `wt/<id>-<slug>` worktree with a backbone-bound lease and an injected
    brief; the same flow in a plain checkout (no claim) leaves the session completely untouched.

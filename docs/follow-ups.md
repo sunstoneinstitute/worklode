@@ -192,3 +192,20 @@ Design items landed in spec 028. These are the mechanical leftovers.
   mutation.
 - **CLAUDE.md says the web UI is unauthenticated.** `internal/api/oidcweb.go`
   gates the web pages behind Keycloak when OIDC is enabled. Fix the sentence.
+- **The copy of the `lode` plugin in `claude-public-plugins` still documents
+  `wt/<id>-<slug>` (spec 030 follow-up).** The in-repo `plugins/lode/` copy was
+  updated when spec 030 landed, but the duplicate published from the other
+  marketplace was not — it needs the same edit, or to be dropped as part of the
+  de-duplication already tracked above.
+- **`handleWorktreeEnter`/`Create`/`Remove` resolve the layout from the wrong
+  cwd (spec 030 follow-up).** `internal/hookrun/hookrun.go` resolves the
+  worktree layout once from the payload cwd, then applies it to a
+  `tool_input` path that may live in a different repo. `runResume` fixed the
+  equivalent hazard by resolving from the target dir; these three hooks did
+  not.
+- **`applyPush`'s branch-pattern match is looser than a prefix check (spec 030
+  follow-up).** `internal/hooks/push.go` short-circuits on a branch-pattern
+  shape match, skipping default-branch and `last-deploy/` handling; the
+  pattern is now `^KEY-N-anything$` rather than prefix-anchored. Theoretical
+  today (a default branch would have to start with an uppercase project key),
+  but cheap to tighten to "task exists".

@@ -101,15 +101,15 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 4. claim --next #1: A (critical bypasses focus ordering).
-	resp1, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/wt/0"})
+	resp1, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/0"})
 	if err != nil {
 		t.Fatalf("claim-next #1: %v", err)
 	}
 	if !resp1.Claimed || resp1.Task == nil || resp1.Task.ID != taskA.ID {
 		t.Fatalf("claim-next #1 = %+v, want claimed %s", resp1, taskA.ID)
 	}
-	if resp1.Task.Lease == nil || resp1.Task.Lease.Worktree != "h:/wt/0" {
-		t.Fatalf("claim-next #1 lease = %+v, want worktree h:/wt/0", resp1.Task.Lease)
+	if resp1.Task.Lease == nil || resp1.Task.Lease.Worktree != "h:/.worktrees/0" {
+		t.Fatalf("claim-next #1 lease = %+v, want worktree h:/.worktrees/0", resp1.Task.Lease)
 	}
 	if resp1.Task.Concern != "usability" {
 		t.Fatalf("claim-next #1 concern = %q, want usability", resp1.Task.Concern)
@@ -121,12 +121,12 @@ func TestPickupLoop(t *testing.T) {
 	if detailA.State != "in_progress" {
 		t.Fatalf("task A state = %q, want in_progress", detailA.State)
 	}
-	if detailA.Lease == nil || detailA.Lease.Worktree != "h:/wt/0" {
-		t.Fatalf("task A lease = %+v, want worktree h:/wt/0", detailA.Lease)
+	if detailA.Lease == nil || detailA.Lease.Worktree != "h:/.worktrees/0" {
+		t.Fatalf("task A lease = %+v, want worktree h:/.worktrees/0", detailA.Lease)
 	}
 
 	// 5. claim --next #2: B (security, rank 0), distinct worktree.
-	resp2, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/wt/1"})
+	resp2, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("claim-next #2: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 7. claim --next #3: C for real, proving the dry-run consumed nothing.
-	resp3, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/wt/2"})
+	resp3, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/2"})
 	if err != nil {
 		t.Fatalf("claim-next #3: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 8. claim --next #4: D (no-concern task; E stays blocked/excluded).
-	resp4, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/wt/3"})
+	resp4, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/3"})
 	if err != nil {
 		t.Fatalf("claim-next #4: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestPickupLoop(t *testing.T) {
 
 	// 9. claim --next #5: claimable set exhausted (A, B, C, D claimed; E
 	// blocked by the still-open draft blocker) — no error, no-ready-task.
-	resp5, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/wt/4"})
+	resp5, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/4"})
 	if err != nil {
 		t.Fatalf("claim-next #5: err = %v, want nil (empty ready set is normal)", err)
 	}

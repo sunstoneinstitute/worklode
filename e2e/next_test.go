@@ -131,7 +131,7 @@ func TestNextEndToEnd(t *testing.T) {
 		t.Fatalf("lode next: %v\noutput: %s", err, out)
 	}
 
-	wantDir := filepath.Join(root, "wt", task.ID+"-wire-up-the-widget")
+	wantDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-wire-up-the-widget")
 	if info, statErr := os.Stat(wantDir); statErr != nil || !info.IsDir() {
 		t.Fatalf("worktree dir %s not created: %v", wantDir, statErr)
 	}
@@ -170,7 +170,7 @@ func TestNextEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create task2: %v", err)
 	}
-	task2Dir := filepath.Join(root, "wt", task2.ID+"-second-task")
+	task2Dir := filepath.Join(root, worktree.DefaultBase, task2.ID+"-second-task")
 
 	decoy, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
 		Project: "nx", Title: "Decoy holder", Priority: "low", Kind: "chore",

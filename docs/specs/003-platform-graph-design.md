@@ -10,6 +10,7 @@ amendedBy:
   "#sec-5":
     - 008-worklode-plugin.md
     - 011-delivery-lifecycle.md
+    - 030-branch-and-worktree-naming.md
   "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-2
 isReplacedBy:
@@ -166,7 +167,7 @@ Shortlist considered:
 
 ## 5. D14 — Claude Code integration: the Worklode plugin {#sec-5}
 
-> **Amended by 008 and 011.** The worktree directory is `wt/<id>-<slug>`; the *branch* carries the configurable prefix (`LODE_BRANCH_PREFIX`, default `lode/`). `wl/` is legacy-recognised only.
+> **Amended by 008, 011 and 030.** The branch name is a server-rendered template (`LODE_BRANCH_TEMPLATE`, default `{{ .id }}-{{ .slug }}`); the worktree lives under a configurable base directory (`worktree_dir`, default `.worktrees`). The earlier `wt/` directory and `lode/`/`wl/` branch prefixes are gone.
 
 **Design lens: push coordination into deterministic, token-free machinery; spend model tokens
 only on judgment.** CLI over MCP, hooks over prompts, server-side selection over agent reasoning.

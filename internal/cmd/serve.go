@@ -81,7 +81,7 @@ func newServeCmd() *cobra.Command {
 				GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
 				FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
 				ClusterEnvMap:       clusterEnv,
-				BranchPrefix:        os.Getenv("LODE_BRANCH_PREFIX"),
+				BranchTemplate:      os.Getenv("LODE_BRANCH_TEMPLATE"),
 				OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
 				OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
 				PublicURL:           os.Getenv("LODE_PUBLIC_URL"),

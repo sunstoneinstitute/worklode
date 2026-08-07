@@ -204,11 +204,11 @@ func TestListPullsDerivesMergedState(t *testing.T) {
 	app, _ := listServer(t, "pulls", [][]map[string]any{{
 		{"number": 1, "title": "open one", "state": "open",
 			"html_url": "u", "updated_at": "2026-01-01T00:00:00Z",
-			"head": map[string]any{"ref": "lode/WL-1-x", "sha": "abc"}},
+			"head": map[string]any{"ref": "WL-1-x", "sha": "abc"}},
 		{"number": 2, "title": "merged one", "state": "closed",
 			"html_url": "u", "updated_at": "2026-01-02T00:00:00Z",
 			"merged_at": "2026-01-02T00:00:00Z", "merge_commit_sha": "def",
-			"head": map[string]any{"ref": "lode/WL-2-y", "sha": "bbb"}},
+			"head": map[string]any{"ref": "WL-2-y", "sha": "bbb"}},
 		{"number": 3, "title": "closed unmerged", "state": "closed",
 			"html_url": "u", "updated_at": "2026-01-03T00:00:00Z",
 			"head": map[string]any{"ref": "x", "sha": "ccc"}},
@@ -225,8 +225,8 @@ func TestListPullsDerivesMergedState(t *testing.T) {
 		t.Fatalf("merged flags = %v/%v/%v, want false/true/false",
 			got[0].Merged, got[1].Merged, got[2].Merged)
 	}
-	if got[1].HeadRef != "lode/WL-2-y" || got[1].HeadSHA != "bbb" {
-		t.Fatalf("head = %q/%q, want lode/WL-2-y/bbb", got[1].HeadRef, got[1].HeadSHA)
+	if got[1].HeadRef != "WL-2-y" || got[1].HeadSHA != "bbb" {
+		t.Fatalf("head = %q/%q, want WL-2-y/bbb", got[1].HeadRef, got[1].HeadSHA)
 	}
 }
 

@@ -555,7 +555,7 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		"html_url": "https://gh/pr/1", "created_at": "2026-01-01T00:00:00Z",
 		"updated_at": "2026-01-02T00:00:00Z", "merged_at": "2026-01-02T00:00:00Z",
 		"merge_commit_sha": "deadbeef",
-		"head":             map[string]any{"ref": store.BranchPrefix() + taskID + "-old", "sha": "cafe"},
+		"head":             map[string]any{"ref": taskID + "-old", "sha": "cafe"},
 	}}
 	app := importGitHub(t, nil, pulls)
 	s := &server{st: st0, cfg: Config{}, log: slog.Default(), appAuth: app}

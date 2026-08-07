@@ -56,7 +56,7 @@ webhooks, Flux notification-controller webhooks — both HMAC-signed),
 import` (backfill through the webhook store path, so re-running is safe).
 
 Cross-cutting pieces: worktree-bound leases (a claim binds a task to a
-`wt/<task-id>-<slug>` worktree; `internal/worktree`, `internal/hookrun` for
+worktree under `.worktrees/`; `internal/worktree`, `internal/hookrun` for
 the Claude Code hook bindings), agent-session tracking priced from the
 agent's own transcript (`internal/transcript`, `store/pricing` — rates are
 effective-dated rows in `model_prices`, never hardcoded), and the org skill
@@ -128,9 +128,13 @@ ground without adding a Python stack to a Go repo.
 
 - Tokens are `wl_` + 40 hex chars everywhere (bootstrap, minted, e2e
   fixtures); anything else is treated as a token hash, not a plaintext.
-- Task branches are `<prefix><task-id>-<slug>` (default prefix `lode/`;
-  legacy `wl/` still recognized for correlation). The server is the authority
-  on branch names.
+- Task branches are rendered from `LODE_BRANCH_TEMPLATE` (default
+  `{{ .id }}-{{ .slug }}`, e.g. `WL-7-fix-the-thing`); the server is the
+  authority on branch names. Worktrees live under `worktree_dir` (default
+  `.worktrees`), configurable per repo in `.worklode/config.toml`.
+  `LODE_WORKTREE_DIR` overrides it client-side for one-off/CI use, but it
+  doesn't persist — a session started without it won't recognise worktrees
+  created with it set, so `worktree_dir` is the durable setting.
 - `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
   reasoning effort each agent role uses when working this repo with subagents.
 - **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML

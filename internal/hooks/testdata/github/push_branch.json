@@ -1,5 +1,5 @@
 {
-  "ref": "refs/heads/lode/WL-1-add-widget",
+  "ref": "refs/heads/WL-1-add-widget",
   "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
   "commits": [
     {"id": "1111111111111111111111111111111111111111", "message": "Add widget"},
