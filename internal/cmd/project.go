@@ -292,41 +292,50 @@ func newProjectShowCmd() *cobra.Command {
 		Short: "Show a project's repos, focus, and token cost",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id := project
-			if id == "" {
-				wd, err := os.Getwd()
-				if err != nil {
-					return fmt.Errorf("get working directory: %w", err)
-				}
-				id = cli.ResolveScope(cmd.Context(), c, cfg, wd).Project
-			}
-			if id == "" {
-				o := cmd.OutOrStdout()
-				fmt.Fprintln(o, "no current project: pass --project <id> to name one")
-				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
-				return nil
-			}
-
-			from, to := costWindow(days)
-			detail, raw, err := c.ProjectDetail(cmd.Context(), id, from, to)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			printProjectDetail(cmd, detail, costWindowLabel(days))
-			return nil
+			return runProjectShow(cmd, project, days)
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "project id (default: the current project)")
 	cmd.Flags().IntVar(&days, "days", defaultCostDays, "cost window in days, counting today; 0 for all history")
 	return cmd
+}
+
+// runProjectShow is `project show`'s body, shared with the `lode show
+// --project <id>`/`--kind project <id>` dispatcher (show.go). project is the
+// project id to show, or "" to resolve the current one from scope (as `lode
+// project show` with no flag does); days is the cost window, counting today
+// (see costWindow).
+func runProjectShow(cmd *cobra.Command, project string, days int) error {
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	id := project
+	if id == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("get working directory: %w", err)
+		}
+		id = cli.ResolveScope(cmd.Context(), c, cfg, wd).Project
+	}
+	if id == "" {
+		o := cmd.OutOrStdout()
+		fmt.Fprintln(o, "no current project: pass --project <id> to name one")
+		fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
+		return nil
+	}
+
+	from, to := costWindow(days)
+	detail, raw, err := c.ProjectDetail(cmd.Context(), id, from, to)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	printProjectDetail(cmd, detail, costWindowLabel(days))
+	return nil
 }
 
 // costWindow turns --days into the [from, to] the API takes. Both ends are

@@ -1061,6 +1061,43 @@ func TestRepoConfigOverridesCurrentProject(t *testing.T) {
 	}
 }
 
+func TestLoadConfigProjectKeyFromUserConfig(t *testing.T) {
+	_, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\nproject_key = \"WL\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ProjectKey != "WL" {
+		t.Fatalf("project key = %q; want WL", cfg.ProjectKey)
+	}
+}
+
+func TestLoadConfigProjectKeyAbsent(t *testing.T) {
+	_, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ProjectKey != "" {
+		t.Fatalf("project key = %q; want empty when unset", cfg.ProjectKey)
+	}
+}
+
+func TestRepoConfigOverridesProjectKey(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\nproject_key = \"USER\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git", "proj"), ".worklode", "project_key = \"WL\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ProjectKey != "WL" {
+		t.Fatalf("project key = %q; want WL (repo overrides user)", cfg.ProjectKey)
+	}
+}
+
 func TestRepoConfigNearestWins(t *testing.T) {
 	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
 	writeRepoConfig(t, filepath.Join(home, "git"), ".worklode", "current_project = \"outer\"\n")
@@ -1151,6 +1188,27 @@ func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
 	}
 	if cfg.ServerURL != "https://new.example.com" || cfg.CurrentProject != "keepme" {
 		t.Fatalf("config after SaveServerOnly = %+v; want the new server and current_project kept", cfg)
+	}
+}
+
+func TestSaveServerOnlyPreservesProjectKey(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	t.Setenv("LODE_TOKEN", "")
+
+	if err := cli.WriteRawConfigForTest("server = \"https://old.example.com\"\nproject_key = \"WL\"\n"); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	if err := cli.SaveServerOnly("https://new.example.com"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	cfg, err := cli.LoadConfigFromForTest("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ServerURL != "https://new.example.com" || cfg.ProjectKey != "WL" {
+		t.Fatalf("config after SaveServerOnly = %+v; want the new server and project_key kept", cfg)
 	}
 }
 

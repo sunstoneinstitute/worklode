@@ -173,27 +173,33 @@ func newTaskShowCmd() *cobra.Command {
 		Short: "Show a task's details: body, edges, blocked status, and lease holder",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.GetTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskDetailRender(cmd.OutOrStdout(), t)
-			return nil
+			return runTaskShow(cmd, args[0])
 		},
 	}
 	return cmd
+}
+
+// runTaskShow is `task show`'s body, shared with the `lode show <id>`
+// dispatcher (show.go) once it has classified arg as a task id.
+func runTaskShow(cmd *cobra.Command, arg string) error {
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	id, err := resolveTaskID(cmd.Context(), arg, c, cfg)
+	if err != nil {
+		return err
+	}
+	t, raw, err := c.GetTask(cmd.Context(), id)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.TaskDetailRender(cmd.OutOrStdout(), t)
+	return nil
 }
 
 func newTaskSkillsCmd() *cobra.Command {
