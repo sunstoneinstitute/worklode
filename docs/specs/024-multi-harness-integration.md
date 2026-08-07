@@ -85,7 +85,7 @@ Two adapter-relevant notes:
 | | Mechanism | Config location | Events Worklode cares about | Can block? |
 |---|---|---|---|---|
 | **Claude Code** | JSON bindings; handler types `command`, `prompt`, `agent`, `http`, `mcp_tool`; sync or background | `~/.claude/settings.json`, `.claude/settings.json`, `.claude/settings.local.json`, plugin `hooks/hooks.json`, skill/agent frontmatter | ~30 events. Currently used: `SessionStart`, `SessionEnd`, `Stop`, `StopFailure`, `SubagentStop`, `Notification`, `PostToolUse:EnterWorktree`. **Unused and relevant:** `CwdChanged`, `FileChanged`, `InstructionsLoaded`, `PreCompact`/`PostCompact`, `TaskCreated`/`TaskCompleted`, `UserPromptSubmit`, `Setup` | Yes (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`) |
-| **Codex CLI** | `hooks.json` layered through the config stack; `/hooks` TUI toggles them; legacy `notify` still fires on turn completion | `~/.codex/hooks.json` and project/managed layers; `allow_managed_hooks_only` in `requirements.toml` | 11 events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `SubagentStart`, `SubagentStop`, `Stop` | Yes (`PreToolUse`, `PermissionRequest`) |
+| **Codex CLI** | `hooks.json` layered through the config stack; command, prompt, and agent handlers; `/hooks` TUI toggles them; legacy `notify` still fires on turn completion | `~/.codex/hooks.json` and project/managed layers; `allow_managed_hooks_only` in `requirements.toml` | 10 configured events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `UserPromptSubmit`, `SubagentStart`, `SubagentStop`, `Stop`. There is **no `SessionEnd` event**. | Yes (`PreToolUse`, `PermissionRequest`, `Stop`) |
 | **Copilot CLI** | JSON files, one `bash` and one `powershell` key per handler, plus `cwd`, `env`, `timeoutSec` | `.github/hooks/*.json` (repo), `~/.copilot/hooks/*.json` (personal) | `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `agentStop`, `subagentStop`, `errorOccurred` | Yes (`preToolUse` approves/denies) |
 | **Amp** | `amp.hooks` array of `{event, action}` in the settings JSON | `~/.config/amp/settings.json`, or `$AMP_SETTINGS_FILE` | `tool:pre-execute`, `tool:post-execute`; actions include `send-user-message`, `redact-tool-input` | Yes, by interrupting with a user message |
 | **Cursor CLI** | `.cursor/hooks.json` *(unverified)* | project `.cursor/` | *(unverified)* | *(unverified)* |
@@ -95,6 +95,14 @@ Two adapter-relevant notes:
 The split is clean: **five harnesses take a shell command**, so the existing compiled
 `lode hook <event>` binary is the whole integration. **Two take TypeScript**, so they need a
 ~30-line shim that shells out to the same binary — still no second coordination model.
+
+For Codex, the generated configuration schema is the authority on accepted event names, but an
+accepted name does not imply uniform runtime coverage. Tool hooks only fire on tool handlers that
+emit the corresponding payload, and compaction and subagent lifecycle coverage has changed across
+Codex releases. Adapters may configure those events only where Worklode can tolerate a missed
+delivery, and `lode doctor` should verify behaviour against the installed Codex version. In
+particular, Worklode cannot observe clean Codex session shutdown through hooks: session-end handling
+degrades to the next reconciliation path rather than binding a fictional `SessionEnd` event.
 
 ### 2.4 Table 3 — Observability and UI surfaces {#sec-2.4}
 
@@ -251,7 +259,7 @@ The event map, per harness, for the events 008 defines:
 | Worklode event | Claude Code | Codex | Copilot | Amp | opencode / pi (shim) |
 |---|---|---|---|---|---|
 | `SessionStart` | `SessionStart` | `SessionStart` | `sessionStart` | — | `session.*` / `session_start` |
-| `SessionEnd` | `SessionEnd` | `SessionEnd` | `sessionEnd` | — | `session_shutdown` |
+| `SessionEnd` | `SessionEnd` | — | `sessionEnd` | — | `session_shutdown` |
 | `Heartbeat` | `Stop`, `StopFailure`, `SubagentStop`, `Notification` | `Stop`, `SubagentStop` | `agentStop`, `subagentStop` | `tool:post-execute` | `session.idle` / agent events |
 | `WorktreeEnter` | `PostToolUse:EnterWorktree` | — | — | — | — |
 | `PreCommit` | (git hook) | (git hook) | (git hook) | (git hook) | (git hook) |
@@ -396,7 +404,8 @@ Primary, consulted 2026-08-01:
   [monitoring & OTEL](https://docs.claude.com/en/docs/claude-code/monitoring-usage),
   [skills](https://docs.claude.com/en/docs/claude-code/skills),
   [memory](https://docs.claude.com/en/docs/claude-code/memory)
-- Codex CLI — `codex-rs/hooks/src/lib.rs` (event list), `codex-rs/core-skills/src/loader.rs`
+- Codex CLI — `codex-rs/core/config.schema.json` (`HooksToml`, the generated configured-event and
+  handler list), `codex-rs/hooks/` (payload schemas and runtime), `codex-rs/core-skills/src/loader.rs`
   (skill roots, `.agents`, symlink policy), `codex-rs/otel/src/config.rs` (exporters), and
   `docs/config.md` (managed hooks), in [openai/codex](https://github.com/openai/codex)
 - Copilot CLI — GitHub Docs content:
