@@ -58,10 +58,15 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 }
 
 // ResolveDelivery advances taskID to the furthest delivery milestone the
-// recorded facts support, forward-only, closing any active lease when the
-// work first lands. All lifecycle rules live here; webhook handlers only
-// record facts and call this. Safe to call repeatedly and in any
-// fact-arrival order. It never advances a draft or abandoned task.
+// recorded facts support, forward-only. All lifecycle rules live here;
+// webhook handlers only record facts and call this. Safe to call repeatedly
+// and in any fact-arrival order. It never advances a draft or abandoned task.
+//
+// Delivery never touches the lease: a lease records that a worktree is
+// occupied, and landing, deploying or releasing the code says nothing about
+// that (spec 004 §2). Leases end on release, abandon, reopen, or the expiry
+// sweep. Mutual exclusion is unaffected — Claim requires state "ready", so a
+// delivered task cannot be claimed out from under its holder anyway.
 //
 // The repo's done_state picks which delivery branch applies. A release-based
 // repo follows merged → deployed_dev → released and ignores prod deploys:
@@ -102,9 +107,6 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	switch state {
 	case "ready", "in_progress", "in_review":
 		if err := Transition(tx, now, taskID, state, "merged", eventID); err != nil {
-			return err
-		}
-		if err := CloseActiveLease(tx, now, taskID); err != nil {
 			return err
 		}
 		state = "merged"

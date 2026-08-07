@@ -251,9 +251,9 @@ func TestFullChain(t *testing.T) {
 	})
 
 	// 4d. pull_request.closed merged → the PR's shas are recorded as task
-	// commits and the lease is released, but the task stays in_review:
-	// merged is a delivery milestone, resolved only once those shas appear
-	// on the default branch.
+	// commits, but the task stays in_review: merged is a delivery milestone,
+	// resolved only once those shas appear on the default branch. The lease
+	// is untouched — delivery never ends a worktree's occupancy.
 	deliverGitHub(t, srv.URL, "pull_request", "e2e-pr-merged", map[string]any{
 		"action":     "closed",
 		"repository": map[string]any{"full_name": repo},
@@ -276,8 +276,8 @@ func TestFullChain(t *testing.T) {
 	if detail.State != "in_review" {
 		t.Fatalf("task state after merge = %q, want in_review until the merge lands on main", detail.State)
 	}
-	if detail.Lease != nil {
-		t.Fatalf("task lease after merge = %+v, want released (nil)", detail.Lease)
+	if detail.Lease == nil {
+		t.Fatal("task lease after merge = nil, want it still held (a merge does not free the worktree)")
 	}
 
 	// 4e. push to the default branch — the push every real merge produces.
