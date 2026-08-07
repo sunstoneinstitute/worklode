@@ -1,4 +1,4 @@
 /wl
 *.db
 /data/
-wt/
+.worktrees/

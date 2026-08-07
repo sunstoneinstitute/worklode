@@ -172,8 +172,9 @@ func initGitRepo(t *testing.T) string {
 	return root
 }
 
-// setupLeasedWorktree creates a project, a task, its wt/<id>-<slug> worktree,
-// and a lease bound to that worktree's real identity (mirroring `lode next`).
+// setupLeasedWorktree creates a project, a task, its .worktrees/<branch>
+// worktree, and a lease bound to that worktree's real identity (mirroring
+// `lode next`).
 // Creating the project is idempotent so a test can call this more than once
 // against the same server to put several tasks under one project.
 func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskID, wtDir, identity string) {
@@ -194,8 +195,7 @@ func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskI
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	slug := strings.TrimPrefix(resp.Branch, task.ID+"-")
-	wtDir = filepath.Join(root, "wt", task.ID+"-"+slug)
+	wtDir = filepath.Join(root, ".worktrees", resp.Branch)
 	if out, err := exec.Command("git", "-C", root, "worktree", "add", wtDir, "-b", resp.Branch).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
@@ -224,7 +224,7 @@ func TestGuardNOPForEveryEvent(t *testing.T) {
 	for _, event := range allEvents {
 		t.Run(event, func(t *testing.T) {
 			rec := newRecordingServer(t)
-			root := initGitRepo(t) // plain repo, no wt/ dir
+			root := initGitRepo(t) // plain repo, no worktree dir
 			payload := payloadJSON(t, Payload{Cwd: root, SessionID: "s1"})
 
 			var stdout, stderr bytes.Buffer
@@ -428,6 +428,167 @@ func TestSessionStartEmitsAdditionalContext(t *testing.T) {
 	// The session marker must have been written and read as fresh (our pid).
 	if !sessionMarkerFresh(wtDir) {
 		t.Fatalf("session marker not written/fresh after session-start")
+	}
+}
+
+// --- offer scan ---------------------------------------------------------
+
+// expireLease force-expires taskID's lease via the store, mirroring the
+// sweeper (see TestWorktreeCreateAutoResumesExpiredLease), so a later Brief
+// call returns Lease == nil.
+func expireLease(t *testing.T, st *store.Store, taskID string) {
+	t.Helper()
+	if _, err := st.ExpireLeases(context.Background(), time.Now().Add(3*time.Hour)); err != nil {
+		t.Fatalf("expire lease on %s: %v", taskID, err)
+	}
+}
+
+// offerScan runs when session-start fires OUTSIDE a worktree. A worktree whose
+// lease has expired and whose marker is absent is offered for adoption.
+func TestOfferScanOffersAbandonedWorktree(t *testing.T) {
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Abandoned worktree")
+	expireLease(t, st, taskID)
+
+	ctx := offerScanContext(t, root)
+	if !strings.Contains(ctx, ".worktrees/"+filepath.Base(wtDir)) {
+		t.Fatalf("additionalContext does not offer the worktree: %q", ctx)
+	}
+	if !strings.Contains(ctx, taskID) {
+		t.Fatalf("additionalContext missing task id %q: %q", taskID, ctx)
+	}
+}
+
+// The layout is flat (spec 030 §3.1): offerScan reads one level below the base
+// and nothing deeper, so a worktree re-homed into a subdirectory is not a
+// worktree root any more and is not offered. This pins the flat scan — the
+// pre-flat code walked to depth 3 and would have found it.
+func TestOfferScanIgnoresNestedWorktree(t *testing.T) {
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Nested worktree")
+
+	nested := filepath.Join(root, ".worktrees", "team", filepath.Base(wtDir))
+	if err := os.MkdirAll(filepath.Dir(nested), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", root, "worktree", "move", wtDir, nested).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree move: %v\n%s", err, out)
+	}
+	expireLease(t, st, taskID)
+
+	if ctx := offerScanContext(t, root); ctx != "" {
+		t.Fatalf("nested worktree was offered for adoption: %q", ctx)
+	}
+}
+
+// offerScan only ever walks the configured base directory (hookrun.go's
+// offerScan), so this proves that narrower property — the scan never reaches
+// outside its base — not that ParseDir has stopped accepting wt/: the scan
+// would skip anything under wt/ even if ParseDir still recognised it. The
+// genuine "legacy wt/ is gone" coverage (spec 030 §5) is
+// TestLayoutParseDir's "legacy wt is gone" case in
+// internal/worktree/worktree_test.go.
+func TestOfferScanIgnoresLegacyWtDir(t *testing.T) {
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Legacy worktree")
+
+	legacy := filepath.Join(root, "wt", filepath.Base(wtDir))
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", root, "worktree", "move", wtDir, legacy).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree move: %v\n%s", err, out)
+	}
+	expireLease(t, st, taskID)
+
+	if ctx := offerScanContext(t, root); ctx != "" {
+		t.Fatalf("legacy wt/ worktree was offered for adoption: %q", ctx)
+	}
+}
+
+// offerScanContext runs session-start from dir and returns the
+// additionalContext it emitted ("" when it emitted nothing).
+func offerScanContext(t *testing.T, dir string) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "session-start",
+		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: dir, SessionID: "s-scan", HookEventName: "SessionStart"})),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("session-start exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if stdout.Len() == 0 {
+		return ""
+	}
+	var out struct {
+		HookSpecificOutput struct {
+			AdditionalContext string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("stdout is not valid additionalContext JSON: %v\nstdout: %s", err, stdout.String())
+	}
+	return out.HookSpecificOutput.AdditionalContext
+}
+
+// --- worktree_dir resolution -------------------------------------------------
+
+// A non-default worktree_dir (here via LODE_WORKTREE_DIR, the env override
+// spec 030 §3.1 gives) must be honoured, not just tolerated: the guard has to
+// find a worktree that isn't under the default .worktrees at all.
+func TestLayoutCustomBaseHonored(t *testing.T) {
+	rec := newRecordingServer(t)
+	root := initGitRepo(t)
+	t.Setenv("LODE_WORKTREE_DIR", "custom-base")
+	wtDir := addWorktreeAt(t, root, "custom-base", "PROJ-1", "custom")
+
+	payload := payloadJSON(t, Payload{Cwd: wtDir, SessionID: "s-custom-base"})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "heartbeat",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if !rec.hit() {
+		t.Fatalf("guard did not fire for a worktree under the configured custom base dir")
+	}
+}
+
+// A malformed worktree_dir (NewLayout rejects an absolute path) must degrade
+// to the default .worktrees layout with a warning, never fail the event or
+// leave the guard permanently blind.
+func TestLayoutMalformedWorktreeDirDegradesToDefault(t *testing.T) {
+	rec := newRecordingServer(t)
+	root := initGitRepo(t)
+	t.Setenv("LODE_WORKTREE_DIR", "/not/relative/to/the/repo")
+	wtDir := addWorktree(t, root, "PROJ-1", "degrade")
+
+	payload := payloadJSON(t, Payload{Cwd: wtDir, SessionID: "s-degrade"})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "heartbeat",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if !rec.hit() {
+		t.Fatalf("malformed worktree_dir should degrade to the default .worktrees layout, not NOP (stderr: %s)", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "resolve worktree layout") {
+		t.Fatalf("expected a warning about the malformed worktree_dir, got stderr=%q", stderr.String())
 	}
 }
 
@@ -946,12 +1107,12 @@ func (b *skillsBackbone) hangArchive(name string) {
 	b.hang[name] = true
 }
 
-// setupFakeWorktree creates a wt/<taskID>-<slug> git worktree under root
-// without exercising a real claim/lease — the skills tests fake the
+// setupFakeWorktree creates a .worktrees/<taskID>-<slug> git worktree under
+// root without exercising a real claim/lease — the skills tests fake the
 // backbone's HTTP surface directly instead.
 func setupFakeWorktree(t *testing.T, root, taskID, slug string) string {
 	t.Helper()
-	wtDir := filepath.Join(root, "wt", taskID+"-"+slug)
+	wtDir := filepath.Join(root, ".worktrees", taskID+"-"+slug)
 	if out, err := exec.Command("git", "-C", root, "worktree", "add", wtDir, "-b", taskID+"-"+slug).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
@@ -1428,13 +1589,20 @@ func (r *endRecorder) only(t *testing.T) map[string]json.RawMessage {
 	return r.bodies[0]
 }
 
-// addWorktree creates a wt/<taskID>-<slug> git worktree under root. Unlike
-// setupLeasedWorktree it needs no backbone: session-end's guard only reads the
-// directory name.
+// addWorktree creates a .worktrees/<taskID>-<slug> git worktree under root.
+// Unlike setupLeasedWorktree it needs no backbone: session-end's guard only
+// reads the directory path.
 func addWorktree(t *testing.T, root, taskID, slug string) string {
 	t.Helper()
-	dir := filepath.Join(root, "wt", taskID+"-"+slug)
-	out, err := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", "lode/"+taskID+"-"+slug).CombinedOutput()
+	return addWorktreeAt(t, root, ".worktrees", taskID, slug)
+}
+
+// addWorktreeAt is addWorktree with a configurable base, for tests exercising
+// a non-default worktree_dir (LODE_WORKTREE_DIR).
+func addWorktreeAt(t *testing.T, root, base, taskID, slug string) string {
+	t.Helper()
+	dir := filepath.Join(root, base, taskID+"-"+slug)
+	out, err := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", taskID+"-"+slug).CombinedOutput()
 	if err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}

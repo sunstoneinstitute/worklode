@@ -302,15 +302,15 @@ func TestClaimNextWorkedExampleDefault(t *testing.T) {
 	t1, t2, t3, t4, t5 := workedExampleFixture(t, s)
 	_, _, _, _ = t1, t2, t4, t5
 
-	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/wt/1"})
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("ClaimNext: %v", err)
 	}
 	if !res.Claimed || res.Task == nil || res.Task.ID != t3.ID {
 		t.Fatalf("ClaimNext default: got %+v, want claim of %s", res, t3.ID)
 	}
-	if res.Lease == nil || res.Lease.Worktree != "h:/wt/1" {
-		t.Fatalf("ClaimNext default lease: got %+v, want worktree h:/wt/1", res.Lease)
+	if res.Lease == nil || res.Lease.Worktree != "h:/.worktrees/1" {
+		t.Fatalf("ClaimNext default lease: got %+v, want worktree h:/.worktrees/1", res.Lease)
 	}
 	mustState(t, s, t3.ID, "in_progress")
 }
@@ -323,7 +323,7 @@ func TestClaimNextWorkedExampleStrictFocus(t *testing.T) {
 	ctx := t.Context()
 	_, t2, _, _, _ := workedExampleFixture(t, s)
 
-	res, err := s.ClaimNext(ctx, ClaimNextOpts{StrictFocus: true, ActorID: "stig", Worktree: "h:/wt/1"})
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{StrictFocus: true, ActorID: "stig", Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("ClaimNext strict-focus: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestClaimNextSoftFocusNeverIdles(t *testing.T) {
 	in.Concern = "completeness"
 	off := createTask(t, s, claimNextTestNow, in)
 
-	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/wt/1"})
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("ClaimNext: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
 
-	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/wt/1"})
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("ClaimNext: %v", err)
 	}

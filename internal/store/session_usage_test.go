@@ -139,7 +139,7 @@ func projectRollupRows(t *testing.T, s *Store, projectID string) []rollupRow {
 func TestEndAgentSessionRecordsPricedUsage(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	tokens := TokenCounts{Input: 1000, CacheWrite5m: 2000, CacheWrite1h: 3000, CacheRead: 4000, Output: 5000}
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
@@ -199,7 +199,7 @@ func TestEndAgentSessionRecordsPricedUsage(t *testing.T) {
 func TestEndAgentSessionReplacesUsage(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1000, Output: 1000}},
@@ -234,7 +234,7 @@ func TestEndAgentSessionReplacesUsage(t *testing.T) {
 // merged before pricing, so its stored amount covers all of its tokens.
 func TestSessionUsageMergesDuplicateBuckets(t *testing.T) {
 	s, _ := openLeaseStore(t)
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1000}},
@@ -251,7 +251,7 @@ func TestSessionUsageMergesDuplicateBuckets(t *testing.T) {
 // One session routinely mixes models at several-fold different rates.
 func TestSessionUsagePricesEachModelSeparately(t *testing.T) {
 	s, _ := openLeaseStore(t)
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1000, Output: 1000}},
@@ -280,7 +280,7 @@ func TestSessionUsagePricesEachModelSeparately(t *testing.T) {
 func TestSessionUsageSplitsAcrossDays(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
@@ -337,7 +337,7 @@ func TestSessionUsageSplitsAcrossDays(t *testing.T) {
 func TestSessionUsageRecordsUnpricedModel(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
@@ -389,8 +389,8 @@ func TestSessionUsageRecordsUnpricedModel(t *testing.T) {
 // Two sessions on different tasks of the same project land in one rollup row.
 func TestProjectDailyCostAggregatesSessions(t *testing.T) {
 	s, _ := openLeaseStore(t)
-	first := usageSession(t, s, "host:/wt/one", "sess-1")
-	second := usageSession(t, s, "host:/wt/two", "sess-2")
+	first := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+	second := usageSession(t, s, "host:/.worktrees/two", "sess-2")
 
 	reportUsage(t, s, first, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
@@ -410,7 +410,7 @@ func TestProjectDailyCostAggregatesSessions(t *testing.T) {
 func TestEndAgentSessionNilBucketsKeepsUsageEmptyClearsIt(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
@@ -468,7 +468,7 @@ func TestSessionUsageRejectsInvalidBuckets(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s, _ := openLeaseStore(t)
 			ctx := t.Context()
-			lease := usageSession(t, s, "host:/wt/one", "sess-1")
+			lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
 			err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1",
 				SessionUsage{Buckets: []SessionUsageBucket{tt.bucket}})
@@ -497,7 +497,7 @@ func TestSessionUsageRejectsInvalidBuckets(t *testing.T) {
 func TestEndAgentSessionUsageRejectsNonHolder(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
-	lease := usageSession(t, s, "host:/wt/one", "sess-1")
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 	if err := s.CreateActor(ctx, "mallory", "agent", "Mallory", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
