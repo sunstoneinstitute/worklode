@@ -81,7 +81,21 @@ New legal transitions:
 - `abandoned` stays reachable only from pre-`merged` states.
 
 All delivery transitions are forward-only; the resolver never walks a task
-backward. Landing on main closes any active lease (as PR-merge does today).
+backward.
+
+> **Corrected against spec 004 §2.** This paragraph originally ended: "Landing
+> on main closes any active lease (as PR-merge does today)." That sentence
+> wrote down inherited GitHub-webhook behaviour and contradicts the model of
+> record: the lease is worktree-scoped (004 §2) and ends only on `release`,
+> `abandon`, `reopen`, or the expiry sweep. Delivery transitions — PR merge,
+> landing on main, deploy to dev or prod, release published — never close the
+> lease. Closing on merge served neither purpose a lease has: mutual exclusion
+> is already enforced by `Claim` requiring state `ready`, so a `merged` task is
+> unclaimable regardless of its lease, and liveness recovery is already the
+> 2h TTL expiry sweep. Delivery state is a fact about the code; the lease is a
+> fact about who occupies the worktree — and work legitimately continues in a
+> worktree after its branch is deployed to dev. Whether manual `lode task done`
+> also stops closing the lease is undecided and not addressed here.
 
 Environment-name normalization: `dev`, `test`, `development`, `staging` → dev
 stage; `prod`, `production` → prod stage; everything else (`copilot`,

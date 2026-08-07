@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -352,8 +351,10 @@ func TestPRMergeRecordsFactsAndResolves(t *testing.T) {
 		if pr.State != "merged" || pr.MergeSHA == nil || pr.MergedAt == nil {
 			t.Fatalf("PR after merge = %+v", pr)
 		}
-		if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-			t.Fatalf("active lease err = %v, want ErrNotFound (lease closed)", err)
+		// The merge says nothing about whether the worktree is still
+		// occupied, so the lease stays open.
+		if _, err := e.st.ActiveLease(ctx, taskID); err != nil {
+			t.Fatalf("active lease after PR merge: err = %v, want it still open", err)
 		}
 		for _, sha := range []string{prHeadSHA, prMergeSHA} {
 			if src := e.taskCommitSource(t, taskID, demoRepo, sha); src != "pr" {
