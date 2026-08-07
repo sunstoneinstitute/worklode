@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -31,18 +30,30 @@ func init() {
 	rootCmd.AddCommand(newNextCmd(), newResumeCmd(), newDoneCmd(), newBlockCmd(), newStatusCmd())
 }
 
+// layoutFrom builds the worktree layout for dir's repo. It reads ONLY the
+// repo-local worktree_dir (cli.WorktreeDirFrom), never the user-level config
+// — spec 030 §4 scopes worktree_dir to the checkout, and internal/hookrun's
+// guard resolves it the same way. Resolving from cfg.WorktreeDir (the merged,
+// user-config-inclusive value) would let a user-level setting silently
+// diverge from what every hook guard sees, which fails closed and quiet: the
+// CLI would create worktrees under one base while hooks NOP on another. A
+// misconfigured worktree_dir is a user error worth reporting, not a silent
+// fallback.
+func layoutFrom(dir string) (worktree.Layout, error) {
+	return worktree.NewLayout(cli.WorktreeDirFrom(dir))
+}
+
 // resolveWorktreeTask resolves dir to its enclosing git worktree root and the
-// task id encoded in its wt/<id>-<slug> directory name. It errors when dir is
-// not inside a git repository, or when the repo root is not a Worklode
-// worktree.
-func resolveWorktreeTask(dir string) (taskID, root string, err error) {
+// task id encoded in its <base>/<branch> path. It errors when dir is not
+// inside a git repository, or when the repo root is not a Worklode worktree.
+func resolveWorktreeTask(l worktree.Layout, dir string) (taskID, root string, err error) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return "", "", fmt.Errorf("%s is not inside a git repository", dir)
 	}
-	taskID, ok = worktree.ParseDir(root)
+	taskID, ok = l.ParseDir(root)
 	if !ok {
-		return "", "", fmt.Errorf("%s is not a Worklode worktree (wt/<id>-<slug>); run this from inside one", root)
+		return "", "", fmt.Errorf("%s is not a Worklode worktree (%s/<branch>); run this from inside one", root, l.Base())
 	}
 	return taskID, root, nil
 }
@@ -97,8 +108,8 @@ func newNextCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "next [id]",
 		Short: "Claim a task (or the top-ranked ready one), set up its worktree, and print its brief",
-		Long: "The one way to enter Worklode mode: claims a task, creates its wt/<id>-<slug> " +
-			"worktree and its task branch, binds the lease to that worktree, and prints " +
+		Long: "The one way to enter Worklode mode: claims a task, creates its worktree " +
+			"and its task branch, binds the lease to that worktree, and prints " +
 			"the task's brief. With an id, claims that task; without one, claims the top-ranked " +
 			"ready task (like `lode task claim --next`).",
 		Args: cobra.MaximumNArgs(1),
@@ -133,6 +144,11 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 	}
 	ctx := cmd.Context()
 
+	layout, err := layoutFrom(".")
+	if err != nil {
+		return err
+	}
+
 	if id != "" {
 		id, err = resolveTaskID(ctx, id, c, cfg)
 		if err != nil {
@@ -144,8 +160,8 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 	if !ok {
 		return fmt.Errorf("not inside a git repository")
 	}
-	if inside, ok := worktree.ParseDir(root); ok {
-		return fmt.Errorf("already inside a worktree for %s; run `lode next` from the main repository, not from wt/", inside)
+	if inside, ok := layout.ParseDir(root); ok {
+		return fmt.Errorf("already inside a worktree for %s; run `lode next` from the main repository, not from %s/", inside, layout.Base())
 	}
 
 	pending, err := pendingIdentity(root)
@@ -153,8 +169,8 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		return err
 	}
 
-	// The server is the authority on the branch name (its prefix is
-	// server-configured), so both paths take it from the claim response.
+	// The server is the authority on the branch name (rendered from
+	// LODE_BRANCH_TEMPLATE), so both paths take it from the claim response.
 	var taskID, slug, branch string
 	switch {
 	case id != "":
@@ -182,10 +198,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		branch = resp.Task.Branch
 	}
 	if branch == "" {
-		branch = worktree.BranchName(store.DefaultBranchPrefix, taskID, slug)
+		branch = worktree.BranchName(taskID, slug)
 	}
 
-	dir := filepath.Join(root, worktree.DirName(taskID, slug))
+	dir := layout.Dir(root, branch)
 
 	if err := addWorktree(root, dir, branch); err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)
@@ -270,7 +286,15 @@ func runResume(cmd *cobra.Command, dir string) error {
 	}
 	ctx := cmd.Context()
 
-	taskID, root, err := resolveWorktreeTask(dir)
+	// Resolve the layout from dir, not the process cwd: resume may target a
+	// worktree in a different repo (or the same repo with a different base)
+	// than the shell it was invoked from (hookrun.go:125-127 flags the same
+	// hazard).
+	layout, err := layoutFrom(dir)
+	if err != nil {
+		return err
+	}
+	taskID, root, err := resolveWorktreeTask(layout, dir)
 	if err != nil {
 		return err
 	}
@@ -313,7 +337,11 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, root, err := resolveWorktreeTask(".")
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, root, err := resolveWorktreeTask(layout, ".")
 			if err != nil {
 				return err
 			}
@@ -346,7 +374,11 @@ func newBlockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, _, err := resolveWorktreeTask(".")
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".")
 			if err != nil {
 				return err
 			}
@@ -431,7 +463,11 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, root, err := resolveWorktreeTask(".")
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, root, err := resolveWorktreeTask(layout, ".")
 			if err != nil {
 				return err
 			}

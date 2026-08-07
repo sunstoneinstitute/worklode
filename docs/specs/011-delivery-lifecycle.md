@@ -9,8 +9,13 @@ amends:
 amendedBy:
   ".":
     - 018-task-hierarchy.md
+  "#sec-2":
+    - 030-branch-and-worktree-naming.md
+  "#sec-4":
+    - 030-branch-and-worktree-naming.md
   "#sec-6":
     - 014-design-documents-as-graph-objects.md#sec-11.3
+    - 030-branch-and-worktree-naming.md
 replaces:
   ".":
     - 004-execution-backbone.md#sec-1.2
@@ -108,6 +113,11 @@ that can never advance a task.
 `projects.deploy_gated` is retired; this mechanism replaces it.
 
 ## 2. Fact tables {#sec-2}
+
+> **Amended by spec 030.** `LODE_BRANCH_PREFIX` is replaced by
+> `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`), and the branch
+> pattern `task_commits` correlates on is derived from that template rather
+> than fixed. `wl/` is no longer recognized.
 
 Four tables, written inside the same `RecordEvent` transaction as the
 webhook that produced them:
@@ -227,6 +237,10 @@ cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
 
 ## 4. Surface changes {#sec-4}
 
+> **Amended by spec 030.** The server-rendered branch is `LODE_BRANCH_TEMPLATE` (default
+> `{{ .id }}-{{ .slug }}`), not a configured prefix; the CLI's fallback when a response carries no
+> branch is the bare `<id>-<slug>`, not `lode/<id>-<slug>`.
+
 - New states flow through existing surfaces: task JSON, `lode task list`
   filters, web UI badges.
 - Task timeline shows delivery facts: landed on main at `<sha>`, dev deploy
@@ -260,6 +274,10 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 > **Amended by spec 014 §11.3.** The `<PROJECTKEY>-{ADR,SPEC}-<n>` alias below is adopted,
 > with `<n>` taken from the document's own filename number instead of the task sequence — the
 > shorthand exists so a reference is typeable without a lookup.
+
+> **Amended by spec 030.** The branch is a server-rendered `LODE_BRANCH_TEMPLATE` (default
+> `{{ .id }}-{{ .slug }}`), not a configurable PREFIX; there is no `lode/` default any more, and
+> `store.TaskIDFromRef`'s pattern is derived from the template (030 §2), not a fixed prefix regex.
 
 The branch pattern is a configurable PREFIX (default `lode/`, replacing the
 hardcoded `wl/`) followed by a task key: `<prefix><task-key>[-slug]`. Task

@@ -474,6 +474,21 @@ docs/specs/029-research-work-in-the-backbone.md:
     sec-8.3: "### 8.3 Events in"
     sec-9: "## 9. What this spec changes elsewhere"
     sec-10: "## 10. Out of scope"
+docs/specs/030-branch-and-worktree-naming.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Branch names are a server-rendered template"
+    sec-1.1: "### 1.1 Fields"
+    sec-1.2: "### 1.2 Validation"
+    sec-2: "## 2. Reverse parsing"
+    sec-3: "## 3. Worktree layout"
+    sec-3.1: "### 3.1 Base directory"
+    sec-3.2: "### 3.2 The path guard"
+    sec-4: "## 4. Configuration surface"
+    sec-5: "## 5. Cutover"
+    sec-5.1: "### 5.1 Migrating an existing worktree"
+    sec-5.2: "### 5.2 PR and push correlation across the cutover"
+    sec-6: "## 6. Testing"
 docs/specs/031-provider-neutral-cli-login.md:
   sections:
     sec-0: "## 0. Why"

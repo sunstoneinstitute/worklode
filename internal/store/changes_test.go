@@ -55,7 +55,7 @@ func defaultPR(taskID string) PullRequest {
 		Number:   1,
 		Title:    "fix the thing",
 		State:    "open",
-		HeadRef:  "wl/" + taskID + "-fix-the-thing",
+		HeadRef:  taskID + "-fix-the-thing",
 		HeadSHA:  "abc123",
 		URL:      "https://github.com/sunstoneinstitute/demo/pull/1",
 		OpenedAt: changesTestNow,
@@ -63,19 +63,23 @@ func defaultPR(taskID string) PullRequest {
 }
 
 func TestTaskIDFromRef(t *testing.T) {
+	t.Cleanup(func() { SetBranchTemplate("") })
+	if err := SetBranchTemplate(""); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		ref  string
 		want string
 	}{
-		{"wl/HDB-123-some-slug", "HDB-123"},
-		{"wl/HDB-1-x", "HDB-1"},
-		{"wl/HDB-12", "HDB-12"},
+		{"HDB-123-some-slug", "HDB-123"},
+		{"HDB-1-x", "HDB-1"},
+		{"HDB-12", ""}, // no slug separator under the default template
 		{"main", ""},
 		{"feature/foo", ""},
-		{"wl/wl-12-x", ""}, // lowercase wl- prefix in the id part: no match
+		{"wl-12-x", ""}, // lowercase id: no match
 		{"", ""},
-		{"wl/-x", ""},
-		{"wl/HDB-abc-x", ""}, // no digits after HDB-
+		{"-x", ""},
+		{"HDB-abc-x", ""}, // no digits after HDB-
 	}
 	for _, c := range cases {
 		if got := TaskIDFromRef(c.ref); got != c.want {
@@ -84,13 +88,15 @@ func TestTaskIDFromRef(t *testing.T) {
 	}
 }
 
-func TestTaskIDFromRefPrefixes(t *testing.T) {
-	SetBranchPrefix("lode/")
-	t.Cleanup(func() { SetBranchPrefix("lode/") })
+func TestTaskIDFromRefCustomTemplate(t *testing.T) {
+	t.Cleanup(func() { SetBranchTemplate("") })
+	if err := SetBranchTemplate("lode/{{ .id }}-{{ .slug }}"); err != nil {
+		t.Fatal(err)
+	}
 	cases := map[string]string{
 		"lode/WL-7-fix-thing": "WL-7",
-		"lode/WL-7":           "WL-7",
-		"wl/WL-7-fix-thing":   "WL-7", // legacy prefix still recognized
+		"WL-7-fix-thing":      "", // no longer matches without the configured prefix
+		"wl/WL-7-fix-thing":   "", // legacy prefix is not recognized (spec 030 §5)
 		"main":                "",
 		"lode/wl-7-lower":     "",
 	}
@@ -99,36 +105,17 @@ func TestTaskIDFromRefPrefixes(t *testing.T) {
 			t.Errorf("TaskIDFromRef(%q) = %q, want %q", ref, got, want)
 		}
 	}
-	SetBranchPrefix("team/")
-	if got := TaskIDFromRef("team/AB-3-x"); got != "AB-3" {
-		t.Errorf("custom prefix: got %q, want AB-3", got)
+	if err := SetBranchTemplate("team/{{ .id }}-{{ .slug }}"); err != nil {
+		t.Fatal(err)
 	}
-	if got := TaskIDFromRef("wl/AB-3-x"); got != "AB-3" {
-		t.Errorf("legacy prefix under custom prefix: got %q, want AB-3", got)
+	if got := TaskIDFromRef("team/AB-3-x"); got != "AB-3" {
+		t.Errorf("custom template: got %q, want AB-3", got)
+	}
+	if got := TaskIDFromRef("wl/AB-3-x"); got != "" {
+		t.Errorf("legacy prefix must not be recognized under a custom template: got %q, want \"\"", got)
 	}
 	if got := BranchFor(&Task{ID: "AB-3", Title: "Fix the thing"}); got != "team/AB-3-fix-the-thing" {
 		t.Errorf("BranchFor = %q, want team/AB-3-fix-the-thing", got)
-	}
-}
-
-// TestSetBranchPrefixNormalizes covers the separator guard: a prefix with no
-// trailing "/" or "-" would otherwise yield branches like "lodeWL-7-slug".
-func TestSetBranchPrefixNormalizes(t *testing.T) {
-	t.Cleanup(func() { SetBranchPrefix("") })
-	cases := map[string]string{
-		"":      "lode/",
-		"lode":  "lode/",
-		"team/": "team/",
-		"team-": "team-",
-	}
-	for in, want := range cases {
-		SetBranchPrefix(in)
-		if got := BranchPrefix(); got != want {
-			t.Errorf("SetBranchPrefix(%q) -> BranchPrefix() = %q, want %q", in, got, want)
-		}
-		if got := TaskIDFromRef(want + "WL-7-slug"); got != "WL-7" {
-			t.Errorf("SetBranchPrefix(%q): TaskIDFromRef(%q) = %q, want WL-7", in, want+"WL-7-slug", got)
-		}
 	}
 }
 
@@ -154,10 +141,14 @@ func TestTaskIDFromBody(t *testing.T) {
 }
 
 func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
-	if got := TaskIDFromRef("wl/SW-3-slug"); got != "SW-3" {
+	t.Cleanup(func() { SetBranchTemplate("") })
+	if err := SetBranchTemplate(""); err != nil {
+		t.Fatal(err)
+	}
+	if got := TaskIDFromRef("SW-3-slug"); got != "SW-3" {
 		t.Errorf("TaskIDFromRef = %q, want SW-3", got)
 	}
-	if got := TaskIDFromRef("wl/SW-3"); got != "SW-3" {
+	if got := TaskIDFromRef("SW-3-"); got != "SW-3" {
 		t.Errorf("TaskIDFromRef = %q, want SW-3", got)
 	}
 }

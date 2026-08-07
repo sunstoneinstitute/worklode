@@ -176,6 +176,20 @@ func TestSlugFromBranch(t *testing.T) {
 	}
 }
 
+func TestResolveWorktreeTaskRejectsNonWorktree(t *testing.T) {
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A real git repo root — worktree.Root succeeds, so this exercises the
+	// ParseDir rejection (a plain repo root is not a Worklode worktree), not
+	// the earlier worktree.Root failure a non-repo tempdir would hit instead.
+	root := initGitRepo(t)
+	if _, _, err := resolveWorktreeTask(l, root); err == nil {
+		t.Fatal("resolveWorktreeTask accepted a non-worktree directory")
+	}
+}
+
 func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -201,11 +215,11 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true (output %s)", out)
 	}
-	wantBranch := "lode/" + task.ID + "-fix-the-thing"
+	wantBranch := task.ID + "-fix-the-thing"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
-	wantDir := filepath.Join(root, "wt", task.ID+"-fix-the-thing")
+	wantDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-fix-the-thing")
 	if result.Worktree != wantDir {
 		t.Fatalf("worktree = %q, want %q", result.Worktree, wantDir)
 	}
@@ -225,6 +239,126 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	}
 	if _, statErr := os.Stat(detail.Lease.Worktree); statErr == nil {
 		t.Fatalf("lease.Worktree = %q looks like a bare filesystem path, want <hostname>:<path>", detail.Lease.Worktree)
+	}
+}
+
+// TestNextHonorsConfiguredWorktreeDir proves `lode next` resolves its layout
+// from the repo-scoped worktree_dir (LODE_WORKTREE_DIR here, cheapest to set)
+// rather than hardcoding worktree.DefaultBase — the one thing layoutFrom
+// exists to do. It fails if layoutFrom ignores the configured value.
+func TestNextHonorsConfiguredWorktreeDir(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Custom base")
+
+	t.Setenv("LODE_WORKTREE_DIR", "custom-base")
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "next", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	}
+
+	var result struct {
+		Claimed  bool   `json:"claimed"`
+		Worktree string `json:"worktree"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if !result.Claimed {
+		t.Fatalf("claimed = false, want true (output %s)", out)
+	}
+	wantDir := filepath.Join(root, "custom-base", task.ID+"-custom-base")
+	if result.Worktree != wantDir {
+		t.Fatalf("worktree = %q, want %q", result.Worktree, wantDir)
+	}
+	if info, err := os.Stat(wantDir); err != nil || !info.IsDir() {
+		t.Fatalf("worktree dir %s does not exist: %v", wantDir, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, worktree.DefaultBase)); err == nil {
+		t.Fatalf("worktree also created under the default base %s; want only %s", worktree.DefaultBase, "custom-base")
+	}
+}
+
+// templateTestServer is lifecycleTestServer with a non-default
+// LODE_BRANCH_TEMPLATE, for tests that need the server to render nested
+// branch names. Restores the process-global branch template on cleanup.
+func templateTestServer(t *testing.T, tmpl string) *cli.Client {
+	t.Helper()
+	t.Cleanup(func() { store.SetBranchTemplate("") })
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, _, err := api.NewServer(st, api.Config{BranchTemplate: tmpl})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	ts := httptest.NewServer(h)
+	t.Cleanup(ts.Close)
+
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", token)
+
+	return cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token})
+}
+
+// dirExists reports whether path is an existing directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// TestNextFlattensTemplateWorktree drives the full template → branch →
+// Layout.Dir → ParseDir chain end to end (spec 030 §3.1, §3.2), which is
+// otherwise only proved by composing separate unit tests: a server configured
+// with a "/"-containing LODE_BRANCH_TEMPLATE keeps the "/" in the BRANCH but
+// gets a flat directory one level below the base, which the path guard then
+// recognises as bound. `lode next` from inside that worktree refusing with
+// "already inside a worktree" is the guard proof — layoutFrom(cwd) resolved
+// the base dir and ParseDir read the flattened name back to a task id.
+func TestNextFlattensTemplateWorktree(t *testing.T) {
+	c := templateTestServer(t, "team/{{ .id }}-{{ .slug }}")
+	setupProject(t, c)
+	task := createTestTask(t, c, "Nested template worktree")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "next", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	}
+	var result struct {
+		Claimed bool   `json:"claimed"`
+		Branch  string `json:"branch"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	wantBranch := "team/" + task.ID + "-nested-template-worktree"
+	if result.Branch != wantBranch {
+		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
+	}
+	// Flat: the "/" is flattened to "-", not turned into a directory level.
+	wantDir := filepath.Join(root, worktree.DefaultBase, "team-"+task.ID+"-nested-template-worktree")
+	if info, err := os.Stat(wantDir); err != nil || !info.IsDir() {
+		t.Fatalf("worktree dir %s does not exist: %v", wantDir, err)
+	}
+	if nested := filepath.Join(root, worktree.DefaultBase, "team"); dirExists(nested) {
+		t.Fatalf("%s exists: the layout must be flat, not nested", nested)
+	}
+
+	t.Chdir(wantDir)
+	if _, err := runLode(t, "next", "--json"); err == nil {
+		t.Fatalf("lode next from inside the worktree: err = nil, want error (guard should have recognised %s)", wantDir)
 	}
 }
 
@@ -250,7 +384,7 @@ func TestNextClaimsTopRankedWithNoID(t *testing.T) {
 	if !result.Claimed {
 		t.Fatalf("claimed = false, want true")
 	}
-	wantBranch := "lode/" + task.ID + "-only-ready-task"
+	wantBranch := task.ID + "-only-ready-task"
 	if result.Branch != wantBranch {
 		t.Fatalf("branch = %q, want %q", result.Branch, wantBranch)
 	}
@@ -290,7 +424,7 @@ func TestNextRefusesInsideExistingWorktree(t *testing.T) {
 		t.Fatalf("lode next (setup): %v\noutput: %s", err, out)
 	}
 
-	dir := filepath.Join(root, "wt", task.ID+"-already-claimed")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-already-claimed")
 	t.Chdir(dir)
 
 	if _, err := runLode(t, "next", "--json"); err == nil {
@@ -307,7 +441,7 @@ func TestNextRollsBackOnWorktreeAddFailure(t *testing.T) {
 	// Pre-occupy the deterministic worktree path with a non-empty directory
 	// that isn't a git worktree, so `git worktree add` (both the -b attempt
 	// and the attach-existing-branch retry) fails.
-	dir := filepath.Join(root, "wt", task.ID+"-blocked-worktree")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-blocked-worktree")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
@@ -349,7 +483,7 @@ func TestResumeRenewsHeldLease(t *testing.T) {
 		t.Fatalf("get task: %v", err)
 	}
 
-	dir := filepath.Join(root, "wt", task.ID+"-resume-me")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-resume-me")
 	t.Chdir(dir)
 
 	// Renewal only bumps renewed_at/expires_at meaningfully once time has
@@ -379,7 +513,7 @@ func TestResumeReclaimsAfterSweeperExpiry(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	dir := filepath.Join(root, "wt", task.ID+"-expired-lease")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-expired-lease")
 
 	// Force the sweeper to reclaim the lease: everything expires "now+3h".
 	if _, err := st.ExpireLeases(context.Background(), time.Now().Add(3*time.Hour)); err != nil {
@@ -416,8 +550,8 @@ func TestResumeErrorsWhenLeasedElsewhere(t *testing.T) {
 	}
 
 	root := initGitRepo(t)
-	dir := filepath.Join(root, "wt", task.ID+"-held-elsewhere")
-	branch := "lode/" + task.ID + "-held-elsewhere"
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-held-elsewhere")
+	branch := task.ID + "-held-elsewhere"
 	c2 := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", branch)
 	if out, err := c2.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
@@ -442,6 +576,62 @@ func TestResumeRefusesOutsideWorktree(t *testing.T) {
 	}
 }
 
+// writeWorktreeDirConfig writes a repo-local .worklode/config.toml pinning
+// worktree_dir to base, so layoutFrom(dir) resolves it for that repo
+// regardless of the process cwd.
+func writeWorktreeDirConfig(t *testing.T, repo, base string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(repo, ".worklode"), 0o755); err != nil {
+		t.Fatalf("mkdir .worklode: %v", err)
+	}
+	content := "worktree_dir = \"" + base + "\"\n"
+	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+}
+
+// TestResumeResolvesLayoutFromTargetDirNotCwd pins the most serious bug found
+// in this plan (fixed in "cmd/cli: resolve worktree layout from the repo,
+// not the merged config"): runResume must build its worktree.Layout from the
+// resume argument's own repo, not from the invoking process's cwd. The two
+// repos here configure DIFFERENT bases, so a cwd-derived layout cannot
+// accidentally succeed by coincidentally matching the target's base — it must
+// fail closed with "not a Worklode worktree" if the bug regresses.
+func TestResumeResolvesLayoutFromTargetDirNotCwd(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Cross repo resume")
+
+	target := initGitRepo(t)
+	writeWorktreeDirConfig(t, target, "target-worktrees")
+	t.Chdir(target)
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+	dir := filepath.Join(target, "target-worktrees", task.ID+"-cross-repo-resume")
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("worktree dir %s does not exist: %v", dir, err)
+	}
+
+	// A second, unrelated repo with a different configured base is the
+	// invoking cwd for the resume below.
+	other := initGitRepo(t)
+	writeWorktreeDirConfig(t, other, "other-worktrees")
+	t.Chdir(other)
+
+	if out, err := runLode(t, "resume", dir, "--json"); err != nil {
+		t.Fatalf("lode resume %s from a different repo (cwd %s): %v\noutput: %s", dir, other, err, out)
+	}
+
+	detail, _, err := c.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if detail.State != "in_progress" || detail.Lease == nil {
+		t.Fatalf("task after resume = state %q lease %+v, want in_progress/non-nil", detail.State, detail.Lease)
+	}
+}
+
 // --- lode done ----------------------------------------------------------
 
 func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
@@ -454,7 +644,7 @@ func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	dir := filepath.Join(root, "wt", task.ID+"-finish-this")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-finish-this")
 	moveToReview(t, st, task.ID)
 
 	t.Chdir(dir)
@@ -501,7 +691,7 @@ func TestBlockRecordsEdgeAndReleasesLease(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	dir := filepath.Join(root, "wt", task.ID+"-needs-a-blocker")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-needs-a-blocker")
 	t.Chdir(dir)
 
 	out, err := runLode(t, "block", "--on", blocker.ID, "--json")
@@ -547,7 +737,7 @@ func TestStatusReportsStateWithoutMutating(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	dir := filepath.Join(root, "wt", task.ID+"-just-looking")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-just-looking")
 	t.Chdir(dir)
 
 	before, _, err := c.GetTask(context.Background(), task.ID)
@@ -595,7 +785,7 @@ func TestStatusReportsResolvedProject(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	t.Chdir(filepath.Join(root, "wt", task.ID+"-scoped-status"))
+	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-scoped-status"))
 
 	out, err := runLode(t, "status", "--json")
 	if err != nil {
@@ -631,7 +821,7 @@ func TestStatusReportsSessionMarkerPresence(t *testing.T) {
 	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
 		t.Fatalf("lode next: %v", err)
 	}
-	dir := filepath.Join(root, "wt", task.ID+"-has-a-session")
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-has-a-session")
 
 	gitDirOut, err := exec.Command("git", "-C", dir, "rev-parse", "--absolute-git-dir").Output()
 	if err != nil {
@@ -687,8 +877,8 @@ func TestTaskBriefCmd(t *testing.T) {
 	if b.Task.ID != task.ID {
 		t.Fatalf("brief.Task.ID = %q, want %q", b.Task.ID, task.ID)
 	}
-	if b.Branch != "lode/"+task.ID+"-brief-me" {
-		t.Fatalf("brief.Branch = %q, want lode/%s-brief-me", b.Branch, task.ID)
+	if b.Branch != task.ID+"-brief-me" {
+		t.Fatalf("brief.Branch = %q, want %s-brief-me", b.Branch, task.ID)
 	}
 	if b.Skills.Provider != "none" || len(b.Skills.Pinned) != 0 || len(b.Skills.Matches) != 0 {
 		t.Fatalf("brief.Skills = %+v, want empty (no pins, no embedder)", b.Skills)
@@ -744,7 +934,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 func TestPrintBriefRendersSkillsSection(t *testing.T) {
 	b := cli.Brief{
 		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "lode/WL-1-t",
+		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{
 			Pinned:   []cli.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
 			Matches:  []cli.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
@@ -779,7 +969,7 @@ func TestPrintBriefRendersSkillsSection(t *testing.T) {
 func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 	b := cli.Brief{
 		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "lode/WL-1-t",
+		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{
 			Warnings: []string{"pinned skill not found: ghost"},
 			Provider: "openai-compatible",
@@ -799,7 +989,7 @@ func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
 	b := cli.Brief{
 		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "lode/WL-1-t",
+		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{Provider: "none"},
 	}
 	buf := &bytes.Buffer{}

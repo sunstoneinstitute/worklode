@@ -167,10 +167,10 @@ func TestTaskListStatusFiltering(t *testing.T) {
 	done := createTestTask(t, c, "Done task")
 	abandoned := createTestTask(t, c, "Abandoned task")
 
-	if _, _, err := c.ClaimTask(ctx, doing.ID, "host:/wt/doing", 0); err != nil {
+	if _, _, err := c.ClaimTask(ctx, doing.ID, "host:/.worktrees/doing", 0); err != nil {
 		t.Fatalf("claim doing: %v", err)
 	}
-	if _, _, err := c.ClaimTask(ctx, done.ID, "host:/wt/done", 0); err != nil {
+	if _, _, err := c.ClaimTask(ctx, done.ID, "host:/.worktrees/done", 0); err != nil {
 		t.Fatalf("claim done: %v", err)
 	}
 	moveToReview(t, st, done.ID)

@@ -435,12 +435,6 @@ func SlugifyTitle(title string) string {
 	return s
 }
 
-// BranchFor returns the conventional git branch for a task:
-// <prefix><id>-<slug>, with the prefix from SetBranchPrefix.
-func BranchFor(t *Task) string {
-	return BranchPrefix() + t.ID + "-" + SlugifyTitle(t.Title)
-}
-
 // GetTask looks up a task by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 	row := s.db.QueryRowContext(ctx,

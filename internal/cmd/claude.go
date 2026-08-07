@@ -43,8 +43,8 @@ type claudeBinding struct {
 // EnterWorktree then fails unless the hook prints the path it created.
 // Worklode observes rather than creates, so binding them broke EnterWorktree
 // outright. Nothing is lost by dropping them — Claude Code creates worktrees
-// under .claude/worktrees/, which worktree.ParseDir rejects, so both handlers
-// were unreachable NOPs on that path. Worklode's own wt/<task-id> worktrees
+// under .claude/worktrees/, which the default layout rejects, so both
+// handlers were unreachable NOPs on that path. Worklode's own worktrees
 // are covered by session-start (which auto-resumes an abandoned lease) and by
 // the worktree-enter binding below; `lode hook worktree-create` and
 // `worktree-remove` remain available for scripts that do create them.

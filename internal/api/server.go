@@ -41,10 +41,10 @@ type Config struct {
 	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
 	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
-	// BranchPrefix (LODE_BRANCH_PREFIX) is the task-branch prefix the server
-	// hands out and correlates pushes by; empty means "lode/". The legacy
-	// "wl/" prefix stays recognized for correlation regardless.
-	BranchPrefix string
+	// BranchTemplate (LODE_BRANCH_TEMPLATE) renders the task-branch names the
+	// server hands out and correlates pushes by; empty means
+	// store.DefaultBranchTemplate. An invalid template fails NewServer.
+	BranchTemplate string
 
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
@@ -131,10 +131,6 @@ type server struct {
 	st  *store.Store
 	cfg Config
 	log *slog.Logger
-
-	// branchPrefix is cfg.BranchPrefix normalized to its default; the server
-	// is the authority on branch names handed to clients.
-	branchPrefix string
 
 	// oidc is nil unless OIDC is configured (issuer + client id set). All SSO
 	// routes 404 when it is nil.
@@ -226,8 +222,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		reg = prometheus.NewRegistry()
 	}
 
-	store.SetBranchPrefix(cfg.BranchPrefix)
-	s.branchPrefix = store.BranchPrefix()
+	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
+		return nil, nil, err
+	}
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if cfg.SessionSecret == "" {

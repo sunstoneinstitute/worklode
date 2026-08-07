@@ -21,7 +21,7 @@ func claimedTask(t *testing.T, st *store.Store, h http.Handler, token string) st
 		t.Fatalf("created task has no id: %v", task)
 	}
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/claim", token,
-		map[string]any{"worktree": "host:/wt/one"})
+		map[string]any{"worktree": "host:/.worktrees/one"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim: got %d, body %s", rr.Code, rr.Body.String())
 	}

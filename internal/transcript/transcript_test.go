@@ -125,15 +125,15 @@ func TestParse(t *testing.T) {
 			}},
 		},
 		{
-			// Root attribution must respect the path separator: /tmp/wt/xyz is a
-			// sibling worktree, not a child of /tmp/wt/x. An entry with no cwd is
+			// Root attribution must respect the path separator: /tmp/.worktrees/xyz is a
+			// sibling worktree, not a child of /tmp/.worktrees/x. An entry with no cwd is
 			// kept, since older transcripts omit the field.
 			name: "root keeps the tree, excludes the sibling, keeps cwd-less entries",
-			opts: Options{Root: "/tmp/wt/x"},
+			opts: Options{Root: "/tmp/.worktrees/x"},
 			jsonl: `
-{"type":"assistant","cwd":"/tmp/wt/x","timestamp":"2026-07-19T10:00:00Z","message":{"id":"msg_1","model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":0}}}
-{"type":"assistant","cwd":"/tmp/wt/x/sub","timestamp":"2026-07-19T10:01:00Z","message":{"id":"msg_2","model":"claude-opus-5","usage":{"input_tokens":2,"output_tokens":0}}}
-{"type":"assistant","cwd":"/tmp/wt/xyz","timestamp":"2026-07-19T10:02:00Z","message":{"id":"msg_3","model":"claude-opus-5","usage":{"input_tokens":400,"output_tokens":0}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/x","timestamp":"2026-07-19T10:00:00Z","message":{"id":"msg_1","model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":0}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/x/sub","timestamp":"2026-07-19T10:01:00Z","message":{"id":"msg_2","model":"claude-opus-5","usage":{"input_tokens":2,"output_tokens":0}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/xyz","timestamp":"2026-07-19T10:02:00Z","message":{"id":"msg_3","model":"claude-opus-5","usage":{"input_tokens":400,"output_tokens":0}}}
 {"type":"assistant","timestamp":"2026-07-19T10:03:00Z","message":{"id":"msg_4","model":"claude-opus-5","usage":{"input_tokens":8,"output_tokens":0}}}
 `,
 			want: []Bucket{{
@@ -233,17 +233,17 @@ func TestParseFileMissingIsNotAnError(t *testing.T) {
 // user turns without usage, assistant messages spread over several content
 // blocks, a sidechain turn on a cheaper model, and a fast-mode turn.
 const realisticTranscript = `
-{"type":"user","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T09:59:00Z","uuid":"u-1","message":{"role":"user","content":"add a test"}}
-{"parentUuid":"u-1","type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:00:00Z","requestId":"req_a","uuid":"a-1","message":{"id":"msg_a","model":"claude-opus-5","usage":{"input_tokens":4,"cache_creation_input_tokens":1200,"cache_read_input_tokens":0,"output_tokens":150,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0}}}}
-{"parentUuid":"u-1","type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:00:00Z","requestId":"req_a","uuid":"a-2","message":{"id":"msg_a","model":"claude-opus-5","usage":{"input_tokens":4,"cache_creation_input_tokens":1200,"cache_read_input_tokens":0,"output_tokens":150,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0}}}}
-{"type":"user","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:00:05Z","uuid":"u-2","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}
-{"type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:00:30Z","requestId":"req_b","uuid":"a-3","message":{"id":"msg_b","model":"claude-opus-5","usage":{"input_tokens":6,"cache_creation_input_tokens":0,"cache_read_input_tokens":1200,"output_tokens":240,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}}
-{"type":"assistant","isSidechain":true,"cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:01:00Z","requestId":"req_d","uuid":"a-4","message":{"id":"msg_d","model":"claude-haiku-4-5","usage":{"input_tokens":3,"cache_creation_input_tokens":900,"cache_read_input_tokens":0,"output_tokens":60,"cache_creation":{"ephemeral_5m_input_tokens":900,"ephemeral_1h_input_tokens":0}}}}
-{"type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-5","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
-{"type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-6","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
-{"type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-7","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
-{"type":"assistant","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:03:00Z","requestId":"req_e","uuid":"a-8","message":{"id":"msg_e","model":"claude-opus-5","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":10235,"output_tokens":30,"speed":"fast","cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}}
-{"type":"system","cwd":"/tmp/wt/demo","timestamp":"2026-07-19T10:04:00Z","uuid":"s-1","content":"session ended"}
+{"type":"user","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T09:59:00Z","uuid":"u-1","message":{"role":"user","content":"add a test"}}
+{"parentUuid":"u-1","type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:00:00Z","requestId":"req_a","uuid":"a-1","message":{"id":"msg_a","model":"claude-opus-5","usage":{"input_tokens":4,"cache_creation_input_tokens":1200,"cache_read_input_tokens":0,"output_tokens":150,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0}}}}
+{"parentUuid":"u-1","type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:00:00Z","requestId":"req_a","uuid":"a-2","message":{"id":"msg_a","model":"claude-opus-5","usage":{"input_tokens":4,"cache_creation_input_tokens":1200,"cache_read_input_tokens":0,"output_tokens":150,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0}}}}
+{"type":"user","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:00:05Z","uuid":"u-2","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:00:30Z","requestId":"req_b","uuid":"a-3","message":{"id":"msg_b","model":"claude-opus-5","usage":{"input_tokens":6,"cache_creation_input_tokens":0,"cache_read_input_tokens":1200,"output_tokens":240,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}}
+{"type":"assistant","isSidechain":true,"cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:01:00Z","requestId":"req_d","uuid":"a-4","message":{"id":"msg_d","model":"claude-haiku-4-5","usage":{"input_tokens":3,"cache_creation_input_tokens":900,"cache_read_input_tokens":0,"output_tokens":60,"cache_creation":{"ephemeral_5m_input_tokens":900,"ephemeral_1h_input_tokens":0}}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-5","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-6","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:02:00Z","requestId":"req_c","uuid":"a-7","message":{"id":"msg_c","model":"claude-opus-5","usage":{"input_tokens":11,"cache_creation_input_tokens":8500,"cache_read_input_tokens":1440,"output_tokens":95,"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":8000}}}}
+{"type":"assistant","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:03:00Z","requestId":"req_e","uuid":"a-8","message":{"id":"msg_e","model":"claude-opus-5","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":10235,"output_tokens":30,"speed":"fast","cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}}
+{"type":"system","cwd":"/tmp/.worktrees/demo","timestamp":"2026-07-19T10:04:00Z","uuid":"s-1","content":"session ended"}
 `
 
 // realisticWant is the hand-summed total of realisticTranscript. It is spelled
@@ -282,7 +282,7 @@ func TestParseFileReadsRealisticTranscript(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	got, err := ParseFile(path, Options{Root: "/tmp/wt/demo"})
+	got, err := ParseFile(path, Options{Root: "/tmp/.worktrees/demo"})
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestParseFileReadsRealisticTranscript(t *testing.T) {
 
 	// The same transcript reported against a different worktree bills nothing,
 	// which is what keeps a two-lease session from being counted twice.
-	other, err := ParseFile(path, Options{Root: "/tmp/wt/elsewhere"})
+	other, err := ParseFile(path, Options{Root: "/tmp/.worktrees/elsewhere"})
 	if err != nil {
 		t.Fatalf("ParseFile with a foreign root: %v", err)
 	}

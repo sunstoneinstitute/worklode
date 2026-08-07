@@ -218,7 +218,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
-	if !strings.HasPrefix(claim.Branch, "lode/WL-1-") {
+	if !strings.HasPrefix(claim.Branch, "WL-1-") {
 		t.Fatalf("claim branch = %q", claim.Branch)
 	}
 	if claim.Lease.ActorID != "alice" || claim.Lease.Worktree != "host:/wt-1" {
@@ -435,8 +435,8 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief (no lease): %v", err)
 	}
-	if brief.Task.ID != task.ID || brief.Branch != "lode/"+task.ID+"-fix-the-thing" {
-		t.Fatalf("Brief = %+v, want task %s branch lode/%s-fix-the-thing", brief, task.ID, task.ID)
+	if brief.Task.ID != task.ID || brief.Branch != task.ID+"-fix-the-thing" {
+		t.Fatalf("Brief = %+v, want task %s branch %s-fix-the-thing", brief, task.ID, task.ID)
 	}
 	if brief.Lease != nil {
 		t.Fatalf("Brief.Lease = %+v, want nil", brief.Lease)
@@ -1192,6 +1192,58 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 	if cfg.CurrentProject != "from-repo" || cfg.CurrentProjectPath != repoPath {
 		t.Fatalf("repo config: project=%q path=%q; want from-repo, %s",
 			cfg.CurrentProject, cfg.CurrentProjectPath, repoPath)
+	}
+}
+
+// WorktreeDirFrom, not LoadConfig/loadConfigFrom, is the sole reader of
+// worktree_dir (spec 030 §4 scopes it to the repo-local config only) — see
+// Config.WorktreeDir's doc. These two tests exercise it directly.
+
+func TestWorktreeDirFromRepoConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "worktree_dir = \"wtrees\"\n")
+	if got := cli.WorktreeDirFrom(repo); got != "wtrees" {
+		t.Errorf("WorktreeDirFrom = %q, want wtrees", got)
+	}
+}
+
+func TestWorktreeDirEnvOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("LODE_WORKTREE_DIR", "from-env")
+	// LODE_TOKEN set but otherwise irrelevant here: WorktreeDirFrom is
+	// deliberately independent of loadConfigFrom (no keychain, no token, no
+	// LODE_TOKEN early return) — this pins that the env override applies
+	// regardless of unrelated client-config env state, not just in isolation.
+	t.Setenv("LODE_TOKEN", "wl_"+strings.Repeat("a", 40))
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "worktree_dir = \"wtrees\"\n")
+	if got := cli.WorktreeDirFrom(repo); got != "from-env" {
+		t.Errorf("WorktreeDirFrom = %q, want from-env", got)
+	}
+}
+
+// TestLoadConfigFromNeverPopulatesWorktreeDir pins the invariant that keeps
+// a user-level worktree_dir from diverging from what internal/hookrun's guard
+// sees: loadConfigFrom (LoadConfig's implementation) must leave
+// Config.WorktreeDir empty even when BOTH a user-level and a repo-level
+// config set worktree_dir — WorktreeDirFrom, not this merged Config, is the
+// sole reader (spec 030 §4; see Config.WorktreeDir's doc). Today this is
+// correct only by inspection (cfg.WorktreeDir = "" in loadConfigFrom, and
+// merge() never touching it); this test would fail if either of those broke.
+func TestLoadConfigFromNeverPopulatesWorktreeDir(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\nworktree_dir = \"user-wtrees\"\n")
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "worktree_dir = \"repo-wtrees\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.WorktreeDir != "" {
+		t.Fatalf("Config.WorktreeDir = %q, want \"\" (worktree_dir must never merge into Config; use WorktreeDirFrom)", cfg.WorktreeDir)
 	}
 }
 
