@@ -5,7 +5,7 @@
 // Two rules govern every handler:
 //
 //   - Worklode's own action is GUARDED. Unless the working directory resolves
-//     to a Worklode worktree (worktree.Root → Layout.ParseDir), the handler
+//     to a Worklode worktree (worktree.Root → Layout.TaskID), the handler
 //     does nothing.
 //   - Worklode NEVER fails the event. Every backbone call runs under a short
 //     timeout and any error (no config, network, 4xx/5xx) is downgraded to a
@@ -361,7 +361,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return // not in a git repo ⇒ NOP
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		offerScan(ctx, opts, root, l)
 		return
@@ -498,20 +498,24 @@ func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.La
 
 	now := opts.now()
 	var lines []string
-	fetched := 0
+	scanned := 0
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
+		// Cap before resolving the id, not after: TaskID shells out to git
+		// for every candidate, so a repo with many worktrees would otherwise
+		// pay a subprocess per directory to use at most five of them.
+		if scanned >= 5 {
+			break
+		}
+		scanned++
+
 		wtDir := filepath.Join(base, e.Name())
-		taskID, ok := l.ParseDir(wtDir)
+		taskID, ok := l.TaskID(wtDir)
 		if !ok {
 			continue
 		}
-		if fetched >= 5 {
-			break
-		}
-		fetched++
 
 		bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 		brief, _, briefErr := c.Brief(bctx, taskID)
@@ -539,7 +543,7 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, 
 	if !ok {
 		return
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		return
 	}
@@ -573,7 +577,7 @@ func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.L
 	if !ok {
 		return
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		return
 	}
@@ -613,7 +617,7 @@ func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.L
 
 func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	created := payloadPath(p, dir)
-	taskID, ok := l.ParseDir(created)
+	taskID, ok := l.TaskID(created)
 	if !ok {
 		return // not under the worktree base dir (or unknown path) ⇒ NOP
 	}
@@ -646,7 +650,7 @@ func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir stri
 
 func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
 	removed := payloadPath(p, dir)
-	taskID, ok := l.ParseDir(removed)
+	taskID, ok := l.TaskID(removed)
 	if !ok {
 		return
 	}
@@ -681,7 +685,7 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 	if !ok {
 		return
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		return
 	}
@@ -724,7 +728,7 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 	if !ok {
 		return
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		return
 	}
@@ -762,7 +766,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
-	taskID, ok := l.ParseDir(root)
+	taskID, ok := l.TaskID(root)
 	if !ok {
 		return
 	}
