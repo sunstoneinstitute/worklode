@@ -135,6 +135,16 @@ ground without adding a Python stack to a Go repo.
   `LODE_WORKTREE_DIR` overrides it client-side for one-off/CI use, but it
   doesn't persist — a session started without it won't recognise worktrees
   created with it set, so `worktree_dir` is the durable setting.
+- A worktree's task id is read via `worktree.Layout.TaskID`
+  (`internal/worktree`): the explicit `worklode.task-id` git config `lode next`
+  stamps on creation (`worktree.SetTaskID`), falling back to the id in the
+  directory name (`Layout.ParseDir`) for worktrees created before this field
+  existed. Both share the same guard — the path must be exactly one level
+  below the base — so only id resolution costs a git subprocess (030 §3.2).
+  `git config --worktree` needs `extensions.worktreeConfig` enabled in the
+  repo's own local config — global config does not count — which `lode
+  install` sets per-repo; `lode next` also sets it defensively before
+  creating a worktree.
 - `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
   reasoning effort each agent role uses when working this repo with subagents.
 - **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
