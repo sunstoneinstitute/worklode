@@ -20,15 +20,14 @@
 # ---------------------------------------------------------------------------
 # DesignDoc lifecycle — purely editorial. `implemented` was removed by 014 §5:
 # implementation is per-section and derived, so a document-level status would be
-# a hand-maintained, lossy summary of something computable.
+# a hand-maintained, lossy summary of something computable. 025 §3 removed
+# `proposed`: a document under review stays `draft` with an open review task.
 # ---------------------------------------------------------------------------
 
 wlc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
 
 wlc:draft a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "draft" ;
-    skos:definition "Being written; not yet proposed for review." .
-wlc:proposed a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "proposed" ;
-    skos:definition "Submitted for crit review; awaiting resolution." .
+    skos:definition "Being written, or under review with the review unresolved." .
 wlc:accepted a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
     skos:definition "Crit-resolved and approved as intent." .
 wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
@@ -37,7 +36,7 @@ wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLab
 # The order is data, so "is X before Y" is queryable. RDF still does not enforce
 # legal transitions; those rules live with the authoring skill (spec 008).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded ) .
+    skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
 
 
 # ---------------------------------------------------------------------------
