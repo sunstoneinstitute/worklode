@@ -580,6 +580,25 @@ func TestReopen(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("reopen unknown task status = %d, want 404", rr.Code)
 	}
+
+	// Reopening a task whose lease survived delivery closes that lease:
+	// delivery leaves the worktree occupied, reopening does not.
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Merged while still leased", "priority": "low", "kind": "chore"})
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/claim", token, map[string]any{"worktree": "host:/wt-3"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim WL-3 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	moveTo(t, st, "WL-3", "in_progress", "merged")
+	if _, err := st.ActiveLease(context.Background(), "WL-3"); err != nil {
+		t.Fatalf("active lease after merge: err = %v, want it still open", err)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/reopen", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reopen WL-3 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if _, err := st.ActiveLease(context.Background(), "WL-3"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("active lease after reopen: err = %v, want ErrNotFound", err)
+	}
 }
 
 // TestReopenFromDeliveryStates pins the rest of the reopenable set in
