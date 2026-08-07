@@ -615,10 +615,12 @@ func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
 	}
 }
 
-// TestResolveDeliveryClosesActiveLease: the resolver transitions straight
-// from in_progress to merged, so it must close the active lease itself or
-// the merged task strands holding a live lease.
-func TestResolveDeliveryClosesActiveLease(t *testing.T) {
+// TestResolveDeliveryKeepsActiveLease: landing the work advances the task to
+// merged and leaves the lease alone. A lease says a worktree is occupied,
+// which is still true after a merge — committing to a branch that is already
+// merged (or deployed) is ordinary work. Leases end on release, abandon,
+// reopen, or the expiry sweep.
+func TestResolveDeliveryKeepsActiveLease(t *testing.T) {
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -659,8 +661,8 @@ func TestResolveDeliveryClosesActiveLease(t *testing.T) {
 		taskID).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
-	if active != 0 {
-		t.Fatalf("active leases after landing = %d, want 0", active)
+	if active != 1 {
+		t.Fatalf("active leases after landing = %d, want 1 (delivery must not close the lease)", active)
 	}
 }
 

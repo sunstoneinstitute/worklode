@@ -370,7 +370,8 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // CloseActiveLease sets released_at on the active lease on taskID, no matter
 // who holds it, inside the given transaction. A task with no active lease is
 // a no-op. Unlike closeLease it never touches task state — callers (done,
-// abandon, merge) set the task's state themselves in the same transaction.
+// abandon) set the task's state themselves in the same transaction. Delivery
+// is not a caller: a merge or deploy leaves the lease alone.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 	var leaseID int64
 	err := tx.QueryRow(

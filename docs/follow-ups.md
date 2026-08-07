@@ -109,6 +109,38 @@ once an instance is running (dogfooding); until then this file is the list.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
+- **`DefaultLeaseTTL = 2h` may be wrong for human/agent alternation**: the TTL
+  was sized for a task an agent executes start to finish, where a missed
+  commit-cadence heartbeat really does mean the agent died. A task that
+  alternates between agent and human control idles for longer than that
+  routinely, and now that delivery transitions no longer close leases the
+  sweeper is the main thing ending them — so a too-short TTL is felt more
+  often. Deliberately not changed yet: observe which stale-lease cases
+  actually show up first, then decide between a longer default, a per-project
+  TTL, or a distinction between agent-held and human-held leases.
+- **`graphserver` response bodies are never drained before `Close`**: the 200
+  path of `Select` stops reading at the JSON decoder's closing brace, and
+  `httpError`'s excerpt is capped at 512 bytes, so `net/http` can't reuse
+  those connections. Consistent with the rest of the repo (no
+  `io.Copy(io.Discard, ...)` anywhere), but the e2e harness pays a fresh TLS
+  handshake on each of up to 30 polls.
+- **`graphserver.PutGraph` has no compare-and-swap**: it returns only a
+  created/replaced bool and discards the `ETag`/`x-sunstone-txn` headers
+  graph-server returns, and no method sends `If-Match`. graph-server has
+  honoured If-Match compare-and-swap since 2026-07-25
+  (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
+  Needed before a second work-graph writer exists; spec 009 should-have 6.
+  Adding it changes `PutGraph`'s signature.
+- **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 009
+  must-have 3, publishing half): decided 2026-08-06 that this repo serves the
+  files from its own site, without rdf-registry (rdf-registry#31 closed).
+  `deploy-www.yml` uploads only `www/`, so `ns/` is not served today — the
+  deploy must include the ttl files and add `ns/**` to its path trigger. The
+  namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
+  fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
+  content-negotiate — pick a serving strategy deliberately. Specs 006 §9,
+  009 item 3, 014 §1 and the `ns/ontology.ttl` header still record the
+  rdf-registry approach and need amending.
 
 ## From the 2026-08-04 architecture grilling
 

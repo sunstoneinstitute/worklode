@@ -458,6 +458,31 @@ NNNN_name.down.sql
 
 where `NNNN` is the next sequence number.
 
+### Graph-server acceptance (spec 009)
+
+`e2e/graphserver_test.go` proves the knowledge-graph hand-off end-to-end
+against a live data-platform graph-server: Keycloak client-credentials
+auth, a named-graph PUT to the fixed `main` branch, a GSP read-back, and a
+drift query over `/sparql`. It skips unless configured:
+
+```bash
+export LODE_GRAPHSERVER_URL=https://graph.dev.sunstoneinstitute.ai
+export LODE_GRAPHSERVER_TOKEN_URL=https://auth.sunstoneinstitute.ai/realms/sunstone/protocol/openid-connect/token
+export LODE_GRAPHSERVER_CLIENT_ID=dataplatform-svc
+export LODE_GRAPHSERVER_CLIENT_SECRET="$(op item get dataplatform-svc --fields credential --reveal)"
+go test -tags e2e ./e2e/ -run TestGraphServerAcceptance -v
+```
+
+Each run writes one uniquely-named graph and deletes it afterwards, so runs
+never collide; point `LODE_GRAPHSERVER_URL` at prod to re-certify after a
+graph-server deploy, at the cost of two extra commits in prod's Nessie history
+per run (the write and the cleanup delete, both on `main`). The three
+`LODE_GRAPHSERVER_*` credential variables must be set together or not at all;
+with none of them set, the client runs unauthenticated, which only works
+against a graph-server started without `AUTH_ENFORCE`. The client behind it
+lives in `internal/graphserver`; the manual equivalent is the data-platform
+runbook `docs/runbooks/2026-07-22-worklode-projector-acceptance.md`.
+
 ### CI gate (who may run PR checks)
 
 `pr-checks.yml` opens with a cheap `gate` job; the lint/test/build/kustomize

@@ -2,10 +2,7 @@ package hooks_test
 
 import (
 	"context"
-	"errors"
 	"testing"
-
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // deployBranchSHA is the commit on last-deploy/dev in push_last_deploy.json.
@@ -64,7 +61,8 @@ func TestDeliveryEndToEnd(t *testing.T) {
 		t.Fatalf("task state after PR opened = %q, want in_review", st)
 	}
 
-	// 3. Merge to main: the work lands, the lease closes.
+	// 3. Merge to main: the work lands. The lease is untouched — it records
+	//    that a worktree is occupied, which landing the code does not change.
 	deliverPushOK(t, e, "d-3", "push_main_merge.json")
 	if n := e.rawQueryInt(t,
 		`SELECT COUNT(*) FROM main_commits WHERE repo = $1`, demoRepo); n != 3 {
@@ -73,8 +71,8 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	if src := e.taskCommitSource(t, taskID, demoRepo, mainMergeSHA); src != "merge_message" {
 		t.Fatalf("merge task_commit source = %q, want merge_message", src)
 	}
-	if _, err := e.st.ActiveLease(ctx, taskID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("active lease err = %v, want ErrNotFound (lease closed on landing)", err)
+	if _, err := e.st.ActiveLease(ctx, taskID); err != nil {
+		t.Fatalf("active lease after landing: err = %v, want the lease still open", err)
 	}
 	if st := e.taskState(t, taskID); st != "merged" {
 		t.Fatalf("task state after merge = %q, want merged", st)
@@ -136,5 +134,10 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	// Dev never saw Flux, so it is still on the bootstrap fallback.
 	if _, _, devSeen, _ := e.envDeploy(t, "dev"); devSeen {
 		t.Fatal("dev flux_seen = true, want false (no Flux revision correlated for dev)")
+	}
+	// No delivery milestone closes the lease: only release, abandon, reopen
+	// and the expiry sweep do.
+	if _, err := e.st.ActiveLease(ctx, taskID); err != nil {
+		t.Fatalf("active lease after the full delivery chain: err = %v, want it still open", err)
 	}
 }

@@ -350,6 +350,43 @@ func TestPreCommitRenewsInsideWorktree(t *testing.T) {
 	}
 }
 
+// TestPreCommitWithoutLeaseIsSilent: committing in a worktree that holds no
+// lease — swept, released, or never claimed — is ordinary. The hook must not
+// renew, must not report a session (both would 404), must not warn, and must
+// not block the commit.
+func TestPreCommitWithoutLeaseIsSilent(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "No lease here")
+	if _, err := c.ReleaseLease(context.Background(), taskID); err != nil {
+		t.Fatalf("release lease: %v", err)
+	}
+	if err := writeSessionMarker(wtDir, "s-nolease", time.Time{}); err != nil {
+		t.Fatalf("write marker: %v", err) // a zero heartbeat makes one due
+	}
+
+	payload := payloadJSON(t, Payload{Cwd: wtDir, HookEventName: "PreToolUse"})
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "pre-commit",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty (a missing lease is not a warning)", stderr.String())
+	}
+	if rec.hitAny("/renew") {
+		t.Fatalf("renew endpoint was hit with no lease held; paths: %v", rec.paths)
+	}
+	if rec.hitAny("/agent-session") {
+		t.Fatalf("agent-session endpoint was hit with no lease held; paths: %v", rec.paths)
+	}
+}
+
 // --- session-start emits additionalContext ----------------------------------
 
 func TestSessionStartEmitsAdditionalContext(t *testing.T) {
