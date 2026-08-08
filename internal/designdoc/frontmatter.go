@@ -28,6 +28,7 @@ type Frontmatter struct {
 	Replaces       AnchorMap `yaml:"replaces,omitempty"`       // dct:replaces
 	IsReplacedBy   AnchorMap `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
 	Task           string    `yaml:"task,omitempty"`           // transitional, no term
+	Kind           string    `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is

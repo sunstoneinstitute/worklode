@@ -222,6 +222,40 @@ pass a full id like WL-12, or set current_project
 The alternative — teaching every `/api/v1/tasks/{id}` endpoint to accept
 `?project=` — touches all fifteen task routes for the same result.
 
+### 4.3a Typed ids and `lode show` {#sec-4.3a}
+
+`lode show` infers an id's kind from its shape, or takes the kind explicitly
+via a kind flag — both forms route to the same place, so holding an id never
+requires knowing what it names and naming a kind never requires knowing its
+id's shape. The type segment of a typed id (`<KEY>-<TYPE>-<n>`, 029 §4) is
+the dispatch key for the inferred form; an id with no type segment is a task.
+
+| Argument shape | Routed to |
+|---|---|
+| `12`, `WL-12` | `task show` — bare numbers resolve per §4.3 |
+| `WL-SPEC-14`, `WL-ADR-7`, optional `#sec-…` | the document renderer (026 §3) |
+| `WL-PLAN-4-1`, `WL-MILE-2`, `WL-DEL-3` | recognized from 029 §4, reported as not showable until those entities exist |
+| any other `<KEY>-<TYPE>-<n>` | an error listing the known type codes |
+
+`--spec 15`, `--adr 7`, `--plan 4-1`, `--milestone 2`, `--deliverable 3`,
+`--task 12`, and `--project <id>` are the explicit form, one flag per kind;
+`--plan`/`--milestone`/`--deliverable` report "not showable yet", same as
+their typed-id form above. `--kind <K> <ordinal>` is the generic spelling of
+the same thing, with `K` one of
+`task|spec|adr|plan|milestone|project|deliverable`. For the six
+ordinal-taking flags the value is a **bare ordinal**, never a typed id —
+`--spec 15`, not `--spec WL-SPEC-15` — since the flag already names the kind
+the id's type segment would have; `--project`'s value is a project id or
+slug instead, and `--kind`'s value is the kind name itself, with the ordinal
+or slug supplied as its own positional. A per-kind flag and a positional id
+are mutually exclusive: the flag's value is the id; `--kind` takes its own
+positional instead, per the argument-shape table above.
+
+The typed grammar is checked before the task grammar, making 014 §11.3's rule
+— a document reference must never parse as a task id — a checked property of
+the dispatcher. `show` joins §4.3's bare-number-taking commands: `lode show
+12` behaves exactly as `lode task show 12`.
+
 ### 4.4 Command surface {#sec-4.4}
 
 | Command | Change |
