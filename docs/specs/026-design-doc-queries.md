@@ -25,7 +25,8 @@ That is expensive, non-reproducible, and wrong often enough to matter — the au
 prompted this spec had to caveat itself as "strong evidence, not proof".
 
 Spec 025 §10 already reserves the surface (`lode doc list --needs-planning`,
-`--needs-execution`, `lode doc show --resolved`) and 025 §7 already fixes the semantics.
+`--needs-execution`, `lode doc show --resolved` — spelled `lode show` here, §3) and 025
+§7 already fixes the semantics.
 What 025 does not do is make them available before the backbone document store exists —
 its own implementation is a long way out, and these queries are needed to plan it.
 
@@ -34,7 +35,7 @@ This spec implements the read-only subset of 025 §10 against the git mirror tha
 flags, and semantics are 025's, so when the store lands the change is the data source and
 nothing else.
 
-**In scope:** `lode doc list`, `lode doc show`, `lode doc sections`, corpus loading and
+**In scope:** `lode doc list`, `lode show`, `lode doc sections`, corpus loading and
 reference resolution in `internal/designdoc`, one new pre-commit script (§4.1), the
 frontmatter keys the queries depend on, tests.
 
@@ -186,11 +187,14 @@ It is the orientation map for anyone entering the corpus: one screen naming wher
 subject is decided, in place of grepping 26 files, and the entry point to the consolidated
 reading path of §3.2.
 
-## 3. `lode doc show` {#sec-3}
+## 3. Showing a document: `lode show` {#sec-3}
 
 ```
-lode doc show <ref> [--resolved] [--section <anchor>]
+lode show <ref> [--resolved] [--section|-s <anchor>]
 ```
+
+`--section` (short `-s`) takes an anchor in any of three spellings: `sec-3`, `#sec-3`,
+or the bare number `3`, which is expanded to `sec-3`.
 
 `<ref>` is a path, a bare filename, a spec number (`014`, `014-design-documents`), or 014
 §11.3's shorthand (`WL-SPEC-14`, and `WL-SPEC-14#sec-2.1` as sugar for `--section sec-2.1`)
@@ -199,6 +203,14 @@ A shorthand naming another project is reported unresolved rather than fetched �
 is dormant until 025. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
 the same ref forms as everything else.
+
+A kind flag (`--spec 15`, `--adr 7`, 019 §4.3a) is an equivalent spelling of a
+local ref: in a keyed corpus, `--spec 15` and `WL-SPEC-15` resolve and render
+identically, so a reader who knows only the kind and the number never has to
+build the typed id by hand. A kind flag always means the local corpus, so
+without a `project_key` it still resolves by bare number, whereas a
+positional shorthand whose key cannot be established gets §4.2's tier-3
+`unresolved` instead.
 
 `--resolved` inlines, under each affected section, the text of the sections elsewhere that
 act on it:
@@ -574,9 +586,10 @@ the seventeen with a stand-in execution task carry a `task` naming it.
   `implements` on new plans, with §2.1's reason;
 - a line on writing amendments as self-contained, section-shaped payloads, so they
   consolidate cleanly (§3.2) instead of reading as a diff against text the reader cannot see;
-- a short section pointing at `lode doc` as the way to answer these questions — orientation
-  via `doc sections`, reading via a consolidated `doc show`, raw files as the deliberate act
-  — replacing the `secfmt.py`-only "Checks" advice with the full set.
+- a short section pointing at `lode doc` and `lode show` as the way to answer these
+  questions — orientation via `doc sections`, reading via a consolidated `lode show`, raw
+  files as the deliberate act — replacing the `secfmt.py`-only "Checks" advice with the full
+  set.
 
 `CLAUDE.md`'s "Specs, plans, tasks" section gains one line naming the commands.
 
@@ -592,7 +605,7 @@ nobody expects the `gofmt`-shaped fix-and-retry loop the other doc hooks have (�
 | `internal/designdoc/query.go` | `NeedsPlanning`, `NeedsExecution` (taking task states as an argument, not fetching them), `CurrentSections`, the effectiveness gate and coverage set arithmetic |
 | `internal/designdoc/resolved.go` | the §3 rendering: the §3.2 fixpoint, body-once set, cycle detection, attribution |
 | `internal/designdoc/check.go` | §4's reference and mirror-edge reporting, used by every query |
-| `internal/designdoc/shorthand.go` | §4.2: parse, normalise, tier selection, `kind` verification |
+| `internal/designdoc/resolve.go` | §4.2: parse, normalise, tier selection, `kind` verification |
 | `internal/cmd/doc.go` | cobra commands, ref forms, table and `--json` output |
 | `scripts/secfmt.py` | the same shorthand grammar; tier-1 resolution and canonical-form rewriting in frontmatter |
 | `scripts/secfrozen.py` | §4.1's gate: baseline diff against `HEAD`, reference integrity, acyclicity; refuses |
@@ -692,7 +705,7 @@ is the whole of what makes them possible, and it is what ships here.
 2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task` is
    absent or open, and no `superseded` plan; every plan in the corpus carries a `status`, and
    one that does not is a reported defect.
-3. `lode doc show 018 --resolved` shows 025 §6's doc-wide amendment as a banner and labels
+3. `lode show 018 --resolved` shows 025 §6's doc-wide amendment as a banner and labels
    its output a consolidated view naming its sources; in the fixture corpus a chain of three
    section-scoped amendments is fully expanded, and no rendering is depth-truncated.
 4. A dangling reference anywhere in `docs/` fails `go test ./internal/designdoc`.
@@ -702,7 +715,7 @@ is the whole of what makes them possible, and it is what ships here.
    into `.pre-commit-config.yaml`, never rewrites a file, and runs with no `lode` binary
    present.
 6. Every query is computed without contacting the server except `--needs-execution`.
-7. `lode doc show WL-SPEC-14#sec-2.1` prints 014 §2.1, and `secfmt.py` rewrites a
+7. `lode show WL-SPEC-14#sec-2.1` prints 014 §2.1, and `secfmt.py` rewrites a
    `requires: WL-SPEC-4` in a worklode document to `004-execution-backbone.md` while leaving
    a foreign `CMS-SPEC-4` untouched.
 8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only

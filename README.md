@@ -98,6 +98,7 @@ root:
 
 ```toml
 current_project = "sunstone-web"
+project_key = "WL"   # design-doc shorthand key for this repo, e.g. WL-SPEC-14
 ```
 
 ```bash
