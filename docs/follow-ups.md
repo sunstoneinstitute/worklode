@@ -209,3 +209,12 @@ Design items landed in spec 028. These are the mechanical leftovers.
   pattern is now `^KEY-N-anything$` rather than prefix-anchored. Theoretical
   today (a default branch would have to start with an uppercase project key),
   but cheap to tighten to "task exists".
+- **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of 026 §3
+  only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (026
+  §3.1–§3.2), `lode doc list` and `lode doc sections` (026 §2), and
+  `--strict-refs` remain unimplemented.
+- **025 §10 (accepted, frozen) and 028 (draft) still spell the command
+  `lode doc show`; 026 §3 implements the same command spelled `lode show`
+  (2026-08-07).** `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
+  (draft, implements 026 §3) is titled "consolidated `lode doc show`" too.
+  Reconcile the spelling when 025's reserved surface is next revisited.
