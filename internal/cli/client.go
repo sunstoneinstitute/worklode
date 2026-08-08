@@ -22,14 +22,16 @@ import (
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server", "current_project", and "worktree_dir", e.g.:
+// recognized keys are "server", "current_project", "project_key", and
+// "worktree_dir", e.g.:
 //
 //	server = "https://wl.example.com"
 //	current_project = "sunstone-web"
+//	project_key = "WL"
 //	worktree_dir = ".worktrees"
 //
-// A repo-local config file overrides current_project (and server) per
-// checkout — see findRepoConfig — which is how current_project is normally
+// A repo-local config file overrides current_project and project_key (and
+// server) per checkout — see findRepoConfig — which is how both are normally
 // set: one project per repository. worktree_dir is the one key this merge
 // deliberately excludes: it is repo-scoped only (spec 030 §4), read via
 // WorktreeDirFrom instead of through this struct — see WorktreeDir's doc.
@@ -50,6 +52,12 @@ type Config struct {
 	// commands can report which file set their scope. Empty when no file
 	// set it.
 	CurrentProjectPath string
+
+	// ProjectKey is the current repo's design-doc project key ("WL"), used
+	// to resolve shorthand refs like "WL-SPEC-14" (spec 026 §4.2). Empty
+	// when unset, which degrades shorthand resolution to tier 3
+	// (internal/designdoc.ResolveRef) rather than failing.
+	ProjectKey string
 
 	// WorktreeDir carries the worktree_dir key when Config is produced
 	// directly by parseConfig — which is how WorktreeDirFrom reads it. It is
@@ -232,6 +240,8 @@ func parseConfig(data string) (Config, error) {
 			cfg.Token = val
 		case "current_project":
 			cfg.CurrentProject = val
+		case "project_key":
+			cfg.ProjectKey = val
 		case "worktree_dir":
 			cfg.WorktreeDir = val
 		default:
@@ -273,6 +283,9 @@ func (cfg *Config) merge(repo Config, path string) {
 		cfg.CurrentProject = repo.CurrentProject
 		cfg.CurrentProjectPath = path
 	}
+	if repo.ProjectKey != "" {
+		cfg.ProjectKey = repo.ProjectKey
+	}
 	// worktree_dir is deliberately NOT merged here: it is repo-scoped only
 	// (spec 030 §4) and read exclusively through WorktreeDirFrom, which never
 	// goes through loadConfigFrom/merge.
@@ -293,7 +306,7 @@ func SaveConfig(cfg Config) error {
 
 // SaveServerOnly writes just the server key to config.toml (0600), creating the
 // directory (0700) as needed. It never writes the token, and preserves an
-// existing current_project.
+// existing current_project and project_key.
 func SaveServerOnly(server string) error {
 	path, err := configPath()
 	if err != nil {
@@ -312,6 +325,9 @@ func SaveServerOnly(server string) error {
 	fmt.Fprintf(&b, "server = %q\n", server)
 	if existing.CurrentProject != "" {
 		fmt.Fprintf(&b, "current_project = %q\n", existing.CurrentProject)
+	}
+	if existing.ProjectKey != "" {
+		fmt.Fprintf(&b, "project_key = %q\n", existing.ProjectKey)
 	}
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
