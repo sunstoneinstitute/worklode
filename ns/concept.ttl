@@ -3,7 +3,8 @@
 # Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
 # fixed enum; the runtime four each mirror a CHECK constraint that already
 # exists in the schema (015 §3). Sources: spec 006 §1.4/§1.5, spec 014 §5/§8
-# (status enum and task kinds), spec 015 §3 (runtime enums).
+# (status enum and task kinds), spec 015 §3 (runtime enums), spec 025 §3
+# (document lifecycle), and spec 033 §1 (plan coverage levels).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -14,7 +15,9 @@
     dct:title "Worklode concept schemes" ;
     dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
                <https://worklode.io/ns/id/doc/spec-worklode-014> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-015> .
+               <https://worklode.io/ns/id/doc/spec-worklode-015> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-025> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-033> .
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +40,18 @@ wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLab
 # legal transitions; those rules live with the authoring skill (spec 008).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
     skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
+
+
+# How completely one plan covers one spec section (033 §1). Only wlc:full — or a
+# wlc:partial whose wl:completedWith set closes — discharges the section.
+wlc:CoverageLevel a skos:ConceptScheme ; skos:prefLabel "Plan coverage level" .
+
+wlc:full a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "full" ;
+    skos:definition "After this plan executes the section is satisfied; nothing further is owed." .
+wlc:partial a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "partial" ;
+    skos:definition "This plan covers part of the section." .
+wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none" ;
+    skos:definition "The plan is bound by the section but covers nothing in it — a standing rule it obeys, recorded so it is not read as an oversight." .
 
 
 # ---------------------------------------------------------------------------

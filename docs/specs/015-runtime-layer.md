@@ -137,7 +137,7 @@ carry identical edges and differ only in how their coordinates are spelled. One 
 
 **Why a git tag is not a `wl:Release`.** The release handler already records a published release as
 an `artifacts` row of kind `git_tag`; a separate class would duplicate it. A release is
-`wl:Artifact` with `wl:artifactKind wlc:git_tag` plus a `wl:covers` edge to the commit its frontier
+`wl:Artifact` with `wl:artifactKind wlc:git_tag` plus a `wl:cutFrom` edge to the commit its frontier
 reaches. `release_frontiers` projects as that edge, not as a node.
 
 ---
@@ -223,7 +223,7 @@ wl:runtimeEventKind a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:domain wl:RuntimeEvent ; rdfs:range skos:Concept ;
     rdfs:comment "Kind of runtime incident; see wlc:RuntimeEventKind." .
 
-wl:covers a owl:ObjectProperty ;
+wl:cutFrom a owl:ObjectProperty ;
     rdfs:domain wl:Artifact ; rdfs:range wl:Commit ;
     rdfs:comment "This artifact carries every commit up to and including that commit — the "
                  "delivery frontier of a published release. Domain is Artifact, not Deployment: "
@@ -295,7 +295,7 @@ runtime fact, the graph mirrors them read-only.
 | `prov:used` (Deployment → Artifact) | `deployments.artifact_id` | v1 | blocked in practice; see below |
 | `wl:Environment` | fixed instance set | v1 | static |
 | `wl:Commit` | `main_commits` | v1 | default-branch push |
-| `wl:covers` (release → commit) | `release_frontiers` | v1 | `release.published` |
+| `wl:cutFrom` (release → commit) | `release_frontiers` | v1 | `release.published` |
 | environment frontier → commit | `env_deploys` | **v2** | grain mismatch; see below |
 | `wl:RuntimeEvent` | `runtime_events` | **v2** | blocked on Open question 1 |
 | `wl:Build` | — | **v2** | no source; needs workflow-run ingest |
@@ -321,7 +321,7 @@ until then `prov:generatedAtTime` on the Artifact carries `built_at` and no Buil
 `wl:RuntimeEvent` is declared but unprojectable until it has a natural key.
 
 **The environment frontier has no node to hang on.** `release_frontiers` is keyed `(repo, tag)`,
-which is exactly a `git_tag` artifact — so `wl:covers` projects cleanly from it. `env_deploys` is
+which is exactly a `git_tag` artifact — so `wl:cutFrom` projects cleanly from it. `env_deploys` is
 keyed `(repo, environment)`, a grain that matches nothing: `wl:Deployment` is keyed
 `(environment, target_kind, target_name)` and `wl:Environment` is global. Representing it needs
 either a new per-repo-per-environment node or a qualified relation, and neither is worth minting
@@ -416,7 +416,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 7. An `owlrl` pass over the TBox plus a seeded ABox flags a node typed both `wl:Artifact` and
    `wl:Deployment` as inconsistent, and infers `prov:Entity` for every Artifact and
    `prov:Activity` for every Deployment — confirming PROV-aware tooling traverses the layer.
-8. A release tag artifact `wl:covers` the commit its `release_frontiers` row names, and that commit
+8. A release tag artifact `wl:cutFrom` the commit its `release_frontiers` row names, and that commit
    resolves to a `wl:Commit` projected from `main_commits`. A release whose `target_commitish` is a
    branch name projects **no** `prov:wasDerivedFrom` edge rather than a fabricated commit node.
 9. `wl:Build` and `wl:RuntimeEvent` are declared with no instances in v1, and no acceptance
