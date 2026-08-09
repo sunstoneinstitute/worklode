@@ -289,12 +289,16 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 
 // webTimelineRow is one rendered row of a task's timeline: a type label and
 // a human summary line, derived from the same entries the JSON timeline API
-// emits (see assembleTimeline / summarizeEntry).
+// emits (see assembleTimeline / summarizeEntry). URL is the entry's
+// source-native link (set for pr and ci entries only; "" otherwise) —
+// rendered as a plain string, never a template.URL, so html/template's
+// contextual autoescaping keeps neutralizing an unsafe scheme.
 type webTimelineRow struct {
 	At      time.Time
 	Type    string
 	Label   string
 	Summary string
+	URL     string
 }
 
 // taskPageData is rendered by task.html.
@@ -427,6 +431,7 @@ func summarizeEntry(e timelineEntry) webTimelineRow {
 	case "pr":
 		row.Label = "Pull request"
 		row.Summary = fmt.Sprintf("%s#%d %q %s", strField(e.obj, "repo"), i64Field(e.obj, "number"), strField(e.obj, "title"), strField(e.obj, "state"))
+		row.URL = strField(e.obj, "url")
 	case "ci":
 		row.Label = "CI run"
 		summary := fmt.Sprintf("%s: %s", strField(e.obj, "workflow"), strField(e.obj, "status"))
@@ -434,6 +439,7 @@ func summarizeEntry(e timelineEntry) webTimelineRow {
 			summary += " (" + c + ")"
 		}
 		row.Summary = summary
+		row.URL = strField(e.obj, "url")
 	case "review":
 		row.Label = "Review"
 		row.Summary = fmt.Sprintf("%s: %s", strField(e.obj, "reviewer"), strField(e.obj, "state"))

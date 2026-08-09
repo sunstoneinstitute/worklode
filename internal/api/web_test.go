@@ -421,6 +421,64 @@ func TestTaskPage(t *testing.T) {
 	}
 }
 
+// TestTaskPageRendersSourceLink asserts a task with a linked PR/CI fact
+// renders a source-native "Open source" link to that fact's own URL, marked
+// rel="noreferrer" — the timeline evidence Task 4 preserves.
+func TestTaskPageRendersSourceLink(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Linked", "priority": "medium", "kind": "feature",
+	})
+	const url = "https://github.com/org/app/pull/9"
+	seedEvent(t, st, "pr-good", func(tx *sql.Tx, _ int64) error {
+		_, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "org/app", Number: 9, Title: "Linked", State: "open",
+			HeadRef: "WL-1-linked", HeadSHA: "sha-good",
+			URL: url, OpenedAt: st.Now(),
+		}, "")
+		return err
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), `href="`+url+`" rel="noreferrer"`, "Open source")
+}
+
+// TestTaskPageEscapesHostileTimelineURL asserts a source URL with an unsafe
+// scheme (e.g. javascript:) never reaches the rendered href verbatim:
+// html/template's contextual autoescaping neutralizes it into the safe
+// "#ZgotmplZ" placeholder, since webTimelineRow.URL is rendered as a plain
+// string, never cast to template.URL.
+func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Hostile link", "priority": "medium", "kind": "feature",
+	})
+	const hostile = "javascript:alert(document.cookie)"
+	seedEvent(t, st, "pr-hostile", func(tx *sql.Tx, _ int64) error {
+		_, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "org/app", Number: 1, Title: "Hostile", State: "open",
+			HeadRef: "WL-1-hostile", HeadSHA: "sha-hostile",
+			URL: hostile, OpenedAt: st.Now(),
+		}, "")
+		return err
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, `href="`+hostile+`"`) {
+		t.Fatalf("hostile URL rendered verbatim in href, want escaped/rejected:\n%s", body)
+	}
+	bodyContains(t, body, "#ZgotmplZ")
+}
+
 func TestTaskPageShowsProgress(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -472,8 +530,9 @@ func TestProjectPage(t *testing.T) {
 	// must not render any of the retired/forbidden concepts. "Crew" and
 	// "Deliverable(s)" are now legitimate project-local nav labels (checked
 	// above), so only the concepts that would still be fabricated data stay
-	// forbidden here.
-	for _, forbidden := range []string{"completion_percentage", "Approval"} {
+	// forbidden here. "completion" also catches "completion_percentage"; "%"
+	// catches any percentage-based health/progress readout.
+	for _, forbidden := range []string{"%", "completion", "project health", "Approval"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("project page unexpectedly renders %q:\n%s", forbidden, body)
 		}
@@ -483,4 +542,41 @@ func TestProjectPage(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project page status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
+}
+
+// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page
+// shows real owner/delegate names, distinguishing "Owned by Dana" (a human
+// assignee) from "Agent One is the delegate" (an agent's unreleased lease) —
+// never the bare actor id, never conflating the two roles.
+func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "dana", "human", "Dana", false); err != nil {
+		t.Fatalf("create actor dana: %v", err)
+	}
+	if err := st.CreateActor(ctx, "agent-one", "agent", "Agent One", false); err != nil {
+		t.Fatalf("create actor agent-one: %v", err)
+	}
+	agentToken, err := st.CreateToken(ctx, "agent-one", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token for agent-one: %v", err)
+	}
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
+	})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "dana"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("assign status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", agentToken, map[string]any{"worktree": "host:/wt-agent-one"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/projects/proj", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Owned by Dana", "Agent One is the delegate")
 }
