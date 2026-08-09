@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -178,5 +179,74 @@ func TestDocSyncOutcomesWritesNothing(t *testing.T) {
 	}
 	if _, _, _, err := s.GetDoc(ctx, "WL-SPEC-34"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dry run wrote a doc: GetDoc err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestGetDocDetail(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "wl", "Worklode", "WL"); err != nil {
+		t.Fatal(err)
+	}
+	syncDocs(t, s, "wl", DocSyncProvenance{SourceBranch: "main"},
+		[]DocUpsert{specUpsert(), planUpsert()})
+
+	d, secs, edges, err := s.GetDoc(ctx, "WL-SPEC-34")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.DocID != "WL-SPEC-34" || d.Kind != "spec" || d.Ordinal != "34" ||
+		d.Status != "accepted" || d.Body == "" || d.Version != 1 {
+		t.Errorf("doc = %+v", d)
+	}
+	if len(secs) != 1 || secs[0].Anchor != "sec-1" || secs[0].Heading != "Scope" {
+		t.Errorf("sections = %+v", secs)
+	}
+	if len(edges) != 1 || edges[0].Rel != "amends" || edges[0].TargetAnchor != "sec-2" {
+		t.Errorf("edges = %+v", edges)
+	}
+
+	if _, _, _, err := s.GetDoc(ctx, "WL-SPEC-999"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing doc: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestListDocsFiltersAndOrder(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "wl", "Worklode", "WL"); err != nil {
+		t.Fatal(err)
+	}
+	nine := specUpsert()
+	nine.Ordinal, nine.Status = "9", "draft"
+	ten := specUpsert()
+	ten.Ordinal = "10"
+	p2 := planUpsert()
+	p2.Ordinal = "34-2"
+	syncDocs(t, s, "wl", DocSyncProvenance{SourceBranch: "main"},
+		[]DocUpsert{ten, nine, specUpsert(), planUpsert(), p2})
+
+	all, err := s.ListDocs(ctx, DocFilter{Project: "wl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, d := range all {
+		ids = append(ids, d.DocID)
+		if d.Body != "" {
+			t.Errorf("%s: list row carries a body", d.DocID)
+		}
+	}
+	want := []string{"WL-PLAN-34-1", "WL-PLAN-34-2", "WL-SPEC-9", "WL-SPEC-10", "WL-SPEC-34"}
+	if !reflect.DeepEqual(ids, want) {
+		t.Errorf("order = %v, want %v (numeric ordinal order, 9 before 10)", ids, want)
+	}
+
+	drafts, err := s.ListDocs(ctx, DocFilter{Project: "wl", Kind: "spec", Status: "draft"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drafts) != 1 || drafts[0].DocID != "WL-SPEC-9" {
+		t.Errorf("filtered = %+v, want just WL-SPEC-9", drafts)
 	}
 }

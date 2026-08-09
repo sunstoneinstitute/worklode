@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -241,11 +242,8 @@ func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string, docs []Do
 }
 
 // GetDoc returns one document by its rendered id ("WL-SPEC-34"), with its
-// sections (by position) and edges. ErrNotFound when no such doc.
-//
-// This is a minimal implementation sufficient for ApplyDocSync's own tests
-// (Task 2 of 034's document-store plan); Task 3 hardens it and adds
-// ListDocs alongside it.
+// sections (ordered by position) and edges (ordered by src_anchor, rel,
+// target, target_anchor). ErrNotFound when no such doc.
 func (s *Store) GetDoc(ctx context.Context, docID string) (*Doc, []DocSection, []DocEdge, error) {
 	var d Doc
 	var frontmatter []byte
@@ -307,4 +305,64 @@ func (s *Store) GetDoc(ctx context.Context, docID string) (*Doc, []DocSection, [
 	}
 
 	return &d, sections, edges, nil
+}
+
+// DocFilter narrows ListDocs; zero fields do not filter.
+type DocFilter struct {
+	Project, Kind, Status string
+}
+
+// ListDocs returns matching documents ordered by project, kind, then ordinal
+// numerically (spec 10 after spec 9; plan 34-2 after 34-1). Rows are
+// bodyless (Body == ""); GetDoc carries the full text.
+func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]Doc, error) {
+	q := `SELECT project, kind, ordinal, doc_id, status, title, frontmatter,
+	             version, source_branch, source_dirty, synced_at, created_at, updated_at
+	        FROM docs`
+	var conds []string
+	var args []any
+	if f.Project != "" {
+		args = append(args, f.Project)
+		conds = append(conds, fmt.Sprintf(`project = $%d`, len(args)))
+	}
+	if f.Kind != "" {
+		args = append(args, f.Kind)
+		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+	}
+	if f.Status != "" {
+		args = append(args, f.Status)
+		conds = append(conds, fmt.Sprintf(`status = $%d`, len(args)))
+	}
+	if len(conds) > 0 {
+		q += ` WHERE ` + strings.Join(conds, ` AND `)
+	}
+	// Ordinal is always dash-separated integers (Task 2's validation
+	// guarantees the cast is safe), so this sorts spec 9 before spec 10 and
+	// plan 34-1 before 34-2 numerically rather than lexically.
+	q += ` ORDER BY project, kind, string_to_array(ordinal, '-')::int[]`
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list docs: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Doc
+	for rows.Next() {
+		var d Doc
+		var frontmatter []byte
+		if err := rows.Scan(&d.Project, &d.Kind, &d.Ordinal, &d.DocID, &d.Status, &d.Title, &frontmatter,
+			&d.Version, &d.SourceBranch, &d.SourceDirty, &d.SyncedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan doc: %w", err)
+		}
+		d.Frontmatter = json.RawMessage(frontmatter)
+		d.SyncedAt = d.SyncedAt.UTC()
+		d.CreatedAt = d.CreatedAt.UTC()
+		d.UpdatedAt = d.UpdatedAt.UTC()
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list docs: %w", err)
+	}
+	return out, nil
 }
