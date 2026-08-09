@@ -162,3 +162,25 @@ func TestLoadSyncCorpusEmptyDirsAreOptional(t *testing.T) {
 		t.Fatalf("LoadSyncCorpus(\"\",\"\") = %v, %v; want empty, nil", docs, err)
 	}
 }
+
+// TestLoadSyncCorpusIgnoresNonMarkdown characterizes the corpus glob's
+// existing *.md-only filter: index.yaml sits alongside the spec docs (034 §5)
+// and must never be loaded as a corpus document.
+func TestLoadSyncCorpusIgnoresNonMarkdown(t *testing.T) {
+	specDir := t.TempDir()
+	writeDoc(t, specDir, "034-design-doc-sync.md", specSrc)
+	writeDoc(t, specDir, "index.yaml", "034-design-doc-sync.md: {}\n")
+
+	docs, err := designdoc.LoadSyncCorpus(specDir, "")
+	if err != nil {
+		t.Fatalf("LoadSyncCorpus: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("LoadSyncCorpus loaded %d docs, want 1: %+v", len(docs), docs)
+	}
+	for _, d := range docs {
+		if d.Filename == "index.yaml" {
+			t.Fatalf("LoadSyncCorpus loaded index.yaml as a corpus document")
+		}
+	}
+}

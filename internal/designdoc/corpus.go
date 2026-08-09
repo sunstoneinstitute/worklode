@@ -48,7 +48,8 @@ type CorpusDoc struct {
 
 // LoadSyncCorpus loads specDir as SPEC/ADR documents and planDir as PLAN
 // documents; either may be "" (that corpus is not configured). Results are
-// sorted by kind then filename.
+// spec-corpus documents (specs and ADRs interleaved) in filename order,
+// followed by plan-corpus documents in filename order.
 func LoadSyncCorpus(specDir, planDir string) ([]CorpusDoc, error) {
 	var out []CorpusDoc
 	if specDir != "" {
@@ -121,7 +122,10 @@ func docTitle(preamble string) (string, bool) {
 }
 
 // frontmatterJSON re-encodes the frontmatter's inner YAML as JSON, so the
-// backbone can store it without a second parser (034 §5).
+// backbone can store it without a second parser (034 §5). YAML scalar
+// timestamps (e.g. "issued: 2026-01-01") are normalized to RFC3339
+// ("2026-01-01T00:00:00Z") in the process — the value is preserved, only its
+// lexical form changes.
 func frontmatterJSON(f *Frontmatter) (json.RawMessage, error) {
 	var m map[string]any
 	if err := yaml.Unmarshal([]byte(f.inner), &m); err != nil {
