@@ -22,8 +22,8 @@ import (
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server", "current_project", "project_key", and
-// "worktree_dir", e.g.:
+// recognized keys are "server", "current_project", "project_key",
+// "worktree_dir", "spec_corpus", and "plan_corpus", e.g.:
 //
 //	server = "https://wl.example.com"
 //	current_project = "sunstone-web"
@@ -67,6 +67,14 @@ type Config struct {
 	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
 	// instead of this field.
 	WorktreeDir string
+
+	// SpecCorpus / PlanCorpus carry the spec_corpus / plan_corpus keys when
+	// Config is produced directly by parseConfig — which is how CorporaFrom
+	// reads them. Like WorktreeDir they are repo-scoped only (spec 034 §2)
+	// and are NOT populated by LoadConfig/loadConfigFrom; CorporaFrom is the
+	// sole reader.
+	SpecCorpus string
+	PlanCorpus string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -143,6 +151,53 @@ func WorktreeDirFrom(startDir string) string {
 	return dir
 }
 
+// Corpora is the repo-scoped corpus declaration (spec 034 §2): which
+// directories `lode doc sync` reads, and as which document kind. A key's
+// presence enables its corpus; the zero value means nothing is configured.
+type Corpora struct {
+	Root    string // absolute repo root — the directory holding .worklode/
+	SpecDir string // absolute spec corpus dir; "" when spec_corpus is unset
+	PlanDir string // absolute plan corpus dir; "" when plan_corpus is unset
+}
+
+// CorporaFrom reads startDir's repo-local config for spec_corpus/plan_corpus
+// (spec 034 §2). Like WorktreeDirFrom it never consults the user-level config
+// or the keychain, but unlike it a malformed repo config is an error here —
+// sync must not silently degrade to "nothing configured" (034 §3).
+func CorporaFrom(startDir string) (Corpora, error) {
+	repoPath, ok := findRepoConfig(startDir)
+	if !ok {
+		return Corpora{}, nil
+	}
+	data, err := os.ReadFile(repoPath)
+	if err != nil {
+		return Corpora{}, fmt.Errorf("read %s: %w", repoPath, err)
+	}
+	cfg, err := parseConfig(string(data))
+	if err != nil {
+		return Corpora{}, fmt.Errorf("parse %s: %w", repoPath, err)
+	}
+	// repoPath is <root>/.worklode/config.toml (or .lode/): root is two up.
+	root := filepath.Dir(filepath.Dir(repoPath))
+	c := Corpora{Root: root}
+	for _, k := range []struct {
+		key, val string
+		dst      *string
+	}{
+		{"spec_corpus", cfg.SpecCorpus, &c.SpecDir},
+		{"plan_corpus", cfg.PlanCorpus, &c.PlanDir},
+	} {
+		if k.val == "" {
+			continue
+		}
+		if filepath.IsAbs(k.val) {
+			return Corpora{}, fmt.Errorf("%s: %s = %q must be a repo-relative directory", repoPath, k.key, k.val)
+		}
+		*k.dst = filepath.Join(root, filepath.FromSlash(k.val))
+	}
+	return c, nil
+}
+
 // LoadConfig reads the config files (a missing file is not an error — its
 // fields are just left empty), merges the repo-local config found from the
 // working directory on top of the user config, and applies the
@@ -178,6 +233,9 @@ func loadConfigFrom(startDir string) (Config, error) {
 		// setting it must not leak into the merged Config — WorktreeDirFrom
 		// is the sole reader, and it never consults this path.
 		cfg.WorktreeDir = ""
+		// spec_corpus/plan_corpus are repo-scoped only (spec 034 §2);
+		// CorporaFrom is the sole reader.
+		cfg.SpecCorpus, cfg.PlanCorpus = "", ""
 	case os.IsNotExist(err):
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
@@ -244,6 +302,10 @@ func parseConfig(data string) (Config, error) {
 			cfg.ProjectKey = val
 		case "worktree_dir":
 			cfg.WorktreeDir = val
+		case "spec_corpus":
+			cfg.SpecCorpus = val
+		case "plan_corpus":
+			cfg.PlanCorpus = val
 		default:
 			return Config{}, fmt.Errorf("line %d: unknown key %q", i+1, key)
 		}
@@ -286,9 +348,10 @@ func (cfg *Config) merge(repo Config, path string) {
 	if repo.ProjectKey != "" {
 		cfg.ProjectKey = repo.ProjectKey
 	}
-	// worktree_dir is deliberately NOT merged here: it is repo-scoped only
-	// (spec 030 §4) and read exclusively through WorktreeDirFrom, which never
-	// goes through loadConfigFrom/merge.
+	// worktree_dir, spec_corpus, and plan_corpus are deliberately NOT merged
+	// here: they are repo-scoped only (specs 030 §4, 034 §2) and read
+	// exclusively through WorktreeDirFrom / CorporaFrom, which never go
+	// through loadConfigFrom/merge.
 }
 
 // SaveConfig stores the token in the OS keychain and writes only the server URL
