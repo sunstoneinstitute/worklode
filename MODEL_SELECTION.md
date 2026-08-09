@@ -11,7 +11,8 @@ names and reasoning-effort controls differ between the two harnesses.
 | Execution coordination (subagent-driven-development loop) | Opus | GPT-5.6-Sol, `high` | Judgment across tasks: sequencing, reviewing results, handling plan-vs-reality deviations. |
 | Implementation subagents — plan task is fully specified (exact files, code, tests; no spikes, no open design decisions) | Sonnet | GPT-5.6-Terra, `medium` | Precise plans make implementation mechanical; the balanced tier executes them reliably at lower cost. |
 | Implementation subagents — task involves unknowns (debugging, spikes, design gaps, plan conflicts with reality) | Opus | GPT-5.6-Sol, `high` | Ambiguity needs judgment; escalate rather than let the balanced tier improvise. |
-| Spec review / code review between tasks | Opus | GPT-5.6-Sol, `high` | Review is judgment, not mechanics. |
+| Code review between tasks — small mechanical diff (config, comments, single-file transcription, tests-only) | Sonnet | GPT-5.6-Terra, `medium` | Small, low-risk diffs are verifiable at the balanced tier. |
+| Code review between tasks — large, cross-cutting, subtle, or security/concurrency-sensitive diff, plus every whole-branch/final review | Opus | GPT-5.6-Sol, `high` | Review is judgment; broad or subtle change is where it earns the cost. |
 | Exploration / fact-finding (codebase mapping, doc lookups) | Agent-definition default (Explore, claude-code-guide, ...) | GPT-5.6-Terra, `low` | Read-only work normally needs the cheapest tier that can synthesize the findings. |
 
 ## Claude Code dispatch
@@ -20,7 +21,9 @@ names and reasoning-effort controls differ between the two harnesses.
   An omitted model does NOT inherit the dispatching agent's model — it
   resolves to the top-level session model (Fable when a Fable session is
   driving), silently running mechanical work on the most expensive tier.
-  Reviewers: `model: "opus"`. Coordinators: dispatched with `model: "opus"`.
+  Reviewers: scale to the diff — `model: "sonnet"` for a small mechanical diff,
+  `model: "opus"` for a large/subtle/risky diff, every whole-branch review, and
+  whenever the risk is unclear. Coordinators: dispatched with `model: "opus"`.
   Fully-specified implementation: `model: "sonnet"`.
 - **"Agent-definition default" (the Exploration row) only applies when you set
   `subagent_type` to a dedicated read-only agent that itself pins a cheaper
@@ -46,8 +49,10 @@ names and reasoning-effort controls differ between the two harnesses.
 
 - Set both `model` and `reasoning_effort` explicitly when spawning an agent.
   Fully specified implementation uses `gpt-5.6-terra` at `medium`; exploration
-  uses Terra at `low`; coordination, ambiguous implementation, and review use
-  `gpt-5.6-sol` at `high`; planning uses Sol at `ultra`.
+  uses Terra at `low`; coordination and ambiguous implementation use
+  `gpt-5.6-sol` at `high`; review scales to the diff — a small mechanical diff on
+  Terra at `medium`, a large/subtle/risky diff and every whole-branch review on Sol
+  at `high`; planning uses Sol at `ultra`.
 - A full-history fork inherits the parent's model and reasoning effort and does
   not accept overrides. To choose a cheaper or stronger tier, fork no history
   or only the recent turns and provide the required context in the task.
