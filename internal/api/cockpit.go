@@ -3,19 +3,18 @@
 // web.go). The cockpit is a projection, never a stored workflow field —
 // selectMode is a pure function of declared facts, and assembleProjectCockpit
 // builds its output fresh from existing store readers on every call (spec
-// 032). It is provisional in Part 1: work items and repositories are adapted
-// from the existing board and repo-mapping readers rather than governed
-// decision/pin/secondary-concern stores, which do not exist yet. assembleBoard
-// itself now reads through the shared, UI-neutral store.ListProjectWorkFacts
-// (Task 3); Task 4 replaces this file's own board adapter (toCockpitWorkItems)
-// with a direct, product-language mapping over those same facts, while
-// preserving this wire contract.
+// 032). Work items, owner/delegate, evidence, blockers, repositories, and
+// cost are all mapped directly from store.ListProjectWorkFacts (Task 3),
+// (*store.Store).GetActor, ListRepos, and ProjectCost — no board adapter, no
+// invented state. Pinned focus and the next governed decision stay nil until
+// Part 2 supplies the stores that back them.
 package api
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -61,6 +60,65 @@ func selectMode(f modeFacts) cockpitMode {
 // promotion and Enter Research decisions. A current project is therefore an
 // ordinary Operations project; query parameters are intentionally absent.
 func modeFactsForProject(store.Project) modeFacts { return modeFacts{} }
+
+// --- evidence classification ------------------------------------------------
+
+// evidenceCategory is one of the four evidence categories spec 032 defines
+// for every disclosed fact. Part 1 emits declared, user_reported, and
+// observed only — it has no AI-produced recommendation, so evidenceRecommended
+// is never assigned by stateEvidence, only reserved for a later part.
+type evidenceCategory string
+
+const (
+	evidenceDeclared     evidenceCategory = "declared"
+	evidenceUserReported evidenceCategory = "user_reported"
+	evidenceObserved     evidenceCategory = "observed"
+	evidenceRecommended  evidenceCategory = "recommended"
+)
+
+// evidenceLabels are the fixed display strings for each evidenceCategory,
+// pinned by TestEvidenceCategoryLabel. Never derive a label by replacing
+// underscores with spaces — evidenceUserReported hyphenates instead of
+// spacing ("User-reported", not "User reported").
+var evidenceLabels = map[evidenceCategory]string{
+	evidenceDeclared:     "Declared",
+	evidenceUserReported: "User-reported",
+	evidenceObserved:     "Observed",
+	evidenceRecommended:  "Recommended",
+}
+
+// Label returns c's fixed display text.
+func (c evidenceCategory) Label() string {
+	if l, ok := evidenceLabels[c]; ok {
+		return l
+	}
+	return string(c)
+}
+
+// stateEvidence classifies the evidence behind a task's current state (or
+// any other fact backed by an optional event): no event at all is a
+// declared fact (the tracker's own state, asserted rather than witnessed);
+// an event from an external system of record (github, flux, watcher, or the
+// server's own system source) is observed; a cli-sourced lease event is
+// observed too (the lease machinery enforces it, not a human's say-so),
+// while any other cli-sourced event is user-reported (someone typed a
+// command); anything else defaults to declared.
+func stateEvidence(source, eventType string, hasEvent bool) evidenceCategory {
+	if !hasEvent {
+		return evidenceDeclared
+	}
+	switch source {
+	case "github", "flux", "watcher", "system":
+		return evidenceObserved
+	case "cli":
+		if strings.HasPrefix(eventType, "lease.") {
+			return evidenceObserved
+		}
+		return evidenceUserReported
+	default:
+		return evidenceDeclared
+	}
+}
 
 // --- projection shape ------------------------------------------------------
 
@@ -168,10 +226,16 @@ var operationsModeBasis = evidenceSummary{
 	Summary:  "Existing Worklode project; no intake lifecycle facts are present",
 }
 
+// costWindow is how far back Cost looks from "now": 30 days, inclusive of
+// today. Fixed rather than caller-controlled — the cockpit is a snapshot,
+// not a report generator (that stays behind the existing bounded
+// GET /api/v1/projects/{id}?from=&to= query parameters).
+const costWindow = 30 * 24 * time.Hour
+
 // --- assembly --------------------------------------------------------------
 
-// assembleProjectCockpit builds the cockpit projection for one project, fresh
-// on every call from GetProject, the scoped board, ListRepos, and
+// assembleProjectCockpit builds the cockpit projection for one project,
+// fresh on every call from GetProject, ListProjectWorkFacts, ListRepos, and
 // ProjectCost. Returns store.ErrNotFound (via GetProject) when the project
 // does not exist.
 func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpitProjection, error) {
@@ -179,7 +243,7 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 	if err != nil {
 		return nil, err
 	}
-	board, err := s.assembleBoard(ctx, id)
+	facts, err := s.st.ListProjectWorkFacts(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -187,17 +251,71 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 	if err != nil {
 		return nil, err
 	}
-	cost, err := s.st.ProjectCost(ctx, id, time.Time{}, time.Time{})
+	now := s.st.Now()
+	cost, err := s.st.ProjectCost(ctx, id, now.Add(-costWindow), now)
 	if err != nil {
 		return nil, err
+	}
+
+	// actors caches actor lookups for the lifetime of this one projection —
+	// a project's work commonly repeats the same owner/delegate across many
+	// tasks, and this keeps each distinct actor to one GetActor round trip.
+	actors := map[string]*store.Actor{}
+	resolveActor := func(actorID string) (*store.Actor, error) {
+		if actorID == "" {
+			return nil, nil
+		}
+		if a, ok := actors[actorID]; ok {
+			return a, nil
+		}
+		a, err := s.st.GetActor(ctx, actorID)
+		if err != nil {
+			return nil, err
+		}
+		actors[actorID] = a
+		return a, nil
+	}
+
+	work := cockpitWork{
+		InProgress: []cockpitWorkItem{}, InReview: []cockpitWorkItem{},
+		Ready: []cockpitWorkItem{}, Blocked: []cockpitWorkItem{},
+	}
+	secondary := []secondaryConcernJSON{}
+
+	for _, f := range facts {
+		switch {
+		case f.Task.State == "in_progress":
+			item, err := mapWorkItem(f, false, resolveActor)
+			if err != nil {
+				return nil, err
+			}
+			work.InProgress = append(work.InProgress, item)
+		case f.Task.State == "in_review":
+			item, err := mapWorkItem(f, false, resolveActor)
+			if err != nil {
+				return nil, err
+			}
+			work.InReview = append(work.InReview, item)
+		case f.Task.State == "ready" && f.Blocked():
+			item, err := mapWorkItem(f, true, resolveActor)
+			if err != nil {
+				return nil, err
+			}
+			work.Blocked = append(work.Blocked, item)
+			secondary = append(secondary, blockerConcerns(f)...)
+		case f.Task.State == "ready":
+			item, err := mapWorkItem(f, false, resolveActor)
+			if err != nil {
+				return nil, err
+			}
+			work.Ready = append(work.Ready, item)
+		}
 	}
 
 	focus := p.Focus
 	if focus == nil {
 		focus = []string{}
 	}
-
-	bp := board.Projects[0]
 
 	return &cockpitProjection{
 		CanonicalURL: "/projects/" + p.ID,
@@ -206,55 +324,127 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 			Name:  selectMode(modeFactsForProject(*p)),
 			Basis: operationsModeBasis,
 		},
-		PinnedFocus:  nil,
-		RankingFocus: focus,
-		NextDecision: nil,
-		Work: cockpitWork{
-			InProgress: toCockpitWorkItems(bp.InProgress, false),
-			InReview:   toCockpitWorkItems(bp.InReview, false),
-			Ready:      toCockpitWorkItems(bp.Ready, false),
-			Blocked:    toCockpitWorkItems(bp.Blocked, true),
-		},
-		SecondaryConcerns: []secondaryConcernJSON{},
+		PinnedFocus:       nil,
+		RankingFocus:      focus,
+		NextDecision:      nil,
+		Work:              work,
+		SecondaryConcerns: secondary,
 		Repositories:      toCockpitRepositories(repos),
 		Cost:              toProjectCostJSON(cost),
 	}, nil
 }
 
-// toCockpitWorkItems adapts one board bucket into cockpit work items. blocked
-// is the bucket's fixed value (true only for the Blocked bucket —
-// assembleBoard has already resolved blocking edges to decide bucket
-// membership, so no further lookup is needed here). Owner/Delegate carry only
-// the actor id available from the board (no display-name lookup yet, hence
-// Name duplicates ID); status_evidence is "declared" because task state comes
-// from the tracker's own state machine, not an external observation.
-func toCockpitWorkItems(tasks []boardTaskJSON, blocked bool) []cockpitWorkItem {
-	out := make([]cockpitWorkItem, 0, len(tasks))
-	for _, t := range tasks {
-		item := cockpitWorkItem{
-			ID:       t.ID,
-			Title:    t.Title,
-			Priority: t.Priority,
-			State:    t.State,
-			Blocked:  blocked,
-			URL:      "/tasks/" + t.ID,
-			StatusEvidence: evidenceSummary{
-				Category: "declared",
-				Summary:  fmt.Sprintf("Task state is %s", t.State),
+// mapWorkItem builds one cockpit work item from a project work fact. blocked
+// is the bucket's fixed value the caller has already determined (true only
+// for a ready task with an open blocker — see assembleProjectCockpit's
+// switch), so no further lookup happens here.
+//
+// owner comes only from Task.Assignee: human ownership recorded through
+// /assign or /start, independent of any lease. delegate comes only from an
+// unreleased lease (f.Lease, already filtered by ListProjectWorkFacts to
+// released_at IS NULL) whose holder is an agent actor — a human or service
+// lease is real, technical evidence of who is touching the task, but is
+// never surfaced as a delegate or Crew member (spec 032 §6).
+func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string) (*store.Actor, error)) (cockpitWorkItem, error) {
+	t := f.Task
+
+	owner, err := resolveActorSummary(t.Assignee, resolveActor)
+	if err != nil {
+		return cockpitWorkItem{}, err
+	}
+
+	var delegate *actorSummary
+	if f.Lease != nil {
+		leaseActor, err := resolveActor(f.Lease.ActorID)
+		if err != nil {
+			return cockpitWorkItem{}, err
+		}
+		if leaseActor != nil && leaseActor.Kind == "agent" {
+			delegate = &actorSummary{ID: leaseActor.ID, Name: displayNameOrID(leaseActor)}
+		}
+	}
+
+	return cockpitWorkItem{
+		ID:             t.ID,
+		Title:          t.Title,
+		Priority:       t.Priority,
+		State:          t.State,
+		Blocked:        blocked,
+		URL:            "/tasks/" + t.ID,
+		Owner:          owner,
+		Delegate:       delegate,
+		StatusEvidence: workItemEvidence(t.State, f.StateEvent),
+	}, nil
+}
+
+// workItemEvidence describes the evidence behind a work item's current
+// state: a declared fact (the tracker's own state, no witnessing event) when
+// the task has never transitioned, otherwise the exact source, type, event
+// id, and time of the event that produced it — stateEvidence's classifying
+// inputs are always retained in the human-readable summary, not thrown away.
+func workItemEvidence(state string, ev *store.EventFact) evidenceSummary {
+	if ev == nil {
+		cat := evidenceDeclared
+		return evidenceSummary{
+			Category: string(cat),
+			Summary:  fmt.Sprintf("%s: task state is %s (no recorded event)", cat.Label(), state),
+		}
+	}
+	cat := stateEvidence(ev.Source, ev.Type, true)
+	return evidenceSummary{
+		Category: string(cat),
+		Summary: fmt.Sprintf("%s: %s event %q (id %d) at %s set state to %s",
+			cat.Label(), ev.Source, ev.Type, ev.ID, ev.At.UTC().Format(time.RFC3339), state),
+	}
+}
+
+// blockerConcerns turns f's open blocker refs into secondary concerns: one
+// entry per open blocker, naming the blocked task it holds up. f is assumed
+// to be blocked (f.Blocked() true) — assembleProjectCockpit only calls this
+// for the ready-and-blocked case.
+func blockerConcerns(f store.ProjectWorkFact) []secondaryConcernJSON {
+	out := make([]secondaryConcernJSON, 0, len(f.OpenBlockers))
+	for _, b := range f.OpenBlockers {
+		out = append(out, secondaryConcernJSON{
+			Kind:  "blocker",
+			Title: b.Title,
+			URL:   "/tasks/" + b.ID,
+			Evidence: evidenceSummary{
+				Category: string(evidenceDeclared),
+				Summary:  fmt.Sprintf("Blocks %s (blocker state %s)", f.Task.ID, b.State),
 			},
-		}
-		if t.Holder != nil {
-			item.Owner = &actorSummary{ID: t.Holder.ActorID, Name: t.Holder.ActorID}
-		}
-		if t.Assignee != "" {
-			item.Delegate = &actorSummary{ID: t.Assignee, Name: t.Assignee}
-		}
-		out = append(out, item)
+		})
 	}
 	return out
 }
 
-// toCockpitRepositories adapts mapped repos into cockpit repository facts.
+// resolveActorSummary resolves id through resolveActor and, if found, builds
+// an actorSummary with its display name (falling back to the id when the
+// actor has none). Returns nil, nil for an empty id or an actor that does
+// not resolve.
+func resolveActorSummary(id string, resolveActor func(string) (*store.Actor, error)) (*actorSummary, error) {
+	a, err := resolveActor(id)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, nil
+	}
+	return &actorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
+}
+
+// displayNameOrID returns a's display name, falling back to its id when the
+// display name is empty (e.g. a service actor created without one).
+func displayNameOrID(a *store.Actor) string {
+	if a.DisplayName != "" {
+		return a.DisplayName
+	}
+	return a.ID
+}
+
+// toCockpitRepositories adapts mapped repos into cockpit repository facts:
+// a project_repos row is a declared fact (someone mapped the repo and its
+// done_state; no event backs it), never observed or recommended.
 func toCockpitRepositories(repos []store.RepoMapping) []repositoryJSON {
 	out := make([]repositoryJSON, 0, len(repos))
 	for _, m := range repos {
@@ -262,7 +452,7 @@ func toCockpitRepositories(repos []store.RepoMapping) []repositoryJSON {
 			Repo:      m.Repo,
 			DoneState: m.DoneState,
 			StatusEvidence: evidenceSummary{
-				Category: "declared",
+				Category: string(evidenceDeclared),
 				Summary:  fmt.Sprintf("Repo mapping declares done_state %s", m.DoneState),
 			},
 		})
