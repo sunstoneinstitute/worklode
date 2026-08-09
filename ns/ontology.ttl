@@ -73,6 +73,15 @@ wl:Section a owl:Class ;
         wlid:section/<doc-slug>/<anchor>, the anchor assigned at first publication and recorded in
         the document source (014 §3).""" .
 
+wl:Plan a owl:Class ;
+    rdfs:subClassOf foaf:Document , prov:Entity ;
+    wl:layer wlc:intent ;
+    rdfs:comment """An executable document: accepting it mints its tasks (025 §4-§5). A sibling of
+        wl:DesignDoc, not a subclass — a plan is spent by execution rather than superseded, and
+        takes no wl:Section parts and no anchors. 014 §2 dropped the class when plan-shaped work
+        was a task subtree; 025 §4 (accepted) reintroduced plans as documents, mirrored here by
+        spec 034 §8.""" .
+
 wl:Deliverable a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:comment """A declared definition-of-done: the vertical join point where a Spec's ambition
@@ -213,7 +222,7 @@ wl:RuntimeEvent a owl:Class ;
 # ---------------------------------------------------------------------------
 
 [] a owl:AllDisjointClasses ;
-   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream
+   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Plan wl:Task wl:Deliverable wl:Workstream
                  wl:Skill wl:Issue wl:PullRequest ) .
 
 [] a owl:AllDisjointClasses ;
@@ -458,8 +467,6 @@ wl:layer a owl:AnnotationProperty ;
 #
 # Deliberately absent — do not reintroduce:
 #
-#   wl:Plan                    dropped (014 §2): plan-shaped work is an ordered
-#                              task subtree in the backbone, not a document.
 #   wl:supersededSection       retired (014 §3): sections are addressable, so
 #                              partial supersession is dct:isReplacedBy between
 #                              them. Nothing else needed RDF 1.2, so there is no
