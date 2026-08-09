@@ -1,6 +1,6 @@
 ---
 status: accepted
-implements: docs/specs/023-keycloak-primary-auth.md
+covers: docs/specs/023-keycloak-primary-auth.md
 requires:
   - 2026-08-02-keycloak-primary-auth-1-keycloak-only.md
 ---

@@ -1,6 +1,6 @@
 ---
 status: draft
-implements:
+covers:
   - docs/specs/026-design-doc-queries.md#sec-1
   - docs/specs/026-design-doc-queries.md#sec-2
   - docs/specs/026-design-doc-queries.md#sec-2.1
@@ -397,7 +397,7 @@ Covers alpha wholesale.
 ```markdown
 ---
 status: accepted
-implements:
+covers:
   - ../specs/002-beta.md#sec-1
 task: WL-2
 ---
@@ -411,7 +411,7 @@ Covers beta §1 only.
 ```markdown
 ---
 status: accepted
-implements:
+covers:
   - /docs/specs/003-gamma.md
 ---
 # Gamma plan

@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/008-worklode-plugin.md
+covers: docs/specs/008-worklode-plugin.md
 ---
 # Worklode plugin — acceptance walkthrough (spec 008)
 

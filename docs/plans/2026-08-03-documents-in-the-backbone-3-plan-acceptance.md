@@ -1,6 +1,6 @@
 ---
 status: accepted
-implements:
+covers:
   - docs/specs/025-documents-in-the-backbone.md#sec-4
   - docs/specs/025-documents-in-the-backbone.md#sec-4.1
   - docs/specs/025-documents-in-the-backbone.md#sec-5

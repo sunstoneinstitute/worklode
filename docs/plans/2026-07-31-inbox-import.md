@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/020-inbox-import.md
+covers: docs/specs/020-inbox-import.md
 ---
 # Inbox Import Implementation Plan
 
