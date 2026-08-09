@@ -4,6 +4,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // TestParseFrontmatterRealSpec uses spec 025 because it is the one document
@@ -55,26 +57,176 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	}
 }
 
-// TestFrontmatterScalarOrList covers implements, which the authoring guide
-// documents as "scalar or list" — both spellings must land in the same field.
-func TestFrontmatterScalarOrList(t *testing.T) {
-	scalar := "---\nimplements: docs/specs/011-delivery-lifecycle.md\n---\n\n## 1. X {#sec-1}\n"
-	list := "---\nimplements:\n  - a.md\n  - b.md\n---\n\n## 1. X {#sec-1}\n"
+// TestFrontmatterCoverage protects the plan coverage API: scalars mean full
+// coverage, objects retain their qualifiers, and the retired spelling remains
+// readable only when the current spelling is absent. Removing scalar handling,
+// object fields, or the precedence rule would make this test fail.
+func TestFrontmatterCoverage(t *testing.T) {
+	section := "docs/specs/033-plan-section-coverage.md#sec-3"
+	tests := []struct {
+		name     string
+		src      string
+		want     CoverageList
+		sections RefList
+	}{
+		{
+			name:     "scalar covers means full coverage",
+			src:      "---\ncovers: " + section + "\n---\n\n## 1. X {#sec-1}\n",
+			want:     CoverageList{{Spec: section, Coverage: "full"}},
+			sections: RefList{section},
+		},
+		{
+			name: "mixed scalar and object covers",
+			src: "---\ncovers:\n  - docs/specs/033-plan-section-coverage.md#sec-2\n  - spec: " + section + "\n" +
+				"    coverage: partial\n    fullCoverageWith:\n      - docs/plans/sibling.md\n---\n\n## 1. X {#sec-1}\n",
+			want: CoverageList{
+				{Spec: "docs/specs/033-plan-section-coverage.md#sec-2", Coverage: "full"},
+				{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}},
+			},
+			sections: RefList{"docs/specs/033-plan-section-coverage.md#sec-2", section},
+		},
+		{
+			name: "retired implements accepts objects",
+			src: "---\nimplements:\n  - spec: " + section + "\n" +
+				"    coverage: partial\n    fullCoverageWith: [docs/plans/sibling.md]\n---\n\n## 1. X {#sec-1}\n",
+			want:     CoverageList{{Spec: section, Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}}},
+			sections: RefList{section},
+		},
+		{
+			name:     "covers takes precedence when both keys appear",
+			src:      "---\ncovers: " + section + "\nimplements: docs/specs/033-plan-section-coverage.md#sec-4\n---\n\n## 1. X {#sec-1}\n",
+			want:     CoverageList{{Spec: section, Coverage: "full"}},
+			sections: RefList{section},
+		},
+		{
+			name:     "explicit empty covers takes precedence over implements",
+			src:      "---\ncovers: []\nimplements: " + section + "\n---\n\n## 1. X {#sec-1}\n",
+			want:     CoverageList{},
+			sections: RefList{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := Parse([]byte(tc.src))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := doc.Frontmatter.CoverageEntries(); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("CoverageEntries() = %#v, want %#v", got, tc.want)
+			}
+			if got := doc.Frontmatter.CoveredSections(); !reflect.DeepEqual(got, tc.sections) {
+				t.Errorf("CoveredSections() = %#v, want %#v", got, tc.sections)
+			}
+		})
+	}
+}
 
-	doc, err := Parse([]byte(scalar))
-	if err != nil {
-		t.Fatalf("Parse scalar: %v", err)
+func TestFrontmatterCoverageRejectsMalformedObjects(t *testing.T) {
+	section := "docs/specs/033-plan-section-coverage.md#sec-3"
+	tests := []struct {
+		name  string
+		entry string
+	}{
+		{name: "spec sequence", entry: "spec: []\n    coverage: partial"},
+		{name: "coverage mapping", entry: "spec: " + section + "\n    coverage: {bad: value}"},
+		{name: "completion mapping", entry: "spec: " + section + "\n    coverage: partial\n    fullCoverageWith: {plan: x}"},
 	}
-	if want := []string{"docs/specs/011-delivery-lifecycle.md"}; !reflect.DeepEqual([]string(doc.Frontmatter.Implements), want) {
-		t.Errorf("scalar Implements = %v, want %v", doc.Frontmatter.Implements, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "---\ncovers:\n  - " + tc.entry + "\n---\n\n## 1. X {#sec-1}\n"
+			if _, err := Parse([]byte(src)); err == nil {
+				t.Fatal("Parse succeeded, want decode error")
+			}
+		})
 	}
 
-	doc, err = Parse([]byte(list))
-	if err != nil {
-		t.Fatalf("Parse list: %v", err)
+	// CoverageList itself accepts a scalar or sequence; mappings are coverage
+	// entries only within that sequence. Accepting this shape would make a
+	// malformed list silently look valid.
+	src := "---\ncovers: {spec: " + section + ", coverage: partial}\n---\n\n## 1. X {#sec-1}\n"
+	if _, err := Parse([]byte(src)); err == nil {
+		t.Fatal("Parse succeeded for mapping covers value, want decode error")
 	}
-	if want := []string{"a.md", "b.md"}; !reflect.DeepEqual([]string(doc.Frontmatter.Implements), want) {
-		t.Errorf("list Implements = %v, want %v", doc.Frontmatter.Implements, want)
+}
+
+// TestFrontmatterCoverageRerendersEditedMappings ensures a changed mapping
+// encodes its qualifiers instead of silently flattening them to references.
+func TestFrontmatterCoverageRerendersEditedMappings(t *testing.T) {
+	src := "---\ncovers:\n  - spec: docs/specs/033-plan-section-coverage.md#sec-3\n    coverage: partial\n    fullCoverageWith:\n      - docs/plans/sibling.md\n---\n\n## 1. X {#sec-1}\n"
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	doc.Frontmatter.Covers[0].FullCoverageWith = append(doc.Frontmatter.Covers[0].FullCoverageWith, "docs/plans/other.md")
+	roundTripped, err := Parse(doc.Bytes())
+	if err != nil {
+		t.Fatalf("Parse edited document: %v", err)
+	}
+	want := CoverageList{{
+		Spec:             "docs/specs/033-plan-section-coverage.md#sec-3",
+		Coverage:         "partial",
+		FullCoverageWith: RefList{"docs/plans/sibling.md", "docs/plans/other.md"},
+	}}
+	if got := roundTripped.Frontmatter.CoverageEntries(); !reflect.DeepEqual(got, want) {
+		t.Errorf("round-tripped CoverageEntries() = %#v, want %#v", got, want)
+	}
+}
+
+// TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges catches the renderer
+// turning the reserved scalar sentinel into a qualified mapping, which
+// secmeta rejects because NO-SPEC has no section or coverage level to qualify.
+func TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges(t *testing.T) {
+	src := "---\nstatus: draft\ncovers: NO-SPEC\n---\n\n# Plan\n"
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	doc.Frontmatter.Status = "accepted"
+
+	rendered := doc.Bytes()
+	front, inner, _ := splitFrontmatter(string(rendered))
+	if front == "" {
+		t.Fatal("rendered document has no frontmatter")
+	}
+	var fields map[string]any
+	if err := yaml.Unmarshal([]byte(inner), &fields); err != nil {
+		t.Fatalf("decode rendered frontmatter: %v", err)
+	}
+	if got, ok := fields["covers"].(string); !ok || got != "NO-SPEC" {
+		t.Fatalf("rendered covers = %#v, want bare scalar NO-SPEC", fields["covers"])
+	}
+
+	roundTripped, err := Parse(rendered)
+	if err != nil {
+		t.Fatalf("Parse rendered document: %v", err)
+	}
+	want := CoverageList{{Spec: "NO-SPEC", Coverage: "full"}}
+	if got := roundTripped.Frontmatter.CoverageEntries(); !reflect.DeepEqual(got, want) {
+		t.Errorf("round-tripped CoverageEntries() = %#v, want %#v", got, want)
+	}
+}
+
+// TestCoveredSectionsReadsRetiredSpelling pins 033 §3: `implements` still
+// parses so a branch written before the rename merges, and CoveredSections
+// reports it without the caller knowing which spelling was on disk.
+func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {
+	retired := "---\nimplements: docs/specs/011-delivery-lifecycle.md\n---\n\n## 1. X {#sec-1}\n"
+	doc, err := Parse([]byte(retired))
+	if err != nil {
+		t.Fatalf("Parse retired spelling: %v", err)
+	}
+	want := []string{"docs/specs/011-delivery-lifecycle.md"}
+	if got := []string(doc.Frontmatter.CoveredSections()); !reflect.DeepEqual(got, want) {
+		t.Errorf("CoveredSections() = %v, want %v", got, want)
+	}
+
+	current := "---\ncovers: a.md\n---\n\n## 1. X {#sec-1}\n"
+	doc, err = Parse([]byte(current))
+	if err != nil {
+		t.Fatalf("Parse covers: %v", err)
+	}
+	if got := []string(doc.Frontmatter.CoveredSections()); !reflect.DeepEqual(got, []string{"a.md"}) {
+		t.Errorf("CoveredSections() = %v, want [a.md]", got)
 	}
 }
 
