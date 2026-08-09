@@ -88,8 +88,8 @@ mechanically-substantive list makes "has a referrer" the first rule the server c
 narrowing is enforced rather than asserted.
 
 **Referrers, for this purpose,** are accepted documents claiming the section through
-`requires`, `implements`, `amends` or `replaces`, and tasks already claimed against a plan that
-implements it. Two things deliberately do not count:
+`requires`, `covers`, `amends` or `replaces`, and tasks already claimed against a plan that
+covers it. Two things deliberately do not count:
 
 - the plan whose execution triggered this fix — it is being amended in the same breath;
 - plans that have not been executed, which §5 marks stale and regenerates instead.
@@ -156,7 +156,7 @@ the corpus assert things nobody decided.
 
 ## 5. Stale plans {#sec-5}
 
-A plan that has not been executed and `implements`-refers to a section amended in place is
+A plan that has not been executed and `covers`-refers to a section amended in place is
 regenerated, not patched: its status becomes `stale` and a re-planning task is minted against
 it.
 

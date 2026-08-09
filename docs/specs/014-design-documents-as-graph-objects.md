@@ -26,6 +26,7 @@ amends:
     - 006-knowledge-graph.md#sec-1.4
     - 007-drift-and-overview.md#sec-4.4
   "#sec-6":
+    - 006-knowledge-graph.md#sec-1.3
     - 007-drift-and-overview.md#sec-2.1
     - 007-drift-and-overview.md#sec-3
     - 007-drift-and-overview.md#sec-4
@@ -65,8 +66,12 @@ amendedBy:
     - 025-documents-in-the-backbone.md#sec-2
   "#sec-5":
     - 025-documents-in-the-backbone.md#sec-3
+  "#sec-6":
+    - 033-plan-section-coverage.md#sec-4.2
   "#sec-10":
     - 025-documents-in-the-backbone.md#sec-2
+  "#sec-12":
+    - 033-plan-section-coverage.md#sec-4.2
 isReplacedBy:
   "#sec-8":
     - 025-documents-in-the-backbone.md#sec-6
@@ -275,7 +280,7 @@ exist:
 
 | Requirement | Expression |
 |---|---|
-| Partial implementation | `<task> wl:implements <section>` — coverage is a **count query** |
+| Partial implementation | `<component> wl:implements <section>` — coverage is a **count query** |
 | Section superseded, heading retained | `<section> wl:status wlc:superseded ; dct:isReplacedBy <section>` |
 | Section removed with an explanation | `wl:status wlc:superseded` + `dct:description` |
 | Sections may never be deleted | SHACL/CI over the section-IRI set (§4) |
@@ -430,6 +435,10 @@ that survives into draft, because inbound links do not care that a document is m
 ---
 
 ## 6. Implementation coverage {#sec-6}
+
+> **Amended by 033 §4.2.** `wl:implements` now names only the
+> Component→Section evidence below. A Task `wl:produces` a Deliverable;
+> `wl:affects` carries work→Component.
 
 ### 6.1 Three objects, previously conflated {#sec-6.1}
 
@@ -645,7 +654,7 @@ No kind is added for plans, planning, speccing, or reconciliation:
 
 ## 9. Authorship {#sec-9}
 
-`wl:implements` covers Task → DesignDoc ("realises this intent"). Nothing expresses "this task
+`wl:implements` covers Component → Section ("that code realises this intent"). Nothing expresses "this task
 *wrote* that document," which is what a `spec`-kind task actually does. Reuse rather than mint:
 
 ```turtle
@@ -702,7 +711,7 @@ is a signal that the ontology is missing one, not licence for a private extensio
 |---|---|---|
 | `status` | `wl:status` | one `wlc:DesignDocStatus` concept (§5) |
 | `issued` | `dct:issued` | ISO date of first publication |
-| `implements` | `wl:implements` | the governing Spec/ADR, authored on the *implementing* document |
+| `covers` | `wl:covers` | the spec sections a plan undertakes to realise; plans only (033 §1) |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
@@ -806,7 +815,7 @@ once rdf-registry is registered as a project and has a key.
 
 | Spec | Change |
 |---|---|
-| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section (Deliverable and Component ranges unaffected); anchor `wl:DesignDoc` on `prov:Entity` so §4's and §9's provenance edges are domain-correct, and correct Task authorship to `prov:wasAssociatedWith` (§9) |
+| 006 | `ls:`→`wl:` throughout; drop `wl:Plan`; add `wl:Section`, `wl:lastRevisedIn`; retire `wl:supersededSection`; remove `wlc:implemented`; widen `wl:status` domain; add `spec` to `wlc:TaskKind`; update both disjointness axioms and acceptance criteria 2 and 5; re-point the doc-implementation form of `wl:implements` from Task→DesignDoc to Component→Section. 033 §4.2 subsequently splits the remaining task half into Task→Deliverable `wl:produces`, drops Component from that range, and removes Issue/PullRequest from its domain; anchor `wl:DesignDoc` on `prov:Entity` so §4's and §9's provenance edges are domain-correct, and correct Task authorship to `prov:wasAssociatedWith` (§9) |
 | 007 | Add the `observed/repo-implements` deriver and the `.worklode/implements.yaml` manifest; add the coverage and stale-claim standing queries; **supersede §4.3** — the stale-claim query replaces its `dct:modified`-vs-task-closure heuristic — and re-point §4.4's Task-join at the Component→Section edge |
 | 008 | `lode task brief` supplies a governing **Spec section**, not a "Spec/Plan excerpt" — bounded by construction, but now dependent on §3; `/lode-spec` outputs become {ADR, Spec, task subtree} |
 | 010 | Reserve `SPEC` and `ADR` as project keys in §2's key CHECK, so a project key can never occupy the shorthand's type token (§11.3) |
@@ -870,8 +879,8 @@ Two pieces of work follow from this spec without belonging to it:
 
 1. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
    `rdf/wl/` and publish under `https://worklode.io/ns/`.
-2. `wl:Plan` is absent from the ontology; a plan-shaped body of work is representable as a task
-   subtree, and no acceptance criterion anywhere still refers to `Spec ⊃ Plan ⊃ Task`.
+2. `wl:Plan` is present as a sibling of `wl:DesignDoc`, never its subclass; accepting a plan mints
+   its task subtree, and no acceptance criterion anywhere still refers to `Spec ⊃ Plan ⊃ Task`.
 3. A section declared `## 2.1 Title {#sec-2.1}` is addressable as
    `wlid:section/<doc-slug>/sec-2.1` and linkable in-document as `[Section 2.1](#sec-2.1)`;
    rewording the heading leaves every inbound claim resolving to the same content.
@@ -908,4 +917,4 @@ Two pieces of work follow from this spec without belonging to it:
 11. `tasks.kind` accepts all of `feature, bug, chore, spec, review, spike, epic`, `wlc:TaskKind`
     contains exactly the same seven, and the migration round-trips up and down.
 12. A `spec`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
-    distinguishable from the tasks that `wl:implements` that document's sections.
+    distinguishable from the components that `wl:implements` that document's sections.

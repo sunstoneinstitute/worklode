@@ -1,8 +1,9 @@
 # Worklode SHACL shapes — closed-world constraints over the `wl:` vocabulary.
 #
 # Extracted from the node-shape sketches in spec 006 §2, spec 014 §7 and spec
-# 015 §7; those specs remain authoritative. Published by rdf-registry as
-# rdf/shapes/wl-shapes.ttl behind the SHACL gate (ADR-0003).
+# 015 §7, plus the domain/range constraints spec 033 §4.2 asks for; those specs
+# remain authoritative. Published by rdf-registry as rdf/shapes/wl-shapes.ttl
+# behind the SHACL gate (ADR-0003).
 #
 # The load-bearing split (006 §2): OWL is open-world with no unique names, so it
 # never flags a missing required field. owl:FunctionalProperty catches *more than
@@ -191,6 +192,110 @@ wl:TaskShape a sh:NodeShape ;
     ] .
 
 
+# --- Domain and range for the predicates that state one (033 §4.2) ---
+#
+# rdfs:domain and rdfs:range are OWL entailments, not constraints: an Artifact
+# carrying wl:covers is *inferred* to be a Plan, and only the disjointness
+# axiom then makes the graph inconsistent — surfaced, if at all, as a
+# contradiction somewhere rather than as the mistyped edge. These shapes say
+# what the author meant. They are also the shapes wl:implements' old comment
+# claimed existed; 033 §4.2 records that claim as false.
+#
+# Targeted with sh:targetSubjectsOf rather than the sh:targetClass the rest of
+# this file uses, because the constraint belongs to the predicate and not to a
+# class's instances: sh:targetClass wl:Plan cannot say that ONLY a Plan covers
+# a Section, since it never sees the subject that was typed wrong. One shape
+# per predicate carries both ends — the node-level sh:class is the domain, the
+# sh:property the range — because every object of a predicate has a subject, so
+# one target set reaches both. Named <term>Shape like the class shapes above,
+# which leaves the property's own lower-case initial in place.
+
+wl:coversShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:covers ;
+    sh:class wl:Plan ;
+    sh:message "Only a Plan covers a Section: a plan writes no code, so what it declares is an undertaking (033 §1)." ;
+    sh:property [
+        sh:path wl:covers ;
+        sh:class wl:Section ;
+        sh:message "wl:covers names a Section — a plan claiming a whole document says nothing a coverage query can use (033 §3)." ;
+    ] .
+
+wl:CoverageShape a sh:NodeShape ;
+    sh:targetClass wl:Coverage ;
+    sh:property [
+        sh:path wl:coveringPlan ;
+        sh:class wl:Plan ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path wl:coveredSection ;
+        sh:class wl:Section ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path wl:coverageLevel ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( wlc:full wlc:partial wlc:none ) ;
+    ] ;
+    sh:property [
+        sh:path wl:completedWith ;
+        sh:class wl:Plan ;
+    ] ;
+    # A partial claim may name the plans which complete it. Full and none are
+    # self-contained claims, so neither can carry a completion set.
+    sh:or (
+        [ sh:property [ sh:path wl:coverageLevel ; sh:hasValue wlc:partial ] ]
+        [ sh:property [ sh:path wl:coverageLevel ; sh:in ( wlc:full wlc:none ) ] ;
+          sh:property [ sh:path wl:completedWith ; sh:maxCount 0 ] ]
+    ) ;
+    sh:sparql [
+        sh:message "A qualified coverage record must reify a direct wl:covers edge for the same Plan and Section (033 §1)." ;
+        sh:select """
+            PREFIX wl: <https://worklode.io/ns/ontology#>
+            SELECT $this WHERE {
+                $this wl:coveringPlan ?plan ; wl:coveredSection ?section .
+                FILTER NOT EXISTS { ?plan wl:covers ?section . }
+            }
+        """ ;
+    ] .
+
+wl:implementsShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:implements ;
+    sh:class wl:Component ;
+    sh:message "Only a Component implements a Section: this edge is evidence that code landed, not intent to write it (033 §4.2)." ;
+    sh:property [
+        sh:path wl:implements ;
+        sh:class wl:Section ;
+        sh:message "wl:implements names a Section, not a whole document — 014 §6 re-pointed 006 §1.3's DesignDoc range." ;
+    ] .
+
+wl:producesShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:produces ;
+    # Shaped against the rdfs:domain ontology.ttl states, wl:Task — 033 §4.2
+    # narrowed 006 §1.3's Task|Issue|PullRequest union. Widen this with the
+    # domain if the union comes back.
+    sh:class wl:Task ;
+    sh:message "Only a Task produces a Deliverable (033 §4.2)." ;
+    sh:property [
+        sh:path wl:produces ;
+        sh:class wl:Deliverable ;
+        sh:message "wl:produces names a Deliverable, never a Component: a component already exists, and wl:affects is what says work touched one (033 §4.2)." ;
+    ] .
+
+wl:affectsShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:affects ;
+    # No node-level sh:class: wl:affects states no rdfs:domain, its subject
+    # being any of Task, Issue or PullRequest (006 §1.3). Range only.
+    sh:property [
+        sh:path wl:affects ;
+        sh:class wl:Component ;
+        sh:message "wl:affects names the Component a Task, Issue or PullRequest touches (006 §1.3)." ;
+    ] .
+
+
 # ---------------------------------------------------------------------------
 # Runtime (015 §7)
 # ---------------------------------------------------------------------------
@@ -205,6 +310,19 @@ wl:ArtifactShape a sh:NodeShape ;
     ] ;
     sh:property [ sh:path owl:versionInfo ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path dct:identifier  ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# Domain and range, on the pattern of the execution-layer block above. Spelled
+# wl:covers until 033 §4.1 moved that name to the Plan→Section undertaking, the
+# two domains being disjoint and so a contradiction rather than a clash of taste.
+wl:cutFromShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:cutFrom ;
+    sh:class wl:Artifact ;
+    sh:message "Only an Artifact is cut from a Commit: the per-environment frontier has no node (015 §6)." ;
+    sh:property [
+        sh:path wl:cutFrom ;
+        sh:class wl:Commit ;
+        sh:message "wl:cutFrom names the Commit a release was cut from; the delivery frontier follows from it (033 §4.1)." ;
+    ] .
 
 wl:DeploymentShape a sh:NodeShape ;
     sh:targetClass wl:Deployment ;

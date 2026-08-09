@@ -2,9 +2,10 @@
 #
 # Extracted from the specs, which remain authoritative: spec 006 (§1) defines
 # the vocabulary, spec 014 amends it (prefix rename, wl:Section, versioning,
-# status enum), spec 015 adds the runtime layer and spec 016 asks 006 to mint
-# two skill-registry terms. Where a spec section is cited below, that section is
-# the reason the term exists.
+# status enum), spec 015 adds the runtime layer, spec 016 asks 006 to mint two
+# skill-registry terms, spec 025 restores Plan as a sibling document class, and
+# spec 033 adds qualified plan-section coverage. Where a spec section is cited
+# below, that section is the reason the term exists.
 #
 # This file is a reference, not a deployment: the graph is not implemented, and
 # publication under https://worklode.io/ns/ belongs to rdf-registry (006 §9).
@@ -35,7 +36,9 @@
     dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
                <https://worklode.io/ns/id/doc/spec-worklode-014> ,
                <https://worklode.io/ns/id/doc/spec-worklode-015> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-016> ;
+               <https://worklode.io/ns/id/doc/spec-worklode-016> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-025> ,
+               <https://worklode.io/ns/id/doc/spec-worklode-033> ;
     owl:versionInfo "unpublished draft, extracted from docs/specs" .
 
 
@@ -56,6 +59,16 @@ wl:DesignDoc a owl:Class ;
         measured against. Superseded, never consumed (014 §2). prov:Entity because 014 asserts
         prov:wasGeneratedBy (§9, the task that wrote it), prov:wasRevisionOf and
         prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
+
+wl:Plan a owl:Class ;
+    rdfs:subClassOf foaf:Document , prov:Entity ;
+    wl:layer wlc:execution ;
+    rdfs:comment """An executable document: a bundle of task definitions with instructions
+        attached. Reviewable and accept-gated like a DesignDoc, but spent once executed, freely
+        mutable, and carrying no frozen section anchors — nothing may pin a claim to a plan.
+        A sibling of DesignDoc, never a subclass: 014 §2 dropped wl:Plan because the section
+        lock would be harmful here, and 025 §4 restored it on that same reasoning. Acceptance
+        mints its tasks (025 §5).""" .
 
 wl:ADR a owl:Class ;
     rdfs:subClassOf wl:DesignDoc ;
@@ -118,7 +131,7 @@ wl:Task a owl:Class ;
     wl:layer wlc:execution ;
     rdfs:comment """A unit of work, projected read-only from the backbone. prov:Activity so a
         document can name the task that wrote it via prov:wasGeneratedBy, which is distinct from
-        the tasks that wl:implements its sections (014 §9). Task execution-state is NOT wl:status:
+        the components that wl:implements its sections (014 §9). Task execution-state is NOT wl:status:
         the state machine is backbone-owned (spec 004) and the graph mirrors it as a projected
         literal rather than forking the enum. Being an Activity, a Task names its author with
         prov:wasAssociatedWith (Activity→Agent) and never prov:wasAttributedTo, whose domain is
@@ -260,9 +273,9 @@ wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Section wl:Plan ) ] ;
     rdfs:range skos:Concept ;
-    rdfs:comment """Editorial lifecycle status in wlc:DesignDocStatus, applying to a DesignDoc or a
-        single Section (014 §5). Functional catches >1; SHACL enforces >=1. Implementation is not a
-        status — it is a coverage query over wl:implements (014 §6).""" .
+    rdfs:comment """Editorial lifecycle status in wlc:DesignDocStatus, applying to a DesignDoc, a
+        Plan, or a single Section (014 §5; 025 §4). Functional catches >1; SHACL enforces >=1.
+        Implementation is not a status — it is a coverage query over wl:implements (014 §6).""" .
 
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
@@ -304,12 +317,71 @@ wl:reviewer a owl:ObjectProperty ;
 
 wl:implements a owl:ObjectProperty ;
     wl:layer wlc:execution ;
-    rdfs:range [ a owl:Class ; owl:unionOf ( wl:Section wl:Deliverable wl:Component ) ] ;
-    rdfs:comment """Realisation of intent. Domain is deliberately unstated: a Component claims a
-        Section (derived by observed/repo-implements from .worklode/implements.yaml, 014 §6), while
-        a Task, Issue or PullRequest realises a Deliverable or Component. The DesignDoc range of
-        006 §1.3 is re-pointed to Section by 014 §6 — coverage is a count query over sections, so
-        no wl:fullyImplements is minted. Union range is machine-readable; SHACL enforces presence.""" .
+    rdfs:domain wl:Component ;
+    rdfs:range wl:Section ;
+    rdfs:comment """This component's code, at the pinned version, implements this section — the
+        claim in .worklode/implements.yaml, derived by observed/repo-implements (014 §6). Evidence,
+        where the neighbouring terms are intent and work: a Plan wl:covers a Section to undertake
+        it, a Task wl:produces a Deliverable to do the work, and this edge says the code landed.
+        Keeps the name because this is the paradigmatic sense of the word; what moved out is the
+        Task half (033 §4.2), which is why the domain can finally be stated. 006 §1.3's DesignDoc
+        range was re-pointed to Section by 014 §6. Coverage stays a count query over sections, so
+        no wl:fullyImplements is minted.""" .
+
+wl:produces a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Deliverable ;
+    rdfs:comment """The work that makes a Deliverable exist. Shared wl:implements until 033 §4.2
+        separated them: a task does not implement a section — it produces the deliverable, and the
+        component is what implements. Authored on the task (006's projection table: task edit).
+        006 §1.3 also ranged this edge over Component and admitted Issue and PullRequest as
+        subjects; 033 §4.2 drops all three. wl:affects already carries the component half, and an
+        issue or a pull request reaches a deliverable only through the task it is bound to —
+        wl:mirrors for the issue, the PR's own task binding for the PR.""" .
+
+wl:covers a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Section ;
+    rdfs:comment """A Plan's undertaking to see a Section built, discharged by the tasks its
+        acceptance mints (025 §5). Deliberately not wl:implements: a plan writes no code, so it
+        claims nothing — one word for the promise and for the evidence that redeems it leaves the
+        two indistinguishable (033 §1). The frontmatter key is `covers`; `implements` on a plan is
+        its retired spelling.""" .
+
+wl:Coverage a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A qualified wl:covers: how completely one Plan covers one Section. Reified
+        beside the direct edge, never in place of it, so 014 §6's coverage queries are untouched
+        and no wl:fullyImplements is minted (033 §1). The node names both ends itself
+        (wl:coveringPlan, wl:coveredSection) rather than hanging off a Plan→Coverage predicate:
+        PROV needs prov:qualifiedAssociation because an Association has no other route back to
+        its Activity, whereas here the pair is the node's whole identity, and a predicate whose
+        object is a reification node cannot be read aloud as a sentence (033 §4).""" .
+
+wl:coveringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Coverage ;
+    rdfs:range wl:Plan .
+
+wl:coveredSection a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Coverage ;
+    rdfs:range wl:Section .
+
+wl:coverageLevel a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Coverage ;
+    rdfs:range skos:Concept .
+
+wl:completedWith a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Coverage ;
+    rdfs:range wl:Plan ;
+    rdfs:comment """The plans that, with this one, discharge the section. Checked, never trusted:
+        a named plan that does not itself cover the section leaves it partially planned
+        (033 §2).""" .
 
 wl:affects a owl:ObjectProperty ;
     wl:layer wlc:execution ;
@@ -398,13 +470,17 @@ wl:digest a owl:DatatypeProperty ;
         ingested value is a single opaque string. A spdx:Checksum alignment is additive if SBOM
         interop is ever wanted.""" .
 
-wl:covers a owl:ObjectProperty ;
+wl:cutFrom a owl:ObjectProperty ;
     wl:layer wlc:runtime ;
     rdfs:domain wl:Artifact ;
     rdfs:range wl:Commit ;
-    rdfs:comment """This artifact carries every commit up to and including that commit — the
-        delivery frontier of a published release. Domain is Artifact, not Deployment: the
-        per-environment frontier has no node (015 §6).""" .
+    rdfs:comment """The commit a published release was cut from: its target_commitish where that
+        resolves, else the default branch head at publish time (011 §6). The delivery frontier
+        follows from it rather than being a second edge — the object is a commit on the default
+        branch, so the release carries every commit up to and including it, and the resolver
+        compares against that ancestry. Domain is Artifact, not Deployment: the per-environment
+        frontier has no node (015 §6). Spelled wl:covers until 033 §4.1 needed that name for the
+        Plan→Section undertaking, and renamed for the fact rather than its consequence.""" .
 
 wl:toEnvironment a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:runtime ;
@@ -474,7 +550,7 @@ wl:layer a owl:AnnotationProperty ;
 #   wl:fullyImplements,        never minted (014 §3): declared coverage is a
 #   wl:partiallyImplements     second source of truth that goes stale.
 #   wl:Release                 never minted (015 §2): a release is a wl:Artifact
-#                              of kind wlc:git_tag plus a wl:covers edge.
+#                              of kind wlc:git_tag plus a wl:cutFrom edge.
 #   wl:Milestone               v2 (006 §1.1).
 #   wlc:TaskState              no SKOS scheme for task state: wl:taskState is a
 #                              literal mirror, so the backbone keeps the enum

@@ -518,6 +518,19 @@ docs/specs/032-project-cockpit.md:
     sec-10: "## 10. Accessibility and responsive behavior"
     sec-11: "## 11. First interactive release"
     sec-12: "## 12. Non-goals"
+docs/specs/033-plan-section-coverage.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. A plan covers sections; it implements none"
+    sec-2: "## 2. Planning coverage is a three-valued query"
+    sec-3: "## 3. Frontmatter shape"
+    sec-4: "## 4. Ontology"
+    sec-4.1: "### 4.1 Two terms this displaces"
+    sec-4.2: "### 4.2 `wl:implements` splits, and states its domain"
+    sec-4.3: "### 4.3 The qualified node names both its ends"
+    sec-5: "## 5. Checks"
+    sec-5.1: "### 5.1 Documents the rename reaches"
+    sec-6: "## 6. Out of scope"
 docs/specs/034-design-doc-sync.md:
   sections:
     sec-0: "## 0. Why"
