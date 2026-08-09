@@ -208,33 +208,28 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 // projectPageData is rendered by project.html.
 type projectPageData struct {
 	basePage
-	Project boardProjectJSON
-	Repos   []store.RepoMapping
+	Cockpit *cockpitProjection
 }
 
-// projectPage handles GET /projects/{id}: the project's board (scoped via
-// assembleBoard) and its mapped repos. Deployments are not project-scoped
-// in the schema (they reference an artifact, not a project), so nothing
+// projectPage handles GET /projects/{id}: the project cockpit, via the same
+// assembleProjectCockpit used by GET /api/v1/projects/{id}/cockpit — it must
+// not call its own HTTP API. Deployments are not project-scoped in the
+// schema (they reference an artifact, not a project), so nothing
 // deployment-specific is shown here.
 func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 
-	board, err := s.assembleBoard(ctx, id)
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	repos, err := s.st.ListRepos(ctx, id)
+	cockpit, err := s.assembleProjectCockpit(ctx, id)
+	s.observeCockpitProjection("web", err)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
 	}
 
 	data := projectPageData{
-		basePage: basePage{Title: "worklode: " + board.Projects[0].Name, AutoRefresh: true},
-		Project:  board.Projects[0],
-		Repos:    repos,
+		basePage: basePage{Title: "worklode: " + cockpit.Project.Name, AutoRefresh: true},
+		Cockpit:  cockpit,
 	}
 	if err := s.tmplProject.ExecuteTemplate(w, "layout.html", data); err != nil {
 		s.log.Error("render project page", "err", err)

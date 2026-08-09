@@ -177,6 +177,10 @@ type server struct {
 	// stop); see assign.go.
 	assignments *prometheus.CounterVec
 
+	// cockpitProjections counts attempted project cockpit projection
+	// assemblies, by surface (api, web) and outcome; see cockpit.go.
+	cockpitProjections *prometheus.CounterVec
+
 	// Web UI templates, parsed once at startup (template.Must panics on a
 	// parse error, so a broken template fails fast at boot, not on first
 	// request). One *template.Template per page — see parseWebTemplates.
@@ -401,6 +405,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// Both are read-only: no requireAdmin.
 	mux.Handle("GET /api/v1/projects/resolve", s.auth(s.resolveProjectByRemote))
 	mux.Handle("GET /api/v1/projects/{id}", s.auth(s.getProject))
+	mux.Handle("GET /api/v1/projects/{id}/cockpit", s.auth(s.projectCockpit))
 	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
 	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
 	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))

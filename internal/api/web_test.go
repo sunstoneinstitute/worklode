@@ -248,7 +248,19 @@ func TestProjectPage(t *testing.T) {
 		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	bodyContains(t, body, "proj", "acme/widgets", "Scoped task")
+	bodyContains(t, body,
+		"proj", "acme/widgets", "Scoped task",
+		`<link rel="canonical" href="/projects/proj">`, // cockpit projection's canonical url
+		"operations",                     // the declared-evidence Operations mode
+		"No governed decision is ready.", // the decision rail's Part-1 fallback
+	)
+	// The cockpit is a projection, never a stored workflow field: the page
+	// must not render any of the retired/forbidden concepts.
+	for _, forbidden := range []string{"completion_percentage", "Crew", "Deliverable", "Approval"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("project page unexpectedly renders %q:\n%s", forbidden, body)
+		}
+	}
 
 	rr = doReq(t, h, "GET", "/projects/nosuch", "", nil)
 	if rr.Code != http.StatusNotFound {

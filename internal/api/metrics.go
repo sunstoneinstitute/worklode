@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // initMetrics creates and registers the server-owned instruments (HTTP
@@ -37,7 +39,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_task_assignments_total",
 		Help: "Task assignment actions, by action (assign, unassign, start, stop).",
 	}, []string{"action"})
-	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments)
+	s.cockpitProjections = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_cockpit_projection_requests_total",
+		Help: "Project cockpit projection assembly attempts, by surface (api, web) and outcome (ok, not_found, error).",
+	}, []string{"surface", "outcome"})
+	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems,
+		s.assignments, s.cockpitProjections)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -45,6 +52,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.syncRuns.WithLabelValues("error")
 	for _, action := range []string{"assign", "unassign", "start", "stop"} {
 		s.assignments.WithLabelValues(action)
+	}
+	for _, surface := range []string{"api", "web"} {
+		for _, outcome := range []string{"ok", "not_found", "error"} {
+			s.cockpitProjections.WithLabelValues(surface, outcome)
+		}
 	}
 }
 
@@ -81,4 +93,27 @@ func (s *server) observeAssignment(action string) {
 		return
 	}
 	s.assignments.WithLabelValues(action).Inc()
+}
+
+// cockpitOutcome classifies an assembleProjectCockpit error for the
+// worklode_cockpit_projection_requests_total outcome label.
+func cockpitOutcome(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		return "not_found"
+	}
+	return "error"
+}
+
+// observeCockpitProjection records one attempted cockpit projection assembly,
+// called exactly once per attempt from both the JSON API handler
+// (surface="api") and the web project page (surface="web").
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeCockpitProjection(surface string, err error) {
+	if s.cockpitProjections == nil {
+		return
+	}
+	s.cockpitProjections.WithLabelValues(surface, cockpitOutcome(err)).Inc()
 }
