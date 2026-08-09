@@ -1,54 +1,65 @@
 {{define "content"}}
-<h1>{{.Project.Name}}</h1>
-<p class="muted">Project id: {{.Project.ID}}</p>
+<link rel="canonical" href="{{.Cockpit.CanonicalURL}}">
+<h1>{{.Cockpit.Project.Name}}</h1>
+<p class="muted">Project id: {{.Cockpit.Project.ID}} &middot; key: {{.Cockpit.Project.Key}}</p>
 
-<h2>Repos</h2>
-{{if .Repos}}
-<ul>{{range .Repos}}<li>{{.Repo}} <span class="muted">(done at {{.DoneState}})</span></li>{{end}}</ul>
+<p>Mode: <strong>{{.Cockpit.Mode.Name}}</strong></p>
+<p class="muted">{{.Cockpit.Mode.Basis.Summary}}</p>
+
+<aside aria-label="Next decision">
+  {{if .Cockpit.NextDecision}}
+    <h2>{{.Cockpit.NextDecision.Title}}</h2>
+  {{else}}
+    <h2>Next decision</h2>
+    <p>No governed decision is ready.</p>
+  {{end}}
+</aside>
+
+<h2>Repositories</h2>
+{{if .Cockpit.Repositories}}
+<ul>{{range .Cockpit.Repositories}}<li>{{.Repo}} <span class="muted">(done at {{.DoneState}})</span></li>{{end}}</ul>
 {{else}}<p class="muted">No repos mapped.</p>{{end}}
 
 <h2>In progress</h2>
-{{if .Project.InProgress}}
+{{if .Cockpit.Work.InProgress}}
 <table>
-  <tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th></tr>
-  {{range .Project.InProgress}}
+  <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
+  {{range .Cockpit.Work.InProgress}}
   <tr>
-    <td><span class="badge state-in_progress">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td>
+    <td><span class="badge state-in_progress">{{.State}}</span> <a href="{{.URL}}">{{.ID}}</a></td>
     <td>{{.Title}}</td>
     <td>{{.Priority}}</td>
-    <td>{{if .Holder}}{{.Holder.ActorID}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
-    <td>{{if .Holder}}{{fmtTime .Holder.ExpiresAt}}{{end}}</td>
   </tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}
 
 <h2>In review</h2>
-{{if .Project.InReview}}
+{{if .Cockpit.Work.InReview}}
 <table>
   <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.InReview}}
-  <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+  {{range .Cockpit.Work.InReview}}
+  <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="{{.URL}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}
 
 <h2>Ready</h2>
-{{if .Project.Ready}}
+{{if .Cockpit.Work.Ready}}
 <table>
   <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.Ready}}
-  <tr><td><span class="badge state-ready">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+  {{range .Cockpit.Work.Ready}}
+  <tr><td><span class="badge state-ready">{{.State}}</span> <a href="{{.URL}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}
 
 <h2>Blocked</h2>
-{{if .Project.Blocked}}
+{{if .Cockpit.Work.Blocked}}
 <table>
   <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.Blocked}}
-  <tr><td><span class="badge state-blocked">blocked</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
+  {{range .Cockpit.Work.Blocked}}
+  <tr><td><span class="badge state-blocked">blocked</span> <a href="{{.URL}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">None</p>{{end}}
