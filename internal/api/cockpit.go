@@ -5,8 +5,11 @@
 // builds its output fresh from existing store readers on every call (spec
 // 032). It is provisional in Part 1: work items and repositories are adapted
 // from the existing board and repo-mapping readers rather than governed
-// decision/pin/secondary-concern stores, which do not exist yet. Tasks 3 and
-// 4 replace that input while preserving this wire contract.
+// decision/pin/secondary-concern stores, which do not exist yet. assembleBoard
+// itself now reads through the shared, UI-neutral store.ListProjectWorkFacts
+// (Task 3); Task 4 replaces this file's own board adapter (toCockpitWorkItems)
+// with a direct, product-language mapping over those same facts, while
+// preserving this wire contract.
 package api
 
 import (

@@ -857,11 +857,12 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 // (in_progress with lease holder, in_review, ready, blocked) plus, when
 // projectFilter is "", the last 10 runtime events store-wide.
 //
-// It is assembled here from existing store readers (ListTasks,
-// BlockedTaskIDs, ActiveLease) rather than a dedicated Store.Board method —
-// there is no additional query complexity to hide behind a store API. Shared
-// by the JSON /api/v1/board handler and the GET / and GET /projects/{id} web
-// pages, so the bucket logic lives in exactly one place.
+// It is assembled here from ListProjectWorkFacts, the store's shared,
+// UI-neutral bulk reader (parent/lease/blocker facts in one read), rather
+// than a dedicated Store.Board method — there is no additional query
+// complexity to hide behind a store API. Shared by the JSON /api/v1/board
+// handler and the GET / and GET /projects/{id} web pages, so the bucket
+// logic lives in exactly one place.
 //
 // recent_failures is simplified from the full deployments->artifacts join
 // described in the design to the last 10 runtime events store-wide, and is
@@ -887,46 +888,41 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		projects = ps
 	}
 
-	blocked, err := s.st.BlockedTaskIDs(ctx)
+	facts, err := s.st.ListProjectWorkFacts(ctx, projectFilter)
 	if err != nil {
 		return nil, err
 	}
-
-	parents, err := s.st.ParentMap(ctx, projectFilter)
-	if err != nil {
-		return nil, err
+	// Facts come back in one global (priority, id) order; grouping by
+	// project here preserves that order within each group, since it is the
+	// same order a per-project query would have produced.
+	byProject := make(map[string][]store.ProjectWorkFact, len(projects))
+	for _, f := range facts {
+		byProject[f.Task.ProjectID] = append(byProject[f.Task.ProjectID], f)
 	}
 
 	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
 
 	for _, p := range projects {
-		tasks, err := s.st.ListTasks(ctx, store.TaskFilter{Project: p.ID})
-		if err != nil {
-			return nil, err
-		}
 		bp := boardProjectJSON{
 			ID: p.ID, Name: p.Name,
 			InProgress: []boardTaskJSON{}, InReview: []boardTaskJSON{},
 			Ready: []boardTaskJSON{}, Blocked: []boardTaskJSON{},
 		}
-		for i := range tasks {
-			t := &tasks[i]
-			bt := boardTaskJSON{taskJSON: toTaskJSON(t), Parent: parents[t.ID]}
+		for _, f := range byProject[p.ID] {
+			t := f.Task
+			bt := boardTaskJSON{taskJSON: toTaskJSON(&t)}
+			if f.Parent != nil {
+				bt.Parent = f.Parent.ID
+			}
 			switch {
 			case t.State == "in_progress":
-				// No active lease (e.g. it expired but the sweeper hasn't
-				// moved the task back to ready yet) just means no holder;
-				// any other error is a real failure.
-				lease, err := s.st.ActiveLease(ctx, t.ID)
-				if err == nil {
-					bt.Holder = &holderJSON{ActorID: lease.ActorID, ExpiresAt: lease.ExpiresAt}
-				} else if !errors.Is(err, store.ErrNotFound) {
-					return nil, err
+				if f.Lease != nil {
+					bt.Holder = &holderJSON{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
 				}
 				bp.InProgress = append(bp.InProgress, bt)
 			case t.State == "in_review":
 				bp.InReview = append(bp.InReview, bt)
-			case t.State == "ready" && blocked[t.ID]:
+			case t.State == "ready" && f.Blocked():
 				bp.Blocked = append(bp.Blocked, bt)
 			case t.State == "ready":
 				bp.Ready = append(bp.Ready, bt)
