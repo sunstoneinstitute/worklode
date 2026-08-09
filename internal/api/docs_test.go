@@ -132,6 +132,7 @@ func TestDocsListAndGet(t *testing.T) {
 	var list struct {
 		Docs []struct {
 			ID, Kind, Status, Title, Body string
+			Frontmatter                   json.RawMessage
 		} `json:"docs"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
@@ -143,6 +144,9 @@ func TestDocsListAndGet(t *testing.T) {
 	for _, d := range list.Docs {
 		if d.Body != "" {
 			t.Errorf("%s: list row carries a body", d.ID)
+		}
+		if len(d.Frontmatter) != 0 {
+			t.Errorf("%s: list row carries frontmatter: %s", d.ID, d.Frontmatter)
 		}
 	}
 

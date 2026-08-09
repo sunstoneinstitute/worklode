@@ -186,7 +186,11 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]docJSON, 0, len(docs))
 	for i := range docs {
-		out = append(out, toDocJSON(&docs[i])) // list rows: store leaves Body ""
+		dj := toDocJSON(&docs[i])
+		// List rows omit body and frontmatter; only getDoc returns them.
+		dj.Body = ""
+		dj.Frontmatter = nil
+		out = append(out, dj)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"docs": out})
 }
