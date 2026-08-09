@@ -1,6 +1,6 @@
 ---
 status: draft
-implements:
+covers:
   - docs/specs/026-design-doc-queries.md#sec-3
   - docs/specs/026-design-doc-queries.md#sec-3.1
   - docs/specs/026-design-doc-queries.md#sec-3.2

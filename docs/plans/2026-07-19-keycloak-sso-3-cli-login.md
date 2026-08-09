@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/001-keycloak-sso.md
+covers: docs/specs/001-keycloak-sso.md
 requires:
   - 2026-07-19-keycloak-sso-1-server-core.md
 isReplacedBy:

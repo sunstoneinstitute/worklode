@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/008-worklode-plugin.md
+covers: docs/specs/008-worklode-plugin.md
 ---
 # `lode install` / `lode uninstall` Implementation Plan
 

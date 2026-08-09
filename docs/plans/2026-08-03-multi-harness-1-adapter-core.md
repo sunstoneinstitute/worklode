@@ -1,6 +1,6 @@
 ---
 status: accepted
-implements:
+covers:
   - docs/specs/024-multi-harness-integration.md#sec-3.1
   - docs/specs/024-multi-harness-integration.md#sec-3.2
   - docs/specs/024-multi-harness-integration.md#sec-3.4

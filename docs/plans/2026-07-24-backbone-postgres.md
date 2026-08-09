@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/004-execution-backbone.md
+covers: docs/specs/004-execution-backbone.md
 ---
 # Execution Backbone on Postgres (spec 004) Implementation Plan
 

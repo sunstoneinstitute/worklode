@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-10
-implements: docs/specs/013-reconciliation.md
+covers: docs/specs/013-reconciliation.md
 ---
 # Reconciliation 1/3: data model & replay engine — Implementation Plan
 
