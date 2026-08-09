@@ -1,51 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}}</title>
-{{if .AutoRefresh}}<meta http-equiv="refresh" content="30">{{end}}
-<style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 1rem 1.5rem 3rem;
-    line-height: 1.4;
-  }
-  header { margin-bottom: 1.5rem; }
-  header a { text-decoration: none; font-weight: 600; font-size: 1.1rem; }
-  h1, h2, h3 { line-height: 1.2; }
-  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.5rem; }
-  th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #8884; vertical-align: top; }
-  th { font-weight: 600; border-bottom: 2px solid #8886; }
-  section { margin-bottom: 2rem; }
-  .muted { opacity: 0.65; }
-  .badge {
-    display: inline-block;
-    padding: 0.1rem 0.5rem;
-    border-radius: 0.75rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    border: 1px solid #8886;
-  }
-  .state-ready { background: #cce0f5; }
-  .state-in_progress { background: #ffe6a8; }
-  .state-in_review { background: #e0d4f7; }
-  .state-blocked { background: #f7cccc; }
-  .state-merged { background: #cde8cd; }
-  .state-deployed_dev { background: #bfe3f0; }
-  .state-deployed_prod { background: #9fd6a0; }
-  .state-released { background: #7ab97c; }
-  .state-abandoned { background: #dddddd; }
-  .state-draft { background: #eeeeee; }
-  pre { white-space: pre-wrap; word-wrap: break-word; background: #8881; padding: 0.75rem; border-radius: 0.4rem; }
-  a { color: inherit; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
-<header><a href="/">worklode</a></header>
-<main>{{block "content" .}}{{end}}</main>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header>
+    <nav aria-label="Primary">
+      <a href="/" {{if eq .ActiveGlobal "home"}}aria-current="page"{{end}}>Home</a>
+      <a href="/intake" {{if eq .ActiveGlobal "intake"}}aria-current="page"{{end}}>Intake</a>
+      <a href="/projects" {{if eq .ActiveGlobal "projects"}}aria-current="page"{{end}}>Projects</a>
+      <a href="/work" {{if eq .ActiveGlobal "work"}}aria-current="page"{{end}}>Work</a>
+      <a href="/reviews" {{if eq .ActiveGlobal "reviews"}}aria-current="page"{{end}}>Reviews</a>
+      <a href="/deliveries" {{if eq .ActiveGlobal "deliveries"}}aria-current="page"{{end}}>Deliveries</a>
+      <a href="/knowledge" {{if eq .ActiveGlobal "knowledge"}}aria-current="page"{{end}}>Knowledge</a>
+    </nav>
+  </header>
+  <main id="main-content">{{template "content" .}}</main>
 </body>
 </html>

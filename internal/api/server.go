@@ -181,12 +181,18 @@ type server struct {
 	// assemblies, by surface (api, web) and outcome; see cockpit.go.
 	cockpitProjections *prometheus.CounterVec
 
+	// navigations counts web UI page requests, by destination and outcome;
+	// see web.go's navWrap and metrics.go's observeNavigation.
+	navigations *prometheus.CounterVec
+
 	// Web UI templates, parsed once at startup (template.Must panics on a
 	// parse error, so a broken template fails fast at boot, not on first
 	// request). One *template.Template per page — see parseWebTemplates.
-	tmplBoard   *template.Template
-	tmplTask    *template.Template
-	tmplProject *template.Template
+	tmplBoard       *template.Template
+	tmplTask        *template.Template
+	tmplProject     *template.Template
+	tmplProjects    *template.Template
+	tmplPlaceholder *template.Template
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -211,9 +217,11 @@ func validatePublicURL(publicURL string) error {
 func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) {
 	s := &server{
 		st: st, cfg: cfg, log: slog.Default(),
-		tmplBoard:   parseWebTemplates("board.html"),
-		tmplTask:    parseWebTemplates("task.html"),
-		tmplProject: parseWebTemplates("project.html"),
+		tmplBoard:       parseWebTemplates("board.html"),
+		tmplTask:        parseWebTemplates("task.html"),
+		tmplProject:     parseWebTemplates("project.html"),
+		tmplProjects:    parseWebTemplates("projects.html"),
+		tmplPlaceholder: parseWebTemplates("placeholder.html"),
 	}
 	s.cliCodes = newCLICodeStore(st.Now)
 	s.bgCtx = cfg.BackgroundCtx
@@ -328,9 +336,26 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// Read-only web UI. When OIDC is enabled these require a valid session
 	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
 	// unconfigured webAuth is a passthrough and the UI stays open as in v1.
-	mux.HandleFunc("GET /{$}", s.webAuth(s.boardPage))
+	// The seven global destinations (spec 032 §2) and the project-local
+	// destinations below each record one worklode_web_navigation_requests_total
+	// observation via navWrap.
+	mux.HandleFunc("GET /{$}", s.webAuth(s.navWrap("home", s.homePage)))
+	mux.HandleFunc("GET /intake", s.webAuth(s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
+		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8."))))
+	mux.HandleFunc("GET /projects", s.webAuth(s.navWrap("projects", s.projectsPage)))
+	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.navWrap("projects", s.projectPage)))
+	mux.HandleFunc("GET /projects/{id}/{section}", s.webAuth(s.navWrap("project_section", s.projectSectionPage)))
+	mux.HandleFunc("GET /work", s.webAuth(s.navWrap("work", s.workPage)))
+	mux.HandleFunc("GET /reviews", s.webAuth(s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
+		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7."))))
+	mux.HandleFunc("GET /deliveries", s.webAuth(s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
+		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 011."))))
+	mux.HandleFunc("GET /knowledge", s.webAuth(s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
+		"Documents and graph-backed expert views arrive with specs 025, 026, and 006."))))
 	mux.HandleFunc("GET /tasks/{id}", s.webAuth(s.taskPage))
-	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.projectPage))
+	// Styles and fonts carry no project data: registered outside webAuth so
+	// an OIDC-gated deployment never redirects an asset request to login.
+	mux.Handle("GET /assets/", s.assetHandler())
 	mux.HandleFunc("GET /auth/login", s.authLogin)
 	mux.HandleFunc("GET /auth/callback", s.authCallback)
 	mux.HandleFunc("GET /auth/github/login", s.githubLogin)

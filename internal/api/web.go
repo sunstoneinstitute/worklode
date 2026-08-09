@@ -1,11 +1,14 @@
-// web.go implements the read-only web UI: GET /, GET /tasks/{id}, and
-// GET /projects/{id}. When OIDC is configured these routes are gated by
-// s.webAuth (see oidcweb.go), which requires a valid session cookie; when
-// OIDC is unconfigured they stay open and the bind address is the only
-// access control. They render server-side HTML with html/template (which
+// web.go implements the read-only web UI: the application shell (layout.html)
+// shared by every page, the seven global destinations and the project-local
+// destinations spec 032 §2 defines, and /assets/ (self-hosted stylesheet and
+// fonts). When OIDC is configured every page route except /assets/ is gated
+// by s.webAuth (see oidcweb.go), which requires a valid session cookie;
+// /assets/ stays open unconditionally (see assetHandler) and, when OIDC is
+// unconfigured, every route stays open and the bind address is the only
+// access control. Pages render server-side HTML with html/template (which
 // auto-escapes all interpolated values) and reuse the same assembly
-// functions as the JSON API (assembleBoard, assembleTimeline) so the board
-// and timeline logic lives in exactly one place.
+// functions as the JSON API (assembleBoard, assembleTimeline,
+// assembleProjectCockpit) so that logic lives in exactly one place.
 package api
 
 import (
@@ -14,14 +17,15 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-//go:embed templates/*.html
-var templatesFS embed.FS
+//go:embed templates/*.html assets
+var webFS embed.FS
 
 // templateFuncs are the funcs available to every web template.
 var templateFuncs = template.FuncMap{
@@ -40,16 +44,63 @@ var templateFuncs = template.FuncMap{
 // layout.html on its own keeps every page's "content" in its own set.
 func parseWebTemplates(page string) *template.Template {
 	return template.Must(template.New("layout.html").Funcs(templateFuncs).
-		ParseFS(templatesFS, "templates/layout.html", "templates/"+page))
+		ParseFS(webFS, "templates/layout.html", "templates/"+page))
+}
+
+// assetHandler serves the embedded /assets/ tree (stylesheet and
+// self-hosted fonts) outside webAuth: they carry no project data, so an
+// OIDC-gated deployment must not redirect them to login (a stylesheet
+// request has no session to attach a redirect to). Cache-Control is bounded
+// (an hour) rather than immutable/forever, since asset filenames are not
+// content-hashed. Every response is counted under the "asset" navigation
+// destination (see navWrap).
+func (s *server) assetHandler() http.Handler {
+	assets, err := fs.Sub(webFS, "assets")
+	if err != nil {
+		panic(err)
+	}
+	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))
+	return s.navWrap("asset", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
+// navOutcome classifies a response status for the
+// worklode_web_navigation_requests_total outcome label.
+func navOutcome(status int) string {
+	switch {
+	case status == http.StatusNotFound:
+		return "not_found"
+	case status >= 500:
+		return "error"
+	default:
+		return "ok"
+	}
+}
+
+// navWrap wraps a web handler to record one worklode_web_navigation_requests_total
+// observation for the given destination, classified from the handler's final
+// HTTP status code.
+func (s *server) navWrap(destination string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next(sw, r)
+		s.observeNavigation(destination, navOutcome(sw.status))
+	}
 }
 
 // basePage carries the fields every page template needs from layout.html
-// (.Title, .AutoRefresh). Every page-specific data struct embeds it so
+// (.Title, .ActiveGlobal). Every page-specific data struct embeds it so
 // layout.html can address those fields the same way regardless of which
-// page is being rendered.
+// page is being rendered. ActiveGlobal names the one primary-nav destination
+// to mark aria-current="page" on ("home", "intake", "projects", "work",
+// "reviews", "deliveries", "knowledge"); leave it empty on project-scoped
+// pages, whose local project nav carries the current-page marker instead —
+// each page must set aria-current="page" exactly once, never on both navs.
 type basePage struct {
-	Title       string
-	AutoRefresh bool
+	Title        string
+	ActiveGlobal string
 }
 
 // webErr renders a minimal HTML error page. The web UI has no JSON error
@@ -73,19 +124,37 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 	webErr(w, http.StatusInternalServerError, "internal error")
 }
 
-// boardPageData is rendered by board.html.
+// boardPageData is rendered by board.html, shared by the Home ("/") and Work
+// ("/work") destinations — both show the same org-wide board; only the
+// heading and ActiveGlobal differ (see board.html's content block).
 type boardPageData struct {
 	basePage
 	Board      *boardResponse
 	InboxCount int
 }
 
-// boardPage handles GET / (routed as "GET /{$}" — see server.go — so it
+// homePage handles GET / (routed as "GET /{$}" — see server.go — so it
 // matches only the exact root path, not every otherwise-unmatched GET): the
-// org-wide board, built from the same assembleBoard used by GET
-// /api/v1/board, plus a count of new (untriaged) inbox issues.
-// Auto-refreshes every 30s.
-func (s *server) boardPage(w http.ResponseWriter, r *http.Request) {
+// default post-login destination. Part 1 has no assigned-work/decision/brief
+// aggregation yet (spec 032 §9), so Home shows the org-wide board under a
+// "Current work" heading — the same data "/work" shows as the task-oriented
+// destination.
+func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
+	s.renderBoard(w, r, "home", "worklode: home")
+}
+
+// workPage handles GET /work: task-oriented saved queries and the ready
+// frontier (spec 032 §2). Part 1 renders the same org-wide board as Home,
+// without the "Current work" framing.
+func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
+	s.renderBoard(w, r, "work", "worklode: work")
+}
+
+// renderBoard builds the org-wide board, built from the same assembleBoard
+// used by GET /api/v1/board, plus a count of new (untriaged) inbox issues,
+// and renders it under the given ActiveGlobal/title. Shared by homePage and
+// workPage.
+func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGlobal, title string) {
 	ctx := r.Context()
 
 	board, err := s.assembleBoard(ctx, "")
@@ -100,12 +169,121 @@ func (s *server) boardPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := boardPageData{
-		basePage:   basePage{Title: "worklode: board", AutoRefresh: true},
+		basePage:   basePage{Title: title, ActiveGlobal: activeGlobal},
 		Board:      board,
 		InboxCount: len(issues),
 	}
 	if err := s.tmplBoard.ExecuteTemplate(w, "layout.html", data); err != nil {
 		s.log.Error("render board page", "err", err)
+	}
+}
+
+// projectsPageData is rendered by projects.html.
+type projectsPageData struct {
+	basePage
+	Projects []store.Project
+}
+
+// projectsPage handles GET /projects: the cross-project portfolio (spec 032
+// §2), linking each project to its canonical cockpit URL.
+func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
+	projects, err := s.st.ListProjects(r.Context())
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	data := projectsPageData{
+		basePage: basePage{Title: "worklode: projects", ActiveGlobal: "projects"},
+		Projects: projects,
+	}
+	if err := s.tmplProjects.ExecuteTemplate(w, "layout.html", data); err != nil {
+		s.log.Error("render projects page", "err", err)
+	}
+}
+
+// placeholderPageData is rendered by placeholder.html: an honest "not built
+// yet" page for a global or project-scoped destination whose governing spec
+// section is not implemented. Cockpit is nil for a global destination
+// (Intake, Reviews, Deliveries, Knowledge) and set for a project section
+// (Crew, Deliverables, Reviews, Decisions, Documents, Activity), which loads
+// the project first and renders the same project-local navigation as the
+// Overview page.
+type placeholderPageData struct {
+	basePage
+	Heading       string
+	Message       string
+	Cockpit       *cockpitProjection
+	ActiveSection string
+}
+
+// globalPlaceholder returns a handler for a global destination with no
+// implemented capability yet (Intake, Reviews, Deliveries, Knowledge).
+func (s *server) globalPlaceholder(destination, heading, message string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := placeholderPageData{
+			basePage: basePage{Title: "worklode: " + heading, ActiveGlobal: destination},
+			Heading:  heading,
+			Message:  message,
+		}
+		if err := s.tmplPlaceholder.ExecuteTemplate(w, "layout.html", data); err != nil {
+			s.log.Error("render placeholder page", "err", err)
+		}
+	}
+}
+
+// projectSections allow-lists the project-local destinations that are not
+// implemented yet, one honest-unavailable message per key naming the owning
+// spec section. Unknown keys 404 (see projectSectionPage).
+var projectSections = map[string]string{
+	"crew":         "Crew arrives with project participants in spec 029 §6.1.",
+	"deliverables": "Deliverables arrive with spec 029 §7.",
+	"reviews":      "Governed approval reviews arrive with spec 029 §7.",
+	"decisions":    "Research decisions arrive with specs 028 and 029.",
+	"documents":    "Backbone documents arrive with specs 025 and 026.",
+	"activity":     "Project activity arrives when the ordered event view is implemented.",
+}
+
+// projectSectionTitles gives each projectSections key its display heading.
+var projectSectionTitles = map[string]string{
+	"crew":         "Crew",
+	"deliverables": "Deliverables",
+	"reviews":      "Reviews",
+	"decisions":    "Decisions",
+	"documents":    "Documents",
+	"activity":     "Activity",
+}
+
+// projectSectionPage handles GET /projects/{id}/{section}: an honest
+// placeholder for a not-yet-implemented project-local destination. It loads
+// the project cockpit first (so an unknown project 404s the same way
+// projectPage does) and renders the same project header/navigation as the
+// Overview page, naming the missing capability. It has no form, button,
+// count, or fake record — see the global constraints in the plan.
+func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
+	section := r.PathValue("section")
+	message, ok := projectSections[section]
+	if !ok {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	cockpit, err := s.assembleProjectCockpit(r.Context(), r.PathValue("id"))
+	s.observeCockpitProjection("web", err)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	heading := projectSectionTitles[section]
+	data := placeholderPageData{
+		basePage:      basePage{Title: "worklode: " + cockpit.Project.Name + ": " + heading},
+		Heading:       heading,
+		Message:       message,
+		Cockpit:       cockpit,
+		ActiveSection: section,
+	}
+	if err := s.tmplPlaceholder.ExecuteTemplate(w, "layout.html", data); err != nil {
+		s.log.Error("render project section page", "err", err)
 	}
 }
 
@@ -228,7 +406,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := projectPageData{
-		basePage: basePage{Title: "worklode: " + cockpit.Project.Name, AutoRefresh: true},
+		basePage: basePage{Title: "worklode: " + cockpit.Project.Name},
 		Cockpit:  cockpit,
 	}
 	if err := s.tmplProject.ExecuteTemplate(w, "layout.html", data); err != nil {
