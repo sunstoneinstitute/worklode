@@ -703,6 +703,15 @@ docs/plans/2026-08-07-branch-and-worktree-naming.md:
     task-4-thread-the-layout-through-the-cli-lifecycle-commands: "### Task 4 — Thread the layout through the CLI lifecycle commands"
     task-5-thread-the-layout-through-the-hooks: "### Task 5 — Thread the layout through the hooks"
     task-6-docs-gitignore-and-the-worktree-migration: "### Task 6 — Docs, gitignore, and the worktree migration"
+docs/plans/2026-08-09-plan-section-coverage.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    file-structure: "## File Structure"
+    tasks: "## Tasks"
+    task-1-parse-and-round-trip-qualified-coverage: "### Task 1 — Parse and round-trip qualified coverage"
+    task-2-validate-plan-coverage-in-hermetic-corpus-tests: "### Task 2 — Validate plan coverage in hermetic corpus tests"
+    task-3-constrain-reified-coverage-nodes-in-shacl: "### Task 3 — Constrain reified coverage nodes in SHACL"
+    task-4-regenerate-indexes-and-verify-completion: "### Task 4 — Regenerate indexes and verify completion"
 docs/plans/2026-08-09-project-cockpit-1-shell-and-projection.md:
   sections:
     global-constraints: "## Global Constraints"
