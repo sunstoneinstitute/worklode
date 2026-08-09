@@ -253,3 +253,37 @@ func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 	}
 	return id, true
 }
+
+// CurrentBranch returns the branch checked out at root. A detached HEAD is
+// an error: the doc-sync gate (spec 034 §3) needs a branch to compare and to
+// record as provenance.
+func CurrentBranch(root string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve current branch (detached HEAD?): %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// DefaultBranch returns the repository's default branch as recorded by the
+// remote's HEAD (spec 034 §3), read from refs/remotes/origin/HEAD — local
+// state git clone writes, so no network round trip. A repo without it (an
+// old clone, or `git init` with a remote added by hand) gets an error naming
+// the fix.
+func DefaultBranch(root string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "symbolic-ref", "refs/remotes/origin/HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("no default branch recorded for origin; run `git remote set-head origin --auto` (needs network) and retry")
+	}
+	return strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/remotes/origin/"), nil
+}
+
+// IsClean reports whether root's working tree has no uncommitted changes,
+// untracked files included — `git status --porcelain` prints nothing (034 §3).
+func IsClean(root string) (bool, error) {
+	out, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
+	if err != nil {
+		return false, fmt.Errorf("git status --porcelain: %w", err)
+	}
+	return len(strings.TrimSpace(string(out))) == 0, nil
+}
