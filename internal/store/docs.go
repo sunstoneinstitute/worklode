@@ -202,6 +202,7 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 			}
 		}
 
+		s.metrics.docUpsert(outcome)
 		results = append(results, DocSyncResult{DocID: docID, Kind: d.Kind, Outcome: outcome})
 	}
 	return results, nil
