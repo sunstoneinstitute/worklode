@@ -816,6 +816,61 @@ func TestBoardUnknownProject(t *testing.T) {
 	}
 }
 
+// TestBoardAcrossProjectsGroupsCorrectly asserts that the org-wide board
+// (no project filter) correctly regroups the single, unscoped
+// ListProjectWorkFacts read back into each project's own bucket — a task
+// never lands under the wrong project, and a project with no tasks still
+// gets an entry with empty buckets rather than being dropped.
+func TestBoardAcrossProjectsGroupsCorrectly(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proja")
+	createProject(t, st, "projb")
+	createProject(t, st, "projc") // no tasks at all
+
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proja", "title": "A ready", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "projb", "title": "B ready", "priority": "medium", "kind": "feature"})
+
+	rr := doReq(t, h, "GET", "/api/v1/board", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("board status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Projects []struct {
+			ID    string `json:"id"`
+			Ready []struct {
+				ID string `json:"id"`
+			} `json:"ready"`
+			InProgress []any `json:"in_progress"`
+			InReview   []any `json:"in_review"`
+			Blocked    []any `json:"blocked"`
+		} `json:"projects"`
+	}
+	decodeInto(t, rr, &body)
+
+	byID := make(map[string]int, len(body.Projects))
+	for i, p := range body.Projects {
+		byID[p.ID] = i
+	}
+	for _, id := range []string{"proja", "projb", "projc"} {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("project %s missing from board; got %+v", id, body.Projects)
+		}
+	}
+
+	a := body.Projects[byID["proja"]]
+	if len(a.Ready) != 1 || a.Ready[0].ID != "PROJA-1" {
+		t.Fatalf("proja ready = %+v, want [PROJA-1]", a.Ready)
+	}
+	b := body.Projects[byID["projb"]]
+	if len(b.Ready) != 1 || b.Ready[0].ID != "PROJB-1" {
+		t.Fatalf("projb ready = %+v, want [PROJB-1]", b.Ready)
+	}
+	c := body.Projects[byID["projc"]]
+	if len(c.Ready) != 0 || len(c.InProgress) != 0 || len(c.InReview) != 0 || len(c.Blocked) != 0 {
+		t.Fatalf("projc (no tasks) = %+v, want every bucket empty", c)
+	}
+}
+
 func TestGetTaskIncludesLease(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
