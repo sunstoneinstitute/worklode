@@ -87,6 +87,13 @@ func validateDocUpsert(d DocUpsert) error {
 	if d.Status == "" || d.Title == "" {
 		return fmt.Errorf("%s-%s: empty status or title: %w", token, d.Ordinal, ErrInvalidInput)
 	}
+	// json.Valid rejects both nil and "" (empty RawMessage), so this also
+	// catches the unset-frontmatter case that would otherwise reach
+	// frontmatter = $n::jsonb as an empty string and fail as a raw Postgres
+	// error instead of ErrInvalidInput.
+	if !json.Valid(d.Frontmatter) {
+		return fmt.Errorf("%s-%s: frontmatter is not valid JSON: %w", token, d.Ordinal, ErrInvalidInput)
+	}
 	for _, e := range d.Edges {
 		if !validDocEdgeRels[e.Rel] {
 			return fmt.Errorf("edge rel %q: %w", e.Rel, ErrInvalidInput)
@@ -198,7 +205,7 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 			if err := LogChange(tx, "doc", docID, eventID, map[string]any{
 				"outcome": outcome, "version": version, "status": d.Status,
 			}); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("log change for doc %s: %w", docID, err)
 			}
 		}
 
@@ -211,6 +218,15 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 // DocSyncOutcomes is ApplyDocSync's read-only twin: the per-doc outcomes a
 // sync WOULD produce, writing nothing (--dry-run, 034 §3).
 func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string, docs []DocUpsert) ([]DocSyncResult, error) {
+	// Validate before the project lookup, matching ApplyDocSync's order, so
+	// the two return the same error class (ErrInvalidInput vs ErrNotFound)
+	// for identical bad input regardless of which is wrong.
+	for _, d := range docs {
+		if err := validateDocUpsert(d); err != nil {
+			return nil, err
+		}
+	}
+
 	var key string
 	if err := s.db.QueryRowContext(ctx, `SELECT key FROM projects WHERE id = $1`, projectID).Scan(&key); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -220,9 +236,6 @@ func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string, docs []Do
 	}
 	var out []DocSyncResult
 	for _, d := range docs {
-		if err := validateDocUpsert(d); err != nil {
-			return nil, err
-		}
 		docID := key + "-" + docKindTokens[d.Kind] + "-" + d.Ordinal
 		var outcome string
 		err := s.db.QueryRowContext(ctx, `

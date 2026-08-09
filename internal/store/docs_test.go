@@ -80,8 +80,9 @@ func TestApplyDocSyncAddUpdateUnchanged(t *testing.T) {
 		t.Fatalf("doc ids = %q, %q", res[0].DocID, res[1].DocID)
 	}
 
-	// Same content, same key order or not: unchanged, version still 1,
-	// provenance overwritten.
+	// Byte-identical content re-synced: unchanged, version still 1,
+	// provenance overwritten. (Key-order independence of the jsonb compare
+	// is a separate property, proven by TestApplyDocSyncJSONKeyOrderUnchanged.)
 	forced := DocSyncProvenance{SourceBranch: "feature-x", Dirty: true}
 	res = syncDocs(t, s, "wl", forced, []DocUpsert{specUpsert(), planUpsert()})
 	for _, r := range res {
@@ -116,6 +117,42 @@ func TestApplyDocSyncAddUpdateUnchanged(t *testing.T) {
 	}
 }
 
+// TestApplyDocSyncJSONKeyOrderUnchanged proves the unchanged/updated compare
+// is done in jsonb (frontmatter = $n::jsonb), not as a byte/text comparison:
+// re-syncing the same doc with the same frontmatter keys in a different
+// order must still land as "unchanged" with no version bump.
+func TestApplyDocSyncJSONKeyOrderUnchanged(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "wl", "Worklode", "WL"); err != nil {
+		t.Fatal(err)
+	}
+	prov := DocSyncProvenance{SourceBranch: "main"}
+
+	d := specUpsert()
+	d.Frontmatter = json.RawMessage(`{"status":"accepted","title":"x"}`)
+	res := syncDocs(t, s, "wl", prov, []DocUpsert{d})
+	if res[0].Outcome != "added" {
+		t.Fatalf("first sync outcome = %q, want added", res[0].Outcome)
+	}
+
+	reordered := d
+	reordered.Frontmatter = json.RawMessage(`{"title":"x","status":"accepted"}`)
+	res = syncDocs(t, s, "wl", prov, []DocUpsert{reordered})
+	if res[0].Outcome != "unchanged" {
+		t.Fatalf("reordered-keys sync outcome = %q, want unchanged (jsonb compare should ignore key order)",
+			res[0].Outcome)
+	}
+
+	got, _, _, err := s.GetDoc(ctx, "WL-SPEC-34")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 {
+		t.Errorf("version = %d, want 1 (unchanged must not bump version)", got.Version)
+	}
+}
+
 func TestApplyDocSyncValidation(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
@@ -134,6 +171,9 @@ func TestApplyDocSyncValidation(t *testing.T) {
 		"plan ordinal on spec": func(d *DocUpsert) { d.Ordinal = "34-1" },
 		"empty status":         func(d *DocUpsert) { d.Status = "" },
 		"empty title":          func(d *DocUpsert) { d.Title = "" },
+		"nil frontmatter":      func(d *DocUpsert) { d.Frontmatter = nil },
+		"empty frontmatter":    func(d *DocUpsert) { d.Frontmatter = json.RawMessage("") },
+		"invalid frontmatter":  func(d *DocUpsert) { d.Frontmatter = json.RawMessage("{") },
 		"bad edge rel":         func(d *DocUpsert) { d.Edges[0].Rel = "mentions" },
 	} {
 		if err := bad(tc); !errors.Is(err, ErrInvalidInput) {
