@@ -57,6 +57,34 @@ type docSyncResponse struct {
 	Results   []docResultJSON `json:"results"`
 }
 
+// docJSON is the wire form of a stored doc. Body and Frontmatter are omitted
+// from list responses.
+type docJSON struct {
+	ID           string           `json:"id"`
+	Project      string           `json:"project"`
+	Kind         string           `json:"kind"`
+	Ordinal      string           `json:"ordinal"`
+	Status       string           `json:"status"`
+	Title        string           `json:"title"`
+	Version      int              `json:"version"`
+	SourceBranch string           `json:"source_branch"`
+	SourceDirty  bool             `json:"source_dirty"`
+	SyncedAt     time.Time        `json:"synced_at"`
+	Body         string           `json:"body,omitempty"`
+	Frontmatter  json.RawMessage  `json:"frontmatter,omitempty"`
+	Sections     []docSectionJSON `json:"sections,omitempty"`
+	Edges        []docEdgeJSON    `json:"edges,omitempty"`
+}
+
+func toDocJSON(d *store.Doc) docJSON {
+	return docJSON{
+		ID: d.DocID, Project: d.Project, Kind: d.Kind, Ordinal: d.Ordinal,
+		Status: d.Status, Title: d.Title, Version: d.Version,
+		SourceBranch: d.SourceBranch, SourceDirty: d.SourceDirty,
+		SyncedAt: d.SyncedAt, Body: d.Body, Frontmatter: d.Frontmatter,
+	}
+}
+
 func toStoreUpserts(in []docUpsertJSON) []store.DocUpsert {
 	out := make([]store.DocUpsert, 0, len(in))
 	for _, d := range in {
@@ -141,4 +169,41 @@ func (s *server) syncDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSyncResponse(false, results))
+}
+
+// listDocs handles GET /api/v1/docs.
+func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := store.DocFilter{Project: q.Get("project"), Kind: q.Get("kind"), Status: q.Get("status")}
+	if f.Kind != "" && f.Kind != "spec" && f.Kind != "adr" && f.Kind != "plan" {
+		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be spec, adr, or plan")
+		return
+	}
+	docs, err := s.st.ListDocs(r.Context(), f)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	out := make([]docJSON, 0, len(docs))
+	for i := range docs {
+		out = append(out, toDocJSON(&docs[i])) // list rows: store leaves Body ""
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"docs": out})
+}
+
+// getDoc handles GET /api/v1/docs/{id}.
+func (s *server) getDoc(w http.ResponseWriter, r *http.Request) {
+	d, secs, edges, err := s.st.GetDoc(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	out := toDocJSON(d)
+	for _, sec := range secs {
+		out.Sections = append(out.Sections, docSectionJSON(sec))
+	}
+	for _, e := range edges {
+		out.Edges = append(out.Edges, docEdgeJSON(e))
+	}
+	writeJSON(w, http.StatusOK, out)
 }

@@ -457,6 +457,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /api/v1/board", s.auth(s.board))
 
 	mux.Handle("POST /api/v1/docs/sync", s.auth(s.syncDocs))
+	mux.Handle("GET /api/v1/docs", s.auth(s.listDocs))
+	mux.Handle("GET /api/v1/docs/{id}", s.auth(s.getDoc))
 
 	// Admin handler: health and metrics on a dedicated listener, never routed
 	// through the public ingress. No auth or request-metrics middleware — the
