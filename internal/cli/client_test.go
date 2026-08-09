@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1865,5 +1866,37 @@ func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
 	if cfg.SpecCorpus != "" || cfg.PlanCorpus != "" {
 		t.Fatalf("Config carries corpus keys (%q, %q); want empty — CorporaFrom is the sole reader",
 			cfg.SpecCorpus, cfg.PlanCorpus)
+	}
+}
+
+func TestSyncDocsWire(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"dry_run":false,"added":1,"updated":0,"unchanged":0,
+			"results":[{"id":"WL-SPEC-34","kind":"spec","outcome":"added"}]}`)
+	}))
+	defer srv.Close()
+
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_" + strings.Repeat("a", 40)})
+	rep, _, err := c.SyncDocs(context.Background(), cli.DocSyncInput{
+		Project: "wl", SourceBranch: "main", Force: true,
+		Docs: []cli.DocUpsert{{Kind: "spec", Ordinal: "34", Status: "accepted",
+			Title: "T", Body: "B", Frontmatter: json.RawMessage(`{"status":"accepted"}`)}},
+	})
+	if err != nil {
+		t.Fatalf("SyncDocs: %v", err)
+	}
+	if gotPath != "/api/v1/docs/sync" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotBody["project"] != "wl" || gotBody["force"] != true || gotBody["source_branch"] != "main" {
+		t.Errorf("body = %v", gotBody)
+	}
+	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-34" {
+		t.Errorf("report = %+v", rep)
 	}
 }

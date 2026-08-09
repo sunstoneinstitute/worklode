@@ -1256,6 +1256,143 @@ func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult,
 	return out, raw, nil
 }
 
+// --- docs ---------------------------------------------------------------
+
+// DocSection is one heading extracted from a synced document's body.
+type DocSection struct {
+	Anchor   string `json:"anchor"`
+	Heading  string `json:"heading"`
+	Depth    int    `json:"depth"`
+	Position int    `json:"position"`
+}
+
+// DocEdge is one cross-reference extracted from a synced document's body.
+type DocEdge struct {
+	SrcAnchor    string `json:"src_anchor"`
+	Rel          string `json:"rel"`
+	Target       string `json:"target"`
+	TargetAnchor string `json:"target_anchor"`
+}
+
+// DocUpsert is one document in a SyncDocs request body.
+type DocUpsert struct {
+	Kind        string          `json:"kind"`
+	Ordinal     string          `json:"ordinal"`
+	Status      string          `json:"status"`
+	Title       string          `json:"title"`
+	Body        string          `json:"body"`
+	Frontmatter json.RawMessage `json:"frontmatter"`
+	Sections    []DocSection    `json:"sections,omitempty"`
+	Edges       []DocEdge       `json:"edges,omitempty"`
+}
+
+// DocSyncInput is the request for SyncDocs.
+type DocSyncInput struct {
+	Project      string
+	SourceBranch string
+	Dirty        bool
+	Force        bool
+	DryRun       bool
+	Docs         []DocUpsert
+}
+
+// DocSyncResult is one document's outcome in a SyncDocs response.
+type DocSyncResult struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Outcome string `json:"outcome"`
+}
+
+// DocSyncReport is the response body of SyncDocs.
+type DocSyncReport struct {
+	DryRun    bool            `json:"dry_run"`
+	Added     int             `json:"added"`
+	Updated   int             `json:"updated"`
+	Unchanged int             `json:"unchanged"`
+	Results   []DocSyncResult `json:"results"`
+}
+
+// Doc is the wire form of a stored document (list rows have Body == "").
+type Doc struct {
+	ID           string          `json:"id"`
+	Project      string          `json:"project"`
+	Kind         string          `json:"kind"`
+	Ordinal      string          `json:"ordinal"`
+	Status       string          `json:"status"`
+	Title        string          `json:"title"`
+	Version      int             `json:"version"`
+	SourceBranch string          `json:"source_branch"`
+	SourceDirty  bool            `json:"source_dirty"`
+	SyncedAt     time.Time       `json:"synced_at"`
+	Body         string          `json:"body,omitempty"`
+	Frontmatter  json.RawMessage `json:"frontmatter,omitempty"`
+	Sections     []DocSection    `json:"sections,omitempty"`
+	Edges        []DocEdge       `json:"edges,omitempty"`
+}
+
+// DocListResponse is the response body of ListDocs.
+type DocListResponse struct {
+	Docs []Doc `json:"docs"`
+}
+
+// SyncDocs calls POST /api/v1/docs/sync — the git→backbone bulk upsert
+// (spec 034 §3).
+func (c *Client) SyncDocs(ctx context.Context, in DocSyncInput) (DocSyncReport, []byte, error) {
+	body := map[string]any{
+		"project":       in.Project,
+		"source_branch": in.SourceBranch,
+		"dirty":         in.Dirty,
+		"force":         in.Force,
+		"dry_run":       in.DryRun,
+		"docs":          in.Docs,
+	}
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/docs/sync", body)
+	if err != nil {
+		return DocSyncReport{}, nil, err
+	}
+	var rep DocSyncReport
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		return DocSyncReport{}, nil, fmt.Errorf("decode sync report: %w", err)
+	}
+	return rep, raw, nil
+}
+
+// ListDocs calls GET /api/v1/docs. Empty filter values do not filter.
+func (c *Client) ListDocs(ctx context.Context, project, kind, status string) (DocListResponse, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)
+	if err != nil {
+		return DocListResponse{}, nil, err
+	}
+	var resp DocListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return DocListResponse{}, nil, fmt.Errorf("decode doc list: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// GetDoc calls GET /api/v1/docs/{id}.
+func (c *Client) GetDoc(ctx context.Context, id string) (Doc, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/docs/"+url.PathEscape(id), nil)
+	if err != nil {
+		return Doc{}, nil, err
+	}
+	var d Doc
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return Doc{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
+}
+
 // --- projects ---------------------------------------------------------
 
 // Project is the wire form of a project, including its mapped repos and

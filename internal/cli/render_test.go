@@ -141,3 +141,18 @@ func TestHumanTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestDocTable(t *testing.T) {
+	var buf bytes.Buffer
+	DocTable(&buf, []Doc{
+		{ID: "WL-SPEC-34", Kind: "spec", Status: "accepted", Version: 2,
+			SourceDirty: true, Title: "Design-doc sync"},
+	})
+	out := buf.String()
+	for _, want := range []string{"ID", "KIND", "STATUS", "V", "DIRTY", "TITLE",
+		"WL-SPEC-34", "accepted", "yes", "Design-doc sync"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("DocTable output missing %q:\n%s", want, out)
+		}
+	}
+}
