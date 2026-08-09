@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-13
-implements: docs/specs/015-runtime-layer.md
+covers: docs/specs/015-runtime-layer.md
 ---
 # Runtime layer (spec 015) — Implementation Plan
 

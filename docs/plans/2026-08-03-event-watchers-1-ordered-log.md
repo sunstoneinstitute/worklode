@@ -1,6 +1,6 @@
 ---
 status: draft
-implements:
+covers:
   - docs/specs/027-event-watchers.md#sec-1
   - docs/specs/027-event-watchers.md#sec-2
   - docs/specs/027-event-watchers.md#sec-3

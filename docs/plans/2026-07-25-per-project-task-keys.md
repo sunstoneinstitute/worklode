@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/010-per-project-task-keys.md
+covers: docs/specs/010-per-project-task-keys.md
 ---
 # Per-project task keys Implementation Plan
 

@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-12
-implements: docs/specs/013-reconciliation.md
+covers: docs/specs/013-reconciliation.md
 ---
 # Reconciliation 3/3: poll engine — Implementation Plan
 

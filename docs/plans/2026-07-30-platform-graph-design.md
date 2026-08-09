@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/003-platform-graph-design.md
+covers: docs/specs/003-platform-graph-design.md
 ---
 # Platform graph design record (spec 003) — Implementation Plan
 

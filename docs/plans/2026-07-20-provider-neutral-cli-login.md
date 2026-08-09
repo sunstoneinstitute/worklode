@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements:
+covers:
   - docs/specs/001-keycloak-sso.md
   - docs/specs/002-github-app-auth.md
 ---
