@@ -43,8 +43,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_cockpit_projection_requests_total",
 		Help: "Project cockpit projection assembly attempts, by surface (api, web) and outcome (ok, not_found, error).",
 	}, []string{"surface", "outcome"})
+	s.navigations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_navigation_requests_total",
+		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
+	}, []string{"destination", "outcome"})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems,
-		s.assignments, s.cockpitProjections)
+		s.assignments, s.cockpitProjections, s.navigations)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -56,6 +60,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, surface := range []string{"api", "web"} {
 		for _, outcome := range []string{"ok", "not_found", "error"} {
 			s.cockpitProjections.WithLabelValues(surface, outcome)
+		}
+	}
+	for _, destination := range []string{
+		"home", "intake", "projects", "work", "reviews", "deliveries", "knowledge",
+		"project_section", "asset",
+	} {
+		for _, outcome := range []string{"ok", "not_found", "error"} {
+			s.navigations.WithLabelValues(destination, outcome)
 		}
 	}
 }
@@ -116,4 +128,15 @@ func (s *server) observeCockpitProjection(surface string, err error) {
 		return
 	}
 	s.cockpitProjections.WithLabelValues(surface, cockpitOutcome(err)).Inc()
+}
+
+// observeNavigation records one web UI page request, by destination (see
+// navWrap in web.go) and outcome ("ok", "not_found", "error", classified by
+// navOutcome from the response status).
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeNavigation(destination, outcome string) {
+	if s.navigations == nil {
+		return
+	}
+	s.navigations.WithLabelValues(destination, outcome).Inc()
 }
