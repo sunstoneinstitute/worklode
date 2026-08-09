@@ -120,6 +120,28 @@ func getPage(t *testing.T, url string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
+// getAuthed fetches url with a bearer token and returns its status code and
+// body — the GET counterpart to postRuntimeEvent's authenticated POST, used
+// by cockpit_test.go to call the bearer-token-only cockpit endpoint.
+func getAuthed(t *testing.T, url, token string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build request for %s: %v", url, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s: %v", url, err)
+	}
+	return resp.StatusCode, string(body)
+}
+
 func TestFullChain(t *testing.T) {
 	ctx := context.Background()
 
