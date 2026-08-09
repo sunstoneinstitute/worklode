@@ -148,6 +148,11 @@ once an instance is running (dogfooding); until then this file is the list.
   content-negotiate — pick a serving strategy deliberately. Specs 006 §9,
   009 item 3, 014 §1 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
+- **Design-doc sync normalizes frontmatter YAML timestamps to RFC3339**
+  (spec 034): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
+  `issued: 2026-01-01` as `"2026-01-01T00:00:00Z"` in the stored JSON —
+  deterministic and idempotency-safe, but not byte-faithful to the source
+  file. Preserving the original lexical form is deliberately deferred.
 
 ## From the 2026-08-04 architecture grilling
 
