@@ -173,7 +173,7 @@ func (s *server) observeDocSync(results []store.DocSyncResult, forced bool, err 
 		result = "error"
 	}
 	s.docSyncRuns.WithLabelValues(result).Inc()
-	if forced {
+	if forced && err == nil {
 		s.docSyncForced.Inc()
 	}
 	for _, r := range results {
