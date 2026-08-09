@@ -150,12 +150,17 @@ ground without adding a Python stack to a Go repo.
   reasoning effort each agent role uses when working this repo with subagents.
 - **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
   frontmatter — no exceptions.** A spec needs `status` and, once accepted,
-  `issued`. A plan needs `status` and `implements`; when no spec governs it,
-  write `implements: NO-SPEC` (the reserved "no governing spec" sentinel, which
-  takes no project key — 026 §4.2a) rather than omitting the key, because an
-  absent `implements` is
+  `issued`. A plan needs `status` and `covers` — the spec sections it undertakes
+  to see built, optionally qualified by a `coverage:` level (033 §1). It is
+  `covers` rather than `implements` because a plan writes no code: `implements`
+  is a component's claim that its code meets a section, and one word for the
+  promise and for the evidence leaves them indistinguishable. `implements` still
+  parses on a plan and is reported as retired.
+  When no spec governs it, write `covers: NO-SPEC` (the reserved "no governing
+  spec" sentinel, which takes no project key — 026 §4.2a) rather than omitting
+  the key, because an absent `covers` is
   indistinguishable from a forgotten one. Frontmatter keys are ontology
-  property names, ordered lifecycle → `implements` → dependency → amendment →
+  property names, ordered lifecycle → `covers` → dependency → amendment →
   supersession. `scripts/secmeta.py` checks all of this on commit; it reports
   and never rewrites, so a failure is yours to decide, not to re-run.
 - Spec sections carry `{#sec-N}` anchors that are **frozen once the spec is
