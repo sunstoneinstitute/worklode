@@ -820,9 +820,22 @@ func TestDocHasNoShowVerb(t *testing.T) {
 	if doc == nil {
 		t.Fatal(`rootCmd has no "doc" command; lode doc sync/list (spec 034) must be registered`)
 	}
+	haveSync, haveList := false, false
 	for _, c := range doc.Commands() {
 		if c.Name() == "show" {
 			t.Fatalf(`"doc" still has a %q child command; lode doc show was consolidated into lode show (026 §3)`, c.Name())
 		}
+		if c.Name() == "sync" {
+			haveSync = true
+		}
+		if c.Name() == "list" {
+			haveList = true
+		}
+	}
+	if !haveSync {
+		t.Error(`"doc" has no "sync" child command; lode doc sync (spec 034) must be registered`)
+	}
+	if !haveList {
+		t.Error(`"doc" has no "list" child command; lode doc list (spec 034) must be registered`)
 	}
 }
