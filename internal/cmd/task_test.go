@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -454,5 +455,47 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	}
 	if got := taskListIDs(t, "--parent", big.ID); len(got) != 2 {
 		t.Fatalf("children of %s = %v, want 2", big.ID, got)
+	}
+}
+
+func TestResolveBody(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(f, []byte("from file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, tc := range map[string]struct {
+		body, bodyFile, stdin, want string
+		wantErr                     bool
+	}{
+		"inline":       {body: "inline", want: "inline"},
+		"file":         {bodyFile: f, want: "from file\n"},
+		"stdin":        {bodyFile: "-", stdin: "from stdin", want: "from stdin"},
+		"missing file": {bodyFile: filepath.Join(t.TempDir(), "nope.md"), wantErr: true},
+		"neither":      {want: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := resolveBody(tc.body, tc.bodyFile, strings.NewReader(tc.stdin))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("want error")
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("resolveBody = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestTaskAddBodyFlagsMutuallyExclusive(t *testing.T) {
+	cmd := newTaskAddCmd()
+	cmd.SetArgs([]string{"--title", "t", "--body", "x", "--body-file", "y"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "none of the others can be") {
+		t.Fatalf("err = %v; want cobra mutual-exclusion error", err)
 	}
 }
