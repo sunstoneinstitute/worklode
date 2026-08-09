@@ -103,10 +103,20 @@ anchors, no renumbering, superseded-with-explanation) are enforced at accept tim
 server instead of a SPARQL-side gate.
 
 **Transitional:** `docs/specs/` and `docs/plans/` stay in git, checked by `secfmt.py`, until
-this spec is implemented and the corpus is imported. From that point the files are deleted;
-repositories reference spec sections only through `.worklode/implements.yaml` (014 §6, which
-is unchanged by this spec — the claim "this commit satisfies §X" is a property of the commit
-and stays in git).
+this spec is implemented and the corpus is imported. From that point the backbone is the store
+of record.
+
+**Files after import — opt-in sync, not mandatory deletion.** A repository may keep
+`docs/specs/` and `docs/plans/` as a git-tracked mirror of the backbone rather than deleting
+them. This is opt-in per repository through a `[doc_sync]` block in `.worklode/config.toml`
+naming the spec and plan directories (§10). With it, `lode doc pull`/`push` reconcile the files
+against the backbone; without it, the files are deleted at import and `pull`/`push` are no-ops.
+Because the backbone has no branches for documents, sync is directional: **`push` (file→api)
+runs only from the default branch**, while **`pull` (api→file) runs from any branch** — a
+feature branch reads the canonical document, it never writes one. When both the file and the
+backbone doc have changed since the last sync, the command refuses and reports rather than
+overwriting. Either way `.worklode/implements.yaml` (014 §6) is unchanged — the claim "this
+commit satisfies §X" is a property of the commit and stays in git.
 
 The authority sentence in 000 §1 updates accordingly: the backbone owns execution facts **and
 design-document artifacts**; the graph owns the derived, queryable view of both plus the
@@ -418,7 +428,16 @@ lode doc list --needs-planning        accepted specs with unplanned accepted sec
 lode doc list --needs-execution       accepted plans whose task set is unminted or unfinished
 lode doc coverage <id>                per-section implemented / unimplemented / stale
 lode doc revise | anchors             as 014 §10
+lode doc pull [<id>|--all]            api→file mirror; any branch; no-op unless [doc_sync] set
+lode doc push [<id>|--all]            file→api; default branch only; no-op unless [doc_sync] set
 ```
+
+`pull` and `push` back the opt-in file mirror of §2, gated on a `[doc_sync]` block in
+`.worklode/config.toml`; with no such block they do nothing. `push` refuses off the default
+branch (the backbone has no doc branches) and both refuse on a since-last-sync conflict rather
+than overwrite. `push` reconciles a file through the same `revise`/`accept` path as any edit,
+so the event log and 014 §7's anchor-freeze and supersession rules still apply — it is not a
+raw body overwrite.
 
 The lode plugin ships skills for the guided flows — authoring a spec, running its review,
 accepting, offering (never assuming) decomposition into plans, and plan review — so the
@@ -439,7 +458,8 @@ ceremony lives in skills while every state change is one of the deterministic ve
 ## 12. Out of scope {#sec-12}
 
 - **Corpus import** — moving the existing 25 specs and 40 plans into the store, anchor
-  assignment for legacy prose, and deleting the files. Follows 014's "adoption" boundary; it
+  assignment for legacy prose, and deleting the files (or keeping them as a §2 sync mirror).
+  Follows 014's "adoption" boundary; it
   is the implementation plan's final phase, not design.
 - **Milestone implementation** — v2, as reserved; only its shape is pinned here (§8).
 - **Graph projection of docs** — the projector work belongs to 006 §6's existing contract.
