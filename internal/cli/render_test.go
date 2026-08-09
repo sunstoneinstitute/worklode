@@ -147,12 +147,27 @@ func TestDocTable(t *testing.T) {
 	DocTable(&buf, []Doc{
 		{ID: "WL-SPEC-34", Kind: "spec", Status: "accepted", Version: 2,
 			SourceDirty: true, Title: "Design-doc sync"},
+		{ID: "WL-ADR-1", Kind: "adr", Status: "draft", Version: 1,
+			SourceDirty: false, Title: "Clean checkout"},
 	})
 	out := buf.String()
 	for _, want := range []string{"ID", "KIND", "STATUS", "V", "DIRTY", "TITLE",
-		"WL-SPEC-34", "accepted", "yes", "Design-doc sync"} {
+		"WL-SPEC-34", "accepted", "yes", "Design-doc sync",
+		"WL-ADR-1", "draft", "Clean checkout"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("DocTable output missing %q:\n%s", want, out)
 		}
+	}
+	var dirtyCol string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "WL-ADR-1") {
+			fields := strings.Fields(line)
+			if len(fields) > 4 {
+				dirtyCol = fields[4]
+			}
+		}
+	}
+	if dirtyCol != "-" {
+		t.Errorf("WL-ADR-1 DIRTY column = %q, want \"-\"\n%s", dirtyCol, out)
 	}
 }

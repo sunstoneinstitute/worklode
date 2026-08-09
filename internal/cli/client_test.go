@@ -1896,6 +1896,12 @@ func TestSyncDocsWire(t *testing.T) {
 	if gotBody["project"] != "wl" || gotBody["force"] != true || gotBody["source_branch"] != "main" {
 		t.Errorf("body = %v", gotBody)
 	}
+	if gotBody["dirty"] != false || gotBody["dry_run"] != false {
+		t.Errorf("body = %v", gotBody)
+	}
+	if docs, ok := gotBody["docs"].([]any); !ok || len(docs) == 0 {
+		t.Errorf("body docs = %v, want a non-empty array", gotBody["docs"])
+	}
 	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-34" {
 		t.Errorf("report = %+v", rep)
 	}
