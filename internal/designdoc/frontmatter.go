@@ -17,18 +17,19 @@ import (
 // header goes away and these become columns, so the struct deliberately does
 // not grow an escape hatch for arbitrary keys.
 type Frontmatter struct {
-	Status         string    `yaml:"status,omitempty"`         // wl:status
-	Issued         string    `yaml:"issued,omitempty"`         // dct:issued
-	Implements     RefList   `yaml:"implements,omitempty"`     // wl:implements
-	Requires       RefList   `yaml:"requires,omitempty"`       // dct:requires
-	IsRequiredBy   RefList   `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
-	WasDerivedFrom string    `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
-	Amends         AnchorMap `yaml:"amends,omitempty"`         // 014 §11
-	AmendedBy      AnchorMap `yaml:"amendedBy,omitempty"`      // 014 §11
-	Replaces       AnchorMap `yaml:"replaces,omitempty"`       // dct:replaces
-	IsReplacedBy   AnchorMap `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
-	Task           string    `yaml:"task,omitempty"`           // transitional, no term
-	Kind           string    `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
+	Status         string       `yaml:"status,omitempty"`         // wl:status
+	Issued         string       `yaml:"issued,omitempty"`         // dct:issued
+	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, 033 §1
+	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 033 §3
+	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
+	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
+	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
+	Amends         AnchorMap    `yaml:"amends,omitempty"`         // 014 §11
+	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 014 §11
+	Replaces       AnchorMap    `yaml:"replaces,omitempty"`       // dct:replaces
+	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
+	Task           string       `yaml:"task,omitempty"`           // transitional, no term
+	Kind           string       `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is
@@ -37,8 +38,30 @@ type Frontmatter struct {
 	inner string
 }
 
+// CoveredSections is the sections a plan undertakes to realise, reading the
+// retired `implements` spelling when `covers` is absent (033 §3). Callers use
+// this rather than either field: a document carrying both is an error
+// scripts/secmeta.py reports, so the precedence here never silently picks.
+func (f Frontmatter) CoveredSections() RefList {
+	entries := f.CoverageEntries()
+	out := make(RefList, len(entries))
+	for i, entry := range entries {
+		out[i] = entry.Spec
+	}
+	return out
+}
+
+// CoverageEntries returns the coverage assertions in the current spelling,
+// falling back to the retired `implements` spelling when `covers` is absent.
+func (f Frontmatter) CoverageEntries() CoverageList {
+	if f.Covers != nil {
+		return f.Covers
+	}
+	return f.Implements
+}
+
 // RefList is a document reference field. The authoring guide allows a bare
-// scalar where a list is meant ("implements: foo.md"), so both spellings
+// scalar where a list is meant ("covers: foo.md"), so both spellings
 // unmarshal to the same slice.
 type RefList []string
 
@@ -58,6 +81,95 @@ func (r *RefList) UnmarshalYAML(n *yaml.Node) error {
 	}
 	*r = xs
 	return nil
+}
+
+// Coverage is a plan's assertion about one spec section. A scalar form on
+// disk is shorthand for full coverage; qualified entries use this mapping.
+type Coverage struct {
+	Spec             string  `yaml:"spec,omitempty"`
+	Coverage         string  `yaml:"coverage,omitempty"`
+	FullCoverageWith RefList `yaml:"fullCoverageWith,omitempty"`
+}
+
+func (c Coverage) isNoSpecScalar() bool {
+	return c.Spec == "NO-SPEC" && c.Coverage == "full" && len(c.FullCoverageWith) == 0
+}
+
+// MarshalYAML keeps the reserved no-governing-spec sentinel unqualified. It
+// has no section or coverage level to express, so the mapping form is invalid
+// under spec 033 even when an unrelated frontmatter edit triggers rendering.
+func (c Coverage) MarshalYAML() (any, error) {
+	if c.isNoSpecScalar() {
+		return c.Spec, nil
+	}
+	type coverageFields Coverage
+	return coverageFields(c), nil
+}
+
+// CoverageList is the scalar-or-list plan coverage field.
+type CoverageList []Coverage
+
+// MarshalYAML preserves canonical `covers: NO-SPEC` for the sentinel's normal
+// one-entry form. Other lists retain their authored coverage entry shapes.
+func (c CoverageList) MarshalYAML() (any, error) {
+	if len(c) == 1 && c[0].isNoSpecScalar() {
+		return c[0].Spec, nil
+	}
+	type coverageEntries CoverageList
+	return coverageEntries(c), nil
+}
+
+// UnmarshalYAML accepts a bare spec reference as full coverage or a qualified
+// mapping. Policy validation belongs to secmeta.py; this parser only preserves
+// the authored syntax faithfully.
+func (c *Coverage) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		var spec string
+		if err := n.Decode(&spec); err != nil {
+			return err
+		}
+		*c = Coverage{Spec: spec, Coverage: "full"}
+		return nil
+	case yaml.MappingNode:
+		type coverageFields struct {
+			Spec             string  `yaml:"spec,omitempty"`
+			Coverage         string  `yaml:"coverage,omitempty"`
+			FullCoverageWith RefList `yaml:"fullCoverageWith,omitempty"`
+		}
+		var fields coverageFields
+		if err := n.Decode(&fields); err != nil {
+			return err
+		}
+		*c = Coverage(fields)
+		return nil
+	default:
+		return fmt.Errorf("coverage: want scalar or mapping, got YAML node kind %d", n.Kind)
+	}
+}
+
+// CoverageList accepts one coverage entry or a sequence of entries.
+func (c *CoverageList) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		var entry Coverage
+		if err := entry.UnmarshalYAML(n); err != nil {
+			return err
+		}
+		*c = CoverageList{entry}
+		return nil
+	case yaml.SequenceNode:
+		entries := make(CoverageList, len(n.Content))
+		for i, item := range n.Content {
+			if err := entries[i].UnmarshalYAML(item); err != nil {
+				return err
+			}
+		}
+		*c = entries
+		return nil
+	default:
+		return fmt.Errorf("coverage list: want scalar or sequence, got YAML node kind %d", n.Kind)
+	}
 }
 
 // AnchorMap keys references by the anchor in *this* document they apply to:
@@ -121,7 +233,7 @@ func (f *Frontmatter) equals(other *Frontmatter) bool {
 }
 
 // render writes the header back as YAML, keys in the order the authoring
-// guide documents (lifecycle, implements, dependency, amendment,
+// guide documents (lifecycle, covers, dependency, amendment,
 // supersession), which is the struct's field order.
 func (f *Frontmatter) render() string {
 	var b strings.Builder

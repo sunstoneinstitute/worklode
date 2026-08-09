@@ -83,7 +83,7 @@ func setupDocCorpus(t *testing.T, projectKey string, files map[string]string) st
 
 const fixtureSpec = `---
 status: accepted
-implements: NO-SPEC
+covers: NO-SPEC
 ---
 # Spec 14 — Fixture
 
@@ -290,7 +290,7 @@ func TestDocShowForeignKeyUnresolvedExitsZero(t *testing.T) {
 // the anchorless-boundary bug).
 const anchorlessBoundarySpec = `---
 status: accepted
-implements: NO-SPEC
+covers: NO-SPEC
 ---
 # Spec 15 — Anchorless boundary fixture
 
@@ -332,7 +332,7 @@ func TestDocShowSectionStopsAtAnchorlessBoundary(t *testing.T) {
 // than erroring because the H5 has no anchor of its own.
 const anchorlessNestedSpec = `---
 status: accepted
-implements: NO-SPEC
+covers: NO-SPEC
 ---
 # Spec 16 — Anchorless nested fixture
 
@@ -369,7 +369,7 @@ func TestDocShowSectionIncludesAnchorlessDescendant(t *testing.T) {
 // an anchor either.
 const anchorlessBeforeTargetSpec = `---
 status: accepted
-implements: NO-SPEC
+covers: NO-SPEC
 ---
 # Spec 17 — Anchorless before fixture
 
