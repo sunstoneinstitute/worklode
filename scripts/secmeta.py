@@ -4,7 +4,7 @@ docs/authoring-design-docs.md. Reports; never rewrites.
 
 What it enforces, per document:
 
-  * only known keys, each on the tree that may carry it (`implements` is a
+  * only known keys, each on the tree that may carry it (`covers` is a
     plan key, `wasDerivedFrom` a spec key)
   * `status` is one of draft / accepted / superseded -- `proposed` was retired
     by 025 section 3
@@ -19,6 +19,15 @@ What it enforces, per document:
     exists in the target -- except the cross-project shorthand, which is
     reported as `unresolved` rather than as an error (commit hooks run without
     a network).
+
+A plan's `covers` entry takes either form (033 section 3): a bare reference,
+meaning `coverage: full`, or the qualified mapping of `spec` + `coverage` and
+an optional `fullCoverageWith`. Two findings need more than one document and so
+run over the corpus rather than per document -- that every `fullCoverageWith`
+target is accepted and contributes `full` or `partial` to the same section (033
+section 2 checks closure, never trusts it), and that a section covered by
+several accepted plans is written in the qualified form, which is the only one
+that can say how the work divides.
 
 Usage: secmeta.py [path ...]        # defaults to docs/specs and docs/plans
 """
@@ -58,11 +67,19 @@ SPEC_ZERO = re.compile(r"^[A-Za-z][\w-]*[-:]SPEC-0+(#|$)", re.I)
 REFERENCE = re.compile(r"^[\w./-]+\.md(#sec-[\w.]+)?$")
 
 SCALAR_REFS = {"wasDerivedFrom"}
-LIST_REFS = {"requires", "isRequiredBy", "implements"}
+# `covers` is the plan's undertaking to realise a section (033 §1); `implements`
+# is its retired spelling, still parsed so in-flight branches merge.
+PLAN_COVERAGE = {"covers", "implements"}
+# The qualified entry form (033 §3). `full` and `none` leave nothing to
+# complete, so `fullCoverageWith` is only meaningful beside `partial`.
+COVERAGE_KEYS = {"spec", "coverage", "fullCoverageWith"}
+COVERAGE_LEVELS = ("full", "partial", "none")
+CLOSED_LEVELS = {"full", "none"}
+LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE
 MAP_REFS = {"amends", "amendedBy", "replaces", "isReplacedBy"}
 PLAIN = {"status", "issued", "task", "kind"}
 SPEC_ONLY = {"wasDerivedFrom"}
-PLAN_ONLY = {"implements"}
+PLAN_ONLY = PLAN_COVERAGE
 KNOWN = SCALAR_REFS | LIST_REFS | MAP_REFS | PLAIN
 
 
@@ -76,6 +93,52 @@ def as_list(v):
     return v if isinstance(v, list) else [v]
 
 
+def load_frontmatter(rel):
+    """(data, error) for one document; data is None when error is set."""
+    fm, _ = split_front_matter((REPO / rel).read_text())
+    if not fm:
+        return None, "no frontmatter"
+    try:
+        data = yaml.safe_load(fm[4:-5]) or {}  # drop the --- fences
+    except yaml.YAMLError as e:
+        return None, f"frontmatter is not valid YAML: {e}"
+    return (data, None) if isinstance(data, dict) else (None, "frontmatter is not a mapping")
+
+
+def resolve_ref(ref, home):
+    """A reference as `<repo-relative path>[#fragment]`, or None when it names
+    no file in this repo -- NO-SPEC, the cross-project shorthand, or prose.
+    Resolution only; check_ref is what reports."""
+    ref = str(ref)
+    if ref.upper() == NO_SPEC or SPEC_ZERO.match(ref) or SHORTHAND.match(ref):
+        return None
+    if not REFERENCE.match(ref):
+        return None
+    path, _, frag = ref.partition("#")
+    if "/" not in path:
+        path = f"{home}/{path}"
+    return f"{path}#{frag}" if frag else path
+
+
+def coverage_key(data):
+    """The plan-coverage key a document carries, `covers` winning over its
+    retired spelling. Both at once is reported separately, as an error."""
+    for key in ("covers", "implements"):
+        if key in data:
+            return key
+    return None
+
+
+def is_plan_path(ref):
+    if not isinstance(ref, str):
+        return False
+    path, separator, _ = ref.partition("#")
+    if separator or any(part in {"", ".", ".."} for part in path.split("/")):
+        return False
+    normal = os.path.normpath(path)
+    return path == normal and path.startswith(f"{PLANS}/") and path.endswith(".md")
+
+
 def check_ref(ref, home, where, out, anchors):
     """Resolve one reference and check its fragment."""
     ref = str(ref)
@@ -83,9 +146,9 @@ def check_ref(ref, home, where, out, anchors):
         if ref != NO_SPEC:
             out.append(("error", f"{where}: write {ref} as {NO_SPEC} — spec 0 is the "
                                  "absence of a spec, so it carries no project key"))
-        elif where != "implements":
+        elif where not in PLAN_COVERAGE:
             out.append(("error", f"{where}: {NO_SPEC} means \"no governing spec\" "
-                                 "and is only meaningful on a plan's implements"))
+                                 "and is only meaningful on a plan's covers"))
         return
     if m := SHORTHAND.match(ref):
         # Unpadded is worklode's convention, not a universal one -- rdf-registry
@@ -112,6 +175,131 @@ def check_ref(ref, home, where, out, anchors):
             out.append(("error", f"{where}: {ref} names no anchor in {path}"))
 
 
+def check_coverage_entry(entry, home, where, out, anchors):
+    """Check one qualified `covers` entry (033 §3). Whether a named
+    fullCoverageWith plan really covers the section needs that plan's own
+    frontmatter, so cross_check does it."""
+    unknown = sorted(str(k) for k in set(entry) - COVERAGE_KEYS)
+    if unknown:
+        out.append(("error", f"{where}: unknown key(s) {', '.join(unknown)} — an entry takes "
+                             "spec, coverage and (beside partial) fullCoverageWith"))
+
+    level = entry.get("coverage")
+    if level is None:
+        out.append(("error", f"{where}: no coverage — one of " + "/".join(COVERAGE_LEVELS)))
+    elif str(level) not in COVERAGE_LEVELS:
+        out.append(("error", f"{where}: coverage {level!r} is not one of "
+                             + "/".join(COVERAGE_LEVELS)))
+    if "fullCoverageWith" in entry and str(level) in CLOSED_LEVELS:
+        out.append(("error", f"{where}: fullCoverageWith is invalid beside coverage: {level} — "
+                             "only a partial entry has anything left for another plan to close"))
+
+    spec = entry.get("spec")
+    if spec is None:
+        out.append(("error", f"{where}: no spec — a qualified entry names the section it covers"))
+    elif str(spec).upper() == NO_SPEC or SPEC_ZERO.match(str(spec)):
+        out.append(("error", f"{where}: {NO_SPEC} is unqualified — the absence of a governing "
+                             "spec has no sections to cover, so write it as a bare entry"))
+    else:
+        spec = str(spec)
+        check_ref(spec, home, f"{where}.spec", out, anchors)
+        if (REFERENCE.match(spec) or SHORTHAND.match(spec)) and "#sec-" not in spec:
+            out.append(("error", f"{where}.spec: {spec} names no section — a plan claiming a "
+                                 "whole document says nothing a coverage query can use"))
+
+    completions = entry.get("fullCoverageWith")
+    if completions is not None:
+        if isinstance(completions, list) and not completions:
+            out.append(("error", f"{where}: fullCoverageWith must name at least one plan"))
+        elif (not isinstance(completions, list) or
+                not all(isinstance(target, str) and is_plan_path(target)
+                        for target in completions)):
+            out.append(("error", f"{where}: fullCoverageWith must be a list of "
+                                 "repo-relative plan paths"))
+        else:
+            for i, target in enumerate(completions):
+                check_ref(target, home, f"{where}.fullCoverageWith[{i}]", out, anchors)
+
+
+def coverage_of(rel, data):
+    """A plan's coverage entries as (section, bare, level, [completing plan path]),
+    each already resolved to a repo-relative path. Unresolvable references are
+    None here and reported by check(). Completions are carried only for a
+    `partial` entry -- elsewhere they are the malformed frontmatter check()
+    reports, and there is no closure claim left to test."""
+    home = str(Path(rel).parent)
+    key = coverage_key(data)
+    entries = []
+    for entry in as_list(data.get(key)) if key else []:
+        if isinstance(entry, dict):
+            level = str(entry.get("coverage"))
+            completions = entry.get("fullCoverageWith") if (
+                level == "partial" and
+                isinstance(entry.get("fullCoverageWith"), list)
+            ) else []
+            entries.append((resolve_ref(entry.get("spec", ""), home), False, level,
+                            [p for p in (resolve_ref(c, home) for c in completions
+                                         if is_plan_path(c)) if p]))
+        else:
+            entries.append((resolve_ref(entry, home), True, "full", []))
+    return entries
+
+
+def cross_check(index):
+    """Findings that need more than one document, as (document, severity,
+    message). They depend on other files resolving, so they are `unresolved`:
+    the plan that would settle them may still be on another branch."""
+    out = []
+    accepted = {}  # section -> the accepted plans covering it
+    for rel, (_, status, entries) in index.items():
+        for section, _bare, _level, _with in entries:
+            if section and status == "accepted":
+                accepted.setdefault(section, set()).add(rel)
+
+    for rel, (shown, status, entries) in sorted(index.items()):
+        for section, bare, _level, completions in entries:
+            if section and bare and status == "accepted" and "#sec-" in section:
+                # A whole-document reference names no section, so it is outside
+                # this rule; 033 §3 requires the qualified form only where a
+                # section is shared, which is the case the bare form cannot say.
+                others = accepted.get(section, set()) - {rel}
+                if others:
+                    out.append((shown, "unresolved",
+                                f"{section} is also covered by {', '.join(sorted(others))}; "
+                                "more than one accepted plan on a section needs the qualified "
+                                "form (033 §3)"))
+            for target in completions:
+                if target == rel:
+                    out.append((shown, "error",
+                                "fullCoverageWith cannot name its own plan — a partial plan "
+                                "cannot close itself (033 §2)"))
+                    continue
+                if target not in index:
+                    path, _, _ = target.partition("#")
+                    if (REPO / path).is_file():
+                        out.append((shown, "unresolved",
+                                    f"fullCoverageWith names {target}, which does not itself cover "
+                                    f"{section} — closure is checked, never trusted (033 §2)"))
+                    continue  # no file — check() reports that
+                target_status = index[target][1]
+                if target_status != "accepted":
+                    out.append((shown, "unresolved",
+                                f"fullCoverageWith names {target_status} plan {target}; only "
+                                "accepted plans can close coverage (033 §2)"))
+                    continue
+                same_section = [level for s, _, level, _ in index[target][2]
+                                if section and s == section]
+                if not same_section:
+                    out.append((shown, "unresolved",
+                                f"fullCoverageWith names {target}, which does not itself cover "
+                                f"{section} — closure is checked, never trusted (033 §2)"))
+                elif not any(level in {"full", "partial"} for level in same_section):
+                    out.append((shown, "unresolved",
+                                f"fullCoverageWith names {target}, whose coverage: none contributes "
+                                f"nothing to {section} closure (033 §2)"))
+    return out
+
+
 def check(path, anchors):
     """Return [(severity, message)] for one document."""
     out = []
@@ -119,14 +307,9 @@ def check(path, anchors):
     home = str(Path(rel).parent)
     is_plan = home == PLANS
 
-    fm, _ = split_front_matter((REPO / rel).read_text())
-    if not fm:
-        out.append(("error", "no frontmatter"))
-        return out
-    try:
-        data = yaml.safe_load(fm[4:-5]) or {}  # drop the --- fences
-    except yaml.YAMLError as e:
-        return [("error", f"frontmatter is not valid YAML: {e}")]
+    data, err = load_frontmatter(rel)
+    if err:
+        return [("error", err)]
 
     for key in data:
         if key not in KNOWN:
@@ -135,6 +318,13 @@ def check(path, anchors):
             out.append(("error", f"{key} is a spec key, not a plan key"))
         elif key in PLAN_ONLY and not is_plan:
             out.append(("error", f"{key} is a plan key, not a spec key"))
+
+    if PLAN_COVERAGE <= set(data):
+        out.append(("error", "covers and implements are the same key under two "
+                             "names (033 §3) — keep covers"))
+    elif "implements" in data:
+        out.append(("unresolved", "implements is retired on a plan; write covers "
+                                  "(033 §1)"))
 
     status = data.get("status")
     if status is None:
@@ -157,8 +347,22 @@ def check(path, anchors):
         if key in SCALAR_REFS and isinstance(v, (list, dict)):
             out.append(("error", f"{key} takes a single reference, not a list"))
             continue
-        for ref in as_list(v):
-            check_ref(ref, home, key, out, anchors)
+        for i, ref in enumerate(as_list(v)):
+            if key in PLAN_COVERAGE and isinstance(ref, dict):
+                check_coverage_entry(ref, home, f"{key}[{i}]", out, anchors)
+            else:
+                check_ref(ref, home, key, out, anchors)
+                ref = str(ref)
+                if (key in PLAN_COVERAGE and ref.upper() != NO_SPEC and
+                        not SPEC_ZERO.match(ref) and
+                        (REFERENCE.match(ref) or SHORTHAND.match(ref)) and
+                        "#sec-" not in ref):
+                    # Before 033, plans commonly named a whole spec. Keep those
+                    # legacy headers checkable, but report that a section query
+                    # cannot consume the claim. New qualified entries fail the
+                    # same condition in check_coverage_entry above.
+                    out.append(("unresolved", f"{key}: {ref} names no section — a plan "
+                                "claiming a whole document says nothing a coverage query can use"))
 
     for key in sorted(set(data) & MAP_REFS):
         v = data[key]
@@ -184,14 +388,26 @@ def main():
     for p in a.paths:
         p = Path(p)
         files.extend(sorted(p.rglob("*.md")) if p.is_dir() else [p])
+    files = [f for f in files if f.name != "index.yaml"]
 
-    anchors, bad = {}, 0
+    anchors, problems = {}, {}
+    index = {}  # plan path -> (as named on the command line, status, coverage entries)
     for f in files:
-        if f.name == "index.yaml":
+        problems[f] = check(f, anchors)
+        rel = os.path.relpath(Path(f).resolve(), REPO)
+        if str(Path(rel).parent) != PLANS:
             continue
-        problems = check(f, anchors)
-        errors = [m for sev, m in problems if sev == "error"]
-        unresolved = [m for sev, m in problems if sev == "unresolved"]
+        data, err = load_frontmatter(rel)
+        if not err:
+            index[rel] = (f, str(data.get("status")), coverage_of(rel, data))
+
+    for f, sev, m in cross_check(index):
+        problems[f].append((sev, m))
+
+    bad = 0
+    for f in files:
+        errors = [m for sev, m in problems[f] if sev == "error"]
+        unresolved = [m for sev, m in problems[f] if sev == "unresolved"]
         for m in errors:
             print(f"{f}: {m}")
         for m in unresolved:
