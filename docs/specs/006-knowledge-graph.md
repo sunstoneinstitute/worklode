@@ -18,7 +18,10 @@ amendedBy:
     - 016-org-wide-skills.md#sec-1
     - 025-documents-in-the-backbone.md#sec-8
   "#sec-1.3":
+    - 014-design-documents-as-graph-objects.md#sec-6
     - 025-documents-in-the-backbone.md#sec-8
+    - 033-plan-section-coverage.md#sec-4
+    - 033-plan-section-coverage.md#sec-4.2
   "#sec-1.4":
     - 014-design-documents-as-graph-objects.md#sec-5
   "#sec-1.5":
@@ -219,6 +222,10 @@ optional and additive (Open Q).
 
 > **Amended by 025 §8.** `ls:inWorkstream` is replaced by `wl:inProject` — Task→Project, functional, derived from `tasks.project_id`.
 
+> **Amended by 033 §4.** `wl:Plan` is a sibling of `wl:DesignDoc`, so the current
+> `wl:status` domain is the union of `wl:DesignDoc`, `wl:Plan`, and `wl:Section`.
+> SHACL requires every Plan to carry one status from `wlc:DesignDocStatus`.
+
 > **`ls:implements` amended by 014 §6 and 015.** The Task/PR/Issue→DesignDoc form declared below is
 > superseded. Implementation is one statement, not three ranges:
 >
@@ -228,7 +235,7 @@ optional and additive (Open Q).
 > the declared and observed halves join:
 >
 > ```sparql
-> ?component   wl:implements ?section .                    # 014 §6 manifest — observed
+> ?component   wl:implements  ?section .                    # 014 §6 manifest — observed
 > ?deliverable wl:deliveredBy ?component ;                 # 006 §Properties — declared
 >              dct:relation ?artifact , ?env .             # 006 §Deliverable — declared
 > ?deployment  prov:used ?artifact ;                       # 015 — observed
@@ -249,6 +256,12 @@ optional and additive (Open Q).
 > because the derivable route (Artifact → Build → Commit → paths → Component) is closed in v1: 015
 > declares `wl:Build` with **no v1 projection source**. Declaring suits a node 006 already treats as
 > declared-only.
+
+> **Further amended by 033 §4.2.** The Turtle below is preserved as the accepted
+> historical statement. In the current vocabulary `wl:implements` is only
+> Component→Section. The remaining work edge is `wl:produces`, with domain
+> `wl:Task` and range `wl:Deliverable`; Component left that range, and Issue and
+> PullRequest left the domain. `wl:affects` carries work→Component.
 
 ```turtle
 ls:governs a owl:ObjectProperty ;                 # intent → component (declared)
@@ -638,7 +651,7 @@ and observed/&lt;source&gt; graph families of spec 007 are orthogonal to these W
 
 > **`ls:implements` row amended by 014 §6.** The DesignDoc half is no longer projected from the
 > backbone: Component→Section claims are derived by `observed/repo-implements` from
-> `.worklode/implements.yaml`. The Deliverable half projects from the backbone as tabled.
+> `.worklode/implements.yaml` as `wl:implements` (033 §4.2). The Deliverable half projects from the backbone as tabled.
 
 Task execution-state is projected as a **literal** (e.g. `ls:taskState "in_progress"`) mirroring
 the backbone enum; it is not modelled as `ls:status` and does not fork the backbone state machine

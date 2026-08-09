@@ -29,6 +29,10 @@ amendedBy:
     - 034-design-doc-sync.md#sec-7
   "#sec-3":
     - 027-event-watchers.md#sec-5
+  "#sec-4":
+    - 033-plan-section-coverage.md#sec-1
+  "#sec-7":
+    - 033-plan-section-coverage.md#sec-2
   "#sec-10":
     - 027-event-watchers.md#sec-6
 replaces:
@@ -75,7 +79,7 @@ The rule decides concrete cases:
 |---|---|
 | Epic grouping one plan's tasks | Query over the tasks' document reference — row deleted |
 | Plan root task | Query — same grouping, same verdict; the plan document is the only identity the set needs (§5) |
-| Spec-level container over its plans | Query over `implements` + the plans' task-set states — never minted |
+| Spec-level container over its plans | Query over `covers` + the plans' task-set states — never minted |
 | Spec-umbrella task, open while unimplemented | Coverage query — never minted |
 | Sprint / iteration container | Never minted; time-boxing is ranking and deadlines |
 | Milestone | Row (declared intent: these deliverables ship together), membership derived |
@@ -98,7 +102,7 @@ exactly as it receives tasks (006 §6). One authoring path, one review surface, 
   as columns (`issued`, `requires`, `wasDerivedFrom`, …), version counter.
 - `doc_sections`: anchor, heading, depth, `last_revised_in` — specs and ADRs only (§4).
   Anchors follow 014 §3 unchanged: assigned at first acceptance, frozen, letter-suffix inserts.
-- `doc_edges`: `implements`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped
+- `doc_edges`: `covers`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped
   where the ends are sections. Both directions stored, checked for agreement (014 §11). Plans
   additionally take `blocks`/`blockedBy` between whole documents — the ordering edge that would
   otherwise need a container row to attach to (§7).
@@ -159,6 +163,12 @@ four, and what they say, remains entirely the assignee's — and neither watcher
 document.
 
 ## 4. Plans are documents {#sec-4}
+
+> **Amended by spec 033 §1.** The key below is now `covers`, because
+> `wl:implements` means realisation and a plan only undertakes. Each entry is a
+> qualified reference carrying a `coverage:` level (`full`, `partial`, `none`)
+> and an optional `fullCoverageWith:`. A bare reference still parses and means
+> `full`; `implements` still parses and means `covers`.
 
 014 §2 demoted plans out of the document model because a plan must stay freely mutable — the
 section lock that protects an accepted spec would be harmful on a document that is rewritten
@@ -350,6 +360,10 @@ commit so `TestTaskKindsAgreeAcrossSources` never sees the sources disagree.
 
 ## 7. Spec fan-out is a query {#sec-7}
 
+> **Amended by spec 033 §2.** The "which specs need planning?" row below is
+> replaced by a three-valued resolution over `coverage:` levels; a section is
+> discharged only by a `full` claim or a `fullCoverageWith` set that closes.
+
 A spec producing several plans gets no container above their tasks. Each need is owned:
 
 | Need | Owner |
@@ -402,7 +416,7 @@ wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
 `wl:Milestone` stays reserved for v2 exactly as 006 §1.1 and 003 leave it, and its shape is
 confirmed by this spec's principle: a milestone **groups Deliverables** — the declared intent
 that a set of outcomes ships together, typically ending with a release. Task membership is
-derived through the existing `wl:implements` (whose range already includes Deliverable), so
+derived through `wl:produces` (033 §4.2, split out of `wl:implements`), so
 milestone progress is a coverage query and no task→milestone edge is ever stored. Bounded
 short-horizon grouping needs no further concept: one intent's tasks are its plan's task set; a
 cross-plan set that must land together is a (small) milestone. A calendar-boxed sprint

@@ -8,6 +8,9 @@ requires:
 amends:
   "#sec-4.2":
     - 019-project-scoping.md#sec-2
+amendedBy:
+  "#sec-2.1":
+    - 033-plan-section-coverage.md#sec-2
 ---
 # Spec 026 — `lode doc` queries over the document corpus
 
@@ -26,7 +29,7 @@ prompted this spec had to caveat itself as "strong evidence, not proof".
 
 Spec 025 §10 already reserves the surface (`lode doc list --needs-planning`,
 `--needs-execution`, `lode doc show --resolved` — spelled `lode show` here, §3) and 025
-§7 already fixes the semantics.
+§7, as amended by 033, fixes the semantics.
 What 025 does not do is make them available before the backbone document store exists —
 its own implementation is a long way out, and these queries are needed to plan it.
 
@@ -62,7 +65,7 @@ backbone `docs` tables, graph projection.
 | Question | Answered from | After 025 |
 |---|---|---|
 | What documents exist, and their status | frontmatter in the git tree | `docs` rows |
-| Which spec sections a plan claims | `implements` in plan frontmatter | `doc_edges` |
+| Which spec sections a plan claims | `covers` in plan frontmatter | `doc_edges` |
 | Whether a plan has been executed | `task` in plan frontmatter, resolved against the tracker | the state of the tasks referencing the doc |
 | What amends or replaces a section | `amends`/`amendedBy`/`replaces`/`isReplacedBy` maps | `doc_edges` |
 | Whether a claim is in force yet | `status` of the *claiming* document (§3.1) | `docs.status` |
@@ -91,7 +94,7 @@ flag, and there is exactly one such repo today (none).
 lode doc list                       every document: kind, id, status, title
 lode doc list --kind spec|adr|plan
 lode doc list --status draft|accepted|superseded
-lode doc list --needs-planning      accepted specs with sections no plan claims
+lode doc list --needs-planning      accepted specs with sections not fully planned
 lode doc list --needs-execution     accepted plans with no closed execution task
 ```
 
@@ -102,24 +105,31 @@ document without one is a defect (§4), reported rather than quietly rendered as
 
 ### 2.1 `--needs-planning` {#sec-2.1}
 
-Plans and sections are many-to-many, and the query assumes nothing else: one plan may claim
-a whole spec, five plans may split it, and one plan may claim sections of several specs.
-A spec section is **planned** when *any* plan's `implements` names it — `014-…md#sec-6`
-names that section, a whole-document `014-…md` names every section the document has,
-present and future — and the union across all plans is what the query takes. A spec is
-listed when it is `accepted` and at least one of its sections is in no plan's union; the
-count and the unplanned anchors are the output.
+Plans and sections are many-to-many, and coverage is the qualified, three-valued
+`covers` relation from 033. For each section of an accepted spec, consider only
+accepted plans naming that exact `#sec-N` anchor:
+
+- `full` makes the section fully planned;
+- `partial` makes it partially planned, unless it carries a non-empty
+  `fullCoverageWith` whose every target is an accepted plan contributing `full`
+  or `partial` to the same section;
+- `none` records a governing constraint and contributes no coverage.
+
+A whole-document claim contributes nothing: it cannot say which present section
+it undertakes and would silently claim future sections. A spec is listed when at
+least one current section is not fully planned; the output gives the gap count,
+anchors, and whether each is partial, bound-only, or unplanned.
 
 Nothing here counts plans per spec or expects a partition. Overlap is legal and unremarked:
 two plans claiming the same section means two plans touch it, not a modelling error.
 
 ```
-docs/specs/007-drift-and-overview.md      accepted   2/9 unplanned   sec-3.4 sec-5
+docs/specs/007-drift-and-overview.md      accepted   2/9 need planning   sec-3.4(partial) sec-5(unplanned)
 ```
 
-A plan whose `implements` is **`NO-SPEC`** declares that no spec governs it (§4.2a). It
+A plan whose `covers` is **`NO-SPEC`** declares that no spec governs it (§4.2a). It
 contributes coverage to nothing and is never itself a planning gap — the sentinel is how a
-standalone plan says so out loud, instead of carrying no `implements` and being
+standalone plan says so out loud, instead of carrying no `covers` and being
 indistinguishable from one that forgot.
 
 `--needs-planning` implies `status: accepted` — planning follows acceptance (025 §3), and a
@@ -128,28 +138,18 @@ rather than an empty result, because an empty result would read as "nothing to p
 combining it with `--needs-execution`: the two select disjoint kinds, so the conjunction is
 always empty, and it is the same silent lie in a different flag.
 
-The acceptance test applies to the **spec**, not to the plan doing the claiming: a draft
-plan's `implements` counts as coverage, because the planning work it represents has been done
-and listing the spec again would ask for it twice. §3.1's effectiveness gate governs
-`amends`/`replaces` — where a premature claim would misstate the design — and does not reach
-`implements`, where it would only misstate who still owes work.
-
-**Known weakness, stated rather than papered over.** No plan in the corpus today carries a
-section-scoped `implements` — all of them claim whole documents — so on the current tree this
-query is close to vacuous: it can only list a spec no plan names at all. A
-whole-document claim is a coverage assertion that can never go stale: sections added by
-later amendment are covered retroactively by a plan written before they existed. The fix is
-authoring, not code — `docs/authoring-design-docs.md` gains a line requiring section-scoped
-`implements` on new plans (§6) — and the query is a forward guard that becomes sharp as that
-convention takes hold. Widening it by guessing which sections a plan "really" covered (from
-dates, from prose) would trade a truthful empty answer for a confident wrong one.
+The acceptance test applies to both ends: a draft spec is not yet owed planning,
+and a draft plan has not yet undertaken work. Counting a draft plan would let an
+unapproved split hide a real gap. Closure targets obey the same gate; a named
+draft plan, a plan covering another section, or a `none` entry leaves the source
+partial and is reported rather than trusted.
 
 The convention is not new: the other side of the same claim, `.worklode/implements.yaml`
 (014 §6), is **already section-scoped** — its entries key on `section:` with a pinned
 document version, precisely so a claim narrows to the part of the spec it satisfies. Plan
-`implements` naming whole documents is the outlier, and bringing it into line makes the two
-halves of coverage — what was planned, and what was built — addressable at the same
-granularity. Without that, `lode doc coverage` (§9) could never join them.
+coverage is therefore section-scoped too, making the two halves — what was planned,
+and what was built — addressable at the same granularity. Without that,
+`lode doc coverage` (§9) could never join them.
 
 ### 2.2 `--needs-execution` {#sec-2.2}
 
@@ -380,7 +380,7 @@ one way to express each intent.
 A reference that does not resolve is a **defect in the corpus, reported, never dropped**.
 Both commands print unresolvable references to stderr with the referring file and key, and
 exit non-zero when any exist, after printing the results they could compute. Silently
-skipping a dangling `implements` would understate `--needs-planning` — precisely the failure
+skipping a dangling `covers` would understate `--needs-planning` — precisely the failure
 mode these commands exist to remove.
 
 The single exception is a reference naming **a project this checkout cannot reach**, which is
@@ -525,12 +525,12 @@ defect when it dangles, once that key exists and it is rewritten `<KEY>-ADR-6`.
 ### 4.2a `NO-SPEC` means "no governing spec" {#sec-4.2a}
 
 Some plans answer to no spec — a mechanical refactor, a build fix, a convention change too
-small to design. Leaving `implements` off says nothing: it reads the same as a plan whose
+small to design. Leaving `covers` off says nothing: it reads the same as a plan whose
 author forgot, and neither the coverage queries nor a reviewer can tell the two apart. Spec
 number **0** is reserved to say it explicitly, and it is written:
 
 ```yaml
-implements: NO-SPEC
+covers: NO-SPEC
 ```
 
 **The sentinel carries no project key.** Spec 0 is not one project's zeroth spec — it is the
@@ -545,7 +545,7 @@ is unchanged: a `WL-SPEC-<n>` for any other `n` must hit a file in this corpus.
 
 Three constraints, all checked by `scripts/secmeta.py`:
 
-- **Only on a plan's `implements`.** On `requires`, `amends` or `replaces` it would assert a
+- **Only on a plan's `covers`.** On `requires`, `amends` or `replaces` it would assert a
   relationship to a document that does not exist, which is a dangling reference wearing a
   sentinel's clothes.
 - **Written `NO-SPEC`, not `<KEY>-SPEC-0`.** The keyed form is recognised and reported so it
@@ -553,18 +553,19 @@ Three constraints, all checked by `scripts/secmeta.py`:
   is moot here for the same reason it is an error elsewhere in worklode's shorthand (014
   §11.3) — though a *foreign* key such as `rdf-registry:ADR-0006` pads by its own convention,
   which is none of our business.
-- **It is not a wildcard.** A plan that does implement a spec and names the sentinel instead is
-  wrong in a way no tool can catch, which is the cost of having the sentinel at all.
+- **It is not a wildcard.** `NO-SPEC` means no spec governs the plan. A governed plan names
+  one or more of its governing spec's sections; naming the sentinel instead is wrong in a way
+  no tool can catch, which is the cost of having the sentinel at all.
 
 ## 5. Plans carry `status` and `task` {#sec-5}
 
 Two frontmatter keys move from optional to expected on plans.
 
 **`status`** — 025 §4 gives plans the same draft → review → accept gate as specs, and §2.2
-needs the accepted state to be readable. `wl:status`'s domain (`wl:DesignDoc | wl:Section`,
-014 §5) widens to include `wl:Plan` in `ns/ontology.ttl`; the value set is unchanged
-(`draft`, `accepted`, `superseded`) and plans take no per-section status because they have
-no addressable sections. A plan is `draft` while it is being written and reviewed, and
+needs the accepted state to be readable. `wl:status`'s domain is
+`wl:DesignDoc | wl:Plan | wl:Section` (033 §4); the value set is unchanged (`draft`,
+`accepted`, `superseded`) and plans take no per-section status because they have no
+addressable sections. A plan is `draft` while it is being written and reviewed, and
 `accepted` from the moment its execution is authorised.
 
 **`task`** — already documented as transitional (`docs/authoring-design-docs.md`), already
@@ -583,7 +584,7 @@ the seventeen with a stand-in execution task carry a `task` naming it.
 - the frontmatter table gains `status` on plans and `task` on plans, with §5's meanings;
 - the references section gains the four reference forms of §4, 014 §11.3's shorthand with the
   rule that distance decides the canonical form, and a line requiring section-scoped
-  `implements` on new plans, with §2.1's reason;
+  `covers` on new plans, with §2.1's reason;
 - a line on writing amendments as self-contained, section-shaped payloads, so they
   consolidate cleanly (§3.2) instead of reading as a diff against text the reader cannot see;
 - a short section pointing at `lode doc` and `lode show` as the way to answer these
@@ -625,8 +626,8 @@ a test failure rather than a corpus that means two things.
 ## 8. Testing {#sec-8}
 
 - Golden fixture corpus (a handful of small specs and plans in `testdata/`) covering: all
-  four reference forms of §4, section and whole-document `implements`, an amendment, a
-  supersession, a dangling ref, a missing mirror edge.
+  four reference forms of §4, valid section-scoped and invalid whole-document `covers`, an
+  amendment, a supersession, a dangling ref, a missing mirror edge.
 - Reference resolution: a bare path resolves from the repo root and a `../` path from the
   referring document's directory, on the same target, from the same file.
 - Shorthand (§4.2), Go and Python both driven by `testdata/shorthand.yaml`: `WL-SPEC-23` and
@@ -637,8 +638,13 @@ a test failure rather than a corpus that means two things.
   the exit code at 0, and becomes a defect under `--strict-refs`.
 - Canonical form: `secfmt.py` rewrites a within-project shorthand to the target's filename and
   leaves a foreign one alone; running it twice changes nothing the second time.
-- `NeedsPlanning`: whole-document claim covers a later-added section; section claim covers
-  only its own; a spec with no plan lists every section; a draft spec never appears.
+- `NeedsPlanning`: only accepted plans contribute; accepted `full` discharges its exact
+  section; an unclosed `partial` is reported as partial; a non-empty `fullCoverageWith`
+  closes its source only when every target is accepted and contributes `full` or `partial`
+  to that same section; draft, `none`, wrong-section, or missing targets and an empty
+  completion set leave the source partial; `none` alone is bound-only; a section with no
+  accepted plan is unplanned; a whole-document claim contributes nothing and is reported
+  because the query requires a `#sec-N` section; a draft spec never appears.
 - `NeedsExecution`: `accepted` with no `task` → listed; `accepted` with an open task →
   listed; closed task → absent; `superseded` (spent) → absent regardless of `task`; a plan
   carrying no `status` at all → reported as a defect, not silently skipped.
@@ -681,7 +687,7 @@ a test failure rather than a corpus that means two things.
   planning half only; the two must not be conflated in output or in prose.
 - **Write verbs.** Nothing here creates, accepts or revises a document; acceptance stays a
   deliberate human act (025 §3).
-- **Backfilling section-scoped `implements`** across the existing plans. `status` and `task`
+- **Backfilling section-scoped `covers`** across the existing plans. `status` and `task`
   *were* backfilled (§2.2, §5) — that is what removed the legacy branch — but re-deriving
   which sections each shipped plan actually covered is the guesswork §2.1 refuses.
 - **The backbone `docs` tables** and the graph projection — 025 owns both, and this spec is
@@ -698,10 +704,11 @@ is the whole of what makes them possible, and it is what ships here.
 ## 10. Acceptance criteria {#sec-10}
 
 1. `lode doc list --needs-planning` exits 0 and lists every accepted spec having at least one
-   section no plan's `implements` union names, with the unplanned anchors and not merely a
-   count. It hardcodes no document: the criterion this replaced asserted one specific spec and
-   became untrue the moment that spec was deleted. A plan carrying `implements: NO-SPEC`
-   (§4.2a) is absent from the output and adds coverage to nothing.
+   section that is not fully planned, reporting each gap anchor as partial, bound-only, or
+   unplanned. Only accepted plans count; `full` or a verified non-empty closed `partial` set
+   discharges the exact section. It hardcodes no document: the criterion this replaced
+   asserted one specific spec and became untrue the moment that spec was deleted. A plan
+   carrying `covers: NO-SPEC` (§4.2a) is absent from the output and adds coverage to nothing.
 2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task` is
    absent or open, and no `superseded` plan; every plan in the corpus carries a `status`, and
    one that does not is a reported defect.
@@ -729,5 +736,5 @@ is the whole of what makes them possible, and it is what ships here.
    `secindex.py` stays a manual regeneration.
 11. Specs 014 and 015 being `draft` leaves their targets' sections listed as current and
    marked `pending`, for `amends` as much as for `replaces`; `--with-drafts` applies both.
-12. The verb names, flags and semantics match 025 §10 and §7, so replacing `LoadCorpus` with
-   a store-backed loader is the whole of the migration.
+12. The verb names, flags and semantics match 025 §10 and §7 as amended by 033, so replacing
+   `LoadCorpus` with a store-backed loader is the whole of the migration.
