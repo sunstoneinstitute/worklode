@@ -185,6 +185,13 @@ type server struct {
 	// see web.go's navWrap and metrics.go's observeNavigation.
 	navigations *prometheus.CounterVec
 
+	// doc sync (spec 034 §10): runs by result, request duration, docs synced
+	// by kind/outcome, and forced (--force) syncs accepted.
+	docSyncRuns     *prometheus.CounterVec
+	docSyncDuration prometheus.Histogram
+	docSyncDocs     *prometheus.CounterVec
+	docSyncForced   prometheus.Counter
+
 	// Web UI templates, parsed once at startup (template.Must panics on a
 	// parse error, so a broken template fails fast at boot, not on first
 	// request). One *template.Template per page — see parseWebTemplates.
@@ -448,6 +455,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("POST /api/v1/inbox/import", s.auth(requireAdmin(s.importInbox)))
 
 	mux.Handle("GET /api/v1/board", s.auth(s.board))
+
+	mux.Handle("POST /api/v1/docs/sync", s.auth(s.syncDocs))
 
 	// Admin handler: health and metrics on a dedicated listener, never routed
 	// through the public ingress. No auth or request-metrics middleware — the

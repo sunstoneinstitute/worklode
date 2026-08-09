@@ -47,8 +47,26 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_navigation_requests_total",
 		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
 	}, []string{"destination", "outcome"})
-	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems,
-		s.assignments, s.cockpitProjections, s.navigations)
+	s.docSyncRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_doc_sync_runs_total",
+		Help: "Doc sync requests by result.",
+	}, []string{"result"})
+	s.docSyncDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "worklode_doc_sync_duration_seconds",
+		Help:    "Doc sync request duration.",
+		Buckets: []float64{0.05, 0.1, 0.5, 1, 5, 15},
+	})
+	s.docSyncDocs = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_doc_sync_docs_total",
+		Help: "Documents synced, by kind and outcome.",
+	}, []string{"kind", "outcome"})
+	s.docSyncForced = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_doc_sync_forced_total",
+		Help: "Forced (--force) doc syncs accepted.",
+	})
+	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
+		s.cockpitProjections, s.navigations,
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -70,6 +88,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.navigations.WithLabelValues(destination, outcome)
 		}
 	}
+	s.docSyncRuns.WithLabelValues("ok")
+	s.docSyncRuns.WithLabelValues("error")
 }
 
 // observeSkillSync records one sync pass, called from both syncOnce
@@ -139,4 +159,24 @@ func (s *server) observeNavigation(destination, outcome string) {
 		return
 	}
 	s.navigations.WithLabelValues(destination, outcome).Inc()
+}
+
+// observeDocSync records one sync request. Nil-safe: tests build a *server
+// directly without initMetrics.
+func (s *server) observeDocSync(results []store.DocSyncResult, forced bool, err error, d time.Duration) {
+	if s.docSyncRuns == nil {
+		return
+	}
+	s.docSyncDuration.Observe(d.Seconds())
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	s.docSyncRuns.WithLabelValues(result).Inc()
+	if forced {
+		s.docSyncForced.Inc()
+	}
+	for _, r := range results {
+		s.docSyncDocs.WithLabelValues(r.Kind, r.Outcome).Inc()
+	}
 }
