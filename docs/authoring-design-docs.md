@@ -73,7 +73,7 @@ three specs.
 |---|---|---|---|
 | `status` | `wl:status` | one of `draft`, `accepted`, `superseded` (`proposed` retired by 025 §3 — a doc under review stays `draft`) | specs, design records |
 | `issued` | `dct:issued` | `YYYY-MM-DD` of first publication | specs, design records |
-| `implements` | `wl:implements` | scalar or list of spec references | **plans** |
+| `covers` | `wl:covers` | scalar or list of spec references, or the qualified form (033 §3) | **plans** |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | list of references | both |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | scalar reference | specs |
 | `amends` / `amendedBy` | — (see 014 §11) | **map**, see below | both |
@@ -93,7 +93,7 @@ tasks (spec 025 §5 — the binding becomes the minted tasks' doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
-Order keys as in the table: lifecycle, then `implements`, then dependency, then
+Order keys as in the table: lifecycle, then `covers`, then dependency, then
 amendment, then supersession.
 
 ### References
@@ -104,7 +104,7 @@ section:
 
 ```yaml
 # in docs/plans/…  ->  crosses into docs/specs/
-implements: docs/specs/011-delivery-lifecycle.md
+covers: docs/specs/011-delivery-lifecycle.md#sec-2
 # in docs/specs/…  ->  same directory
 requires:
   - 004-execution-backbone.md
@@ -141,12 +141,12 @@ path.
 
 **`NO-SPEC` is reserved for "no governing spec".** A plan that answers to no
 spec — a mechanical refactor, a build fix, a convention too small to design —
-writes `implements: NO-SPEC` rather than omitting the key, because an absent
-`implements` reads identically to a forgotten one. There is no spec 0 and there
+writes `covers: NO-SPEC` rather than omitting the key, because an absent
+`covers` reads identically to a forgotten one. There is no spec 0 and there
 will not be one, so it is the only reference that resolves to nothing without
 being a defect. It takes no project key in any corpus — absence of a spec is not
 one project's spec 0 — so `WL-SPEC-0` is recognised but reported: write
-`NO-SPEC`. Valid on a plan's `implements` and nowhere else (026 §4.2a).
+`NO-SPEC`. Valid on a plan's `covers` and nowhere else (026 §4.2a).
 
 A shorthand naming a project this checkout cannot reach is reported as
 `unresolved`, not as an error. Commit hooks run without a network or a built
