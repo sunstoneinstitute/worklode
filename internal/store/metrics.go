@@ -27,10 +27,11 @@ func WithMetrics(reg prometheus.Registerer) Option {
 // storeMetrics holds the store's domain instruments. All methods are nil-safe
 // so call sites need no guards on stores opened without WithMetrics.
 type storeMetrics struct {
-	claims   *prometheus.CounterVec
-	renewals *prometheus.CounterVec
-	releases *prometheus.CounterVec
-	expiries prometheus.Counter
+	claims           *prometheus.CounterVec
+	renewals         *prometheus.CounterVec
+	releases         *prometheus.CounterVec
+	expiries         prometheus.Counter
+	projectWorkReads *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -51,8 +52,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_lease_expiries_total",
 			Help: "Leases closed by the expiry sweeper.",
 		}),
+		projectWorkReads: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_project_work_reads_total",
+			Help: "ListProjectWorkFacts reads by outcome.",
+		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads)
 	return m
 }
 
@@ -82,6 +87,16 @@ func (m *storeMetrics) expire(n int) {
 		return
 	}
 	m.expiries.Add(float64(n))
+}
+
+// projectWorkRead records one ListProjectWorkFacts call by outcome. Never
+// labeled by project or task id — those are unbounded, and this metric only
+// needs to answer "is the bulk reader healthy," not "for which project."
+func (m *storeMetrics) projectWorkRead(err error) {
+	if m == nil {
+		return
+	}
+	m.projectWorkReads.WithLabelValues(outcome(err)).Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the
