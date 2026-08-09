@@ -75,7 +75,7 @@ wl:Section a owl:Class ;
 
 wl:Plan a owl:Class ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
-    wl:layer wlc:intent ;
+    wl:layer wlc:execution ;
     rdfs:comment """An executable document: accepting it mints its tasks (025 §4-§5). A sibling of
         wl:DesignDoc, not a subclass — a plan is spent by execution rather than superseded, and
         takes no wl:Section parts and no anchors. 014 §2 dropped the class when plan-shaped work
@@ -258,7 +258,7 @@ wl:deliveredBy a owl:ObjectProperty ;
 
 wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Section ) ] ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Section wl:Plan ) ] ;
     rdfs:range skos:Concept ;
     rdfs:comment """Editorial lifecycle status in wlc:DesignDocStatus, applying to a DesignDoc or a
         single Section (014 §5). Functional catches >1; SHACL enforces >=1. Implementation is not a
