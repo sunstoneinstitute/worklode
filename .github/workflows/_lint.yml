@@ -46,6 +46,10 @@ jobs:
       # workflow, so the pre-commit hook is the primary gate.
       - name: codex marketplace mirrors claude
         run: ./scripts/sync-codex-marketplace.py --check
+      - name: check generated web artifacts
+        run: |
+          ./scripts/fetch-tailwind.sh
+          ./scripts/check-generated.sh
       - name: section numbers
         run: |
           out=$(./scripts/secfmt.py -l) || status=$?

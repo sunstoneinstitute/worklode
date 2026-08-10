@@ -1,22 +1,26 @@
-// web.go implements the read-only web UI: the application shell (layout.html)
-// shared by every page, the seven global destinations and the project-local
-// destinations spec 032 §2 defines, and /assets/ (self-hosted stylesheet and
-// fonts). When OIDC is configured every page route except /assets/ is gated
-// by s.webAuth (see oidcweb.go), which requires a valid session cookie;
-// /assets/ stays open unconditionally (see assetHandler) and, when OIDC is
-// unconfigured, every route stays open and the bind address is the only
-// access control. Pages render server-side HTML with html/template (which
-// auto-escapes all interpolated values) and reuse the same assembly
-// functions as the JSON API (assembleBoard, assembleTimeline,
-// assembleProjectCockpit) so that logic lives in exactly one place.
+// web.go implements the read-only web UI: the application shell (Page, in
+// layout.templ) shared by every page, the seven global destinations and the
+// project-local destinations spec 032 §2 defines, and /assets/ (self-hosted
+// stylesheet and fonts). When OIDC is configured every page route except
+// /assets/ is gated by s.webAuth (see oidcweb.go), which requires a valid
+// session cookie; /assets/ stays open unconditionally (see assetHandler)
+// and, when OIDC is unconfigured, every route stays open and the bind
+// address is the only access control. Pages render server-side HTML with
+// templ components (*_templ.go, generated from the .templ files in this
+// package — see the //go:generate directive below — which auto-escape all
+// interpolated values) and reuse the same assembly functions as the JSON
+// API (assembleBoard, assembleTimeline, assembleProjectCockpit) so that
+// logic lives in exactly one place.
 package api
+
+//go:generate ../../scripts/gen-web.sh
 
 import (
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
+	"html"
 	"io/fs"
 	"net/http"
 	"time"
@@ -24,28 +28,13 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-//go:embed templates/*.html assets
+//go:embed assets
 var webFS embed.FS
 
-// templateFuncs are the funcs available to every web template.
-var templateFuncs = template.FuncMap{
-	// fmtTime renders every timestamp the same way across the web UI: UTC,
-	// "2006-01-02 15:04".
-	"fmtTime": func(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") },
-}
-
-// parseWebTemplates parses layout.html plus one page's own template file
-// into a *template.Template of their own. Each page gets its own parse (one
-// per page, not one combined parse of every file) because html/template
-// treats every {{define "content"}} block from every parsed file as
-// entries in one shared namespace: parsing board.html, task.html, and
-// project.html together would let whichever file parses last silently win
-// the "content" block for all three pages. Pairing each page file with
-// layout.html on its own keeps every page's "content" in its own set.
-func parseWebTemplates(page string) *template.Template {
-	return template.Must(template.New("layout.html").Funcs(templateFuncs).
-		ParseFS(webFS, "templates/layout.html", "templates/"+page))
-}
+// FmtTime renders every timestamp the same way across the web UI: UTC,
+// "2006-01-02 15:04". Called directly from the .templ files (the plain-func
+// successor to the old html/template FuncMap entry of the same job).
+func FmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
 // assetHandler serves the embedded /assets/ tree (stylesheet and
 // self-hosted fonts) outside webAuth: they carry no project data, so an
@@ -90,14 +79,15 @@ func (s *server) navWrap(destination string, next http.HandlerFunc) http.Handler
 	}
 }
 
-// basePage carries the fields every page template needs from layout.html
-// (.Title, .ActiveGlobal). Every page-specific data struct embeds it so
-// layout.html can address those fields the same way regardless of which
-// page is being rendered. ActiveGlobal names the one primary-nav destination
-// to mark aria-current="page" on ("home", "intake", "projects", "work",
-// "reviews", "deliveries", "knowledge"); leave it empty on project-scoped
-// pages, whose local project nav carries the current-page marker instead —
-// each page must set aria-current="page" exactly once, never on both navs.
+// basePage carries the fields every page needs from the Page shell
+// component (layout.templ): Title, ActiveGlobal. Every page-specific data
+// struct embeds it so Page can address those fields the same way regardless
+// of which page is being rendered. ActiveGlobal names the one primary-nav
+// destination to mark aria-current="page" on ("home", "intake", "projects",
+// "work", "reviews", "deliveries", "knowledge"); leave it empty on
+// project-scoped pages, whose local project nav carries the current-page
+// marker instead — each page must set aria-current="page" exactly once,
+// never on both navs.
 type basePage struct {
 	Title        string
 	ActiveGlobal string
@@ -109,7 +99,7 @@ type basePage struct {
 func webErr(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
-	fmt.Fprintf(w, "<!doctype html><title>%d</title><h1>%d</h1><p>%s</p>", code, code, template.HTMLEscapeString(msg))
+	fmt.Fprintf(w, "<!doctype html><title>%d</title><h1>%d</h1><p>%s</p>", code, code, html.EscapeString(msg))
 }
 
 // webStoreErr maps a store error to a web error page: ErrNotFound -> 404,
@@ -124,9 +114,9 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 	webErr(w, http.StatusInternalServerError, "internal error")
 }
 
-// boardPageData is rendered by board.html, shared by the Home ("/") and Work
-// ("/work") destinations — both show the same org-wide board; only the
-// heading and ActiveGlobal differ (see board.html's content block).
+// boardPageData is rendered by the Board component (board.templ), shared by
+// the Home ("/") and Work ("/work") destinations — both show the same
+// org-wide board; only the heading and ActiveGlobal differ.
 type boardPageData struct {
 	basePage
 	Board      *boardResponse
@@ -173,12 +163,13 @@ func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGloba
 		Board:      board,
 		InboxCount: len(issues),
 	}
-	if err := s.tmplBoard.ExecuteTemplate(w, "layout.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := Board(data).Render(r.Context(), w); err != nil {
 		s.log.Error("render board page", "err", err)
 	}
 }
 
-// projectsPageData is rendered by projects.html.
+// projectsPageData is rendered by the Projects component (projects.templ).
 type projectsPageData struct {
 	basePage
 	Projects []store.Project
@@ -196,18 +187,19 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 		basePage: basePage{Title: "worklode: projects", ActiveGlobal: "projects"},
 		Projects: projects,
 	}
-	if err := s.tmplProjects.ExecuteTemplate(w, "layout.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := Projects(data).Render(r.Context(), w); err != nil {
 		s.log.Error("render projects page", "err", err)
 	}
 }
 
-// placeholderPageData is rendered by placeholder.html: an honest "not built
-// yet" page for a global or project-scoped destination whose governing spec
-// section is not implemented. Cockpit is nil for a global destination
-// (Intake, Reviews, Deliveries, Knowledge) and set for a project section
-// (Crew, Deliverables, Reviews, Decisions, Documents, Activity), which loads
-// the project first and renders the same project-local navigation as the
-// Overview page.
+// placeholderPageData is rendered by the Placeholder component
+// (placeholder.templ): an honest "not built yet" page for a global or
+// project-scoped destination whose governing spec section is not
+// implemented. Cockpit is nil for a global destination (Intake, Reviews,
+// Deliveries, Knowledge) and set for a project section (Crew, Deliverables,
+// Reviews, Decisions, Documents, Activity), which loads the project first
+// and renders the same project-local navigation as the Overview page.
 type placeholderPageData struct {
 	basePage
 	Heading       string
@@ -225,7 +217,8 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 			Heading:  heading,
 			Message:  message,
 		}
-		if err := s.tmplPlaceholder.ExecuteTemplate(w, "layout.html", data); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := Placeholder(data).Render(r.Context(), w); err != nil {
 			s.log.Error("render placeholder page", "err", err)
 		}
 	}
@@ -282,7 +275,8 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 		Cockpit:       cockpit,
 		ActiveSection: section,
 	}
-	if err := s.tmplPlaceholder.ExecuteTemplate(w, "layout.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := Placeholder(data).Render(r.Context(), w); err != nil {
 		s.log.Error("render project section page", "err", err)
 	}
 }
@@ -291,8 +285,10 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 // a human summary line, derived from the same entries the JSON timeline API
 // emits (see assembleTimeline / summarizeEntry). URL is the entry's
 // source-native link (set for pr and ci entries only; "" otherwise) —
-// rendered as a plain string, never a template.URL, so html/template's
-// contextual autoescaping keeps neutralizing an unsafe scheme.
+// rendered as a plain string href in task.templ, so templ's own href
+// sanitizer (github.com/a-h/templ's SafeURL) neutralizes an unsafe scheme
+// into "about:invalid#TemplFailedSanitizationURL" before it ever reaches
+// the page.
 type webTimelineRow struct {
 	At      time.Time
 	Type    string
@@ -301,7 +297,7 @@ type webTimelineRow struct {
 	URL     string
 }
 
-// taskPageData is rendered by task.html.
+// taskPageData is rendered by the Task component (task.templ).
 type taskPageData struct {
 	basePage
 	Task      store.Task
@@ -366,8 +362,8 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Leaves can never have children, so skip the query — template only
-	// reads Progress inside the {{if .Children}} branch anyway.
+	// Leaves can never have children, so skip the query — the component
+	// only reads Progress inside the len(data.Children) > 0 branch anyway.
 	if len(data.Children) > 0 {
 		progress, err := s.st.ChildProgress(ctx, id)
 		if err != nil {
@@ -382,12 +378,13 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		data.Timeline = append(data.Timeline, summarizeEntry(e))
 	}
 
-	if err := s.tmplTask.ExecuteTemplate(w, "layout.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := Task(data).Render(r.Context(), w); err != nil {
 		s.log.Error("render task page", "err", err)
 	}
 }
 
-// projectPageData is rendered by project.html.
+// projectPageData is rendered by the Project component (project.templ).
 type projectPageData struct {
 	basePage
 	Cockpit *cockpitProjection
@@ -413,7 +410,8 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 		basePage: basePage{Title: "worklode: " + cockpit.Project.Name},
 		Cockpit:  cockpit,
 	}
-	if err := s.tmplProject.ExecuteTemplate(w, "layout.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := Project(data).Render(r.Context(), w); err != nil {
 		s.log.Error("render project page", "err", err)
 	}
 }
