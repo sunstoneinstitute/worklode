@@ -82,10 +82,10 @@ The rule decides concrete cases:
 
 ## 2. Documents move into the backbone {#sec-2}
 
-> **Amended by 034 §7.** The one-time corpus import that precedes deleting the git trees becomes
-> an ongoing git→backbone sync (034): the corpus is populated into the store continuously while
-> git stays the authoring surface, and the files are deleted only once backbone authoring (§3, §5)
-> lands. The end state — backbone-authored documents, git files gone — is unchanged.
+> **Amended by 034 §7.** The one-time corpus import that precedes the store-of-record cutover
+> becomes an ongoing git→backbone sync (034): the corpus is populated into the store continuously
+> while git stays the authoring surface, until backbone authoring (§3, §5) lands. What becomes of
+> the files then — deleted, or kept as the opt-in mirror described below — is unchanged by 034.
 
 014 established documents as durable, section-addressable, status-gated objects that are not
 git files, and placed them in the knowledge graph. The logical model stands; the authoritative

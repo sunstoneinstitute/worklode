@@ -17,9 +17,10 @@ amends:
 
 Spec 025 (accepted) moves specs, ADRs, and plans into the backbone: authored
 there, reviewed there, projected to the graph, with the git `docs/specs/` and
-`docs/plans/` trees a transitional mirror that is deleted once the corpus is
-imported (025 §2). That end state needs the authoring surface 025 §10 reserves
-— `lode doc new`/`submit`/`accept` — and the document store behind it. None of
+`docs/plans/` trees a transitional mirror — deleted, or kept as an opt-in git
+mirror, once the corpus is imported (025 §2). That end state needs the authoring
+surface 025 §10 reserves — `lode doc new`/`submit`/`accept` — and the document
+store behind it. None of
 it is built.
 
 Until it is, design documents live only in git. The backbone cannot answer
@@ -35,8 +36,9 @@ authoring lands, the sync retires.
 
 ## 1. On-ramp, not a second end state {#sec-1}
 
-This does not change 025's destination — backbone-authored documents, git files
-gone. It is the incremental form of the one-time corpus import 025 §12 defers to
+This does not change 025's destination — backbone-authored documents, with the
+git trees then deleted or kept as an opt-in mirror (025 §2). It is the
+incremental form of the one-time corpus import 025 §12 defers to
 its final phase: the corpus flows continuously while git remains the authoring
 surface, instead of arriving in one cutover.
 
@@ -159,12 +161,14 @@ populate-and-store half.
 
 ## 7. Relationship to specs 025, 026, 029 {#sec-7}
 
-**Amends 025 §2.** 025 §2 says the git trees "stay in git … until this spec is
-implemented and the corpus is imported. From that point the files are deleted."
-This spec makes that import continuous: the corpus is synced to the backbone
-while git remains the authoring surface, and deletion waits for backbone
-authoring (025 §3/§5) to land. The destination is unchanged; only the transition
-gains an ongoing sync step.
+**Amends 025 §2.** 025 §2 has the git trees "stay in git … until this spec is
+implemented and the corpus is imported. From that point the backbone is the
+store of record," the files then deleted or kept as an opt-in mirror. This spec
+makes that import continuous: the corpus is synced to the backbone while git
+remains the authoring surface, and the store-of-record cutover waits for
+backbone authoring (025 §3/§5) to land. Whether the files are then deleted or
+kept as an opt-in mirror is 025 §2's to settle, unchanged by this spec; 034 only
+adds the ongoing on-ramp sync ahead of it.
 
 **Extends 026.** 026 is a read-only surface by design (026 §9) and deliberately
 adds no config key, putting the corpus directory on a `--docs` flag (026 §1).
@@ -212,7 +216,8 @@ values bounded.
 - `api → git` pull; any bidirectional sync.
 - `lode doc coverage`, which also needs the implementation side
   (`.worklode/implements.yaml`, 014 §6) — 026 §9.
-- Deleting the git corpus, which waits for backbone authoring.
+- Deleting the git corpus (or standing up 025 §2's opt-in mirror), which waits
+  for backbone authoring.
 
 ## 12. Acceptance criteria {#sec-12}
 
