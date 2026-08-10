@@ -249,13 +249,3 @@ Design items landed in spec 028. These are the mechanical leftovers.
   advanced for docs earlier in the batch, even though no rows were written.
   Extreme edge (requires a failure partway through a multi-doc sync). Move the
   increment to after commit when this is next touched.
-- **A plan's doc-graph edge is still labelled `implements`, not `covers`
-  (spec 033 → 034 reconciliation).** `internal/designdoc/corpus.go` emits
-  `EdgeMeta{Rel: "implements"}` for a plan's coverage, exactly as 034 ships
-  it, even though 033 retires `implements` for plans in favour of `wl:covers`
-  (033 sec-4.2). Aligning the edge needs a new `doc_edges` migration adding
-  `covers` to the rel CHECK constraint (mirrored in
-  `store.validDocEdgeRels`), plus updating the corpus loader and its tests.
-  Behaviour is otherwise correct — plans parse, cover, and validate under
-  `covers`; only the projected edge label lags. Do it when the doc-store edge
-  vocabulary is next revised.

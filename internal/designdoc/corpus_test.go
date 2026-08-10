@@ -117,8 +117,10 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 	if len(plan.Sections) != 0 {
 		t.Errorf("plan carries sections: %+v (025 §4: plans take none)", plan.Sections)
 	}
+	// The fixture uses the retired `implements:` spelling; the projected edge
+	// is still the canonical wl:covers (033 §4.2).
 	if len(plan.Edges) != 1 || plan.Edges[0] != (designdoc.EdgeMeta{
-		Rel: "implements", Target: "docs/specs/034-design-doc-sync.md",
+		Rel: "covers", Target: "docs/specs/034-design-doc-sync.md",
 	}) {
 		t.Errorf("plan edges = %+v", plan.Edges)
 	}
