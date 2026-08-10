@@ -124,6 +124,21 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 	}
 }
 
+// TestShellReferencesHTMX asserts the shell references the self-hosted,
+// dormant HTMX asset — no CDN, no hx-* behavior (that's spec 032 §11) — and
+// that /assets/htmx.min.js is served unauthenticated like the other assets.
+func TestShellReferencesHTMX(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	if !strings.Contains(body, `src="/assets/htmx.min.js"`) {
+		t.Error("shell does not reference self-hosted HTMX")
+	}
+	rr := doReq(t, h, "GET", "/assets/htmx.min.js", "", nil)
+	if rr.Code != 200 {
+		t.Errorf("GET /assets/htmx.min.js = %d, want 200 (no auth redirect)", rr.Code)
+	}
+}
+
 func TestAssetsServedWithoutAuth(t *testing.T) {
 	_, h, _ := newTestServer(t)
 

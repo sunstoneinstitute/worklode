@@ -5,6 +5,8 @@ package api
 // landmark each page's content fills via { children... }. Ported from
 // templates/layout.html, which this replaces (see web.go's render call
 // sites — each page component wraps its own content in @Page(p.basePage)).
+// The self-hosted HTMX script tag at the end of <body> is dormant substrate:
+// no hx-* attributes or behavior anywhere yet (that's spec 032 §11).
 
 templ Page(p basePage) {
 	<!doctype html>
@@ -25,6 +27,7 @@ templ Page(p basePage) {
 			<main id="main-content">
 				{ children... }
 			</main>
+			<script src="/assets/htmx.min.js" defer></script>
 		</body>
 	</html>
 }
