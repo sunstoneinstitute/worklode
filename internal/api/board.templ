@@ -1,0 +1,117 @@
+package api
+
+// board.templ renders boardPageData for both the Home ("/") and Work
+// ("/work") destinations — both show the same org-wide board; only the
+// heading and ActiveGlobal differ. Ported from templates/board.html.
+
+templ Board(data boardPageData) {
+	@Page(data.basePage) {
+		if data.ActiveGlobal == "home" {
+			<h1>Home</h1>
+			<h2>Current work</h2>
+		} else {
+			<h1>Work</h1>
+		}
+		<p class="muted">Inbox: { data.InboxCount } new issue{ pluralSuffix(data.InboxCount) }</p>
+		for _, proj := range data.Board.Projects {
+			@boardProjectSection(proj)
+		}
+		if len(data.Board.RecentFailures) > 0 {
+			<section>
+				<h2>Recent failures</h2>
+				<table>
+					<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
+					for _, f := range data.Board.RecentFailures {
+						<tr><td>{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
+					}
+				</table>
+			</section>
+		}
+	}
+}
+
+// boardProjectSection renders one project's In progress / In review / Ready
+// / Blocked buckets, matching board.html's per-project <section> exactly:
+// each bucket's badge class is fixed per-bucket (state-in_progress,
+// dynamic state-{state}, state-ready, state-blocked) independent of the
+// item's own State value, which board.html also hardcodes per bucket.
+templ boardProjectSection(proj boardProjectJSON) {
+	<section>
+		<h2><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></h2>
+
+		<h3>In progress</h3>
+		if len(proj.InProgress) == 0 {
+			<p class="muted">None</p>
+		} else {
+			<table>
+				<tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th><th>Assignee</th></tr>
+				for _, item := range proj.InProgress {
+					<tr>
+						<td><span class="badge state-in_progress">{ item.State }</span> <a href={ "/tasks/" + item.ID }>{ item.ID }</a></td>
+						<td>{ item.Title }</td>
+						<td>{ item.Priority }</td>
+						<td>
+							if item.Holder != nil {
+								{ item.Holder.ActorID }
+							} else {
+								<span class="muted">&mdash;</span>
+							}
+						</td>
+						<td>
+							if item.Holder != nil {
+								{ FmtTime(item.Holder.ExpiresAt) }
+							}
+						</td>
+						<td>{ item.Assignee }</td>
+					</tr>
+				}
+			</table>
+		}
+
+		<h3>In review</h3>
+		if len(proj.InReview) == 0 {
+			<p class="muted">None</p>
+		} else {
+			<table>
+				<tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
+				for _, item := range proj.InReview {
+					<tr><td><span class={ "badge state-" + item.State }>{ item.State }</span> <a href={ "/tasks/" + item.ID }>{ item.ID }</a></td><td>{ item.Title }</td><td>{ item.Priority }</td><td>{ item.Assignee }</td></tr>
+				}
+			</table>
+		}
+
+		<h3>Ready</h3>
+		if len(proj.Ready) == 0 {
+			<p class="muted">None</p>
+		} else {
+			<table>
+				<tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
+				for _, item := range proj.Ready {
+					<tr><td><span class="badge state-ready">{ item.State }</span> <a href={ "/tasks/" + item.ID }>{ item.ID }</a></td><td>{ item.Title }</td><td>{ item.Priority }</td><td>{ item.Assignee }</td></tr>
+				}
+			</table>
+		}
+
+		<h3>Blocked</h3>
+		if len(proj.Blocked) == 0 {
+			<p class="muted">None</p>
+		} else {
+			<table>
+				<tr><th>Task</th><th>Title</th><th>Priority</th><th>Assignee</th></tr>
+				for _, item := range proj.Blocked {
+					<tr><td><span class="badge state-blocked">blocked</span> <a href={ "/tasks/" + item.ID }>{ item.ID }</a></td><td>{ item.Title }</td><td>{ item.Priority }</td><td>{ item.Assignee }</td></tr>
+				}
+			</table>
+		}
+	</section>
+}
+
+// pluralSuffix returns "s" unless n == 1 — the org-wide board's inbox-count
+// pluralization, matching the pre-migration
+// {{if ne .InboxCount 1}}s{{end}} exactly.
+func pluralSuffix(n int) string {
+	if n != 1 {
+		return "s"
+	}
+	return ""
+}

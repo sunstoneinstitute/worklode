@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"math"
 	"net/http"
@@ -191,15 +190,6 @@ type server struct {
 	docSyncDuration prometheus.Histogram
 	docSyncDocs     *prometheus.CounterVec
 	docSyncForced   prometheus.Counter
-
-	// Web UI templates, parsed once at startup (template.Must panics on a
-	// parse error, so a broken template fails fast at boot, not on first
-	// request). One *template.Template per page — see parseWebTemplates.
-	tmplBoard       *template.Template
-	tmplTask        *template.Template
-	tmplProject     *template.Template
-	tmplProjects    *template.Template
-	tmplPlaceholder *template.Template
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -224,11 +214,6 @@ func validatePublicURL(publicURL string) error {
 func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) {
 	s := &server{
 		st: st, cfg: cfg, log: slog.Default(),
-		tmplBoard:       parseWebTemplates("board.html"),
-		tmplTask:        parseWebTemplates("task.html"),
-		tmplProject:     parseWebTemplates("project.html"),
-		tmplProjects:    parseWebTemplates("projects.html"),
-		tmplPlaceholder: parseWebTemplates("placeholder.html"),
 	}
 	s.cliCodes = newCLICodeStore(st.Now)
 	s.bgCtx = cfg.BackgroundCtx
