@@ -148,6 +148,11 @@ once an instance is running (dogfooding); until then this file is the list.
   content-negotiate — pick a serving strategy deliberately. Specs 006 §9,
   009 item 3, 014 §1 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
+- **Design-doc sync normalizes frontmatter YAML timestamps to RFC3339**
+  (spec 034): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
+  `issued: 2026-01-01` as `"2026-01-01T00:00:00Z"` in the stored JSON —
+  deterministic and idempotency-safe, but not byte-faithful to the source
+  file. Preserving the original lexical form is deliberately deferred.
 
 ## From the 2026-08-04 architecture grilling
 
@@ -211,8 +216,10 @@ Design items landed in spec 028. These are the mechanical leftovers.
   but cheap to tighten to "task exists".
 - **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of 026 §3
   only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (026
-  §3.1–§3.2), `lode doc list` and `lode doc sections` (026 §2), and
-  `--strict-refs` remain unimplemented.
+  §3.1–§3.2) remains unimplemented. `lode doc sync` and `lode doc list` now
+  exist (spec 034); `lode doc sections`, `--strict-refs`, and the 026 §2
+  planning-status flags (`--needs-planning` / `--needs-execution`) remain
+  unimplemented.
 - **025 §10 (accepted, frozen) and 028 (draft) still spell the command
   `lode doc show`; 026 §3 implements the same command spelled `lode show`
   (2026-08-07).** `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
@@ -235,3 +242,10 @@ Design items landed in spec 028. These are the mechanical leftovers.
   `PinnedFocus`/`NextDecision`, and `modeFactsForProject`'s intake/promotion
   facts) stay nil/false in Part 1 — `internal/api/cockpit.go` documents this
   as a Part 2 dependency on spec 029's stores.
+- **`worklode_doc_upserts_total` is incremented inside `ApplyDocSync`'s
+  transaction (spec 034 follow-up).** `internal/store/docs.go` calls
+  `s.metrics.docUpsert(outcome)` per doc before the transaction commits; a
+  mid-batch DB failure that rolls the tx back leaves the counter already
+  advanced for docs earlier in the batch, even though no rows were written.
+  Extreme edge (requires a failure partway through a multi-doc sync). Move the
+  increment to after commit when this is next touched.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1781,5 +1782,127 @@ func TestClientAssignmentFlow(t *testing.T) {
 	}
 	if submitted.State != "in_review" {
 		t.Fatalf("SubmitTask result state = %q, want in_review", submitted.State)
+	}
+}
+
+// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 034 §2):
+// CorporaFrom, not LoadConfig, is the sole reader.
+
+func TestCorporaFromRepoConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode",
+		"spec_corpus = \"docs/specs\"\nplan_corpus = \"docs/plans\"\n")
+
+	c, err := cli.CorporaFrom(filepath.Join(repo, "sub"))
+	if err != nil {
+		t.Fatalf("CorporaFrom: %v", err)
+	}
+	if c.Root != repo {
+		t.Errorf("Root = %q, want %q", c.Root, repo)
+	}
+	if want := filepath.Join(repo, "docs", "specs"); c.SpecDir != want {
+		t.Errorf("SpecDir = %q, want %q", c.SpecDir, want)
+	}
+	if want := filepath.Join(repo, "docs", "plans"); c.PlanDir != want {
+		t.Errorf("PlanDir = %q, want %q", c.PlanDir, want)
+	}
+}
+
+func TestCorporaFromKeyPresenceEnablesEachCorpus(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "spec_corpus = \"design\"\n")
+
+	c, err := cli.CorporaFrom(repo)
+	if err != nil {
+		t.Fatalf("CorporaFrom: %v", err)
+	}
+	if want := filepath.Join(repo, "design"); c.SpecDir != want {
+		t.Errorf("SpecDir = %q, want %q", c.SpecDir, want)
+	}
+	if c.PlanDir != "" {
+		t.Errorf("PlanDir = %q, want \"\" (plan_corpus unset)", c.PlanDir)
+	}
+}
+
+func TestCorporaFromNoRepoConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	c, err := cli.CorporaFrom(filepath.Join(home, "git", "bare"))
+	if err != nil {
+		t.Fatalf("CorporaFrom: %v", err)
+	}
+	if c != (cli.Corpora{}) {
+		t.Errorf("CorporaFrom = %+v, want zero Corpora", c)
+	}
+}
+
+func TestCorporaFromRejectsAbsolutePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode", "spec_corpus = \"/etc/specs\"\n")
+	if _, err := cli.CorporaFrom(repo); err == nil {
+		t.Fatal("CorporaFrom accepted an absolute spec_corpus; want error")
+	}
+}
+
+// The keys never reach the merged Config, mirroring
+// TestLoadConfigFromNeverPopulatesWorktreeDir.
+func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
+	home, workDir := repoTestHome(t,
+		"server = \"https://wl.example.com\"\nspec_corpus = \"user-specs\"\n")
+	repo := filepath.Join(home, "git", "proj")
+	writeRepoConfig(t, repo, ".worklode",
+		"spec_corpus = \"repo-specs\"\nplan_corpus = \"repo-plans\"\n")
+
+	cfg, err := cli.LoadConfigFromForTest(workDir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.SpecCorpus != "" || cfg.PlanCorpus != "" {
+		t.Fatalf("Config carries corpus keys (%q, %q); want empty — CorporaFrom is the sole reader",
+			cfg.SpecCorpus, cfg.PlanCorpus)
+	}
+}
+
+func TestSyncDocsWire(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"dry_run":false,"added":1,"updated":0,"unchanged":0,
+			"results":[{"id":"WL-SPEC-34","kind":"spec","outcome":"added"}]}`)
+	}))
+	defer srv.Close()
+
+	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_" + strings.Repeat("a", 40)})
+	rep, _, err := c.SyncDocs(context.Background(), cli.DocSyncInput{
+		Project: "wl", SourceBranch: "main", Force: true,
+		Docs: []cli.DocUpsert{{Kind: "spec", Ordinal: "34", Status: "accepted",
+			Title: "T", Body: "B", Frontmatter: json.RawMessage(`{"status":"accepted"}`)}},
+	})
+	if err != nil {
+		t.Fatalf("SyncDocs: %v", err)
+	}
+	if gotPath != "/api/v1/docs/sync" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotBody["project"] != "wl" || gotBody["force"] != true || gotBody["source_branch"] != "main" {
+		t.Errorf("body = %v", gotBody)
+	}
+	if gotBody["dirty"] != false || gotBody["dry_run"] != false {
+		t.Errorf("body = %v", gotBody)
+	}
+	if docs, ok := gotBody["docs"].([]any); !ok || len(docs) == 0 {
+		t.Errorf("body docs = %v, want a non-empty array", gotBody["docs"])
+	}
+	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-34" {
+		t.Errorf("report = %+v", rep)
 	}
 }

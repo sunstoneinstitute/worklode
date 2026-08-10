@@ -142,6 +142,21 @@ func IssueTable(w io.Writer, issues []Issue) {
 	tw.Flush()
 }
 
+// DocTable prints one row per synced document: id, kind, status, version, a
+// dirty-provenance marker (034 §3), and title.
+func DocTable(w io.Writer, docs []Doc) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "ID\tKIND\tSTATUS\tV\tDIRTY\tTITLE")
+	for _, d := range docs {
+		dirty := "-"
+		if d.SourceDirty {
+			dirty = "yes"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n", d.ID, d.Kind, d.Status, d.Version, dirty, d.Title)
+	}
+	tw.Flush()
+}
+
 // ProjectTable prints one row per project: id, key, name, repos. Each repo is
 // rendered as "owner/name (done_state)".
 func ProjectTable(w io.Writer, projects []Project) {
