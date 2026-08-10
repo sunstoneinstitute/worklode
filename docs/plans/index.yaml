@@ -751,3 +751,13 @@ docs/plans/2026-08-09-project-cockpit-1-shell-and-projection.md:
     task-3-add-bulk-project-work-facts-and-status-provenance: "### Task 3 — Add bulk project-work facts and status provenance"
     task-4-complete-accountability-and-evidence-disclosure: "### Task 4 — Complete accountability and evidence disclosure"
     task-5-prove-the-cockpit-tracer-through-public-surfaces: "### Task 5 — Prove the cockpit tracer through public surfaces"
+docs/plans/2026-08-10-cockpit-templ-htmx-tailwind.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    file-map: "## File Map"
+    spec-coverage: "## Spec Coverage"
+    tasks: "## Tasks"
+    task-1-install-the-templ-and-tailwind-toolchain-and-repo-hygiene: "### Task 1 — Install the templ and Tailwind toolchain and repo hygiene"
+    task-2-convert-the-cockpit-shell-and-pages-to-templ-with-tailwind-styling: "### Task 2 — Convert the cockpit shell and pages to templ with Tailwind styling"
+    task-3-embed-self-hosted-htmx-into-the-shell-dormant: "### Task 3 — Embed self-hosted HTMX into the shell (dormant)"
+    task-4-align-documentation-and-run-the-full-verification-gate: "### Task 4 — Align documentation and run the full verification gate"
