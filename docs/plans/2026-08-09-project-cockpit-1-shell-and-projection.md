@@ -1,6 +1,6 @@
 ---
 status: draft
-implements:
+covers:
   - docs/specs/032-project-cockpit.md#sec-0
   - docs/specs/032-project-cockpit.md#sec-1
   - docs/specs/032-project-cockpit.md#sec-2
