@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
@@ -801,16 +803,39 @@ func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
 	}
 }
 
-// TestShowHasNoDocCommand pins the removal of `lode doc`: its verbs now live
-// under `lode show`'s kind flags.
-func TestShowHasNoDocCommand(t *testing.T) {
+// TestDocHasNoShowVerb pins that only the "show" verb was consolidated out of
+// `lode doc` and into `lode show`'s kind flags (026 §3). Spec 034 reinstates
+// `lode doc` as the namespace for sync/list (and, later, new/submit/accept);
+// this guards against "show" creeping back in as `lode doc show`, not
+// against the "doc" command existing at all. (An unrecognized subcommand of
+// a non-root parent, e.g. `lode doc show`, prints help and exits 0 by cobra
+// default — see `lode task bogus` — so that path isn't asserted here.)
+func TestDocHasNoShowVerb(t *testing.T) {
+	var doc *cobra.Command
 	for _, c := range rootCmd.Commands() {
 		if c.Name() == "doc" {
-			t.Fatalf("rootCmd still has a %q child command; lode doc must be removed", c.Name())
+			doc = c
 		}
 	}
-	out, err := runLode(t, "doc", "show", "26")
-	if err == nil {
-		t.Fatalf(`lode doc show 26 succeeded\noutput: %s`, out)
+	if doc == nil {
+		t.Fatal(`rootCmd has no "doc" command; lode doc sync/list (spec 034) must be registered`)
+	}
+	haveSync, haveList := false, false
+	for _, c := range doc.Commands() {
+		if c.Name() == "show" {
+			t.Fatalf(`"doc" still has a %q child command; lode doc show was consolidated into lode show (026 §3)`, c.Name())
+		}
+		if c.Name() == "sync" {
+			haveSync = true
+		}
+		if c.Name() == "list" {
+			haveList = true
+		}
+	}
+	if !haveSync {
+		t.Error(`"doc" has no "sync" child command; lode doc sync (spec 034) must be registered`)
+	}
+	if !haveList {
+		t.Error(`"doc" has no "list" child command; lode doc list (spec 034) must be registered`)
 	}
 }

@@ -54,15 +54,40 @@ func init() {
 	rootCmd.AddCommand(newTaskCmd())
 }
 
+// resolveBody returns the task body from --body / --body-file (spec 034 §9,
+// the gh convention): bodyFile wins when set, with "-" reading stdin. Flag
+// exclusivity is enforced by cobra (MarkFlagsMutuallyExclusive), not here.
+func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
+	if bodyFile == "" {
+		return body, nil
+	}
+	if bodyFile == "-" {
+		b, err := io.ReadAll(stdin)
+		if err != nil {
+			return "", fmt.Errorf("read body from stdin: %w", err)
+		}
+		return string(b), nil
+	}
+	b, err := os.ReadFile(bodyFile)
+	if err != nil {
+		return "", fmt.Errorf("read body file: %w", err)
+	}
+	return string(b), nil
+}
+
 func newTaskAddCmd() *cobra.Command {
 	var scope scopeFlags
-	var title, body, priority, kind, concern, parent string
+	var title, body, bodyFile, priority, kind, concern, parent string
 	var draft bool
 	var skills []string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			body, err := resolveBody(body, bodyFile, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
@@ -92,6 +117,8 @@ func newTaskAddCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read the task body from a file (\"-\" for stdin)")
+	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, review, spike, epic")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")

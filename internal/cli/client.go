@@ -22,8 +22,8 @@ import (
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server", "current_project", "project_key", and
-// "worktree_dir", e.g.:
+// recognized keys are "server", "current_project", "project_key",
+// "worktree_dir", "spec_corpus", and "plan_corpus", e.g.:
 //
 //	server = "https://wl.example.com"
 //	current_project = "sunstone-web"
@@ -67,6 +67,14 @@ type Config struct {
 	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
 	// instead of this field.
 	WorktreeDir string
+
+	// SpecCorpus / PlanCorpus carry the spec_corpus / plan_corpus keys when
+	// Config is produced directly by parseConfig — which is how CorporaFrom
+	// reads them. Like WorktreeDir they are repo-scoped only (spec 034 §2)
+	// and are NOT populated by LoadConfig/loadConfigFrom; CorporaFrom is the
+	// sole reader.
+	SpecCorpus string
+	PlanCorpus string
 }
 
 // tokenStore is the keychain the client reads/writes tokens through.
@@ -143,6 +151,53 @@ func WorktreeDirFrom(startDir string) string {
 	return dir
 }
 
+// Corpora is the repo-scoped corpus declaration (spec 034 §2): which
+// directories `lode doc sync` reads, and as which document kind. A key's
+// presence enables its corpus; the zero value means nothing is configured.
+type Corpora struct {
+	Root    string // absolute repo root — the directory holding .worklode/
+	SpecDir string // absolute spec corpus dir; "" when spec_corpus is unset
+	PlanDir string // absolute plan corpus dir; "" when plan_corpus is unset
+}
+
+// CorporaFrom reads startDir's repo-local config for spec_corpus/plan_corpus
+// (spec 034 §2). Like WorktreeDirFrom it never consults the user-level config
+// or the keychain, but unlike it a malformed repo config is an error here —
+// sync must not silently degrade to "nothing configured" (034 §3).
+func CorporaFrom(startDir string) (Corpora, error) {
+	repoPath, ok := findRepoConfig(startDir)
+	if !ok {
+		return Corpora{}, nil
+	}
+	data, err := os.ReadFile(repoPath)
+	if err != nil {
+		return Corpora{}, fmt.Errorf("read %s: %w", repoPath, err)
+	}
+	cfg, err := parseConfig(string(data))
+	if err != nil {
+		return Corpora{}, fmt.Errorf("parse %s: %w", repoPath, err)
+	}
+	// repoPath is <root>/.worklode/config.toml (or .lode/): root is two up.
+	root := filepath.Dir(filepath.Dir(repoPath))
+	c := Corpora{Root: root}
+	for _, k := range []struct {
+		key, val string
+		dst      *string
+	}{
+		{"spec_corpus", cfg.SpecCorpus, &c.SpecDir},
+		{"plan_corpus", cfg.PlanCorpus, &c.PlanDir},
+	} {
+		if k.val == "" {
+			continue
+		}
+		if filepath.IsAbs(k.val) {
+			return Corpora{}, fmt.Errorf("%s: %s = %q must be a repo-relative directory", repoPath, k.key, k.val)
+		}
+		*k.dst = filepath.Join(root, filepath.FromSlash(k.val))
+	}
+	return c, nil
+}
+
 // LoadConfig reads the config files (a missing file is not an error — its
 // fields are just left empty), merges the repo-local config found from the
 // working directory on top of the user config, and applies the
@@ -178,6 +233,9 @@ func loadConfigFrom(startDir string) (Config, error) {
 		// setting it must not leak into the merged Config — WorktreeDirFrom
 		// is the sole reader, and it never consults this path.
 		cfg.WorktreeDir = ""
+		// spec_corpus/plan_corpus are repo-scoped only (spec 034 §2);
+		// CorporaFrom is the sole reader.
+		cfg.SpecCorpus, cfg.PlanCorpus = "", ""
 	case os.IsNotExist(err):
 		// No config file: fine, env vars (or flags) may still supply everything.
 	default:
@@ -244,6 +302,10 @@ func parseConfig(data string) (Config, error) {
 			cfg.ProjectKey = val
 		case "worktree_dir":
 			cfg.WorktreeDir = val
+		case "spec_corpus":
+			cfg.SpecCorpus = val
+		case "plan_corpus":
+			cfg.PlanCorpus = val
 		default:
 			return Config{}, fmt.Errorf("line %d: unknown key %q", i+1, key)
 		}
@@ -286,9 +348,10 @@ func (cfg *Config) merge(repo Config, path string) {
 	if repo.ProjectKey != "" {
 		cfg.ProjectKey = repo.ProjectKey
 	}
-	// worktree_dir is deliberately NOT merged here: it is repo-scoped only
-	// (spec 030 §4) and read exclusively through WorktreeDirFrom, which never
-	// goes through loadConfigFrom/merge.
+	// worktree_dir, spec_corpus, and plan_corpus are deliberately NOT merged
+	// here: they are repo-scoped only (specs 030 §4, 034 §2) and read
+	// exclusively through WorktreeDirFrom / CorporaFrom, which never go
+	// through loadConfigFrom/merge.
 }
 
 // SaveConfig stores the token in the OS keychain and writes only the server URL
@@ -1191,6 +1254,143 @@ func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult,
 		return ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
 	}
 	return out, raw, nil
+}
+
+// --- docs ---------------------------------------------------------------
+
+// DocSection is one heading extracted from a synced document's body.
+type DocSection struct {
+	Anchor   string `json:"anchor"`
+	Heading  string `json:"heading"`
+	Depth    int    `json:"depth"`
+	Position int    `json:"position"`
+}
+
+// DocEdge is one cross-reference extracted from a synced document's body.
+type DocEdge struct {
+	SrcAnchor    string `json:"src_anchor"`
+	Rel          string `json:"rel"`
+	Target       string `json:"target"`
+	TargetAnchor string `json:"target_anchor"`
+}
+
+// DocUpsert is one document in a SyncDocs request body.
+type DocUpsert struct {
+	Kind        string          `json:"kind"`
+	Ordinal     string          `json:"ordinal"`
+	Status      string          `json:"status"`
+	Title       string          `json:"title"`
+	Body        string          `json:"body"`
+	Frontmatter json.RawMessage `json:"frontmatter"`
+	Sections    []DocSection    `json:"sections,omitempty"`
+	Edges       []DocEdge       `json:"edges,omitempty"`
+}
+
+// DocSyncInput is the request for SyncDocs.
+type DocSyncInput struct {
+	Project      string
+	SourceBranch string
+	Dirty        bool
+	Force        bool
+	DryRun       bool
+	Docs         []DocUpsert
+}
+
+// DocSyncResult is one document's outcome in a SyncDocs response.
+type DocSyncResult struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Outcome string `json:"outcome"`
+}
+
+// DocSyncReport is the response body of SyncDocs.
+type DocSyncReport struct {
+	DryRun    bool            `json:"dry_run"`
+	Added     int             `json:"added"`
+	Updated   int             `json:"updated"`
+	Unchanged int             `json:"unchanged"`
+	Results   []DocSyncResult `json:"results"`
+}
+
+// Doc is the wire form of a stored document (list rows have Body == "").
+type Doc struct {
+	ID           string          `json:"id"`
+	Project      string          `json:"project"`
+	Kind         string          `json:"kind"`
+	Ordinal      string          `json:"ordinal"`
+	Status       string          `json:"status"`
+	Title        string          `json:"title"`
+	Version      int             `json:"version"`
+	SourceBranch string          `json:"source_branch"`
+	SourceDirty  bool            `json:"source_dirty"`
+	SyncedAt     time.Time       `json:"synced_at"`
+	Body         string          `json:"body,omitempty"`
+	Frontmatter  json.RawMessage `json:"frontmatter,omitempty"`
+	Sections     []DocSection    `json:"sections,omitempty"`
+	Edges        []DocEdge       `json:"edges,omitempty"`
+}
+
+// DocListResponse is the response body of ListDocs.
+type DocListResponse struct {
+	Docs []Doc `json:"docs"`
+}
+
+// SyncDocs calls POST /api/v1/docs/sync — the git→backbone bulk upsert
+// (spec 034 §3).
+func (c *Client) SyncDocs(ctx context.Context, in DocSyncInput) (DocSyncReport, []byte, error) {
+	body := map[string]any{
+		"project":       in.Project,
+		"source_branch": in.SourceBranch,
+		"dirty":         in.Dirty,
+		"force":         in.Force,
+		"dry_run":       in.DryRun,
+		"docs":          in.Docs,
+	}
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/docs/sync", body)
+	if err != nil {
+		return DocSyncReport{}, nil, err
+	}
+	var rep DocSyncReport
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		return DocSyncReport{}, nil, fmt.Errorf("decode sync report: %w", err)
+	}
+	return rep, raw, nil
+}
+
+// ListDocs calls GET /api/v1/docs. Empty filter values do not filter.
+func (c *Client) ListDocs(ctx context.Context, project, kind, status string) (DocListResponse, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)
+	if err != nil {
+		return DocListResponse{}, nil, err
+	}
+	var resp DocListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return DocListResponse{}, nil, fmt.Errorf("decode doc list: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// GetDoc calls GET /api/v1/docs/{id}.
+func (c *Client) GetDoc(ctx context.Context, id string) (Doc, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/docs/"+url.PathEscape(id), nil)
+	if err != nil {
+		return Doc{}, nil, err
+	}
+	var d Doc
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return Doc{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
 }
 
 // --- projects ---------------------------------------------------------

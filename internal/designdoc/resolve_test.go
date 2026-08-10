@@ -248,3 +248,25 @@ func TestFindCorpusNoRepoRoot(t *testing.T) {
 		t.Errorf("FindCorpus = %q, want empty", got)
 	}
 }
+
+func TestFindRepoRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := FindRepoRoot(nested); got != root {
+		t.Errorf("FindRepoRoot(%q) = %q, want %q", nested, got, root)
+	}
+	if got := FindRepoRoot(t.TempDir()); got != "" {
+		t.Errorf("FindRepoRoot outside a repo = %q, want \"\"", got)
+	}
+	// FindCorpus stays the conventional-default wrapper.
+	if got, want := FindCorpus(nested), filepath.Join(root, "docs", "specs"); got != want {
+		t.Errorf("FindCorpus = %q, want %q", got, want)
+	}
+}
