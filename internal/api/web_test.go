@@ -153,6 +153,20 @@ func TestAssetsServedWithoutAuth(t *testing.T) {
 	}
 }
 
+// TestTailwindSourceNotServed asserts the Tailwind build source
+// (internal/api/styles/app.tailwind.css) is not reachable under /assets/ —
+// it moved out of the embedded, served tree so un-minified build source is
+// no longer exposed; only the generated internal/api/assets/app.css is
+// served.
+func TestTailwindSourceNotServed(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	rr := doReq(t, h, "GET", "/assets/app.tailwind.css", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestAppCSSContent(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
