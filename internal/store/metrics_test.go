@@ -61,6 +61,8 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.renew("ok")
 	m.release("ok")
 	m.expire(3)
+	m.projectWorkRead(nil)
+	m.projectWorkRead(errors.New("boom"))
 }
 
 // TestLeaseMetricsCounters drives claim/renew/release/expire through a store
@@ -173,5 +175,48 @@ func TestClaimNextDryRunRecordsNothing(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "none")); got != 0 {
 		t.Fatalf("claims{claim_next,none} after dry run = %v, want 0", got)
+	}
+}
+
+// TestProjectWorkReadMetrics drives a real ListProjectWorkFacts call through
+// a store with metrics attached (proving the outcome="ok" counter is wired
+// into the method itself), then exercises projectWorkRead's error-label
+// mapping directly — parallel to TestClaimOutcomeMapping — since a genuine
+// DB failure is impractical to force through the public method. It also
+// asserts the metric carries only the outcome label: never a project or
+// task id, which would be unbounded.
+func TestProjectWorkReadMetrics(t *testing.T) {
+	s := openTaskStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+
+	if _, err := s.ListProjectWorkFacts(ctx, "horndb"); err != nil {
+		t.Fatalf("ListProjectWorkFacts: %v", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.projectWorkReads.WithLabelValues("ok")); got != 1 {
+		t.Fatalf("project_work_reads{ok} = %v, want 1", got)
+	}
+
+	s.metrics.projectWorkRead(errors.New("boom"))
+	if got := testutil.ToFloat64(s.metrics.projectWorkReads.WithLabelValues("error")); got != 1 {
+		t.Fatalf("project_work_reads{error} = %v, want 1", got)
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_project_work_reads_total" {
+			continue
+		}
+		for _, metric := range mf.GetMetric() {
+			for _, lp := range metric.GetLabel() {
+				if lp.GetName() != "outcome" {
+					t.Fatalf("worklode_project_work_reads_total has unexpected label %q, want only outcome", lp.GetName())
+				}
+			}
+		}
 	}
 }

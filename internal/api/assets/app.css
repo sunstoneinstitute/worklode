@@ -1,0 +1,264 @@
+/*
+ * app.css - the worklode cockpit shell's stylesheet: Sunstone brand tokens,
+ * light/dark themes, and the accessible/responsive shell rules the cockpit
+ * shell depends on (skip link, focus-visible, minimum target size, the
+ * narrow-viewport column). Adapted from the sunstone-core:branding skill's
+ * examples/sunstone-theme.css; self-hosted fonts and their OFL licences live
+ * in fonts/ next to this file. See docs/specs/032-project-cockpit.md §10.
+ */
+
+/* ---------- Fonts (self-hosted variable fonts) ---------- */
+
+@font-face {
+  font-family: "DM Sans";
+  src: url("/assets/fonts/dm-sans-variable.ttf") format("truetype-variations");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/assets/fonts/source-serif-4-variable.ttf") format("truetype-variations");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Brand constants (theme-independent) ---------- */
+
+:root {
+  /* Logo colors */
+  --sunstone-orange: #F58221;
+  --sunstone-yellow: #FAD604;
+  --sunstone-dark-blue: #0E1937;
+
+  /* Tints (40%) */
+  --sunstone-orange-tint: #FDE6D3;
+  --sunstone-yellow-tint: #FDEF9B;
+  --sunstone-blue-tint: #9FA3AF;
+
+  /* Secondaries */
+  --sunstone-orange-alt: #FF9055;
+  --sunstone-cyan: #46C5DE;      /* Cool 2 */
+  --sunstone-yellow-green: #EFDE0F; /* Cool 4 */
+  --sunstone-teal: #266680;      /* Cool 6 */
+
+  /* Greys */
+  --sunstone-cool-grey: #CBCBCB;
+  --sunstone-cool-grey-light: #F4F4F4;
+  --sunstone-warm-grey: #A49A87;
+  --sunstone-warm-grey-light: #E0D8C9;
+
+  /* Typography */
+  --font-sans: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+
+  --text-title: 3.35rem;
+  --text-h1: 1.65rem;
+  --text-h2: 1.4rem;
+  --text-h3: 1.25rem;
+  --text-h4: 1.1rem;
+  --text-h5: 1rem;
+  --text-h6: 0.9rem;
+
+  --radius-pill: 999px;
+}
+
+/* ---------- Light theme (default) ---------- */
+
+:root {
+  color-scheme: light;
+
+  --color-background: #FFFFFF;
+  --color-surface: var(--sunstone-cool-grey-light);
+  --color-surface-accent: var(--sunstone-orange-tint);
+  --color-text: var(--sunstone-dark-blue);
+  --color-text-muted: color-mix(in srgb, var(--sunstone-dark-blue) 62%, #FFFFFF);
+  --color-border: var(--sunstone-cool-grey);
+  --color-link: var(--sunstone-teal);
+
+  --color-cta-bg: var(--sunstone-yellow);
+  --color-cta-text: var(--sunstone-dark-blue);
+}
+
+/* ---------- Dark theme ---------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-background: var(--sunstone-dark-blue);
+    --color-surface: color-mix(in srgb, #FFFFFF 7%, var(--sunstone-dark-blue));
+    --color-surface-accent: color-mix(in srgb, var(--sunstone-orange) 18%, var(--sunstone-dark-blue));
+    --color-text: var(--sunstone-cool-grey-light);
+    --color-text-muted: var(--sunstone-blue-tint);
+    --color-border: color-mix(in srgb, #FFFFFF 18%, var(--sunstone-dark-blue));
+    --color-link: var(--sunstone-cyan);
+
+    --color-cta-bg: var(--sunstone-yellow);
+    --color-cta-text: var(--sunstone-dark-blue);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-background: var(--sunstone-dark-blue);
+  --color-surface: color-mix(in srgb, #FFFFFF 7%, var(--sunstone-dark-blue));
+  --color-surface-accent: color-mix(in srgb, var(--sunstone-orange) 18%, var(--sunstone-dark-blue));
+  --color-text: var(--sunstone-cool-grey-light);
+  --color-text-muted: var(--sunstone-blue-tint);
+  --color-border: color-mix(in srgb, #FFFFFF 18%, var(--sunstone-dark-blue));
+  --color-link: var(--sunstone-cyan);
+
+  --color-cta-bg: var(--sunstone-yellow);
+  --color-cta-text: var(--sunstone-dark-blue);
+}
+
+/* ---------- Base ---------- */
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  line-height: 1.5;
+  margin: 0;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+h1 { font-size: var(--text-h1); }
+h2 { font-size: var(--text-h2); }
+h3 { font-size: var(--text-h3); }
+
+a { color: var(--color-link); }
+
+.muted { color: var(--color-text-muted); }
+
+/* ---------- Skip link ---------- */
+
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(-100%);
+  background: var(--color-cta-bg);
+  color: var(--color-cta-text);
+  padding: 0.75rem 1.25rem;
+  z-index: 100;
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* ---------- Focus and target size ---------- */
+
+:focus-visible { outline: 3px solid var(--sunstone-yellow); outline-offset: 3px; }
+a, button, input, select, summary { min-height: 44px; }
+
+/* ---------- Shell layout ---------- */
+
+header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 1.5rem;
+}
+nav[aria-label="Primary"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 72rem;
+  margin: 0 auto;
+}
+nav[aria-label="Primary"] a {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+}
+nav[aria-label="Primary"] a[aria-current="page"] {
+  border-bottom-color: var(--sunstone-orange);
+  font-weight: 700;
+}
+
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 3rem;
+}
+
+section { margin-bottom: 2rem; }
+
+/* ---------- Project shell: local nav + narrow-viewport column ---------- */
+
+.cockpit-grid { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 20rem; gap: 2rem; }
+
+.project-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.project-nav a {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-text);
+  text-decoration: none;
+  border-radius: 0.4rem;
+}
+.project-nav a[aria-current="page"] {
+  background: var(--color-surface-accent);
+  font-weight: 700;
+}
+
+@media (max-width: 64rem) {
+  .cockpit-grid { display: flex; flex-direction: column; }
+  .project-nav ul { display: flex; flex-wrap: wrap; }
+}
+
+/* ---------- Tables, badges, misc ---------- */
+
+table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.5rem; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+th { font-weight: 600; border-bottom: 2px solid var(--color-border); }
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.state-ready { background: color-mix(in srgb, var(--sunstone-cyan) 30%, transparent); }
+.state-in_progress { background: color-mix(in srgb, var(--sunstone-yellow) 40%, transparent); }
+.state-in_review { background: color-mix(in srgb, var(--sunstone-orange) 25%, transparent); }
+.state-blocked { background: color-mix(in srgb, #d33 30%, transparent); }
+.state-merged { background: color-mix(in srgb, var(--sunstone-teal) 30%, transparent); }
+.state-deployed_dev { background: color-mix(in srgb, var(--sunstone-cyan) 45%, transparent); }
+.state-deployed_prod { background: color-mix(in srgb, var(--sunstone-teal) 45%, transparent); }
+.state-released { background: color-mix(in srgb, var(--sunstone-teal) 60%, transparent); }
+.state-abandoned { background: var(--color-border); }
+.state-draft { background: var(--color-surface); }
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: var(--color-surface);
+  padding: 0.75rem;
+  border-radius: 0.4rem;
+}

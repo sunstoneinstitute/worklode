@@ -21,7 +21,213 @@ func bodyContains(t *testing.T, body string, want ...string) {
 	}
 }
 
-func TestBoardPageOrgBoard(t *testing.T) {
+// assertShell checks the structural markers every page rendered through
+// layout.html must carry: the skip link, the one primary nav landmark, the
+// one main landmark, and the shared stylesheet — see
+// docs/specs/032-project-cockpit.md §10.
+func assertShell(t *testing.T, body string) {
+	t.Helper()
+	for _, want := range []string{
+		`<html lang="en">`,
+		`href="#main-content"`,
+		`<nav aria-label="Primary">`,
+		`<main id="main-content"`,
+		`href="/assets/app.css"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page is missing shell marker %q", want)
+		}
+	}
+	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
+		t.Errorf("main landmark count = %d, want 1", got)
+	}
+}
+
+// assertOneAriaCurrent checks exactly one nav item (primary or project-local)
+// is marked as the current page — the shell's binding accessibility
+// constraint: never zero, never two.
+func assertOneAriaCurrent(t *testing.T, body string) {
+	t.Helper()
+	if got := strings.Count(body, `aria-current="page"`); got != 1 {
+		t.Errorf(`aria-current="page" count = %d, want 1`, got)
+	}
+}
+
+// assertOrder checks every string in want appears in body, in that order
+// (each search starts after the previous match).
+func assertOrder(t *testing.T, body string, want ...string) {
+	t.Helper()
+	pos := 0
+	for _, w := range want {
+		idx := strings.Index(body[pos:], w)
+		if idx < 0 {
+			t.Errorf("body missing %q after position %d, in expected order %v", w, pos, want)
+			return
+		}
+		pos += idx + len(w)
+	}
+}
+
+// TestGlobalNavOrder checks the primary nav renders the seven destinations
+// in the exact order docs/specs/032-project-cockpit.md §2 requires: Home,
+// Intake, Projects, Work, Reviews, Deliveries, Knowledge.
+func TestGlobalNavOrder(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	assertOrder(t, body, ">Home<", ">Intake<", ">Projects<", ">Work<", ">Reviews<", ">Deliveries<", ">Knowledge<")
+}
+
+func TestGlobalDestinations(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	for _, path := range []string{"/", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/knowledge"} {
+		t.Run(path, func(t *testing.T) {
+			rr := doReq(t, h, "GET", path, "", nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want 200; body %s", path, rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			assertShell(t, body)
+			assertOneAriaCurrent(t, body)
+		})
+	}
+}
+
+// TestGlobalPlaceholdersAreHonest checks the four not-yet-implemented global
+// destinations name their owning spec and render no form, button, or fake
+// state implying the workflow exists.
+func TestGlobalPlaceholdersAreHonest(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	for _, tt := range []struct {
+		path string
+		want string
+	}{
+		{"/intake", "spec 032 §5"},
+		{"/reviews", "spec 029 §7"},
+		{"/deliveries", "spec 029 §3"},
+		{"/knowledge", "specs 025"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			rr := doReq(t, h, "GET", tt.path, "", nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want 200; body %s", tt.path, rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			bodyContains(t, body, tt.want)
+			for _, forbidden := range []string{"<form", "<button"} {
+				if strings.Contains(body, forbidden) {
+					t.Fatalf("%s unexpectedly renders %q:\n%s", tt.path, forbidden, body)
+				}
+			}
+		})
+	}
+}
+
+func TestAssetsServedWithoutAuth(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	for _, path := range []string{"/assets/app.css", "/assets/fonts/dm-sans-variable.ttf", "/assets/fonts/source-serif-4-variable.ttf", "/assets/fonts/dm-sans-OFL.txt", "/assets/fonts/source-serif-4-OFL.txt"} {
+		rr := doReq(t, h, "GET", path, "", nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rr.Code)
+		}
+		if cc := rr.Header().Get("Cache-Control"); cc != "public, max-age=3600" {
+			t.Errorf("%s Cache-Control = %q, want bounded public cache", path, cc)
+		}
+	}
+}
+
+func TestAppCSSContent(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	rr := doReq(t, h, "GET", "/assets/app.css", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Fatalf("content-type = %q, want text/css", ct)
+	}
+	css := rr.Body.String()
+	for _, want := range []string{
+		"#0E1937", "#F4F4F4", "#FAD604", "#266680", "#46C5DE",
+		"prefers-color-scheme: dark", ":focus-visible", "min-height: 44px",
+		"@media (max-width: 64rem)",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("stylesheet missing %q", want)
+		}
+	}
+}
+
+func TestProjectSections(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+
+	sections := map[string]string{
+		"crew":         "spec 029 §6.1",
+		"deliverables": "spec 029 §7",
+		"reviews":      "spec 029 §7",
+		"decisions":    "specs 028 and 029",
+		"documents":    "specs 025 and 026",
+		"activity":     "ordered event view",
+	}
+	for section, want := range sections {
+		t.Run(section, func(t *testing.T) {
+			rr := doReq(t, h, "GET", "/projects/proj/"+section, "", nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			assertShell(t, body)
+			assertOneAriaCurrent(t, body)
+			bodyContains(t, body, "proj", want)
+			for _, forbidden := range []string{"<form", "<button"} {
+				if strings.Contains(body, forbidden) {
+					t.Fatalf("section %s unexpectedly renders %q:\n%s", section, forbidden, body)
+				}
+			}
+		})
+	}
+
+	rr := doReq(t, h, "GET", "/projects/proj/nosuchsection", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown section status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/projects/nosuch/crew", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown project section status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+
+	for _, path := range []string{"/projects/proj", "/projects/proj?variant=A", "/projects/proj?variant=B", "/projects/proj?variant=C"} {
+		rr := doReq(t, h, "GET", path, "", nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200; body %s", path, rr.Code, rr.Body.String())
+		}
+		bodyContains(t, rr.Body.String(), "operations")
+	}
+}
+
+func TestHomePage(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	rr := doReq(t, h, "GET", "/", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "<h1>Home</h1>", "Current work")
+}
+
+func TestWorkPageOrgBoard(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj1")
 	createProject(t, st, "proj2")
@@ -79,15 +285,17 @@ func TestBoardPageOrgBoard(t *testing.T) {
 	}
 	seedIssue(t, st, "acme/widgets", 1, "An untriaged issue")
 
-	rr = doReq(t, h, "GET", "/", "", nil)
+	rr = doReq(t, h, "GET", "/work", "", nil)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("board page status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("work page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	ct := rr.Header().Get("Content-Type")
 	if !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("content-type = %q, want text/html", ct)
 	}
 	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
 	bodyContains(t, body,
 		"proj1", "proj2", // project names
 		"Leased task", "alice", // in_progress task + holder actor
@@ -213,6 +421,64 @@ func TestTaskPage(t *testing.T) {
 	}
 }
 
+// TestTaskPageRendersSourceLink asserts a task with a linked PR/CI fact
+// renders a source-native "Open source" link to that fact's own URL, marked
+// rel="noreferrer" — the timeline evidence Task 4 preserves.
+func TestTaskPageRendersSourceLink(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Linked", "priority": "medium", "kind": "feature",
+	})
+	const url = "https://github.com/org/app/pull/9"
+	seedEvent(t, st, "pr-good", func(tx *sql.Tx, _ int64) error {
+		_, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "org/app", Number: 9, Title: "Linked", State: "open",
+			HeadRef: "WL-1-linked", HeadSHA: "sha-good",
+			URL: url, OpenedAt: st.Now(),
+		}, "")
+		return err
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), `href="`+url+`" rel="noreferrer"`, "Open source")
+}
+
+// TestTaskPageEscapesHostileTimelineURL asserts a source URL with an unsafe
+// scheme (e.g. javascript:) never reaches the rendered href verbatim:
+// html/template's contextual autoescaping neutralizes it into the safe
+// "#ZgotmplZ" placeholder, since webTimelineRow.URL is rendered as a plain
+// string, never cast to template.URL.
+func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Hostile link", "priority": "medium", "kind": "feature",
+	})
+	const hostile = "javascript:alert(document.cookie)"
+	seedEvent(t, st, "pr-hostile", func(tx *sql.Tx, _ int64) error {
+		_, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "org/app", Number: 1, Title: "Hostile", State: "open",
+			HeadRef: "WL-1-hostile", HeadSHA: "sha-hostile",
+			URL: hostile, OpenedAt: st.Now(),
+		}, "")
+		return err
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, `href="`+hostile+`"`) {
+		t.Fatalf("hostile URL rendered verbatim in href, want escaped/rejected:\n%s", body)
+	}
+	bodyContains(t, body, "#ZgotmplZ")
+}
+
 func TestTaskPageShowsProgress(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -248,10 +514,69 @@ func TestProjectPage(t *testing.T) {
 		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	bodyContains(t, body, "proj", "acme/widgets", "Scoped task")
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body,
+		"proj", "acme/widgets", "Scoped task",
+		`<link rel="canonical" href="/projects/proj">`, // cockpit projection's canonical url
+		"operations",                     // the declared-evidence Operations mode
+		"No governed decision is ready.", // the decision rail's Part-1 fallback
+	)
+	// Project local nav, in the exact order docs/specs/032-project-cockpit.md
+	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
+	// Documents, Activity.
+	assertOrder(t, body, ">Overview<", ">Crew<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	// The cockpit is a projection, never a stored workflow field: the page
+	// must not render any of the retired/forbidden concepts. "Crew" and
+	// "Deliverable(s)" are now legitimate project-local nav labels (checked
+	// above), so only the concepts that would still be fabricated data stay
+	// forbidden here. "completion" also catches "completion_percentage"; "%"
+	// catches any percentage-based health/progress readout.
+	for _, forbidden := range []string{"%", "completion", "project health", "Approval"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("project page unexpectedly renders %q:\n%s", forbidden, body)
+		}
+	}
 
 	rr = doReq(t, h, "GET", "/projects/nosuch", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project page status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
+}
+
+// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page
+// shows real owner/delegate names, distinguishing "Owned by Dana" (a human
+// assignee) from "Agent One is the delegate" (an agent's unreleased lease) —
+// never the bare actor id, never conflating the two roles.
+func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "dana", "human", "Dana", false); err != nil {
+		t.Fatalf("create actor dana: %v", err)
+	}
+	if err := st.CreateActor(ctx, "agent-one", "agent", "Agent One", false); err != nil {
+		t.Fatalf("create actor agent-one: %v", err)
+	}
+	agentToken, err := st.CreateToken(ctx, "agent-one", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token for agent-one: %v", err)
+	}
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
+	})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "dana"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("assign status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", agentToken, map[string]any{"worktree": "host:/wt-agent-one"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/projects/proj", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Owned by Dana", "Agent One is the delegate")
 }

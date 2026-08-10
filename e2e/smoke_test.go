@@ -120,6 +120,28 @@ func getPage(t *testing.T, url string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
+// getAuthed fetches url with a bearer token and returns its status code and
+// body — the GET counterpart to postRuntimeEvent's authenticated POST, used
+// by cockpit_test.go to call the bearer-token-only cockpit endpoint.
+func getAuthed(t *testing.T, url, token string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build request for %s: %v", url, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s: %v", url, err)
+	}
+	return resp.StatusCode, string(body)
+}
+
 func TestFullChain(t *testing.T) {
 	ctx := context.Background()
 
@@ -574,20 +596,36 @@ func assertBoard(t *testing.T, ctx context.Context, agent *cli.Client) {
 	}
 }
 
-// assertWebPages checks the read-only web UI renders: the board page carries
-// the project name and the crashloop failure, and the task page loads.
+// assertWebPages checks the read-only web UI renders: Home shows the shared
+// shell and its own heading, Work carries the project name and the
+// crashloop failure (the org-wide board, now the task-oriented destination —
+// see docs/specs/032-project-cockpit.md §2), and the task page loads.
 func assertWebPages(t *testing.T, baseURL, taskID string) {
 	t.Helper()
 	code, body := getPage(t, baseURL+"/")
 	if code != http.StatusOK {
 		t.Fatalf("GET /: status = %d, want 200", code)
 	}
+	for _, want := range []string{
+		`<nav aria-label="Primary">`, `<main id="main-content"`, `href="/assets/app.css"`, // shared shell
+		"<h1>Home</h1>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("home page missing %q:\n%s", want, body)
+		}
+	}
+
+	code, body = getPage(t, baseURL+"/work")
+	if code != http.StatusOK {
+		t.Fatalf("GET /work: status = %d, want 200", code)
+	}
 	if !strings.Contains(body, "Demo") {
-		t.Fatalf("board page does not mention project Demo:\n%s", body)
+		t.Fatalf("work page does not mention project Demo:\n%s", body)
 	}
 	if !strings.Contains(body, "CrashLoopBackOff") {
-		t.Fatalf("board page does not show the crashloop failure:\n%s", body)
+		t.Fatalf("work page does not show the crashloop failure:\n%s", body)
 	}
+
 	code, body = getPage(t, fmt.Sprintf("%s/tasks/%s", baseURL, taskID))
 	if code != http.StatusOK {
 		t.Fatalf("GET /tasks/%s: status = %d, want 200 (body %s)", taskID, code, body)

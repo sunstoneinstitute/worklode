@@ -46,7 +46,8 @@ in `deploy/base/kustomization.yaml`.
 
 Request flow: `internal/cmd` (cobra commands, both server and client sides) →
 `internal/cli` (HTTP client, project scoping, rendering) → `internal/api`
-(HTTP server: `/api/v1` bearer-token API, unauthenticated read-only web UI +
+(HTTP server: `/api/v1` bearer-token API, a session-gated, read-mostly project
+cockpit; development mode remains open when no provider is configured, +
 `/metrics`, OIDC login) → `internal/store` (all Postgres access via pgx;
 domain logic like task state machine, ranking, atomic `claim` live here).
 

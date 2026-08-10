@@ -27,9 +27,9 @@
 <h2>Timeline</h2>
 {{if .Timeline}}
 <table>
-  <tr><th>When</th><th>Type</th><th>Summary</th></tr>
+  <tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
   {{range .Timeline}}
-  <tr><td>{{fmtTime .At}}</td><td>{{.Label}}</td><td>{{.Summary}}</td></tr>
+  <tr><td>{{fmtTime .At}}</td><td>{{.Label}}</td><td>{{.Summary}}</td><td>{{if .URL}}<a href="{{.URL}}" rel="noreferrer">Open source</a>{{end}}</td></tr>
   {{end}}
 </table>
 {{else}}<p class="muted">No timeline entries yet.</p>{{end}}

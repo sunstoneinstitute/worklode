@@ -218,3 +218,20 @@ Design items landed in spec 028. These are the mechanical leftovers.
   (2026-08-07).** `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
   (draft, implements 026 §3) is titled "consolidated `lode doc show`" too.
   Reconcile the spelling when 025's reserved surface is next revisited.
+- **Full WCAG 2.2 AA assistive-technology walkthrough** is deferred to the
+  four-part project cockpit series' acceptance (spec 032), not Part 1: Part 1
+  only proves the structural markers (landmarks, one `aria-current`, focus
+  order) automated tests can check.
+- **Browser-rendered 1280px/768px/360px regression automation** for the
+  cockpit shell, if the CSS contract test (`TestAppCSSContent`) proves
+  insufficient to catch a real layout regression at those breakpoints.
+- **Part 1's honest-unavailable pages** (`/projects/{id}/crew`,
+  `/projects/{id}/deliverables`, `/projects/{id}/reviews`,
+  `/projects/{id}/decisions`, `/projects/{id}/documents`,
+  `/projects/{id}/activity`, `/intake`, `/reviews`, `/deliveries`,
+  `/knowledge`) are placeholders naming their owning spec section; replace
+  each with its real implementation as Parts 2–4 land.
+- **Mode facts and project-lead-authorized pinned focus** (spec 032's
+  `PinnedFocus`/`NextDecision`, and `modeFactsForProject`'s intake/promotion
+  facts) stay nil/false in Part 1 — `internal/api/cockpit.go` documents this
+  as a Part 2 dependency on spec 029's stores.

@@ -1,55 +1,71 @@
 {{define "content"}}
-<h1>{{.Project.Name}}</h1>
-<p class="muted">Project id: {{.Project.ID}}</p>
+<link rel="canonical" href="{{.Cockpit.CanonicalURL}}">
+<div class="cockpit-grid">
+  <nav aria-label="Project" class="project-nav">{{template "project-nav" .}}</nav>
+  <div class="cockpit-canvas">
+    <section aria-labelledby="outcome-heading">
+      <h1 id="outcome-heading">{{.Cockpit.Project.Name}}</h1>
+      <p class="muted">Project id: {{.Cockpit.Project.ID}} &middot; key: {{.Cockpit.Project.Key}}</p>
+      <p>{{.Cockpit.Project.Key}} &middot; {{.Cockpit.Mode.Name}}</p>
+      <p class="muted">{{.Cockpit.Mode.Basis.Summary}}</p>
+    </section>
 
-<h2>Repos</h2>
-{{if .Repos}}
-<ul>{{range .Repos}}<li>{{.Repo}} <span class="muted">(done at {{.DoneState}})</span></li>{{end}}</ul>
-{{else}}<p class="muted">No repos mapped.</p>{{end}}
+    <section id="work" aria-labelledby="work-heading">
+      <h2 id="work-heading">Current work</h2>
 
-<h2>In progress</h2>
-{{if .Project.InProgress}}
-<table>
-  <tr><th>Task</th><th>Title</th><th>Priority</th><th>Holder</th><th>Expires</th></tr>
-  {{range .Project.InProgress}}
-  <tr>
-    <td><span class="badge state-in_progress">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td>
-    <td>{{.Title}}</td>
-    <td>{{.Priority}}</td>
-    <td>{{if .Holder}}{{.Holder.ActorID}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
-    <td>{{if .Holder}}{{fmtTime .Holder.ExpiresAt}}{{end}}</td>
-  </tr>
-  {{end}}
-</table>
-{{else}}<p class="muted">None</p>{{end}}
+      <h3>Running</h3>
+      <ul>{{range .Cockpit.Work.InProgress}}<li>{{template "work-item" .}}</li>{{else}}<li>None</li>{{end}}</ul>
 
-<h2>In review</h2>
-{{if .Project.InReview}}
-<table>
-  <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.InReview}}
-  <tr><td><span class="badge state-{{.State}}">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
-  {{end}}
-</table>
-{{else}}<p class="muted">None</p>{{end}}
+      <h3>Awaiting review</h3>
+      <ul>{{range .Cockpit.Work.InReview}}<li>{{template "work-item" .}}</li>{{else}}<li>None</li>{{end}}</ul>
 
-<h2>Ready</h2>
-{{if .Project.Ready}}
-<table>
-  <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.Ready}}
-  <tr><td><span class="badge state-ready">{{.State}}</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
-  {{end}}
-</table>
-{{else}}<p class="muted">None</p>{{end}}
+      <h3>Ready</h3>
+      <ul>{{range .Cockpit.Work.Ready}}<li>{{template "work-item" .}}</li>{{else}}<li>None</li>{{end}}</ul>
 
-<h2>Blocked</h2>
-{{if .Project.Blocked}}
-<table>
-  <tr><th>Task</th><th>Title</th><th>Priority</th></tr>
-  {{range .Project.Blocked}}
-  <tr><td><span class="badge state-blocked">blocked</span> <a href="/tasks/{{.ID}}">{{.ID}}</a></td><td>{{.Title}}</td><td>{{.Priority}}</td></tr>
-  {{end}}
-</table>
-{{else}}<p class="muted">None</p>{{end}}
+      <h3>Blocked</h3>
+      <ul>{{range .Cockpit.Work.Blocked}}<li>{{template "work-item" .}}</li>{{else}}<li>None</li>{{end}}</ul>
+    </section>
+
+    <details>
+      <summary>Evidence</summary>
+      <p>Ranking focus: {{range .Cockpit.RankingFocus}}{{.}} {{else}}none{{end}}</p>
+
+      <h3>Repositories</h3>
+      <ul>{{range .Cockpit.Repositories}}<li>{{.Repo}}: {{.DoneState}} ({{.StatusEvidence.Category}})</li>{{else}}<li>No mapped repositories</li>{{end}}</ul>
+
+      <h3>Blocking concerns</h3>
+      <ul>{{range .Cockpit.SecondaryConcerns}}<li><a href="{{.URL}}">{{.Title}}</a>: {{.Evidence.Summary}}</li>{{else}}<li>No open blockers</li>{{end}}</ul>
+
+      <h3>Cost, last 30 days</h3>
+      <ul>{{range .Cockpit.Cost.Totals}}<li>{{.Currency}} {{.CostAmount}}, {{.UnpricedTokens}} unpriced tokens</li>{{else}}<li>No cost recorded</li>{{end}}</ul>
+
+      <a href="/projects/{{.Cockpit.Project.ID}}/activity">Open project activity</a>
+    </details>
+  </div>
+  <aside aria-label="Next decision">
+    <h2>Next decision</h2>
+    {{if .Cockpit.NextDecision}}
+      <p>{{.Cockpit.NextDecision.Title}}</p>
+      <p>Accountable: {{.Cockpit.NextDecision.Accountable}}</p>
+      <p>{{.Cockpit.NextDecision.Readiness}}</p>
+    {{else}}
+      <p>No governed decision is ready.</p>
+    {{end}}
+  </aside>
+</div>
 {{end}}
+
+{{define "project-nav"}}
+<ul>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}" aria-current="page">Overview</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/crew">Crew</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}#work">Work</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/deliverables">Deliverables</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/reviews">Reviews</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/decisions">Decisions</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/documents">Documents</a></li>
+  <li><a href="/projects/{{.Cockpit.Project.ID}}/activity">Activity</a></li>
+</ul>
+{{end}}
+
+{{define "work-item"}}<a href="{{.URL}}">{{.ID}} &mdash; {{.Title}}</a>: {{.State}} ({{.StatusEvidence.Category}}) &mdash; {{.StatusEvidence.Summary}}{{if .Owner}} &middot; Owned by {{.Owner.Name}}{{end}}{{if .Delegate}} &middot; {{.Delegate.Name}} is the delegate{{end}}{{end}}

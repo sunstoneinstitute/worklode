@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func TestObserveSkillSync(t *testing.T) {
@@ -77,4 +79,133 @@ func TestObserveAssignment(t *testing.T) {
 func TestObserveAssignmentNilSafe(t *testing.T) {
 	s := &server{}
 	s.observeAssignment("assign")
+}
+
+func TestCockpitOutcome(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, "ok"},
+		{"not found", store.ErrNotFound, "not_found"},
+		{"wrapped not found", fmt.Errorf("get project: %w", store.ErrNotFound), "not_found"},
+		{"other", errors.New("boom"), "error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cockpitOutcome(tt.err); got != tt.want {
+				t.Fatalf("cockpitOutcome(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestObserveCockpitProjectionRegistersMetric asserts
+// worklode_cockpit_projection_requests_total is registered (and, thanks to
+// pre-initialisation, gatherable with zero observations) as soon as
+// initMetrics runs.
+func TestObserveCockpitProjectionRegistersMetric(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var found bool
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_cockpit_projection_requests_total" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("worklode_cockpit_projection_requests_total not registered")
+	}
+}
+
+// TestObserveCockpitProjection covers the three outcomes across both
+// surfaces, with no id label present anywhere.
+func TestObserveCockpitProjection(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeCockpitProjection("api", nil)
+	s.observeCockpitProjection("web", nil)
+	s.observeCockpitProjection("api", store.ErrNotFound)
+	s.observeCockpitProjection("web", errors.New("boom"))
+
+	for _, tc := range []struct {
+		surface, outcome string
+		want             float64
+	}{
+		{"api", "ok", 1}, {"web", "ok", 1},
+		{"api", "not_found", 1}, {"web", "not_found", 0},
+		{"api", "error", 0}, {"web", "error", 1},
+	} {
+		if got := testutil.ToFloat64(s.cockpitProjections.WithLabelValues(tc.surface, tc.outcome)); got != tc.want {
+			t.Fatalf("cockpitProjections{surface=%s,outcome=%s} = %v, want %v", tc.surface, tc.outcome, got, tc.want)
+		}
+	}
+}
+
+// TestObserveCockpitProjectionNilSafe checks a *server built without
+// initMetrics (as tests in this package do) does not panic when a handler
+// calls observeCockpitProjection.
+func TestObserveCockpitProjectionNilSafe(t *testing.T) {
+	s := &server{}
+	s.observeCockpitProjection("api", nil)
+}
+
+// TestObserveNavigation covers one successful route (home), one missing
+// project section (project_section/not_found), and one asset response
+// (asset/ok) — the three cases the plan calls out — plus registration and
+// bounded labels with no project or task id anywhere.
+func TestObserveNavigation(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeNavigation("home", "ok")
+	s.observeNavigation("project_section", "not_found")
+	s.observeNavigation("asset", "ok")
+
+	for _, tc := range []struct {
+		destination, outcome string
+		want                 float64
+	}{
+		{"home", "ok", 1},
+		{"project_section", "not_found", 1},
+		{"asset", "ok", 1},
+		{"home", "not_found", 0},
+		{"projects", "ok", 0},
+	} {
+		if got := testutil.ToFloat64(s.navigations.WithLabelValues(tc.destination, tc.outcome)); got != tc.want {
+			t.Fatalf("navigations{destination=%s,outcome=%s} = %v, want %v", tc.destination, tc.outcome, got, tc.want)
+		}
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var found bool
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_web_navigation_requests_total" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("worklode_web_navigation_requests_total not registered")
+	}
+}
+
+// TestObserveNavigationNilSafe checks a *server built without initMetrics
+// (as tests in this package do) does not panic when a handler calls
+// observeNavigation.
+func TestObserveNavigationNilSafe(t *testing.T) {
+	s := &server{}
+	s.observeNavigation("home", "ok")
 }
