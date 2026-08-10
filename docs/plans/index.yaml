@@ -703,3 +703,15 @@ docs/plans/2026-08-07-branch-and-worktree-naming.md:
     task-4-thread-the-layout-through-the-cli-lifecycle-commands: "### Task 4 — Thread the layout through the CLI lifecycle commands"
     task-5-thread-the-layout-through-the-hooks: "### Task 5 — Thread the layout through the hooks"
     task-6-docs-gitignore-and-the-worktree-migration: "### Task 6 — Docs, gitignore, and the worktree migration"
+docs/plans/2026-08-09-project-cockpit-1-shell-and-projection.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    file-map: "## File Map"
+    scope-and-series-boundary: "## Scope and Series Boundary"
+    spec-coverage: "## Spec Coverage"
+    tasks: "## Tasks"
+    task-1-ship-the-minimal-cockpit-tracer-through-api-and-html: "### Task 1 — Ship the minimal cockpit tracer through API and HTML"
+    task-2-establish-the-accessible-application-and-project-shell: "### Task 2 — Establish the accessible application and project shell"
+    task-3-add-bulk-project-work-facts-and-status-provenance: "### Task 3 — Add bulk project-work facts and status provenance"
+    task-4-complete-accountability-and-evidence-disclosure: "### Task 4 — Complete accountability and evidence disclosure"
+    task-5-prove-the-cockpit-tracer-through-public-surfaces: "### Task 5 — Prove the cockpit tracer through public surfaces"
