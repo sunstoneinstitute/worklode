@@ -21,6 +21,16 @@ go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ```
 
+Cockpit dev loop (`internal/api`'s templ + Tailwind build):
+
+```bash
+go tool templ generate --watch        # regenerate *_templ.go on change
+./bin/tailwindcss -i internal/api/assets/app.tailwind.css \
+  -o internal/api/assets/app.css --watch
+./scripts/fetch-tailwind.sh           # one-time: install the pinned CLI into bin/
+go generate ./...                     # regenerate both committed artifacts
+```
+
 Store tests need a reachable Postgres with **pgvector**
 (CI uses `pgvector/pgvector:pg17`); default DSN
 `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,
@@ -49,7 +59,11 @@ Request flow: `internal/cmd` (cobra commands, both server and client sides) →
 (HTTP server: `/api/v1` bearer-token API, a session-gated, read-mostly project
 cockpit; development mode remains open when no provider is configured, +
 `/metrics`, OIDC login) → `internal/store` (all Postgres access via pgx;
-domain logic like task state machine, ranking, atomic `claim` live here).
+domain logic like task state machine, ranking, atomic `claim` live here). The
+cockpit's web pages render with `templ` components (`internal/api/*.templ`,
+compiled to `*_templ.go` by `go generate`), styled by a standalone Tailwind
+CSS v4 build (`internal/api/assets/app.tailwind.css` →
+`internal/api/assets/app.css`) and a self-hosted, currently dormant HTMX.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks, Flux notification-controller webhooks — both HMAC-signed),
