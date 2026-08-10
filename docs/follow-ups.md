@@ -160,6 +160,20 @@ once an instance is running (dogfooding); until then this file is the list.
   the stable `/assets/app.css` path with a bounded cache lifetime instead of
   an immutable, hash-named file. Add content hashing when cache-busting on
   every deploy starts to matter.
+- **`check-generated.sh` misses a brand-new untracked generated file**: it
+  uses `git diff --exit-code`, which is silent on a `foo_templ.go` whose
+  `foo.templ` was added but whose generated Go was never committed. Harden
+  with `git status --porcelain` on the generated paths, or `git add -N`
+  before diffing.
+- **`internal/api/styles/app.tailwind.css`'s `@source not "../assets/*.js"`
+  excludes all vendored JS**, not just `htmx.min.js` specifically. Harmless
+  today (only vendored JS is in scan scope); tighten to the vendored bundle
+  by name if a first-party JS file carrying utility-class strings is ever
+  added.
+- **`scripts/fetch-tailwind.sh` writes the download directly to
+  `bin/tailwindcss`** (non-atomic) rather than temp-file + rename; it
+  self-heals via the checksum/`-x` gate on the next run, but an atomic write
+  would be cleaner.
 
 ## From the 2026-08-04 architecture grilling
 

@@ -3,4 +3,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 go tool templ generate ./internal/api/...
-./bin/tailwindcss -i internal/api/assets/app.tailwind.css -o internal/api/assets/app.css
+./bin/tailwindcss -i internal/api/styles/app.tailwind.css -o internal/api/assets/app.css

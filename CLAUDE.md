@@ -25,7 +25,7 @@ Cockpit dev loop (`internal/api`'s templ + Tailwind build):
 
 ```bash
 go tool templ generate --watch        # regenerate *_templ.go on change
-./bin/tailwindcss -i internal/api/assets/app.tailwind.css \
+./bin/tailwindcss -i internal/api/styles/app.tailwind.css \
   -o internal/api/assets/app.css --watch
 ./scripts/fetch-tailwind.sh           # one-time: install the pinned CLI into bin/
 go generate ./...                     # regenerate both committed artifacts
@@ -62,7 +62,7 @@ cockpit; development mode remains open when no provider is configured, +
 domain logic like task state machine, ranking, atomic `claim` live here). The
 cockpit's web pages render with `templ` components (`internal/api/*.templ`,
 compiled to `*_templ.go` by `go generate`), styled by a standalone Tailwind
-CSS v4 build (`internal/api/assets/app.tailwind.css` →
+CSS v4 build (`internal/api/styles/app.tailwind.css` →
 `internal/api/assets/app.css`) and a self-hosted, currently dormant HTMX.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
