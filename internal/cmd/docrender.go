@@ -52,6 +52,9 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 	corpus := designdoc.FindCorpus(cwd)
+	if corpora, err := cli.CorporaFrom(cwd); err == nil && corpora.SpecDir != "" {
+		corpus = corpora.SpecDir
+	}
 	if corpus == "" {
 		return errors.New("not inside a worklode repo (no .worklode directory found)")
 	}

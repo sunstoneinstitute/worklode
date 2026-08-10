@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -219,4 +220,36 @@ func TestProjectWorkReadMetrics(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestDocUpsertMetric drives ApplyDocSync through the added/unchanged/updated
+// outcomes and asserts each is counted under its own outcome label.
+func TestDocUpsertMetric(t *testing.T) {
+	s := OpenTestStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "wl", "Worklode", "WL"); err != nil {
+		t.Fatal(err)
+	}
+	prov := DocSyncProvenance{SourceBranch: "main"}
+	syncDocs(t, s, "wl", prov, []DocUpsert{specUpsert()}) // added
+	syncDocs(t, s, "wl", prov, []DocUpsert{specUpsert()}) // unchanged
+	changed := specUpsert()
+	changed.Body += "x"
+	syncDocs(t, s, "wl", prov, []DocUpsert{changed}) // updated
+
+	for outcome, want := range map[string]float64{"added": 1, "updated": 1, "unchanged": 1} {
+		got := testutil.ToFloat64(s.metrics.docUpserts.WithLabelValues(outcome))
+		if got != want {
+			t.Errorf("worklode_doc_upserts_total{outcome=%q} = %v, want %v", outcome, got, want)
+		}
+	}
+}
+
+// TestDocUpsertMetricNilSafe asserts docUpsert on a nil *storeMetrics is a
+// no-op, matching every other store metrics method.
+func TestDocUpsertMetricNilSafe(t *testing.T) {
+	var m *storeMetrics
+	m.docUpsert("added") // must not panic
 }

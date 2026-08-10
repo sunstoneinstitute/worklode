@@ -17,17 +17,17 @@ type ResolvedRef struct {
 	Section string // "sec-2.1" when the ref carried a #sec- fragment, else ""
 }
 
-// FindCorpus walks up from dir looking for a directory containing
-// ".worklode"; the corpus is docs/specs under it. Returns "" when no
-// repo root is found.
-func FindCorpus(dir string) string {
+// FindRepoRoot walks up from dir to the nearest directory containing a
+// ".worklode" directory — the repo root the corpus config is relative to
+// (spec 034 §2). Returns "" when no repo root is found.
+func FindRepoRoot(dir string) string {
 	d, err := filepath.Abs(dir)
 	if err != nil {
 		return ""
 	}
 	for {
 		if st, err := os.Stat(filepath.Join(d, ".worklode")); err == nil && st.IsDir() {
-			return filepath.Join(d, "docs", "specs")
+			return d
 		}
 		parent := filepath.Dir(d)
 		if parent == d {
@@ -35,6 +35,17 @@ func FindCorpus(dir string) string {
 		}
 		d = parent
 	}
+}
+
+// FindCorpus returns the conventional spec corpus, docs/specs under the repo
+// root — the default a repo without a spec_corpus key gets (034 §2). Returns
+// "" when no repo root is found.
+func FindCorpus(dir string) string {
+	root := FindRepoRoot(dir)
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, "docs", "specs")
 }
 
 // AmbiguousRefError reports a ref that matched more than one corpus document.

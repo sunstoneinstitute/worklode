@@ -518,3 +518,18 @@ docs/specs/032-project-cockpit.md:
     sec-10: "## 10. Accessibility and responsive behavior"
     sec-11: "## 11. First interactive release"
     sec-12: "## 12. Non-goals"
+docs/specs/034-design-doc-sync.md:
+  sections:
+    sec-0: "## 0. Why"
+    sec-1: "## 1. On-ramp, not a second end state"
+    sec-2: "## 2. What syncs — corpora and config"
+    sec-3: "## 3. The sync command"
+    sec-4: "## 4. The backbone document store"
+    sec-5: "## 5. Identity"
+    sec-6: "## 6. Reads"
+    sec-7: "## 7. Relationship to specs 025, 026, 029"
+    sec-8: "## 8. Ontology: `wl:Plan`"
+    sec-9: "## 9. CLI ergonomics — `--body-file`"
+    sec-10: "## 10. Metrics"
+    sec-11: "## 11. Out of scope"
+    sec-12: "## 12. Acceptance criteria"

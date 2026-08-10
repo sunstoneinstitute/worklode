@@ -497,3 +497,54 @@ func TestSetTaskIDIsolatedAcrossWorktreesAfterEnablingExtension(t *testing.T) {
 		t.Fatalf("TaskID(two) = (%q, %v), want (\"WL-2\", true)", gotID, ok)
 	}
 }
+
+func TestCurrentBranchAndIsClean(t *testing.T) {
+	dir := initGitRepo(t)
+
+	branch, err := worktree.CurrentBranch(dir)
+	if err != nil {
+		t.Fatalf("CurrentBranch: %v", err)
+	}
+	// initGitRepo commits on git's default init branch; whatever it is
+	// called locally, it must be non-empty and match git's own answer.
+	out, _ := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if want := strings.TrimSpace(string(out)); branch != want || branch == "" {
+		t.Errorf("CurrentBranch = %q, want %q", branch, want)
+	}
+
+	clean, err := worktree.IsClean(dir)
+	if err != nil || !clean {
+		t.Fatalf("IsClean(fresh) = %v, %v; want true", clean, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "junk.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clean, err = worktree.IsClean(dir)
+	if err != nil || clean {
+		t.Fatalf("IsClean(dirty) = %v, %v; want false", clean, err)
+	}
+}
+
+func TestDefaultBranch(t *testing.T) {
+	dir := initGitRepo(t)
+
+	// No origin/HEAD recorded: a named error telling the user how to fix it.
+	if _, err := worktree.DefaultBranch(dir); err == nil ||
+		!strings.Contains(err.Error(), "git remote set-head") {
+		t.Fatalf("DefaultBranch without origin/HEAD: err = %v, want set-head hint", err)
+	}
+
+	// Record origin/HEAD the way `git remote set-head origin --auto` would;
+	// no network needed.
+	if out, err := exec.Command("git", "-C", dir, "remote", "add", "origin", dir).CombinedOutput(); err != nil {
+		t.Fatalf("remote add: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "symbolic-ref",
+		"refs/remotes/origin/HEAD", "refs/remotes/origin/main").CombinedOutput(); err != nil {
+		t.Fatalf("set origin/HEAD: %v\n%s", err, out)
+	}
+	got, err := worktree.DefaultBranch(dir)
+	if err != nil || got != "main" {
+		t.Fatalf("DefaultBranch = %q, %v; want main", got, err)
+	}
+}

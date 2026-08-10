@@ -61,6 +61,15 @@ wl:DesignDocShape a sh:NodeShape ;
         sh:message "A DesignDoc carries exactly one wl:status from wlc:DesignDocStatus." ;
     ] .
 
+wl:PlanShape a sh:NodeShape ;
+    sh:targetClass wl:Plan ;
+    sh:property [
+        sh:path wl:status ;
+        sh:minCount 1 ;
+        sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
+        sh:message "A Plan carries exactly one wl:status, drawn from wlc:DesignDocStatus (034 §8; plans reuse the editorial lifecycle enum)." ;
+    ] .
+
 wl:SectionShape a sh:NodeShape ;
     sh:targetClass wl:Section ;
     sh:property [
