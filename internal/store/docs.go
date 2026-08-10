@@ -64,10 +64,10 @@ var (
 	planOrdinalRe = regexp.MustCompile(`^(0|[1-9][0-9]*)-[1-9][0-9]*$`)
 )
 
-// validDocEdgeRels mirrors the doc_edges.rel CHECK constraint (migration
-// 0011).
+// validDocEdgeRels mirrors the doc_edges.rel CHECK constraint (migrations
+// 0011, 0012).
 var validDocEdgeRels = map[string]bool{
-	"implements": true, "amends": true, "amendedBy": true,
+	"implements": true, "covers": true, "amends": true, "amendedBy": true,
 	"replaces": true, "isReplacedBy": true, "blocks": true,
 }
 

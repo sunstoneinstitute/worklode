@@ -36,3 +36,5 @@ configMapGenerator:
       - migrations/0010_task_assignee.down.sql
       - migrations/0011_docs.up.sql
       - migrations/0011_docs.down.sql
+      - migrations/0012_doc_edges_covers.up.sql
+      - migrations/0012_doc_edges_covers.down.sql
