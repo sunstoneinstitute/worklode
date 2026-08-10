@@ -21,10 +21,10 @@ func bodyContains(t *testing.T, body string, want ...string) {
 	}
 }
 
-// assertShell checks the structural markers every page rendered through
-// layout.html must carry: the skip link, the one primary nav landmark, the
-// one main landmark, and the shared stylesheet — see
-// docs/specs/032-project-cockpit.md §10.
+// assertShell checks the structural markers every page rendered through the
+// Page shell component (layout.templ) must carry: the skip link, the one
+// primary nav landmark, the one main landmark, and the shared stylesheet —
+// see docs/specs/032-project-cockpit.md §10.
 func assertShell(t *testing.T, body string) {
 	t.Helper()
 	for _, want := range []string{
@@ -449,9 +449,14 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 
 // TestTaskPageEscapesHostileTimelineURL asserts a source URL with an unsafe
 // scheme (e.g. javascript:) never reaches the rendered href verbatim:
-// html/template's contextual autoescaping neutralizes it into the safe
-// "#ZgotmplZ" placeholder, since webTimelineRow.URL is rendered as a plain
-// string, never cast to template.URL.
+// templ's own href sanitizer (github.com/a-h/templ's SafeURL, applied
+// automatically to every <a href=...> expression by the generated code —
+// see task.templ) neutralizes it into "about:invalid#TemplFailedSanitizationURL",
+// since webTimelineRow.URL is rendered as a plain string. This is templ's
+// equivalent safety net to html/template's contextual autoescaping (which
+// used to substitute the different placeholder "#ZgotmplZ" for the same
+// class of hostile URL) — same guarantee (never rendered verbatim), a
+// different library's placeholder token.
 func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -476,7 +481,7 @@ func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 	if strings.Contains(body, `href="`+hostile+`"`) {
 		t.Fatalf("hostile URL rendered verbatim in href, want escaped/rejected:\n%s", body)
 	}
-	bodyContains(t, body, "#ZgotmplZ")
+	bodyContains(t, body, "about:invalid#TemplFailedSanitizationURL")
 }
 
 func TestTaskPageShowsProgress(t *testing.T) {
