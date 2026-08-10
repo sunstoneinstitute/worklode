@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-3
-implements: docs/specs/009-data-platform-kg-requirements.md
+covers: docs/specs/009-data-platform-kg-requirements.md
 ---
 # Data-platform KG requirements (spec 009) — Implementation Plan
 

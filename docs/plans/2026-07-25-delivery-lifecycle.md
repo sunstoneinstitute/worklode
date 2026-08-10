@@ -1,6 +1,6 @@
 ---
 status: superseded
-implements: docs/specs/011-delivery-lifecycle.md
+covers: docs/specs/011-delivery-lifecycle.md
 ---
 # Delivery Lifecycle Implementation Plan
 

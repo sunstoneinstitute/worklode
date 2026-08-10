@@ -703,6 +703,42 @@ docs/plans/2026-08-07-branch-and-worktree-naming.md:
     task-4-thread-the-layout-through-the-cli-lifecycle-commands: "### Task 4 — Thread the layout through the CLI lifecycle commands"
     task-5-thread-the-layout-through-the-hooks: "### Task 5 — Thread the layout through the hooks"
     task-6-docs-gitignore-and-the-worktree-migration: "### Task 6 — Docs, gitignore, and the worktree migration"
+docs/plans/2026-08-09-design-doc-sync-1-client-foundations.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-spec-corpus-and-plan-corpus-config-keys: "### Task 1 — spec_corpus and plan_corpus config keys"
+    task-2-generalize-designdocfindcorpus-and-honor-spec-corpus-in-lode-show: "### Task 2 — Generalize designdoc.FindCorpus and honor spec_corpus in lode show"
+    task-3-corpus-loader-with-file-derived-identity: "### Task 3 — Corpus loader with file-derived identity"
+    task-4-lode-task-add-body-file: "### Task 4 — lode task add --body-file"
+    task-5-wlplan-in-ns: "### Task 5 — wl:Plan in ns/"
+docs/plans/2026-08-09-design-doc-sync-2-document-store.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-migration-docs-doc-sections-doc-edges: "### Task 1 — Migration: docs, doc_sections, doc_edges"
+    task-2-applydocsync-the-idempotent-upsert: "### Task 2 — ApplyDocSync: the idempotent upsert"
+    task-3-store-reads-getdoc-and-listdocs: "### Task 3 — Store reads: GetDoc and ListDocs"
+    task-4-store-metric-worklode-doc-upserts-total: "### Task 4 — Store metric: worklode_doc_upserts_total"
+docs/plans/2026-08-09-design-doc-sync-3-sync-api-and-cli.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-post-apiv1docssync-with-metrics: "### Task 1 — POST /api/v1/docs/sync with metrics"
+    task-2-get-apiv1docs-and-get-apiv1docsid: "### Task 2 — GET /api/v1/docs and GET /api/v1/docs/{id}"
+    task-3-client-methods-syncdocs-listdocs-getdoc-doctable: "### Task 3 — Client methods: SyncDocs, ListDocs, GetDoc, DocTable"
+    task-4-git-helpers-currentbranch-defaultbranch-isclean: "### Task 4 — Git helpers: CurrentBranch, DefaultBranch, IsClean"
+    task-5-lode-doc-sync-and-lode-doc-list: "### Task 5 — lode doc sync and lode doc list"
+    task-6-e2e-the-sync-round-trip-over-public-surfaces: "### Task 6 — e2e: the sync round trip over public surfaces"
+docs/plans/2026-08-09-plan-section-coverage.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    file-structure: "## File Structure"
+    tasks: "## Tasks"
+    task-1-parse-and-round-trip-qualified-coverage: "### Task 1 — Parse and round-trip qualified coverage"
+    task-2-validate-plan-coverage-in-hermetic-corpus-tests: "### Task 2 — Validate plan coverage in hermetic corpus tests"
+    task-3-constrain-reified-coverage-nodes-in-shacl: "### Task 3 — Constrain reified coverage nodes in SHACL"
+    task-4-regenerate-indexes-and-verify-completion: "### Task 4 — Regenerate indexes and verify completion"
 docs/plans/2026-08-09-project-cockpit-1-shell-and-projection.md:
   sections:
     global-constraints: "## Global Constraints"

@@ -1,6 +1,6 @@
 ---
 status: accepted
-implements:
+covers:
   - docs/specs/024-multi-harness-integration.md#sec-3.3
 requires:
   - 2026-08-03-multi-harness-1-adapter-core.md

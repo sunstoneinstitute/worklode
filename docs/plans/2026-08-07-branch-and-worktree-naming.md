@@ -1,6 +1,6 @@
 ---
 status: accepted
-implements: docs/specs/030-branch-and-worktree-naming.md
+covers: docs/specs/030-branch-and-worktree-naming.md
 ---
 # Branch and worktree naming — implementation plan
 

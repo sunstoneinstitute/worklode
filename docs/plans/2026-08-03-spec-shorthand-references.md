@@ -1,6 +1,6 @@
 ---
 status: draft
-implements:
+covers:
   - docs/specs/014-design-documents-as-graph-objects.md#sec-11.3
   - docs/specs/026-design-doc-queries.md#sec-4.2
   - docs/specs/010-per-project-task-keys.md#sec-2
