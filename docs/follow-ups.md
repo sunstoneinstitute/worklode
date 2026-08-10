@@ -153,6 +153,13 @@ once an instance is running (dogfooding); until then this file is the list.
   `issued: 2026-01-01` as `"2026-01-01T00:00:00Z"` in the stored JSON —
   deterministic and idempotency-safe, but not byte-faithful to the source
   file. Preserving the original lexical form is deliberately deferred.
+- **`app.css` is un-minified**: the Tailwind build ships readable output so the
+  contract test can assert readable strings; minify once that test asserts on
+  something other than raw CSS text.
+- **Cockpit asset filenames are not content-hashed**: `app.css` is served at
+  the stable `/assets/app.css` path with a bounded cache lifetime instead of
+  an immutable, hash-named file. Add content hashing when cache-busting on
+  every deploy starts to matter.
 
 ## From the 2026-08-04 architecture grilling
 
