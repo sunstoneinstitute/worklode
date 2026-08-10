@@ -9,12 +9,14 @@
  * docs/specs/032-project-cockpit.md §10.
  */
 @import "tailwindcss";
-@source "../*.templ";   /* .templ files live in internal/api/, one level up from assets/ */
-@source not "*.js";     /* exclude vendored JS (e.g. htmx.min.js) from Tailwind's automatic
-                          * content scan — minified vendor code can coincidentally contain
-                          * utility-class-shaped substrings (htmx's own "resize" property
-                          * name was picked up as the .resize utility) that must not leak
-                          * into the generated stylesheet. */
+@source "../*.templ";   /* .templ files live in internal/api/, one level up from styles/ */
+@source not "../assets/*.js"; /* exclude vendored JS (e.g. htmx.min.js) from Tailwind's
+                          * automatic content scan — minified vendor code can coincidentally
+                          * contain utility-class-shaped substrings (htmx's own "resize"
+                          * property name was picked up as the .resize utility) that must
+                          * not leak into the generated stylesheet. @source globs are
+                          * resolved relative to this file, so the path must include
+                          * assets/ now that the source lives in styles/. */
 
 @theme {
   --font-sans: "DM Sans", system-ui, sans-serif;
