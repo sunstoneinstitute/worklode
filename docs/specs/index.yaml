@@ -517,7 +517,8 @@ docs/specs/032-project-cockpit.md:
     sec-9: "## 9. Home and the Morning Brief"
     sec-10: "## 10. Accessibility and responsive behavior"
     sec-11: "## 11. First interactive release"
-    sec-12: "## 12. Non-goals"
+    sec-12: "## 12. Cockpit rendering and styling toolchain"
+    sec-13: "## 13. Non-goals"
 docs/specs/033-plan-section-coverage.md:
   sections:
     sec-0: "## 0. Purpose & scope"
