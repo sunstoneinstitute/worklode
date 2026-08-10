@@ -1,6 +1,6 @@
 ---
 status: draft
-implements: docs/specs/034-design-doc-sync.md
+covers: docs/specs/034-design-doc-sync.md
 ---
 # Design-doc sync, part 3 — API surface and lode doc
 

@@ -235,7 +235,7 @@ wl:RuntimeEvent a owl:Class ;
 # ---------------------------------------------------------------------------
 
 [] a owl:AllDisjointClasses ;
-   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Plan wl:Task wl:Deliverable wl:Workstream
+   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Workstream
                  wl:Skill wl:Issue wl:PullRequest ) .
 
 [] a owl:AllDisjointClasses ;
@@ -271,7 +271,7 @@ wl:deliveredBy a owl:ObjectProperty ;
 
 wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
-    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Section wl:Plan ) ] ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan wl:Section ) ] ;
     rdfs:range skos:Concept ;
     rdfs:comment """Editorial lifecycle status in wlc:DesignDocStatus, applying to a DesignDoc, a
         Plan, or a single Section (014 §5; 025 §4). Functional catches >1; SHACL enforces >=1.

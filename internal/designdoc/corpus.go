@@ -265,8 +265,8 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, ref := range doc.Frontmatter.Implements {
-			base, frag := splitFragment(ref)
+		for _, ref := range doc.Frontmatter.CoverageEntries() {
+			base, frag := splitFragment(ref.Spec)
 			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "implements", Target: base, TargetAnchor: frag})
 		}
 		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
@@ -287,10 +287,11 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 // planSpecOrdinal derives the plan id's spec ordinal from the first
 // implements entry (034 §5): NO-SPEC or an absent key → 0.
 func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
-	if len(fm.Implements) == 0 {
+	entries := fm.CoverageEntries()
+	if len(entries) == 0 {
 		return 0, nil
 	}
-	base, _ := splitFragment(fm.Implements[0])
+	base, _ := splitFragment(entries[0].Spec)
 	if base == "NO-SPEC" {
 		return 0, nil
 	}

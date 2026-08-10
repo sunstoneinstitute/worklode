@@ -1,6 +1,6 @@
 ---
 status: draft
-implements: docs/specs/034-design-doc-sync.md
+covers: docs/specs/034-design-doc-sync.md
 ---
 # Design-doc sync, part 1 — client foundations
 
