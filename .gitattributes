@@ -1,1 +1,2 @@
-www/img/*.png filter=lfs diff=lfs merge=lfs -text
+*.png filter=lfs diff=lfs merge=lfs -text
+docs/mockups/cockpit/index.html filter=lfs diff=lfs merge=lfs -text
