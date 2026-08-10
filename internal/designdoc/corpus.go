@@ -267,7 +267,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 		}
 		for _, ref := range doc.Frontmatter.CoverageEntries() {
 			base, frag := splitFragment(ref.Spec)
-			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "implements", Target: base, TargetAnchor: frag})
+			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "covers", Target: base, TargetAnchor: frag})
 		}
 		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
 		plans = append(plans, pending{doc: cd, specOrd: specOrd})
@@ -285,7 +285,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 }
 
 // planSpecOrdinal derives the plan id's spec ordinal from the first
-// implements entry (034 §5): NO-SPEC or an absent key → 0.
+// coverage entry (034 §5): NO-SPEC or an absent key → 0.
 func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	entries := fm.CoverageEntries()
 	if len(entries) == 0 {
@@ -297,7 +297,7 @@ func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	}
 	n, ok := leadingNumber(path.Base(base))
 	if !ok {
-		return 0, fmt.Errorf("%s: implements %q has no leading spec number to derive the plan id from (034 §5)", name, base)
+		return 0, fmt.Errorf("%s: covers %q has no leading spec number to derive the plan id from (034 §5)", name, base)
 	}
 	return n, nil
 }
