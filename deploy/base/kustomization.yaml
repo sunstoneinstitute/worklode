@@ -38,3 +38,5 @@ configMapGenerator:
       - migrations/0011_docs.down.sql
       - migrations/0012_doc_edges_covers.up.sql
       - migrations/0012_doc_edges_covers.down.sql
+      - migrations/0013_project_focus_decision.up.sql
+      - migrations/0013_project_focus_decision.down.sql
