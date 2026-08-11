@@ -26,6 +26,7 @@ func TestVerifyValidToken(t *testing.T) {
 		"preferred_username": "alice",
 		"name":               "Alice Example",
 		"groups":             []string{"user", "admin"},
+		"github_username":    "stigsb",
 	})
 	claims, err := v.Verify(context.Background(), raw)
 	if err != nil {
@@ -34,11 +35,33 @@ func TestVerifyValidToken(t *testing.T) {
 	if claims.PreferredUsername != "alice" || claims.Name != "Alice Example" {
 		t.Fatalf("claims = %+v", claims)
 	}
+	if claims.GitHubUsername != "stigsb" {
+		t.Fatalf("GitHubUsername = %q, want %q", claims.GitHubUsername, "stigsb")
+	}
 	if !claims.HasRole("user") || !claims.HasRole("admin") {
 		t.Fatalf("HasRole failed for %+v", claims.Groups)
 	}
 	if claims.HasRole("nope") {
 		t.Fatalf("HasRole matched an absent role")
+	}
+}
+
+// TestVerifyGitHubUsernameAbsentIsEmpty asserts the claim is optional: a token
+// with no github_username attribute parses to an empty string, never an
+// error, since login must never depend on the Keycloak attribute being set.
+func TestVerifyGitHubUsernameAbsentIsEmpty(t *testing.T) {
+	iss := oidctest.NewIssuer(t)
+	v := newVerifier(t, iss)
+
+	raw := iss.SignToken(t, map[string]any{
+		"preferred_username": "alice",
+	})
+	claims, err := v.Verify(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if claims.GitHubUsername != "" {
+		t.Fatalf("GitHubUsername = %q, want empty", claims.GitHubUsername)
 	}
 }
 

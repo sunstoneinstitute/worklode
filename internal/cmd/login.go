@@ -17,9 +17,8 @@ func newLoginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate to worklode and store a token",
-		Long: "Open a browser to sign in with whatever identity provider the server\n" +
-			"is configured for (Keycloak, GitHub, or a choice of both), then store the\n" +
-			"resulting 30-day token in the OS keychain. Re-run after it expires.",
+		Long: "Open a browser to sign in with Keycloak, then store the resulting\n" +
+			"30-day token in the OS keychain. Re-run after it expires.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := cli.LoadConfig()

@@ -1,6 +1,9 @@
 ---
-status: accepted
+status: superseded
 covers: docs/specs/023-keycloak-primary-auth.md
+isReplacedBy:
+  ".":
+    - 2026-08-11-keycloak-primary-auth-identity.md
 ---
 # Keycloak-Primary Auth 1 — Keycloak is the only login
 

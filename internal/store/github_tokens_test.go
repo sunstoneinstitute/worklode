@@ -9,7 +9,7 @@ func TestGitHubUserTokenRoundTrip(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.UpsertHumanActor(ctx, "github:42", "octocat", false); err != nil {
+	if err := s.UpsertHumanActor(ctx, "github:42", "octocat", false, ""); err != nil {
 		t.Fatalf("actor: %v", err)
 	}
 

@@ -761,3 +761,11 @@ docs/plans/2026-08-10-cockpit-templ-htmx-tailwind.md:
     task-2-convert-the-cockpit-shell-and-pages-to-templ-with-tailwind-styling: "### Task 2 — Convert the cockpit shell and pages to templ with Tailwind styling"
     task-3-embed-self-hosted-htmx-into-the-shell-dormant: "### Task 3 — Embed self-hosted HTMX into the shell (dormant)"
     task-4-align-documentation-and-run-the-full-verification-gate: "### Task 4 — Align documentation and run the full verification gate"
+docs/plans/2026-08-11-keycloak-primary-auth-identity.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    non-goals-follow-up: "## Non-goals / follow-up"
+    tasks: "## Tasks"
+    task-1-remove-the-github-web-login: "### Task 1 — Remove the GitHub web login"
+    task-2-record-the-keycloak-asserted-github-login: "### Task 2 — Record the Keycloak-asserted GitHub login"
+    task-3-actor-merge-script-for-github169939: "### Task 3 — Actor-merge script for github:169939"
