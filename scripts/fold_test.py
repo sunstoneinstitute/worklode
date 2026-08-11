@@ -9,9 +9,11 @@ docs/specs/ or docs/specs2/ in this repo.
 --check also imports currentspec.py (for the --with-drafts live view) and
 secindex.py (to prove docs/specs/index.yaml is current), so its fixtures
 copy those scripts too and build a small live docs/specs/ corpus alongside
-docs/specs2/fold.yaml. secindex.render() is used here only to author a
-byte-matching index.yaml fixture -- not to test secindex.py itself, which is
-covered by its own suite.
+docs/specs2/fold.yaml. secindex.render() is used here both as the object
+under test's own staleness oracle and, in these fixtures, to author a
+byte-matching index.yaml -- there is no secindex_test.py and secindex.py
+--check runs in neither pre-commit nor CI, so this suite is presently the
+only thing exercising render() at all.
 """
 
 import shutil
@@ -419,6 +421,40 @@ documents:
     dropped: []
 """
 
+# Finding 2 repro (task-2 review): a two-section spec, folded by a document
+# whose `sources:` names only 901-beta.md (never 900-alpha.md itself), while
+# that document's `sections:` place an anchor straight from 900-alpha.md.
+# --partial's scope must still cover 900-alpha.md's other live anchor from
+# the *placement*, not only from `sources:`, or it silently exempts a whole
+# undeclared source file.
+ALPHA_TWO_SECTIONS_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Alpha
+
+## 1. One {#sec-1}
+
+One.
+
+## 2. Two {#sec-2}
+
+Two.
+"""
+
+CHECK_FOLD_PARTIAL_UNDECLARED_SOURCE = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-beta-folded.md
+    title: Beta folded
+    sources: [901-beta.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+    dropped: []
+"""
+
 
 def write_check_repo(tmp, fold, specs):
     """A throwaway repo for --check: scripts/fold.py plus the currentspec.py
@@ -527,6 +563,21 @@ class PartialCheckTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unplaced", result.stderr)
             self.assertIn("901-beta.md#sec-1", result.stderr)
+
+    def test_partial_does_not_exempt_a_placed_anchor_whose_file_is_not_a_declared_source(self):
+        # Finding 2 repro: only 901-beta.md is named in `sources:`, but the
+        # document actually places an anchor from 900-alpha.md, which no
+        # document's `sources:` lists. 900-alpha.md#sec-2 must still be
+        # caught as unplaced -- --partial's scope may not silently drop an
+        # entire file just because its name never appears in `sources:`.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--partial", fold=CHECK_FOLD_PARTIAL_UNDECLARED_SOURCE,
+                specs={"900-alpha.md": ALPHA_TWO_SECTIONS_SPEC},
+            )
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertIn("unplaced", result.stderr)
+            self.assertIn("900-alpha.md#sec-2", result.stderr)
 
     def test_partial_still_reports_dangling(self):
         with tempfile.TemporaryDirectory() as tmp:

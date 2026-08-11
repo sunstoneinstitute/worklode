@@ -140,27 +140,51 @@ def sources_for(edge, path, anchor):
     return sorted(edge.get((path, anchor), set()), key=lambda s: (s[0], s[1] or ""))
 
 
+def effective(src_path, docs, with_drafts):
+    """True when a `replaces`/`amends` claim made by the document at
+    `src_path` already holds: the document lives outside the loaded index
+    (nothing to gate on), or its own status is accepted/superseded always,
+    draft only under --with-drafts. The one definition every effectiveness
+    test in this module shares, so a future status added to EFFECTIVE (or
+    any other rule change) cannot apply in one place and not another."""
+    st = status_of(src_path, docs)
+    return st is None or st in EFFECTIVE or (with_drafts and st == "draft")
+
+
+def dropped_whole(docs, with_drafts):
+    """{path: [(src_path, src_anchor), ...]} for every document dropped in
+    its entirety in the --with-drafts view: `status: superseded`, or an
+    effective `replaces` naming the whole document. The replacer sources are
+    returned (not a bare bool) because main()'s superseded footer names
+    them; an empty list means status alone dropped it, no replacer recorded.
+    `live_sections` and `main` both call this, so "is this document dropped
+    whole" is decided in exactly one place."""
+    replaced = edges(docs, "replaces", "isReplacedBy")
+    out = {}
+    for path, doc in docs.items():
+        whole = [s for s in sources_for(replaced, path, None) if effective(s[0], docs, with_drafts)]
+        if doc["status"] == "superseded" or whole:
+            out[path] = whole
+    return out
+
+
 def live_sections(docs, with_drafts):
     """{(path, anchor): heading} for every section that still states the
     design -- the same test `main()` prints, factored out so another script
     (fold.py) can import the live view instead of shelling out. A document
-    dropped whole (`status: superseded`, or an effective `replaces` on the
-    whole document) contributes none of its sections; otherwise a section is
-    live unless something effective replaces it. `with_drafts` mirrors the
-    CLI flag: True treats a draft's own claims as already in force."""
+    `dropped_whole` reports as dropped contributes none of its sections;
+    every other section is live unless something effective replaces it.
+    `with_drafts` mirrors the CLI flag: True treats a draft's own claims as
+    already in force."""
     replaced = edges(docs, "replaces", "isReplacedBy")
-
-    def effective(src_path):
-        st = status_of(src_path, docs)
-        return st is None or st in EFFECTIVE or (with_drafts and st == "draft")
+    dropped = dropped_whole(docs, with_drafts)
 
     out = {}
     for path, doc in sorted(docs.items()):
-        whole = [s for s in sources_for(replaced, path, None) if effective(s[0])]
-        if doc["status"] == "superseded" or whole:
+        if path in dropped:
             continue
         for anchor, heading in doc["sections"].items():
-            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0])]
+            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0], docs, with_drafts)]
             if not reps:
                 out[(path, anchor)] = heading
     return out
@@ -181,41 +205,37 @@ def main():
     replaced = edges(docs, "replaces", "isReplacedBy")
     amended = edges(docs, "amends", "amendedBy")
 
-    def effective(src_path):
-        st = status_of(src_path, docs)
-        return st is None or st in EFFECTIVE or (a.with_drafts and st == "draft")
-
     def notes_for(path, anchor):
         """Claims landing here: effective ones annotate, pending ones are named
         as proposals. The gate applies to `amends` exactly as to `replaces`."""
         n = [
-            f"amended by {name(*s)}" if effective(s[0]) else f"pending {name(*s)}"
+            f"amended by {name(*s)}" if effective(s[0], docs, a.with_drafts) else f"pending {name(*s)}"
             for s in sources_for(amended, path, anchor)
         ]
         n += [
             f"pending {name(*s)}"
             for s in sources_for(replaced, path, anchor)
-            if not effective(s[0])
+            if not effective(s[0], docs, a.with_drafts)
         ]
         return n
 
     live = live_sections(docs, a.with_drafts)
+    dropped_docs = dropped_whole(docs, a.with_drafts)
 
     out, dropped, superseded, dangling = [], [], [], []
     kept = 0
     for path, doc in sorted(docs.items()):
         if only and path != only:
             continue
-        whole = [s for s in sources_for(replaced, path, None) if effective(s[0])]
-        if doc["status"] == "superseded" or whole:
-            superseded.append((name(path), [name(*s) for s in whole]))
+        if path in dropped_docs:
+            superseded.append((name(path), [name(*s) for s in dropped_docs[path]]))
             continue
         lines = []
         for anchor, heading in doc["sections"].items():
             if (path, anchor) in live:
                 lines.append((anchor, heading, notes_for(path, anchor)))
                 continue
-            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0])]
+            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0], docs, a.with_drafts)]
             dropped.append((name(path, anchor), [name(*s) for s in reps]))
         kept += len(lines)
         out.append((path, doc["status"], lines, notes_for(path, None)))
