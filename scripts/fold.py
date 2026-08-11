@@ -23,17 +23,26 @@ to the documents fold.yaml currently declares (via `sources:`), so parts 2-4
 can run the check while the fold is still incomplete; the "no ref is
 duplicated or dangling" half always runs over the whole fold.
 
-Usage: fold.py --mapping | --check [--partial]
+Usage: fold.py --mapping | --check [--partial] | --scaffold [--only FILE]
 
   --mapping   derive docs/specs2/mapping.yaml from docs/specs2/fold.yaml
   --check     prove fold.yaml accounts for every live section of docs/specs/
   --partial   with --check, only require full coverage of the documents
               fold.yaml currently declares
+  --scaffold  write docs/specs2/<to> skeleton documents from fold.yaml
+  --only      with --scaffold, write only the named <to> document
 
---scaffold (Task 3) and --check --ids (Task 6) are later tasks in the same
-plan; this module's shape (load_fold returning a Fold, derive_mapping taking
-one, run_check returning named groups) is designed to grow them without
-reworking the parse step or the report shape.
+--scaffold writes a skeleton per declared document: frontmatter
+(`status: draft` plus a computed `requires:`), numbered headings from each
+section's `heading`, and each section's source text pasted in verbatim
+behind an HTML-comment provenance marker, ready for the rewrite pass that
+turns it into prose. It refuses to overwrite an existing docs/specs2/<to> --
+regenerating after the rewrite has started would lose the rewrite -- and
+never writes any document when any target of the invocation already exists.
+--check --ids (Task 6) is a later task in the same plan; this module's shape
+(load_fold returning a Fold, derive_mapping taking one, run_check returning
+named groups) is designed to grow it without reworking the parse step or the
+report shape.
 """
 
 import argparse
@@ -49,15 +58,17 @@ try:
 except ImportError:
     sys.exit("fold: needs PyYAML (pip install pyyaml)")
 
-sys.dont_write_bytecode = True  # importing currentspec/secindex must not litter scripts/
+sys.dont_write_bytecode = True  # importing currentspec/secindex/secfmt must not litter scripts/
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import currentspec  # noqa: E402
+import secfmt  # noqa: E402
 import secindex  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 FOLD_PATH = Path("docs/specs2/fold.yaml")
 MAPPING_PATH = Path("docs/specs2/mapping.yaml")
 DEFAULT_SPECS_DIR = "docs/specs"
+DEFAULT_SPECS2_DIR = "docs/specs2"
 DEFAULT_PROJECT_KEY = "WL"
 
 # fold.yaml's own top-level keys (see the plan's "The fold.yaml schema") and
@@ -311,6 +322,145 @@ def run_check(fold: Fold, partial: bool) -> list:
     return [("unplaced", unplaced), ("placed twice", placed_twice), ("dangling", dangling)]
 
 
+def _number_parts(new: str) -> tuple:
+    """(digit tuple, letter-or-empty) for a fold.yaml `new:` number -- the same
+    decomposition parent_of() already trusts for validation, reused here to
+    put a document's sections in numeric order and to derive heading depth
+    (how many dot-separated components the number has)."""
+    m = SECTION_NUMBER.match(new)
+    if not m:
+        raise FoldError(f"{new!r} is not a well-formed section number")
+    digits, letter = m.groups()
+    return tuple(int(p) for p in digits.split(".")), (letter or "")
+
+
+def _heading_level(new: str) -> int:
+    """1 for a top-level `new:` ("0", "1"), 2 for one dot ("1.1"), 3 for two
+    ("1.1.2") -- H2/H3/H4 per 014 §7's depth-3 addressable limit."""
+    digits, _letter = _number_parts(new)
+    return len(digits)
+
+
+def _split_ref(ref: str) -> tuple:
+    """A fold.yaml ref ("<filename>#<anchor>") split into its parts. load_fold
+    already rejected any ref with no '#sec-' fragment, so `#` is always present
+    by the time this runs."""
+    filename, _, anchor = ref.partition("#")
+    return filename, anchor
+
+
+def slice_section(path: Path, anchor: str) -> str:
+    """The verbatim body of one `#anchor` section of `path`: the lines between
+    its heading and the next heading at any level, or the end of the document
+    -- located via secindex.py's own anchor table (secindex.sections_of),
+    never a second markdown parser, so a slice boundary can never disagree
+    with what secindex.py and secfmt.py already call that section. Surrounding
+    blank lines are trimmed; interior text is untouched."""
+    if not path.is_file():
+        raise FoldError(f"{path.name}: no such source document")
+    keys = [key for key, _heading in secindex.sections_of(path)]
+    if anchor not in keys:
+        raise FoldError(f"{path.name}: no section '#{anchor}'")
+    _front, body = secfmt.split_front_matter(path.read_text())
+    lines = body.splitlines(keepends=True)
+    heading_lines = [i for i, _m in secfmt.headings(body)]
+    idx = keys.index(anchor)
+    start = heading_lines[idx] + 1
+    end = heading_lines[idx + 1] if idx + 1 < len(heading_lines) else len(lines)
+    return "".join(lines[start:end]).strip("\n")
+
+
+def compute_requires(doc: Document, fold: Fold, specs_dir: Path) -> list:
+    """`requires:` for one scaffolded document: the union of every source's
+    own `requires:`, minus any target whose filename is itself a `sources:`
+    entry somewhere in this fold (that dependency folds internal to
+    docs/specs2/), the rest left pointing at docs/specs/ -- refmap.py
+    repoints them at cutover; docs/specs/ still exists today so they still
+    resolve, and translating them to docs/specs2/ paths now would dangle."""
+    internal = {s for d in fold.documents for s in d.sources}
+    specs_root = fold.corpus.get("from") or DEFAULT_SPECS_DIR
+    seen, out = set(), []
+    for source in doc.sources:
+        fm = currentspec.frontmatter(specs_dir / source)
+        raw = fm.get("requires")
+        refs = raw if isinstance(raw, list) else ([raw] if raw else [])
+        for ref in refs:
+            ref = str(ref)
+            target, _, frag = ref.partition("#")
+            if Path(target).name in internal:
+                continue
+            full_path = target if "/" in target else f"{specs_root}/{target}"
+            full = f"{full_path}#{frag}" if frag else full_path
+            if full not in seen:
+                seen.add(full)
+                out.append(full)
+    return sorted(out)
+
+
+def build_frontmatter(fields: dict) -> str:
+    """One frontmatter block (`---`-fenced, PyYAML block style, matching
+    dump_mapping's convention for generated YAML in this module)."""
+    body = yaml.safe_dump(fields, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    return f"---\n{body}---\n"
+
+
+def scaffold_text(doc: Document, fold: Fold, specs_dir: Path) -> str:
+    """The full skeleton docs/specs2/<doc.to> text: frontmatter (`status:
+    draft` plus computed `requires:`), the H1 title, then every declared
+    section in document order (sorted by `new:`, not necessarily fold.yaml's
+    own list order) with its heading and its `from:` segments pasted in
+    verbatim behind a provenance marker naming each source anchor."""
+    m = SPEC_NUMBER.match(Path(doc.to).name)
+    if not m:
+        raise FoldError(f"{doc.to!r} has no leading number to derive a spec title from")
+    number = int(m.group(1))
+
+    fields = {"status": "draft"}
+    requires = compute_requires(doc, fold, specs_dir)
+    if requires:
+        fields["requires"] = requires
+
+    parts = [build_frontmatter(fields), f"# Spec {number} — {doc.title}\n"]
+    for section in sorted(doc.sections, key=lambda s: _number_parts(s["new"])):
+        level = _heading_level(section["new"])
+        hashes = "#" * (level + 1)
+        label = secfmt.label(section["new"], level)
+        anchor = f"sec-{section['new']}"
+        parts.append(f"\n{hashes} {label} {section['heading']} {{#{anchor}}}\n")
+        for ref in section["from"]:
+            filename, source_anchor = _split_ref(ref)
+            text = slice_section(specs_dir / filename, source_anchor)
+            parts.append(f"\n<!-- from: {ref} -->\n{text}\n")
+
+    return "".join(parts)
+
+
+def scaffold_targets(fold: Fold, only) -> list:
+    """The documents --scaffold should write: all of fold.yaml's, or just the
+    one named by --only. Raises FoldError when --only names nothing there."""
+    docs = fold.documents
+    if only is None:
+        return docs
+    docs = [d for d in docs if d.to == only]
+    if not docs:
+        raise FoldError(f"--only {only!r} names no document in fold.yaml")
+    return docs
+
+
+def build_scaffolds(fold: Fold, specs_dir: Path, out_dir: Path, only=None) -> dict:
+    """{to: text} for every document this --scaffold invocation would write,
+    computed in full before any write happens. Raises FoldError -- writing
+    nothing -- when any target already exists, so a second --scaffold over a
+    partially-written docs/specs2/ refuses the whole invocation rather than
+    silently completing it (regenerating after the rewrite pass has started
+    would lose the rewrite)."""
+    docs = scaffold_targets(fold, only)
+    existing = sorted(d.to for d in docs if (out_dir / d.to).exists())
+    if existing:
+        raise FoldError(f"refusing to overwrite existing {', '.join(existing)}")
+    return {d.to: scaffold_text(d, fold, specs_dir) for d in docs}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--mapping", action="store_true",
@@ -320,19 +470,30 @@ def main(argv=None):
     ap.add_argument("--partial", action="store_true",
                      help="with --check, only require full coverage of the documents "
                           "fold.yaml currently declares")
+    ap.add_argument("--scaffold", action="store_true",
+                     help="write docs/specs2/<to> skeleton documents from fold.yaml")
+    ap.add_argument("--only", metavar="FILE",
+                     help="with --scaffold, write only the document whose 'to' is FILE")
     a = ap.parse_args(argv)
 
-    if a.mapping and a.check:
-        ap.error("--mapping and --check are mutually exclusive")
+    modes = (a.mapping, a.check, a.scaffold)
+    if sum(bool(m) for m in modes) > 1:
+        ap.error("--mapping, --check and --scaffold are mutually exclusive")
     if a.partial and not a.check:
         ap.error("--partial only makes sense with --check")
-    if not a.mapping and not a.check:
-        ap.error("no mode selected (--mapping, --check)")
+    if a.only and not a.scaffold:
+        ap.error("--only only makes sense with --scaffold")
+    if not any(modes):
+        ap.error("no mode selected (--mapping, --check, --scaffold)")
 
     try:
         fold = load_fold(REPO / FOLD_PATH)
         if a.check:
             groups = run_check(fold, partial=a.partial)
+        elif a.scaffold:
+            specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
+            out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
+            scaffolds = build_scaffolds(fold, specs_dir, out_dir, only=a.only)
     except FoldError as e:
         print(f"fold: {e}", file=sys.stderr)
         return 2
@@ -347,6 +508,13 @@ def main(argv=None):
                     print(f"  {ref}", file=sys.stderr)
         print(f"fold: check {'passed' if ok else 'failed'}", file=sys.stderr)
         return 0 if ok else 1
+
+    if a.scaffold:
+        for to, text in scaffolds.items():
+            path = out_dir / to
+            path.write_text(text)
+            print(f"fold: wrote {path.relative_to(REPO)}", file=sys.stderr)
+        return 0
 
     mapping = derive_mapping(fold)
     out = REPO / MAPPING_PATH
