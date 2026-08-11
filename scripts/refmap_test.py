@@ -662,6 +662,19 @@ class ProseFormBoundaryCorruptionTest(unittest.TestCase):
                 original,
             )
 
+    def test_single_digit_adr_number_before_section_sign_is_not_a_spec_reference(self):
+        # The two ADR-0006 cases above are overdetermined: "0006" is four
+        # digits, so MAX_PROSENUM_DIGITS rejects them whether or not the
+        # leading lookbehind excludes "-". A one-digit ADR number isolates
+        # the boundary itself -- and under OVERLAP_MAPPING both 6 and 11 are
+        # real from_ids with no sections, so a leak shows up as a failure,
+        # not as a silently plausible rewrite.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "See ADR-6 §3 and ADR-11 §2 for background.\n"
+            root, result = run_refmap(tmp, self.OVERLAP_MAPPING, {"README.md": original}, "-w")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((root / "README.md").read_text(), original)
+
     def test_version_string_is_not_a_spec_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = "Requires v1.3 §3 of the client.\n"
