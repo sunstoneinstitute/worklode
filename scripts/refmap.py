@@ -592,6 +592,10 @@ def write_marker(root: Path, mapping: Mapping, total_subs: int, changed: int) ->
 
 
 def report(results: list, out) -> None:
+    """The substitution plan and the unmapped-reference listing, both on
+    `out` (stdout in main): they are the run's *data*, greppable and
+    pipeable. The one-line refusals that follow -- why nothing was written --
+    go to stderr instead, so a caller piping the plan still sees them."""
     for r in results:
         for lineno, old, new in r.subs:
             print(f"{r.rel.as_posix()}:{lineno}: {old} -> {new}", file=out)
@@ -634,7 +638,8 @@ def main(argv=None):
     if a.write and (root / MARKER_PATH).exists():
         print(f"refmap: {MARKER_PATH} exists -- refmap.py -w has already run against this "
               "tree (this survives a commit; it is not the git-dirty check). Delete it to "
-              "re-run after amending mapping.yaml, having first reverted the previous run.")
+              "re-run after amending mapping.yaml, having first reverted the previous run.",
+              file=sys.stderr)
         return 1
 
     mapping_path = root / MAPPING_PATH
@@ -667,7 +672,7 @@ def main(argv=None):
 
     if total_unmapped:
         print(f"\nrefmap: {total_unmapped} unmapped reference(s) -- fix mapping.yaml "
-              "or resolve by hand; nothing written")
+              "or resolve by hand; nothing written", file=sys.stderr)
         return 1
 
     if a.write:
@@ -677,7 +682,8 @@ def main(argv=None):
                     else "has uncommitted changes")
             print(f"\nrefmap: --root {why} -- refusing to write (a clean starting point "
                   "keeps this run's diff attributable and revertable). Commit or stash "
-                  "first, use --dry-run to preview, or --force to override.")
+                  "first, use --dry-run to preview, or --force to override.",
+                  file=sys.stderr)
             return 1
         for r in changed:
             (root / r.rel).write_text(r.new_text, encoding="utf-8")

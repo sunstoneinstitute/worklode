@@ -220,6 +220,7 @@ def load_fold(path) -> Fold:
     """Parse and validate one fold.yaml. Raises FoldError, naming the
     offending ref or key and the document, on:
 
+      * no file at `path`
       * an unknown key at the fold-document level, within a section entry,
         or within a dropped entry
       * a document missing `to` or `title`
@@ -230,6 +231,8 @@ def load_fold(path) -> Fold:
       * a `from:` ref with no `#sec-` fragment
     """
     path = Path(path)
+    if not path.is_file():
+        raise FoldError(f"{rel_to_repo(path)} is missing")
     raw = yaml.safe_load(path.read_text()) or {}
     if not isinstance(raw, dict):
         raise FoldError(f"{path.name}: fold document is not a mapping")
@@ -474,6 +477,11 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     unplaced = sorted(scope - declared)
 
     out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
+    # check_ids slices every source section fold.yaml places, so a ref naming
+    # no anchor makes it raise -- replacing the whole grouped report with one
+    # parse error, and hiding the very group that names the offending ref.
+    # Fix the fold first; the ids pass has nothing coherent to say until then.
+    run_ids = ids and not no_such_anchor
     missing, undeclared, dropped_ids = [], [], []
     for doc in fold.documents:
         written = out_dir / doc.to
@@ -483,7 +491,7 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
         written_anchors = {key for key, _heading in secindex.sections_of(written)}
         missing.extend(f"{doc.to}#{a}" for a in sorted(declared_anchors - written_anchors))
         undeclared.extend(f"{doc.to}#{a}" for a in sorted(written_anchors - declared_anchors))
-        if ids:
+        if run_ids:
             dropped_ids.extend(check_ids(doc, specs_dir, written))
 
     groups = [
@@ -495,7 +503,7 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
         ("missing", missing),
         ("undeclared", undeclared),
     ]
-    if ids:
+    if run_ids:
         groups.append(("dropped ids", dropped_ids))
     return groups
 
@@ -521,8 +529,9 @@ def _heading_level(new: str) -> int:
 
 def _split_ref(ref: str) -> tuple:
     """A fold.yaml ref ("<filename>#<anchor>") split into its parts. load_fold
-    already rejected any ref with no '#sec-' fragment, so `#` is always present
-    by the time this runs."""
+    already rejected any `from:` ref carrying neither a '#sec-' fragment nor
+    the '#preamble' pseudo-anchor, so `#` is always present by the time this
+    runs."""
     filename, _, anchor = ref.partition("#")
     return filename, anchor
 
@@ -825,6 +834,10 @@ def main(argv=None):
     if not any(modes):
         ap.error("no mode selected (--mapping, --check, --scaffold)")
 
+    # Every FoldError-raising call sits inside this one boundary, derivation
+    # included: parts 2-4 run fold.py dozens of times, and a raw traceback
+    # instead of "fold: <msg>" is what makes an implementer improvise rather
+    # than escalate.
     try:
         fold = load_fold(REPO / FOLD_PATH)
         if a.check:
@@ -833,6 +846,8 @@ def main(argv=None):
             specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
             out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
             scaffolds = build_scaffolds(fold, specs_dir, out_dir, only=a.only)
+        else:
+            mapping = derive_mapping(fold)
     except FoldError as e:
         print(f"fold: {e}", file=sys.stderr)
         return 2
@@ -852,10 +867,9 @@ def main(argv=None):
         for to, text in scaffolds.items():
             path = out_dir / to
             path.write_text(text)
-            print(f"fold: wrote {path.relative_to(REPO)}", file=sys.stderr)
+            print(f"fold: wrote {rel_to_repo(path)}", file=sys.stderr)
         return 0
 
-    mapping = derive_mapping(fold)
     out = REPO / MAPPING_PATH
     out.write_text(dump_mapping(mapping))
     print(f"fold: wrote {MAPPING_PATH}", file=sys.stderr)
