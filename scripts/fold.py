@@ -413,7 +413,8 @@ def scaffold_text(doc: Document, fold: Fold, specs_dir: Path) -> str:
     m = SPEC_NUMBER.match(Path(doc.to).name)
     if not m:
         raise FoldError(f"{doc.to!r} has no leading number to derive a spec title from")
-    number = int(m.group(1))
+    number = m.group(1)  # kept as the filename's own digit string -- house style
+    # zero-pads ("# Spec 005 — ..."), and int() would silently strip that.
 
     fields = {"status": "draft"}
     requires = compute_requires(doc, fold, specs_dir)
