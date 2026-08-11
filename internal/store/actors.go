@@ -21,6 +21,11 @@ type Actor struct {
 	Kind        string
 	DisplayName string
 	Admin       bool
+	// ExpectedGitHubLogin is the GitHub login Keycloak asserts for this actor
+	// via the realm's github_username user attribute (spec 023 §3.2), re-synced
+	// on every login. Empty when the Keycloak account carries no such
+	// attribute.
+	ExpectedGitHubLogin string
 }
 
 // tokenPrefix marks plaintext bearer tokens so they are visually
@@ -47,14 +52,20 @@ func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, a
 }
 
 // UpsertHumanActor inserts a human actor, or on repeat login updates its
-// display name and admin flag. Admin is re-synced on every login, so a Keycloak
-// demotion takes effect the next time the user logs in. Kind is set to 'human'
-// on insert and left unchanged on update.
-func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool) error {
+// display name, admin flag, and expected GitHub login. Admin and
+// expectedGitHubLogin are both re-synced on every login, so a Keycloak
+// demotion or a cleared github_username attribute takes effect the next time
+// the user logs in. expectedGitHubLogin is stored as SQL NULL when empty.
+// Kind is set to 'human' on insert and left unchanged on update.
+func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool, expectedGitHubLogin string) error {
+	var ghLogin sql.NullString
+	if expectedGitHubLogin != "" {
+		ghLogin = sql.NullString{String: expectedGitHubLogin, Valid: true}
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name, admin) VALUES ($1, 'human', $2, $3)
-		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin`,
-		id, displayName, admin,
+		`INSERT INTO actors (id, kind, display_name, admin, expected_github_login) VALUES ($1, 'human', $2, $3, $4)
+		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin, expected_github_login = excluded.expected_github_login`,
+		id, displayName, admin, ghLogin,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert human actor %s: %w", id, err)
@@ -66,15 +77,17 @@ func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, ad
 func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 	var a Actor
 	var displayName sql.NullString
+	var ghLogin sql.NullString
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, display_name, admin FROM actors WHERE id = $1`, id)
-	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin); err != nil {
+		`SELECT id, kind, display_name, admin, expected_github_login FROM actors WHERE id = $1`, id)
+	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("get actor %s: %w", id, err)
 	}
 	a.DisplayName = displayName.String
+	a.ExpectedGitHubLogin = ghLogin.String
 	return &a, nil
 }
 

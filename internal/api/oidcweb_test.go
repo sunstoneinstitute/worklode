@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -65,12 +66,12 @@ func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 // Full round-trip: login -> (drive the issuer) -> callback sets a session
 // cookie and redirects to the originally requested page.
 func TestAuthCallbackRoundTrip(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t)
 
 	// The issuer's /token endpoint will return this ID token.
 	iss.TokenClaims = map[string]any{
 		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
-		"groups": []string{"user"},
+		"groups": []string{"user"}, "github_username": "gracehop",
 	}
 
 	// Step 1: hit /auth/login to obtain the oauth-state cookie and the state param.
@@ -95,6 +96,16 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	}
 	if !hasCookie(rr, "wl_session") {
 		t.Fatal("no wl_session cookie set after callback")
+	}
+
+	// The callback's provisionActor call carries the github_username claim
+	// onto the actor (spec 023 §3.2).
+	a, err := st.GetActor(context.Background(), "grace")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if a.ExpectedGitHubLogin != "gracehop" {
+		t.Fatalf("ExpectedGitHubLogin = %q, want %q", a.ExpectedGitHubLogin, "gracehop")
 	}
 
 	// Step 3: the session cookie now lets a gated page through.

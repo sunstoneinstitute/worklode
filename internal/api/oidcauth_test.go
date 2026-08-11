@@ -169,6 +169,47 @@ func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
 	}
 }
 
+// TestOIDCTokenExchangeSyncsGitHubUsername asserts expected_github_login is
+// re-synced on every login exactly like the admin flag (spec 023 §3.2): a
+// login carrying github_username sets it, and a later login without the
+// claim clears it back to empty while still succeeding (201).
+func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {
+	st, h, iss := newOIDCServer(t)
+	ctx := context.Background()
+
+	raw := iss.SignToken(t, map[string]any{
+		"preferred_username": "heidi", "name": "Heidi", "groups": []string{"user"},
+		"github_username": "hheidi",
+	})
+	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{"id_token": raw})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("first login status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	a, err := st.GetActor(ctx, "heidi")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if a.ExpectedGitHubLogin != "hheidi" {
+		t.Fatalf("ExpectedGitHubLogin = %q, want %q", a.ExpectedGitHubLogin, "hheidi")
+	}
+
+	// Second login without the claim clears it, and still returns 201.
+	raw = iss.SignToken(t, map[string]any{
+		"preferred_username": "heidi", "name": "Heidi", "groups": []string{"user"},
+	})
+	rr = doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{"id_token": raw})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("second login status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	a, err = st.GetActor(ctx, "heidi")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if a.ExpectedGitHubLogin != "" {
+		t.Fatalf("ExpectedGitHubLogin after clear = %q, want empty", a.ExpectedGitHubLogin)
+	}
+}
+
 func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
 	raw := iss.SignToken(t, map[string]any{
