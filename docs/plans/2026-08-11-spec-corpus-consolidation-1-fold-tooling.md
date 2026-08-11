@@ -127,6 +127,13 @@ a better spec. Nothing here licenses a design change.
    mechanically.
 8. **Leave numbering alone.** Headings and numbers come from `fold.yaml`;
    `secfmt.py` owns the `{#sec-N}` anchors.
+9. **Never break a backtick span across a line.** Reflowing a paragraph so that
+   `` `lode task brief` `` wraps mid-span makes `--check --ids` report it as
+   dropped. Keep the span whole and wrap around it.
+10. **Do not add structure.** The drift check reports any heading `fold.yaml`
+    does not declare — including a sub-heading carried over from a source spec,
+    and an unnumbered `## Appendix`. New structure is a `fold.yaml` change,
+    which is a planning-tier decision, not a rewrite.
 
 ## Global Constraints
 
@@ -414,5 +421,23 @@ work either — it also drives where `fold.py --scaffold` writes.
 
 `fold.yaml` authoring for parts 2–4 is planning-tier work and happens before
 that part's tasks, not inside them. Part 1 is the exception: its single 005
+entry is written inside task 7, because the format it validates does not exist
+until then.
+
+**Before part 2 starts, pre-seed `allow_dropped_ids` with the corpus's 22
+source-side span artifacts.** `SPAN_RE`'s single-backtick branch is `[^`\n]+`,
+so where a source spec wraps an inline span across a line the backticks re-pair
+and capture the prose between — yielding garbage "identifiers" like `` `, binds
+` `` and `` `'; on **first** sight call '` ``. There are 22 across 11 files. They
+are a property of the source, computable before any rewrite begins, and no
+rewrite can make them go away. Seeding them in a planning-tier pass keeps the
+"rewrite tasks never edit `fold.yaml`" rule intact; leaving them unseeded spends
+22 human escalations on noise.
+
+Measured cost of the guard on a real fold: a faithful rewrite of spec 005 — all
+markers deleted, all 10 headings reworded, every paragraph reflowed, two
+sections merged, all three fences reindented — produced **2** findings, one a
+wrapped span (rule 9 above) and one a source-side artifact. Neither was content
+loss. Part 1 is the exception: its single 005
 entry is written inside task 7, because the format it validates does not exist
 until then.
