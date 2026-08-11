@@ -1076,5 +1076,153 @@ class AllowDroppedTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
 
+class MalformedMappingTest(unittest.TestCase):
+    """load_mapping's validation path, which had no coverage at all. Mirrors
+    fold_test.py's MalformedFoldTest: each case is a real contract, and each
+    must report `refmap: <msg>` on stderr rather than raise."""
+
+    FILES = {"internal/cli/scope.go": "// nothing to see here\n"}
+
+    def assert_rejected(self, mapping, message):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_refmap(tmp, mapping, self.FILES, "--dry-run")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn(message, result.stderr)
+
+    def test_rejects_a_mapping_that_is_not_a_mapping(self):
+        self.assert_rejected("- just\n- a\n- list\n", "mapping is not a mapping")
+
+    def test_rejects_a_documents_entry_missing_a_key(self):
+        mapping = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - {from: 002-github-app-auth.md, to: 001-identity.md, from_id: WL-SPEC-2}
+            sections: {}
+            dropped: []
+            """
+        self.assert_rejected(mapping, "documents[0]: missing 'to_id'")
+
+    def test_names_the_offending_documents_index(self):
+        mapping = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - {from: 002-a.md, to: 001-x.md, from_id: WL-SPEC-2, to_id: WL-SPEC-1}
+              - {from: 003-b.md, to: 001-x.md, to_id: WL-SPEC-1}
+            sections: {}
+            dropped: []
+            """
+        self.assert_rejected(mapping, "documents[1]: missing 'from_id'")
+
+    def test_rejects_a_dropped_entry_missing_ref(self):
+        mapping = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents: []
+            sections: {}
+            dropped:
+              - {reason: "spent: current-state narrative"}
+            """
+        self.assert_rejected(mapping, "dropped[0]: missing 'ref'")
+
+    def test_reports_a_missing_mapping_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = write_tree(tmp, MAIN_MAPPING, self.FILES)
+            (root / "docs/specs2/mapping.yaml").unlink()
+            result = invoke_refmap(root, "--dry-run")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("mapping.yaml", result.stderr)
+            self.assertIn("not found", result.stderr)
+
+    def test_dry_run_and_write_are_mutually_exclusive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_refmap(tmp, MAIN_MAPPING, self.FILES, "--dry-run", "-w")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("mutually exclusive", result.stderr)
+
+
+class RefusalStreamTest(unittest.TestCase):
+    """Every refusal goes to stderr, so a caller that pipes stdout (the
+    substitution plan) still sees why the run stopped."""
+
+    def test_unmapped_refusal_is_on_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go": "// docs/specs/002-github-app-auth.md#sec-99\n"},
+                "-w",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unmapped reference(s)", result.stderr)
+
+    def test_marker_refusal_is_on_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go": "// docs/specs/002-github-app-auth.md#sec-3.5\n"},
+                "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            second = invoke_refmap(root, "-w")
+            self.assertNotEqual(second.returncode, 0)
+            self.assertIn(".refmap-applied", second.stderr)
+
+    def test_dirty_worktree_refusal_is_on_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = write_tree(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go": "// docs/specs/002-github-app-auth.md#sec-3.5\n"},
+            )
+            (root / "uncommitted.txt").write_text("dirty\n")
+            result = invoke_refmap(root, "-w")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("refusing to write", result.stderr)
+
+
+class MarkerContentTest(unittest.TestCase):
+    def test_marker_records_corpus_to_and_the_run_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go":
+                    "// docs/specs/002-github-app-auth.md#sec-3.5\n"
+                    "// docs/specs/002-github-app-auth.md#sec-3.5 again\n",
+                 "docs/plans/some-plan.md":
+                    "covers: docs/specs/002-github-app-auth.md\n"},
+                "-w", "--corpus-to", "docs/specs",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            marker = (root / "docs/specs2/.refmap-applied").read_text()
+            self.assertIn("corpus_to: docs/specs\n", marker)
+            self.assertIn("substitutions: 3\n", marker)
+            self.assertIn("files_changed: 2\n", marker)
+
+
+class NonTextFileTest(unittest.TestCase):
+    def test_a_file_that_is_not_utf8_is_skipped_silently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = write_tree(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go": "// docs/specs/002-github-app-auth.md#sec-3.5\n"},
+            )
+            blob = root / "internal" / "cli" / "testdata.bin"
+            blob.write_bytes(b"\xff\xfe docs/specs/002-github-app-auth.md#sec-99 \x00\x80")
+            commit_all(root, "add a binary")
+
+            result = invoke_refmap(root, "-w")
+            # The blob holds what would be an unmapped reference if it were
+            # read as text; skipping it silently is what keeps a binary
+            # fixture from blocking the whole run.
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                blob.read_bytes(),
+                b"\xff\xfe docs/specs/002-github-app-auth.md#sec-99 \x00\x80",
+            )
+            self.assertNotIn("testdata.bin", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
