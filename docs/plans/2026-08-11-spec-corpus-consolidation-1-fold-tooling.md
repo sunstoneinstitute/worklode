@@ -394,8 +394,17 @@ whole-branch review before cutover.
 2. `git rm -r docs/specs && git mv docs/specs2 docs/specs`.
 3. Flip `status`/`issued` on the documents whose sources were all accepted.
 4. `spec_corpus = "docs/specs"` in `.worklode/config.toml`; `lode doc sync --dry-run`.
-5. Delete `scripts/fold.py`, `scripts/refmap.py` and their tests; keep
+5. `git rm docs/specs/.refmap-applied` — `refmap.py -w` drops this marker in
+   `docs/specs2/`, and step 2 carries it into the shipped corpus.
+6. Delete `scripts/fold.py`, `scripts/refmap.py` and their tests; keep
    `mapping.yaml`.
+
+**If the mapping is amended mid-cutover, revert the rewrite before re-running.**
+The marker records `corpus_to` and counts but no identity of `mapping.yaml`, so
+it cannot tell "the mapping changed" from "this is a double-rewrite". `--force`
+re-applies the *full* rewrite over already-rewritten text — straight into the
+id collisions the marker exists to prevent. `git checkout` the previous run
+first, then re-run.
 
 Reversing 1 and 2 does not work: after the move `corpus.from` collides with the
 new corpus, `refmap.py`'s `MAPPING_PATH` is hardcoded to
