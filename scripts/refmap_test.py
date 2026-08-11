@@ -27,9 +27,18 @@ ROOT = Path(__file__).resolve().parent.parent
 REFMAP = ROOT / "scripts" / "refmap.py"
 
 
-def write_tree(tmp, mapping, files):
+def git(root, *args):
+    subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True)
+
+
+def write_tree(tmp, mapping, files, commit=True):
     """A throwaway --root: docs/specs2/mapping.yaml (mapping, a YAML string)
-    plus `files` ({relpath: content})."""
+    plus `files` ({relpath: content}). `commit` (default True) also makes
+    `root` a git repo with everything committed -- -w's idempotency gate
+    (C3: shorthand/prose substitutions are not self-inverse, since old and
+    new numbering both start at 1) requires a clean git worktree, so every
+    -w test needs a real, committed repo unless it is specifically testing
+    that gate's "not a repo at all" branch (commit=False)."""
     root = Path(tmp)
     specs2 = root / "docs" / "specs2"
     specs2.mkdir(parents=True)
@@ -38,16 +47,28 @@ def write_tree(tmp, mapping, files):
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(textwrap.dedent(content))
+    if commit:
+        git(root, "init", "-q")
+        git(root, "config", "user.email", "refmap-test@example.com")
+        git(root, "config", "user.name", "refmap-test")
+        git(root, "config", "commit.gpgsign", "false")
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", "fixture")
     return root
 
 
-def run_refmap(tmp, mapping, files, *args):
-    root = write_tree(tmp, mapping, files)
-    result = subprocess.run(
+def invoke_refmap(root, *args):
+    """Run the real refmap.py against an already-built `root`, without
+    rebuilding or re-committing it -- what a second -w run in a row needs."""
+    return subprocess.run(
         [sys.executable, str(REFMAP), "--root", str(root), *args],
         capture_output=True, text=True, check=False,
     )
-    return root, result
+
+
+def run_refmap(tmp, mapping, files, *args, commit=True):
+    root = write_tree(tmp, mapping, files, commit=commit)
+    return root, invoke_refmap(root, *args)
 
 
 # A three-document mapping exercising a straight 1:1 fold (002 -> 001), a
@@ -379,11 +400,19 @@ class ExclusionTest(unittest.TestCase):
     def test_git_directory_is_never_touched(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = "// see docs/specs/002-github-app-auth.md#sec-3.5\n"
+            # A name that cannot collide with a real file `git init`/`commit`
+            # writes into .git/ (write_tree now git-inits every fixture, for
+            # the -w idempotency gate -- COMMIT_EDITMSG used to work when
+            # .git/ was just a fixture directory, but a real git commit
+            # actually writes that file, which made this test pass for the
+            # wrong reason).
             root, result = run_refmap(
-                tmp, MAIN_MAPPING, {".git/COMMIT_EDITMSG": original}, "-w",
+                tmp, MAIN_MAPPING, {".git/refmap-fixture-marker.txt": original}, "-w",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / ".git/COMMIT_EDITMSG").read_text(), original)
+            self.assertEqual(
+                (root / ".git/refmap-fixture-marker.txt").read_text(), original
+            )
 
     def test_an_ordinary_sibling_named_worktreesx_is_still_scanned(self):
         # Regression guard for an over-broad exclusion: only the exact
@@ -422,6 +451,369 @@ class ShorthandScopeTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / "docs/specs/006-knowledge-graph.md").read_text(), original)
+
+    def test_cross_project_shorthand_with_a_section_sign_is_left_alone(self):
+        # C1 regression: extends the test above one character further -- the
+        # review noted the un-extended version stops one character short of
+        # the bug (a "§" after a cross-project id must still not trip the
+        # *prose* branch).
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "amends: [rdf-registry:ADR-0006 §3]\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/specs/006-knowledge-graph.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "docs/specs/006-knowledge-graph.md").read_text(), original)
+
+
+# C1: the prose branch's leading lookbehind excluded \w but not "-" or ".",
+# so a digit run immediately after either -- an ADR number, a version
+# string, a date -- was captured as a spec "number" and silently rewritten
+# using the target spec's mapping. Real sites: docs/specs/006-knowledge-
+# graph.md lines 94, 583, 754, 790 and docs/plans/2026-07-30-data-platform-
+# kg-requirements.md:48 (all "ADR-NNNN §N"), used verbatim below.
+class ProseFormBoundaryCorruptionTest(unittest.TestCase):
+    # A mapping where old spec 6 (whose id the corrupted "0006" collapses to
+    # via int()) and old spec 1/3/11 are all real, mapped documents -- so a
+    # silent corruption would produce a *plausible*, not obviously-broken,
+    # wrong id, exactly like the review's proof (WL-SPEC-6 -> WL-SPEC-11).
+    OVERLAP_MAPPING = """\
+        version: 1
+        corpus: {from: docs/specs, to: docs/specs2}
+        documents:
+          - {from: 001-old-one.md, to: 900-new-one.md, from_id: WL-SPEC-1, to_id: WL-SPEC-3}
+          - {from: 003-old-three.md, to: 901-new-three.md, from_id: WL-SPEC-3, to_id: WL-SPEC-9}
+          - {from: 006-knowledge-graph.md, to: 902-new-six.md, from_id: WL-SPEC-6, to_id: WL-SPEC-11}
+          - {from: 011-old-eleven.md, to: 903-new-eleven.md, from_id: WL-SPEC-11, to_id: WL-SPEC-20}
+        sections: {}
+        dropped: []
+        """
+
+    def test_adr_number_before_section_sign_is_not_a_spec_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = (
+                "Branch-free, version-free term & instance IRIs (ADR-0006 §3). "
+                "This is the **host/namespace\n"
+            )
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"docs/specs/006-knowledge-graph.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "docs/specs/006-knowledge-graph.md").read_text(), original)
+
+    def test_adr_number_real_repo_lines(self):
+        # docs/specs/006-knowledge-graph.md:94,583,754,790, verbatim.
+        original = (
+            "so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.\n"
+            "  add `ls` to the `/rdf/` DCAT/VoID index (ADR-0006 §5).\n"
+            "   Deployment / Environment is documented and branch-free (ADR-0006 §3); "
+            "spec 009 can host it.\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"docs/specs/006-knowledge-graph.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "docs/specs/006-knowledge-graph.md").read_text(), original)
+
+    def test_adr_number_in_plan_real_repo_line(self):
+        # docs/plans/2026-07-30-data-platform-kg-requirements.md:48, verbatim.
+        original = (
+            "| 5 | Writable fixed branch | data-platform | **Done.** "
+            "`PUT /branches/main/graphs?graph=<iri>` "
+            "(`crates/graph-server/src/app.rs:53-59`); ADR-0003 §2: "
+            '"every project writes to the one fixed writable branch `main`". |\n'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING,
+                {"docs/plans/2026-07-30-data-platform-kg-requirements.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (root / "docs/plans/2026-07-30-data-platform-kg-requirements.md").read_text(),
+                original,
+            )
+
+    def test_version_string_is_not_a_spec_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "Requires v1.3 §3 of the client.\n"
+            root, result = run_refmap(tmp, self.OVERLAP_MAPPING, {"README.md": original}, "-w")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "README.md").read_text(), original)
+
+    def test_date_is_not_a_spec_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "Filed on 2026-08-11 §3 of the ledger.\n"
+            root, result = run_refmap(tmp, self.OVERLAP_MAPPING, {"README.md": original}, "-w")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "README.md").read_text(), original)
+
+    def test_zero_padded_number_longer_than_three_digits_is_rejected_even_after_spec_prefix(self):
+        # The lookbehind fix alone does not stop this one -- "spec " is a
+        # legitimate leading boundary -- so an explicit digit-length cap is
+        # the second half of the C1 fix.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "See spec 0006 §3 for background.\n"
+            root, result = run_refmap(tmp, self.OVERLAP_MAPPING, {"README.md": original}, "-w")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "README.md").read_text(), original)
+
+    def test_ordinary_three_digit_prose_reference_still_rewrites(self):
+        # The fix must not overcorrect into rejecting legitimate references.
+        # (Prose output uses the new *filename's* own leading number, per
+        # fold.py's H1-title convention -- not to_id -- so the fixture's `to`
+        # must itself start with "006" for "spec 006 §9" to be the right
+        # expectation.)
+        with tempfile.TemporaryDirectory() as tmp:
+            mapping = """\
+                version: 1
+                corpus: {from: docs/specs, to: docs/specs2}
+                documents:
+                  - {from: 014-old.md, to: 006-new.md, from_id: WL-SPEC-14, to_id: WL-SPEC-6}
+                sections:
+                  "014-old.md#sec-5": "006-new.md#sec-9"
+                dropped: []
+                """
+            root, result = run_refmap(tmp, mapping, {"ns/shapes.ttl": "# spec 014 §5\n"}, "-w")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "ns/shapes.ttl").read_text(), "# spec 006 §9\n")
+
+
+# C2: the path form's trailing lookahead excluded "." outright, so a path
+# reference ending a sentence ("....md.") never matched at all -- no
+# substitution and no unmapped entry, the "too narrow, silently stale"
+# failure the brief warns about. The fragment form had the mirror bug: the
+# anchor's own character class included ".", so "#sec-3." swallowed the
+# period into the anchor and failed loudly (a false unmapped) instead of
+# resolving. Real sites (verbatim): internal/api/cliauth.go:6, deploy/base/
+# migrations/0004_agent_sessions.up.sql:2, 0007_skills.up.sql:3, docs/plans/
+# 2026-07-27-org-wide-skills.md:56, docs/plans/2026-07-20-provider-neutral-
+# cli-login.md:119.
+class PathFormSentenceEndTest(unittest.TestCase):
+    MAPPING = """\
+        version: 1
+        corpus: {from: docs/specs, to: docs/specs2}
+        documents:
+          - {from: 031-provider-neutral-cli-login.md, to: 901-new.md,
+             from_id: WL-SPEC-31, to_id: WL-SPEC-901}
+          - {from: 012-agent-sessions.md, to: 902-new.md,
+             from_id: WL-SPEC-12, to_id: WL-SPEC-902}
+          - {from: 016-org-wide-skills.md, to: 903-new.md,
+             from_id: WL-SPEC-16, to_id: WL-SPEC-903}
+        sections: {}
+        dropped: []
+        """
+
+    def test_cliauth_go_real_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.MAPPING,
+                {"internal/api/cliauth.go":
+                    "// docs/specs/031-provider-neutral-cli-login.md.\n"},
+                "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (root / "internal/api/cliauth.go").read_text(), "// docs/specs2/901-new.md.\n"
+            )
+
+    def test_migration_comment_real_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.MAPPING,
+                {"deploy/base/migrations/0004_agent_sessions.up.sql":
+                    "-- docs/specs/012-agent-sessions.md.\n",
+                 "deploy/base/migrations/0007_skills.up.sql":
+                    "-- See docs/specs/016-org-wide-skills.md.\n"},
+                "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (root / "deploy/base/migrations/0004_agent_sessions.up.sql").read_text(),
+                "-- docs/specs2/902-new.md.\n",
+            )
+            self.assertEqual(
+                (root / "deploy/base/migrations/0007_skills.up.sql").read_text(),
+                "-- See docs/specs2/903-new.md.\n",
+            )
+
+    def test_plan_real_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.MAPPING,
+                {"docs/plans/2026-07-27-org-wide-skills.md":
+                    "-- See docs/specs/016-org-wide-skills.md.\n",
+                 "docs/plans/2026-07-20-provider-neutral-cli-login.md":
+                    "// docs/specs/031-provider-neutral-cli-login.md.\n"},
+                "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (root / "docs/plans/2026-07-27-org-wide-skills.md").read_text(),
+                "-- See docs/specs2/903-new.md.\n",
+            )
+            self.assertEqual(
+                (root / "docs/plans/2026-07-20-provider-neutral-cli-login.md").read_text(),
+                "// docs/specs2/901-new.md.\n",
+            )
+
+    def test_path_followed_by_an_extension_is_still_rejected(self):
+        # Must not regress: ".md.bak" names a different file, never a match.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// docs/specs/031-provider-neutral-cli-login.md.bak\n"
+            root, result = run_refmap(
+                tmp, self.MAPPING, {"internal/api/cliauth.go": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "internal/api/cliauth.go").read_text(), original)
+
+    def test_path_followed_by_a_hyphenated_continuation_is_still_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// docs/specs/031-provider-neutral-cli-login.md-ish\n"
+            root, result = run_refmap(
+                tmp, self.MAPPING, {"internal/api/cliauth.go": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "internal/api/cliauth.go").read_text(), original)
+
+    def test_anchor_ending_a_sentence_does_not_swallow_the_period(self):
+        mapping = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - {from: 014-old.md, to: 900-new.md, from_id: WL-SPEC-14, to_id: WL-SPEC-900}
+            sections:
+              "014-old.md#sec-3": "900-new.md#sec-9"
+            dropped: []
+            """
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, mapping, {"docs/specs/014-old.md": "See 014-old.md#sec-3.\n"}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "docs/specs/014-old.md").read_text(), "See 900-new.md#sec-9.\n")
+
+
+# C3: old and new spec numbering both start at 1, so a shorthand/prose
+# substitution's *output* can coincidentally be a valid *input* for another
+# entry (WL-SPEC-4 -> WL-SPEC-6, and WL-SPEC-6 is itself a real from_id
+# mapping to WL-SPEC-11) -- unlike the path form, which is self-blocking
+# because its own output carries the new corpus_to prefix. A second -w
+# before the first is committed must refuse, not rewrite again.
+class IdempotencyTest(unittest.TestCase):
+    OVERLAP_MAPPING = """\
+        version: 1
+        corpus: {from: docs/specs, to: docs/specs2}
+        documents:
+          - {from: 004-old-four.md, to: 900-new-four.md, from_id: WL-SPEC-4, to_id: WL-SPEC-6}
+          - {from: 006-old-six.md, to: 901-new-six.md, from_id: WL-SPEC-6, to_id: WL-SPEC-11}
+        sections: {}
+        dropped: []
+        """
+
+    def test_first_write_on_a_clean_worktree_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "internal/cmd/show.go").read_text(), "// see WL-SPEC-6\n")
+
+    def test_second_write_before_committing_refuses_and_does_not_double_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            after_first = (root / "internal/cmd/show.go").read_text()
+            self.assertEqual(after_first, "// see WL-SPEC-6\n")
+
+            second = invoke_refmap(root, "-w")
+            self.assertNotEqual(second.returncode, 0)
+            after_second = (root / "internal/cmd/show.go").read_text()
+            self.assertEqual(after_second, after_first)  # not rewritten a second time
+            self.assertNotIn("WL-SPEC-11", after_second)
+
+    def test_write_refuses_when_root_is_not_a_git_worktree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// see WL-SPEC-4\n"
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": original}, "-w", commit=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / "internal/cmd/show.go").read_text(), original)
+
+    def test_dry_run_is_unaffected_by_a_dirty_worktree(self):
+        # --dry-run never writes, so it needs no clean-tree guard at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            dry = invoke_refmap(root, "--dry-run")
+            self.assertEqual(dry.returncode, 0, dry.stderr)
+
+
+class CorpusToOverrideTest(unittest.TestCase):
+    def test_corpus_to_flag_overrides_mapping_yaml_for_output_paths_only(self):
+        # Part 5 runs `refmap.py -w --corpus-to docs/specs` *before* `git mv`
+        # (see the module docstring) -- output paths must use the override,
+        # while input recognition still keys off mapping.yaml's own
+        # corpus.from (unaffected by this flag).
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go":
+                    "// see docs/specs/002-github-app-auth.md#sec-3.5 for the rule\n"},
+                "-w", "--corpus-to", "docs/specs",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            got = (root / "internal/cli/scope.go").read_text()
+            self.assertEqual(
+                got,
+                "// see docs/specs/001-identity-and-authentication.md#sec-6.2 for the rule\n",
+            )
+
+    def test_without_the_flag_mapping_yamls_own_corpus_to_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cli/scope.go":
+                    "// see docs/specs/002-github-app-auth.md#sec-3.5 for the rule\n"},
+                "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            got = (root / "internal/cli/scope.go").read_text()
+            self.assertIn("docs/specs2/001-identity-and-authentication.md#sec-6.2", got)
+
+
+class AllowDroppedTest(unittest.TestCase):
+    def test_allow_dropped_passes_through_a_recorded_drop_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// see docs/specs/002-github-app-auth.md#sec-2 (dropped)\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"internal/cli/scope.go": original}, "-w", "--allow-dropped",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "internal/cli/scope.go").read_text(), original)
+
+    def test_allow_dropped_still_fails_a_never_mapped_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// docs/specs/002-github-app-auth.md#sec-99 was never placed or dropped\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"internal/cli/scope.go": original}, "-w", "--allow-dropped",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / "internal/cli/scope.go").read_text(), original)
+
+    def test_without_the_flag_a_dropped_reference_still_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "// see docs/specs/002-github-app-auth.md#sec-2 (dropped)\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"internal/cli/scope.go": original}, "--dry-run",
+            )
+            self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":
