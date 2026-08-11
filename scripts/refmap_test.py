@@ -943,11 +943,12 @@ class DurableIdempotencyMarkerTest(unittest.TestCase):
             self.assertEqual(after_second, after_first)
             self.assertNotIn("011-kg.md", after_second)
 
-    def test_force_bypasses_the_marker_and_rewrites_again(self):
-        # The explicit escape hatch for "I amended mapping.yaml and really do
-        # need to re-run" -- deliberately reaches the WL-SPEC-11 collision
-        # this whole mechanism exists to block by default, to prove --force
-        # actually removes the block rather than something else.
+    def test_force_does_not_bypass_the_marker(self):
+        # --force is the *worktree* override and nothing else. It used to
+        # bypass this marker too, which made the tool's own refusal message
+        # route the operator onto the unsafe path: a stray scripts/__pycache__
+        # makes the tree dirty, -w says "use --force", and --force then also
+        # removes the guard against the WL-SPEC-11 double-rewrite collision.
         with tempfile.TemporaryDirectory() as tmp:
             root, first = run_refmap(
                 tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
@@ -956,10 +957,53 @@ class DurableIdempotencyMarkerTest(unittest.TestCase):
             commit_all(root)
 
             second = invoke_refmap(root, "-w", "--force")
+            self.assertNotEqual(second.returncode, 0)
+            self.assertEqual((root / "internal/cmd/show.go").read_text(), "// see WL-SPEC-6\n")
+
+    def test_deleting_the_marker_is_the_way_to_re_run(self):
+        # The one documented bypass, and the one that is a deliberate act
+        # rather than a flag reached for to get past an unrelated complaint.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            commit_all(root)
+            (root / "docs/specs2/.refmap-applied").unlink()
+            commit_all(root, "drop the marker")
+
+            second = invoke_refmap(root, "-w")
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertEqual(
                 (root / "internal/cmd/show.go").read_text(), "// see WL-SPEC-11\n"
             )
+
+    def test_force_still_bypasses_the_dirty_worktree_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = write_tree(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"},
+            )
+            (root / "scripts").mkdir()
+            (root / "scripts" / "stray.pyc").write_text("uncommitted\n")
+
+            refused = invoke_refmap(root, "-w")
+            self.assertNotEqual(refused.returncode, 0)
+
+            forced = invoke_refmap(root, "-w", "--force")
+            self.assertEqual(forced.returncode, 0, forced.stdout + forced.stderr)
+            self.assertEqual((root / "internal/cmd/show.go").read_text(), "// see WL-SPEC-6\n")
+
+    def test_the_refusal_message_names_the_marker_not_force(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            second = invoke_refmap(root, "-w")
+            out = second.stdout + second.stderr
+            self.assertIn(".refmap-applied", out)
+            self.assertIn("Delete it", out)
+            self.assertNotIn("--force", out)
 
     def test_marker_is_not_written_when_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
