@@ -282,7 +282,10 @@ func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200; body %s", path, rr.Code, rr.Body.String())
 		}
-		bodyContains(t, rr.Body.String(), "operations")
+		// The mode is a pure projection of declared facts: every ?variant
+		// still renders the Operations (mode B) canvas, never a mode the
+		// query asked for.
+		bodyContains(t, rr.Body.String(), `data-panel="B"`, "Operations")
 	}
 }
 
@@ -594,11 +597,20 @@ func TestProjectPage(t *testing.T) {
 	assertShell(t, body)
 	assertOneAriaCurrent(t, body)
 	bodyContains(t, body,
-		"proj", "acme/widgets", "Scoped task",
+		"proj", "Scoped task",
 		`<link rel="canonical" href="/projects/proj">`, // cockpit projection's canonical url
-		"operations",                     // the declared-evidence Operations mode
-		"No governed decision is ready.", // the decision rail's Part-1 fallback
+		`data-panel="B"`,      // the Operations (mode B) canvas
+		"Operations",          // the declared-evidence Operations mode banner
+		"Active work",         // the Operations work card renders the ready task
+		"Automation boundary", // the decision rail's honest automation-boundary card
 	)
+	// Mode B has no repositories panel (its Definition-of-done panel has no
+	// backing data and is omitted too), so a mapped repo must not leak into
+	// the rendered canvas — repositories remain covered by the JSON cockpit
+	// contract, not this page.
+	if strings.Contains(body, "acme/widgets") {
+		t.Errorf("project page unexpectedly rendered the mapped repo acme/widgets:\n%s", body)
+	}
 	// Project local nav, in the exact order docs/specs/032-project-cockpit.md
 	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
 	// Documents, Activity.
@@ -621,10 +633,11 @@ func TestProjectPage(t *testing.T) {
 	}
 }
 
-// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page
-// shows real owner/delegate names, distinguishing "Owned by Dana" (a human
-// assignee) from "Agent One is the delegate" (an agent's unreleased lease) —
-// never the bare actor id, never conflating the two roles.
+// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page's
+// Active-work row shows real owner/delegate names, distinguishing the human
+// accountable owner (Dana) from the agent that holds the lease (Agent One)
+// via the "Agent One · on behalf of Dana" who-line — never the bare actor id,
+// never conflating the two roles.
 func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -655,5 +668,5 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	bodyContains(t, rr.Body.String(), "Owned by Dana", "Agent One is the delegate")
+	bodyContains(t, rr.Body.String(), "Agent One", "on behalf of Dana")
 }

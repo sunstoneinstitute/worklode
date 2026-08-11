@@ -271,8 +271,8 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("GET /projects/proj?variant=%s: status = %d, want 200", variant, code)
 		}
-		if !strings.Contains(body, "operations") {
-			t.Fatalf("variant=%s body does not render Operations mode:\n%s", variant, body)
+		if !strings.Contains(body, `data-panel="B"`) {
+			t.Fatalf("variant=%s body does not render the Operations (mode B) canvas:\n%s", variant, body)
 		}
 		if !strings.Contains(body, `<link rel="canonical" href="/projects/proj">`) {
 			t.Fatalf("variant=%s body missing the canonical /projects/proj link:\n%s", variant, body)
@@ -314,11 +314,12 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	}
 }
 
-// assertOverviewSurface checks the rendered /projects/proj page: two distinct
-// navigation landmarks, one main landmark, one decision rail, Dana as owner,
-// Agent One as delegate, Observed status evidence, blocker copy, an evidence
-// <details> disclosure, and a source link back to the blocking task (the
-// "source" the blocked-state evidence traces to).
+// assertOverviewSurface checks the rendered /projects/proj page in Operations
+// mode: two distinct navigation landmarks, one main landmark, the labelled
+// decision-rail aside, the mode-B canvas, an Active-work row distinguishing
+// Dana (owner) from Agent One (delegate), Observed status evidence, and the
+// highest-signal exception that links back to the blocking task with the
+// evidence it rests on (the "source" the blocked-state evidence traces to).
 func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	t.Helper()
 
@@ -334,24 +335,33 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 		t.Fatalf("main landmark count = %d, want 1:\n%s", got, body)
 	}
-	if !strings.Contains(body, `<aside aria-label="Next decision">`) {
-		t.Fatalf("missing the decision rail:\n%s", body)
+	if !strings.Contains(body, `<aside class="rail" aria-label="Decisions and exceptions">`) {
+		t.Fatalf("missing the decision-rail landmark:\n%s", body)
+	}
+	if !strings.Contains(body, `data-panel="B"`) {
+		t.Fatalf("missing the Operations (mode B) canvas:\n%s", body)
 	}
 
-	if !strings.Contains(body, "Owned by Dana") {
-		t.Fatalf("missing owner copy \"Owned by Dana\":\n%s", body)
+	// The Active-work row surfaces the accountable human owner and the agent
+	// that holds the lease distinctly, via the "Agent One · on behalf of
+	// Dana" who-line — never the bare id, never conflating the two roles.
+	if !strings.Contains(body, "Agent One") {
+		t.Fatalf("missing the agent delegate \"Agent One\":\n%s", body)
 	}
-	if !strings.Contains(body, "Agent One is the delegate") {
-		t.Fatalf("missing delegate copy \"Agent One is the delegate\":\n%s", body)
+	if !strings.Contains(body, "on behalf of Dana") {
+		t.Fatalf("missing owner attribution \"on behalf of Dana\":\n%s", body)
 	}
-	if !strings.Contains(body, "Observed:") {
-		t.Fatalf("missing Observed status evidence copy:\n%s", body)
+	if !strings.Contains(body, "Observed") {
+		t.Fatalf("missing Observed status evidence:\n%s", body)
+	}
+
+	// The highest-signal exception names the blocker, states the evidence it
+	// rests on, and links back to the blocking task.
+	if !strings.Contains(body, "Highest-signal exception") {
+		t.Fatalf("missing the highest-signal exception card:\n%s", body)
 	}
 	if !strings.Contains(body, "Blocks "+dependentID+" (blocker state") {
-		t.Fatalf("missing blocker copy \"Blocks %s (blocker state ...)\":\n%s", dependentID, body)
-	}
-	if !strings.Contains(body, "<details>") || !strings.Contains(body, "<summary>Evidence</summary>") {
-		t.Fatalf("missing the evidence <details> disclosure:\n%s", body)
+		t.Fatalf("missing blocker evidence \"Blocks %s (blocker state ...)\":\n%s", dependentID, body)
 	}
 	if !strings.Contains(body, `<a href="/tasks/`+blockerID+`">`) {
 		t.Fatalf("missing the source link back to the blocking task /tasks/%s:\n%s", blockerID, body)
