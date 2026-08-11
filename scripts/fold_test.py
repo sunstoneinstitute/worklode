@@ -971,6 +971,107 @@ Rewritten two.
 Rewritten three.
 """
 
+# Same tokens, 2-space indent instead of 4 -- a harmless reformat that must
+# not trip the guard (post-review fix: whole-block exact-substring survival
+# broke on exactly this).
+WRITTEN_950_BLOCK_REINDENTED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+The widget graph schema, reindented:
+
+```sql
+CREATE TABLE widget_edges (
+  from_widget text NOT NULL,
+  to_widget   text NOT NULL
+);
+```
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# Same tokens, fence language tag changed from sql to postgres.
+WRITTEN_950_BLOCK_RELABELED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+The widget graph schema, relabelled:
+
+```postgres
+CREATE TABLE widget_edges (
+    from_widget text NOT NULL,
+    to_widget   text NOT NULL
+);
+```
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# One column renamed (to_widget -> dest_widget) -- every other token in the
+# block (CREATE, TABLE, widget_edges, from_widget, text, NOT, NULL) is still
+# present verbatim, so exactly one identifier should be reported dropped.
+WRITTEN_950_BLOCK_RENAMED_COLUMN = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Schema for the widget graph:
+
+```sql
+CREATE TABLE widget_edges (
+    from_widget text NOT NULL,
+    dest_widget text NOT NULL
+);
+```
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+CHECK_FOLD_ALLOW_DROPPED_BLOCK_TOKEN = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+    allow_dropped_ids:
+      to_widget: "spent: column renamed to dest_widget, see spec 900"
+"""
+
 
 class IdentifierPreservationCheckTest(unittest.TestCase):
     # Each case is a real contract of --check --ids: it would fail if the
@@ -1034,7 +1135,10 @@ class IdentifierPreservationCheckTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("dropped ids", result.stderr)
 
-    def test_ids_reports_a_dropped_whole_fenced_block(self):
+    def test_ids_reports_many_findings_for_a_wholly_dropped_block(self):
+        # Token tracking (post-review): a dropped block must surface as many
+        # findings, one per surviving-nowhere token, not a single opaque
+        # multi-line dump -- unmissable in a report a human skims.
         with tempfile.TemporaryDirectory() as tmp:
             _, result = run_fold_check(
                 tmp, "--ids", fold=CHECK_FOLD_CLEAN,
@@ -1043,8 +1147,12 @@ class IdentifierPreservationCheckTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("dropped ids", result.stderr)
-            self.assertIn("CREATE TABLE widget_edges", result.stderr)
+            self.assertIn("`widget_edges`", result.stderr)
+            self.assertIn("`from_widget`", result.stderr)
+            self.assertIn("`to_widget`", result.stderr)
             self.assertIn("900-alpha.md#sec-1", result.stderr)
+            findings = result.stderr.count("(from 900-alpha.md#sec-1)")
+            self.assertGreaterEqual(findings, 5, result.stderr)
 
     def test_ids_passes_when_the_fenced_block_survives_verbatim(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1052,6 +1160,52 @@ class IdentifierPreservationCheckTest(unittest.TestCase):
                 tmp, "--ids", fold=CHECK_FOLD_CLEAN,
                 specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
                 written={"950-alpha-folded.md": WRITTEN_950_BLOCK_KEPT},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ids_passes_when_a_block_is_reindented(self):
+        # Post-review fix: whole-block exact-substring survival broke on
+        # exactly this (an unchanged schema, different indentation).
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_REINDENTED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ids_passes_when_a_block_fence_is_relabelled(self):
+        # sql -> postgres: the language tag is never part of a fenced
+        # block's captured content (excluded by FENCE_RE before tokenizing
+        # or before whole-block capture), so this already held pre-fix too
+        # -- kept as a permanent regression guard, not a red/green case.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_RELABELED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ids_reports_exactly_one_finding_for_a_renamed_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_RENAMED_COLUMN},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dropped ids", result.stderr)
+            self.assertIn("`to_widget`", result.stderr)
+            findings = result.stderr.count("(from 900-alpha.md#sec-1)")
+            self.assertEqual(findings, 1, result.stderr)
+
+    def test_ids_renamed_column_finding_is_exemptable_with_one_allow_dropped_ids_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_ALLOW_DROPPED_BLOCK_TOKEN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_RENAMED_COLUMN},
             )
             self.assertEqual(result.returncode, 0, result.stderr)
 

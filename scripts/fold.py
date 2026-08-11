@@ -55,17 +55,17 @@ regenerating after the rewrite has started would lose the rewrite -- and
 never writes any document when any target of the invocation already exists.
 
 --check --ids (Task 6) adds a sixth report group, "dropped ids": for every
-document already written to docs/specs2/<to>, every identifier (an inline
-`` `...` ``/``` ``...`` ``` backtick span, or the full verbatim content of a
-triple-backtick fenced code block -- a spec's fenced block is typically its
-authoritative schema or CLI surface, so a rewrite dropping the whole block is
-the same failure as dropping a span) collected from the source sections
-fold.yaml places there must still appear, exact-text, somewhere in the
-written prose -- scoped to the whole document, since a legitimate merge may
-move a term between sections. A per-document `allow_dropped_ids:` mapping
-(identifier -> reason, reason required) exempts specific drops. `--ids` only
-modifies `--check`; combined with `--mapping` or `--scaffold` it is rejected
-at the CLI, and omitting it leaves the report at five groups, unchanged.
+document already written to docs/specs2/<to>, every identifier collected
+from the source sections fold.yaml places there must still appear,
+exact-text, somewhere in the written prose -- scoped to the whole document,
+since a legitimate merge may move a term between sections. An identifier is
+an inline `` `...` ``/``` ``...`` ``` backtick span, or (post-review; see the
+comment above FENCE_RE) one identifier-shaped token from inside a
+triple-backtick fenced code block -- not the block's whole content as one
+unit. A per-document `allow_dropped_ids:` mapping (identifier -> reason,
+reason required) exempts specific drops. `--ids` only modifies `--check`;
+combined with `--mapping` or `--scaffold` it is rejected at the CLI, and
+omitting it leaves the report at five groups, unchanged.
 """
 
 import argparse
@@ -445,28 +445,45 @@ def slice_section(path: Path, anchor: str) -> str:
 # Inline spans use Markdown's own two forms -- `` `...` `` (single) and
 # `` ``...`` `` (double, for a span that itself contains a backtick) --
 # matched only outside fenced code, since a bare backtick inside example code
-# is a literal character, not span markup. A fenced (triple-backtick)
-# block's full verbatim content is tracked as its own identifier alongside
-# the inline spans: a spec's code block is typically its authoritative
-# schema or CLI surface, and a rewrite dropping the whole block -- not
-# reformatting it, dropping it -- is exactly the failure this guard exists
-# to catch (see the plan's Task 6 brief). Nothing in this path normalises
-# case, punctuation or whitespace; every comparison is exact-text.
+# is a literal character, not span markup.
+#
+# A fenced (triple-backtick) block is tokenized, not tracked as one whole
+# unit (the original design; changed after review). Whole-block exact-
+# substring survival breaks on a harmless reindent, or on any one-character
+# edit anywhere in any of the corpus's ~100 fenced blocks -- and the plan
+# forbids rewrite tasks from touching fold.yaml, so every such break becomes
+# an unexemptable human escalation. Worse: an implementer facing that
+# unexemptable red gate would keep the block byte-identical rather than
+# absorb an amendment note into it (rewrite rule 3), which means the guard
+# would actively cause the rewrite to skip the plan's core operation --
+# worse than not having the guard. Tokenizing sidesteps this: reindenting or
+# relabelling a fence's language tag changes no token, a wholly dropped
+# block surfaces as many findings (one per token, unmissable), and a single
+# renamed identifier inside a block surfaces as exactly one finding,
+# exemptable the same one-line way as a dropped inline span. No attempt is
+# made to distinguish a "real" identifier from a SQL/shell keyword (NOT,
+# NULL, CREATE, ...) -- a keyword is exactly the token most likely to survive
+# a rewrite unchanged, so including it in the token set costs nothing.
+# Nothing in this path normalises case, punctuation or whitespace; every
+# comparison is exact-text.
 FENCE_RE = re.compile(r"```[^\n]*\n(.*?)\n```", re.DOTALL)
 SPAN_RE = re.compile(r"``([^`]+)``|`([^`\n]+)`")
+TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_./-]*")
 
 
 def extract_identifiers(text: str) -> list:
-    """Every backticked span and fenced-block body found in `text`, in the
-    order they appear. Fenced blocks are located and stripped out first, so
-    an inline single/double backtick inside example code is never mistaken
-    for span markup. May contain duplicates within one section --
-    collect_identifiers folds those across a document."""
-    blocks = [m.group(1) for m in FENCE_RE.finditer(text)]
+    """Every backticked span in `text`, plus every TOKEN_RE token found
+    inside each fenced (triple-backtick) code block, in the order they
+    appear. Fenced blocks are located and their tokens collected first, then
+    stripped out of `text` before inline-span scanning, so a bare backtick
+    inside example code is never mistaken for span markup. May contain
+    duplicates within one section -- collect_identifiers folds those across
+    a document."""
+    block_tokens = [tok for m in FENCE_RE.finditer(text) for tok in TOKEN_RE.findall(m.group(1))]
     stripped = FENCE_RE.sub("", text)
     spans = [m.group(1) if m.group(1) is not None else m.group(2)
              for m in SPAN_RE.finditer(stripped)]
-    return spans + blocks
+    return spans + block_tokens
 
 
 def collect_identifiers(doc: Document, specs_dir: Path) -> dict:
@@ -487,11 +504,12 @@ def collect_identifiers(doc: Document, specs_dir: Path) -> dict:
 
 
 def format_dropped_id(ident: str, ref: str) -> str:
-    """One "dropped ids" report line: the identifier -- backtick-quoted, or
-    fence-quoted when it is a dropped whole code block (spans a newline) --
-    followed by the source ref an author can find it at."""
-    quoted = f"```\n{ident}\n```" if "\n" in ident else f"`{ident}`"
-    return f"{quoted} (from {ref})"
+    """One "dropped ids" report line: the identifier, backtick-quoted, and
+    the source ref an author can find it at. Tokenizing fenced-block content
+    (see the comment above FENCE_RE) means every identifier this module
+    produces today is single-line, so there is no multi-line report form to
+    render."""
+    return f"`{ident}` (from {ref})"
 
 
 def check_ids(doc: Document, specs_dir: Path, written: Path) -> list:
