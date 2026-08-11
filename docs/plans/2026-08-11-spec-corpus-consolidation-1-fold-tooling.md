@@ -437,24 +437,37 @@ edge `requires:` already carries. And a section with exactly one subsection
 folds into its parent (005's §3 + §3.1), which is the fragmentation this
 migration exists to remove.
 
-**The two gaps, both in parts 3–4 territory.** First, `fold.yaml` records
-*placement* but not *authority*. Where one `new:` section merges sources
-written years apart, the later source often supersedes rather than supplements
-the earlier — and a whole-document supersession leaves no inline note in the
-sliced body, so rewrite rules 2 and 3 both miss it. Rule 2 read literally
-("keep every distinct claim") makes the rewriter state the retired rule
-*and* the current one. `sections:` needs a way to name which `from:` ref is
-authoritative, or at minimum a free-text `note:` the scaffold passes through to
-the rewriter. `SECTION_KEYS` is closed, so this is a `scripts/fold.py` change
-and therefore a planning-tier decision to take **before part 3 starts**, not
-inside a rewrite task.
+**Closed by the task-7 review, in the tooling.** `fold.yaml` recorded
+*placement* but not *authority*: where a source is amended or superseded
+**as a whole document**, the claim lives only in frontmatter and leaves no
+inline note anywhere in the sliced body, so rewrite rule 3 has nothing to
+absorb and rule 2 read literally ("keep every distinct claim") makes the
+rewriter state the retired rule *and* the current one. There are nine such
+doc-wide claims; 004 carries two (010 and 018) and 011 carries one, both
+part-3 folds. `--scaffold` now emits each source's `amends` / `amendedBy` /
+`replaces` / `isReplacedBy` as a comment block above the first section —
+derived from the frontmatter `compute_requires` already parses, so it cannot
+be forgotten and needs no `fold.yaml` key. A per-section amendment still
+carries its inline note and is handled by rule 3 as before.
 
-Second, `from:` is many-old → one-new only, and the "exactly once" constraint
-forbids the reverse. A source section whose substance legitimately belongs in
-two new sections has no expression: placing it under its dominant new section
-makes `mapping.yaml` point half its inbound references at the wrong place.
-Expect this in 006, 025 and 026. Splitting one such section costs a
-`sections:` schema change plus a carve-out in `run_check`'s placed-twice group.
+**Still open, part 3–4 territory.** `from:` is many-old → one-new only, and the
+"exactly once" constraint forbids the reverse. A source section whose substance
+legitimately belongs in two new sections has no expression: placing it under
+its dominant new section makes `mapping.yaml` point half its inbound references
+at the wrong place. Expect this in 006, 025 and 026. Splitting one such section
+costs a `sections:` schema change plus a carve-out in `run_check`'s
+placed-twice group.
+
+**Preamble must be placed like any other anchor.** Prose between a document's
+H1 and its first `##` heading belongs to no `{#sec-N}`. `--check` now counts it
+as live corpus material under the pseudo-anchor `<file>#preamble`, so it must
+appear in a `from:` or a `dropped:` with a reason like everything else. Four
+live documents have it — 007, 008, 009 and 018 (003 has it too but is
+superseded, so it never reaches the live view). Usually the right call is
+`dropped:`: 008's whole preamble is a standing rewrite instruction ("read
+`ls:governs` as `wl:governs`"), and placing it would additionally make
+`--check --ids` demand the retired `ls:` spelling survive into the new corpus.
+009's is genuine scope prose and belongs in a `from:`.
 
 Two conventions to keep, neither enforced by code: **list the dominant source
 first in `sources:`** (it drives `requires:` union order and `mapping.yaml`'s
@@ -504,6 +517,13 @@ work either — it also drives where `fold.py --scaffold` writes.
 that part's tasks, not inside them. Part 1 is the exception: its single 005
 entry is written inside task 7, because the format it validates does not exist
 until then.
+
+**Before part 2 starts, place or drop the four live preambles** —
+`007-drift-and-overview.md#preamble`, `008-worklode-plugin.md#preamble`,
+`009-data-platform-kg-requirements.md#preamble`,
+`018-task-hierarchy.md#preamble`. `--check` reports them as unplaced until
+`fold.yaml` accounts for each, and they are placement decisions, so they belong
+in the same planning-tier pass that authors that part's entries.
 
 **Before part 2 starts, pre-seed `allow_dropped_ids` with the corpus's 22
 source-side span artifacts.** `SPAN_RE`'s single-backtick branch is `[^`\n]+`,

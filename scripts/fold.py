@@ -18,6 +18,10 @@ and every old source file gets its own row.
 --with-drafts view still counts as live in docs/specs/: every live anchor
 must appear exactly once across all `from:` and `dropped:` refs in
 fold.yaml, and every `from:`/`dropped:` ref must name a live anchor.
+"Anchor" here includes the pseudo-anchor `#preamble` (see PREAMBLE_ANCHOR)
+for the prose a document carries before its first `##` heading, which no
+{#sec-N} covers and which anchor-based slicing would otherwise drop
+silently.
 `--check --partial` narrows the "every live anchor is placed" half of that
 to the documents fold.yaml currently declares (via `sources:`), so parts 2-4
 can run the check while the fold is still incomplete; the "no ref is
@@ -47,10 +51,12 @@ Usage: fold.py --mapping | --check [--partial] [--ids] | --scaffold [--only FILE
   --only      with --scaffold, write only the named <to> document
 
 --scaffold writes a skeleton per declared document: frontmatter
-(`status: draft` plus a computed `requires:`), numbered headings from each
-section's `heading`, and each section's source text pasted in verbatim
-behind an HTML-comment provenance marker, ready for the rewrite pass that
-turns it into prose. It refuses to overwrite an existing docs/specs2/<to> --
+(`status: draft` plus a computed `requires:`), an HTML-comment block naming
+whatever still amends or supersedes the sources (PROVENANCE_KEYS -- a
+whole-document claim leaves no inline note for the rewrite to find, so the
+scaffold has to say so), numbered headings from each section's `heading`,
+and each section's source text pasted in verbatim behind an HTML-comment
+provenance marker, ready for the rewrite pass that turns it into prose. It refuses to overwrite an existing docs/specs2/<to> --
 regenerating after the rewrite has started would lose the rewrite -- and
 never writes any document when any target of the invocation already exists.
 
@@ -103,6 +109,30 @@ FOLD_KEYS = {"version", "corpus", "documents"}
 DOCUMENT_KEYS = {"to", "title", "sources", "sections", "dropped", "allow_dropped_ids"}
 SECTION_KEYS = {"new", "heading", "from"}
 DROPPED_KEYS = {"ref", "reason"}
+
+# Prose between a source's H1 and its first `##` heading belongs to no
+# {#sec-N} section, so anchor-based slicing drops it and an anchor-based check
+# cannot see the loss (task-7 review). Five documents carry such prose --
+# 003, 007, 008, 009 and 018 -- and it is normative in some of them: 018's
+# whole-document "Amended by spec 025" note lives entirely there, and 008's
+# is a standing rewrite instruction ("read `ls:governs` as `wl:governs`").
+# `<file>#preamble` makes it addressable by the same `from:`/`dropped:`
+# machinery every real anchor uses, so an author must place it or drop it with
+# a reason, and no seventh report group or second concept is needed. Dropping
+# is usually right -- four of the five preambles are instructions or spent
+# history rather than content -- and dropping also keeps them out of
+# collect_identifiers, which would otherwise demand the retired `ls:` spelling
+# survive into the new corpus.
+PREAMBLE_ANCHOR = "preamble"
+
+# The frontmatter keys --scaffold surfaces as a provenance comment. A
+# whole-document claim (subject ".") leaves no inline note anywhere in the
+# section bodies -- 004, 005 and 011 are each amended doc-wide by 018 with
+# zero marker in the prose -- so a rewriter reading only the scaffold cannot
+# know the amendment exists. compute_requires already parses this frontmatter;
+# these keys come along for free, derived rather than authored, so no
+# fold.yaml key can be forgotten.
+PROVENANCE_KEYS = ("amends", "amendedBy", "replaces", "isReplacedBy")
 
 
 class FoldError(Exception):
@@ -247,7 +277,7 @@ def load_fold(path) -> Fold:
             new = str(entry["new"])
             refs = [str(r) for r in (entry.get("from") or [])]
             for ref in refs:
-                if "#sec-" not in ref:
+                if "#sec-" not in ref and not ref.endswith(f"#{PREAMBLE_ANCHOR}"):
                     raise FoldError(f"{to}: {ref!r} has no #sec- fragment")
             parent = parent_of(new)
             if parent is not None and parent not in declared:
@@ -315,6 +345,19 @@ def load_live_corpus(specs_dir: Path) -> dict:
     return currentspec.live_sections(docs, with_drafts=True)
 
 
+def preamble_refs(live: dict, specs_dir: Path) -> set:
+    """{`<filename>#preamble`} for every live document carrying prose outside
+    every anchor. Folded into --check's live-corpus set rather than reported
+    on its own, so unplaced/placed-twice/dangling cover it unchanged: leaving
+    it unaccounted-for is "unplaced", naming it against a document that has
+    none is "dangling", and --partial scopes it by filename like any other
+    ref. Keyed off `live` so a superseded document (003) drops out here for
+    the same reason its anchors do."""
+    names = sorted({Path(path).name for path, _anchor in live})
+    return {f"{name}#{PREAMBLE_ANCHOR}"
+            for name in names if slice_preamble(specs_dir / name)}
+
+
 def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
     against the live corpus and, separately, against the written docs/specs2/
@@ -347,6 +390,7 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
     live = load_live_corpus(specs_dir)
     live_refs = {f"{Path(path).name}#{anchor}" for path, anchor in live}
+    live_refs |= preamble_refs(live, specs_dir)
 
     placements = []
     for doc in fold.documents:
@@ -420,15 +464,41 @@ def _split_ref(ref: str) -> tuple:
     return filename, anchor
 
 
+def slice_preamble(path: Path) -> str:
+    """The verbatim prose between `path`'s H1 and its first `##` heading, with
+    the H1 line itself dropped (--scaffold writes its own from fold.yaml's
+    `title`). Empty string when there is none, which is the common case.
+
+    secfmt.headings() matches `#{2,6}` only, so the H1 is not a heading to it
+    and this text lies before every section slice_section() can reach."""
+    _front, body = secfmt.split_front_matter(path.read_text())
+    lines = body.splitlines(keepends=True)
+    heading_lines = [i for i, _m in secfmt.headings(body)]
+    end = heading_lines[0] if heading_lines else len(lines)
+    kept, seen_h1 = [], False
+    for line in lines[:end]:
+        if not seen_h1 and line.startswith("# "):
+            seen_h1 = True
+            continue
+        kept.append(line)
+    return "".join(kept).strip("\n")
+
+
 def slice_section(path: Path, anchor: str) -> str:
     """The verbatim body of one `#anchor` section of `path`: the lines between
     its heading and the next heading at any level, or the end of the document
     -- located via secindex.py's own anchor table (secindex.sections_of),
     never a second markdown parser, so a slice boundary can never disagree
     with what secindex.py and secfmt.py already call that section. Surrounding
-    blank lines are trimmed; interior text is untouched."""
+    blank lines are trimmed; interior text is untouched.
+
+    The pseudo-anchor `preamble` (see PREAMBLE_ANCHOR) reaches the prose that
+    precedes every real anchor, and is the one anchor that may legitimately
+    slice to the empty string."""
     if not path.is_file():
         raise FoldError(f"{path.name}: no such source document")
+    if anchor == PREAMBLE_ANCHOR:
+        return slice_preamble(path)
     keys = [key for key, _heading in secindex.sections_of(path)]
     if anchor not in keys:
         raise FoldError(f"{path.name}: no section '#{anchor}'")
@@ -556,6 +626,44 @@ def compute_requires(doc: Document, fold: Fold, specs_dir: Path) -> list:
     return sorted(out)
 
 
+def provenance_notes(doc: Document, specs_dir: Path) -> list:
+    """[(source, ["<key> <subject>: <ref>, <ref>", ...]), ...] for every
+    source of `doc` that declares any PROVENANCE_KEYS entry, in `sources:`
+    order. Subjects are kept verbatim, `"."` included, because which subject
+    a claim is keyed by is exactly what tells a rewriter whether to look for
+    an inline note or to expect none."""
+    out = []
+    for source in doc.sources:
+        fm = currentspec.frontmatter(specs_dir / source)
+        rows = []
+        for key in PROVENANCE_KEYS:
+            raw = fm.get(key)
+            if not raw:
+                continue
+            items = raw.items() if isinstance(raw, dict) else [(".", raw)]
+            for subject, refs in items:
+                refs = refs if isinstance(refs, list) else [refs]
+                joined = ", ".join(str(r) for r in refs)
+                rows.append(f'{key} "{subject}": {joined}')
+        if rows:
+            out.append((source, rows))
+    return out
+
+
+def build_provenance(notes: list) -> str:
+    """One HTML-comment block naming what still amends or supersedes the
+    sources. Rewrite rule 1 deletes it along with the `from:` markers."""
+    lines = ['<!-- provenance, from the sources\' frontmatter. A "." subject is a',
+             "     whole-document claim: it leaves no inline note in any section body,",
+             "     so state the post-amendment rule directly (rewrite rule 3) rather",
+             "     than looking for a note to absorb."]
+    for source, rows in notes:
+        lines.append(f"\n     {source}")
+        lines.extend(f"       {row}" for row in rows)
+    lines.append("-->\n")
+    return "\n".join(lines)
+
+
 def build_frontmatter(fields: dict) -> str:
     """One frontmatter block (`---`-fenced, PyYAML block style, matching
     dump_mapping's convention for generated YAML in this module)."""
@@ -581,6 +689,9 @@ def scaffold_text(doc: Document, fold: Fold, specs_dir: Path) -> str:
         fields["requires"] = requires
 
     parts = [build_frontmatter(fields), f"# Spec {number} — {doc.title}\n"]
+    notes = provenance_notes(doc, specs_dir)
+    if notes:
+        parts.append("\n" + build_provenance(notes))
     for section in sorted(doc.sections, key=lambda s: _number_parts(s["new"])):
         level = _heading_level(section["new"])
         hashes = "#" * (level + 1)

@@ -47,6 +47,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 sys.dont_write_bytecode = True  # importing secindex must not litter scripts/
 sys.path.insert(0, str(ROOT / "scripts"))
+import fold  # noqa: E402
 import secindex  # noqa: E402
 
 # A two-document fixture: one merge (three old sections -> one new section,
@@ -1501,6 +1502,279 @@ class ScaffoldHouseChecksTest(unittest.TestCase):
                 cwd=repo, capture_output=True, text=True, check=False,
             )
             self.assertEqual(meta.returncode, 0, meta.stdout + meta.stderr)
+
+
+# Preamble fixtures (task-7 review, Important 1): prose between a source's H1
+# and its first `##` heading sits inside no {#sec-N} section, so anchor-based
+# slicing drops it and an anchor-based check cannot see the loss. `#preamble`
+# is the pseudo-anchor that makes it addressable by the same `from:`/`dropped:`
+# machinery every real anchor already uses.
+ALPHA_PREAMBLE_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Alpha
+
+> **Prefix renamed by 014 §1.** Read `ls:governs` below as `wl:governs`.
+
+Alpha's scope, stated before the first numbered section.
+
+## 1. One {#sec-1}
+
+One.
+
+## 2. Two {#sec-2}
+
+Two.
+
+## 3. Three {#sec-3}
+
+Three.
+"""
+
+# Every anchor placed, the preamble accounted for by nothing.
+CHECK_FOLD_PREAMBLE_UNPLACED = CHECK_FOLD_CLEAN
+
+CHECK_FOLD_PREAMBLE_PLACED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#preamble", "900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+"""
+
+CHECK_FOLD_PREAMBLE_DROPPED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped:
+      - {ref: "900-alpha.md#preamble", reason: "spent: prefix-rename instruction, applied in the rewrite"}
+"""
+
+# 900-alpha.md here is the plain ALPHA_SPEC, which has no preamble at all.
+CHECK_FOLD_PREAMBLE_DANGLING = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#preamble", "900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+"""
+
+
+class PreambleCheckTest(unittest.TestCase):
+    """--check must account for source prose that falls outside every anchor.
+
+    Placing it, dropping it and leaving it unaccounted-for all go through the
+    same three groups every real anchor uses, so no seventh report group and
+    no second concept: `<file>#preamble` is simply live corpus material like
+    any other."""
+
+    def check(self, tmp, *args, **kw):
+        return run_fold_check(tmp, *args, **kw)
+
+    def test_check_reports_preamble_no_placement_accounts_for(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(
+                tmp, fold=CHECK_FOLD_PREAMBLE_UNPLACED,
+                specs={"900-alpha.md": ALPHA_PREAMBLE_SPEC},
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("unplaced", result.stderr)
+            self.assertIn("900-alpha.md#preamble", result.stderr)
+
+    def test_check_passes_when_preamble_is_placed_in_a_from_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(
+                tmp, fold=CHECK_FOLD_PREAMBLE_PLACED,
+                specs={"900-alpha.md": ALPHA_PREAMBLE_SPEC},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_passes_when_preamble_is_recorded_as_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(
+                tmp, fold=CHECK_FOLD_PREAMBLE_DROPPED,
+                specs={"900-alpha.md": ALPHA_PREAMBLE_SPEC},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_document_without_preamble_is_never_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(tmp, fold=CHECK_FOLD_CLEAN)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("#preamble", result.stderr)
+
+    def test_preamble_ref_against_a_document_without_one_is_dangling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(tmp, fold=CHECK_FOLD_PREAMBLE_DANGLING)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("dangling", result.stderr)
+            self.assertIn("900-alpha.md#preamble", result.stderr)
+
+    def test_partial_still_scopes_preamble_to_declared_sources(self):
+        # 901-beta.md carries preamble but no fold.yaml entry names it, so
+        # --partial must stay silent about it while 900-alpha.md's is placed.
+        beta = ALPHA_PREAMBLE_SPEC.replace("# Alpha", "# Beta")
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, result = self.check(
+                tmp, "--partial", fold=CHECK_FOLD_PREAMBLE_PLACED,
+                specs={"900-alpha.md": ALPHA_PREAMBLE_SPEC, "901-beta.md": beta},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("901-beta.md#preamble", result.stderr)
+
+
+class PreambleSliceTest(unittest.TestCase):
+    """The real case the review named: 018's doc-wide amendment note lives
+    entirely in preamble, so an anchor-only fold drops it silently."""
+
+    def test_slices_018s_doc_wide_amendment_note_from_the_real_corpus(self):
+        text = fold.slice_section(ROOT / "docs" / "specs" / "018-task-hierarchy.md", "preamble")
+        self.assertIn("Amended by spec 025 (doc-wide)", text)
+        self.assertIn("`kind = 'epic'` is dropped, not renamed", text)
+        self.assertNotIn("# Spec 018", text)  # the H1 is the scaffold's to write
+
+    def test_005_has_no_preamble(self):
+        # The document task 7 already folded. If this ever grows preamble the
+        # committed fold silently lost prose.
+        path = ROOT / "docs" / "specs" / "005-prioritization-and-pickup.md"
+        self.assertEqual(fold.slice_section(path, "preamble"), "")
+
+    def test_scaffold_pastes_a_placed_preamble_verbatim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, result = run_fold_scaffold(
+                tmp, fold=CHECK_FOLD_PREAMBLE_PLACED,
+                specs={"900-alpha.md": ALPHA_PREAMBLE_SPEC},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            text = (repo / "docs" / "specs2" / "950-alpha-folded.md").read_text()
+            self.assertIn("<!-- from: 900-alpha.md#preamble -->", text)
+            self.assertIn("Read `ls:governs` below as `wl:governs`.", text)
+            self.assertIn("Alpha's scope, stated before the first numbered section.", text)
+
+
+# Provenance fixtures (task-7 review, Important 2): a whole-document `amendedBy`
+# leaves no inline note anywhere in the source's section bodies, so a rewriter
+# reading only the scaffold cannot know the amendment exists. --scaffold already
+# parses each source's frontmatter for `requires:`; the amendment and
+# supersession keys come along for free.
+AMENDED_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+amends:
+  "#sec-1":
+    - 902-gamma.md#sec-1
+amendedBy:
+  ".":
+    - 902-gamma.md
+  "#sec-2":
+    - 903-external.md
+replaces:
+  ".":
+    - 899-old.md
+isReplacedBy:
+  ".":
+    - 904-newer.md
+---
+# Alpha
+
+## 1. One {#sec-1}
+
+One.
+"""
+
+PROVENANCE_FOLD = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+    dropped: []
+"""
+
+
+class ScaffoldProvenanceTest(unittest.TestCase):
+    def scaffold_text(self, tmp, fold_yaml, specs):
+        repo, result = run_fold_scaffold(tmp, fold=fold_yaml, specs=specs)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return (repo / "docs" / "specs2" / "950-alpha-folded.md").read_text()
+
+    def test_all_four_amendment_and_supersession_keys_are_emitted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = self.scaffold_text(
+                tmp, PROVENANCE_FOLD, {"900-alpha.md": AMENDED_SPEC}
+            )
+            self.assertIn("provenance", text)
+            self.assertIn("amendedBy", text)
+            self.assertIn("902-gamma.md", text)
+            self.assertIn("amends", text)
+            self.assertIn("replaces", text)
+            self.assertIn("899-old.md", text)
+            self.assertIn("isReplacedBy", text)
+            self.assertIn("904-newer.md", text)
+            # Per-section subjects survive alongside the doc-wide ones.
+            self.assertIn("#sec-2", text)
+            self.assertIn("903-external.md", text)
+
+    def test_no_provenance_block_when_the_source_declares_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = self.scaffold_text(
+                tmp, PROVENANCE_FOLD, {"900-alpha.md": ALPHA_SPEC}
+            )
+            self.assertNotIn("provenance", text)
+
+    def test_doc_wide_amendedby_of_004_and_011_reaches_their_scaffold_header(self):
+        # The review's named cases: both are amended doc-wide by 018 with zero
+        # inline marker, exactly as 005 was, and 004 is a part-3 fold.
+        specs_dir = ROOT / "docs" / "specs"
+        for source, to in (("004-execution-backbone.md", "004-execution-backbone.md"),
+                           ("011-delivery-lifecycle.md", "011-delivery-lifecycle.md")):
+            doc = fold.Document(to=to, title="T", sources=[source], sections=[])
+            f = fold.Fold(version=1, corpus={"from": "docs/specs", "to": "docs/specs2"},
+                          documents=[doc])
+            text = fold.scaffold_text(doc, f, specs_dir)
+            header = text.split("\n## ")[0]
+            self.assertIn("amendedBy", header, source)
+            self.assertIn('"."', header, source)
+            self.assertIn("018-task-hierarchy.md", header, source)
+
+    def test_provenance_block_does_not_break_the_house_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, result = run_fold_scaffold(
+                tmp, fold=PROVENANCE_FOLD, specs={"900-alpha.md": AMENDED_SPEC},
+                extra_scripts=("secmeta.py",),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fmt = subprocess.run(
+                [sys.executable, "scripts/secfmt.py", "-d", "docs/specs2"],
+                cwd=repo, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(fmt.returncode, 0, fmt.stdout + fmt.stderr)
+            self.assertEqual(fmt.stdout, "")
 
 
 if __name__ == "__main__":
