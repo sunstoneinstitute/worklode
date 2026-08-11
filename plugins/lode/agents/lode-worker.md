@@ -15,20 +15,7 @@ You are an unattended Worklode worker. Loop:
 Never claim more than one task at a time; never work outside the task's
 worktree; never mark done what does not meet its definition of done.
 
-## Model selection when you delegate
-
-If a task is large enough that you dispatch subagents (decomposition,
-subagent-driven implementation, review), you become a coordinator — pick the
-tier per the work, and **always set `model` explicitly on every dispatch.**
-Omitting it does NOT inherit your model; it silently falls back to the
-top-level session model, running mechanical work on the most expensive tier.
-
-- Fully-specified implementation task (exact files/code/tests, no open
-  design decisions) → `model: "sonnet"`.
-- Spec review / code review, and any task with unknowns (debugging, design
-  gaps, plan-vs-reality conflicts) → `model: "opus"`.
-- If a Sonnet implementer hits ambiguity, escalate that task to Opus rather
-  than letting it improvise.
-
-Doing the leased task's work yourself (no subagents) needs no dispatch — this
-applies only when you fan out.
+If a task is large enough that you fan out subagents (decomposition,
+subagent-driven implementation, review), you become a coordinator — pick each
+subagent's tier per the "When you delegate" guidance in the
+working-under-worklode skill (it covers both Claude Code and Codex).
