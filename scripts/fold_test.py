@@ -439,7 +439,7 @@ documents:
     dropped: []
 """
 
-# sec-99 does not exist in 900-alpha.md.
+# sec-99 does not exist in 900-alpha.md -- a typo, not a retired anchor.
 CHECK_FOLD_DANGLING = """\
 version: 1
 corpus: {from: docs/specs, to: docs/specs2}
@@ -452,6 +452,85 @@ documents:
       - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
       - {new: "3", heading: "Three and a phantom", from: ["900-alpha.md#sec-3", "900-alpha.md#sec-99"]}
     dropped: []
+"""
+
+# A retired document: its anchors exist in docs/specs/index.yaml but
+# currentspec.py's live view drops all of them, because the document is
+# superseded whole. Every real fold has these -- 003-platform-graph-design.md
+# plus 22 individually-replaced anchors across eight other documents -- and
+# `dropped:` is the only place they can be recorded.
+RETIRED_SPEC = """\
+---
+status: superseded
+issued: 2026-01-01
+---
+# Retired
+
+## 1. One {#sec-1}
+
+Retired one.
+
+## 2. Two {#sec-2}
+
+Retired two.
+"""
+
+RETIRED_SPECS = {"900-alpha.md": ALPHA_SPEC, "902-retired.md": RETIRED_SPEC}
+
+# The legal shape: every retired anchor recorded under `dropped:`, with the
+# retired document named in `sources:` so mapping.yaml still carries its
+# whole-document row.
+CHECK_FOLD_RETIRED_DROPPED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md, 902-retired.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped:
+      - {ref: "902-retired.md#sec-1", reason: "superseded: whole document replaced by 900"}
+      - {ref: "902-retired.md#sec-2", reason: "superseded: whole document replaced by 900"}
+"""
+
+# The illegal shape: a retired anchor under `from:`. It is real, so it is not
+# a typo -- but folding text the corpus no longer states is exactly what the
+# fold must not do silently.
+CHECK_FOLD_RETIRED_PLACED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md, 902-retired.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+      - {new: "4", heading: "Retired", from: ["902-retired.md#sec-1"]}
+    dropped:
+      - {ref: "902-retired.md#sec-2", reason: "superseded: whole document replaced by 900"}
+"""
+
+# A `dropped:` ref that is a genuine typo -- no such anchor anywhere in the
+# index, live or retired. This must stay a failure whichever key it sits
+# under, or `dropped:` becomes a way to launder a misspelt ref.
+CHECK_FOLD_DROPPED_PHANTOM = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped:
+      - {ref: "900-alpha.md#sec-99", reason: "spent: no such anchor, a typo"}
 """
 
 # Finding 2 repro (task-2 review): a two-section spec, folded by a document
@@ -552,11 +631,11 @@ class CompletenessCheckTest(unittest.TestCase):
             self.assertIn("placed twice", result.stderr)
             self.assertIn("900-alpha.md#sec-1", result.stderr)
 
-    def test_check_reports_dangling_anchor(self):
+    def test_check_reports_anchor_that_does_not_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, result = run_fold_check(tmp, fold=CHECK_FOLD_DANGLING)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("dangling", result.stderr)
+            self.assertIn("no such anchor", result.stderr)
             self.assertIn("900-alpha.md#sec-99", result.stderr)
 
     def test_check_fails_when_index_is_missing(self):
@@ -583,6 +662,54 @@ class CompletenessCheckTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("index.yaml", result.stderr)
             self.assertIn("stale", result.stderr)
+
+
+class RetiredAnchorCheckTest(unittest.TestCase):
+    """An anchor may be real without being live. `--check` must tell the two
+    failure modes apart: a ref naming an anchor that never existed is always a
+    defect, while a ref naming a retired one is legal under `dropped:` and
+    only there. Conflating them (the original single "dangling" group) left
+    the 22 retired anchors this fold has to account for unrecordable -- the
+    only key that may hold them was the one `--check` rejected."""
+
+    def test_dropped_ref_naming_a_retired_anchor_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_RETIRED_DROPPED, specs=RETIRED_SPECS,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_from_ref_naming_a_retired_anchor_is_reported_not_live(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_RETIRED_PLACED, specs=RETIRED_SPECS,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not live", result.stderr)
+            self.assertIn("902-retired.md#sec-1", result.stderr)
+            # The other retired anchor is recorded under `dropped:`, so it is
+            # accounted for and must not be reported alongside it.
+            self.assertNotIn("902-retired.md#sec-2", result.stderr)
+
+    def test_dropped_ref_naming_no_anchor_at_all_still_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_DROPPED_PHANTOM,
+                specs={"900-alpha.md": ALPHA_SPEC},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no such anchor", result.stderr)
+            self.assertIn("900-alpha.md#sec-99", result.stderr)
+
+    def test_retired_document_is_not_reported_unplaced(self):
+        # A retired document contributes nothing to the live corpus, so a
+        # fold that never mentions it at all is complete, not incomplete.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN, specs=RETIRED_SPECS,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("902-retired.md", result.stderr)
 
 
 class PartialCheckTest(unittest.TestCase):
@@ -620,11 +747,11 @@ class PartialCheckTest(unittest.TestCase):
             self.assertIn("unplaced", result.stderr)
             self.assertIn("900-alpha.md#sec-2", result.stderr)
 
-    def test_partial_still_reports_dangling(self):
+    def test_partial_still_reports_an_anchor_that_does_not_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, result = run_fold_check(tmp, "--partial", fold=CHECK_FOLD_DANGLING)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("dangling", result.stderr)
+            self.assertIn("no such anchor", result.stderr)
             self.assertIn("900-alpha.md#sec-99", result.stderr)
 
     def test_partial_still_reports_placed_twice(self):
@@ -1585,7 +1712,7 @@ class PreambleCheckTest(unittest.TestCase):
     """--check must account for source prose that falls outside every anchor.
 
     Placing it, dropping it and leaving it unaccounted-for all go through the
-    same three groups every real anchor uses, so no seventh report group and
+    same groups every real anchor uses, so no report group of its own and
     no second concept: `<file>#preamble` is simply live corpus material like
     any other."""
 
@@ -1624,11 +1751,11 @@ class PreambleCheckTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("#preamble", result.stderr)
 
-    def test_preamble_ref_against_a_document_without_one_is_dangling(self):
+    def test_preamble_ref_against_a_document_without_one_is_no_such_anchor(self):
         with tempfile.TemporaryDirectory() as tmp:
             _repo, result = self.check(tmp, fold=CHECK_FOLD_PREAMBLE_DANGLING)
             self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertIn("dangling", result.stderr)
+            self.assertIn("no such anchor", result.stderr)
             self.assertIn("900-alpha.md#preamble", result.stderr)
 
     def test_partial_still_scopes_preamble_to_declared_sources(self):
