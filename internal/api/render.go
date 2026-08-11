@@ -115,6 +115,7 @@ func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
 		Project:      cockpitProject(c.Project),
 		ModeName:     string(c.Mode.Name),
 		ModeBasis:    c.Mode.Basis.Summary,
+		PinnedFocus:  cockpitFocus(c.PinnedFocus),
 		RankingFocus: c.RankingFocus,
 		NextDecision: cockpitDecision(c.NextDecision),
 		Work: ui.CockpitWork{
@@ -133,6 +134,19 @@ func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
 // project placeholder sidebar.
 func cockpitProject(p cockpitProjectJSON) ui.CockpitProject {
 	return ui.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key}
+}
+
+// cockpitFocus maps the pinned-focus note, preserving nil (nothing pinned).
+// The pinner's display name flattens to "" when the actor is unknown.
+func cockpitFocus(f *focusJSON) *ui.CockpitFocus {
+	if f == nil {
+		return nil
+	}
+	cf := &ui.CockpitFocus{Note: f.Note, PinnedAt: f.PinnedAt}
+	if f.PinnedBy != nil {
+		cf.PinnedBy = f.PinnedBy.Name
+	}
+	return cf
 }
 
 // cockpitDecision maps the next governed decision, preserving nil (no decision

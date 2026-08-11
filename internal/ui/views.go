@@ -10,6 +10,7 @@ package ui
 import (
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -132,20 +133,34 @@ type PlaceholderView struct {
 
 // --- project cockpit --------------------------------------------------------
 
-// CockpitView is the project cockpit page (project overview). It mirrors the
-// shape of api's cockpitProjection, flattened for rendering.
+// CockpitView is the project cockpit page (project overview), rendered in the
+// prototype's Operations mode (docs/mockups/cockpit/index.html, mode B). It
+// mirrors the shape of api's cockpitProjection, flattened for rendering.
+// PinnedFocus, NextDecision, and RankingFocus stay nil/empty until the stores
+// that back them exist; each panel is omitted honestly when its data is
+// absent rather than rendering an invented placeholder.
 type CockpitView struct {
 	Page              PageProps
 	CanonicalURL      string
 	Project           CockpitProject
 	ModeName          string
 	ModeBasis         string
+	PinnedFocus       *CockpitFocus
 	RankingFocus      []string
 	NextDecision      *CockpitDecision
 	Work              CockpitWork
 	SecondaryConcerns []CockpitConcern
 	Repositories      []CockpitRepo
 	CostTotals        []CockpitCostTotal
+}
+
+// CockpitFocus is the project's pinned focus note shown at the top of the
+// Operations canvas: a short human-authored steer, who pinned it, and when.
+// PinnedBy is the pinner's display name ("" when unknown).
+type CockpitFocus struct {
+	Note     string
+	PinnedBy string
+	PinnedAt time.Time
 }
 
 // CockpitProject is the project identity shown in the cockpit and the
@@ -162,6 +177,12 @@ type CockpitWork struct {
 	InReview   []WorkRow
 	Ready      []WorkRow
 	Blocked    []WorkRow
+}
+
+// Len is the total number of active work items across all four buckets — the
+// Active-work list renders an honest "no active work" line when it is zero.
+func (w CockpitWork) Len() int {
+	return len(w.InProgress) + len(w.InReview) + len(w.Ready) + len(w.Blocked)
 }
 
 // WorkRow is one cockpit work item: the task link, its state, the evidence
@@ -257,19 +278,112 @@ func EvidenceChip(category string) string {
 	}
 }
 
+// EvidenceLabel returns the human display text for an evidence category,
+// hyphenating user_reported ("User-reported", never "User reported").
+func EvidenceLabel(category string) string {
+	switch category {
+	case "declared":
+		return "Declared"
+	case "user_reported":
+		return "User-reported"
+	case "observed":
+		return "Observed"
+	case "recommended":
+		return "Recommended"
+	default:
+		return category
+	}
+}
+
+// StateLabel returns the human display text for a task state.
+func StateLabel(state string) string {
+	switch state {
+	case "in_progress":
+		return "In progress"
+	case "in_review":
+		return "In review"
+	case "ready":
+		return "Ready"
+	case "blocked":
+		return "Blocked"
+	default:
+		return state
+	}
+}
+
+// ModeLabel returns the human display text for a cockpit lifecycle mode. Only
+// Operations is wired today; the other labels are ready for when their modes
+// are stored.
+func ModeLabel(mode string) string {
+	switch mode {
+	case "operations":
+		return "Operations"
+	case "approved_launch":
+		return "Approved launch"
+	case "editorial_decision":
+		return "Editorial decision"
+	default:
+		return mode
+	}
+}
+
+// Initials returns up to two uppercase initials for a display name, for the
+// avatar badges in the Active-work list and decision rail. An empty name
+// yields "" (a blank avatar), never a fabricated placeholder.
+func Initials(name string) string {
+	var out []rune
+	for _, field := range strings.Fields(name) {
+		for _, r := range field {
+			out = append(out, unicode.ToUpper(r))
+			break
+		}
+		if len(out) == 2 {
+			break
+		}
+	}
+	return string(out)
+}
+
+// WorkRowWhoClass returns the .who avatar wrapper class for a work row: an
+// agent delegate holding the lease renders as ".who agent" (the AI badge
+// styling), everything else as a plain ".who".
+func WorkRowWhoClass(item WorkRow) string {
+	if item.Delegate != "" {
+		return "who agent"
+	}
+	return "who"
+}
+
+// WorkRowInitials returns the avatar initials for a work row: the delegated
+// agent's when one holds the lease, otherwise the human owner's, otherwise ""
+// (unassigned — a blank avatar, never invented).
+func WorkRowInitials(item WorkRow) string {
+	if item.Delegate != "" {
+		return Initials(item.Delegate)
+	}
+	return Initials(item.Owner)
+}
+
+// WorkRowActors renders a work row's who-line: the delegated agent acting on
+// behalf of the accountable owner, an agent with no recorded owner, a lone
+// human owner, or an honest "Unassigned" when neither is known.
+func WorkRowActors(item WorkRow) string {
+	switch {
+	case item.Delegate != "" && item.Owner != "":
+		return item.Delegate + " · on behalf of " + item.Owner
+	case item.Delegate != "":
+		return item.Delegate + " · delegated agent"
+	case item.Owner != "":
+		return item.Owner + " · owner"
+	default:
+		return "Unassigned"
+	}
+}
+
 // pluralSuffix returns "s" unless n == 1 — the inbox-count pluralization.
 func pluralSuffix(n int) string {
 	if n != 1 {
 		return "s"
 	}
 	return ""
-}
-
-// rankingFocusText renders a project's ranking focus for display:
-// space-separated with a trailing space, or the literal "none" when empty.
-func rankingFocusText(focus []string) string {
-	if len(focus) == 0 {
-		return "none"
-	}
-	return strings.Join(focus, " ") + " "
 }

@@ -1,12 +1,21 @@
 package ui
 
 // cockpit.templ renders the project cockpit / overview page (GET
-// /projects/{id}, spec 032 §10). A minimal restyle of the former
-// internal/api/project.templ: the same outcome / current-work / evidence /
-// next-decision structure, wrapped in the design-system shell (project
-// sidebar + cards) — not the Operations redesign (that is a later task). The
-// decision <aside aria-label="Next decision"> and the evidence <details>
-// disclosure are preserved verbatim, as is the owner/delegate/evidence copy.
+// /projects/{id}, spec 032 §10) in the prototype's Operations mode
+// (docs/mockups/cockpit/index.html, mode B): the Operations canvas
+// (mode banner, Sunstone-Way stepper, pinned focus, active work) beside the
+// right decision rail (next decision, highest-signal exception, automation
+// boundary). The topbar + project sidebar come from the Page shell + sidebar
+// component; this file owns only the mode B body.
+//
+// Honest empty states, never fabricated data: the pinned-focus card and the
+// next-decision card render only when their (currently always-nil) data is
+// present; the stepper is neutral methodology chrome (no fabricated
+// done/current markers, since the projection carries no stage fact); the
+// automation boundary discloses "not configured" for the policy/budget the
+// backbone does not store yet and shows real 30-day agent spend. The
+// prototype's Definition-of-done panel has no backing data and is omitted.
+// The prototype-only A/B/C mode switch is omitted (only Operations is wired).
 
 templ Cockpit(v CockpitView) {
 	@Page(v.Page) {
@@ -14,109 +23,167 @@ templ Cockpit(v CockpitView) {
 		<div class="shell">
 			@sidebar(v.Project, "overview")
 			<div class="main">
-				<div class="canvas">
-					<section class="card pad" aria-labelledby="outcome-heading">
-						<h1 id="outcome-heading">{ v.Project.Name }</h1>
-						<p class="muted small">Project id: { v.Project.ID } &middot; key: { v.Project.Key }</p>
-						<p>{ v.Project.Key } &middot; <span class="chip plain">{ v.ModeName }</span></p>
-						<p class="muted small">{ v.ModeBasis }</p>
-					</section>
-
-					<section class="card" id="work" aria-labelledby="work-heading">
-						<div class="hd"><h3 id="work-heading">Current work</h3></div>
-						<div class="bd">
-							@workBucket("Running", v.Work.InProgress)
-							@workBucket("Awaiting review", v.Work.InReview)
-							@workBucket("Ready", v.Work.Ready)
-							@workBucket("Blocked", v.Work.Blocked)
+				<section class="mode active" data-panel="B" data-mode={ v.ModeName } aria-label="Operations mode">
+					<div class="canvas">
+						<div class="mode-banner">
+							<span class="mode-name" style="background:var(--ok-bg);color:var(--ok)">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
+								{ ModeLabel(v.ModeName) } <span class="tg">B</span>
+							</span>
+							<span class="sub">{ v.ModeBasis }</span>
 						</div>
-					</section>
-
-					<section class="card pad">
-						<details>
-							<summary>Evidence</summary>
-							<p>Ranking focus: { rankingFocusText(v.RankingFocus) }</p>
-
-							<h4>Repositories</h4>
-							<ul>
-								if len(v.Repositories) == 0 {
-									<li>No mapped repositories</li>
-								} else {
-									for _, r := range v.Repositories {
-										<li>{ r.Repo }: { r.DoneState } (<span class={ "chip " + EvidenceChip(r.EvidenceCategory) }>{ r.EvidenceCategory }</span>)</li>
-									}
+						@stageStepper()
+						if v.PinnedFocus != nil {
+							@pinnedFocus(v.PinnedFocus)
+						}
+						<section class="card" id="work" aria-labelledby="work-heading">
+							<div class="hd">
+								<h3 id="work-heading">Active work</h3>
+								<div class="meta muted">people &amp; delegated agents</div>
+							</div>
+							<div class="bd wl">
+								for _, item := range v.Work.InProgress {
+									@workRow(item)
 								}
-							</ul>
-
-							<h4>Blocking concerns</h4>
-							<ul>
-								if len(v.SecondaryConcerns) == 0 {
-									<li>No open blockers</li>
-								} else {
-									for _, c := range v.SecondaryConcerns {
-										<li><a href={ c.URL }>{ c.Title }</a>: { c.EvidenceSummary }</li>
-									}
+								for _, item := range v.Work.InReview {
+									@workRow(item)
 								}
-							</ul>
-
-							<h4>Cost, last 30 days</h4>
-							<ul>
-								if len(v.CostTotals) == 0 {
-									<li>No cost recorded</li>
-								} else {
-									for _, t := range v.CostTotals {
-										<li>{ t.Currency } { t.CostAmount }, { t.UnpricedTokens } unpriced tokens</li>
-									}
+								for _, item := range v.Work.Ready {
+									@workRow(item)
 								}
-							</ul>
-
-							<a href={ "/projects/" + v.Project.ID + "/activity" }>Open project activity</a>
-						</details>
-					</section>
-
-					<div class="card pad">
-						<aside aria-label="Next decision">
-							<h3>Next decision</h3>
-							if v.NextDecision != nil {
-								<p>{ v.NextDecision.Title }</p>
-								<p>Accountable: { v.NextDecision.Accountable }</p>
-								<p>{ v.NextDecision.Readiness }</p>
-							} else {
-								<p>No governed decision is ready.</p>
-							}
-						</aside>
+								for _, item := range v.Work.Blocked {
+									@workRow(item)
+								}
+								if v.Work.Len() == 0 {
+									<p class="muted small">No active work.</p>
+								}
+							</div>
+						</section>
 					</div>
-				</div>
+					<aside class="rail" aria-label="Decisions and exceptions">
+						if v.NextDecision != nil {
+							@decisionCard(v.NextDecision)
+						}
+						if len(v.SecondaryConcerns) > 0 {
+							@exceptionCard(v.SecondaryConcerns[0])
+						}
+						@automationBoundary(v.CostTotals)
+					</aside>
+				</section>
 			</div>
 		</div>
 	}
 }
 
-// workBucket renders one cockpit work bucket as a list, or a single "None"
-// item when empty — matching the former project.templ per-bucket <ul>.
-templ workBucket(heading string, items []WorkRow) {
-	<h4>{ heading }</h4>
-	<ul>
-		if len(items) == 0 {
-			<li>None</li>
-		} else {
-			for _, item := range items {
-				<li>@workRow(item)</li>
-			}
-		}
-	</ul>
+// stageStepper renders the five fixed Sunstone Way stages as structural
+// methodology chrome. No step is marked done or current: the cockpit
+// projection carries no stage fact (Operations is the catch-all default mode,
+// reached by legacy projects too), so a progress marker would be fabricated.
+templ stageStepper() {
+	<div class="stepper" aria-label="Sunstone Way stages">
+		<div class="step"><span class="pip">1</span><span class="stx">Launch</span></div>
+		<div class="step"><span class="pip">2</span><span class="stx">Research</span></div>
+		<div class="step"><span class="pip">3</span><span class="stx">Report</span></div>
+		<div class="step"><span class="pip">4</span><span class="stx">Story</span></div>
+		<div class="step"><span class="pip">5</span><span class="stx">Distribution</span></div>
+	</div>
 }
 
-// workRow renders one cockpit work item: id/title link, its state and the
-// evidence behind that state, then the owner/delegate annotations when
-// present. The "Owned by …" and "… is the delegate" copy is preserved
-// verbatim (asserted by the cockpit e2e and web tests).
+// pinnedFocus renders the project's pinned-focus note with its attribution.
+// Rendered only when a focus is pinned (see Cockpit) — never an empty card.
+templ pinnedFocus(f *CockpitFocus) {
+	<section class="card" aria-labelledby="focus-heading">
+		<div class="hd">
+			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-line)" stroke-width="2" aria-hidden="true"><path d="M12 3l2 5 5 .4-4 3.4 1.3 5-4.3-2.8L7.7 19 9 14l-4-3.4 5-.4z" fill="var(--accent)"></path></svg>
+			<h3 id="focus-heading">Pinned focus</h3>
+			<div class="meta">
+				if f.PinnedBy != "" {
+					<span class="muted">by { f.PinnedBy } &middot; { FmtTime(f.PinnedAt) }</span>
+				} else {
+					<span class="muted">{ FmtTime(f.PinnedAt) }</span>
+				}
+			</div>
+		</div>
+		<div class="bd">
+			<p>{ f.Note }</p>
+		</div>
+	</section>
+}
+
+// workRow renders one active-work item: the who avatar (agent delegate vs
+// human owner), the task link, the who-line (owner/delegate), and the
+// evidence + state chips. The who-line and both chips are the honest facts
+// the projection supplies; no per-row cost is stored, so no cost is shown.
 templ workRow(item WorkRow) {
-	<a href={ item.URL }>{ item.ID } &mdash; { item.Title }</a>: { item.State } (<span class={ "chip " + EvidenceChip(item.EvidenceCategory) }>{ item.EvidenceCategory }</span>) &mdash; { item.EvidenceSummary }
-	if item.Owner != "" {
-		&middot; Owned by { item.Owner }
-	}
-	if item.Delegate != "" {
-		&middot; { item.Delegate } is the delegate
-	}
+	<div class="wlrow">
+		<div class={ WorkRowWhoClass(item) }>
+			<span class="avatar" aria-hidden="true">{ WorkRowInitials(item) }</span>
+		</div>
+		<div class="tl">
+			<div class="t"><a href={ item.URL }>{ item.ID } &mdash; { item.Title }</a></div>
+			<div class="s">{ WorkRowActors(item) }</div>
+		</div>
+		<div class="rt">
+			<span class={ "chip " + EvidenceChip(item.EvidenceCategory) }><span class="cd" aria-hidden="true"></span>{ EvidenceLabel(item.EvidenceCategory) }</span>
+			<span class={ "chip " + StateChip(item.State) }><span class="cd" aria-hidden="true"></span>{ StateLabel(item.State) }</span>
+		</div>
+	</div>
+}
+
+// decisionCard renders the next governed decision (title, accountable owner,
+// and what it rests on). Rendered only when a decision is ready (see Cockpit);
+// the cockpit is read-mostly, so its affordances are links, never buttons.
+templ decisionCard(d *CockpitDecision) {
+	<div class="decision">
+		<div class="dh">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5 9-11"></path></svg>
+			Next decision
+		</div>
+		<div class="db">
+			<h3>{ d.Title }</h3>
+			if d.Accountable != "" {
+				<div class="who-owns"><span class="avatar" aria-hidden="true">{ Initials(d.Accountable) }</span><span><b>{ d.Accountable }</b></span></div>
+			}
+			if d.Readiness != "" {
+				<div class="rest">
+					<span class="rl">What it rests on</span>
+					<p class="reason">{ d.Readiness }</p>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// exceptionCard renders the highest-signal exception (the top secondary
+// concern) as a link back to the source task plus its evidence summary.
+templ exceptionCard(c CockpitConcern) {
+	<div class="railcard">
+		<div class="rt">
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--crit)" stroke-width="2" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"></path><circle cx="12" cy="12" r="9"></circle></svg>
+			Highest-signal exception
+		</div>
+		<div class="exrow crit">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"></path><circle cx="12" cy="12" r="9"></circle></svg>
+			<span><a href={ c.URL }>{ c.Title }</a> &mdash; { c.EvidenceSummary }</span>
+		</div>
+	</div>
+}
+
+// automationBoundary renders the automation-boundary card honestly: the
+// backbone stores no automation policy or budget yet ("not configured"), and
+// the real 30-day agent spend from the cost projection (or "none recorded").
+templ automationBoundary(totals []CockpitCostTotal) {
+	<div class="railcard">
+		<div class="rt">Automation boundary</div>
+		<div class="auto-line"><span class="k">Policy</span><span class="v">not configured</span></div>
+		<div class="auto-line"><span class="k">Budget</span><span class="v">not configured</span></div>
+		if len(totals) == 0 {
+			<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">none recorded</span></div>
+		} else {
+			for _, t := range totals {
+				<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">{ t.Currency } { t.CostAmount }</span></div>
+			}
+		}
+		<p class="small muted">No automation policy or budget is configured for this project.</p>
+	</div>
 }
