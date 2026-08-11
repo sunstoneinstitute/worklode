@@ -62,15 +62,30 @@ flag. `--dry-run` (the default) computes the same full plan and reports the
 same failure without writing; `-w` writes, and only when the plan is
 entirely clean.
 
-`-w` also refuses to write against anything but a clean git worktree at
-`--root`. Only the path form is naturally idempotent (its own output carries
-the `corpus_to` prefix, which the input pattern requires and the output
-never re-triggers); shorthand and prose substitutions are not self-inverse,
-because old and new spec numbering both start at 1 -- a rewritten id
-(WL-SPEC-4 -> WL-SPEC-6) can coincidentally be a valid *old* id too
-(WL-SPEC-6, mapping elsewhere to WL-SPEC-11), so a second `-w` before the
-first is committed would silently rewrite again. Commit (or stash) between
-runs; `--dry-run` is unaffected, since it never writes.
+No substitution in any of the four forms is guaranteed self-inverse: old
+and new spec numbering both start at 1, so a rewritten id or path can
+coincidentally look like a fresh *old*-corpus reference to a second `-w`
+pass (WL-SPEC-4 -> WL-SPEC-6, and WL-SPEC-6 is itself a real from_id
+elsewhere, mapping to WL-SPEC-11). This is true of the path form too under
+`--corpus-to` set equal to `corpus_from` -- exactly Part 5's cutover mode --
+where the output prefix stops being distinguishable from the input prefix
+(025-....md -> 006-....md on one run, 006-....md -> 011-....md on the
+next, both under `docs/specs/`). An earlier version of this module claimed
+the path form was naturally idempotent and gated only on a clean git
+worktree; both claims were wrong for cutover mode specifically, so `-w`
+refuses to write a *second* time against the same tree by a different,
+durable mechanism: MARKER_PATH (docs/specs2/.refmap-applied), written on
+every successful `-w` and checked, unconditionally, before any other work
+happens. Unlike a git-dirty check, the marker survives a commit -- that is
+the whole point, since the unsafe sequence is exactly "-w, commit, -w
+again" (a clean tree after the first commit gives a dirty-only check
+nothing left to say). `--force` bypasses it, for re-running after amending
+mapping.yaml; deleting the marker file works too. The clean-worktree check
+(`worktree_state`) still runs as a *secondary* guard -- not because it
+buys idempotency, but because starting from a clean tree keeps the
+resulting diff attributable to this run alone and trivially revertable
+before it's committed -- and `--force` bypasses that too. `--dry-run` is
+unaffected by either guard, since it never writes.
 
 .worktrees/ and .claude/worktrees/ are pruned unconditionally, at any depth,
 along with .git/; everything else in the repo is scanned, including
@@ -95,16 +110,20 @@ the newly-moved corpus, `MAPPING_PATH` (docs/specs2/mapping.yaml) would no
 longer resolve, and the bare-filename gate would start treating the new
 corpus's own siblings as old-corpus references.
 
-Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR] [--allow-dropped]
+Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR]
+                 [--allow-dropped] [--force]
 
   --dry-run        report the rewrite plan without writing anything (default)
   -w               write the plan; refuses to write anything if any
-                   reference is unmapped, or if --root is not a clean git
-                   worktree
+                   reference is unmapped, if docs/specs2/.refmap-applied
+                   already exists (this tree has already been rewritten
+                   once), or if --root is not a clean git worktree
   --root           repository root to scan and rewrite (default: .)
   --corpus-to      override mapping.yaml's corpus.to for output paths only
   --allow-dropped  pass a recorded dropped: reference through unchanged
                    instead of failing (never-mapped references still fail)
+  --force          bypass the idempotency marker and the clean-worktree
+                   check (re-running -w after amending mapping.yaml)
 """
 
 import argparse
@@ -121,6 +140,12 @@ except ImportError:
     sys.exit("refmap: needs PyYAML (pip install pyyaml)")
 
 MAPPING_PATH = Path("docs/specs2/mapping.yaml")
+# Fixed alongside MAPPING_PATH, deliberately *not* under corpus_to: its job
+# ("has -w already been run against this tree") does not depend on which
+# output prefix that run used, and a marker whose own location moved with
+# --corpus-to could miss a run made under a different override (see the
+# module docstring's idempotency paragraph).
+MARKER_PATH = Path("docs/specs2/.refmap-applied")
 DEFAULT_CORPUS_FROM = "docs/specs"
 DEFAULT_CORPUS_TO = "docs/specs2"
 DEFAULT_PROJECT_KEY = "WL"
@@ -408,20 +433,21 @@ def should_prune(parent_parts: tuple, name: str) -> bool:
 
 def iter_files(root: Path):
     """Every file under `root`, excluding .git/, .worktrees/ and
-    .claude/worktrees/ at any depth (see the module docstring), and
-    docs/specs2/mapping.yaml itself. mapping.yaml's own from_id/to_id fields
-    are literal "<KEY>-SPEC-<n>" text, which the shorthand branch matches
-    with no file-location gating (unlike the bare-filename path branch) --
-    scanning the tool's own input would rewrite it out from under itself, so
-    it is the one file this tool never touches."""
-    mapping_path = (root / MAPPING_PATH).resolve()
+    .claude/worktrees/ at any depth (see the module docstring), and two
+    files this tool owns rather than scans: docs/specs2/mapping.yaml (its
+    own from_id/to_id fields are literal "<KEY>-SPEC-<n>" text, which the
+    shorthand branch matches with no file-location gating, unlike the
+    bare-filename path branch -- scanning it would rewrite it out from under
+    itself) and docs/specs2/.refmap-applied, the idempotency marker (its
+    content is this tool's own bookkeeping, not repo prose)."""
+    skip = {(root / MAPPING_PATH).resolve(), (root / MARKER_PATH).resolve()}
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
         parts = () if rel_dir == Path(".") else rel_dir.parts
         dirnames[:] = [d for d in dirnames if not should_prune(parts, d)]
         for name in filenames:
             path = Path(dirpath) / name
-            if path.resolve() == mapping_path:
+            if path.resolve() in skip:
                 continue
             yield path
 
@@ -456,16 +482,18 @@ def process_file(path: Path, root: Path, index: Index, allow_dropped: bool):
 
 
 def worktree_state(root: Path) -> str:
-    """'clean', 'dirty', or 'not-a-repo' for `root` -- the gate -w checks
-    before writing (see the module docstring's idempotency paragraph).
-    Shorthand and prose substitutions are not self-inverse: old and new
-    numbering both start at 1, so a rewritten id can coincidentally be a
-    valid *old* id too (WL-SPEC-4 -> WL-SPEC-6, and WL-SPEC-6 is itself a
-    real from_id), and a second -w over the same uncommitted tree would
-    silently rewrite again. Only the path form is naturally idempotent (its
-    own output carries the corpus_to prefix, which never re-matches the
-    corpus_from-prefixed input pattern). Fails closed: anything other than a
-    provably clean git worktree refuses to write."""
+    """'clean', 'dirty', or 'not-a-repo' for `root`.
+
+    NOT the idempotency mechanism -- see MARKER_PATH / write_marker for
+    that; this is a secondary hygiene guard `-w` checks before writing, kept
+    because a clean starting point makes the resulting diff attributable to
+    this run alone and trivially revertable (`git checkout .`) if something
+    looks wrong before it's committed. It catches nothing a committed marker
+    doesn't already catch on its own, and catches nothing at all once the
+    first run's output has been committed -- a clean tree only means
+    "nothing uncommitted right now", not "this tree has never been
+    rewritten". Fails closed: anything other than a provably clean git
+    worktree refuses to write."""
     try:
         probe = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
@@ -480,6 +508,32 @@ def worktree_state(root: Path) -> str:
         capture_output=True, text=True, check=False,
     )
     return "clean" if status.returncode == 0 and not status.stdout.strip() else "dirty"
+
+
+def write_marker(root: Path, mapping: Mapping, total_subs: int, changed: int) -> None:
+    """Write the durable idempotency marker after a successful -w. Deliberately
+    a plain, human-readable file rather than a stamp inside mapping.yaml:
+    mapping.yaml is fold.py's own generated artifact (docs/plans/....md's
+    "never hand-edit it, generated from fold.yaml alone" -- a second writer,
+    even one only appending a key, muddies that), and mapping.yaml is
+    already excluded from every scan/rewrite pass (see iter_files) precisely
+    so nothing but fold.py ever touches it. A sibling file keeps that
+    invariant intact and needs no YAML round-trip (which would risk
+    reformatting a file this tool does not own)."""
+    (root / MARKER_PATH).write_text(
+        "# Written by scripts/refmap.py -w. Its presence blocks a second -w\n"
+        "# run against this tree -- old and new spec numbering both start at\n"
+        "# 1, so a rewritten id or path can coincidentally look like a fresh\n"
+        "# old-corpus reference on a second pass, and this file is what makes\n"
+        "# that unsafe even after the first run has been committed (a clean\n"
+        "# git worktree is not evidence this file's absence would be).\n"
+        "#\n"
+        "# Delete this file, or pass --force, to re-run after amending\n"
+        "# mapping.yaml.\n"
+        f"corpus_to: {mapping.corpus_to}\n"
+        f"substitutions: {total_subs}\n"
+        f"files_changed: {changed}\n"
+    )
 
 
 def report(results: list, out) -> None:
@@ -509,11 +563,21 @@ def main(argv=None):
                      help="pass a reference through unchanged, instead of failing, when its "
                           "target is in mapping.yaml's dropped: list (a recorded human "
                           "decision) -- a never-mapped reference still fails regardless")
+    ap.add_argument("--force", action="store_true",
+                     help="bypass the idempotency marker and the clean-worktree check -- "
+                          "for re-running -w after amending mapping.yaml")
     a = ap.parse_args(argv)
     if a.dry_run and a.write:
         ap.error("--dry-run and -w are mutually exclusive")
 
     root = Path(a.root).resolve()
+
+    if a.write and not a.force and (root / MARKER_PATH).exists():
+        print(f"refmap: {MARKER_PATH} exists -- refmap.py -w has already run against this "
+              "tree (this survives a commit; it is not the git-dirty check). Delete it, or "
+              "pass --force, to re-run after amending mapping.yaml.")
+        return 1
+
     mapping_path = root / MAPPING_PATH
     if not mapping_path.is_file():
         print(f"refmap: {mapping_path} not found -- run scripts/fold.py --mapping first",
@@ -547,16 +611,16 @@ def main(argv=None):
 
     if a.write:
         state = worktree_state(root)
-        if state != "clean":
+        if state != "clean" and not a.force:
             why = ("is not a git working tree" if state == "not-a-repo"
                     else "has uncommitted changes")
-            print(f"\nrefmap: --root {why} -- refusing to write. Shorthand and prose "
-                  "substitutions are not self-inverse (old and new numbering both start "
-                  "at 1), so a second -w before the first is committed would silently "
-                  "rewrite again. Commit or stash first, or use --dry-run to preview.")
+            print(f"\nrefmap: --root {why} -- refusing to write (a clean starting point "
+                  "keeps this run's diff attributable and revertable). Commit or stash "
+                  "first, use --dry-run to preview, or --force to override.")
             return 1
         for r in changed:
             (root / r.rel).write_text(r.new_text, encoding="utf-8")
+        write_marker(root, mapping, total_subs, len(changed))
         print(f"\nrefmap: wrote {total_subs} substitution(s) across {len(changed)} file(s)")
         return 0
 
