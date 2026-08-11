@@ -161,23 +161,23 @@ class RoundTripTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root, result = run_refmap(
                 tmp, MAIN_MAPPING,
-                {"internal/cmd/show_test.go":
+                {"internal/cmd/show.go":
                     '\t{"WL-SPEC-14#sec-5", targetDoc, ""},\n'},
                 "-w",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            got = (root / "internal/cmd/show_test.go").read_text()
+            got = (root / "internal/cmd/show.go").read_text()
             self.assertIn('"WL-SPEC-6#sec-9"', got)
 
     def test_wl_spec_shorthand_without_fragment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, result = run_refmap(
                 tmp, MAIN_MAPPING,
-                {"internal/cmd/show_test.go": '\t{"WL-SPEC-2", targetDoc, ""},\n'},
+                {"internal/cmd/show.go": '\t{"WL-SPEC-2", targetDoc, ""},\n'},
                 "-w",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            got = (root / "internal/cmd/show_test.go").read_text()
+            got = (root / "internal/cmd/show.go").read_text()
             self.assertIn('"WL-SPEC-1"', got)
 
     def test_prose_form_spec_prefixed(self):
@@ -437,6 +437,125 @@ class ExclusionTest(unittest.TestCase):
             self.assertIn("docs/specs2/001-identity-and-authentication.md#sec-6.2", got)
 
 
+class IgnoredPathTest(unittest.TestCase):
+    """Files that carry synthetic spec identifiers as *data* must not be read
+    as prose. A test fixture corpus (`001-alpha.md`, `WL-SPEC-900`), a
+    table-driven Go test case, or a quoted review diff resolves to nothing --
+    and one unmapped id is enough to make -w refuse the whole run, so
+    scanning them would block cutover outright. Reordering cutover cannot
+    help: the Go fixtures are never deleted."""
+
+    UNMAPPED = "// see docs/specs/900-not-in-the-mapping.md#sec-1\n"
+    MAPPED = "// see docs/specs/002-github-app-auth.md#sec-3.5\n"
+
+    def assert_skipped(self, rel):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {rel: self.UNMAPPED + self.MAPPED}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            # Unchanged, not merely tolerated: a skipped file is never read.
+            self.assertEqual((root / rel).read_text(), self.UNMAPPED + self.MAPPED)
+            self.assertNotIn(rel, result.stdout)
+
+    def test_python_test_fixtures_are_not_scanned(self):
+        self.assert_skipped("scripts/fold_test.py")
+        self.assert_skipped("scripts/refmap_test.py")
+
+    def test_go_test_fixtures_are_not_scanned(self):
+        self.assert_skipped("internal/cmd/show_test.go")
+        self.assert_skipped("e2e/docsync_test.go")
+
+    def test_agent_session_artifacts_are_not_scanned(self):
+        self.assert_skipped(".superpowers/sdd/some-plan/review-a..b.diff")
+
+    def test_an_ordinary_go_source_is_still_scanned(self):
+        # The exclusion is by filename suffix, not by living under internal/:
+        # production code beside a skipped test file must still be rewritten.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING,
+                {"internal/cmd/show.go": self.MAPPED,
+                 "internal/cmd/show_test.go": self.MAPPED},
+                "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("docs/specs2/001-identity-and-authentication.md#sec-6.2",
+                          (root / "internal/cmd/show.go").read_text())
+            self.assertEqual((root / "internal/cmd/show_test.go").read_text(), self.MAPPED)
+
+    def test_ignore_glob_flag_skips_an_extra_path(self):
+        # Cutover's escape hatch for a file the built-in list cannot know
+        # about -- a plan that quotes a fixture corpus verbatim, say.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/plans/quotes-a-fixture.md": self.UNMAPPED},
+                "-w", "--ignore-glob", "docs/plans/quotes-a-fixture.md",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((root / "docs/plans/quotes-a-fixture.md").read_text(), self.UNMAPPED)
+
+    def test_without_the_flag_the_same_path_still_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/plans/quotes-a-fixture.md": self.UNMAPPED}, "-w",
+            )
+            self.assertNotEqual(result.returncode, 0)
+
+
+class SpecZeroTest(unittest.TestCase):
+    """`WL-SPEC-0` is the reserved "no governing spec" sentinel (026 §4.2a):
+    "There is no spec 0 and there will not be one, so it is the only
+    reference that resolves to nothing without being a defect." It appears in
+    docs/authoring-design-docs.md, spec 025 and spec 026 -- all shipping
+    prose that also carries real references -- so it has to be recognised and
+    left alone rather than excluded by the file."""
+
+    def test_spec_zero_shorthand_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "so `WL-SPEC-0` is recognised but reported: write `NO-SPEC`.\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/authoring-design-docs.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((root / "docs/authoring-design-docs.md").read_text(), original)
+
+    def test_spec_zero_shorthand_with_a_fragment_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "The `WL-SPEC-0#sec-1` form is never valid.\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/specs/025-documents-in-the-backbone.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                (root / "docs/specs/025-documents-in-the-backbone.md").read_text(), original)
+
+    def test_spec_zero_prose_form_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = "The authority sentence in 000 §1 updates accordingly.\n"
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/specs/025-documents-in-the-backbone.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                (root / "docs/specs/025-documents-in-the-backbone.md").read_text(), original)
+
+    def test_a_real_reference_in_the_same_file_is_still_rewritten(self):
+        # The point of handling the sentinel per-reference rather than by
+        # excluding the file: docs/authoring-design-docs.md carries one
+        # WL-SPEC-0 and about fifteen real references.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = ("write `NO-SPEC`, never `WL-SPEC-0`.\n"
+                        "covers: docs/specs/002-github-app-auth.md\n")
+            root, result = run_refmap(
+                tmp, MAIN_MAPPING, {"docs/authoring-design-docs.md": original}, "-w",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            got = (root / "docs/authoring-design-docs.md").read_text()
+            self.assertIn("`WL-SPEC-0`", got)
+            self.assertIn("covers: docs/specs2/001-identity-and-authentication.md\n", got)
+
+
 class ShorthandScopeTest(unittest.TestCase):
     def test_wl_adr_shorthand_is_left_alone(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -446,10 +565,10 @@ class ShorthandScopeTest(unittest.TestCase):
             # round-trip even on an untouched file.
             original = '{"WL-ADR-7", targetDoc, ""},\n'
             root, result = run_refmap(
-                tmp, MAIN_MAPPING, {"internal/cmd/show_test.go": original}, "-w",
+                tmp, MAIN_MAPPING, {"internal/cmd/show.go": original}, "-w",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "internal/cmd/show_test.go").read_text(), original)
+            self.assertEqual((root / "internal/cmd/show.go").read_text(), original)
 
     def test_cross_project_shorthand_is_left_alone(self):
         with tempfile.TemporaryDirectory() as tmp:
