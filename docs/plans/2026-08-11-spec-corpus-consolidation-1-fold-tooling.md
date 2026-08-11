@@ -383,7 +383,25 @@ whole-branch review before cutover.
 | 2 | Near-1:1 folds: 013, 016, 017, 019, 020, 021, 022, 029, 032 | sonnet |
 | 3 | Multi-source folds: 001, 004, 008, 012 | sonnet impl, opus review |
 | 4 | The dense clusters: 006, 007, 025, 026 | sonnet impl, opus review |
-| 5 | Cutover: `refmap.py -w`, `git mv`, `spec_corpus` config, `lode doc sync --dry-run`, delete `fold.py`/`refmap.py` | opus |
+| 5 | Cutover (see order below) | opus |
+
+**Part 5 runs in this order, in one commit.** The obvious sequence —
+`refmap.py -w` then `git mv` — is wrong: it rewrites ~2,000 references to
+`docs/specs2/…` and then renames that directory out from under them.
+
+1. `refmap.py -w --corpus-to docs/specs` — rewrite references to their
+   *post-move* paths, while `docs/specs2/` is still where the fold lives.
+2. `git rm -r docs/specs && git mv docs/specs2 docs/specs`.
+3. Flip `status`/`issued` on the documents whose sources were all accepted.
+4. `spec_corpus = "docs/specs"` in `.worklode/config.toml`; `lode doc sync --dry-run`.
+5. Delete `scripts/fold.py`, `scripts/refmap.py` and their tests; keep
+   `mapping.yaml`.
+
+Reversing 1 and 2 does not work: after the move `corpus.from` collides with the
+new corpus, `refmap.py`'s `MAPPING_PATH` is hardcoded to
+`docs/specs2/mapping.yaml`, and the bare-filename gate would read new-corpus
+siblings as old references. Changing `corpus.to` in `fold.yaml` instead does not
+work either — it also drives where `fold.py --scaffold` writes.
 
 `fold.yaml` authoring for parts 2–4 is planning-tier work and happens before
 that part's tasks, not inside them. Part 1 is the exception: its single 005
