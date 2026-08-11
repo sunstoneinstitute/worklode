@@ -607,7 +607,7 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 		t.Fatalf("GET /: status = %d, want 200", code)
 	}
 	for _, want := range []string{
-		`<nav aria-label="Primary">`, `<main id="main-content"`, `href="/assets/app.css"`, // shared shell
+		`<nav aria-label="Primary"`, `<main id="main-content"`, `href="/assets/app.css"`, // shared shell
 		"<h1>Home</h1>",
 	} {
 		if !strings.Contains(body, want) {

@@ -1,0 +1,36 @@
+package ui
+
+// placeholder.templ renders an honest "not built yet" page. A global
+// destination (Project nil) shows the heading and the owning-spec message in a
+// card. A project section (Project set) renders the same project sidebar and
+// header as the overview page, naming the missing capability — no form,
+// button, count, or fabricated record. Restyled from the former
+// internal/api/placeholder.templ.
+
+templ Placeholder(v PlaceholderView) {
+	@Page(v.Page) {
+		if v.Project != nil {
+			<link rel="canonical" href={ v.CanonicalURL }/>
+			<div class="shell">
+				@sidebar(*v.Project, v.ActiveSection)
+				<div class="main">
+					<div class="canvas">
+						<section class="card pad">
+							<h1>{ v.Project.Name }: { v.Heading }</h1>
+							<p class="muted">{ v.Message }</p>
+						</section>
+					</div>
+				</div>
+			</div>
+		} else {
+			<div class="main">
+				<div class="canvas">
+					<section class="card pad">
+						<h1>{ v.Heading }</h1>
+						<p class="muted">{ v.Message }</p>
+					</section>
+				</div>
+			</div>
+		}
+	}
+}
