@@ -112,3 +112,29 @@ jobs:
           arm64-sequoia-sha: ${{ needs.build-bottles.outputs.arm64_sequoia_sha256 }}
           arm64-tahoe-sha: ${{ needs.build-bottles.outputs.arm64_tahoe_sha256 }}
           cellar: ${{ needs.build-bottles.outputs.cellar }}
+
+  build-windows:
+    needs: [promote, build-bottles]
+    uses: ./.github/workflows/_build-windows.yml
+    with:
+      tag: ${{ needs.promote.outputs.tag }}
+
+  # Same as homebrew above: promote-images's push doesn't trigger release.yml,
+  # so the Scoop bucket update runs directly here too.
+  scoop:
+    needs: [promote, build-windows]
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+
+      - name: Update Scoop bucket
+        uses: ./.github/actions/update-scoop-bucket
+        with:
+          tag: ${{ needs.promote.outputs.tag }}
+          deploy-key: ${{ secrets.SCOOP_DEPLOY_KEY }}
+          amd64-sha: ${{ needs.build-windows.outputs.amd64_sha256 }}
