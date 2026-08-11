@@ -825,6 +825,53 @@ class ScaffoldTest(unittest.TestCase):
             self.assertFalse((repo / "docs" / "specs2" / "950-alpha-beta-folded.md").exists())
 
 
+# H1 title regression: `to:` filenames spanning a leading-zero case (005), a
+# three-digit case with no leading zero (023 still needs its own leading
+# zero preserved), and a >=100 case where zero-padding is a non-issue -- the
+# fix must keep the filename's number string as-is, not int()-round-trip it.
+H1_FOLD = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 005-padded.md
+    title: Padded title
+    sources: [900-alpha.md]
+    sections:
+      - {new: "0", heading: "Purpose", from: ["900-alpha.md#sec-1"]}
+    dropped: []
+  - to: 023-three-digit.md
+    title: Three digit title
+    sources: [900-alpha.md]
+    sections:
+      - {new: "0", heading: "Purpose", from: ["900-alpha.md#sec-1"]}
+    dropped: []
+  - to: 100-boundary.md
+    title: Boundary title
+    sources: [900-alpha.md]
+    sections:
+      - {new: "0", heading: "Purpose", from: ["900-alpha.md#sec-1"]}
+    dropped: []
+"""
+
+
+class TitleNumberTest(unittest.TestCase):
+    def test_h1_keeps_the_to_filenames_number_string_verbatim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, result = run_fold_scaffold(tmp, fold=H1_FOLD, specs=SCAFFOLD_SPECS)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            padded = (repo / "docs" / "specs2" / "005-padded.md").read_text()
+            self.assertIn("# Spec 005 — Padded title\n", padded)
+            self.assertNotIn("# Spec 5 —", padded)  # the int()-collapsed form
+
+            three_digit = (repo / "docs" / "specs2" / "023-three-digit.md").read_text()
+            self.assertIn("# Spec 023 — Three digit title\n", three_digit)
+            self.assertNotIn("# Spec 23 —", three_digit)
+
+            boundary = (repo / "docs" / "specs2" / "100-boundary.md").read_text()
+            self.assertIn("# Spec 100 — Boundary title\n", boundary)
+
+
 class ScaffoldHouseChecksTest(unittest.TestCase):
     def test_scaffolded_output_passes_secfmt_and_secmeta(self):
         with tempfile.TemporaryDirectory() as tmp:
