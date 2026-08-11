@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Project groups one or more repos under a single unit of work. Focus is the
@@ -16,7 +17,64 @@ type Project struct {
 	Name  string
 	Key   string
 	Focus []string
+
+	// Curated v0 backing for the cockpit's "Pinned focus" and "Next decision"
+	// cards (migration 0013), set by a lead until spec-029 derives them. Zero
+	// values mean unset: an empty FocusNote or DecisionTitle means the card is
+	// absent. Written via PinProjectFocus / SetProjectNextDecision.
+	FocusNote           string
+	FocusPinnedBy       string
+	FocusPinnedAt       time.Time
+	DecisionTitle       string
+	DecisionAccountable string
+	DecisionReadiness   string
 }
+
+// projectExtras holds the nullable cockpit columns (migration 0013) during a
+// row scan; dest wires them into a Scan call and apply copies present values
+// onto a Project, leaving Go zero values where the column was NULL. Keeping
+// both scan sites (GetProject, ListProjects) on this one helper stops them
+// drifting apart.
+type projectExtras struct {
+	focusNote           sql.NullString
+	focusPinnedBy       sql.NullString
+	focusPinnedAt       sql.NullTime
+	decisionTitle       sql.NullString
+	decisionAccountable sql.NullString
+	decisionReadiness   sql.NullString
+}
+
+func (e *projectExtras) dest() []any {
+	return []any{
+		&e.focusNote, &e.focusPinnedBy, &e.focusPinnedAt,
+		&e.decisionTitle, &e.decisionAccountable, &e.decisionReadiness,
+	}
+}
+
+func (e *projectExtras) apply(p *Project) {
+	p.FocusNote = e.focusNote.String
+	p.FocusPinnedBy = e.focusPinnedBy.String
+	p.FocusPinnedAt = e.focusPinnedAt.Time
+	p.DecisionTitle = e.decisionTitle.String
+	p.DecisionAccountable = e.decisionAccountable.String
+	p.DecisionReadiness = e.decisionReadiness.String
+}
+
+// nullIfZeroTime maps the zero time to a SQL NULL, so optional timestamptz
+// columns stay NULL rather than holding the year-1 sentinel.
+func nullIfZeroTime(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
+}
+
+// projectColumns is the SELECT list shared by GetProject and ListProjects:
+// the base columns plus the migration-0013 cockpit columns, in the order
+// projectExtras.dest expects them.
+const projectColumns = `id, name, key, focus,
+	focus_note, focus_pinned_by, focus_pinned_at,
+	decision_title, decision_accountable, decision_readiness`
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
 // a []string. An empty or null column yields a nil slice.
@@ -48,9 +106,10 @@ func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	var focus []byte
+	var ext projectExtras
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, key, focus FROM projects WHERE id = $1`, id)
-	if err := row.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
+		`SELECT `+projectColumns+` FROM projects WHERE id = $1`, id)
+	if err := row.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -61,12 +120,13 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 		return nil, fmt.Errorf("get project %s: %w", id, err)
 	}
 	p.Focus = f
+	ext.apply(&p)
 	return &p, nil
 }
 
 // ListProjects returns all projects.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, key, focus FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+projectColumns+` FROM projects`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -76,7 +136,8 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	for rows.Next() {
 		var p Project
 		var focus []byte
-		if err := rows.Scan(&p.ID, &p.Name, &p.Key, &focus); err != nil {
+		var ext projectExtras
+		if err := rows.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		f, err := scanProjectFocus(focus)
@@ -84,6 +145,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 			return nil, fmt.Errorf("scan project %s: %w", p.ID, err)
 		}
 		p.Focus = f
+		ext.apply(&p)
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -137,6 +199,68 @@ func (s *Store) SetProjectFocus(ctx context.Context, projectID string, focus []s
 			return nil
 		})
 	return err
+}
+
+// PinProjectFocus sets (or clears) the cockpit's curated "Pinned focus" card
+// for a project: a lead-set note plus who pinned it and when (migration 0013,
+// superseded by spec-029). An empty note clears all three columns to NULL,
+// ignoring pinnedBy and pinnedAt; a non-empty note writes them, storing NULL
+// for an empty pinnedBy or a zero pinnedAt. Returns ErrNotFound if the project
+// does not exist.
+func (s *Store) PinProjectFocus(ctx context.Context, projectID, note, pinnedBy string, pinnedAt time.Time) error {
+	// nil params clear all three; set only when the card carries a note.
+	var noteVal, byVal, atVal any
+	if note != "" {
+		noteVal = note
+		byVal = nullIfEmpty(pinnedBy)
+		atVal = nullIfZeroTime(pinnedAt)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects
+		    SET focus_note = $1, focus_pinned_by = $2, focus_pinned_at = $3
+		  WHERE id = $4`, noteVal, byVal, atVal, projectID)
+	if err != nil {
+		return fmt.Errorf("pin focus for project %s: %w", projectID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("pin focus rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	return nil
+}
+
+// SetProjectNextDecision sets (or clears) the cockpit's curated "Next decision"
+// card for a project: a lead-set title plus who is accountable and a readiness
+// note (migration 0013, superseded by spec-029). An empty title clears all
+// three columns to NULL, ignoring accountable and readiness; a non-empty title
+// writes them, storing NULL for an empty accountable or readiness. Returns
+// ErrNotFound if the project does not exist.
+func (s *Store) SetProjectNextDecision(ctx context.Context, projectID, title, accountable, readiness string) error {
+	// nil params clear all three; set only when the card carries a title.
+	var titleVal, accVal, readyVal any
+	if title != "" {
+		titleVal = title
+		accVal = nullIfEmpty(accountable)
+		readyVal = nullIfEmpty(readiness)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects
+		    SET decision_title = $1, decision_accountable = $2, decision_readiness = $3
+		  WHERE id = $4`, titleVal, accVal, readyVal, projectID)
+	if err != nil {
+		return fmt.Errorf("set next decision for project %s: %w", projectID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set next decision rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	return nil
 }
 
 // AddRepo maps repo ("owner/name") to projectID. A repo may belong to at

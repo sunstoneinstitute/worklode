@@ -740,6 +740,52 @@ func TestClientProjectFocus(t *testing.T) {
 	}
 }
 
+// TestClientProjectCuratedCards round-trips PinProjectFocus and
+// SetProjectNextDecision through the real PATCH handler, verifying the values
+// land in the store and that an empty value clears each card.
+func TestClientProjectCuratedCards(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	if _, _, err := c.PinProjectFocus(ctx, "proj", "Ship the cockpit", "stig"); err != nil {
+		t.Fatalf("PinProjectFocus: %v", err)
+	}
+	if _, _, err := c.SetProjectNextDecision(ctx, "proj", "Pick a datastore", "stig", "blocked on benchmark"); err != nil {
+		t.Fatalf("SetProjectNextDecision: %v", err)
+	}
+
+	p, err := st.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if p.FocusNote != "Ship the cockpit" || p.FocusPinnedBy != "stig" {
+		t.Errorf("focus = {%q, %q}, want {Ship the cockpit, stig}", p.FocusNote, p.FocusPinnedBy)
+	}
+	if p.DecisionTitle != "Pick a datastore" || p.DecisionAccountable != "stig" ||
+		p.DecisionReadiness != "blocked on benchmark" {
+		t.Errorf("decision = {%q, %q, %q}, want {Pick a datastore, stig, blocked on benchmark}",
+			p.DecisionTitle, p.DecisionAccountable, p.DecisionReadiness)
+	}
+
+	// Empty values clear each card.
+	if _, _, err := c.PinProjectFocus(ctx, "proj", "", ""); err != nil {
+		t.Fatalf("PinProjectFocus clear: %v", err)
+	}
+	if _, _, err := c.SetProjectNextDecision(ctx, "proj", "", "", ""); err != nil {
+		t.Fatalf("SetProjectNextDecision clear: %v", err)
+	}
+	p, err = st.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject after clear: %v", err)
+	}
+	if p.FocusNote != "" || p.DecisionTitle != "" {
+		t.Errorf("after clear focus_note=%q decision_title=%q, want both empty", p.FocusNote, p.DecisionTitle)
+	}
+}
+
 func TestClientErrorRendering(t *testing.T) {
 	err := &cli.ClientError{Status: 404, Msg: "task WL-9 not found"}
 	want := "server error (404): task WL-9 not found"
