@@ -412,11 +412,15 @@ this migration is replacing.
 `fold.yaml` alone, so it is regenerated once per part, after that part's
 planning-tier `fold.yaml` authoring and before its first rewrite.
 
-**Those steps are the only gate.** The `secfmt.py` pre-commit hook matches
-`^docs/specs/.*\.md$` and the `secmeta.py` hook `^docs/(specs|plans)/.*\.md$`,
-so neither fires on a commit that touches only `docs/specs2/` — and docs-only
-PRs skip CI. Until cutover renames the directory, nothing automatic checks the
-folded corpus. Run the steps.
+**Run the `secmeta.py` step — the hook does not cover it.** The `secfmt.py`
+hook now matches `^docs/specs2?/.*\.md$` and passes the changed filenames, so
+numbering and anchors are covered. The `secmeta.py` hook matches the widened
+pattern too, but it runs `pass_filenames: false`, so it invokes
+`scripts/secmeta.py` with no arguments and checks `DEFAULT_ROOTS` —
+`docs/specs` and `docs/plans` — whatever triggered it. Frontmatter in
+`docs/specs2/` is unchecked until the hook passes the path or `DEFAULT_ROOTS`
+grows. Docs-only PRs skip CI, so the explicit step is the only thing standing
+in for it.
 
 Model per `MODEL_SELECTION.md`: implementation `sonnet` (fully specified,
 mechanical diff, objective gate); per-document review `sonnet` for the near-1:1
@@ -450,13 +454,10 @@ derived from the frontmatter `compute_requires` already parses, so it cannot
 be forgotten and needs no `fold.yaml` key. A per-section amendment still
 carries its inline note and is handled by rule 3 as before.
 
-**Still open, part 3–4 territory.** `from:` is many-old → one-new only, and the
-"exactly once" constraint forbids the reverse. A source section whose substance
-legitimately belongs in two new sections has no expression: placing it under
-its dominant new section makes `mapping.yaml` point half its inbound references
-at the wrong place. Expect this in 006, 025 and 026. Splitting one such section
-costs a `sections:` schema change plus a carve-out in `run_check`'s
-placed-twice group.
+The other thing 005 could not exercise — one old section whose substance wants
+to split across two new ones — is settled under "Decisions this plan
+implements": `from:` stays many-old→one-new, and the *new* structure is shaped
+to fit during `fold.yaml` authoring.
 
 **Preamble must be placed like any other anchor.** Prose between a document's
 H1 and its first `##` heading belongs to no `{#sec-N}`. `--check` now counts it
