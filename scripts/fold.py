@@ -274,11 +274,16 @@ def run_check(fold: Fold, partial: bool) -> list:
     prose appends more groups to this same shape rather than reworking it.
     A ref is `<filename>#<anchor>`, fold.yaml's own `from:`/`ref:` spelling.
 
-    `partial` narrows only the unplaced check, to anchors belonging to a
-    document some fold.yaml entry already lists in `sources:` -- placed-twice
-    and dangling always run over everything fold.yaml declares, because a
-    duplicate or a phantom ref is a fold.yaml defect regardless of how much
-    of the corpus is folded yet."""
+    `partial` narrows only the unplaced check, to anchors belonging to a file
+    some fold.yaml entry already accounts for -- named in a `sources:` list,
+    *or* the source of a placed or dropped ref, since a `from:`/`dropped:`
+    ref against a file is itself a declaration that the file is in play,
+    whether or not its name also happens to be in `sources:`. Without the
+    union, a document whose `sources:` undershoots what it actually places
+    exempts the rest of that file's anchors instead of catching them as
+    unplaced. Placed-twice and dangling always run over everything fold.yaml
+    declares, because a duplicate or a phantom ref is a fold.yaml defect
+    regardless of how much of the corpus is folded yet."""
     specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
     live = load_live_corpus(specs_dir)
     live_refs = {f"{Path(path).name}#{anchor}" for path, anchor in live}
@@ -297,6 +302,7 @@ def run_check(fold: Fold, partial: bool) -> list:
 
     if partial:
         sources = {s for doc in fold.documents for s in doc.sources}
+        sources |= {ref.split("#", 1)[0] for ref in placements}
         scope = {ref for ref in live_refs if ref.split("#", 1)[0] in sources}
     else:
         scope = live_refs
