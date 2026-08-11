@@ -390,6 +390,12 @@ this migration is replacing.
 `fold.yaml` alone, so it is regenerated once per part, after that part's
 planning-tier `fold.yaml` authoring and before its first rewrite.
 
+**Those steps are the only gate.** The `secfmt.py` pre-commit hook matches
+`^docs/specs/.*\.md$` and the `secmeta.py` hook `^docs/(specs|plans)/.*\.md$`,
+so neither fires on a commit that touches only `docs/specs2/` — and docs-only
+PRs skip CI. Until cutover renames the directory, nothing automatic checks the
+folded corpus. Run the steps.
+
 Model per `MODEL_SELECTION.md`: implementation `sonnet` (fully specified,
 mechanical diff, objective gate); per-document review `sonnet` for the near-1:1
 folds in part 2, `opus` for the multi-source folds in parts 3–4 and for the
