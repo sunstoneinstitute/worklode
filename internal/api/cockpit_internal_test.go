@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -148,6 +149,111 @@ func TestMapWorkItemMissingDisplayNameFallsBackToID(t *testing.T) {
 	}
 	if item.Owner == nil || item.Owner.Name != "svc-1" {
 		t.Errorf("owner = %#v, want name svc-1 (fallback to id)", item.Owner)
+	}
+}
+
+// notFoundActors is a resolveActor func that reports every non-empty id as
+// store.ErrNotFound — the real GetActor's signal for "no such actor", which
+// pinnedBySummary must treat as a fallback, not a hard failure.
+func notFoundActors() func(string) (*store.Actor, error) {
+	return func(id string) (*store.Actor, error) {
+		if id == "" {
+			return nil, nil
+		}
+		return nil, store.ErrNotFound
+	}
+}
+
+// TestBuildPinnedFocusUnsetIsNil asserts a project with no focus note yields a
+// nil pinned-focus card, never a dummy record — the "nil when unset" contract.
+func TestBuildPinnedFocusUnsetIsNil(t *testing.T) {
+	got, err := buildPinnedFocus(&store.Project{}, stubActors(nil))
+	if err != nil {
+		t.Fatalf("buildPinnedFocus: %v", err)
+	}
+	if got != nil {
+		t.Errorf("pinned focus = %#v, want nil for an unset note", got)
+	}
+}
+
+// TestBuildPinnedFocusResolvedActor asserts a pinned-by that resolves to an
+// actor carries the actor's id and display name (not the bare id).
+func TestBuildPinnedFocusResolvedActor(t *testing.T) {
+	at := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
+	resolve := stubActors(map[string]*store.Actor{
+		"stig": {ID: "stig", Kind: "human", DisplayName: "Stig Bakken"},
+	})
+	got, err := buildPinnedFocus(&store.Project{
+		FocusNote: "Ship the cockpit", FocusPinnedBy: "stig", FocusPinnedAt: at,
+	}, resolve)
+	if err != nil {
+		t.Fatalf("buildPinnedFocus: %v", err)
+	}
+	if got == nil || got.Note != "Ship the cockpit" || !got.PinnedAt.Equal(at) {
+		t.Fatalf("pinned focus = %#v, want note/at populated", got)
+	}
+	if got.PinnedBy == nil || got.PinnedBy.ID != "stig" || got.PinnedBy.Name != "Stig Bakken" {
+		t.Errorf("pinned_by = %#v, want stig/Stig Bakken", got.PinnedBy)
+	}
+}
+
+// TestBuildPinnedFocusUnresolvedFallback asserts a pinned-by that resolves to
+// no actor falls back to the raw string as the display name and never fails
+// the projection — covering both the (nil, nil) and (nil, ErrNotFound) shapes
+// resolveActor can return for an unknown pinner.
+func TestBuildPinnedFocusUnresolvedFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		resolve func(string) (*store.Actor, error)
+	}{
+		{"nil actor no error", stubActors(nil)},
+		{"ErrNotFound", notFoundActors()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := buildPinnedFocus(&store.Project{
+				FocusNote: "Keep going", FocusPinnedBy: "A Seeded Name",
+			}, tc.resolve)
+			if err != nil {
+				t.Fatalf("buildPinnedFocus: %v", err)
+			}
+			if got == nil || got.PinnedBy == nil {
+				t.Fatalf("pinned focus = %#v, want a pinned_by fallback", got)
+			}
+			if got.PinnedBy.ID != "" || got.PinnedBy.Name != "A Seeded Name" {
+				t.Errorf("pinned_by = %#v, want empty id and the raw name", got.PinnedBy)
+			}
+		})
+	}
+}
+
+// TestBuildPinnedFocusNoPinner asserts a note with an empty pinned-by yields a
+// card with a nil PinnedBy — a note can stand without a named pinner.
+func TestBuildPinnedFocusNoPinner(t *testing.T) {
+	got, err := buildPinnedFocus(&store.Project{FocusNote: "Solo note"}, notFoundActors())
+	if err != nil {
+		t.Fatalf("buildPinnedFocus: %v", err)
+	}
+	if got == nil || got.Note != "Solo note" {
+		t.Fatalf("pinned focus = %#v, want the note", got)
+	}
+	if got.PinnedBy != nil {
+		t.Errorf("pinned_by = %#v, want nil for an empty pinner", got.PinnedBy)
+	}
+}
+
+// TestBuildNextDecision asserts the next-decision card is nil when unset and
+// carries title/accountable/readiness when a title is set.
+func TestBuildNextDecision(t *testing.T) {
+	if got := buildNextDecision(&store.Project{}); got != nil {
+		t.Errorf("next decision = %#v, want nil for an unset title", got)
+	}
+	got := buildNextDecision(&store.Project{
+		DecisionTitle: "Pick a datastore", DecisionAccountable: "stig",
+		DecisionReadiness: "blocked on benchmark",
+	})
+	if got == nil || got.Title != "Pick a datastore" ||
+		got.Accountable != "stig" || got.Readiness != "blocked on benchmark" {
+		t.Errorf("next decision = %#v, want the three fields populated", got)
 	}
 }
 
