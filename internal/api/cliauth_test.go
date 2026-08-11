@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -92,7 +94,7 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 }
 
 func TestCLILoginValidatesLoopback(t *testing.T) {
-	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	bad := []string{
 		"", "https://evil.com/", "http://evil.com/", "http://localhost/", "ftp://localhost:1/",
@@ -125,8 +127,29 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 	if !hasIntent {
 		t.Fatal("intent cookie not set")
 	}
-	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/github/login") {
-		t.Fatalf("redirect = %q; want /auth/github/login", loc)
+	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
+		t.Fatalf("redirect = %q; want /auth/login", loc)
+	}
+}
+
+// TestCLILoginRequiresOIDC asserts the server-mediated CLI login 404s when
+// OIDC is unconfigured, even if the dormant GitHub App OAuth client (s.gh,
+// spec 023 §3.3) is set — it never gates login.
+func TestCLILoginRequiresOIDC(t *testing.T) {
+	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/cli/login?state=x&redirect_uri="+url.QueryEscape("http://localhost:5555/"), nil)
+	s.cliLogin(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("cliLogin status = %d; want 404", rr.Code)
+	}
+
+	rr2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/.well-known/lode-login", nil)
+	s.wellKnownLogin(rr2, req2)
+	if rr2.Code != http.StatusNotFound {
+		t.Fatalf("wellKnownLogin status = %d; want 404", rr2.Code)
 	}
 }
 
@@ -186,7 +209,14 @@ func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 }
 
 func TestWellKnownLoginReportsProviders(t *testing.T) {
-	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wl.example.com"}}
+	iss := oidctest.NewIssuer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	v, err := oidc.New(ctx, iss.URL(), iss.ClientID)
+	if err != nil {
+		t.Fatalf("configure oidc: %v", err)
+	}
+	s := &server{oidc: v, cfg: Config{PublicURL: "https://wl.example.com"}}
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/lode-login", nil)
 	rr := httptest.NewRecorder()
 	s.wellKnownLogin(rr, req)
@@ -201,7 +231,7 @@ func TestWellKnownLoginReportsProviders(t *testing.T) {
 		t.Fatalf("urls wrong: %v", m)
 	}
 	provs, _ := m["providers"].([]any)
-	if len(provs) != 1 || provs[0] != "github" {
-		t.Fatalf("providers = %v; want [github]", m["providers"])
+	if len(provs) != 1 || provs[0] != "keycloak" {
+		t.Fatalf("providers = %v; want [keycloak]", m["providers"])
 	}
 }

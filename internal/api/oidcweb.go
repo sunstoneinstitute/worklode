@@ -1,9 +1,8 @@
-// oidcweb.go gates the read-only web UI behind Keycloak when OIDC is enabled:
+// oidcweb.go gates the read-only web UI behind Keycloak, worklode's sole
+// interactive login provider (spec 023 §3.1):
 //   - webAuth wraps each web page and, when unauthenticated, 302s to
-//     loginTarget (see githubweb.go), which picks /auth/login, the GitHub
-//     chooser, or /auth/github/login depending on which providers are
-//     configured. It is a passthrough only when neither provider is
-//     configured (the UI stays open, as in v1).
+//     loginTarget (/auth/login). It is a passthrough only when OIDC is
+//     unconfigured (the UI stays open, as in v1).
 //   - GET /auth/login starts an auth-code + PKCE flow: it sets a signed
 //     oauth-state cookie and redirects to Keycloak's authorize URL.
 //   - GET /auth/callback redeems the code, verifies the ID token, provisions
@@ -18,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"golang.org/x/oauth2"
@@ -51,12 +51,19 @@ func (s *server) callbackURL() string {
 	return strings.TrimRight(s.cfg.PublicURL, "/") + "/auth/callback"
 }
 
+// loginTarget returns where webAuth sends unauthenticated users. Keycloak is
+// worklode's only interactive login provider (spec 023 §3.1); the dormant
+// GitHub App OAuth client (s.gh, spec 023 §3.3) never affects this.
+func (s *server) loginTarget(next string) string {
+	return "/auth/login?next=" + url.QueryEscape(next)
+}
+
 // webAuth wraps a web page handler with session-cookie enforcement. It is a
-// passthrough only when both OIDC and GitHub are disabled. Unauthenticated
-// requests 302 to loginTarget with the current path preserved in ?next.
+// passthrough only when OIDC is disabled. Unauthenticated requests 302 to
+// loginTarget with the current path preserved in ?next.
 func (s *server) webAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.oidc == nil && s.gh == nil {
+		if s.oidc == nil {
 			next(w, r)
 			return
 		}

@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 )
 
 // gated GETs must redirect to /auth/login when OIDC is enabled and no session
@@ -173,6 +176,58 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 	}
 	if hasCookie(rr, "wl_session") {
 		t.Fatal("wl_session set despite expired state")
+	}
+}
+
+// TestGitHubLoginRoutesRemoved asserts the GitHub web-login routes are gone:
+// Keycloak (/auth/login) is worklode's only interactive login (spec 023
+// §3.1).
+func TestGitHubLoginRoutesRemoved(t *testing.T) {
+	_, h, _ := newOIDCServer(t)
+	for _, path := range []string{"/auth/choose", "/auth/github/login", "/auth/github/callback"} {
+		rr := doReq(t, h, "GET", path, "", nil)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want 404", path, rr.Code)
+		}
+	}
+}
+
+// TestLoginTarget asserts loginTarget always sends unauthenticated users to
+// Keycloak, regardless of whether the dormant GitHub App OAuth client (s.gh,
+// spec 023 §3.3) is configured.
+func TestLoginTarget(t *testing.T) {
+	// Without the GitHub App OAuth client configured (s.gh nil).
+	_, h, _ := newOIDCServer(t)
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login?next=") {
+		t.Fatalf("Location = %q, want /auth/login?next=...", loc)
+	}
+
+	// With the GitHub App OAuth client configured (s.gh set) — login target is
+	// unaffected; Keycloak remains the only destination.
+	st := newTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	h2, _, err := api.NewServer(st, api.Config{
+		OIDCIssuer:         iss.URL(),
+		OIDCClientID:       iss.ClientID,
+		PublicURL:          "http://localhost:8080",
+		SessionSecret:      "test-session-secret",
+		GitHubClientID:     "cid",
+		GitHubClientSecret: "secret",
+		TokenEncKey:        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	rr2 := doReq(t, h2, "GET", "/tasks/WL-1", "", nil)
+	if rr2.Code != http.StatusFound {
+		t.Fatalf("with gh: status = %d, want 302", rr2.Code)
+	}
+	if loc := rr2.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login?next=") {
+		t.Fatalf("with gh: Location = %q, want /auth/login?next=...", loc)
 	}
 }
 

@@ -88,8 +88,6 @@ func newServeCmd() *cobra.Command {
 				SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
 				GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
 				GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
-				GitHubOrg:           os.Getenv("LODE_GITHUB_ORG"),
-				GitHubAdminTeam:     os.Getenv("LODE_GITHUB_ADMIN_TEAM"),
 				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
 				GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
 				GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),

@@ -68,6 +68,27 @@ func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
 	}
 }
 
+// TestNewServerAcceptsGitHubWithoutOrg asserts NewServer succeeds with the
+// dormant GitHub App OAuth client configured (spec 023 §3.3) and no org
+// setting: the org-membership guard that used to gate the GitHub login flow
+// is gone along with that flow (spec 023 §3.1).
+func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
+	st := newTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	_, _, err := api.NewServer(st, api.Config{
+		OIDCIssuer:         iss.URL(),
+		OIDCClientID:       iss.ClientID,
+		PublicURL:          "http://localhost:8080",
+		SessionSecret:      "test-session-secret",
+		GitHubClientID:     "cid",
+		GitHubClientSecret: "secret",
+		TokenEncKey:        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+}
+
 func TestOIDCConfig(t *testing.T) {
 	_, h, iss := newOIDCServer(t)
 	rr := doReq(t, h, "GET", "/auth/oidc/config", "", nil)
