@@ -35,6 +35,11 @@ Install the `lode` CLI:
 go install ./cmd/lode    # or: go build -o ~/bin/lode ./cmd/lode
 ```
 
+Or via a package manager:
+
+- macOS (Homebrew): `brew install sunstoneinstitute/tap/worklode`
+- Windows (Scoop): `scoop bucket add sunstone https://github.com/sunstoneinstitute/scoop-bucket && scoop install sunstone/worklode`
+
 Point the CLI at it, either via `~/.config/worklode/config.toml`:
 
 ```toml
