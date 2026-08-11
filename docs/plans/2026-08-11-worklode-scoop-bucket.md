@@ -39,8 +39,11 @@ never produced — an actual `lode.exe`.
   jobs so the two channels ship together from one tag.
 
 **Tech Stack:** GitHub Actions (Ubuntu runner), Go cross-compilation
-(`GOOS=windows GOARCH=amd64`), Python 3 (template rendering, matching
-`.github/homebrew/`), `zip`/`sha256sum`, Scoop JSON manifest.
+(`GOOS=windows GOARCH=amd64`), `uv`-run Python for template rendering (a PEP
+723 self-contained script, so the interpreter is hermetic rather than the
+runner's system `python3`), `zip`/`sha256sum`, Scoop JSON manifest. The
+existing `.github/homebrew/render-formula.py` stays on `python3` — retrofitting
+it to `uv` is out of scope here.
 
 **Scope:** amd64 only. `lode` is pure Go, so a Windows-on-ARM (`arm64`) block is
 a later one-line addition if demand appears; it is deliberately omitted now.
@@ -130,9 +133,16 @@ README.md                                # Quickstart: package-manager install n
 - `license` matches the repo's `LICENSE` (MIT).
 
 **Create `.github/scoop/render-manifest.py`** — same shape and validation
-discipline as `.github/homebrew/render-formula.py`:
+discipline as `.github/homebrew/render-formula.py`, run via `uv run`. The PEP
+723 header makes it self-contained: `uv run` provisions a matching interpreter
+with no `pyproject.toml`, and the empty `dependencies` keeps it stdlib-only (the
+repo deliberately carries no Python dependency stack):
 
 ```python
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 import json
 import os
 import sys
@@ -171,13 +181,13 @@ with open(out_path, "w") as f:
 
 ```bash
 VERSION=0.0.0 URL=https://example/lode_0.0.0_windows_amd64.zip SHA256=deadbeef \
-  python3 .github/scoop/render-manifest.py .github/scoop/worklode.json.template /tmp/m.json
-python3 -c "import json,sys; json.load(open('/tmp/m.json')); print('ok')"
+  uv run .github/scoop/render-manifest.py .github/scoop/worklode.json.template /tmp/m.json
+uv run python -c "import json; json.load(open('/tmp/m.json')); print('ok')"
 ```
 
 - [ ] `.github/scoop/worklode.json.template` created
-- [ ] `.github/scoop/render-manifest.py` created
-- [ ] Local render produces valid JSON with no `__` left
+- [ ] `.github/scoop/render-manifest.py` created (PEP 723 header, stdlib-only)
+- [ ] `uv run` render produces valid JSON with no `__` left
 
 ---
 
@@ -306,6 +316,12 @@ inputs:
 runs:
   using: composite
   steps:
+    # uv is set up inside the action so callers (release.yml, promote-prod.yml)
+    # need no uv-specific wiring — the dependency lives with the step that uses
+    # it. ubuntu-latest has no uv preinstalled. Pin to the current release SHA,
+    # matching the sha-pinning convention every other action in this repo uses.
+    - name: Set up uv
+      uses: astral-sh/setup-uv@<pin-to-current-release-sha> # v6
     - name: Render manifest
       shell: bash
       env:
@@ -317,7 +333,7 @@ runs:
         VERSION="${TAG#v}"
         URL="https://github.com/${REPO}/releases/download/${TAG}/lode_${VERSION}_windows_amd64.zip"
         VERSION="$VERSION" URL="$URL" SHA256="$SHA256" \
-          python3 .github/scoop/render-manifest.py \
+          uv run .github/scoop/render-manifest.py \
             .github/scoop/worklode.json.template "$RUNNER_TEMP/worklode.json"
 
     - name: Update manifest in the bucket
