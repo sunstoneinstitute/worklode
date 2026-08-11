@@ -38,6 +38,15 @@ excluding surrounding word/path characters -- so `WL-SPEC-1` cannot match
 inside `WL-SPEC-14`, `004-....md` cannot match inside a longer filename, and
 `#sec-1` cannot match the `#sec-1` prefix of `#sec-1.3` (the pattern always
 captures "1.3" whole and looks *that* up, never "1" plus a dangling tail).
+The prose form's leading boundary additionally excludes "-" and "." (not
+just word characters), so an ADR number ("ADR-0006 §3"), a version string
+("v1.3 §3") or a date ("2026-08-11 §3") is never captured as a spec number;
+a zero-padded number longer than three digits is rejected outright rather
+than int()-collapsed, for the same reason applied where the boundary alone
+cannot catch it (e.g. "spec 0006 §3"). Every branch's trailing boundary
+tolerates one bare "." with nothing filename-like after it, so a reference
+ending a sentence ("....md.", "WL-SPEC-14.", "014 §5.") still matches --
+while "....md.bak" and "....md-old" still correctly do not.
 
 A recognised reference that resolves into docs/specs/ but has no match in
 `sections:` (fragment form) or `documents:` (whole-document form, including
@@ -45,9 +54,23 @@ the shorthand and prose forms once resolved to a source filename) points at
 material the fold either dropped or has not folded yet. This is a hard
 failure, not a warning: every one is listed with its file and line, and the
 whole run refuses to write -- not even the substitutions that did resolve --
-so a run can never leave the tree half-rewritten. `--dry-run` (the default)
-computes the same full plan and reports the same failure without writing;
-`-w` writes, and only when the plan is entirely clean.
+so a run can never leave the tree half-rewritten. `--allow-dropped` narrows
+this by one case: a reference whose target is a *recorded* `dropped:` entry
+(a human decision that it is fine to leave stale) passes through unchanged
+instead of failing; a never-mapped reference still fails regardless of the
+flag. `--dry-run` (the default) computes the same full plan and reports the
+same failure without writing; `-w` writes, and only when the plan is
+entirely clean.
+
+`-w` also refuses to write against anything but a clean git worktree at
+`--root`. Only the path form is naturally idempotent (its own output carries
+the `corpus_to` prefix, which the input pattern requires and the output
+never re-triggers); shorthand and prose substitutions are not self-inverse,
+because old and new spec numbering both start at 1 -- a rewritten id
+(WL-SPEC-4 -> WL-SPEC-6) can coincidentally be a valid *old* id too
+(WL-SPEC-6, mapping elsewhere to WL-SPEC-11), so a second `-w` before the
+first is committed would silently rewrite again. Commit (or stash) between
+runs; `--dry-run` is unaffected, since it never writes.
 
 .worktrees/ and .claude/worktrees/ are pruned unconditionally, at any depth,
 along with .git/; everything else in the repo is scanned, including
@@ -59,17 +82,35 @@ which is never scanned or written (its from_id/to_id fields are literal
 shorthand text that the shorthand branch would otherwise try to resolve).
 A file that is not valid UTF-8 is skipped as non-text, silently.
 
-Usage: refmap.py [--dry-run | -w] [--root .]
+`--corpus-to` overrides mapping.yaml's `corpus.to` for output paths only
+(input recognition still keys off `corpus.from`, unaffected). Part 5's
+cutover runs `refmap.py -w --corpus-to docs/specs` *before* `git mv`: at
+that point docs/specs2/ is still the corpus's real on-disk location (so
+`--root` must still resolve it there), but the references being written
+need to point at the name the corpus will have *after* the same commit's
+`git mv` -- not the transitional docs/specs2/ name, which `git mv` would
+otherwise leave dangling in every reference this tool just wrote. Do not
+reorder that sequence: running `git mv` first collides `corpus.from` with
+the newly-moved corpus, `MAPPING_PATH` (docs/specs2/mapping.yaml) would no
+longer resolve, and the bare-filename gate would start treating the new
+corpus's own siblings as old-corpus references.
 
-  --dry-run   report the rewrite plan without writing anything (default)
-  -w          write the plan; refuses to write anything if any reference is
-              unmapped
-  --root      repository root to scan and rewrite (default: .)
+Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR] [--allow-dropped]
+
+  --dry-run        report the rewrite plan without writing anything (default)
+  -w               write the plan; refuses to write anything if any
+                   reference is unmapped, or if --root is not a clean git
+                   worktree
+  --root           repository root to scan and rewrite (default: .)
+  --corpus-to      override mapping.yaml's corpus.to for output paths only
+  --allow-dropped  pass a recorded dropped: reference through unchanged
+                   instead of failing (never-mapped references still fail)
 """
 
 import argparse
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,8 +184,27 @@ def load_mapping(path: Path) -> Mapping:
 
 
 FILENAME = r"\d{3,}-[\w-]+\.md"
-FRAGMENT = r"#sec-[\w.]+"
+# Word segments joined by internal dots, never ending on one: matches
+# "3", "1.3", "2.1a" in full, but "3." (a sentence-ending period) leaves the
+# trailing "." unconsumed for the caller's own trailing boundary to see,
+# instead of swallowing it into the anchor (a bug fixed at cutover review --
+# see the task-5-report.md "C2" entry).
+FRAGMENT = r"#sec-[\w]+(?:\.[\w]+)*"
+# Boxes every branch's match on the right: refuses a continuation character
+# (word/hyphen), with or without a leading period first -- so "...md-old" and
+# "...md.bak" both still refuse (a "." followed by a filename/word character
+# is a real continuation), but "...md." at the end of a sentence, with
+# nothing filename-like after the period, is accepted (fixed at cutover
+# review -- "C2": the original `(?![\w.-])` excluded any trailing "." at
+# all, so a path or shorthand or prose reference ending a sentence was
+# silently never recognised as a reference in the first place).
+TRAILING = r"(?!\.?[\w-])"
 LEADING_NUMBER = re.compile(r"^(\d+)-")
+# A zero-padded prose spec number longer than this many digits is not a
+# plausible spec number in this corpus (today's max is 034) -- rejected
+# outright rather than int()-collapsed, so "spec 0006" is never quietly
+# read as spec 6 (fixed at cutover review -- "C1").
+MAX_PROSENUM_DIGITS = 3
 
 
 def spec_number_str(filename: str) -> str:
@@ -194,16 +254,21 @@ def build_pattern(corpus_from: str, key: str) -> re.Pattern:
         r"(?:(?P<pathprefix>" + re.escape(corpus_from) + r")/)?"
         r"(?P<filename>" + FILENAME + r")"
         r"(?P<pathfrag>" + FRAGMENT + r")?"
-        r"(?![\w.-])"
+        + TRAILING
     )
     shorthand = (
         r"(?<![\w-])" + re.escape(key) + r"-(?P<kind>SPEC|ADR)-(?P<num>\d+)"
         r"(?P<shortfrag>" + FRAGMENT + r")?"
-        r"(?![\w.-])"
+        + TRAILING
     )
+    # Leading boundary excludes "-" and "." as well as \w (not just \w, the
+    # original bug -- "C1"): a bare digit run is the least distinctive of
+    # the three forms, so an ADR number ("ADR-0006 §3"), a version string
+    # ("v1.3 §3") or a date ("2026-08-11 §3") must not be captured as if the
+    # trailing digits were a spec number.
     prose = (
-        r"(?<![\w])(?P<proseprefix>spec )?(?P<prosenum>\d+) §(?P<prosesec>\d+(?:\.\d+)*)"
-        r"(?![\w.])"
+        r"(?<![\w.-])(?P<proseprefix>spec )?(?P<prosenum>\d+) §(?P<prosesec>\d+(?:\.\d+)*)"
+        + TRAILING
     )
     return re.compile(f"{path}|{shorthand}|{prose}")
 
@@ -228,11 +293,23 @@ def build_index(mapping: Mapping) -> Index:
     )
 
 
-def make_replacer(index: Index, file_is_in_corpus: bool, subs: list, unmapped: list):
+def make_replacer(index: Index, file_is_in_corpus: bool, allow_dropped: bool,
+                   subs: list, unmapped: list):
     """One re.sub callback closing over one file's collected substitutions
     and unmapped refs -- dispatches on which of the pattern's three branches
     fired, by which of that branch's own required groups is non-None."""
     m = index.mapping
+
+    def fail_or_pass(ref, original):
+        """A lookup miss's common tail: pass through unchanged and silently
+        under --allow-dropped when `ref` is a *recorded* drop (a human
+        already decided leaving it stale is fine); otherwise -- including
+        every never-mapped ref, which --allow-dropped does not touch -- it
+        is a hard failure regardless of the flag."""
+        reason = m.dropped.get(ref)
+        if not (allow_dropped and reason is not None):
+            unmapped.append((ref, reason))
+        return original
 
     def resolve_path(match):
         filename = match.group("filename")
@@ -245,14 +322,12 @@ def make_replacer(index: Index, file_is_in_corpus: bool, subs: list, unmapped: l
             old_ref = f"{filename}{frag}"
             new_ref = m.sections.get(old_ref)
             if new_ref is None:
-                unmapped.append((old_ref, m.dropped.get(old_ref)))
-                return original
+                return fail_or_pass(old_ref, original)
             new_tail = new_ref  # already "<newfile>#<newanchor>"
         else:
             new_filename = index.doc_by_from.get(filename)
             if new_filename is None:
-                unmapped.append((filename, None))
-                return original
+                return fail_or_pass(filename, original)
             new_tail = new_filename
         replacement = f"{m.corpus_to}/{new_tail}" if prefixed else new_tail
         subs.append((original, replacement))
@@ -268,21 +343,18 @@ def make_replacer(index: Index, file_is_in_corpus: bool, subs: list, unmapped: l
         if frag:
             filename = index.filename_by_from_id.get(from_id)
             if filename is None:
-                unmapped.append((f"{from_id}{frag}", None))
-                return original
+                return fail_or_pass(f"{from_id}{frag}", original)
             old_ref = f"{filename}{frag}"
             new_ref = m.sections.get(old_ref)
             if new_ref is None:
-                unmapped.append((old_ref, m.dropped.get(old_ref)))
-                return original
+                return fail_or_pass(old_ref, original)
             new_filename, new_anchor = new_ref.split("#", 1)
             to_id = index.to_id_by_filename.get(new_filename)
             replacement = f"{to_id}#{new_anchor}"
         else:
             to_id = index.id_by_from_id.get(from_id)
             if to_id is None:
-                unmapped.append((from_id, None))
-                return original
+                return fail_or_pass(from_id, original)
             replacement = to_id
         subs.append((original, replacement))
         return replacement
@@ -291,17 +363,17 @@ def make_replacer(index: Index, file_is_in_corpus: bool, subs: list, unmapped: l
         original = match.group(0)
         prefix = match.group("proseprefix") or ""
         num = match.group("prosenum")
+        if len(num) > MAX_PROSENUM_DIGITS:
+            return original  # not a plausible zero-padded spec number: not a reference
         sec = match.group("prosesec")
         from_id = f"{index.project_key}-SPEC-{int(num)}"
         filename = index.filename_by_from_id.get(from_id)
-        old_ref = f"{filename}#sec-{sec}" if filename else f"{from_id}#sec-{sec}"
         if filename is None:
-            unmapped.append((old_ref, None))
-            return original
+            return fail_or_pass(f"{from_id}#sec-{sec}", original)
+        old_ref = f"{filename}#sec-{sec}"
         new_ref = m.sections.get(old_ref)
         if new_ref is None:
-            unmapped.append((old_ref, m.dropped.get(old_ref)))
-            return original
+            return fail_or_pass(old_ref, original)
         new_filename, new_anchor = new_ref.split("#", 1)
         new_number = spec_number_str(new_filename)
         new_sec = new_anchor[len("sec-"):]
@@ -354,7 +426,7 @@ def iter_files(root: Path):
             yield path
 
 
-def process_file(path: Path, root: Path, index: Index):
+def process_file(path: Path, root: Path, index: Index, allow_dropped: bool):
     """One file's rewrite plan, or None when the file is not text. Applies
     the pattern line by line -- references never span a line in practice,
     and line numbers are what the unmapped/substitution report needs --
@@ -371,7 +443,7 @@ def process_file(path: Path, root: Path, index: Index):
     subs, unmapped, new_lines, changed = [], [], [], False
     for lineno, line in enumerate(text.splitlines(keepends=True), start=1):
         line_subs, line_unmapped = [], []
-        replacer = make_replacer(index, in_corpus, line_subs, line_unmapped)
+        replacer = make_replacer(index, in_corpus, allow_dropped, line_subs, line_unmapped)
         new_line = index.pattern.sub(replacer, line)
         if line_subs:
             changed = True
@@ -381,6 +453,33 @@ def process_file(path: Path, root: Path, index: Index):
 
     return FileResult(rel=rel, changed=changed, new_text="".join(new_lines),
                        subs=subs, unmapped=unmapped)
+
+
+def worktree_state(root: Path) -> str:
+    """'clean', 'dirty', or 'not-a-repo' for `root` -- the gate -w checks
+    before writing (see the module docstring's idempotency paragraph).
+    Shorthand and prose substitutions are not self-inverse: old and new
+    numbering both start at 1, so a rewritten id can coincidentally be a
+    valid *old* id too (WL-SPEC-4 -> WL-SPEC-6, and WL-SPEC-6 is itself a
+    real from_id), and a second -w over the same uncommitted tree would
+    silently rewrite again. Only the path form is naturally idempotent (its
+    own output carries the corpus_to prefix, which never re-matches the
+    corpus_from-prefixed input pattern). Fails closed: anything other than a
+    provably clean git worktree refuses to write."""
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return "not-a-repo"
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return "not-a-repo"
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        capture_output=True, text=True, check=False,
+    )
+    return "clean" if status.returncode == 0 and not status.stdout.strip() else "dirty"
 
 
 def report(results: list, out) -> None:
@@ -403,6 +502,13 @@ def main(argv=None):
                      help="report the rewrite plan without writing (default)")
     ap.add_argument("-w", "--write", action="store_true", help="write the plan")
     ap.add_argument("--root", default=".", help="repository root to scan (default: .)")
+    ap.add_argument("--corpus-to", metavar="DIR",
+                     help="override mapping.yaml's corpus.to for output paths only "
+                          "(Part 5's cutover runs -w --corpus-to docs/specs before git mv)")
+    ap.add_argument("--allow-dropped", action="store_true",
+                     help="pass a reference through unchanged, instead of failing, when its "
+                          "target is in mapping.yaml's dropped: list (a recorded human "
+                          "decision) -- a never-mapped reference still fails regardless")
     a = ap.parse_args(argv)
     if a.dry_run and a.write:
         ap.error("--dry-run and -w are mutually exclusive")
@@ -420,9 +526,13 @@ def main(argv=None):
         print(f"refmap: {e}", file=sys.stderr)
         return 2
 
+    if a.corpus_to:
+        mapping.corpus_to = a.corpus_to
+
     index = build_index(mapping)
     files = sorted(iter_files(root), key=lambda p: p.relative_to(root).as_posix())
-    results = [r for r in (process_file(p, root, index) for p in files) if r is not None]
+    results = [r for r in (process_file(p, root, index, a.allow_dropped) for p in files)
+               if r is not None]
 
     total_subs = sum(len(r.subs) for r in results)
     total_unmapped = sum(len(r.unmapped) for r in results)
@@ -436,6 +546,15 @@ def main(argv=None):
         return 1
 
     if a.write:
+        state = worktree_state(root)
+        if state != "clean":
+            why = ("is not a git working tree" if state == "not-a-repo"
+                    else "has uncommitted changes")
+            print(f"\nrefmap: --root {why} -- refusing to write. Shorthand and prose "
+                  "substitutions are not self-inverse (old and new numbering both start "
+                  "at 1), so a second -w before the first is committed would silently "
+                  "rewrite again. Commit or stash first, or use --dry-run to preview.")
+            return 1
         for r in changed:
             (root / r.rel).write_text(r.new_text, encoding="utf-8")
         print(f"\nrefmap: wrote {total_subs} substitution(s) across {len(changed)} file(s)")
