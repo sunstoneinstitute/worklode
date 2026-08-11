@@ -5,6 +5,10 @@ The controlling variable is plan precision: the sharper the plan, the cheaper
 the executor can be. Claude Code and Codex use the same role classes; model
 names and reasoning-effort controls differ between the two harnesses.
 
+The worker-facing subset of this mapping (implementation vs review/ambiguous)
+is restated in the `working-under-worklode` skill so it travels with the lode
+plugin into any repo — keep the two in sync when tiers change.
+
 | Role | Claude Code | Codex | Rationale |
 |---|---|---|---|
 | Planning: spec reading, scope decisions, writing implementation plans | Fable 5 | GPT-5.6-Sol, `ultra` | Highest reasoning tier; its job is to make plans precise enough that cheaper models can execute them. |

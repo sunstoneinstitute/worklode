@@ -33,3 +33,22 @@ The brief is the context contract. If it is not enough to do the work, that
 is a signal the task needs decomposition — set it with
 `lode task edit <id> --needs-decomposition=true` and /lode:block or report,
 rather than spelunking the repo to reverse-engineer intent.
+
+## When you delegate
+
+You do the leased task's work yourself — no dispatch needed. This section
+applies only when the task is big enough that you fan out subagents
+(decomposition, subagent-driven implementation, review): then you're a
+coordinator and pick each subagent's tier. Use your harness's column.
+
+| What you're dispatching | Claude Code | Codex |
+|---|---|---|
+| Fully-specified implementation (exact files/code/tests, no open design) | `model: "sonnet"` | `gpt-5.6-terra`, `medium` |
+| Review, or any task with unknowns (debugging, design gaps, plan-vs-reality) | `model: "opus"` | `gpt-5.6-sol`, `high` |
+
+- **Claude Code:** always set `model` explicitly — omitting it falls back to
+  the top-level session model, silently running mechanical work on the most
+  expensive tier.
+- **Codex:** set both `model` and `reasoning_effort`.
+- If an implementer hits ambiguity, escalate that task to the higher tier
+  rather than letting it improvise.
