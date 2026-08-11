@@ -1,0 +1,57 @@
+# Placement file for the docs/specs -> docs/specs2 fold
+# (docs/plans/2026-08-11-spec-corpus-consolidation-1-fold-tooling.md).
+#
+# This is the only place a folding decision is recorded. scripts/fold.py
+# derives the skeleton documents, mapping.yaml and every check from it --
+# never from the written prose in docs/specs2/*.md -- so the consolidating
+# rewrite can be as heavy as it needs to be without the mapping drifting.
+#
+# Every document keeps the number of its dominant source, so no WL-SPEC-<n>
+# ever changes meaning. Every live anchor in currentspec.py's --with-drafts
+# view appears exactly once across all `from:` and `dropped:` refs.
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  # Part 1's validation fold: one source, one whole-document amendment (018)
+  # to absorb, eleven live anchors, no drops. 3.1 folds into its parent --
+  # a section with exactly one subsection is the fragmentation this migration
+  # exists to remove -- leaving ten sections. Headings shed the `(D8)`/`(D9)`
+  # design-record tags: 003-platform-graph-design.md is superseded and retired
+  # by this fold, so the tags point at nothing a reader can open.
+  - to: 005-prioritization-and-pickup.md
+    title: Prioritization & pickup
+    sources: [005-prioritization-and-pickup.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["005-prioritization-and-pickup.md#sec-0"]}
+      - {new: "1", heading: "`concern` and `priority`",
+         from: ["005-prioritization-and-pickup.md#sec-1"]}
+      - {new: "2", heading: "`project.focus`",
+         from: ["005-prioritization-and-pickup.md#sec-2"]}
+      - {new: "3", heading: "Ranking",
+         from: ["005-prioritization-and-pickup.md#sec-3",
+                "005-prioritization-and-pickup.md#sec-3.1"]}
+      - {new: "4", heading: "`claim --next`",
+         from: ["005-prioritization-and-pickup.md#sec-4"]}
+      - {new: "5", heading: "`--strict-focus`",
+         from: ["005-prioritization-and-pickup.md#sec-5"]}
+      - {new: "6", heading: "Task sizing and decomposition",
+         from: ["005-prioritization-and-pickup.md#sec-6"]}
+      # The scaffolding trio is kept, one per folded document, not dropped:
+      # Dependencies says what each dependency is *for*, which frontmatter
+      # `requires:` cannot; Open questions and Acceptance criteria are the
+      # document's own live state.
+      - {new: "7", heading: "Dependencies",
+         from: ["005-prioritization-and-pickup.md#sec-7"]}
+      - {new: "8", heading: "Open questions",
+         from: ["005-prioritization-and-pickup.md#sec-8"]}
+      - {new: "9", heading: "Acceptance criteria",
+         from: ["005-prioritization-and-pickup.md#sec-9"]}
+    allow_dropped_ids:
+      ". The deterministic ": >-
+        Source-side span artifact, not an identifier. 005 sec-4 wraps an
+        inline single-backtick span across a line break; SPAN_RE's
+        single-backtick branch forbids a newline, so the two nearest
+        surviving backticks re-pair and capture the prose between them. It is
+        a property of docs/specs/005, computable before any rewrite, and no
+        rewrite of docs/specs2/005 can make it appear.
