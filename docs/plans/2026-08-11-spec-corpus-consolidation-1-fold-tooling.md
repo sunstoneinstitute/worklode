@@ -363,24 +363,77 @@ parts 2–5 commit to it.
 ## The per-document task template
 
 Every task in parts 2–4 is this, with the document substituted. It is the same
-task 18 times, which is the point.
+task 18 times, which is the point. **Frozen against what folding 005 actually
+took** (task 7) — every path below is explicit because the checkers default to
+`docs/specs`/`docs/plans` and otherwise report clean while checking the corpus
+this migration is replacing.
 
 > **Task N — Fold `<NNN-slug>.md`**
 > `kind: chore`, `priority: medium`, `blockedBy: [ ]`
 >
 > **Files:** Create `docs/specs2/<NNN-slug>.md`.
 >
-> - [ ] `scripts/fold.py --scaffold --only <NNN-slug>.md`
-> - [ ] Rewrite the scaffold following **Rewrite rules** 1–8 above. Do not edit
+> - [ ] `./scripts/fold.py --scaffold --only <NNN-slug>.md`
+> - [ ] Rewrite the scaffold following **Rewrite rules** 1–10 above. Do not edit
 >       `fold.yaml`; if a rule cannot be followed without a judgment call, stop
 >       and report it as a `fold.yaml` defect.
-> - [ ] `scripts/fold.py --check --partial --ids` — clean.
-> - [ ] `./scripts/secfmt.py -l` and `./scripts/secmeta.py` — clean.
+> - [ ] `./scripts/fold.py --check --partial --ids` — clean. **`--partial` is
+>       required** until the last document is folded; without it the check
+>       reports every anchor of the unfolded corpus as unplaced.
+> - [ ] `./scripts/secfmt.py -l docs/specs2` and `./scripts/secmeta.py
+>       docs/specs2` — clean.
+> - [ ] `./scripts/secindex.py docs/specs2` and commit the regenerated
+>       `index.yaml`, so the folded corpus ships with the map every consumer
+>       reads and `--check` stays meaningful.
+
+`fold.py --mapping` is not part of this task — `mapping.yaml` derives from
+`fold.yaml` alone, so it is regenerated once per part, after that part's
+planning-tier `fold.yaml` authoring and before its first rewrite.
 
 Model per `MODEL_SELECTION.md`: implementation `sonnet` (fully specified,
 mechanical diff, objective gate); per-document review `sonnet` for the near-1:1
 folds in part 2, `opus` for the multi-source folds in parts 3–4 and for the
 whole-branch review before cutover.
+
+## What folding 005 established
+
+The validation fold (task 7) came out clean on every check with zero findings.
+Three things it settled, and two the schema cannot yet express.
+
+**Settled.** The scaffolding trio is kept per document, not dropped — the
+schema block above still shows `005#sec-7` under `dropped:` as a `dropped:`
+*syntax* illustration; the decision in "Decisions this plan implements" governs.
+A `Dependencies` section earns its place by saying what each neighbouring spec
+supplies, which frontmatter `requires:` cannot; it opens by naming the hard
+edge `requires:` already carries. And a section with exactly one subsection
+folds into its parent (005's §3 + §3.1), which is the fragmentation this
+migration exists to remove.
+
+**The two gaps, both in parts 3–4 territory.** First, `fold.yaml` records
+*placement* but not *authority*. Where one `new:` section merges sources
+written years apart, the later source often supersedes rather than supplements
+the earlier — and a whole-document supersession leaves no inline note in the
+sliced body, so rewrite rules 2 and 3 both miss it. Rule 2 read literally
+("keep every distinct claim") makes the rewriter state the retired rule
+*and* the current one. `sections:` needs a way to name which `from:` ref is
+authoritative, or at minimum a free-text `note:` the scaffold passes through to
+the rewriter. `SECTION_KEYS` is closed, so this is a `scripts/fold.py` change
+and therefore a planning-tier decision to take **before part 3 starts**, not
+inside a rewrite task.
+
+Second, `from:` is many-old → one-new only, and the "exactly once" constraint
+forbids the reverse. A source section whose substance legitimately belongs in
+two new sections has no expression: placing it under its dominant new section
+makes `mapping.yaml` point half its inbound references at the wrong place.
+Expect this in 006, 025 and 026. Splitting one such section costs a
+`sections:` schema change plus a carve-out in `run_check`'s placed-twice group.
+
+Two conventions to keep, neither enforced by code: **list the dominant source
+first in `sources:`** (it drives `requires:` union order and `mapping.yaml`'s
+row order), and give every `allow_dropped_ids` entry a reason that says whether
+the drop is a source-side artifact or a real, accepted loss — the key is the
+raw identifier, so one entry silently covers every source contributing that
+same string.
 
 ## Series
 
@@ -435,9 +488,9 @@ rewrite can make them go away. Seeding them in a planning-tier pass keeps the
 22 human escalations on noise.
 
 Measured cost of the guard on a real fold: a faithful rewrite of spec 005 — all
-markers deleted, all 10 headings reworded, every paragraph reflowed, two
-sections merged, all three fences reindented — produced **2** findings, one a
-wrapped span (rule 9 above) and one a source-side artifact. Neither was content
-loss. Part 1 is the exception: its single 005
-entry is written inside task 7, because the format it validates does not exist
-until then.
+markers deleted, all ten headings reworded, every paragraph reflowed, two
+sections merged, 018's amendment absorbed — cost exactly **one**
+`allow_dropped_ids` entry, for the one source-side artifact in the document,
+and came out at zero findings. The only rewrite-side risk the guard caught in
+rehearsal was a reflow wrapping `` `lode task brief` `` across a line, which
+rule 9 exists to prevent rather than exempt.

@@ -1,0 +1,22 @@
+version: 1
+corpus:
+  from: docs/specs
+  to: docs/specs2
+documents:
+- from: 005-prioritization-and-pickup.md
+  to: 005-prioritization-and-pickup.md
+  from_id: WL-SPEC-5
+  to_id: WL-SPEC-5
+sections:
+  005-prioritization-and-pickup.md#sec-0: 005-prioritization-and-pickup.md#sec-0
+  005-prioritization-and-pickup.md#sec-1: 005-prioritization-and-pickup.md#sec-1
+  005-prioritization-and-pickup.md#sec-2: 005-prioritization-and-pickup.md#sec-2
+  005-prioritization-and-pickup.md#sec-3: 005-prioritization-and-pickup.md#sec-3
+  005-prioritization-and-pickup.md#sec-3.1: 005-prioritization-and-pickup.md#sec-3
+  005-prioritization-and-pickup.md#sec-4: 005-prioritization-and-pickup.md#sec-4
+  005-prioritization-and-pickup.md#sec-5: 005-prioritization-and-pickup.md#sec-5
+  005-prioritization-and-pickup.md#sec-6: 005-prioritization-and-pickup.md#sec-6
+  005-prioritization-and-pickup.md#sec-7: 005-prioritization-and-pickup.md#sec-7
+  005-prioritization-and-pickup.md#sec-8: 005-prioritization-and-pickup.md#sec-8
+  005-prioritization-and-pickup.md#sec-9: 005-prioritization-and-pickup.md#sec-9
+dropped: []
