@@ -45,12 +45,19 @@ runner's system `python3`), `zip`/`sha256sum`, Scoop JSON manifest. The
 existing `.github/homebrew/render-formula.py` stays on `python3` — retrofitting
 it to `uv` is out of scope here.
 
-**Scope:** amd64 only. `lode` is pure Go, so a Windows-on-ARM (`arm64`) block is
-a later one-line addition if demand appears; it is deliberately omitted now.
+**Scope:** amd64 only. A Windows-on-ARM (`arm64`) block is a later one-line
+addition if demand appears; it is deliberately omitted now.
 
-**Not in scope / no metrics:** this is release/CI wiring with no server code, no
-new HTTP endpoint, background loop, or store operation — the `worklode_*`
-metrics rule does not apply.
+**Windows portability (Task 8, added during execution):** the binary is
+CGO-free but was not actually Windows-buildable — `internal/hookrun` used the
+Unix-only `syscall.Kill(pid, 0)` in `pidAlive` (the sole such call in the
+binary). Task 8 splits that one function per-OS so `GOOS=windows` compiles;
+without it the `_build-windows.yml` build step fails. This is the only
+core-code change in the plan.
+
+**Metrics:** `pidAlive` is not an HTTP endpoint, background loop, or store
+operation, and the rest is release/CI wiring — the `worklode_*` metrics rule
+does not apply.
 
 ---
 
@@ -518,6 +525,102 @@ Or via a package manager:
 ```
 
 - [ ] README Quickstart documents Homebrew + Scoop install
+
+---
+
+## Task 8 — Windows cross-compile fix (`pidAlive` platform split)
+
+Added during execution: `GOOS=windows GOARCH=amd64 go build ./...` fails today
+because `internal/hookrun/hookrun.go` calls the Unix-only `syscall.Kill(pid, 0)`
+in `pidAlive`. Split that one function into build-tagged files, faithfully
+porting the liveness probe to Windows. `golang.org/x/sys` is already in the
+module graph (indirect), so this adds no new module — only promotes it to a
+direct dependency.
+
+**Remove** `pidAlive` (its doc comment + body) from `hookrun.go`, and drop the
+now-unused `"syscall"` import there (it is imported only for this call).
+
+**Create `internal/hookrun/pidalive_unix.go`:**
+
+```go
+//go:build unix
+
+package hookrun
+
+import "syscall"
+
+// pidAlive reports whether pid names a live process (signal 0 probe). Any
+// error — ESRCH in particular — is treated as dead.
+func pidAlive(pid int) bool {
+	return syscall.Kill(pid, 0) == nil
+}
+```
+
+**Create `internal/hookrun/pidalive_windows.go`:**
+
+```go
+//go:build windows
+
+package hookrun
+
+import "golang.org/x/sys/windows"
+
+// pidAlive reports whether pid names a live process. It opens the process for a
+// limited-information query and reads its exit code: a still-running process
+// reports STILL_ACTIVE (259). Any error — the process not existing in
+// particular — is treated as dead, matching the Unix signal-0 probe.
+func pidAlive(pid int) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	var code uint32
+	if err := windows.GetExitCodeProcess(h, &code); err != nil {
+		return false
+	}
+	return code == 259 // STILL_ACTIVE
+}
+```
+
+**Create `internal/hookrun/pidalive_test.go`** (no build tag — runs on every
+OS, exercising whichever implementation is compiled in):
+
+```go
+package hookrun
+
+import (
+	"os"
+	"testing"
+)
+
+func TestPidAliveSelf(t *testing.T) {
+	if !pidAlive(os.Getpid()) {
+		t.Fatal("pidAlive(self) = false, want true")
+	}
+}
+
+func TestPidAliveDead(t *testing.T) {
+	// A pid far above any live process; the probe must read it as dead.
+	if pidAlive(1 << 30) {
+		t.Fatal("pidAlive(1<<30) = true, want false")
+	}
+}
+```
+
+**Then** run `go mod tidy` (moves `golang.org/x/sys` to a direct require).
+
+**Verify:**
+- `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...` — clean (this is the
+  gate; it fails before the fix).
+- `go build ./...` and `go test ./internal/hookrun/ -run TestPidAlive` on the
+  host (Linux/macOS) — pass, output pristine.
+- `go vet ./internal/hookrun/` — clean.
+
+- [ ] `pidAlive` removed from `hookrun.go`; unused `syscall` import dropped
+- [ ] `pidalive_unix.go`, `pidalive_windows.go`, `pidalive_test.go` created
+- [ ] `go mod tidy` run; `x/sys` now a direct require
+- [ ] Windows cross-compile of `./...` clean; host build + hookrun tests pass
 
 ---
 
