@@ -30,7 +30,7 @@ func assertShell(t *testing.T, body string) {
 	for _, want := range []string{
 		`<html lang="en">`,
 		`href="#main-content"`,
-		`<nav aria-label="Primary">`,
+		`<nav aria-label="Primary"`,
 		`<main id="main-content"`,
 		`href="/assets/app.css"`,
 	} {
@@ -41,6 +41,26 @@ func assertShell(t *testing.T, body string) {
 	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 		t.Errorf("main landmark count = %d, want 1", got)
 	}
+}
+
+// mainContent returns the page's <main id="main-content"> region — the page's
+// own content, excluding the shared shell chrome (top bar, brand, theme
+// toggle, avatar). Honest-placeholder checks scope their "no fabricated
+// affordance" assertions to this region: the shell legitimately carries a
+// theme-toggle <button>, but a placeholder's content must still render no
+// form or button that would imply an unbuilt workflow exists.
+func mainContent(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<main id="main-content"`)
+	if i < 0 {
+		t.Fatalf("body has no <main id=\"main-content\"> region:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</main>")
+	if j < 0 {
+		t.Fatalf("body has no closing </main>:\n%s", body)
+	}
+	return rest[:j]
 }
 
 // assertOneAriaCurrent checks exactly one nav item (primary or project-local)
@@ -115,9 +135,10 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 			}
 			body := rr.Body.String()
 			bodyContains(t, body, tt.want)
+			main := mainContent(t, body)
 			for _, forbidden := range []string{"<form", "<button"} {
-				if strings.Contains(body, forbidden) {
-					t.Fatalf("%s unexpectedly renders %q:\n%s", tt.path, forbidden, body)
+				if strings.Contains(main, forbidden) {
+					t.Fatalf("%s unexpectedly renders %q in its main content:\n%s", tt.path, forbidden, body)
 				}
 			}
 		})
@@ -139,6 +160,24 @@ func TestShellReferencesHTMX(t *testing.T) {
 	}
 }
 
+// TestShellReferencesThemeToggle asserts the shell wires the self-hosted
+// theme toggle: it renders the #theme button, references /assets/theme.js, and
+// that script is served unauthenticated like the other assets.
+func TestShellReferencesThemeToggle(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	if !strings.Contains(body, `id="theme"`) {
+		t.Error("shell does not render the theme-toggle button")
+	}
+	if !strings.Contains(body, `src="/assets/theme.js"`) {
+		t.Error("shell does not reference the self-hosted theme-toggle script")
+	}
+	rr := doReq(t, h, "GET", "/assets/theme.js", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Errorf("GET /assets/theme.js = %d, want 200 (no auth redirect)", rr.Code)
+	}
+}
+
 func TestAssetsServedWithoutAuth(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
@@ -154,10 +193,9 @@ func TestAssetsServedWithoutAuth(t *testing.T) {
 }
 
 // TestTailwindSourceNotServed asserts the Tailwind build source
-// (internal/api/styles/app.tailwind.css) is not reachable under /assets/ —
-// it moved out of the embedded, served tree so un-minified build source is
-// no longer exposed; only the generated internal/api/assets/app.css is
-// served.
+// (internal/ui/styles/app.tailwind.css) is not reachable under /assets/ —
+// it lives outside the embedded, served tree so un-minified build source is
+// never exposed; only the generated internal/ui/assets/app.css is served.
 func TestTailwindSourceNotServed(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
@@ -167,6 +205,10 @@ func TestTailwindSourceNotServed(t *testing.T) {
 	}
 }
 
+// TestAppCSSContent checks the served stylesheet — built from internal/ui's
+// design-system source (ported verbatim from the cockpit design prototype,
+// docs/mockups/cockpit/index.html) — carries the brand palette, both the
+// light and dark token blocks, and a sample of the shell/component rules.
 func TestAppCSSContent(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
@@ -180,8 +222,8 @@ func TestAppCSSContent(t *testing.T) {
 	css := rr.Body.String()
 	for _, want := range []string{
 		"#0E1937", "#F4F4F4", "#FAD604", "#266680", "#46C5DE",
-		"prefers-color-scheme: dark", ":focus-visible", "min-height: 44px",
-		"@media (max-width: 64rem)",
+		"prefers-color-scheme:dark", ":focus-visible", "--ink:", "--accent:",
+		".topbar", "@media (max-width:1080px)",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("stylesheet missing %q", want)
@@ -211,9 +253,10 @@ func TestProjectSections(t *testing.T) {
 			assertShell(t, body)
 			assertOneAriaCurrent(t, body)
 			bodyContains(t, body, "proj", want)
+			main := mainContent(t, body)
 			for _, forbidden := range []string{"<form", "<button"} {
-				if strings.Contains(body, forbidden) {
-					t.Fatalf("section %s unexpectedly renders %q:\n%s", section, forbidden, body)
+				if strings.Contains(main, forbidden) {
+					t.Fatalf("section %s unexpectedly renders %q in its main content:\n%s", section, forbidden, body)
 				}
 			}
 		})
@@ -239,7 +282,10 @@ func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200; body %s", path, rr.Code, rr.Body.String())
 		}
-		bodyContains(t, rr.Body.String(), "operations")
+		// The mode is a pure projection of declared facts: every ?variant
+		// still renders the Operations (mode B) canvas, never a mode the
+		// query asked for.
+		bodyContains(t, rr.Body.String(), `data-panel="B"`, "Operations")
 	}
 }
 
@@ -332,7 +378,7 @@ func TestWorkPageOrgBoard(t *testing.T) {
 		"CrashLoopBackOff on app", // recent-failures message
 		"Inbox: 1 new issue",      // inbox count
 		"Human-owned task",        // the human-owned in_progress task's title
-		"<td>dana</td>",           // its Assignee column cell — proves the column renders the value, not just the header
+		"Assignee dana",           // its assignee, rendered on the row — proves the value renders, distinct from the holder
 	)
 }
 
@@ -480,8 +526,8 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 // scheme (e.g. javascript:) never reaches the rendered href verbatim:
 // templ's own href sanitizer (github.com/a-h/templ's SafeURL, applied
 // automatically to every <a href=...> expression by the generated code —
-// see task.templ) neutralizes it into "about:invalid#TemplFailedSanitizationURL",
-// since webTimelineRow.URL is rendered as a plain string. This is templ's
+// see internal/ui/task.templ) neutralizes it into "about:invalid#TemplFailedSanitizationURL",
+// since ui.TimelineRow.URL is rendered as a plain string. This is templ's
 // equivalent safety net to html/template's contextual autoescaping (which
 // used to substitute the different placeholder "#ZgotmplZ" for the same
 // class of hostile URL) — same guarantee (never rendered verbatim), a
@@ -551,11 +597,20 @@ func TestProjectPage(t *testing.T) {
 	assertShell(t, body)
 	assertOneAriaCurrent(t, body)
 	bodyContains(t, body,
-		"proj", "acme/widgets", "Scoped task",
+		"proj", "Scoped task",
 		`<link rel="canonical" href="/projects/proj">`, // cockpit projection's canonical url
-		"operations",                     // the declared-evidence Operations mode
-		"No governed decision is ready.", // the decision rail's Part-1 fallback
+		`data-panel="B"`,      // the Operations (mode B) canvas
+		"Operations",          // the declared-evidence Operations mode banner
+		"Active work",         // the Operations work card renders the ready task
+		"Automation boundary", // the decision rail's honest automation-boundary card
 	)
+	// Mode B has no repositories panel (its Definition-of-done panel has no
+	// backing data and is omitted too), so a mapped repo must not leak into
+	// the rendered canvas — repositories remain covered by the JSON cockpit
+	// contract, not this page.
+	if strings.Contains(body, "acme/widgets") {
+		t.Errorf("project page unexpectedly rendered the mapped repo acme/widgets:\n%s", body)
+	}
 	// Project local nav, in the exact order docs/specs/032-project-cockpit.md
 	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
 	// Documents, Activity.
@@ -578,10 +633,11 @@ func TestProjectPage(t *testing.T) {
 	}
 }
 
-// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page
-// shows real owner/delegate names, distinguishing "Owned by Dana" (a human
-// assignee) from "Agent One is the delegate" (an agent's unreleased lease) —
-// never the bare actor id, never conflating the two roles.
+// TestProjectPageOwnerAndDelegateCopy asserts the rendered Overview page's
+// Active-work row shows real owner/delegate names, distinguishing the human
+// accountable owner (Dana) from the agent that holds the lease (Agent One)
+// via the "Agent One · on behalf of Dana" who-line — never the bare actor id,
+// never conflating the two roles.
 func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -612,5 +668,5 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	bodyContains(t, rr.Body.String(), "Owned by Dana", "Agent One is the delegate")
+	bodyContains(t, rr.Body.String(), "Agent One", "on behalf of Dana")
 }

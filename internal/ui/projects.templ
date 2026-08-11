@@ -1,0 +1,33 @@
+package ui
+
+// projects.templ renders the cross-project portfolio (GET /projects), linking
+// each project to its canonical cockpit URL. Restyled from the former
+// internal/api/projects.templ table into a design-system .card.
+
+templ Projects(v ProjectsView) {
+	@Page(v.Page) {
+		<div class="main">
+			<div class="canvas">
+				<h1>Projects</h1>
+				if len(v.Projects) == 0 {
+					<p class="muted">No projects yet.</p>
+				} else {
+					<section class="card">
+						<div class="bd">
+							<div class="wl">
+								for _, proj := range v.Projects {
+									<div class="wlrow">
+										<div class="tl">
+											<div class="t"><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></div>
+										</div>
+										<div class="rt"><span class="chip plain mono">{ proj.Key }</span></div>
+									</div>
+								}
+							</div>
+						</div>
+					</section>
+				}
+			</div>
+		</div>
+	}
+}

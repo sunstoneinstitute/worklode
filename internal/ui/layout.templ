@@ -1,0 +1,121 @@
+package ui
+
+// layout.templ is the application shell every page renders through: the
+// document head, skip link, the sticky top bar (brand + primary global nav +
+// theme toggle + avatar), and the <main id="main-content"> landmark each
+// page's content fills via { children... }. Styled with the prototype design
+// system (see internal/ui/styles/app.tailwind.css): .topbar, nav.global,
+// .top-right/.iconbtn/.avatar. The self-hosted HTMX script tag is dormant
+// substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
+// toggles data-theme on <html>, honoring the OS colour-scheme on first click.
+
+templ Page(p PageProps) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ p.Title }</title>
+			<link rel="stylesheet" href="/assets/app.css"/>
+		</head>
+		<body>
+			<a class="skip-link" href="#main-content">Skip to content</a>
+			<header class="topbar">
+				<div class="brand">
+					<span class="mark">
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3" stroke="#0E1937" stroke-width="2" stroke-linecap="round"></path><circle cx="12" cy="12" r="3" fill="#0E1937"></circle></svg>
+					</span>
+					worklode
+				</div>
+				<nav aria-label="Primary" class="global">
+					@globalNav(p.ActiveGlobal)
+				</nav>
+				<div class="top-right">
+					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
+					</button>
+					<div class="avatar" aria-hidden="true">SB</div>
+				</div>
+			</header>
+			<main id="main-content">
+				{ children... }
+			</main>
+			<script src="/assets/theme.js" defer></script>
+			<script src="/assets/htmx.min.js" defer></script>
+		</body>
+	</html>
+}
+
+// globalNav renders the seven global destinations in the exact order
+// docs/specs/032-project-cockpit.md §2 requires (Home, Intake, Projects, Work,
+// Reviews, Deliveries, Knowledge), marking the one matching active as both
+// aria-current="page" and .active. Project-scoped pages pass "" — matching
+// none of these — since their project-local nav carries the current-page
+// marker instead; every page sets aria-current="page" exactly once.
+templ globalNav(active string) {
+	@globalLink("/", "Home", "home", active)
+	@globalLink("/intake", "Intake", "intake", active)
+	@globalLink("/projects", "Projects", "projects", active)
+	@globalLink("/work", "Work", "work", active)
+	@globalLink("/reviews", "Reviews", "reviews", active)
+	@globalLink("/deliveries", "Deliveries", "deliveries", active)
+	@globalLink("/knowledge", "Knowledge", "knowledge", active)
+}
+
+// globalLink renders one primary-nav anchor, marking it current when key
+// matches active. The label is emitted tight against the tags (>{label}<) so
+// the seven destinations keep their exact >Name< text markers.
+templ globalLink(href, label, key, active string) {
+	<a
+		href={ href }
+		if key == active {
+			class="active"
+			aria-current="page"
+		}
+	>{ label }</a>
+}
+
+// sidebar renders the project-scoped left column shared by the cockpit and the
+// project placeholder pages: the project header (name + key) and the
+// project-local nav, with active marking the current local destination.
+templ sidebar(p CockpitProject, active string) {
+	<div class="sidebar">
+		<div class="proj-head">
+			<div class="proj-kicker"><span class="dot"></span> Project</div>
+			<h2 class="proj-name">{ p.Name }</h2>
+			<div class="proj-lead"><span class="mono">{ p.Key }</span></div>
+		</div>
+		<nav aria-label="Project" class="local">
+			@localNav(p.ID, active)
+		</nav>
+	</div>
+}
+
+// localNav renders the eight project-local destinations in the exact order
+// docs/specs/032-project-cockpit.md §2 requires (Overview, Crew, Work,
+// Deliverables, Reviews, Decisions, Documents, Activity), marking the item
+// matching active as aria-current="page". The Work item links to the
+// overview's #work anchor and is never marked current.
+templ localNav(projectID, active string) {
+	@localLink("/projects/"+projectID, "Overview", "overview", active)
+	@localLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
+	<a href={ "/projects/" + projectID + "#work" }>Work</a>
+	@localLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active)
+	@localLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active)
+	@localLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active)
+	@localLink("/projects/"+projectID+"/documents", "Documents", "documents", active)
+	@localLink("/projects/"+projectID+"/activity", "Activity", "activity", active)
+}
+
+// localLink renders one project-local nav anchor, marking it current when key
+// matches active. The label is emitted tight against the tags (>{label}<) so
+// the eight destinations keep their exact >Name< text markers.
+templ localLink(href, label, key, active string) {
+	<a
+		href={ href }
+		if key == active {
+			class="active"
+			aria-current="page"
+		}
+	>{ label }</a>
+}
