@@ -13,7 +13,7 @@ the **ranking function** that orders ready work, the atomic **`lode task claim -
 command surface, the **`--strict-focus`** modifier, and the **`needs-decomposition`**
 sizing gate that keeps oversized tasks out of the pickup loop.
 
-Pickup is where the coordination layer earns its keep (000). With one human and one agent
+Pickup is where the coordination layer earns its keep. With one human and one agent
 in one repo, choosing the next task is a private decision and any consistent ordering
 works. Worklode assumes a crowd — many people and many agents against one backbone — so
 selection is itself shared state, and both the ranking and the claim have to stay correct
