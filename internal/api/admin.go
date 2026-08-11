@@ -272,14 +272,35 @@ func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
+// patchProjectRequest is the settable-field set of PATCH /api/v1/projects/{id}.
+// Every field is a pointer so an absent field (nil) is distinguished from one
+// present-but-empty (a clear): sending focus_note:"" clears the pinned-focus
+// card, decision_title:"" clears the next-decision card. focus_pinned_by,
+// decision_accountable, and decision_readiness are the companion fields of
+// their trigger (focus_note / decision_title) and are ignored without it.
 type patchProjectRequest struct {
-	Focus *[]string `json:"focus"`
+	Focus               *[]string `json:"focus"`
+	FocusNote           *string   `json:"focus_note"`
+	FocusPinnedBy       *string   `json:"focus_pinned_by"`
+	DecisionTitle       *string   `json:"decision_title"`
+	DecisionAccountable *string   `json:"decision_accountable"`
+	DecisionReadiness   *string   `json:"decision_readiness"`
 }
 
-// patchProject handles PATCH /api/v1/projects/{id}: currently only updates
-// focus, the ordered list of concerns the project's ranking should
-// prioritize (see store.SetProjectFocus). Admin-gated like the other project
-// mutations, since focus affects claim-next ordering for everyone.
+// derefString returns *p, or "" when p is nil — for optional string body
+// fields that default to empty when the caller omits them.
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// patchProject handles PATCH /api/v1/projects/{id}: updates any subset of the
+// ranking focus (store.SetProjectFocus), the curated pinned-focus card
+// (store.PinProjectFocus), and the curated next-decision card
+// (store.SetProjectNextDecision) in one call. Admin-gated like the other
+// project mutations, since focus affects claim-next ordering for everyone.
 func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req patchProjectRequest
@@ -287,13 +308,31 @@ func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	if req.Focus == nil {
+	// FocusNote and DecisionTitle are the triggers for their cards; the guard
+	// counts them (and focus) so a body with no trigger field is a clean 422.
+	if req.Focus == nil && req.FocusNote == nil && req.DecisionTitle == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
-	if err := s.st.SetProjectFocus(r.Context(), id, *req.Focus); err != nil {
-		s.mapStoreErr(w, err)
-		return
+	if req.Focus != nil {
+		if err := s.st.SetProjectFocus(r.Context(), id, *req.Focus); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+	}
+	if req.FocusNote != nil {
+		if err := s.st.PinProjectFocus(r.Context(), id, *req.FocusNote,
+			derefString(req.FocusPinnedBy), s.st.Now()); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+	}
+	if req.DecisionTitle != nil {
+		if err := s.st.SetProjectNextDecision(r.Context(), id, *req.DecisionTitle,
+			derefString(req.DecisionAccountable), derefString(req.DecisionReadiness)); err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
 	}
 
 	p, err := s.st.GetProject(r.Context(), id)

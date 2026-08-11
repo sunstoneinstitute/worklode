@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 )
 
 func TestCreateAndGetProject(t *testing.T) {
@@ -148,6 +149,143 @@ func TestSetProjectFocusInvalidEntry(t *testing.T) {
 	}
 	if len(got.Focus) != 0 {
 		t.Fatalf("GetProject Focus after rejected SetProjectFocus: got %v, want unchanged (empty)", got.Focus)
+	}
+}
+
+func TestPinProjectFocusRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// A new project has no pinned focus.
+	got, err := s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.FocusNote != "" || got.FocusPinnedBy != "" || !got.FocusPinnedAt.IsZero() {
+		t.Fatalf("new project focus: got note=%q by=%q at=%v, want all unset",
+			got.FocusNote, got.FocusPinnedBy, got.FocusPinnedAt)
+	}
+
+	at := time.Date(2026, 8, 11, 15, 30, 0, 0, time.UTC)
+	if err := s.PinProjectFocus(ctx, "horndb", "Ship the cockpit", "stig", at); err != nil {
+		t.Fatalf("PinProjectFocus: %v", err)
+	}
+
+	got, err = s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.FocusNote != "Ship the cockpit" || got.FocusPinnedBy != "stig" || !got.FocusPinnedAt.Equal(at) {
+		t.Fatalf("after pin: got note=%q by=%q at=%v, want note=%q by=%q at=%v",
+			got.FocusNote, got.FocusPinnedBy, got.FocusPinnedAt, "Ship the cockpit", "stig", at)
+	}
+
+	// ListProjects reflects the same values.
+	list, err := s.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListProjects: got %d, want 1", len(list))
+	}
+	if list[0].FocusNote != "Ship the cockpit" || list[0].FocusPinnedBy != "stig" || !list[0].FocusPinnedAt.Equal(at) {
+		t.Fatalf("ListProjects focus: got note=%q by=%q at=%v",
+			list[0].FocusNote, list[0].FocusPinnedBy, list[0].FocusPinnedAt)
+	}
+
+	// An empty note clears all three columns, regardless of the other args.
+	if err := s.PinProjectFocus(ctx, "horndb", "", "ignored", at); err != nil {
+		t.Fatalf("PinProjectFocus clear: %v", err)
+	}
+	got, err = s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.FocusNote != "" || got.FocusPinnedBy != "" || !got.FocusPinnedAt.IsZero() {
+		t.Fatalf("after clear: got note=%q by=%q at=%v, want all unset",
+			got.FocusNote, got.FocusPinnedBy, got.FocusPinnedAt)
+	}
+}
+
+func TestPinProjectFocusMissingProject(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	err := s.PinProjectFocus(ctx, "nope", "note", "stig", time.Now())
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PinProjectFocus missing project: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetProjectNextDecisionRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "horndb", "HornDB", "HDB"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// A new project has no next decision.
+	got, err := s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.DecisionTitle != "" || got.DecisionAccountable != "" || got.DecisionReadiness != "" {
+		t.Fatalf("new project decision: got title=%q accountable=%q readiness=%q, want all unset",
+			got.DecisionTitle, got.DecisionAccountable, got.DecisionReadiness)
+	}
+
+	if err := s.SetProjectNextDecision(ctx, "horndb", "Pick a datastore", "stig", "blocked on benchmark"); err != nil {
+		t.Fatalf("SetProjectNextDecision: %v", err)
+	}
+
+	got, err = s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.DecisionTitle != "Pick a datastore" || got.DecisionAccountable != "stig" || got.DecisionReadiness != "blocked on benchmark" {
+		t.Fatalf("after set: got title=%q accountable=%q readiness=%q",
+			got.DecisionTitle, got.DecisionAccountable, got.DecisionReadiness)
+	}
+
+	// ListProjects reflects the same values.
+	list, err := s.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListProjects: got %d, want 1", len(list))
+	}
+	if list[0].DecisionTitle != "Pick a datastore" || list[0].DecisionAccountable != "stig" || list[0].DecisionReadiness != "blocked on benchmark" {
+		t.Fatalf("ListProjects decision: got title=%q accountable=%q readiness=%q",
+			list[0].DecisionTitle, list[0].DecisionAccountable, list[0].DecisionReadiness)
+	}
+
+	// An empty title clears all three columns, regardless of the other args.
+	if err := s.SetProjectNextDecision(ctx, "horndb", "", "ignored", "ignored"); err != nil {
+		t.Fatalf("SetProjectNextDecision clear: %v", err)
+	}
+	got, err = s.GetProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got.DecisionTitle != "" || got.DecisionAccountable != "" || got.DecisionReadiness != "" {
+		t.Fatalf("after clear: got title=%q accountable=%q readiness=%q, want all unset",
+			got.DecisionTitle, got.DecisionAccountable, got.DecisionReadiness)
+	}
+}
+
+func TestSetProjectNextDecisionMissingProject(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	err := s.SetProjectNextDecision(ctx, "nope", "title", "stig", "ready")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SetProjectNextDecision missing project: want ErrNotFound, got %v", err)
 	}
 }
 

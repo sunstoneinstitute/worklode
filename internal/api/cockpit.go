@@ -6,12 +6,14 @@
 // 032). Work items, owner/delegate, evidence, blockers, repositories, and
 // cost are all mapped directly from store.ListProjectWorkFacts (Task 3),
 // (*store.Store).GetActor, ListRepos, and ProjectCost — no board adapter, no
-// invented state. Pinned focus and the next governed decision stay nil until
-// Part 2 supplies the stores that back them.
+// invented state. Pinned focus and the next governed decision are the curated
+// v0 cards backed by the project row (migration 0013); each stays nil until a
+// lead sets it via PinProjectFocus / SetProjectNextDecision.
 package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -317,6 +319,11 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 		focus = []string{}
 	}
 
+	pinnedFocus, err := buildPinnedFocus(p, resolveActor)
+	if err != nil {
+		return nil, err
+	}
+
 	return &cockpitProjection{
 		CanonicalURL: "/projects/" + p.ID,
 		Project:      cockpitProjectJSON{ID: p.ID, Name: p.Name, Key: p.Key},
@@ -324,14 +331,72 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 			Name:  selectMode(modeFactsForProject(*p)),
 			Basis: operationsModeBasis,
 		},
-		PinnedFocus:       nil,
+		PinnedFocus:       pinnedFocus,
 		RankingFocus:      focus,
-		NextDecision:      nil,
+		NextDecision:      buildNextDecision(p),
 		Work:              work,
 		SecondaryConcerns: secondary,
 		Repositories:      toCockpitRepositories(repos),
 		Cost:              toProjectCostJSON(cost),
 	}, nil
+}
+
+// buildPinnedFocus maps the project's curated "Pinned focus" card (migration
+// 0013): nil when no note is set, otherwise the note plus the resolved pinner.
+// Only a real actor-lookup error propagates — an unknown pinner falls back to
+// its raw string and never fails the whole cockpit (see pinnedBySummary).
+func buildPinnedFocus(p *store.Project, resolveActor func(string) (*store.Actor, error)) (*focusJSON, error) {
+	if p.FocusNote == "" {
+		return nil, nil
+	}
+	by, err := pinnedBySummary(p.FocusPinnedBy, resolveActor)
+	if err != nil {
+		return nil, err
+	}
+	return &focusJSON{
+		Note:     p.FocusNote,
+		PinnedBy: by,
+		PinnedAt: p.FocusPinnedAt,
+	}, nil
+}
+
+// pinnedBySummary resolves a pinned-focus "pinned by" value, which may be an
+// actor id or a plain display name seeded before the pinner had an actor row.
+// A resolved actor yields its id and display name; a non-empty value that
+// resolves to no actor falls back to the raw value as the name (so a seeded
+// name still shows); an empty value yields nil. store.ErrNotFound is the "no
+// such actor" signal and takes the fallback path — only some other lookup
+// error propagates, so an unknown pinner never fails the whole cockpit.
+func pinnedBySummary(pinnedBy string, resolveActor func(string) (*store.Actor, error)) (*actorSummary, error) {
+	if pinnedBy == "" {
+		return nil, nil
+	}
+	a, err := resolveActor(pinnedBy)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return &actorSummary{Name: pinnedBy}, nil
+		}
+		return nil, err
+	}
+	if a == nil {
+		return &actorSummary{Name: pinnedBy}, nil
+	}
+	return &actorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
+}
+
+// buildNextDecision maps the project's curated "Next decision" card (migration
+// 0013): nil when no title is set, otherwise the title, who is accountable,
+// and the readiness note. Subject/Actions/Evidence stay at their zero values —
+// the curated v0 card carries none.
+func buildNextDecision(p *store.Project) *decisionJSON {
+	if p.DecisionTitle == "" {
+		return nil
+	}
+	return &decisionJSON{
+		Title:       p.DecisionTitle,
+		Accountable: p.DecisionAccountable,
+		Readiness:   p.DecisionReadiness,
+	}
 }
 
 // mapWorkItem builds one cockpit work item from a project work fact. blocked
