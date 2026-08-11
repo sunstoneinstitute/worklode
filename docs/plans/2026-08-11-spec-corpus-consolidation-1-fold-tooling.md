@@ -60,6 +60,16 @@ Settled during design; recorded here because no spec governs a corpus migration.
 - **`fold.py` and `refmap.py` are one-shot migration code** — they get tests,
   not permanent-tooling polish, and they are deleted in the cutover commit.
   `mapping.yaml` is the durable artifact.
+- **A folded document keeps only `status` and `requires`.** `replaces` and
+  `wasDerivedFrom` naming a source of this same fold are dropped: the fold *is*
+  the supersession, and `mapping.yaml` is its record. Supersession of a document
+  outside the fold is kept.
+- **One old section may not split across two new ones.** `from:` is
+  many-old→one-new by construction — `SECTION_KEYS` has no inverse, `--check`
+  reports a second placement as `placed twice`, and `mapping.yaml`'s `sections:`
+  is single-valued, so relaxing the check could not express it either. Where a
+  source section's substance wants to split, shape the *new* structure to match
+  it during `fold.yaml` authoring. Expect this in 006, 025 and 026.
 
 ## The fold.yaml schema
 
@@ -140,6 +150,12 @@ a better spec. Nothing here licenses a design change.
     does not declare — including a sub-heading carried over from a source spec,
     and an unnumbered `## Appendix`. New structure is a `fold.yaml` change,
     which is a planning-tier decision, not a rewrite.
+11. **Consolidate the scaffolding trio by claim, not by concatenation.** Six
+    merged sources' `Acceptance criteria` concatenated is a 40-item list nobody
+    reads. Merge criteria that state the same requirement and keep every
+    distinct one — this is rule 2 applied to the trio, and rules 2 and 6 do not
+    forbid it. Same for `Open questions`: drop the ones the fold itself answers,
+    and say so in `dropped:`.
 
 ## Global Constraints
 
