@@ -1,42 +1,38 @@
 // web.go implements the read-only web UI: the application shell (Page, in
 // layout.templ) shared by every page, the seven global destinations and the
 // project-local destinations spec 032 §2 defines, and /assets/ (self-hosted
-// stylesheet and fonts). When OIDC is configured every page route except
-// /assets/ is gated by s.webAuth (see oidcweb.go), which requires a valid
-// session cookie; /assets/ stays open unconditionally (see assetHandler)
-// and, when OIDC is unconfigured, every route stays open and the bind
-// address is the only access control. Pages render server-side HTML with
-// templ components (*_templ.go, generated from the .templ files in this
-// package — see the //go:generate directive below — which auto-escape all
-// interpolated values) and reuse the same assembly functions as the JSON
-// API (assembleBoard, assembleTimeline, assembleProjectCockpit) so that
-// logic lives in exactly one place.
+// stylesheet and fonts, embedded and served from internal/ui — see
+// assetHandler). When OIDC is configured every page route except /assets/ is
+// gated by s.webAuth (see oidcweb.go), which requires a valid session
+// cookie; /assets/ stays open unconditionally and, when OIDC is
+// unconfigured, every route stays open and the bind address is the only
+// access control. Pages render server-side HTML with templ components
+// (*_templ.go, generated from the .templ files in this package — see
+// internal/ui's //go:generate directive, which drives both packages' templ
+// and Tailwind builds — which auto-escape all interpolated values) and reuse
+// the same assembly functions as the JSON API (assembleBoard,
+// assembleTimeline, assembleProjectCockpit) so that logic lives in exactly
+// one place.
 package api
 
-//go:generate ../../scripts/gen-web.sh
-
 import (
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
-	"io/fs"
 	"net/http"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
-
-//go:embed assets
-var webFS embed.FS
 
 // FmtTime renders every timestamp the same way across the web UI: UTC,
 // "2006-01-02 15:04". Called directly from the .templ files (the plain-func
 // successor to the old html/template FuncMap entry of the same job).
 func FmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
-// assetHandler serves the embedded /assets/ tree (stylesheet and
+// assetHandler serves internal/ui's embedded /assets/ tree (stylesheet and
 // self-hosted fonts) outside webAuth: they carry no project data, so an
 // OIDC-gated deployment must not redirect them to login (a stylesheet
 // request has no session to attach a redirect to). Cache-Control is bounded
@@ -44,11 +40,7 @@ func FmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 // content-hashed. Every response is counted under the "asset" navigation
 // destination (see navWrap).
 func (s *server) assetHandler() http.Handler {
-	assets, err := fs.Sub(webFS, "assets")
-	if err != nil {
-		panic(err)
-	}
-	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))
+	fileServer := http.StripPrefix("/assets/", http.FileServer(http.FS(ui.Assets())))
 	return s.navWrap("asset", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		fileServer.ServeHTTP(w, r)

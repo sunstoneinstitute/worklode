@@ -21,12 +21,13 @@ go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ```
 
-Cockpit dev loop (`internal/api`'s templ + Tailwind build):
+Cockpit dev loop (`internal/api` and `internal/ui`'s templ + Tailwind build,
+driven by the single `//go:generate` directive in `internal/ui/ui.go`):
 
 ```bash
 go tool templ generate --watch        # regenerate *_templ.go on change
-./bin/tailwindcss -i internal/api/styles/app.tailwind.css \
-  -o internal/api/assets/app.css --watch
+./bin/tailwindcss -i internal/ui/styles/app.tailwind.css \
+  -o internal/ui/assets/app.css --watch
 ./scripts/fetch-tailwind.sh           # one-time: install the pinned CLI into bin/
 go generate ./...                     # regenerate both committed artifacts
 ```
@@ -62,8 +63,12 @@ cockpit; development mode remains open when no provider is configured, +
 domain logic like task state machine, ranking, atomic `claim` live here). The
 cockpit's web pages render with `templ` components (`internal/api/*.templ`,
 compiled to `*_templ.go` by `go generate`), styled by a standalone Tailwind
-CSS v4 build (`internal/api/styles/app.tailwind.css` →
-`internal/api/assets/app.css`) and a self-hosted, currently dormant HTMX.
+CSS v4 build (`internal/ui/styles/app.tailwind.css` →
+`internal/ui/assets/app.css`) and a self-hosted, currently dormant HTMX.
+`internal/ui` owns the design-system assets (stylesheet, fonts, htmx) served
+at `/assets/` via `internal/api`'s `assetHandler`; it depends on nothing
+beyond stdlib, `internal/store` (if needed), and the templ runtime —
+`internal/api` imports `internal/ui`, never the reverse.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks, Flux notification-controller webhooks — both HMAC-signed),

@@ -154,10 +154,9 @@ func TestAssetsServedWithoutAuth(t *testing.T) {
 }
 
 // TestTailwindSourceNotServed asserts the Tailwind build source
-// (internal/api/styles/app.tailwind.css) is not reachable under /assets/ —
-// it moved out of the embedded, served tree so un-minified build source is
-// no longer exposed; only the generated internal/api/assets/app.css is
-// served.
+// (internal/ui/styles/app.tailwind.css) is not reachable under /assets/ —
+// it lives outside the embedded, served tree so un-minified build source is
+// never exposed; only the generated internal/ui/assets/app.css is served.
 func TestTailwindSourceNotServed(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
@@ -167,6 +166,10 @@ func TestTailwindSourceNotServed(t *testing.T) {
 	}
 }
 
+// TestAppCSSContent checks the served stylesheet — built from internal/ui's
+// design-system source (ported verbatim from the cockpit design prototype,
+// docs/mockups/cockpit/index.html) — carries the brand palette, both the
+// light and dark token blocks, and a sample of the shell/component rules.
 func TestAppCSSContent(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
@@ -180,8 +183,8 @@ func TestAppCSSContent(t *testing.T) {
 	css := rr.Body.String()
 	for _, want := range []string{
 		"#0E1937", "#F4F4F4", "#FAD604", "#266680", "#46C5DE",
-		"prefers-color-scheme: dark", ":focus-visible", "min-height: 44px",
-		"@media (max-width: 64rem)",
+		"prefers-color-scheme:dark", ":focus-visible", "--ink:", "--accent:",
+		".topbar", "@media (max-width:1080px)",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("stylesheet missing %q", want)
