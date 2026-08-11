@@ -116,8 +116,8 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 	if rr.Code != http.StatusFound {
 		t.Fatalf("good redirect_uri: status %d; want 302", rr.Code)
 	}
-	// Intent cookie is set, and we are redirected into the web login (single
-	// provider -> /auth/github/login).
+	// Intent cookie is set, and we are redirected into the web login
+	// (Keycloak is the only provider -> /auth/login).
 	var hasIntent bool
 	for _, c := range rr.Result().Cookies() {
 		if c.Name == cliCookieName && c.Value != "" {
