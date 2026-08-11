@@ -23,6 +23,17 @@ to the documents fold.yaml currently declares (via `sources:`), so parts 2-4
 can run the check while the fold is still incomplete; the "no ref is
 duplicated or dangling" half always runs over the whole fold.
 
+`--check` also guards the other side of the fold once the rewrite pass
+starts: for every fold.yaml document already written to docs/specs2/<to>, its
+declared `new:` anchors must match the anchors secindex.sections_of() finds
+in the written file, reported as two separate directions -- `missing`
+(declared, dropped by the rewrite) and `undeclared` (written, never
+declared). A document fold.yaml declares but that has no file yet at
+docs/specs2/<to> is unstarted work, not drift, and is skipped silently; this
+is what lets the check run continuously as parts 2-4 write documents one at a
+time. Only anchor presence is compared -- a heading whose title text the
+rewrite improved is not drift.
+
 Usage: fold.py --mapping | --check [--partial] | --scaffold [--only FILE]
 
   --mapping   derive docs/specs2/mapping.yaml from docs/specs2/fold.yaml
@@ -280,10 +291,11 @@ def load_live_corpus(specs_dir: Path) -> dict:
 
 def run_check(fold: Fold, partial: bool) -> list:
     """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
-    against the live corpus -- always these three groups today ("unplaced",
-    "placed twice", "dangling"); Task 4's anchor-drift check against written
-    prose appends more groups to this same shape rather than reworking it.
-    A ref is `<filename>#<anchor>`, fold.yaml's own `from:`/`ref:` spelling.
+    against the live corpus and, separately, against the written docs/specs2/
+    prose -- five groups today: "unplaced", "placed twice", "dangling"
+    (fold.yaml vs. docs/specs/, see below), and "missing"/"undeclared"
+    (fold.yaml vs. docs/specs2/, see below). A ref is `<filename>#<anchor>`,
+    fold.yaml's own `from:`/`ref:`/`new:`-derived spelling.
 
     `partial` narrows only the unplaced check, to anchors belonging to a file
     some fold.yaml entry already accounts for -- named in a `sources:` list,
@@ -294,7 +306,12 @@ def run_check(fold: Fold, partial: bool) -> list:
     exempts the rest of that file's anchors instead of catching them as
     unplaced. Placed-twice and dangling always run over everything fold.yaml
     declares, because a duplicate or a phantom ref is a fold.yaml defect
-    regardless of how much of the corpus is folded yet."""
+    regardless of how much of the corpus is folded yet.
+
+    missing/undeclared are unaffected by `partial` for the same reason: each
+    is already scoped to exactly the documents fold.yaml declares, minus
+    whichever of those have no file yet at docs/specs2/<to> -- that document
+    is unstarted work, not drift, so it is skipped rather than reported."""
     specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
     live = load_live_corpus(specs_dir)
     live_refs = {f"{Path(path).name}#{anchor}" for path, anchor in live}
@@ -319,7 +336,24 @@ def run_check(fold: Fold, partial: bool) -> list:
         scope = live_refs
     unplaced = sorted(scope - declared)
 
-    return [("unplaced", unplaced), ("placed twice", placed_twice), ("dangling", dangling)]
+    out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
+    missing, undeclared = [], []
+    for doc in fold.documents:
+        written = out_dir / doc.to
+        if not written.is_file():
+            continue  # unstarted work, not drift
+        declared_anchors = {f"sec-{section['new']}" for section in doc.sections}
+        written_anchors = {key for key, _heading in secindex.sections_of(written)}
+        missing.extend(f"{doc.to}#{a}" for a in sorted(declared_anchors - written_anchors))
+        undeclared.extend(f"{doc.to}#{a}" for a in sorted(written_anchors - declared_anchors))
+
+    return [
+        ("unplaced", unplaced),
+        ("placed twice", placed_twice),
+        ("dangling", dangling),
+        ("missing", missing),
+        ("undeclared", undeclared),
+    ]
 
 
 def _number_parts(new: str) -> tuple:

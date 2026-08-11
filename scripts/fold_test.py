@@ -15,6 +15,14 @@ byte-matching index.yaml -- there is no secindex_test.py and secindex.py
 --check runs in neither pre-commit nor CI, so this suite is presently the
 only thing exercising render() at all.
 
+--check's anchor-drift half (fold.yaml vs. the written docs/specs2/ prose)
+reuses the same fixtures via write_check_repo's `written` parameter: an
+optional {filename: markdown} of docs/specs2/ files, on top of the fold.yaml
+and docs/specs/ mini-corpus every --check test already needs. Omitting a
+filename from `written` is what exercises "not written yet" -- deliberately
+the default, so every completeness-gate test above already doubles as a
+regression for "skip, don't report" unless it opts into `written`.
+
 --scaffold needs no index.yaml (it slices docs/specs/ sections directly,
 never through currentspec.py's live view), so its fixtures are a plain
 docs/specs/ mini-corpus plus docs/specs2/fold.yaml. Its last test also
@@ -463,12 +471,16 @@ documents:
 """
 
 
-def write_check_repo(tmp, fold, specs):
+def write_check_repo(tmp, fold, specs, written=None):
     """A throwaway repo for --check: scripts/fold.py plus the currentspec.py
     (+secfmt.py) it imports for the live view and secindex.py (+secfmt.py) it
     imports to prove docs/specs/index.yaml is current; docs/specs2/fold.yaml;
-    and a docs/specs/ mini-corpus (`specs` is {filename: markdown}) with a
-    real, byte-matching index.yaml built the same way secindex.py would."""
+    a docs/specs/ mini-corpus (`specs` is {filename: markdown}) with a real,
+    byte-matching index.yaml built the same way secindex.py would; and,
+    when given, `written` ({filename: markdown}) is the already-rewritten
+    docs/specs2/ prose the anchor-drift half of --check compares fold.yaml
+    against -- a filename fold.yaml declares but that is absent from
+    `written` is unstarted work, not drift, and stays unwritten here too."""
     repo = Path(tmp)
     scripts = repo / "scripts"
     scripts.mkdir(parents=True)
@@ -477,6 +489,8 @@ def write_check_repo(tmp, fold, specs):
     specs2 = repo / "docs" / "specs2"
     specs2.mkdir(parents=True)
     (specs2 / "fold.yaml").write_text(textwrap.dedent(fold))
+    for name, content in (written or {}).items():
+        (specs2 / name).write_text(textwrap.dedent(content))
     specs_dir = repo / "docs" / "specs"
     specs_dir.mkdir(parents=True)
     for name, content in specs.items():
@@ -485,9 +499,11 @@ def write_check_repo(tmp, fold, specs):
     return repo
 
 
-def run_fold_check(tmp, *args, fold=CHECK_FOLD_CLEAN, specs=None):
+def run_fold_check(tmp, *args, fold=CHECK_FOLD_CLEAN, specs=None, written=None):
     """Run the real fold.py --check in an isolated, minimal repository."""
-    repo = write_check_repo(tmp, fold, specs if specs is not None else {"900-alpha.md": ALPHA_SPEC})
+    repo = write_check_repo(
+        tmp, fold, specs if specs is not None else {"900-alpha.md": ALPHA_SPEC}, written
+    )
     result = subprocess.run(
         [sys.executable, "scripts/fold.py", "--check", *args],
         cwd=repo, capture_output=True, text=True, check=False,
@@ -599,6 +615,158 @@ class PartialCheckTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("placed twice", result.stderr)
             self.assertIn("900-alpha.md#sec-1", result.stderr)
+
+
+# Anchor-drift fixtures: CHECK_FOLD_CLEAN declares 950-alpha-folded.md with
+# three sections (new: 1, 2, 3 -> #sec-1, #sec-2, #sec-3). These are written
+# docs/specs2/950-alpha-folded.md bodies exercising each drift outcome; they
+# are deliberately unrelated to 900-alpha.md/ALPHA_SPEC's own section bodies,
+# since the drift check compares fold.yaml's declared anchors against the
+# written file's actual anchors, never against the old corpus.
+WRITTEN_950_CLEAN = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Rewritten one.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# sec-3 is declared in fold.yaml but the rewrite dropped it.
+WRITTEN_950_MISSING_SECTION = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Rewritten one.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+"""
+
+# sec-4 exists in the written file but fold.yaml never declared it.
+WRITTEN_950_UNDECLARED_SECTION = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Rewritten one.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+
+## 4. Four {#sec-4}
+
+An anchor fold.yaml never declared.
+"""
+
+# Same three anchors as WRITTEN_950_CLEAN, but every heading's title text was
+# improved by the rewrite pass -- anchor presence must still read as clean.
+WRITTEN_950_RETITLED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. First thing {#sec-1}
+
+Rewritten one.
+
+## 2. Second thing {#sec-2}
+
+Rewritten two.
+
+## 3. Third thing {#sec-3}
+
+Rewritten three.
+"""
+
+
+class AnchorDriftCheckTest(unittest.TestCase):
+    # Each case is a real contract of --check's anchor-drift half: it would
+    # fail if the corresponding direction stopped being compared, or its
+    # label or the offending ref stopped appearing in the report.
+    def test_check_reports_missing_anchor_dropped_by_the_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                written={"950-alpha-folded.md": WRITTEN_950_MISSING_SECTION},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing", result.stderr)
+            self.assertIn("950-alpha-folded.md#sec-3", result.stderr)
+
+    def test_check_reports_undeclared_anchor_added_by_the_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                written={"950-alpha-folded.md": WRITTEN_950_UNDECLARED_SECTION},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("undeclared", result.stderr)
+            self.assertIn("950-alpha-folded.md#sec-4", result.stderr)
+
+    def test_check_skips_a_document_fold_yaml_declares_but_nobody_wrote_yet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # No `written=` at all -- 950-alpha-folded.md does not exist in
+            # docs/specs2/. That is unstarted work, not drift, so the check
+            # must pass even though none of fold.yaml's three declared
+            # anchors are backed by any written file.
+            _, result = run_fold_check(tmp, fold=CHECK_FOLD_CLEAN)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("missing", result.stderr)
+            self.assertNotIn("undeclared", result.stderr)
+
+    def test_check_passes_when_written_anchors_match_declared_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                written={"950-alpha-folded.md": WRITTEN_950_CLEAN},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_retitled_heading_with_same_anchor_is_not_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                written={"950-alpha-folded.md": WRITTEN_950_RETITLED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_partial_still_reports_missing_anchor(self):
+        # The drift check is unaffected by --partial: it is already scoped to
+        # exactly the documents fold.yaml declares, so --partial must not
+        # suppress it.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--partial", fold=CHECK_FOLD_CLEAN,
+                written={"950-alpha-folded.md": WRITTEN_950_MISSING_SECTION},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing", result.stderr)
+            self.assertIn("950-alpha-folded.md#sec-3", result.stderr)
 
 
 # --scaffold fixtures. Three source documents exercise both directions of the
