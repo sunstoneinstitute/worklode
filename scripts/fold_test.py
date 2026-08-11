@@ -664,6 +664,89 @@ class CompletenessCheckTest(unittest.TestCase):
             self.assertIn("stale", result.stderr)
 
 
+# `sources:` omits 900-alpha.md entirely while placing all three of its
+# anchors. Every other group is clean, so this fixture isolates the one
+# defect: mapping.yaml would carry eleven section rows and zero `documents:`
+# rows, and nothing else in --check would notice.
+CHECK_FOLD_SOURCE_NOT_DECLARED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: []
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+"""
+
+# The same omission on the `dropped:` side: the retired document's anchors
+# are properly recorded, but no `documents:` row will map whole-document and
+# WL-SPEC-N references to it.
+CHECK_FOLD_DROPPED_SOURCE_NOT_DECLARED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped:
+      - {ref: "902-retired.md#sec-1", reason: "superseded: whole document replaced by 900"}
+      - {ref: "902-retired.md#sec-2", reason: "superseded: whole document replaced by 900"}
+"""
+
+
+class SourceDeclarationCheckTest(unittest.TestCase):
+    """A file a document places from, or drops from, must be in its
+    `sources:`. Nothing tied the two together before: `sources:` alone drives
+    mapping.yaml's `documents:` rows, compute_requires and provenance_notes,
+    so an omission silently costs the whole-document mapping, a dependency
+    edge, and the very note that stops a rewriter restating a retired rule --
+    while --check reported clean."""
+
+    def test_placed_file_missing_from_sources_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_SOURCE_NOT_DECLARED,
+                specs={"900-alpha.md": ALPHA_SPEC},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sources", result.stderr)
+            self.assertIn("900-alpha.md", result.stderr)
+            self.assertIn("950-alpha-folded.md", result.stderr)
+
+    def test_dropped_file_missing_from_sources_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_DROPPED_SOURCE_NOT_DECLARED, specs=RETIRED_SPECS,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sources", result.stderr)
+            self.assertIn("902-retired.md", result.stderr)
+
+    def test_declared_sources_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_RETIRED_DROPPED, specs=RETIRED_SPECS,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_partial_does_not_suppress_the_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--partial", fold=CHECK_FOLD_SOURCE_NOT_DECLARED,
+                specs={"900-alpha.md": ALPHA_SPEC},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sources", result.stderr)
+
+
 class RetiredAnchorCheckTest(unittest.TestCase):
     """An anchor may be real without being live. `--check` must tell the two
     failure modes apart: a ref naming an anchor that never existed is always a

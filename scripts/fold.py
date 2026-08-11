@@ -64,7 +64,7 @@ provenance marker, ready for the rewrite pass that turns it into prose. It refus
 regenerating after the rewrite has started would lose the rewrite -- and
 never writes any document when any target of the invocation already exists.
 
---check --ids (Task 6) adds a seventh report group, "dropped ids": for every
+--check --ids (Task 6) adds an eighth report group, "dropped ids": for every
 document already written to docs/specs2/<to>, every identifier collected
 from the source sections fold.yaml places there must still appear,
 exact-text, somewhere in the written prose -- scoped to the whole document,
@@ -75,7 +75,7 @@ triple-backtick fenced code block -- not the block's whole content as one
 unit. A per-document `allow_dropped_ids:` mapping (identifier -> reason,
 reason required) exempts specific drops. `--ids` only modifies `--check`;
 combined with `--mapping` or `--scaffold` it is rejected at the CLI, and
-omitting it leaves the report at six groups, unchanged.
+omitting it leaves the report at seven groups, unchanged.
 """
 
 import argparse
@@ -383,11 +383,23 @@ def preamble_refs(paths, specs_dir: Path) -> set:
 def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
     against the live corpus and, separately, against the written docs/specs2/
-    prose -- six groups today: "unplaced", "placed twice", "no such anchor",
-    "placed but not live" (fold.yaml vs. docs/specs/, see below), and
-    "missing"/"undeclared" (fold.yaml vs. docs/specs2/, see below). A ref is
+    prose -- seven groups today: "unplaced", "placed twice", "no such
+    anchor", "placed but not live", "source not declared in sources:"
+    (fold.yaml vs. docs/specs/, see below), and "missing"/"undeclared"
+    (fold.yaml vs. docs/specs2/, see below). A ref is
     `<filename>#<anchor>`, fold.yaml's own `from:`/`ref:`/`new:`-derived
     spelling.
+
+    "source not declared in sources:" holds a file some `from:` or `dropped:`
+    ref names that the same document's `sources:` omits. The two lists are
+    read by different code and nothing tied them together: `sources:` alone
+    produces mapping.yaml's `documents:` rows (so every whole-document and
+    WL-SPEC-N reference to an omitted file hard-fails at cutover), and it is
+    what compute_requires and provenance_notes iterate -- so an omission also
+    silently drops a dependency edge and the amendment note that stops a
+    rewriter restating a retired rule. All three failures are invisible:
+    before this group, `sources: []` with eleven `from:` refs was a clean
+    check.
 
     The two docs/specs/-side failure modes are reported apart because they
     are not the same defect and do not have the same remedy. "no such anchor"
@@ -401,11 +413,11 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     made the second unrecordable: `dropped:` was the only key that could hold
     a retired anchor and the only key --check refused to let it sit in.
 
-    `ids=True` appends a seventh group, "dropped ids" (see check_ids()),
+    `ids=True` appends an eighth group, "dropped ids" (see check_ids()),
     over the same per-document written-file loop that computes
     missing/undeclared -- reusing its existence gate rather than a second
     pass over fold.documents. `ids=False` (the default) leaves the report at
-    six groups.
+    seven groups.
 
     `partial` narrows only the unplaced check, to anchors belonging to a file
     some fold.yaml entry already accounts for -- named in a `sources:` list,
@@ -431,11 +443,18 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
                   for path, doc in docs.items() for anchor in doc["sections"]}
     known_refs |= preamble_refs(docs.keys(), specs_dir)
 
-    placed, dropped_refs = [], []
+    placed, dropped_refs, undeclared_sources = [], [], []
     for doc in fold.documents:
+        own = []
         for section in doc.sections:
-            placed.extend(section["from"])
-        dropped_refs.extend(d["ref"] for d in doc.dropped)
+            own.extend(section["from"])
+        placed.extend(own)
+        own_dropped = [d["ref"] for d in doc.dropped]
+        dropped_refs.extend(own_dropped)
+        declared_sources = set(doc.sources)
+        for filename in sorted({ref.split("#", 1)[0] for ref in own + own_dropped}):
+            if filename not in declared_sources:
+                undeclared_sources.append(f"{filename} (placed in {doc.to}, absent from its sources:)")
     placements = placed + dropped_refs
 
     counts = Counter(placements)
@@ -472,6 +491,7 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
         ("placed twice", placed_twice),
         ("no such anchor", no_such_anchor),
         ("placed but not live (record under dropped:)", not_live),
+        ("source not declared in sources:", undeclared_sources),
         ("missing", missing),
         ("undeclared", undeclared),
     ]
