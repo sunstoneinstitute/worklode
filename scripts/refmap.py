@@ -88,9 +88,12 @@ before it's committed -- and `--force` bypasses that too. `--dry-run` is
 unaffected by either guard, since it never writes.
 
 .worktrees/ and .claude/worktrees/ are pruned unconditionally, at any depth,
-along with .git/; everything else in the repo is scanned, including
-docs/plans/ (`covers:`/`requires:` frontmatter is repointed, nothing else
-about a plan changes) and docs/specs2/ itself (a scaffolded document's own
+along with .git/, and so is anything matching DEFAULT_IGNORE_GLOBS or a
+--ignore-glob pattern -- files that carry synthetic spec identifiers as data
+rather than as references, where a match resolves to nothing and one such
+match is enough to make -w refuse the whole run. Everything else in the repo
+is scanned, including docs/plans/ (`covers:`/`requires:` frontmatter is
+repointed, nothing else about a plan changes) and docs/specs2/ itself (a scaffolded document's own
 `requires:` still points at docs/specs/ until this runs -- see fold.py's
 compute_requires) -- except docs/specs2/mapping.yaml, this tool's own input,
 which is never scanned or written (its from_id/to_id fields are literal
@@ -111,7 +114,7 @@ longer resolve, and the bare-filename gate would start treating the new
 corpus's own siblings as old-corpus references.
 
 Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR]
-                 [--allow-dropped] [--force]
+                 [--allow-dropped] [--ignore-glob GLOB] [--force]
 
   --dry-run        report the rewrite plan without writing anything (default)
   -w               write the plan; refuses to write anything if any
@@ -122,11 +125,14 @@ Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR]
   --corpus-to      override mapping.yaml's corpus.to for output paths only
   --allow-dropped  pass a recorded dropped: reference through unchanged
                    instead of failing (never-mapped references still fail)
+  --ignore-glob    skip files matching GLOB (repeatable), on top of
+                   DEFAULT_IGNORE_GLOBS
   --force          bypass the idempotency marker and the clean-worktree
                    check (re-running -w after amending mapping.yaml)
 """
 
 import argparse
+import fnmatch
 import os
 import re
 import subprocess
@@ -155,6 +161,26 @@ DEFAULT_PROJECT_KEY = "WL"
 # parent is ".claude", so an unrelated "worktrees" directory elsewhere in the
 # tree is still scanned.
 PRUNE_ANYWHERE = {".git", ".worktrees"}
+
+# Files whose spec identifiers are *data*, not references: a hermetic fixture
+# corpus (001-alpha.md, WL-SPEC-900, 1004-execution-backbone.md), a
+# table-driven Go test case, or an agent-session artifact quoting either. A
+# match in one of these resolves to nothing, and one unmapped id is enough to
+# make -w refuse the whole run -- so without this list cutover cannot write
+# at all, and reordering cutover does not help because the Go fixtures are
+# never deleted. Measured on this repo: 21 sites in scripts/*_test.py, 17
+# across four Go test files, 45 in .superpowers/ review diffs.
+#
+# Matched with fnmatch against the repo-relative POSIX path, where "*" does
+# cross "/" -- so "*_test.go" catches every depth, and ".superpowers/*"
+# catches the whole subtree. Extend per-run with --ignore-glob rather than
+# editing this list: some files (a plan quoting a fixture corpus verbatim)
+# only become fixture-bearing at cutover time.
+DEFAULT_IGNORE_GLOBS = (
+    "scripts/*_test.py",
+    "*_test.go",
+    ".superpowers/*",
+)
 
 
 class RefmapError(Exception):
@@ -230,6 +256,14 @@ LEADING_NUMBER = re.compile(r"^(\d+)-")
 # outright rather than int()-collapsed, so "spec 0006" is never quietly
 # read as spec 6 (fixed at cutover review -- "C1").
 MAX_PROSENUM_DIGITS = 3
+# `WL-SPEC-0` / `000 §N` is the reserved "no governing spec" sentinel
+# (026 §4.2a), not a document: "There is no spec 0 and there will not be one,
+# so it is the only reference that resolves to nothing without being a
+# defect" (docs/authoring-design-docs.md). It is recognised and left alone
+# per-reference rather than by excluding the files it appears in --
+# docs/authoring-design-docs.md, spec 025 and spec 026 each carry one
+# alongside a dozen or more real references that must be rewritten.
+SENTINEL_SPEC_NUMBER = 0
 
 
 def spec_number_str(filename: str) -> str:
@@ -363,6 +397,8 @@ def make_replacer(index: Index, file_is_in_corpus: bool, allow_dropped: bool,
         if match.group("kind") != "SPEC":
             return original  # WL-ADR-<n>: not part of this fold, always left alone
         num = match.group("num")
+        if int(num) == SENTINEL_SPEC_NUMBER:
+            return original  # the reserved NO-SPEC sentinel, never a document
         frag = match.group("shortfrag")
         from_id = f"{index.project_key}-SPEC-{int(num)}"
         if frag:
@@ -390,6 +426,8 @@ def make_replacer(index: Index, file_is_in_corpus: bool, allow_dropped: bool,
         num = match.group("prosenum")
         if len(num) > MAX_PROSENUM_DIGITS:
             return original  # not a plausible zero-padded spec number: not a reference
+        if int(num) == SENTINEL_SPEC_NUMBER:
+            return original  # the reserved NO-SPEC sentinel, never a document
         sec = match.group("prosesec")
         from_id = f"{index.project_key}-SPEC-{int(num)}"
         filename = index.filename_by_from_id.get(from_id)
@@ -431,11 +469,12 @@ def should_prune(parent_parts: tuple, name: str) -> bool:
     return name == "worktrees" and bool(parent_parts) and parent_parts[-1] == ".claude"
 
 
-def iter_files(root: Path):
+def iter_files(root: Path, ignore_globs=DEFAULT_IGNORE_GLOBS):
     """Every file under `root`, excluding .git/, .worktrees/ and
-    .claude/worktrees/ at any depth (see the module docstring), and two
-    files this tool owns rather than scans: docs/specs2/mapping.yaml (its
-    own from_id/to_id fields are literal "<KEY>-SPEC-<n>" text, which the
+    .claude/worktrees/ at any depth (see the module docstring); anything
+    `ignore_globs` matches (see DEFAULT_IGNORE_GLOBS); and two files this
+    tool owns rather than scans: docs/specs2/mapping.yaml (its own
+    from_id/to_id fields are literal "<KEY>-SPEC-<n>" text, which the
     shorthand branch matches with no file-location gating, unlike the
     bare-filename path branch -- scanning it would rewrite it out from under
     itself) and docs/specs2/.refmap-applied, the idempotency marker (its
@@ -449,7 +488,17 @@ def iter_files(root: Path):
             path = Path(dirpath) / name
             if path.resolve() in skip:
                 continue
+            if is_ignored(path.relative_to(root), ignore_globs):
+                continue
             yield path
+
+
+def is_ignored(rel: Path, ignore_globs) -> bool:
+    """True when the repo-relative path `rel` matches any ignore glob. Kept
+    a plain fnmatch over the POSIX spelling: "*" crosses "/" there, which is
+    what makes "*_test.go" and ".superpowers/*" mean what they read as."""
+    text = rel.as_posix()
+    return any(fnmatch.fnmatch(text, pattern) for pattern in ignore_globs)
 
 
 def process_file(path: Path, root: Path, index: Index, allow_dropped: bool):
@@ -563,6 +612,10 @@ def main(argv=None):
                      help="pass a reference through unchanged, instead of failing, when its "
                           "target is in mapping.yaml's dropped: list (a recorded human "
                           "decision) -- a never-mapped reference still fails regardless")
+    ap.add_argument("--ignore-glob", metavar="GLOB", action="append", default=[],
+                     help="skip files matching GLOB (repeatable), on top of the built-in "
+                          "fixture-bearing paths -- for a file that only becomes "
+                          "fixture-bearing at cutover, e.g. a plan quoting a test corpus")
     ap.add_argument("--force", action="store_true",
                      help="bypass the idempotency marker and the clean-worktree check -- "
                           "for re-running -w after amending mapping.yaml")
@@ -594,7 +647,9 @@ def main(argv=None):
         mapping.corpus_to = a.corpus_to
 
     index = build_index(mapping)
-    files = sorted(iter_files(root), key=lambda p: p.relative_to(root).as_posix())
+    ignore_globs = (*DEFAULT_IGNORE_GLOBS, *a.ignore_glob)
+    files = sorted(iter_files(root, ignore_globs),
+                   key=lambda p: p.relative_to(root).as_posix())
     results = [r for r in (process_file(p, root, index, a.allow_dropped) for p in files)
                if r is not None]
 
