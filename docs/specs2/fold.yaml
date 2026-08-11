@@ -17,7 +17,10 @@ documents:
   # a section with exactly one subsection is the fragmentation this migration
   # exists to remove -- leaving ten sections. Headings shed the `(D8)`/`(D9)`
   # design-record tags: 003-platform-graph-design.md is superseded and retired
-  # by this fold, so the tags point at nothing a reader can open.
+  # by this fold, so the tags point at nothing a reader can open. The inline
+  # `(000)` in sec-0 goes for the same reason and is a worse case --
+  # 000-umbrella-architecture.md has never existed in this corpus at all, so
+  # a shipping spec was pointing at a document nobody can open.
   - to: 005-prioritization-and-pickup.md
     title: Prioritization & pickup
     sources: [005-prioritization-and-pickup.md]
