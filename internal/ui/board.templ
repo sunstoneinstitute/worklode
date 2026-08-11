@@ -1,0 +1,92 @@
+package ui
+
+// board.templ renders the org-wide board shared by Home ("/") and Work
+// ("/work"): each project's In progress / In review / Ready / Blocked buckets
+// as worklist rows, plus recent runtime failures. Restyled from the former
+// internal/api/board.templ tables into the design system's .card + .wl rows.
+
+templ Board(v BoardView) {
+	@Page(v.Page) {
+		<div class="main">
+			<div class="canvas">
+				if v.IsHome {
+					<h1>Home</h1>
+					<h2>Current work</h2>
+				} else {
+					<h1>Work</h1>
+				}
+				<p class="muted small">Inbox: { v.InboxCount } new issue{ pluralSuffix(v.InboxCount) }</p>
+				for _, proj := range v.Projects {
+					@boardProject(proj)
+				}
+				if len(v.RecentFailures) > 0 {
+					<section class="card">
+						<div class="hd"><h3>Recent failures</h3></div>
+						<div class="bd">
+							<table>
+								<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
+								for _, f := range v.RecentFailures {
+									<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
+								}
+							</table>
+						</div>
+					</section>
+				}
+			</div>
+		</div>
+	}
+}
+
+// boardProject renders one project's four state buckets. Each bucket's chip
+// variant is fixed per bucket (matching the former per-bucket badge classes),
+// independent of the item's own State value.
+templ boardProject(proj BoardProject) {
+	<section class="card">
+		<div class="hd"><h3><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></h3></div>
+		<div class="bd">
+			@boardBucket("In progress", "info", false, proj.InProgress)
+			@boardBucket("In review", "warn", false, proj.InReview)
+			@boardBucket("Ready", "ok", false, proj.Ready)
+			@boardBucket("Blocked", "crit", true, proj.Blocked)
+		</div>
+	</section>
+}
+
+// boardBucket renders one named bucket as a worklist, or "None" when empty.
+// blockedLabel forces the fixed "blocked" chip label the Blocked bucket used.
+templ boardBucket(heading, variant string, blockedLabel bool, items []BoardItem) {
+	<h4 class="small muted">{ heading }</h4>
+	if len(items) == 0 {
+		<p class="muted small">None</p>
+	} else {
+		<div class="wl">
+			for _, item := range items {
+				@boardRow(item, variant, blockedLabel)
+			}
+		</div>
+	}
+}
+
+// boardRow renders one task row: id/title link, the bucket's state chip and a
+// priority chip, and — when present — the lease holder and the assignee.
+templ boardRow(item BoardItem, variant string, blockedLabel bool) {
+	<div class="wlrow">
+		<div class="tl">
+			<div class="t"><a href={ "/tasks/" + item.ID }>{ item.ID }</a> &mdash; { item.Title }</div>
+			<div class="s">
+				if blockedLabel {
+					<span class="chip crit">blocked</span>
+				} else {
+					<span class={ "chip " + variant }>{ item.State }</span>
+				}
+				<span class="chip plain">{ item.Priority }</span>
+				if item.Holder != nil {
+					<span class="muted">&middot; Held by { item.Holder.ActorID } (expires { FmtTime(item.Holder.ExpiresAt) })</span>
+				}
+				if item.Assignee != "" {
+					<span class="muted">&middot; Assignee { item.Assignee }</span>
+				}
+			</div>
+		</div>
+	</div>
+}

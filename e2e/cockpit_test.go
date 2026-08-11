@@ -271,8 +271,8 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("GET /projects/proj?variant=%s: status = %d, want 200", variant, code)
 		}
-		if !strings.Contains(body, "operations") {
-			t.Fatalf("variant=%s body does not render Operations mode:\n%s", variant, body)
+		if !strings.Contains(body, `data-panel="B"`) {
+			t.Fatalf("variant=%s body does not render the Operations (mode B) canvas:\n%s", variant, body)
 		}
 		if !strings.Contains(body, `<link rel="canonical" href="/projects/proj">`) {
 			t.Fatalf("variant=%s body missing the canonical /projects/proj link:\n%s", variant, body)
@@ -296,8 +296,9 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		if !strings.Contains(body, wantSpec) {
 			t.Fatalf("GET %s: body missing owning-spec sentence %q:\n%s", path, wantSpec, body)
 		}
-		if strings.Contains(body, "<form") || strings.Contains(body, "<button") {
-			t.Fatalf("GET %s unexpectedly renders a form or button:\n%s", path, body)
+		main := mainContent(t, body)
+		if strings.Contains(main, "<form") || strings.Contains(main, "<button") {
+			t.Fatalf("GET %s unexpectedly renders a form or button in its main content:\n%s", path, body)
 		}
 	}
 
@@ -313,18 +314,19 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	}
 }
 
-// assertOverviewSurface checks the rendered /projects/proj page: two distinct
-// navigation landmarks, one main landmark, one decision rail, Dana as owner,
-// Agent One as delegate, Observed status evidence, blocker copy, an evidence
-// <details> disclosure, and a source link back to the blocking task (the
-// "source" the blocked-state evidence traces to).
+// assertOverviewSurface checks the rendered /projects/proj page in Operations
+// mode: two distinct navigation landmarks, one main landmark, the labelled
+// decision-rail aside, the mode-B canvas, an Active-work row distinguishing
+// Dana (owner) from Agent One (delegate), Observed status evidence, and the
+// highest-signal exception that links back to the blocking task with the
+// evidence it rests on (the "source" the blocked-state evidence traces to).
 func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	t.Helper()
 
 	if got := strings.Count(body, "<nav aria-label="); got != 2 {
 		t.Fatalf("nav landmark count = %d, want 2 (Primary + Project):\n%s", got, body)
 	}
-	if !strings.Contains(body, `<nav aria-label="Primary">`) {
+	if !strings.Contains(body, `<nav aria-label="Primary"`) {
 		t.Fatalf("missing the primary global nav landmark:\n%s", body)
 	}
 	if !strings.Contains(body, `<nav aria-label="Project"`) {
@@ -333,24 +335,33 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 		t.Fatalf("main landmark count = %d, want 1:\n%s", got, body)
 	}
-	if !strings.Contains(body, `<aside aria-label="Next decision">`) {
-		t.Fatalf("missing the decision rail:\n%s", body)
+	if !strings.Contains(body, `<aside class="rail" aria-label="Decisions and exceptions">`) {
+		t.Fatalf("missing the decision-rail landmark:\n%s", body)
+	}
+	if !strings.Contains(body, `data-panel="B"`) {
+		t.Fatalf("missing the Operations (mode B) canvas:\n%s", body)
 	}
 
-	if !strings.Contains(body, "Owned by Dana") {
-		t.Fatalf("missing owner copy \"Owned by Dana\":\n%s", body)
+	// The Active-work row surfaces the accountable human owner and the agent
+	// that holds the lease distinctly, via the "Agent One · on behalf of
+	// Dana" who-line — never the bare id, never conflating the two roles.
+	if !strings.Contains(body, "Agent One") {
+		t.Fatalf("missing the agent delegate \"Agent One\":\n%s", body)
 	}
-	if !strings.Contains(body, "Agent One is the delegate") {
-		t.Fatalf("missing delegate copy \"Agent One is the delegate\":\n%s", body)
+	if !strings.Contains(body, "on behalf of Dana") {
+		t.Fatalf("missing owner attribution \"on behalf of Dana\":\n%s", body)
 	}
-	if !strings.Contains(body, "Observed:") {
-		t.Fatalf("missing Observed status evidence copy:\n%s", body)
+	if !strings.Contains(body, "Observed") {
+		t.Fatalf("missing Observed status evidence:\n%s", body)
+	}
+
+	// The highest-signal exception names the blocker, states the evidence it
+	// rests on, and links back to the blocking task.
+	if !strings.Contains(body, "Highest-signal exception") {
+		t.Fatalf("missing the highest-signal exception card:\n%s", body)
 	}
 	if !strings.Contains(body, "Blocks "+dependentID+" (blocker state") {
-		t.Fatalf("missing blocker copy \"Blocks %s (blocker state ...)\":\n%s", dependentID, body)
-	}
-	if !strings.Contains(body, "<details>") || !strings.Contains(body, "<summary>Evidence</summary>") {
-		t.Fatalf("missing the evidence <details> disclosure:\n%s", body)
+		t.Fatalf("missing blocker evidence \"Blocks %s (blocker state ...)\":\n%s", dependentID, body)
 	}
 	if !strings.Contains(body, `<a href="/tasks/`+blockerID+`">`) {
 		t.Fatalf("missing the source link back to the blocking task /tasks/%s:\n%s", blockerID, body)
@@ -358,15 +369,42 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 }
 
 // assertNoFabrication checks a rendered Overview variant carries none of the
-// forbidden, non-existent-in-Part-1 concepts: a bare percentage, a
-// project-health readout, or a prototype form/button control.
+// forbidden, non-existent-in-Part-1 concepts: a bare percentage or a
+// project-health readout anywhere, or a fabricated form/button control in the
+// page content. The form/button check scopes to the main-content region: the
+// shared shell legitimately carries a theme-toggle <button>, which is chrome,
+// not fabricated workflow state.
 func assertNoFabrication(t *testing.T, variant, body string) {
 	t.Helper()
-	for _, forbidden := range []string{"%", "project health", "<form", "<button"} {
+	for _, forbidden := range []string{"%", "project health"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("variant=%s unexpectedly renders %q:\n%s", variant, forbidden, body)
 		}
 	}
+	main := mainContent(t, body)
+	for _, forbidden := range []string{"<form", "<button"} {
+		if strings.Contains(main, forbidden) {
+			t.Fatalf("variant=%s unexpectedly renders %q in its main content:\n%s", variant, forbidden, body)
+		}
+	}
+}
+
+// mainContent returns the page's <main id="main-content"> region, excluding
+// the shared shell chrome (top bar, theme toggle, avatar). Honest-affordance
+// checks scope to this region so the shell's legitimate theme-toggle <button>
+// does not read as fabricated page content.
+func mainContent(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<main id="main-content"`)
+	if i < 0 {
+		t.Fatalf("body has no <main id=\"main-content\"> region:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</main>")
+	if j < 0 {
+		t.Fatalf("body has no closing </main>:\n%s", body)
+	}
+	return rest[:j]
 }
 
 // getCockpit fetches GET /api/v1/projects/{id}/cockpit with a bearer token
