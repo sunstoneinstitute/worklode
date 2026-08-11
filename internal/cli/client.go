@@ -1470,6 +1470,43 @@ func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string)
 	return p, raw, nil
 }
 
+// PinProjectFocus calls PATCH /api/v1/projects/{id} to set (or clear) the
+// curated pinned-focus card and returns the updated project. An empty note
+// clears the card; pinnedBy is an actor id or a plain display name. The fields
+// are always sent, so the server reads note:"" as an explicit clear.
+func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string) (Project, []byte, error) {
+	return c.patchProject(ctx, id, map[string]any{
+		"focus_note":      note,
+		"focus_pinned_by": pinnedBy,
+	})
+}
+
+// SetProjectNextDecision calls PATCH /api/v1/projects/{id} to set (or clear)
+// the curated next-decision card and returns the updated project. An empty
+// title clears the card. The fields are always sent, so the server reads
+// title:"" as an explicit clear.
+func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accountable, readiness string) (Project, []byte, error) {
+	return c.patchProject(ctx, id, map[string]any{
+		"decision_title":       title,
+		"decision_accountable": accountable,
+		"decision_readiness":   readiness,
+	})
+}
+
+// patchProject PATCHes body to /api/v1/projects/{id} and decodes the updated
+// project it returns, shared by the project-mutation client methods.
+func (c *Client) patchProject(ctx context.Context, id string, body map[string]any) (Project, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), body)
+	if err != nil {
+		return Project{}, nil, err
+	}
+	var p Project
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+	}
+	return p, raw, nil
+}
+
 // CostTotals is the tokens and money one currency accounts for over a
 // window. CostAmount is a decimal string, for the same reason
 // EndAgentSessionInput.CostAmount is.

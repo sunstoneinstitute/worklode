@@ -347,6 +347,91 @@ func TestPatchProjectFocus(t *testing.T) {
 	}
 }
 
+// patchCockpitCards fetches the cockpit's curated cards for project id.
+func patchCockpitCards(t *testing.T, h http.Handler, token, id string) pinnedFocusDecode {
+	t.Helper()
+	rr := doReq(t, h, "GET", "/api/v1/projects/"+id+"/cockpit", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("cockpit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got pinnedFocusDecode
+	decodeInto(t, rr, &got)
+	return got
+}
+
+// TestPatchProjectCuratedCards covers PATCH /api/v1/projects/{id} setting the
+// pinned-focus and next-decision cards: one combined PATCH sets both (visible
+// via the cockpit), an empty focus_note/decision_title clears each, and a body
+// carrying only a companion field (no trigger) is a 422.
+func TestPatchProjectCuratedCards(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	if err := st.CreateActor(context.Background(), "stig", "human", "Stig Bakken", true); err != nil {
+		t.Fatalf("create actor stig: %v", err)
+	}
+
+	// A single PATCH sets ranking focus, pinned focus, and next decision.
+	rr := doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{
+		"focus":                []string{"security"},
+		"focus_note":           "Ship the cockpit",
+		"focus_pinned_by":      "stig",
+		"decision_title":       "Pick a datastore",
+		"decision_accountable": "stig",
+		"decision_readiness":   "blocked on benchmark",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("combined patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	got := patchCockpitCards(t, h, token, "proj")
+	if got.PinnedFocus == nil || got.PinnedFocus.Note != "Ship the cockpit" {
+		t.Fatalf("pinned_focus = %#v, want the note set", got.PinnedFocus)
+	}
+	if by := got.PinnedFocus.PinnedBy; by == nil || by.ID != "stig" || by.Name != "Stig Bakken" {
+		t.Errorf("pinned_by = %#v, want stig/Stig Bakken", by)
+	}
+	if got.NextDecision == nil || got.NextDecision.Title != "Pick a datastore" ||
+		got.NextDecision.Accountable != "stig" || got.NextDecision.Readiness != "blocked on benchmark" {
+		t.Errorf("next_decision = %#v, want populated", got.NextDecision)
+	}
+
+	// An empty focus_note clears the pinned-focus card; the decision is
+	// untouched because decision_title is absent from this body.
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{"focus_note": ""})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear focus_note status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = patchCockpitCards(t, h, token, "proj")
+	if got.PinnedFocus != nil {
+		t.Errorf("pinned_focus = %#v, want nil after clear", got.PinnedFocus)
+	}
+	if got.NextDecision == nil {
+		t.Errorf("next_decision = nil, want it left intact by a focus-only clear")
+	}
+
+	// An empty decision_title clears the next-decision card.
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{"decision_title": ""})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear decision_title status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got = patchCockpitCards(t, h, token, "proj"); got.NextDecision != nil {
+		t.Errorf("next_decision = %#v, want nil after clear", got.NextDecision)
+	}
+
+	// A body with only a companion field (no focus_note/decision_title trigger)
+	// changes nothing and is a clean 422.
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/proj", token, map[string]any{"focus_pinned_by": "stig"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("companion-only patch status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// A missing project 404s through the same path as focus.
+	rr = doReq(t, h, "PATCH", "/api/v1/projects/nosuch", token, map[string]any{"focus_note": "x"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("missing project status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateProjectValidation(t *testing.T) {
 	_, h, token := newTestServer(t)
 	for name, body := range map[string]map[string]any{
