@@ -76,12 +76,18 @@ documents:
       - {new: "2", heading: "Ranking", from: ["005-prioritization-and-pickup.md#sec-3",
                                               "005-prioritization-and-pickup.md#sec-3.1"]}
     dropped:
-      - {ref: "005-prioritization-and-pickup.md#sec-7", reason: "absorbed: dependency list is frontmatter"}
+      - {ref: "003-platform-graph-design.md#sec-4", reason: "superseded: whole document replaced by 004-009"}
 ```
 
 `from` is a list so N old sections may merge into one new section; the mapping
 then points all N at the same new anchor. `dropped` carries a reason string
 whose first token is a category — `absorbed`, `spent`, `superseded`, `dead`.
+
+**`dropped:` is not where scaffolding goes.** The `Dependencies` / `Open
+questions` / `Acceptance criteria` trio is *kept and consolidated* per the
+decision above — place those sections, do not drop them. Only the five
+`Amendments to existing specs` sections are `absorbed`, because folding leaves
+them nothing to say.
 
 ## Derived mapping.yaml
 
