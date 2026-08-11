@@ -79,6 +79,93 @@ func TestProjectCockpit(t *testing.T) {
 	}
 }
 
+// pinnedFocusDecode is the JSON shape of pinned_focus and next_decision, used
+// by the curated-cards test below.
+type pinnedFocusDecode struct {
+	PinnedFocus *struct {
+		Note     string `json:"note"`
+		PinnedBy *struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"pinned_by"`
+	} `json:"pinned_focus"`
+	NextDecision *struct {
+		Title       string `json:"title"`
+		Accountable string `json:"accountable"`
+		Readiness   string `json:"readiness"`
+	} `json:"next_decision"`
+}
+
+// TestProjectCockpitPinnedFocusAndDecision asserts the curated v0 cards
+// (migration 0013) surface in the projection once a lead sets them: a pinned
+// focus whose pinner resolves to a real actor's display name, and a next
+// decision carrying its title/accountable/readiness.
+func TestProjectCockpitPinnedFocusAndDecision(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "stig", "human", "Stig Bakken", true); err != nil {
+		t.Fatalf("create actor stig: %v", err)
+	}
+	if err := st.PinProjectFocus(ctx, "proj", "Ship the cockpit", "stig", st.Now()); err != nil {
+		t.Fatalf("PinProjectFocus: %v", err)
+	}
+	if err := st.SetProjectNextDecision(ctx, "proj", "Pick a datastore", "stig", "blocked on benchmark"); err != nil {
+		t.Fatalf("SetProjectNextDecision: %v", err)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/projects/proj/cockpit", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got pinnedFocusDecode
+	decodeInto(t, rr, &got)
+
+	if got.PinnedFocus == nil {
+		t.Fatalf("pinned_focus = nil, want populated; body %s", rr.Body.String())
+	}
+	if got.PinnedFocus.Note != "Ship the cockpit" {
+		t.Errorf("pinned_focus.note = %q, want %q", got.PinnedFocus.Note, "Ship the cockpit")
+	}
+	if by := got.PinnedFocus.PinnedBy; by == nil || by.ID != "stig" || by.Name != "Stig Bakken" {
+		t.Errorf("pinned_focus.pinned_by = %#v, want stig/Stig Bakken", by)
+	}
+	if got.NextDecision == nil {
+		t.Fatalf("next_decision = nil, want populated")
+	}
+	if got.NextDecision.Title != "Pick a datastore" ||
+		got.NextDecision.Accountable != "stig" ||
+		got.NextDecision.Readiness != "blocked on benchmark" {
+		t.Errorf("next_decision = %#v, want title/accountable/readiness populated", got.NextDecision)
+	}
+}
+
+// TestProjectCockpitPinnedByUnresolvedName asserts a pinned-by that is a plain
+// seeded display name (no matching actor row) still surfaces as the pinner's
+// name — an unknown pinner must not blank out or fail the card.
+func TestProjectCockpitPinnedByUnresolvedName(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	ctx := context.Background()
+	if err := st.PinProjectFocus(ctx, "proj", "Curated note", "Ada Lovelace", st.Now()); err != nil {
+		t.Fatalf("PinProjectFocus: %v", err)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/projects/proj/cockpit", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got pinnedFocusDecode
+	decodeInto(t, rr, &got)
+
+	if got.PinnedFocus == nil || got.PinnedFocus.PinnedBy == nil {
+		t.Fatalf("pinned_focus/pinned_by = %#v, want a fallback pinner", got.PinnedFocus)
+	}
+	if by := got.PinnedFocus.PinnedBy; by.ID != "" || by.Name != "Ada Lovelace" {
+		t.Errorf("pinned_by = %#v, want empty id and the raw seeded name", by)
+	}
+}
+
 // TestProjectCockpitRequiresAuth mirrors TestAPIRequiresAuth for the cockpit
 // route: a missing bearer token must 401, not fall through to an unmatched
 // route (404) or an anonymous read.
