@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -1029,12 +1028,6 @@ func sessionMarkerFresh(root string) bool {
 		return false
 	}
 	return pidAlive(m.PID)
-}
-
-// pidAlive reports whether pid names a live process (signal 0 probe). Any
-// error — ESRCH in particular — is treated as dead.
-func pidAlive(pid int) bool {
-	return syscall.Kill(pid, 0) == nil
 }
 
 // warn prints a non-fatal hook warning to stderr. Warnings never change the
