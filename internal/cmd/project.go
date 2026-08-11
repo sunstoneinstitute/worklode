@@ -20,8 +20,8 @@ func newProjectCmd() *cobra.Command {
 		Short: "Manage projects and their repos",
 	}
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
-		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectResolveCmd(),
-		newProjectShowCmd())
+		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectFocusNoteCmd(),
+		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd())
 	return cmd
 }
 
@@ -218,6 +218,90 @@ func newProjectFocusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&clear, "clear", false, "clear the project's focus")
+	return cmd
+}
+
+// newProjectFocusNoteCmd is `lode project focus-note <id>`: set or clear the
+// cockpit's curated pinned-focus note. --clear (or an empty --note) clears it.
+func newProjectFocusNoteCmd() *cobra.Command {
+	var note, by string
+	var clear bool
+	cmd := &cobra.Command{
+		Use:   "focus-note <id>",
+		Short: "Set or clear a project's pinned-focus note (cockpit card)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if clear && (note != "" || by != "") {
+				return fmt.Errorf("--clear takes no --note or --by")
+			}
+			if !clear && note == "" {
+				return fmt.Errorf("provide --note, or --clear to remove the pinned focus")
+			}
+
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			// A cleared note is the empty string; PinProjectFocus reads that as
+			// an explicit clear on the server.
+			p, raw, err := c.PinProjectFocus(cmd.Context(), args[0], note, by)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ProjectTable(cmd.OutOrStdout(), []cli.Project{p})
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&note, "note", "", "the pinned-focus note")
+	cmd.Flags().StringVar(&by, "by", "", "who pinned it (actor id or display name)")
+	cmd.Flags().BoolVar(&clear, "clear", false, "clear the pinned focus")
+	return cmd
+}
+
+// newProjectDecisionCmd is `lode project decision <id>`: set or clear the
+// cockpit's curated next-decision card. --clear (or an empty --title) clears
+// it; --rests-on carries the readiness note.
+func newProjectDecisionCmd() *cobra.Command {
+	var title, accountable, restsOn string
+	var clear bool
+	cmd := &cobra.Command{
+		Use:   "decision <id>",
+		Short: "Set or clear a project's next-decision card (cockpit card)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if clear && (title != "" || accountable != "" || restsOn != "") {
+				return fmt.Errorf("--clear takes no --title, --accountable, or --rests-on")
+			}
+			if !clear && title == "" {
+				return fmt.Errorf("provide --title, or --clear to remove the next decision")
+			}
+
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			// A cleared title is the empty string; SetProjectNextDecision reads
+			// that as an explicit clear on the server.
+			p, raw, err := c.SetProjectNextDecision(cmd.Context(), args[0], title, accountable, restsOn)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ProjectTable(cmd.OutOrStdout(), []cli.Project{p})
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&title, "title", "", "the decision title")
+	cmd.Flags().StringVar(&accountable, "accountable", "", "who is accountable for the decision")
+	cmd.Flags().StringVar(&restsOn, "rests-on", "", "readiness note: what the decision rests on")
+	cmd.Flags().BoolVar(&clear, "clear", false, "clear the next decision")
 	return cmd
 }
 

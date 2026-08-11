@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -80,6 +81,58 @@ func TestProjectRepoDoneState(t *testing.T) {
 		if m.Repo == "acme/widgets" && m.DoneState != "deployed_prod" {
 			t.Fatalf("acme/widgets done_state after rejected set = %q, want deployed_prod", m.DoneState)
 		}
+	}
+}
+
+// TestProjectCuratedCards covers `lode project focus-note` and `lode project
+// decision` end to end: setting them lands in the store, --clear removes them,
+// and a bare invocation (no value, no --clear) is a usage error.
+func TestProjectCuratedCards(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+
+	if out, err := runLode(t, "project", "focus-note", "proj", "--note", "Ship the cockpit", "--by", "alice"); err != nil {
+		t.Fatalf("focus-note: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "decision", "proj",
+		"--title", "Pick a datastore", "--accountable", "alice", "--rests-on", "blocked on benchmark"); err != nil {
+		t.Fatalf("decision: %v\noutput: %s", err, out)
+	}
+
+	p, err := st.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if p.FocusNote != "Ship the cockpit" || p.FocusPinnedBy != "alice" {
+		t.Errorf("focus = {%q, %q}, want {Ship the cockpit, alice}", p.FocusNote, p.FocusPinnedBy)
+	}
+	if p.DecisionTitle != "Pick a datastore" || p.DecisionAccountable != "alice" ||
+		p.DecisionReadiness != "blocked on benchmark" {
+		t.Errorf("decision = {%q, %q, %q}", p.DecisionTitle, p.DecisionAccountable, p.DecisionReadiness)
+	}
+
+	// --clear removes each card.
+	if out, err := runLode(t, "project", "focus-note", "proj", "--clear"); err != nil {
+		t.Fatalf("focus-note --clear: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "decision", "proj", "--clear"); err != nil {
+		t.Fatalf("decision --clear: %v\noutput: %s", err, out)
+	}
+	if p, err = st.GetProject(ctx, "proj"); err != nil {
+		t.Fatalf("GetProject after clear: %v", err)
+	}
+	if p.FocusNote != "" || p.DecisionTitle != "" {
+		t.Errorf("after clear focus_note=%q decision_title=%q, want both empty", p.FocusNote, p.DecisionTitle)
+	}
+
+	// A bare set with neither a value nor --clear is a usage error, not a
+	// silent clear.
+	if out, err := runLode(t, "project", "focus-note", "proj"); err == nil {
+		t.Fatalf("focus-note with no --note/--clear: want error\noutput: %s", out)
+	}
+	if out, err := runLode(t, "project", "decision", "proj"); err == nil {
+		t.Fatalf("decision with no --title/--clear: want error\noutput: %s", out)
 	}
 }
 
