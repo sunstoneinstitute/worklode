@@ -1,18 +1,15 @@
-// web.go implements the read-only web UI: the application shell (Page, in
-// layout.templ) shared by every page, the seven global destinations and the
-// project-local destinations spec 032 §2 defines, and /assets/ (self-hosted
-// stylesheet and fonts, embedded and served from internal/ui — see
-// assetHandler). When OIDC is configured every page route except /assets/ is
-// gated by s.webAuth (see oidcweb.go), which requires a valid session
-// cookie; /assets/ stays open unconditionally and, when OIDC is
-// unconfigured, every route stays open and the bind address is the only
-// access control. Pages render server-side HTML with templ components
-// (*_templ.go, generated from the .templ files in this package — see
-// internal/ui's //go:generate directive, which drives both packages' templ
-// and Tailwind builds — which auto-escape all interpolated values) and reuse
-// the same assembly functions as the JSON API (assembleBoard,
-// assembleTimeline, assembleProjectCockpit) so that logic lives in exactly
-// one place.
+// web.go implements the read-only web UI: it builds the presentation views
+// internal/ui's templ components render (the shared Page shell, the seven
+// global destinations and the project-local destinations spec 032 §2 defines)
+// and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
+// from internal/ui — see assetHandler). When OIDC is configured every page
+// route except /assets/ is gated by s.webAuth (see oidcweb.go), which
+// requires a valid session cookie; /assets/ stays open unconditionally and,
+// when OIDC is unconfigured, every route stays open and the bind address is
+// the only access control. Each handler maps the read model into a ui view
+// (see render.go) and calls ui.<Page>(view).Render; the views reuse the same
+// assembly functions as the JSON API (assembleBoard, assembleTimeline,
+// assembleProjectCockpit) so that logic lives in exactly one place.
 package api
 
 import (
@@ -21,16 +18,10 @@ import (
 	"fmt"
 	"html"
 	"net/http"
-	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
-
-// FmtTime renders every timestamp the same way across the web UI: UTC,
-// "2006-01-02 15:04". Called directly from the .templ files (the plain-func
-// successor to the old html/template FuncMap entry of the same job).
-func FmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
 // assetHandler serves internal/ui's embedded /assets/ tree (stylesheet and
 // self-hosted fonts) outside webAuth: they carry no project data, so an
@@ -71,20 +62,6 @@ func (s *server) navWrap(destination string, next http.HandlerFunc) http.Handler
 	}
 }
 
-// basePage carries the fields every page needs from the Page shell
-// component (layout.templ): Title, ActiveGlobal. Every page-specific data
-// struct embeds it so Page can address those fields the same way regardless
-// of which page is being rendered. ActiveGlobal names the one primary-nav
-// destination to mark aria-current="page" on ("home", "intake", "projects",
-// "work", "reviews", "deliveries", "knowledge"); leave it empty on
-// project-scoped pages, whose local project nav carries the current-page
-// marker instead — each page must set aria-current="page" exactly once,
-// never on both navs.
-type basePage struct {
-	Title        string
-	ActiveGlobal string
-}
-
 // webErr renders a minimal HTML error page. The web UI has no JSON error
 // convention of its own (see writeErr for the API's), so this is its
 // equivalent.
@@ -104,15 +81,6 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 	}
 	s.log.Error("internal error", "err", err)
 	webErr(w, http.StatusInternalServerError, "internal error")
-}
-
-// boardPageData is rendered by the Board component (board.templ), shared by
-// the Home ("/") and Work ("/work") destinations — both show the same
-// org-wide board; only the heading and ActiveGlobal differ.
-type boardPageData struct {
-	basePage
-	Board      *boardResponse
-	InboxCount int
 }
 
 // homePage handles GET / (routed as "GET /{$}" — see server.go — so it
@@ -150,21 +118,11 @@ func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGloba
 		return
 	}
 
-	data := boardPageData{
-		basePage:   basePage{Title: title, ActiveGlobal: activeGlobal},
-		Board:      board,
-		InboxCount: len(issues),
-	}
+	view := boardView(board, len(issues), activeGlobal == "home", title, activeGlobal)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Board(data).Render(r.Context(), w); err != nil {
+	if err := ui.Board(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render board page", "err", err)
 	}
-}
-
-// projectsPageData is rendered by the Projects component (projects.templ).
-type projectsPageData struct {
-	basePage
-	Projects []store.Project
 }
 
 // projectsPage handles GET /projects: the cross-project portfolio (spec 032
@@ -175,42 +133,22 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	data := projectsPageData{
-		basePage: basePage{Title: "worklode: projects", ActiveGlobal: "projects"},
-		Projects: projects,
-	}
+	view := projectsView(projects, "worklode: projects", "projects")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Projects(data).Render(r.Context(), w); err != nil {
+	if err := ui.Projects(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render projects page", "err", err)
 	}
 }
 
-// placeholderPageData is rendered by the Placeholder component
-// (placeholder.templ): an honest "not built yet" page for a global or
-// project-scoped destination whose governing spec section is not
-// implemented. Cockpit is nil for a global destination (Intake, Reviews,
-// Deliveries, Knowledge) and set for a project section (Crew, Deliverables,
-// Reviews, Decisions, Documents, Activity), which loads the project first
-// and renders the same project-local navigation as the Overview page.
-type placeholderPageData struct {
-	basePage
-	Heading       string
-	Message       string
-	Cockpit       *cockpitProjection
-	ActiveSection string
-}
-
 // globalPlaceholder returns a handler for a global destination with no
-// implemented capability yet (Intake, Reviews, Deliveries, Knowledge).
+// implemented capability yet (Intake, Reviews, Deliveries, Knowledge). The
+// rendered page is honest: heading and owning-spec message only, no form,
+// button, count, or fabricated record.
 func (s *server) globalPlaceholder(destination, heading, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		data := placeholderPageData{
-			basePage: basePage{Title: "worklode: " + heading, ActiveGlobal: destination},
-			Heading:  heading,
-			Message:  message,
-		}
+		view := placeholderGlobalView(destination, heading, message)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := Placeholder(data).Render(r.Context(), w); err != nil {
+		if err := ui.Placeholder(view).Render(r.Context(), w); err != nil {
 			s.log.Error("render placeholder page", "err", err)
 		}
 	}
@@ -259,48 +197,11 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	heading := projectSectionTitles[section]
-	data := placeholderPageData{
-		basePage:      basePage{Title: "worklode: " + cockpit.Project.Name + ": " + heading},
-		Heading:       heading,
-		Message:       message,
-		Cockpit:       cockpit,
-		ActiveSection: section,
-	}
+	view := placeholderProjectView(cockpit, projectSectionTitles[section], message, section)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Placeholder(data).Render(r.Context(), w); err != nil {
+	if err := ui.Placeholder(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render project section page", "err", err)
 	}
-}
-
-// webTimelineRow is one rendered row of a task's timeline: a type label and
-// a human summary line, derived from the same entries the JSON timeline API
-// emits (see assembleTimeline / summarizeEntry). URL is the entry's
-// source-native link (set for pr and ci entries only; "" otherwise) —
-// rendered as a plain string href in task.templ, so templ's own href
-// sanitizer (github.com/a-h/templ's SafeURL) neutralizes an unsafe scheme
-// into "about:invalid#TemplFailedSanitizationURL" before it ever reaches
-// the page.
-type webTimelineRow struct {
-	At      time.Time
-	Type    string
-	Label   string
-	Summary string
-	URL     string
-}
-
-// taskPageData is rendered by the Task component (task.templ).
-type taskPageData struct {
-	basePage
-	Task      store.Task
-	Blocked   bool
-	Holder    *store.Lease
-	Blocks    []string
-	BlockedBy []string
-	Parent    string
-	Children  []string
-	Progress  store.HierarchyProgress
-	Timeline  []webTimelineRow
 }
 
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
@@ -326,60 +227,50 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := taskPageData{
-		basePage: basePage{Title: "worklode: " + id},
+	view := ui.TaskView{
+		Page:     ui.PageProps{Title: "worklode: " + id},
 		Task:     *t,
 		Blocked:  blocked[id],
+		Timeline: timelineRows(entries),
 	}
 	for _, e := range out {
 		switch e.Type {
 		case "blocks":
-			data.Blocks = append(data.Blocks, e.ToTask)
+			view.Blocks = append(view.Blocks, e.ToTask)
 		case "child_of":
-			data.Parent = e.ToTask
+			view.Parent = e.ToTask
 		}
 	}
 	for _, e := range in {
 		switch e.Type {
 		case "blocks":
-			data.BlockedBy = append(data.BlockedBy, e.FromTask)
+			view.BlockedBy = append(view.BlockedBy, e.FromTask)
 		case "child_of":
-			data.Children = append(data.Children, e.FromTask)
+			view.Children = append(view.Children, e.FromTask)
 		}
 	}
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
-		data.Holder = lease
+		view.Holder = lease
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.webStoreErr(w, err)
 		return
 	}
 
 	// Leaves can never have children, so skip the query — the component
-	// only reads Progress inside the len(data.Children) > 0 branch anyway.
-	if len(data.Children) > 0 {
+	// only reads Progress inside the len(Children) > 0 branch anyway.
+	if len(view.Children) > 0 {
 		progress, err := s.st.ChildProgress(ctx, id)
 		if err != nil {
 			s.webStoreErr(w, err)
 			return
 		}
-		data.Progress = progress
-	}
-
-	data.Timeline = make([]webTimelineRow, 0, len(entries))
-	for _, e := range entries {
-		data.Timeline = append(data.Timeline, summarizeEntry(e))
+		view.Progress = progress
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Task(data).Render(r.Context(), w); err != nil {
+	if err := ui.Task(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render task page", "err", err)
 	}
-}
-
-// projectPageData is rendered by the Project component (project.templ).
-type projectPageData struct {
-	basePage
-	Cockpit *cockpitProjection
 }
 
 // projectPage handles GET /projects/{id}: the project cockpit, via the same
@@ -398,12 +289,9 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := projectPageData{
-		basePage: basePage{Title: "worklode: " + cockpit.Project.Name},
-		Cockpit:  cockpit,
-	}
+	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := Project(data).Render(r.Context(), w); err != nil {
+	if err := ui.Cockpit(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render project page", "err", err)
 	}
 }
@@ -411,9 +299,9 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 // summarizeEntry renders one timeline entry (same map[string]any shape the
 // JSON timeline API emits, from timeline.go's stateEntries/prEntries/etc.)
 // as a human-readable row: a type label plus a one-line summary.
-func summarizeEntry(e timelineEntry) webTimelineRow {
+func summarizeEntry(e timelineEntry) ui.TimelineRow {
 	typ, _ := e.obj["type"].(string)
-	row := webTimelineRow{At: e.at, Type: typ}
+	row := ui.TimelineRow{At: e.at, Type: typ}
 	switch typ {
 	case "state":
 		row.Label = "State change"

@@ -1,0 +1,122 @@
+package ui
+
+// cockpit.templ renders the project cockpit / overview page (GET
+// /projects/{id}, spec 032 §10). A minimal restyle of the former
+// internal/api/project.templ: the same outcome / current-work / evidence /
+// next-decision structure, wrapped in the design-system shell (project
+// sidebar + cards) — not the Operations redesign (that is a later task). The
+// decision <aside aria-label="Next decision"> and the evidence <details>
+// disclosure are preserved verbatim, as is the owner/delegate/evidence copy.
+
+templ Cockpit(v CockpitView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		<div class="shell">
+			@sidebar(v.Project, "overview")
+			<div class="main">
+				<div class="canvas">
+					<section class="card pad" aria-labelledby="outcome-heading">
+						<h1 id="outcome-heading">{ v.Project.Name }</h1>
+						<p class="muted small">Project id: { v.Project.ID } &middot; key: { v.Project.Key }</p>
+						<p>{ v.Project.Key } &middot; <span class="chip plain">{ v.ModeName }</span></p>
+						<p class="muted small">{ v.ModeBasis }</p>
+					</section>
+
+					<section class="card" id="work" aria-labelledby="work-heading">
+						<div class="hd"><h3 id="work-heading">Current work</h3></div>
+						<div class="bd">
+							@workBucket("Running", v.Work.InProgress)
+							@workBucket("Awaiting review", v.Work.InReview)
+							@workBucket("Ready", v.Work.Ready)
+							@workBucket("Blocked", v.Work.Blocked)
+						</div>
+					</section>
+
+					<section class="card pad">
+						<details>
+							<summary>Evidence</summary>
+							<p>Ranking focus: { rankingFocusText(v.RankingFocus) }</p>
+
+							<h4>Repositories</h4>
+							<ul>
+								if len(v.Repositories) == 0 {
+									<li>No mapped repositories</li>
+								} else {
+									for _, r := range v.Repositories {
+										<li>{ r.Repo }: { r.DoneState } (<span class={ "chip " + EvidenceChip(r.EvidenceCategory) }>{ r.EvidenceCategory }</span>)</li>
+									}
+								}
+							</ul>
+
+							<h4>Blocking concerns</h4>
+							<ul>
+								if len(v.SecondaryConcerns) == 0 {
+									<li>No open blockers</li>
+								} else {
+									for _, c := range v.SecondaryConcerns {
+										<li><a href={ c.URL }>{ c.Title }</a>: { c.EvidenceSummary }</li>
+									}
+								}
+							</ul>
+
+							<h4>Cost, last 30 days</h4>
+							<ul>
+								if len(v.CostTotals) == 0 {
+									<li>No cost recorded</li>
+								} else {
+									for _, t := range v.CostTotals {
+										<li>{ t.Currency } { t.CostAmount }, { t.UnpricedTokens } unpriced tokens</li>
+									}
+								}
+							</ul>
+
+							<a href={ "/projects/" + v.Project.ID + "/activity" }>Open project activity</a>
+						</details>
+					</section>
+
+					<div class="card pad">
+						<aside aria-label="Next decision">
+							<h3>Next decision</h3>
+							if v.NextDecision != nil {
+								<p>{ v.NextDecision.Title }</p>
+								<p>Accountable: { v.NextDecision.Accountable }</p>
+								<p>{ v.NextDecision.Readiness }</p>
+							} else {
+								<p>No governed decision is ready.</p>
+							}
+						</aside>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// workBucket renders one cockpit work bucket as a list, or a single "None"
+// item when empty — matching the former project.templ per-bucket <ul>.
+templ workBucket(heading string, items []WorkRow) {
+	<h4>{ heading }</h4>
+	<ul>
+		if len(items) == 0 {
+			<li>None</li>
+		} else {
+			for _, item := range items {
+				<li>@workRow(item)</li>
+			}
+		}
+	</ul>
+}
+
+// workRow renders one cockpit work item: id/title link, its state and the
+// evidence behind that state, then the owner/delegate annotations when
+// present. The "Owned by …" and "… is the delegate" copy is preserved
+// verbatim (asserted by the cockpit e2e and web tests).
+templ workRow(item WorkRow) {
+	<a href={ item.URL }>{ item.ID } &mdash; { item.Title }</a>: { item.State } (<span class={ "chip " + EvidenceChip(item.EvidenceCategory) }>{ item.EvidenceCategory }</span>) &mdash; { item.EvidenceSummary }
+	if item.Owner != "" {
+		&middot; Owned by { item.Owner }
+	}
+	if item.Delegate != "" {
+		&middot; { item.Delegate } is the delegate
+	}
+}

@@ -296,8 +296,9 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		if !strings.Contains(body, wantSpec) {
 			t.Fatalf("GET %s: body missing owning-spec sentence %q:\n%s", path, wantSpec, body)
 		}
-		if strings.Contains(body, "<form") || strings.Contains(body, "<button") {
-			t.Fatalf("GET %s unexpectedly renders a form or button:\n%s", path, body)
+		main := mainContent(t, body)
+		if strings.Contains(main, "<form") || strings.Contains(main, "<button") {
+			t.Fatalf("GET %s unexpectedly renders a form or button in its main content:\n%s", path, body)
 		}
 	}
 
@@ -324,7 +325,7 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	if got := strings.Count(body, "<nav aria-label="); got != 2 {
 		t.Fatalf("nav landmark count = %d, want 2 (Primary + Project):\n%s", got, body)
 	}
-	if !strings.Contains(body, `<nav aria-label="Primary">`) {
+	if !strings.Contains(body, `<nav aria-label="Primary"`) {
 		t.Fatalf("missing the primary global nav landmark:\n%s", body)
 	}
 	if !strings.Contains(body, `<nav aria-label="Project"`) {
@@ -358,15 +359,42 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 }
 
 // assertNoFabrication checks a rendered Overview variant carries none of the
-// forbidden, non-existent-in-Part-1 concepts: a bare percentage, a
-// project-health readout, or a prototype form/button control.
+// forbidden, non-existent-in-Part-1 concepts: a bare percentage or a
+// project-health readout anywhere, or a fabricated form/button control in the
+// page content. The form/button check scopes to the main-content region: the
+// shared shell legitimately carries a theme-toggle <button>, which is chrome,
+// not fabricated workflow state.
 func assertNoFabrication(t *testing.T, variant, body string) {
 	t.Helper()
-	for _, forbidden := range []string{"%", "project health", "<form", "<button"} {
+	for _, forbidden := range []string{"%", "project health"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("variant=%s unexpectedly renders %q:\n%s", variant, forbidden, body)
 		}
 	}
+	main := mainContent(t, body)
+	for _, forbidden := range []string{"<form", "<button"} {
+		if strings.Contains(main, forbidden) {
+			t.Fatalf("variant=%s unexpectedly renders %q in its main content:\n%s", variant, forbidden, body)
+		}
+	}
+}
+
+// mainContent returns the page's <main id="main-content"> region, excluding
+// the shared shell chrome (top bar, theme toggle, avatar). Honest-affordance
+// checks scope to this region so the shell's legitimate theme-toggle <button>
+// does not read as fabricated page content.
+func mainContent(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<main id="main-content"`)
+	if i < 0 {
+		t.Fatalf("body has no <main id=\"main-content\"> region:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</main>")
+	if j < 0 {
+		t.Fatalf("body has no closing </main>:\n%s", body)
+	}
+	return rest[:j]
 }
 
 // getCockpit fetches GET /api/v1/projects/{id}/cockpit with a bearer token

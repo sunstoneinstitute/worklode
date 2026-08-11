@@ -30,7 +30,7 @@ func assertShell(t *testing.T, body string) {
 	for _, want := range []string{
 		`<html lang="en">`,
 		`href="#main-content"`,
-		`<nav aria-label="Primary">`,
+		`<nav aria-label="Primary"`,
 		`<main id="main-content"`,
 		`href="/assets/app.css"`,
 	} {
@@ -41,6 +41,26 @@ func assertShell(t *testing.T, body string) {
 	if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 		t.Errorf("main landmark count = %d, want 1", got)
 	}
+}
+
+// mainContent returns the page's <main id="main-content"> region — the page's
+// own content, excluding the shared shell chrome (top bar, brand, theme
+// toggle, avatar). Honest-placeholder checks scope their "no fabricated
+// affordance" assertions to this region: the shell legitimately carries a
+// theme-toggle <button>, but a placeholder's content must still render no
+// form or button that would imply an unbuilt workflow exists.
+func mainContent(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<main id="main-content"`)
+	if i < 0 {
+		t.Fatalf("body has no <main id=\"main-content\"> region:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</main>")
+	if j < 0 {
+		t.Fatalf("body has no closing </main>:\n%s", body)
+	}
+	return rest[:j]
 }
 
 // assertOneAriaCurrent checks exactly one nav item (primary or project-local)
@@ -115,9 +135,10 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 			}
 			body := rr.Body.String()
 			bodyContains(t, body, tt.want)
+			main := mainContent(t, body)
 			for _, forbidden := range []string{"<form", "<button"} {
-				if strings.Contains(body, forbidden) {
-					t.Fatalf("%s unexpectedly renders %q:\n%s", tt.path, forbidden, body)
+				if strings.Contains(main, forbidden) {
+					t.Fatalf("%s unexpectedly renders %q in its main content:\n%s", tt.path, forbidden, body)
 				}
 			}
 		})
@@ -136,6 +157,24 @@ func TestShellReferencesHTMX(t *testing.T) {
 	rr := doReq(t, h, "GET", "/assets/htmx.min.js", "", nil)
 	if rr.Code != 200 {
 		t.Errorf("GET /assets/htmx.min.js = %d, want 200 (no auth redirect)", rr.Code)
+	}
+}
+
+// TestShellReferencesThemeToggle asserts the shell wires the self-hosted
+// theme toggle: it renders the #theme button, references /assets/theme.js, and
+// that script is served unauthenticated like the other assets.
+func TestShellReferencesThemeToggle(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	if !strings.Contains(body, `id="theme"`) {
+		t.Error("shell does not render the theme-toggle button")
+	}
+	if !strings.Contains(body, `src="/assets/theme.js"`) {
+		t.Error("shell does not reference the self-hosted theme-toggle script")
+	}
+	rr := doReq(t, h, "GET", "/assets/theme.js", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Errorf("GET /assets/theme.js = %d, want 200 (no auth redirect)", rr.Code)
 	}
 }
 
@@ -214,9 +253,10 @@ func TestProjectSections(t *testing.T) {
 			assertShell(t, body)
 			assertOneAriaCurrent(t, body)
 			bodyContains(t, body, "proj", want)
+			main := mainContent(t, body)
 			for _, forbidden := range []string{"<form", "<button"} {
-				if strings.Contains(body, forbidden) {
-					t.Fatalf("section %s unexpectedly renders %q:\n%s", section, forbidden, body)
+				if strings.Contains(main, forbidden) {
+					t.Fatalf("section %s unexpectedly renders %q in its main content:\n%s", section, forbidden, body)
 				}
 			}
 		})
@@ -335,7 +375,7 @@ func TestWorkPageOrgBoard(t *testing.T) {
 		"CrashLoopBackOff on app", // recent-failures message
 		"Inbox: 1 new issue",      // inbox count
 		"Human-owned task",        // the human-owned in_progress task's title
-		"<td>dana</td>",           // its Assignee column cell — proves the column renders the value, not just the header
+		"Assignee dana",           // its assignee, rendered on the row — proves the value renders, distinct from the holder
 	)
 }
 
@@ -483,8 +523,8 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 // scheme (e.g. javascript:) never reaches the rendered href verbatim:
 // templ's own href sanitizer (github.com/a-h/templ's SafeURL, applied
 // automatically to every <a href=...> expression by the generated code —
-// see task.templ) neutralizes it into "about:invalid#TemplFailedSanitizationURL",
-// since webTimelineRow.URL is rendered as a plain string. This is templ's
+// see internal/ui/task.templ) neutralizes it into "about:invalid#TemplFailedSanitizationURL",
+// since ui.TimelineRow.URL is rendered as a plain string. This is templ's
 // equivalent safety net to html/template's contextual autoescaping (which
 // used to substitute the different placeholder "#ZgotmplZ" for the same
 // class of hostile URL) — same guarantee (never rendered verbatim), a

@@ -61,14 +61,16 @@ Request flow: `internal/cmd` (cobra commands, both server and client sides) →
 cockpit; development mode remains open when no provider is configured, +
 `/metrics`, OIDC login) → `internal/store` (all Postgres access via pgx;
 domain logic like task state machine, ranking, atomic `claim` live here). The
-cockpit's web pages render with `templ` components (`internal/api/*.templ`,
+cockpit's web pages render with `templ` components (`internal/ui/*.templ`,
 compiled to `*_templ.go` by `go generate`), styled by a standalone Tailwind
 CSS v4 build (`internal/ui/styles/app.tailwind.css` →
 `internal/ui/assets/app.css`) and a self-hosted, currently dormant HTMX.
-`internal/ui` owns the design-system assets (stylesheet, fonts, htmx) served
-at `/assets/` via `internal/api`'s `assetHandler`; it depends on nothing
-beyond stdlib, `internal/store` (if needed), and the templ runtime —
-`internal/api` imports `internal/ui`, never the reverse.
+`internal/ui` owns the page components and the design-system assets
+(stylesheet, fonts, htmx) served at `/assets/` via `internal/api`'s
+`assetHandler`; the components take `internal/ui` view types that
+`internal/api`'s `render.go` maps its read-model DTOs into. `internal/ui`
+depends on nothing beyond stdlib, `internal/store` (if needed), and the templ
+runtime — `internal/api` imports `internal/ui`, never the reverse.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks, Flux notification-controller webhooks — both HMAC-signed),

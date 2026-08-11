@@ -159,7 +159,20 @@
     display: none !important;
   }
 }
-@layer utilities;
+@layer utilities {
+  .fixed {
+    position: fixed;
+  }
+  .sticky {
+    position: sticky;
+  }
+  .inline {
+    display: inline;
+  }
+  .table {
+    display: table;
+  }
+}
 :root {
   --bg: #F0F0F1;
   --surface: #FFFFFF;
@@ -330,6 +343,21 @@ button {
   outline: 2px solid var(--link);
   outline-offset: 2px;
   border-radius: 4px;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
 }
 .topbar {
   position: sticky;
