@@ -152,9 +152,10 @@ func isLoopbackRedirect(raw string) bool {
 }
 
 // cliLogin handles GET /auth/cli/login: validate the loopback redirect target,
-// stamp it into a signed cookie, and redirect into the normal web login.
+// stamp it into a signed cookie, and redirect into the Keycloak web login.
+// 404 when OIDC is unconfigured (s.oidc == nil).
 func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
-	if s.oidc == nil && s.gh == nil {
+	if s.oidc == nil {
 		writeErr(w, http.StatusNotFound, "no interactive login configured")
 		return
 	}
@@ -209,25 +210,19 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// wellKnownLogin handles GET /.well-known/lode-login: tells the CLI where to start
-// the login and which providers are available. 404 when the server has no
-// interactive provider configured.
+// wellKnownLogin handles GET /.well-known/lode-login: tells the CLI where to
+// start the login and which providers are available — always ["keycloak"],
+// worklode's sole interactive login provider (spec 023 §3.1). 404 when OIDC
+// is unconfigured (s.oidc == nil).
 func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
-	if s.oidc == nil && s.gh == nil {
+	if s.oidc == nil {
 		writeErr(w, http.StatusNotFound, "no interactive login configured")
 		return
-	}
-	var providers []string
-	if s.gh != nil {
-		providers = append(providers, "github")
-	}
-	if s.oidc != nil {
-		providers = append(providers, "keycloak")
 	}
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"authorize_url": base + "/auth/cli/login",
 		"token_url":     base + "/auth/cli/token",
-		"providers":     providers,
+		"providers":     []string{"keycloak"},
 	})
 }

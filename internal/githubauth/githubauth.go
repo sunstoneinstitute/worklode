@@ -1,8 +1,10 @@
-// Package githubauth wraps the GitHub App user-authorization (OAuth) flow for
-// worklode's web login: it builds the authorize URL, exchanges the code for
-// a user-to-server token, and reads the user's identity plus org/team
-// membership. It parallels internal/oidc and never touches it. A Client is
-// built only when the GitHub App client id and secret are configured.
+// Package githubauth wraps the GitHub App user-authorization (OAuth) flow:
+// it builds the authorize URL, exchanges the code for a user-to-server
+// token, and reads the user's identity. Keycloak is worklode's only login
+// provider (spec 023 §3.1); these primitives are dormant raw material for
+// the deferred account-link flow (spec 023 §3.3). It parallels internal/oidc
+// and never touches it. A Client is built only when the GitHub App client id
+// and secret are configured.
 package githubauth
 
 import (
@@ -21,19 +23,15 @@ import (
 type Client struct {
 	ClientID     string
 	ClientSecret string
-	Org          string
-	AdminTeam    string
 	APIBase      string          // e.g. https://api.github.com
 	Endpoint     oauth2.Endpoint // authorize/token endpoints
 }
 
 // New builds a Client for the public GitHub.
-func New(clientID, clientSecret, org, adminTeam string) *Client {
+func New(clientID, clientSecret string) *Client {
 	return &Client{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		Org:          org,
-		AdminTeam:    adminTeam,
 		APIBase:      "https://api.github.com",
 		Endpoint:     githuboauth.Endpoint,
 	}
@@ -126,50 +124,4 @@ func (c *Client) FetchIdentity(ctx context.Context, token string) (*Identity, er
 		return nil, fmt.Errorf("github GET /user: status %d", code)
 	}
 	return &id, nil
-}
-
-// Roles is the authorization derived from GitHub membership.
-type Roles struct {
-	User  bool // active member of Org
-	Admin bool // active member of AdminTeam
-}
-
-type membershipResp struct {
-	State string `json:"state"`
-}
-
-// activeMembership returns true when the endpoint returns 200 with state
-// "active". A 404 means "not a member" and yields false, nil.
-func (c *Client) activeMembership(ctx context.Context, token, path string) (bool, error) {
-	var m membershipResp
-	code, err := c.get(ctx, token, path, &m)
-	if err != nil {
-		return false, err
-	}
-	switch code {
-	case http.StatusOK:
-		return m.State == "active", nil
-	case http.StatusNotFound:
-		return false, nil
-	default:
-		return false, fmt.Errorf("github GET %s: status %d", path, code)
-	}
-}
-
-// Roles evaluates org membership (→ User) and admin-team membership (→ Admin)
-// for login, using the user-to-server token.
-func (c *Client) Roles(ctx context.Context, token, login string) (Roles, error) {
-	user, err := c.activeMembership(ctx, token, "/user/memberships/orgs/"+c.Org)
-	if err != nil {
-		return Roles{}, err
-	}
-	if !user {
-		return Roles{}, nil
-	}
-	admin, err := c.activeMembership(ctx, token,
-		fmt.Sprintf("/orgs/%s/teams/%s/memberships/%s", c.Org, c.AdminTeam, login))
-	if err != nil {
-		return Roles{}, err
-	}
-	return Roles{User: true, Admin: admin}, nil
 }

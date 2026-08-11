@@ -23,12 +23,6 @@ patches:
       - op: add
         path: /data/LODE_PUBLIC_URL
         value: "https://worklode.dev.sunstoneinstitute.ai"
-      - op: add
-        path: /data/LODE_GITHUB_ORG
-        value: "sunstoneinstitute"
-      - op: add
-        path: /data/LODE_GITHUB_ADMIN_TEAM
-        value: "worklode-admins"
       - op: replace
         path: /data/LODE_SKILL_SOURCES
         value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
