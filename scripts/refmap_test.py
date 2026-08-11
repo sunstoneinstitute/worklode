@@ -57,6 +57,14 @@ def write_tree(tmp, mapping, files, commit=True):
     return root
 
 
+def commit_all(root, message="post-write"):
+    """What a human does between two -w runs: stage and commit everything,
+    including whatever -w just wrote (the rewritten files and, once it
+    exists, the durable .refmap-applied marker)."""
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", message)
+
+
 def invoke_refmap(root, *args):
     """Run the real refmap.py against an already-built `root`, without
     rebuilding or re-committing it -- what a second -w run in a row needs."""
@@ -753,6 +761,95 @@ class IdempotencyTest(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             dry = invoke_refmap(root, "--dry-run")
             self.assertEqual(dry.returncode, 0, dry.stderr)
+
+
+# C3 round 2: the git-dirty check only ever caught a second -w run *before*
+# a commit -- committing the first run's output (files + marker) makes the
+# tree clean again, and round 1's gate had nothing left to say. These are
+# the full sequences the round-2 review demanded: -w, commit, -w again, and
+# the same sequence under --corpus-to docs/specs, which is the mode where
+# the path form's own self-blocking property (its output carries corpus_to,
+# which the input pattern requires) stops holding, because corpus_to *is*
+# corpus_from there.
+class DurableIdempotencyMarkerTest(unittest.TestCase):
+    OVERLAP_MAPPING = IdempotencyTest.OVERLAP_MAPPING
+
+    def test_second_write_after_committing_the_first_still_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            after_first = (root / "internal/cmd/show.go").read_text()
+            self.assertEqual(after_first, "// see WL-SPEC-6\n")
+            self.assertTrue((root / "docs/specs2/.refmap-applied").is_file())
+
+            commit_all(root)  # the tree is clean again -- round 1's gate alone would pass
+            second = invoke_refmap(root, "-w")
+            self.assertNotEqual(second.returncode, 0)
+            after_second = (root / "internal/cmd/show.go").read_text()
+            self.assertEqual(after_second, after_first)
+            self.assertNotIn("WL-SPEC-11", after_second)
+
+    def test_second_write_after_committing_the_first_still_refuses_under_corpus_to_override(self):
+        # Real repro shape from the review: a path reference whose *target*
+        # filename is itself a real `from` elsewhere in the mapping, rewritten
+        # under --corpus-to equal to corpus_from -- the output is
+        # indistinguishable from a fresh old-corpus reference on a second pass.
+        mapping = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - {from: 025-design-object-model.md, to: 006-knowledge-graph.md,
+                 from_id: WL-SPEC-25, to_id: WL-SPEC-6}
+              - {from: 006-knowledge-graph.md, to: 011-kg.md,
+                 from_id: WL-SPEC-6, to_id: WL-SPEC-11}
+            sections: {}
+            dropped: []
+            """
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, mapping,
+                {"README.md": "See docs/specs/025-design-object-model.md.\n"},
+                "-w", "--corpus-to", "docs/specs",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            after_first = (root / "README.md").read_text()
+            self.assertEqual(after_first, "See docs/specs/006-knowledge-graph.md.\n")
+
+            commit_all(root)
+            second = invoke_refmap(root, "-w", "--corpus-to", "docs/specs")
+            self.assertNotEqual(second.returncode, 0)
+            after_second = (root / "README.md").read_text()
+            self.assertEqual(after_second, after_first)
+            self.assertNotIn("011-kg.md", after_second)
+
+    def test_force_bypasses_the_marker_and_rewrites_again(self):
+        # The explicit escape hatch for "I amended mapping.yaml and really do
+        # need to re-run" -- deliberately reaches the WL-SPEC-11 collision
+        # this whole mechanism exists to block by default, to prove --force
+        # actually removes the block rather than something else.
+        with tempfile.TemporaryDirectory() as tmp:
+            root, first = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"}, "-w",
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            commit_all(root)
+
+            second = invoke_refmap(root, "-w", "--force")
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(
+                (root / "internal/cmd/show.go").read_text(), "// see WL-SPEC-11\n"
+            )
+
+    def test_marker_is_not_written_when_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, result = run_refmap(
+                tmp, self.OVERLAP_MAPPING, {"internal/cmd/show.go": "// see WL-SPEC-4\n"},
+                "--dry-run",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((root / "docs/specs2/.refmap-applied").exists())
 
 
 class CorpusToOverrideTest(unittest.TestCase):
