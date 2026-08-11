@@ -19,7 +19,10 @@ the checks. Crucially `mapping.yaml` derives from `fold.yaml` **alone**, never
 from the written prose — so the consolidating rewrite in parts 2–4 can be as
 heavy as it needs to be without the mapping drifting, and `--check` catches a
 rewrite that drops or invents an anchor. `scripts/refmap.py` consumes
-`mapping.yaml` at cutover to rewrite the repo's ~1,700 inbound references.
+`mapping.yaml` at cutover to rewrite the repo's ~1,900 inbound references
+(measured against a complete synthetic mapping: 1,831 substitutions planned
+plus 58 that need a human decision. The original ~1,700 estimate missed the
+bare `NNN §N.N` prose form in `ns/*.ttl`).
 
 **Why this is cheap to execute.** All the judgment lives in `fold.yaml`, written
 at the planning tier. Once it exists, each document's rewrite is a
@@ -79,7 +82,7 @@ corpus: {from: docs/specs, to: docs/specs2}
 documents:
   - to: 005-prioritization-and-pickup.md
     title: Prioritization and pickup
-    sources: [005-prioritization-and-pickup.md]
+    sources: [005-prioritization-and-pickup.md, 003-platform-graph-design.md]
     sections:
       - {new: "0", heading: "Purpose & scope", from: ["005-prioritization-and-pickup.md#sec-0"]}
       - {new: "1", heading: "`concern` and `priority`", from: ["005-prioritization-and-pickup.md#sec-1"]}
@@ -92,6 +95,17 @@ documents:
 `from` is a list so N old sections may merge into one new section; the mapping
 then points all N at the same new anchor. `dropped` carries a reason string
 whose first token is a category — `absorbed`, `spent`, `superseded`, `dead`.
+
+**Two rules `--check` enforces, both easy to trip.** Every file named in a
+`from:` or a `dropped:` ref must appear in that document's `sources:` — which
+is why 003 is listed above even though nothing is folded from it. `sources:`
+alone produces `mapping.yaml`'s `documents:` rows, so an omission silently
+costs every whole-document and `WL-SPEC-N` reference to that file, plus a
+`requires:` edge and the provenance note. And a `from:` ref must name an
+anchor the `--with-drafts` view still counts as **live**; a real but retired
+anchor — a superseded document's, or a replaced section's — goes under
+`dropped:` and nowhere else. There are 22 such anchors across eight documents,
+plus all six of 003.
 
 **`dropped:` is not where scaffolding goes.** The `Dependencies` / `Open
 questions` / `Acceptance criteria` trio is *kept and consolidated* per the
@@ -125,7 +139,10 @@ a better spec. Nothing here licenses a design change.
 1. **Delete the provenance markers** the scaffold emitted.
 2. **Merged sections state shared material once.** Where `from:` listed several
    sources for one section, keep every distinct claim and de-duplicate only
-   restatements of the same claim.
+   restatements of the same claim. A clause that does not parse — garbled or
+   truncated in the source — may be repaired to say what it evidently means;
+   that is a non-substantive repair, not a change of rule. Where what it means
+   is not evident, escalate rather than guess.
 3. **Absorb amendment notes.** A `> **Amended by spec NNN.** …` block is replaced
    by the amended text stating the post-amendment rule directly. The note goes
    away; what it said does not.
@@ -134,10 +151,19 @@ a better spec. Nothing here licenses a design change.
    count as current here. If resolving one requires a judgment call, stop and
    escalate rather than guess — that is a `fold.yaml` defect.
 5. **Repoint cross-references** using `mapping.yaml`. A reference to material
-   listed under `dropped:` is an escalation, not a deletion.
+   listed under `dropped:` is an escalation, not a deletion. **This rule has a
+   manual half.** `refmap.py` only sees a reference carrying a `§`, a filename
+   or a `WL-SPEC-N`; a bare number — `(018)`, `**014**`, `per 027` — is
+   invisible to it, and `--scaffold` copies section text verbatim, so all 129
+   such references in the corpus land in the new documents pointing at numbers
+   that will not exist. The per-document task below carries the grep. The
+   regex is deliberately not widened: a bare three-digit number matches dates,
+   version strings and port numbers, and widening it has already caused two
+   critical bugs.
 6. **Never add a normative claim, never drop one.** No new MUST/never/only
-   sentences, no removed ones. Trimming a redundant restatement is allowed under
-   rule 2; trimming the last statement of a rule is not.
+   sentences, no removed ones. Trimming a redundant restatement, and repairing a
+   clause that does not parse, are allowed under rule 2; trimming the last
+   statement of a rule is not.
 7. **Preserve every backticked identifier** — schema columns, CLI flags,
    ontology terms, file paths, env vars. `fold.py --check --ids` enforces this
    mechanically.
@@ -348,9 +374,11 @@ CLI flag or ontology term — and that failure is mechanically detectable.
       anchor. A rewrite that merely reorders or rewords around it must pass.
 - [ ] **Step 2: Implement.** Compare on exact backtick-span text; do not
       normalise case or punctuation.
-- [ ] **Step 3: Add an escape hatch.** A per-document
-      `allow_dropped_ids: ["`old_column`"]` key in `fold.yaml`, each entry
-      requiring a `# reason:` comment. Assert an unlisted drop still fails.
+- [ ] **Step 3: Add an escape hatch.** A per-document `allow_dropped_ids:`
+      key in `fold.yaml`, a **mapping** of identifier → reason (the raw
+      identifier is the key, so one entry covers every source contributing
+      that same string), with the reason required by the parser — an empty
+      one is an error. Assert an unlisted drop still fails.
 
 ### Task 7 — Validate end-to-end on spec 005
 
@@ -396,9 +424,13 @@ this migration is replacing.
 > **Files:** Create `docs/specs2/<NNN-slug>.md`.
 >
 > - [ ] `./scripts/fold.py --scaffold --only <NNN-slug>.md`
-> - [ ] Rewrite the scaffold following **Rewrite rules** 1–10 above. Do not edit
+> - [ ] Rewrite the scaffold following **Rewrite rules** 1–11 above. Do not edit
 >       `fold.yaml`; if a rule cannot be followed without a judgment call, stop
 >       and report it as a `fold.yaml` defect.
+> - [ ] `grep -nE '\(0[0-9]{2}\)|\*\*0[0-9]{2}\*\*|(per|spec|see) 0[0-9]{2}'
+>       docs/specs2/<NNN-slug>.md` — repoint each hit by hand against
+>       `mapping.yaml` (rewrite rule 5's manual half). `refmap.py` cannot see
+>       a bare number, so these are the references nothing else will catch.
 > - [ ] `./scripts/fold.py --check --partial --ids` — clean. **`--partial` is
 >       required** until the last document is folded; without it the check
 >       reports every anchor of the unfolded corpus as unplaced.
@@ -412,15 +444,21 @@ this migration is replacing.
 `fold.yaml` alone, so it is regenerated once per part, after that part's
 planning-tier `fold.yaml` authoring and before its first rewrite.
 
-**Run the `secmeta.py` step — the hook does not cover it.** The `secfmt.py`
-hook now matches `^docs/specs2?/.*\.md$` and passes the changed filenames, so
-numbering and anchors are covered. The `secmeta.py` hook matches the widened
-pattern too, but it runs `pass_filenames: false`, so it invokes
-`scripts/secmeta.py` with no arguments and checks `DEFAULT_ROOTS` —
-`docs/specs` and `docs/plans` — whatever triggered it. Frontmatter in
-`docs/specs2/` is unchecked until the hook passes the path or `DEFAULT_ROOTS`
-grows. Docs-only PRs skip CI, so the explicit step is the only thing standing
-in for it.
+**The hooks cover `docs/specs2/`; the explicit steps are still worth running.**
+The `secfmt.py` hook matches `^docs/specs2?/.*\.md$` and passes the changed
+filenames; the `secmeta.py` hook runs `pass_filenames: false` but now passes
+both roots explicitly (commit `85443af`), so frontmatter in `docs/specs2/` is
+checked on commit. What no hook covers is `secindex.py` over `docs/specs2/`,
+and neither runs at all until you actually commit — so run the steps in the
+task and see them clean before you write the report, rather than discovering
+a finding at commit time.
+
+**`undeclared` will fire on you, and it is not a tool bug.** `--check`
+reports *any* heading `fold.yaml` does not declare — a sub-heading carried
+over from a source section, an unnumbered `## Appendix`, a `###` the merge
+seemed to want. That is rewrite rule 10 working exactly as designed: new
+structure is a `fold.yaml` change, which is a planning-tier decision. Delete
+the heading or escalate; do not add it to `fold.yaml` yourself.
 
 Model per `MODEL_SELECTION.md`: implementation `sonnet` (fully specified,
 mechanical diff, objective gate); per-document review `sonnet` for the near-1:1
