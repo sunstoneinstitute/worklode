@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""Hermetic tests for scripts/fold.py -- fold.yaml parsing and derived
-mapping.yaml. Follows scripts/secmeta_test.py's isolated-repo pattern: copy
-the script under test into a throwaway repo and run it as a subprocess, so
-REPO (script-relative) resolves inside the temp dir and nothing touches
-docs/specs2/ in this repo."""
+"""Hermetic tests for scripts/fold.py -- fold.yaml parsing, derived
+mapping.yaml, and the --check completeness gate. Follows
+scripts/secmeta_test.py's isolated-repo pattern: copy the script(s) under
+test into a throwaway repo and run fold.py as a subprocess, so REPO
+(script-relative) resolves inside the temp dir and nothing touches
+docs/specs/ or docs/specs2/ in this repo.
+
+--check also imports currentspec.py (for the --with-drafts live view) and
+secindex.py (to prove docs/specs/index.yaml is current), so its fixtures
+copy those scripts too and build a small live docs/specs/ corpus alongside
+docs/specs2/fold.yaml. secindex.render() is used here only to author a
+byte-matching index.yaml fixture -- not to test secindex.py itself, which is
+covered by its own suite.
+"""
 
 import shutil
 import subprocess
@@ -19,6 +28,9 @@ except ImportError:
     sys.exit("fold_test: needs PyYAML (pip install pyyaml)")
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True  # importing secindex must not litter scripts/
+sys.path.insert(0, str(ROOT / "scripts"))
+import secindex  # noqa: E402
 
 # A two-document fixture: one merge (three old sections -> one new section,
 # plus a 1:1 section and a dropped one) and one self-fold (a document whose
@@ -47,14 +59,21 @@ documents:
 
 CONFIG = 'current_project = "worklode"\nproject_key = "WL"\n'
 
+# fold.py imports currentspec.py and secindex.py at module level (for
+# --check's live view and index-freshness proof), and both of those import
+# secfmt.py -- every throwaway repo needs all four, even for --mapping-only
+# tests, or the subprocess fails before argparse ever runs.
+FOLD_SCRIPTS = ("fold.py", "currentspec.py", "secindex.py", "secfmt.py")
+
 
 def write_repo(tmp, fold=FOLD, config=CONFIG):
-    """A throwaway repo: scripts/fold.py, docs/specs2/fold.yaml, and (unless
-    config is None) .worklode/config.toml."""
+    """A throwaway repo: scripts/fold.py (+ the scripts it imports),
+    docs/specs2/fold.yaml, and (unless config is None) .worklode/config.toml."""
     repo = Path(tmp)
     scripts = repo / "scripts"
     scripts.mkdir(parents=True)
-    shutil.copy2(ROOT / "scripts" / "fold.py", scripts / "fold.py")
+    for name in FOLD_SCRIPTS:
+        shutil.copy2(ROOT / "scripts" / name, scripts / name)
     specs2 = repo / "docs" / "specs2"
     specs2.mkdir(parents=True)
     (specs2 / "fold.yaml").write_text(textwrap.dedent(fold))
@@ -225,6 +244,303 @@ class MalformedFoldTest(unittest.TestCase):
                   - {new: "1", heading: "First", from: ["002-github-app-auth.md#sec-1"], extra: nope}
             """
         self.assert_rejected(fold, "001-identity-and-authentication.md: unknown key 'extra' in a section entry")
+
+    def test_rejects_unknown_key_in_document_entry(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+                extra: nope
+            """
+        self.assert_rejected(fold, "documents[0]: unknown key 'extra'")
+
+    def test_rejects_document_missing_to(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+            """
+        self.assert_rejected(fold, "documents[0]: missing 'to'")
+
+    def test_rejects_document_missing_title(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                sources: [002-github-app-auth.md]
+                sections: []
+            """
+        self.assert_rejected(fold, "001-identity-and-authentication.md: missing 'title'")
+
+    def test_rejects_dropped_entry_missing_ref(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+                dropped:
+                  - {reason: "spent: superseded narrative"}
+            """
+        self.assert_rejected(fold, "001-identity-and-authentication.md: dropped entry missing 'ref'")
+
+    def test_rejects_dropped_entry_missing_reason(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+                dropped:
+                  - {ref: "002-github-app-auth.md#sec-5"}
+            """
+        self.assert_rejected(fold, "001-identity-and-authentication.md: dropped entry missing 'reason'")
+
+    def test_rejects_unknown_key_in_dropped_entry(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+                dropped:
+                  - {ref: "002-github-app-auth.md#sec-5", reason: "spent", extra: nope}
+            """
+        self.assert_rejected(fold, "001-identity-and-authentication.md: unknown key 'extra' in a dropped entry")
+
+
+# --check fixtures: a live docs/specs/ mini-corpus (spec markdown + a real,
+# byte-matching index.yaml so the "index is current" precondition holds) plus
+# a docs/specs2/fold.yaml declaring where its anchors go. Two spec documents
+# -- "alpha" (folded by every completeness fixture below) and "beta" (left
+# undeclared by every fold.yaml here, used only by the --partial tests) --
+# keep each test isolated to the one failure class it names.
+ALPHA_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Alpha
+
+## 1. One {#sec-1}
+
+One.
+
+## 2. Two {#sec-2}
+
+Two.
+
+## 3. Three {#sec-3}
+
+Three.
+"""
+
+BETA_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Beta
+
+## 1. One {#sec-1}
+
+One.
+"""
+
+CHECK_FOLD_CLEAN = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+"""
+
+# sec-3 is never placed or dropped.
+CHECK_FOLD_UNPLACED = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+    dropped: []
+"""
+
+# sec-1 is placed under both new:1 and new:2.
+CHECK_FOLD_PLACED_TWICE = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two and one again", from: ["900-alpha.md#sec-2", "900-alpha.md#sec-1"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+"""
+
+# sec-99 does not exist in 900-alpha.md.
+CHECK_FOLD_DANGLING = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three and a phantom", from: ["900-alpha.md#sec-3", "900-alpha.md#sec-99"]}
+    dropped: []
+"""
+
+
+def write_check_repo(tmp, fold, specs):
+    """A throwaway repo for --check: scripts/fold.py plus the currentspec.py
+    (+secfmt.py) it imports for the live view and secindex.py (+secfmt.py) it
+    imports to prove docs/specs/index.yaml is current; docs/specs2/fold.yaml;
+    and a docs/specs/ mini-corpus (`specs` is {filename: markdown}) with a
+    real, byte-matching index.yaml built the same way secindex.py would."""
+    repo = Path(tmp)
+    scripts = repo / "scripts"
+    scripts.mkdir(parents=True)
+    for name in FOLD_SCRIPTS:
+        shutil.copy2(ROOT / "scripts" / name, scripts / name)
+    specs2 = repo / "docs" / "specs2"
+    specs2.mkdir(parents=True)
+    (specs2 / "fold.yaml").write_text(textwrap.dedent(fold))
+    specs_dir = repo / "docs" / "specs"
+    specs_dir.mkdir(parents=True)
+    for name, content in specs.items():
+        (specs_dir / name).write_text(textwrap.dedent(content))
+    (specs_dir / "index.yaml").write_text(secindex.render(specs_dir, repo))
+    return repo
+
+
+def run_fold_check(tmp, *args, fold=CHECK_FOLD_CLEAN, specs=None):
+    """Run the real fold.py --check in an isolated, minimal repository."""
+    repo = write_check_repo(tmp, fold, specs if specs is not None else {"900-alpha.md": ALPHA_SPEC})
+    result = subprocess.run(
+        [sys.executable, "scripts/fold.py", "--check", *args],
+        cwd=repo, capture_output=True, text=True, check=False,
+    )
+    return repo, result
+
+
+class CompletenessCheckTest(unittest.TestCase):
+    # Each case is a real contract of --check's completeness gate: it would
+    # fail if the corresponding group stopped being computed, or its label
+    # or the offending anchor stopped appearing in the report.
+    def test_check_passes_when_every_live_anchor_is_placed_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, fold=CHECK_FOLD_CLEAN)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_reports_unplaced_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, fold=CHECK_FOLD_UNPLACED)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unplaced", result.stderr)
+            self.assertIn("900-alpha.md#sec-3", result.stderr)
+
+    def test_check_reports_placed_twice_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, fold=CHECK_FOLD_PLACED_TWICE)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("placed twice", result.stderr)
+            self.assertIn("900-alpha.md#sec-1", result.stderr)
+
+    def test_check_reports_dangling_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, fold=CHECK_FOLD_DANGLING)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dangling", result.stderr)
+            self.assertIn("900-alpha.md#sec-99", result.stderr)
+
+    def test_check_fails_when_index_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_check_repo(tmp, CHECK_FOLD_CLEAN, {"900-alpha.md": ALPHA_SPEC})
+            (repo / "docs" / "specs" / "index.yaml").unlink()
+            result = subprocess.run(
+                [sys.executable, "scripts/fold.py", "--check"],
+                cwd=repo, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("index.yaml", result.stderr)
+            self.assertIn("missing", result.stderr)
+
+    def test_check_fails_when_index_is_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_check_repo(tmp, CHECK_FOLD_CLEAN, {"900-alpha.md": ALPHA_SPEC})
+            index = repo / "docs" / "specs" / "index.yaml"
+            index.write_text(index.read_text() + "# a hand edit secindex.py did not make\n")
+            result = subprocess.run(
+                [sys.executable, "scripts/fold.py", "--check"],
+                cwd=repo, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("index.yaml", result.stderr)
+            self.assertIn("stale", result.stderr)
+
+
+class PartialCheckTest(unittest.TestCase):
+    def test_partial_ignores_a_document_the_fold_never_declares(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # beta is live but no fold.yaml document names it as a source.
+            _, result = run_fold_check(
+                tmp, "--partial", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": ALPHA_SPEC, "901-beta.md": BETA_SPEC},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_without_partial_the_same_undeclared_document_is_unplaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": ALPHA_SPEC, "901-beta.md": BETA_SPEC},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unplaced", result.stderr)
+            self.assertIn("901-beta.md#sec-1", result.stderr)
+
+    def test_partial_still_reports_dangling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, "--partial", fold=CHECK_FOLD_DANGLING)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dangling", result.stderr)
+            self.assertIn("900-alpha.md#sec-99", result.stderr)
+
+    def test_partial_still_reports_placed_twice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(tmp, "--partial", fold=CHECK_FOLD_PLACED_TWICE)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("placed twice", result.stderr)
+            self.assertIn("900-alpha.md#sec-1", result.stderr)
 
 
 if __name__ == "__main__":

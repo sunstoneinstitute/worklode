@@ -14,19 +14,33 @@ each of its sections can list several `from:` anchors (several old sections
 folded into one new one); `derive_mapping` fans both out so every old anchor
 and every old source file gets its own row.
 
-Usage: fold.py --mapping
+`--check` proves fold.yaml accounts for every section currentspec.py's
+--with-drafts view still counts as live in docs/specs/: every live anchor
+must appear exactly once across all `from:` and `dropped:` refs in
+fold.yaml, and every `from:`/`dropped:` ref must name a live anchor.
+`--check --partial` narrows the "every live anchor is placed" half of that
+to the documents fold.yaml currently declares (via `sources:`), so parts 2-4
+can run the check while the fold is still incomplete; the "no ref is
+duplicated or dangling" half always runs over the whole fold.
+
+Usage: fold.py --mapping | --check [--partial]
 
   --mapping   derive docs/specs2/mapping.yaml from docs/specs2/fold.yaml
+  --check     prove fold.yaml accounts for every live section of docs/specs/
+  --partial   with --check, only require full coverage of the documents
+              fold.yaml currently declares
 
---scaffold and --check are later tasks in the same plan; this module's shape
-(load_fold returning a Fold, derive_mapping taking one) is designed to grow
-them without reworking the parse step.
+--scaffold (Task 3) and --check --ids (Task 6) are later tasks in the same
+plan; this module's shape (load_fold returning a Fold, derive_mapping taking
+one, run_check returning named groups) is designed to grow them without
+reworking the parse step or the report shape.
 """
 
 import argparse
 import re
 import sys
 import tomllib
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,17 +49,26 @@ try:
 except ImportError:
     sys.exit("fold: needs PyYAML (pip install pyyaml)")
 
+sys.dont_write_bytecode = True  # importing currentspec/secindex must not litter scripts/
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import currentspec  # noqa: E402
+import secindex  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 FOLD_PATH = Path("docs/specs2/fold.yaml")
 MAPPING_PATH = Path("docs/specs2/mapping.yaml")
+DEFAULT_SPECS_DIR = "docs/specs"
 DEFAULT_PROJECT_KEY = "WL"
 
 # fold.yaml's own top-level keys (see the plan's "The fold.yaml schema") and
-# the keys one `sections:` entry may carry. `from` cannot be a dataclass
-# field (it is a Python keyword), so section and dropped entries stay plain
-# dicts rather than growing a parallel class for two field names.
+# the keys one `sections:` entry may carry, and the keys one `dropped:` entry
+# may carry. `from` cannot be a dataclass field (it is a Python keyword), so
+# section and dropped entries stay plain dicts rather than growing a parallel
+# class for two field names.
 FOLD_KEYS = {"version", "corpus", "documents"}
+DOCUMENT_KEYS = {"to", "title", "sources", "sections", "dropped"}
 SECTION_KEYS = {"new", "heading", "from"}
+DROPPED_KEYS = {"ref", "reason"}
 
 
 class FoldError(Exception):
@@ -117,7 +140,10 @@ def load_fold(path) -> Fold:
     """Parse and validate one fold.yaml. Raises FoldError, naming the
     offending ref or key and the document, on:
 
-      * an unknown key at the fold-document level or within a section entry
+      * an unknown key at the fold-document level, within a section entry,
+        or within a dropped entry
+      * a document missing `to` or `title`
+      * a dropped entry missing `ref` or `reason`
       * a `new:` number whose parent is not declared in the same document
       * a duplicate `new:` within a document
       * a `from:` ref with no `#sec-` fragment
@@ -133,12 +159,28 @@ def load_fold(path) -> Fold:
 
     corpus = raw.get("corpus") or {}
     documents = []
-    for doc in raw.get("documents") or []:
+    for i, doc in enumerate(raw.get("documents") or []):
+        unknown = sorted(str(k) for k in set(doc) - DOCUMENT_KEYS)
+        if unknown:
+            raise FoldError(f"documents[{i}]: unknown key {unknown[0]!r}")
         to = doc.get("to")
+        if not to:
+            raise FoldError(f"documents[{i}]: missing 'to'")
         title = doc.get("title")
+        if not title:
+            raise FoldError(f"{to}: missing 'title'")
         sources = list(doc.get("sources") or [])
         raw_sections = list(doc.get("sections") or [])
-        dropped = [{"ref": d["ref"], "reason": d["reason"]} for d in (doc.get("dropped") or [])]
+
+        dropped = []
+        for d in doc.get("dropped") or []:
+            missing = sorted(DROPPED_KEYS - set(d))
+            if missing:
+                raise FoldError(f"{to}: dropped entry missing {missing[0]!r}")
+            unknown = sorted(str(k) for k in set(d) - DROPPED_KEYS)
+            if unknown:
+                raise FoldError(f"{to}: unknown key {unknown[0]!r} in a dropped entry")
+            dropped.append({"ref": str(d["ref"]), "reason": str(d["reason"])})
 
         # First pass: every key is known and every `new:` is declared once,
         # so the second pass can check each section's parent against the
@@ -209,20 +251,96 @@ def dump_mapping(mapping) -> str:
     return yaml.safe_dump(mapping, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
+def load_live_corpus(specs_dir: Path) -> dict:
+    """{(path, anchor): heading} for currentspec.py's --with-drafts view of
+    `specs_dir` -- the live corpus fold.yaml must fully account for. Raises
+    FoldError, naming the index, when docs/specs/index.yaml is missing or
+    stale, rather than silently checking against an out-of-date view."""
+    specs_dir = specs_dir.resolve()
+    index_path = specs_dir / "index.yaml"
+    rel = index_path.relative_to(REPO)
+    if not index_path.is_file():
+        raise FoldError(f"{rel} is missing -- run scripts/secindex.py")
+    if index_path.read_text() != secindex.render(specs_dir, REPO):
+        raise FoldError(f"{rel} is stale -- run scripts/secindex.py")
+    docs = currentspec.load(index_path)
+    return currentspec.live_sections(docs, with_drafts=True)
+
+
+def run_check(fold: Fold, partial: bool) -> list:
+    """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
+    against the live corpus -- always these three groups today ("unplaced",
+    "placed twice", "dangling"); Task 4's anchor-drift check against written
+    prose appends more groups to this same shape rather than reworking it.
+    A ref is `<filename>#<anchor>`, fold.yaml's own `from:`/`ref:` spelling.
+
+    `partial` narrows only the unplaced check, to anchors belonging to a
+    document some fold.yaml entry already lists in `sources:` -- placed-twice
+    and dangling always run over everything fold.yaml declares, because a
+    duplicate or a phantom ref is a fold.yaml defect regardless of how much
+    of the corpus is folded yet."""
+    specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
+    live = load_live_corpus(specs_dir)
+    live_refs = {f"{Path(path).name}#{anchor}" for path, anchor in live}
+
+    placements = []
+    for doc in fold.documents:
+        for section in doc.sections:
+            placements.extend(section["from"])
+        placements.extend(d["ref"] for d in doc.dropped)
+
+    counts = Counter(placements)
+    placed_twice = sorted(ref for ref, n in counts.items() if n > 1)
+
+    declared = set(placements)
+    dangling = sorted(ref for ref in declared if ref not in live_refs)
+
+    if partial:
+        sources = {s for doc in fold.documents for s in doc.sources}
+        scope = {ref for ref in live_refs if ref.split("#", 1)[0] in sources}
+    else:
+        scope = live_refs
+    unplaced = sorted(scope - declared)
+
+    return [("unplaced", unplaced), ("placed twice", placed_twice), ("dangling", dangling)]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--mapping", action="store_true",
                      help="derive docs/specs2/mapping.yaml from docs/specs2/fold.yaml")
+    ap.add_argument("--check", action="store_true",
+                     help="prove fold.yaml accounts for every live section of docs/specs/")
+    ap.add_argument("--partial", action="store_true",
+                     help="with --check, only require full coverage of the documents "
+                          "fold.yaml currently declares")
     a = ap.parse_args(argv)
 
-    if not a.mapping:
-        ap.error("no mode selected (--mapping)")
+    if a.mapping and a.check:
+        ap.error("--mapping and --check are mutually exclusive")
+    if a.partial and not a.check:
+        ap.error("--partial only makes sense with --check")
+    if not a.mapping and not a.check:
+        ap.error("no mode selected (--mapping, --check)")
 
     try:
         fold = load_fold(REPO / FOLD_PATH)
+        if a.check:
+            groups = run_check(fold, partial=a.partial)
     except FoldError as e:
         print(f"fold: {e}", file=sys.stderr)
         return 2
+
+    if a.check:
+        ok = True
+        for label, refs in groups:
+            if refs:
+                ok = False
+                print(f"fold: {label} ({len(refs)}):", file=sys.stderr)
+                for ref in refs:
+                    print(f"  {ref}", file=sys.stderr)
+        print(f"fold: check {'passed' if ok else 'failed'}", file=sys.stderr)
+        return 0 if ok else 1
 
     mapping = derive_mapping(fold)
     out = REPO / MAPPING_PATH
