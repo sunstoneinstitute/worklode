@@ -17,7 +17,10 @@ and every old source file gets its own row.
 `--check` proves fold.yaml accounts for every section currentspec.py's
 --with-drafts view still counts as live in docs/specs/: every live anchor
 must appear exactly once across all `from:` and `dropped:` refs in
-fold.yaml, and every `from:`/`dropped:` ref must name a live anchor.
+fold.yaml. Every ref must name an anchor docs/specs/index.yaml knows, and
+a `from:` ref must additionally name a *live* one: an anchor that is real
+but retired (its document superseded, or that section replaced) belongs
+under `dropped:`, which is where the corpus's 22 such anchors are recorded.
 "Anchor" here includes the pseudo-anchor `#preamble` (see PREAMBLE_ANCHOR)
 for the prose a document carries before its first `##` heading, which no
 {#sec-N} covers and which anchor-based slicing would otherwise drop
@@ -25,7 +28,8 @@ silently.
 `--check --partial` narrows the "every live anchor is placed" half of that
 to the documents fold.yaml currently declares (via `sources:`), so parts 2-4
 can run the check while the fold is still incomplete; the "no ref is
-duplicated or dangling" half always runs over the whole fold.
+duplicated, phantom, or retired-but-placed" half always runs over the whole
+fold.
 
 `--check` also guards the other side of the fold once the rewrite pass
 starts: for every fold.yaml document already written to docs/specs2/<to>, its
@@ -60,7 +64,7 @@ provenance marker, ready for the rewrite pass that turns it into prose. It refus
 regenerating after the rewrite has started would lose the rewrite -- and
 never writes any document when any target of the invocation already exists.
 
---check --ids (Task 6) adds a sixth report group, "dropped ids": for every
+--check --ids (Task 6) adds a seventh report group, "dropped ids": for every
 document already written to docs/specs2/<to>, every identifier collected
 from the source sections fold.yaml places there must still appear,
 exact-text, somewhere in the written prose -- scoped to the whole document,
@@ -71,7 +75,7 @@ triple-backtick fenced code block -- not the block's whole content as one
 unit. A per-document `allow_dropped_ids:` mapping (identifier -> reason,
 reason required) exempts specific drops. `--ids` only modifies `--check`;
 combined with `--mapping` or `--scaffold` it is rejected at the CLI, and
-omitting it leaves the report at five groups, unchanged.
+omitting it leaves the report at six groups, unchanged.
 """
 
 import argparse
@@ -118,7 +122,7 @@ DROPPED_KEYS = {"ref", "reason"}
 # is a standing rewrite instruction ("read `ls:governs` as `wl:governs`").
 # `<file>#preamble` makes it addressable by the same `from:`/`dropped:`
 # machinery every real anchor uses, so an author must place it or drop it with
-# a reason, and no seventh report group or second concept is needed. Dropping
+# a reason, and no report group of its own or second concept is needed. Dropping
 # is usually right -- four of the five preambles are instructions or spent
 # history rather than content -- and dropping also keeps them out of
 # collect_identifiers, which would otherwise demand the retired `ls:` spelling
@@ -189,6 +193,17 @@ def spec_id(filename, key):
     if not m:
         raise FoldError(f"{filename!r} has no leading number to derive a spec id from")
     return f"{key}-SPEC-{int(m.group(1))}"
+
+
+def rel_to_repo(path: Path) -> Path:
+    """`path` relative to REPO when it lies inside it, else `path` unchanged.
+    fold.yaml's `corpus:` directories are ordinary paths and may legitimately
+    resolve outside the repo, where Path.relative_to raises ValueError -- a
+    message-formatting convenience must not become the error a caller sees."""
+    try:
+        return path.relative_to(REPO)
+    except ValueError:
+        return path
 
 
 def project_key():
@@ -329,31 +344,38 @@ def dump_mapping(mapping) -> str:
     return yaml.safe_dump(mapping, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
-def load_live_corpus(specs_dir: Path) -> dict:
-    """{(path, anchor): heading} for currentspec.py's --with-drafts view of
-    `specs_dir` -- the live corpus fold.yaml must fully account for. Raises
-    FoldError, naming the index, when docs/specs/index.yaml is missing or
-    stale, rather than silently checking against an out-of-date view."""
+def load_corpus(specs_dir: Path) -> tuple:
+    """`(docs, live)` for `specs_dir`: currentspec.py's whole index view and
+    its --with-drafts live view. The fold needs both -- `live` is what
+    fold.yaml must fully account for, `docs` is what an anchor must at least
+    exist in before a ref to it can be anything but a typo. Raises FoldError,
+    naming the index, when docs/specs/index.yaml is missing or stale, rather
+    than silently checking against an out-of-date view."""
     specs_dir = specs_dir.resolve()
     index_path = specs_dir / "index.yaml"
-    rel = index_path.relative_to(REPO)
+    rel = rel_to_repo(index_path)
     if not index_path.is_file():
         raise FoldError(f"{rel} is missing -- run scripts/secindex.py")
-    if index_path.read_text() != secindex.render(specs_dir, REPO):
+    try:
+        current = secindex.render(specs_dir, REPO)
+    except Exception as e:  # a source document secindex.py itself cannot read
+        raise FoldError(f"{rel}: cannot regenerate the index to compare against -- {e}")
+    if index_path.read_text() != current:
         raise FoldError(f"{rel} is stale -- run scripts/secindex.py")
     docs = currentspec.load(index_path)
-    return currentspec.live_sections(docs, with_drafts=True)
+    return docs, currentspec.live_sections(docs, with_drafts=True)
 
 
-def preamble_refs(live: dict, specs_dir: Path) -> set:
-    """{`<filename>#preamble`} for every live document carrying prose outside
-    every anchor. Folded into --check's live-corpus set rather than reported
-    on its own, so unplaced/placed-twice/dangling cover it unchanged: leaving
-    it unaccounted-for is "unplaced", naming it against a document that has
-    none is "dangling", and --partial scopes it by filename like any other
-    ref. Keyed off `live` so a superseded document (003) drops out here for
-    the same reason its anchors do."""
-    names = sorted({Path(path).name for path, _anchor in live})
+def preamble_refs(paths, specs_dir: Path) -> set:
+    """{`<filename>#preamble`} for every document in `paths` carrying prose
+    outside every anchor. Folded into --check's ref sets rather than reported
+    on its own, so the existing groups cover it unchanged: leaving a live one
+    unaccounted-for is "unplaced", naming one against a document that has
+    none is "no such anchor", and --partial scopes it by filename like any
+    other ref. Called twice, over the live paths and over every indexed path,
+    so a retired document's preamble is recordable under `dropped:` exactly
+    like its anchors."""
+    names = sorted({Path(path).name for path in paths})
     return {f"{name}#{PREAMBLE_ANCHOR}"
             for name in names if slice_preamble(specs_dir / name)}
 
@@ -361,16 +383,29 @@ def preamble_refs(live: dict, specs_dir: Path) -> set:
 def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
     against the live corpus and, separately, against the written docs/specs2/
-    prose -- five groups today: "unplaced", "placed twice", "dangling"
-    (fold.yaml vs. docs/specs/, see below), and "missing"/"undeclared"
-    (fold.yaml vs. docs/specs2/, see below). A ref is `<filename>#<anchor>`,
-    fold.yaml's own `from:`/`ref:`/`new:`-derived spelling.
+    prose -- six groups today: "unplaced", "placed twice", "no such anchor",
+    "placed but not live" (fold.yaml vs. docs/specs/, see below), and
+    "missing"/"undeclared" (fold.yaml vs. docs/specs2/, see below). A ref is
+    `<filename>#<anchor>`, fold.yaml's own `from:`/`ref:`/`new:`-derived
+    spelling.
 
-    `ids=True` appends a sixth group, "dropped ids" (see check_ids()), over
-    the same per-document written-file loop that computes missing/undeclared
-    -- reusing its existence gate rather than a second pass over
-    fold.documents. `ids=False` (the default) leaves the report at five
-    groups, byte-identical to before this parameter existed.
+    The two docs/specs/-side failure modes are reported apart because they
+    are not the same defect and do not have the same remedy. "no such anchor"
+    means the ref names nothing in docs/specs/index.yaml at all -- a typo,
+    always an error, whichever key it sits under. "placed but not live" means
+    the anchor is real but currentspec.py's --with-drafts view no longer
+    counts it as stating the design (its document is superseded, or something
+    replaced that section): folding its text forward would carry a retired
+    rule into the new corpus, so it is a defect under `from:` -- and legal,
+    indeed required, under `dropped:`. Reporting both as one "dangling" group
+    made the second unrecordable: `dropped:` was the only key that could hold
+    a retired anchor and the only key --check refused to let it sit in.
+
+    `ids=True` appends a seventh group, "dropped ids" (see check_ids()),
+    over the same per-document written-file loop that computes
+    missing/undeclared -- reusing its existence gate rather than a second
+    pass over fold.documents. `ids=False` (the default) leaves the report at
+    six groups.
 
     `partial` narrows only the unplaced check, to anchors belonging to a file
     some fold.yaml entry already accounts for -- named in a `sources:` list,
@@ -379,30 +414,37 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     whether or not its name also happens to be in `sources:`. Without the
     union, a document whose `sources:` undershoots what it actually places
     exempts the rest of that file's anchors instead of catching them as
-    unplaced. Placed-twice and dangling always run over everything fold.yaml
-    declares, because a duplicate or a phantom ref is a fold.yaml defect
-    regardless of how much of the corpus is folded yet.
+    unplaced. The other four groups always run over everything fold.yaml
+    declares, because a duplicate, a phantom ref or a retired one placed
+    under `from:` is a fold.yaml defect regardless of how much of the corpus
+    is folded yet.
 
     missing/undeclared are unaffected by `partial` for the same reason: each
     is already scoped to exactly the documents fold.yaml declares, minus
     whichever of those have no file yet at docs/specs2/<to> -- that document
     is unstarted work, not drift, so it is skipped rather than reported."""
     specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
-    live = load_live_corpus(specs_dir)
+    docs, live = load_corpus(specs_dir)
     live_refs = {f"{Path(path).name}#{anchor}" for path, anchor in live}
-    live_refs |= preamble_refs(live, specs_dir)
+    live_refs |= preamble_refs({path for path, _anchor in live}, specs_dir)
+    known_refs = {f"{Path(path).name}#{anchor}"
+                  for path, doc in docs.items() for anchor in doc["sections"]}
+    known_refs |= preamble_refs(docs.keys(), specs_dir)
 
-    placements = []
+    placed, dropped_refs = [], []
     for doc in fold.documents:
         for section in doc.sections:
-            placements.extend(section["from"])
-        placements.extend(d["ref"] for d in doc.dropped)
+            placed.extend(section["from"])
+        dropped_refs.extend(d["ref"] for d in doc.dropped)
+    placements = placed + dropped_refs
 
     counts = Counter(placements)
     placed_twice = sorted(ref for ref, n in counts.items() if n > 1)
 
     declared = set(placements)
-    dangling = sorted(ref for ref in declared if ref not in live_refs)
+    no_such_anchor = sorted(ref for ref in declared if ref not in known_refs)
+    not_live = sorted(ref for ref in set(placed)
+                      if ref in known_refs and ref not in live_refs)
 
     if partial:
         sources = {s for doc in fold.documents for s in doc.sources}
@@ -428,7 +470,8 @@ def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     groups = [
         ("unplaced", unplaced),
         ("placed twice", placed_twice),
-        ("dangling", dangling),
+        ("no such anchor", no_such_anchor),
+        ("placed but not live (record under dropped:)", not_live),
         ("missing", missing),
         ("undeclared", undeclared),
     ]
