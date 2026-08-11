@@ -1902,11 +1902,19 @@ class PreambleCheckTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_document_without_preamble_is_never_reported(self):
+    def test_preamble_refs_keys_off_actual_prose_not_the_document(self):
+        # Asserted against preamble_refs directly: the end-to-end form of
+        # this case ("--check passes and says nothing about #preamble") is
+        # vacuous -- it passes identically if preamble_refs is deleted, since
+        # a function that returns nothing also mentions nothing.
         with tempfile.TemporaryDirectory() as tmp:
-            _repo, result = self.check(tmp, fold=CHECK_FOLD_CLEAN)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertNotIn("#preamble", result.stderr)
+            specs_dir = Path(tmp)
+            (specs_dir / "900-alpha.md").write_text(ALPHA_PREAMBLE_SPEC)
+            (specs_dir / "901-beta.md").write_text(ALPHA_SPEC)  # no preamble
+            refs = fold.preamble_refs(
+                ["docs/specs/900-alpha.md", "docs/specs/901-beta.md"], specs_dir
+            )
+            self.assertEqual(refs, {"900-alpha.md#preamble"})
 
     def test_preamble_ref_against_a_document_without_one_is_no_such_anchor(self):
         with tempfile.TemporaryDirectory() as tmp:
