@@ -140,6 +140,32 @@ def sources_for(edge, path, anchor):
     return sorted(edge.get((path, anchor), set()), key=lambda s: (s[0], s[1] or ""))
 
 
+def live_sections(docs, with_drafts):
+    """{(path, anchor): heading} for every section that still states the
+    design -- the same test `main()` prints, factored out so another script
+    (fold.py) can import the live view instead of shelling out. A document
+    dropped whole (`status: superseded`, or an effective `replaces` on the
+    whole document) contributes none of its sections; otherwise a section is
+    live unless something effective replaces it. `with_drafts` mirrors the
+    CLI flag: True treats a draft's own claims as already in force."""
+    replaced = edges(docs, "replaces", "isReplacedBy")
+
+    def effective(src_path):
+        st = status_of(src_path, docs)
+        return st is None or st in EFFECTIVE or (with_drafts and st == "draft")
+
+    out = {}
+    for path, doc in sorted(docs.items()):
+        whole = [s for s in sources_for(replaced, path, None) if effective(s[0])]
+        if doc["status"] == "superseded" or whole:
+            continue
+        for anchor, heading in doc["sections"].items():
+            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0])]
+            if not reps:
+                out[(path, anchor)] = heading
+    return out
+
+
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("--with-drafts", action="store_true")
@@ -173,6 +199,8 @@ def main():
         ]
         return n
 
+    live = live_sections(docs, a.with_drafts)
+
     out, dropped, superseded, dangling = [], [], [], []
     kept = 0
     for path, doc in sorted(docs.items()):
@@ -184,11 +212,11 @@ def main():
             continue
         lines = []
         for anchor, heading in doc["sections"].items():
-            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0])]
-            if reps:
-                dropped.append((name(path, anchor), [name(*s) for s in reps]))
+            if (path, anchor) in live:
+                lines.append((anchor, heading, notes_for(path, anchor)))
                 continue
-            lines.append((anchor, heading, notes_for(path, anchor)))
+            reps = [s for s in sources_for(replaced, path, anchor) if effective(s[0])]
+            dropped.append((name(path, anchor), [name(*s) for s in reps]))
         kept += len(lines)
         out.append((path, doc["status"], lines, notes_for(path, None)))
 
