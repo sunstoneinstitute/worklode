@@ -79,13 +79,18 @@ every successful `-w` and checked, unconditionally, before any other work
 happens. Unlike a git-dirty check, the marker survives a commit -- that is
 the whole point, since the unsafe sequence is exactly "-w, commit, -w
 again" (a clean tree after the first commit gives a dirty-only check
-nothing left to say). `--force` bypasses it, for re-running after amending
-mapping.yaml; deleting the marker file works too. The clean-worktree check
+nothing left to say). Deleting the marker file is the *only* way past it,
+deliberately: `--force` does not bypass it. The clean-worktree check
 (`worktree_state`) still runs as a *secondary* guard -- not because it
 buys idempotency, but because starting from a clean tree keeps the
 resulting diff attributable to this run alone and trivially revertable
-before it's committed -- and `--force` bypasses that too. `--dry-run` is
-unaffected by either guard, since it never writes.
+before it's committed -- and `--force` bypasses that one, which is all it
+does. The two were once bypassed by the same flag, and that made the tool's
+own refusal message route the operator onto the unsafe path: an untracked
+scripts/__pycache__ is enough to make the tree dirty, at which point -w
+says "or --force to override" and --force silently removed the
+double-rewrite guard as well. `--dry-run` is unaffected by either guard,
+since it never writes.
 
 .worktrees/ and .claude/worktrees/ are pruned unconditionally, at any depth,
 along with .git/, and so is anything matching DEFAULT_IGNORE_GLOBS or a
@@ -120,15 +125,16 @@ Usage: refmap.py [--dry-run | -w] [--root .] [--corpus-to DIR]
   -w               write the plan; refuses to write anything if any
                    reference is unmapped, if docs/specs2/.refmap-applied
                    already exists (this tree has already been rewritten
-                   once), or if --root is not a clean git worktree
+                   once -- delete that file to re-run), or if --root is not
+                   a clean git worktree
   --root           repository root to scan and rewrite (default: .)
   --corpus-to      override mapping.yaml's corpus.to for output paths only
   --allow-dropped  pass a recorded dropped: reference through unchanged
                    instead of failing (never-mapped references still fail)
   --ignore-glob    skip files matching GLOB (repeatable), on top of
                    DEFAULT_IGNORE_GLOBS
-  --force          bypass the idempotency marker and the clean-worktree
-                   check (re-running -w after amending mapping.yaml)
+  --force          bypass the clean-worktree check only (never the
+                   idempotency marker)
 """
 
 import argparse
@@ -577,8 +583,8 @@ def write_marker(root: Path, mapping: Mapping, total_subs: int, changed: int) ->
         "# that unsafe even after the first run has been committed (a clean\n"
         "# git worktree is not evidence this file's absence would be).\n"
         "#\n"
-        "# Delete this file, or pass --force, to re-run after amending\n"
-        "# mapping.yaml.\n"
+        "# Delete this file to re-run after amending mapping.yaml. --force does\n"
+        "# not bypass it: revert the previous run, then delete this file.\n"
         f"corpus_to: {mapping.corpus_to}\n"
         f"substitutions: {total_subs}\n"
         f"files_changed: {changed}\n"
@@ -617,18 +623,18 @@ def main(argv=None):
                           "fixture-bearing paths -- for a file that only becomes "
                           "fixture-bearing at cutover, e.g. a plan quoting a test corpus")
     ap.add_argument("--force", action="store_true",
-                     help="bypass the idempotency marker and the clean-worktree check -- "
-                          "for re-running -w after amending mapping.yaml")
+                     help="bypass the clean-worktree check only -- it does not and must "
+                          "not bypass the idempotency marker; delete the marker file for that")
     a = ap.parse_args(argv)
     if a.dry_run and a.write:
         ap.error("--dry-run and -w are mutually exclusive")
 
     root = Path(a.root).resolve()
 
-    if a.write and not a.force and (root / MARKER_PATH).exists():
+    if a.write and (root / MARKER_PATH).exists():
         print(f"refmap: {MARKER_PATH} exists -- refmap.py -w has already run against this "
-              "tree (this survives a commit; it is not the git-dirty check). Delete it, or "
-              "pass --force, to re-run after amending mapping.yaml.")
+              "tree (this survives a commit; it is not the git-dirty check). Delete it to "
+              "re-run after amending mapping.yaml, having first reverted the previous run.")
         return 1
 
     mapping_path = root / MAPPING_PATH
