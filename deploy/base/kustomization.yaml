@@ -40,3 +40,5 @@ configMapGenerator:
       - migrations/0012_doc_edges_covers.down.sql
       - migrations/0013_project_focus_decision.up.sql
       - migrations/0013_project_focus_decision.down.sql
+      - migrations/0014_actor_github_expectation.up.sql
+      - migrations/0014_actor_github_expectation.down.sql

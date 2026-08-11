@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 issued: 2026-07-31
 replaces:
   "#sec-3.1":
@@ -29,8 +29,9 @@ GitHub as a user is a follow-up spec.
 
 - **One actor per person.** Spec 002's dual-provider model creates two actor
   rows for the same human (`preferred_username` and `github:<id>`), which it
-  explicitly punted on reconciling. Making Keycloak the only login removes
-  the split instead of mapping it.
+  explicitly punted on reconciling. Making Keycloak the only login stops the
+  split from growing; the rows it already created are merged into the
+  Keycloak actor (§3.1).
 - **Attribution without escalation.** A stored user token is bounded by the
   intersection of App permissions, installation scope, and the user's own
   access. An org owner's token therefore ≈ the full App permission set. The
@@ -68,9 +69,15 @@ GitHub as a user is a follow-up spec.
   unchanged from spec 001.
 - Config removed: `LODE_GITHUB_ORG`, `LODE_GITHUB_ADMIN_TEAM`. The App no
   longer needs the Organization → Members: read permission.
-- Existing `github:<id>` actor rows are left in place, orphaned (worklode is
-  not in production; nothing meaningful references them). Cleanup is recorded
-  in `docs/follow-ups.md` when this ships.
+- Existing `github:<id>` actor rows are **merged** into the person's Keycloak
+  actor: every row referencing them (`tasks.created_by`, `tasks.assignee`,
+  `tokens.actor_id`, `github_user_tokens.actor_id`, `leases.actor_id`) is
+  repointed to the Keycloak actor id, then the GitHub row is deleted.
+  Worklode is in production with tasks and tokens referencing these rows, so
+  the merge runs as a reviewed one-off SQL script against the production
+  database with explicit human approval rather than as a schema migration.
+  The append-only event log keeps historical `github:<id>` ids as provenance
+  and is never rewritten.
 
 ### 3.2 B. Expected GitHub identity from Keycloak {#sec-3.2}
 
@@ -169,7 +176,6 @@ Config after this spec: `LODE_GITHUB_APP_CLIENT_ID`,
   — own spec, first consumer of `store.UserToken`.
 - Background/scheduled token refresh.
 - Unlink UI beyond row deletion via admin/CLI.
-- Cleanup migration for orphaned `github:<id>` actors (follow-up).
 - hzprod rollout (with the `worklode-prod` App, as in spec 002).
 
 ## 5. Error handling {#sec-5}

@@ -59,11 +59,7 @@ type Config struct {
 	// SessionSecret (above) are shared and required when this is enabled.
 	GitHubClientID     string // LODE_GITHUB_APP_CLIENT_ID
 	GitHubClientSecret string // LODE_GITHUB_APP_CLIENT_SECRET
-	GitHubOrg          string // LODE_GITHUB_ORG
-	// GitHubAdminTeam (LODE_GITHUB_ADMIN_TEAM) is optional; when empty no user is
-	// granted admin via GitHub (the team-membership check simply 404s).
-	GitHubAdminTeam string
-	TokenEncKey     string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	TokenEncKey        string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
 
 	// GitHub App installation auth, used to discover a newly mapped repo's
 	// delivery profile (see discoverDoneState). Independent of the login flow
@@ -135,8 +131,10 @@ type server struct {
 	// routes 404 when it is nil.
 	oidc *oidc.Verifier
 
-	// gh and tokenCipher are nil unless GitHub App auth is configured. All
-	// /auth/github/* routes 404 when gh is nil.
+	// gh and tokenCipher are nil unless the GitHub App OAuth client is
+	// configured; reserved for the future account-link flow (spec 023 §3.3).
+	// Login never touches them — Keycloak is worklode's sole interactive
+	// login provider (spec 023 §3.1).
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
 
@@ -259,9 +257,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err := validatePublicURL(cfg.PublicURL); err != nil {
 			return nil, nil, err
 		}
-		if cfg.GitHubOrg == "" {
-			return nil, nil, fmt.Errorf("LODE_GITHUB_ORG is required when GitHub auth is enabled")
-		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
 		if err != nil || len(key) != 32 {
 			return nil, nil, fmt.Errorf("LODE_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
@@ -270,7 +265,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err != nil {
 			return nil, nil, fmt.Errorf("configure token cipher: %w", err)
 		}
-		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubOrg, cfg.GitHubAdminTeam)
+		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret)
 		s.tokenCipher = tc
 	}
 
@@ -350,9 +345,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /assets/", s.assetHandler())
 	mux.HandleFunc("GET /auth/login", s.authLogin)
 	mux.HandleFunc("GET /auth/callback", s.authCallback)
-	mux.HandleFunc("GET /auth/github/login", s.githubLogin)
-	mux.HandleFunc("GET /auth/github/callback", s.githubCallback)
-	mux.HandleFunc("GET /auth/choose", s.authChoose)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.

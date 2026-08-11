@@ -2,7 +2,7 @@
 status: accepted
 covers: docs/specs/023-keycloak-primary-auth.md
 requires:
-  - 2026-08-02-keycloak-primary-auth-1-keycloak-only.md
+  - 2026-08-11-keycloak-primary-auth-identity.md
 ---
 # Keycloak-Primary Auth 2 — GitHub link storage, refresh, and the web link flow
 
