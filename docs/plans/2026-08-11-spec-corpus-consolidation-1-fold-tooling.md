@@ -515,6 +515,34 @@ the drop is a source-side artifact or a real, accepted loss — the key is the
 raw identifier, so one entry silently covers every source contributing that
 same string.
 
+## Known at hand-off
+
+Carried out of part 1's final review, parked deliberately rather than fixed.
+
+**Part 5 must decide about 18 references that dangle today**, independent of
+this fold. `refmap.py --dry-run` against a complete mapping reports them as
+unmapped, and no `dropped:` entry can absorb a reference to something that never
+existed: `000-umbrella-architecture.md` (4 sites, never existed in this corpus),
+`034-design-doc-sync.md#sec-12.1`–`12.5` (7 — only `sec-12` exists),
+`014-design-documents-as-graph-objects.md#sec-7.2` (4, including
+`ns/shapes.ttl:89,97`), `WL-SPEC-999` (6 — five plans plus `026:636`),
+`006-knowledge-graph.md#sec-4.2`, and `023-keycloak-primary-auth.md#sec-3.3.4`.
+Verified absent at the merge-base too, so this is corpus rot the fold made
+visible rather than caused. The unmapped report exists to force exactly this
+decision; make it, do not silence it.
+
+**`--ignore-glob` can hide a stale reference, and says nothing when it does.**
+`--ignore-glob 'docs/plans/*'` turns an unmapped `#sec-99` into a clean rc 0.
+Two plans quote a fixture corpus verbatim and will need the flag at cutover, so
+it *will* be used. Prefer the narrowest glob that clears them, and read the
+substitution count before and after. A "skipped N file(s)" line would close this
+properly if part 5 wants to spend three minutes on it.
+
+**`scripts/refmap.py:172` cites the fixture id `WL-SPEC-900` in a comment**, so
+the tool reports a reference to itself. Cutover needs
+`--ignore-glob scripts/refmap.py` (safe — its only other hit is a docstring
+example on line 29), or respell the comment `WL-SPEC-9NN`.
+
 ## Series
 
 | Part | Scope | Tier |
