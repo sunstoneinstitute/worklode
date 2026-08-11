@@ -200,6 +200,39 @@ class MalformedFoldTest(unittest.TestCase):
             _, result = run_fold(tmp, "--mapping", fold=fold)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(message, result.stderr)
+            # Parts 2-4 run fold.py dozens of times. A raw traceback instead
+            # of "fold: <msg>" is what makes an implementer improvise rather
+            # than escalate, so every rejection path is held to the reported
+            # form, not merely to a non-zero exit.
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_rejects_to_filename_with_no_leading_number(self):
+        # Raised by derive_mapping, not load_fold -- the one validation that
+        # runs after parsing, and the one that used to escape main()'s
+        # try/except entirely.
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections: []
+            """
+        self.assert_rejected(fold, "has no leading number")
+
+    def test_absent_fold_yaml_is_reported_not_raised(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = write_repo(tmp)
+            (repo / "docs" / "specs2" / "fold.yaml").unlink()
+            result = subprocess.run(
+                [sys.executable, "scripts/fold.py", "--mapping"],
+                cwd=repo, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("fold.yaml", result.stderr)
+            self.assertIn("missing", result.stderr)
 
     def test_rejects_new_number_whose_parent_is_not_declared(self):
         fold = """\
@@ -1411,6 +1444,24 @@ class IdentifierPreservationCheckTest(unittest.TestCase):
             findings = result.stderr.count("(from 900-alpha.md#sec-1)")
             self.assertEqual(findings, 1, result.stderr)
 
+    def test_ids_is_skipped_while_a_ref_names_no_anchor(self):
+        # --ids slices every source section fold.yaml places, so a phantom
+        # ref makes that raise and replaces the whole grouped report with one
+        # parse error -- hiding the very group that names the phantom. Skip
+        # the ids pass instead: fix the fold first, then the ids check has
+        # something coherent to run against.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_DANGLING,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_DROPPED},
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("no such anchor", result.stderr)
+            self.assertIn("900-alpha.md#sec-99", result.stderr)
+            self.assertNotIn("no section", result.stderr)
+            self.assertNotIn("dropped ids", result.stderr)
+
     def test_ids_renamed_column_finding_is_exemptable_with_one_allow_dropped_ids_entry(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, result = run_fold_check(
@@ -1690,6 +1741,29 @@ class TitleNumberTest(unittest.TestCase):
 
             boundary = (repo / "docs" / "specs2" / "100-boundary.md").read_text()
             self.assertIn("# Spec 100 — Boundary title\n", boundary)
+
+
+class ScaffoldOutsideRepoTest(unittest.TestCase):
+    def test_scaffold_reports_cleanly_when_corpus_to_is_outside_the_repo(self):
+        # The live repro for the error-boundary family: --scaffold wrote every
+        # file and *then* crashed on the success message's own
+        # relative_to(REPO), leaving the operator a traceback over a run that
+        # had in fact succeeded.
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            fold_yaml = SCAFFOLD_FOLD.replace(
+                "corpus: {from: docs/specs, to: docs/specs2}",
+                f"corpus: {{from: docs/specs, to: {outside}}}",
+            )
+            repo = write_scaffold_repo(Path(tmp) / "repo", fold_yaml, SCAFFOLD_SPECS)
+            result = subprocess.run(
+                [sys.executable, "scripts/fold.py", "--scaffold"],
+                cwd=repo, capture_output=True, text=True, check=False,
+            )
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((outside / "950-alpha-beta-folded.md").is_file())
 
 
 class ScaffoldHouseChecksTest(unittest.TestCase):
