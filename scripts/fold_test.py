@@ -339,6 +339,23 @@ class MalformedFoldTest(unittest.TestCase):
             """
         self.assert_rejected(fold, "001-identity-and-authentication.md: unknown key 'extra' in a dropped entry")
 
+    def test_rejects_allow_dropped_ids_entry_without_reason(self):
+        fold = """\
+            version: 1
+            corpus: {from: docs/specs, to: docs/specs2}
+            documents:
+              - to: 001-identity-and-authentication.md
+                title: Identity and authentication
+                sources: [002-github-app-auth.md]
+                sections:
+                  - {new: "1", heading: "First", from: ["002-github-app-auth.md#sec-1"]}
+                allow_dropped_ids:
+                  old_column: ""
+            """
+        self.assert_rejected(
+            fold, "001-identity-and-authentication.md: allow_dropped_ids entry 'old_column' has no reason"
+        )
+
 
 # --check fixtures: a live docs/specs/ mini-corpus (spec markdown + a real,
 # byte-matching index.yaml so the "index is current" precondition holds) plus
@@ -767,6 +784,276 @@ class AnchorDriftCheckTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing", result.stderr)
             self.assertIn("950-alpha-folded.md#sec-3", result.stderr)
+
+
+# --check --ids fixtures. IDS_ALPHA_SPEC is 900-alpha.md's usual shape
+# (folded by CHECK_FOLD_CLEAN into 950-alpha-folded.md, same as the
+# anchor-drift fixtures above) with one inline backticked identifier added to
+# sec-1, and nothing else -- kept deliberately free of a fenced code block so
+# these fixtures test only the inline-span half; IDS_ALPHA_SPEC_WITH_BLOCK
+# below (a different table name, so the two halves never overlap by
+# substring accident) tests the fenced-block half in isolation.
+IDS_ALPHA_SPEC = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Alpha
+
+## 1. One {#sec-1}
+
+The `task_edges` table tracks task ordering.
+
+## 2. Two {#sec-2}
+
+Two.
+
+## 3. Three {#sec-3}
+
+Three.
+"""
+
+# `task_edges` reworded and moved elsewhere in the sentence -- still present,
+# so the ids check must pass.
+WRITTEN_950_IDS_CLEAN = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Task ordering lives in the `task_edges` table, which records the from/to pair.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# `task_edges` is gone -- summarised away, the realistic failure this guard
+# exists to catch.
+WRITTEN_950_IDS_DROPPED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Rewritten one, summarised away.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# `task_edges` survives, but under sec-2 instead of sec-1 -- a legitimate
+# merge moving a term between sections. The check is scoped to the whole
+# document, so this must pass.
+WRITTEN_950_IDS_MOVED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+Rewritten one, no longer names the table here.
+
+## 2. Two {#sec-2}
+
+Ordering is tracked by `task_edges`.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+CHECK_FOLD_ALLOW_DROPPED_IDS = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 950-alpha-folded.md
+    title: Alpha folded
+    sources: [900-alpha.md]
+    sections:
+      - {new: "1", heading: "One", from: ["900-alpha.md#sec-1"]}
+      - {new: "2", heading: "Two", from: ["900-alpha.md#sec-2"]}
+      - {new: "3", heading: "Three", from: ["900-alpha.md#sec-3"]}
+    dropped: []
+    allow_dropped_ids:
+      task_edges: "spent: renamed to task_links, see spec 900"
+"""
+
+# A spec whose sec-1 holds only a fenced SQL block (no separate inline
+# backtick mention of the same table name), to test the fenced-block half of
+# --ids in isolation from the inline-span half above.
+IDS_ALPHA_SPEC_WITH_BLOCK = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Alpha
+
+## 1. One {#sec-1}
+
+Schema for the widget graph:
+
+```sql
+CREATE TABLE widget_edges (
+    from_widget text NOT NULL,
+    to_widget   text NOT NULL
+);
+```
+
+## 2. Two {#sec-2}
+
+Two.
+
+## 3. Three {#sec-3}
+
+Three.
+"""
+
+# The whole block is gone, paraphrased instead -- the failure the brief
+# calls out by name ("a rewrite dropping a whole block").
+WRITTEN_950_BLOCK_DROPPED = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+The widget graph schema is summarised here instead of shown verbatim.
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+# The block survives byte-for-byte; only the surrounding prose changed.
+WRITTEN_950_BLOCK_KEPT = """\
+---
+status: draft
+---
+# Spec 950 — Alpha folded
+
+## 1. One {#sec-1}
+
+The widget graph schema, unchanged:
+
+```sql
+CREATE TABLE widget_edges (
+    from_widget text NOT NULL,
+    to_widget   text NOT NULL
+);
+```
+
+## 2. Two {#sec-2}
+
+Rewritten two.
+
+## 3. Three {#sec-3}
+
+Rewritten three.
+"""
+
+
+class IdentifierPreservationCheckTest(unittest.TestCase):
+    # Each case is a real contract of --check --ids: it would fail if the
+    # identifier collection, the exact-text comparison, the escape hatch, or
+    # the --ids/--check coupling stopped working as documented.
+    def test_ids_reports_dropped_identifier_with_source_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_DROPPED},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dropped ids", result.stderr)
+            self.assertIn("`task_edges`", result.stderr)
+            self.assertIn("900-alpha.md#sec-1", result.stderr)
+
+    def test_ids_passes_when_reworded_around_the_identifier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_CLEAN},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ids_passes_when_identifier_moves_to_another_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_MOVED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ids_exempts_an_identifier_listed_in_allow_dropped_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_ALLOW_DROPPED_IDS,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_DROPPED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_plain_check_does_not_run_the_ids_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+                written={"950-alpha-folded.md": WRITTEN_950_IDS_DROPPED},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("dropped ids", result.stderr)
+
+    def test_ids_skips_a_document_nobody_wrote_yet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("dropped ids", result.stderr)
+
+    def test_ids_reports_a_dropped_whole_fenced_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_DROPPED},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("dropped ids", result.stderr)
+            self.assertIn("CREATE TABLE widget_edges", result.stderr)
+            self.assertIn("900-alpha.md#sec-1", result.stderr)
+
+    def test_ids_passes_when_the_fenced_block_survives_verbatim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result = run_fold_check(
+                tmp, "--ids", fold=CHECK_FOLD_CLEAN,
+                specs={"900-alpha.md": IDS_ALPHA_SPEC_WITH_BLOCK},
+                written={"950-alpha-folded.md": WRITTEN_950_BLOCK_KEPT},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 # --scaffold fixtures. Three source documents exercise both directions of the

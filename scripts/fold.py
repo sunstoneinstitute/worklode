@@ -34,12 +34,15 @@ is what lets the check run continuously as parts 2-4 write documents one at a
 time. Only anchor presence is compared -- a heading whose title text the
 rewrite improved is not drift.
 
-Usage: fold.py --mapping | --check [--partial] | --scaffold [--only FILE]
+Usage: fold.py --mapping | --check [--partial] [--ids] | --scaffold [--only FILE]
 
   --mapping   derive docs/specs2/mapping.yaml from docs/specs2/fold.yaml
   --check     prove fold.yaml accounts for every live section of docs/specs/
   --partial   with --check, only require full coverage of the documents
               fold.yaml currently declares
+  --ids       with --check, also verify every backticked identifier and
+              fenced code block from the source sections survives into the
+              written docs/specs2/ prose
   --scaffold  write docs/specs2/<to> skeleton documents from fold.yaml
   --only      with --scaffold, write only the named <to> document
 
@@ -50,10 +53,19 @@ behind an HTML-comment provenance marker, ready for the rewrite pass that
 turns it into prose. It refuses to overwrite an existing docs/specs2/<to> --
 regenerating after the rewrite has started would lose the rewrite -- and
 never writes any document when any target of the invocation already exists.
---check --ids (Task 6) is a later task in the same plan; this module's shape
-(load_fold returning a Fold, derive_mapping taking one, run_check returning
-named groups) is designed to grow it without reworking the parse step or the
-report shape.
+
+--check --ids (Task 6) adds a sixth report group, "dropped ids": for every
+document already written to docs/specs2/<to>, every identifier (an inline
+`` `...` ``/``` ``...`` ``` backtick span, or the full verbatim content of a
+triple-backtick fenced code block -- a spec's fenced block is typically its
+authoritative schema or CLI surface, so a rewrite dropping the whole block is
+the same failure as dropping a span) collected from the source sections
+fold.yaml places there must still appear, exact-text, somewhere in the
+written prose -- scoped to the whole document, since a legitimate merge may
+move a term between sections. A per-document `allow_dropped_ids:` mapping
+(identifier -> reason, reason required) exempts specific drops. `--ids` only
+modifies `--check`; combined with `--mapping` or `--scaffold` it is rejected
+at the CLI, and omitting it leaves the report at five groups, unchanged.
 """
 
 import argparse
@@ -88,7 +100,7 @@ DEFAULT_PROJECT_KEY = "WL"
 # section and dropped entries stay plain dicts rather than growing a parallel
 # class for two field names.
 FOLD_KEYS = {"version", "corpus", "documents"}
-DOCUMENT_KEYS = {"to", "title", "sources", "sections", "dropped"}
+DOCUMENT_KEYS = {"to", "title", "sources", "sections", "dropped", "allow_dropped_ids"}
 SECTION_KEYS = {"new", "heading", "from"}
 DROPPED_KEYS = {"ref", "reason"}
 
@@ -105,6 +117,7 @@ class Document:
     sources: list
     sections: list  # each {"new": str, "heading": str, "from": [str, ...]}
     dropped: list = field(default_factory=list)  # each {"ref": str, "reason": str}
+    allow_dropped_ids: dict = field(default_factory=dict)  # {identifier: reason}
 
 
 @dataclass
@@ -166,6 +179,7 @@ def load_fold(path) -> Fold:
         or within a dropped entry
       * a document missing `to` or `title`
       * a dropped entry missing `ref` or `reason`
+      * an `allow_dropped_ids` entry with no reason
       * a `new:` number whose parent is not declared in the same document
       * a duplicate `new:` within a document
       * a `from:` ref with no `#sec-` fragment
@@ -204,6 +218,17 @@ def load_fold(path) -> Fold:
                 raise FoldError(f"{to}: unknown key {unknown[0]!r} in a dropped entry")
             dropped.append({"ref": str(d["ref"]), "reason": str(d["reason"])})
 
+        # A mapping, not a list like `dropped:` -- one reason per identifier,
+        # never a list of {ref, reason} pairs, since the identifier itself
+        # (not a synthetic ref) is already the natural unique key here.
+        allow_dropped_ids = {}
+        raw_allow = doc.get("allow_dropped_ids") or {}
+        for ident, reason in raw_allow.items():
+            reason = str(reason).strip() if reason is not None else ""
+            if not reason:
+                raise FoldError(f"{to}: allow_dropped_ids entry {str(ident)!r} has no reason")
+            allow_dropped_ids[str(ident)] = reason
+
         # First pass: every key is known and every `new:` is declared once,
         # so the second pass can check each section's parent against the
         # document's full declared set regardless of list order.
@@ -230,7 +255,8 @@ def load_fold(path) -> Fold:
             sections.append({"new": new, "heading": entry.get("heading", ""), "from": refs})
 
         documents.append(Document(to=to, title=title, sources=sources,
-                                   sections=sections, dropped=dropped))
+                                   sections=sections, dropped=dropped,
+                                   allow_dropped_ids=allow_dropped_ids))
 
     return Fold(version=raw.get("version", 1), corpus=corpus, documents=documents)
 
@@ -289,13 +315,19 @@ def load_live_corpus(specs_dir: Path) -> dict:
     return currentspec.live_sections(docs, with_drafts=True)
 
 
-def run_check(fold: Fold, partial: bool) -> list:
+def run_check(fold: Fold, partial: bool, ids: bool = False) -> list:
     """[(label, [ref, ...]), ...] comparing fold.yaml's declared placements
     against the live corpus and, separately, against the written docs/specs2/
     prose -- five groups today: "unplaced", "placed twice", "dangling"
     (fold.yaml vs. docs/specs/, see below), and "missing"/"undeclared"
     (fold.yaml vs. docs/specs2/, see below). A ref is `<filename>#<anchor>`,
     fold.yaml's own `from:`/`ref:`/`new:`-derived spelling.
+
+    `ids=True` appends a sixth group, "dropped ids" (see check_ids()), over
+    the same per-document written-file loop that computes missing/undeclared
+    -- reusing its existence gate rather than a second pass over
+    fold.documents. `ids=False` (the default) leaves the report at five
+    groups, byte-identical to before this parameter existed.
 
     `partial` narrows only the unplaced check, to anchors belonging to a file
     some fold.yaml entry already accounts for -- named in a `sources:` list,
@@ -337,7 +369,7 @@ def run_check(fold: Fold, partial: bool) -> list:
     unplaced = sorted(scope - declared)
 
     out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
-    missing, undeclared = [], []
+    missing, undeclared, dropped_ids = [], [], []
     for doc in fold.documents:
         written = out_dir / doc.to
         if not written.is_file():
@@ -346,14 +378,19 @@ def run_check(fold: Fold, partial: bool) -> list:
         written_anchors = {key for key, _heading in secindex.sections_of(written)}
         missing.extend(f"{doc.to}#{a}" for a in sorted(declared_anchors - written_anchors))
         undeclared.extend(f"{doc.to}#{a}" for a in sorted(written_anchors - declared_anchors))
+        if ids:
+            dropped_ids.extend(check_ids(doc, specs_dir, written))
 
-    return [
+    groups = [
         ("unplaced", unplaced),
         ("placed twice", placed_twice),
         ("dangling", dangling),
         ("missing", missing),
         ("undeclared", undeclared),
     ]
+    if ids:
+        groups.append(("dropped ids", dropped_ids))
+    return groups
 
 
 def _number_parts(new: str) -> tuple:
@@ -402,6 +439,76 @@ def slice_section(path: Path, anchor: str) -> str:
     start = heading_lines[idx] + 1
     end = heading_lines[idx + 1] if idx + 1 < len(heading_lines) else len(lines)
     return "".join(lines[start:end]).strip("\n")
+
+
+# --check --ids (Task 6): the exact-text identifier-preservation guard.
+# Inline spans use Markdown's own two forms -- `` `...` `` (single) and
+# `` ``...`` `` (double, for a span that itself contains a backtick) --
+# matched only outside fenced code, since a bare backtick inside example code
+# is a literal character, not span markup. A fenced (triple-backtick)
+# block's full verbatim content is tracked as its own identifier alongside
+# the inline spans: a spec's code block is typically its authoritative
+# schema or CLI surface, and a rewrite dropping the whole block -- not
+# reformatting it, dropping it -- is exactly the failure this guard exists
+# to catch (see the plan's Task 6 brief). Nothing in this path normalises
+# case, punctuation or whitespace; every comparison is exact-text.
+FENCE_RE = re.compile(r"```[^\n]*\n(.*?)\n```", re.DOTALL)
+SPAN_RE = re.compile(r"``([^`]+)``|`([^`\n]+)`")
+
+
+def extract_identifiers(text: str) -> list:
+    """Every backticked span and fenced-block body found in `text`, in the
+    order they appear. Fenced blocks are located and stripped out first, so
+    an inline single/double backtick inside example code is never mistaken
+    for span markup. May contain duplicates within one section --
+    collect_identifiers folds those across a document."""
+    blocks = [m.group(1) for m in FENCE_RE.finditer(text)]
+    stripped = FENCE_RE.sub("", text)
+    spans = [m.group(1) if m.group(1) is not None else m.group(2)
+             for m in SPAN_RE.finditer(stripped)]
+    return spans + blocks
+
+
+def collect_identifiers(doc: Document, specs_dir: Path) -> dict:
+    """{identifier: ref} for every identifier found across every source
+    section fold.yaml places in `doc`. Scoped to the whole document, not per
+    section -- a legitimate rewrite may move a term between sections while
+    merging, so only "dropped from the document" is a real loss. The first
+    `from:` ref an identifier appears under, in section/from order, is what a
+    dropped-id report points readers at."""
+    identifiers = {}
+    for section in doc.sections:
+        for ref in section["from"]:
+            filename, anchor = _split_ref(ref)
+            text = slice_section(specs_dir / filename, anchor)
+            for ident in extract_identifiers(text):
+                identifiers.setdefault(ident, ref)
+    return identifiers
+
+
+def format_dropped_id(ident: str, ref: str) -> str:
+    """One "dropped ids" report line: the identifier -- backtick-quoted, or
+    fence-quoted when it is a dropped whole code block (spans a newline) --
+    followed by the source ref an author can find it at."""
+    quoted = f"```\n{ident}\n```" if "\n" in ident else f"`{ident}`"
+    return f"{quoted} (from {ref})"
+
+
+def check_ids(doc: Document, specs_dir: Path, written: Path) -> list:
+    """Sorted "dropped ids" report lines for one already-written document:
+    every identifier collect_identifiers() finds in doc's source sections
+    that is neither exempted by doc.allow_dropped_ids nor still present,
+    exact-text, anywhere in `written`'s full contents. Callers gate this on
+    `written.is_file()` themselves (run_check reuses the same per-document
+    existence check it already does for missing/undeclared)."""
+    identifiers = collect_identifiers(doc, specs_dir)
+    written_text = written.read_text()
+    out = [
+        format_dropped_id(ident, ref)
+        for ident, ref in identifiers.items()
+        if ident not in doc.allow_dropped_ids and ident not in written_text
+    ]
+    return sorted(out)
 
 
 def compute_requires(doc: Document, fold: Fold, specs_dir: Path) -> list:
@@ -505,6 +612,9 @@ def main(argv=None):
     ap.add_argument("--partial", action="store_true",
                      help="with --check, only require full coverage of the documents "
                           "fold.yaml currently declares")
+    ap.add_argument("--ids", action="store_true",
+                     help="with --check, also verify every backticked identifier and "
+                          "fenced code block survives into the written docs/specs2/ prose")
     ap.add_argument("--scaffold", action="store_true",
                      help="write docs/specs2/<to> skeleton documents from fold.yaml")
     ap.add_argument("--only", metavar="FILE",
@@ -516,6 +626,8 @@ def main(argv=None):
         ap.error("--mapping, --check and --scaffold are mutually exclusive")
     if a.partial and not a.check:
         ap.error("--partial only makes sense with --check")
+    if a.ids and not a.check:
+        ap.error("--ids only makes sense with --check")
     if a.only and not a.scaffold:
         ap.error("--only only makes sense with --scaffold")
     if not any(modes):
@@ -524,7 +636,7 @@ def main(argv=None):
     try:
         fold = load_fold(REPO / FOLD_PATH)
         if a.check:
-            groups = run_check(fold, partial=a.partial)
+            groups = run_check(fold, partial=a.partial, ids=a.ids)
         elif a.scaffold:
             specs_dir = REPO / (fold.corpus.get("from") or DEFAULT_SPECS_DIR)
             out_dir = REPO / (fold.corpus.get("to") or DEFAULT_SPECS2_DIR)
