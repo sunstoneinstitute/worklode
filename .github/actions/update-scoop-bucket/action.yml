@@ -1,0 +1,114 @@
+name: Update Scoop bucket
+description: >
+  Point the worklode manifest in sunstoneinstitute/scoop-bucket at a v* tag of
+  this repo's Windows release asset.
+
+# Runs as a composite action inside the caller's job for the same reason
+# update-homebrew-tap does: the deploy key lives in the `release` environment,
+# and an environment secret arrives empty in a called (on: workflow_call)
+# workflow. The caller declares `environment: release` and passes the resolved
+# secret in as `deploy-key`.
+
+inputs:
+  tag:
+    description: Git tag to publish (e.g. v0.1.3)
+    required: true
+  deploy-key:
+    description: >
+      Private half of a write-enabled deploy key on
+      sunstoneinstitute/scoop-bucket. Owned by that repo rather than a person,
+      so the credential outlives any individual's account.
+    required: true
+  amd64-sha:
+    description: sha256 of the lode_<version>_windows_amd64.zip release asset
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # uv is set up inside the action so callers (release.yml, promote-prod.yml)
+    # need no uv-specific wiring — the dependency lives with the step that uses
+    # it. ubuntu-latest has no uv preinstalled. Pin to the current release SHA,
+    # matching the sha-pinning convention every other action in this repo uses.
+    - name: Set up uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+    - name: Render manifest
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        REPO: ${{ github.repository }}
+        SHA256: ${{ inputs.amd64-sha }}
+      run: |
+        set -euo pipefail
+        VERSION="${TAG#v}"
+        URL="https://github.com/${REPO}/releases/download/${TAG}/lode_${VERSION}_windows_amd64.zip"
+        VERSION="$VERSION" URL="$URL" SHA256="$SHA256" \
+          uv run .github/scoop/render-manifest.py \
+            .github/scoop/worklode.json.template "$RUNNER_TEMP/worklode.json"
+
+    - name: Update manifest in the bucket
+      shell: bash
+      env:
+        SCOOP_DEPLOY_KEY: ${{ inputs.deploy-key }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+
+        KEY_FILE="$RUNNER_TEMP/scoop_deploy_key"
+        KNOWN_HOSTS="$RUNNER_TEMP/known_hosts"
+        install -m 600 /dev/null "$KEY_FILE"
+        printf '%s\n' "$SCOOP_DEPLOY_KEY" > "$KEY_FILE"
+
+        # An empty/malformed secret otherwise surfaces as ssh's opaque
+        # "error in libcrypto" + publickey denial, which reads like a missing
+        # deploy key rather than a bad secret. The length is safe to print.
+        if ! ssh-keygen -y -f "$KEY_FILE" > /dev/null 2>&1 < /dev/null; then
+          echo "::error::SCOOP_DEPLOY_KEY is not a usable OpenSSH private key" \
+               "— ${#SCOOP_DEPLOY_KEY} bytes received. Check that the calling job" \
+               "declares 'environment: release'."
+          exit 1
+        fi
+
+        curl -fsS https://api.github.com/meta \
+          | jq -r '.ssh_keys[] | "github.com " + .' > "$KNOWN_HOSTS"
+
+        export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
+
+        git clone --depth 1 \
+          git@github.com:sunstoneinstitute/scoop-bucket.git \
+          "$RUNNER_TEMP/bucket"
+        cd "$RUNNER_TEMP/bucket"
+
+        # bucket/ is Scoop's manifest subdirectory; mkdir -p covers a
+        # freshly-created bucket repo that does not have it yet.
+        mkdir -p bucket
+        cp "$RUNNER_TEMP/worklode.json" bucket/worklode.json
+
+        # status --porcelain (not `git diff --quiet`) so this also works on an
+        # unborn default branch in a brand-new empty bucket repo, where the
+        # manifest is untracked rather than a diff against HEAD.
+        if [ -z "$(git status --porcelain)" ]; then
+          echo "::notice::Manifest already matches ${TAG} — nothing to push."
+          exit 0
+        fi
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add bucket/worklode.json
+        git commit -m "Update worklode to ${TAG}"
+        git push origin HEAD:main
+
+    - name: Output summary
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        SHA256: ${{ inputs.amd64-sha }}
+      run: |
+        {
+          echo "### Scoop bucket updated"
+          echo ""
+          echo "**Tag:** \`${TAG}\`"
+          echo "**amd64 zip sha256:** \`${SHA256}\`"
+          echo "**Manifest:** sunstoneinstitute/scoop-bucket \`bucket/worklode.json\`"
+          echo "**Install:** \`scoop bucket add sunstone https://github.com/sunstoneinstitute/scoop-bucket && scoop install sunstone/worklode\`"
+        } >> "$GITHUB_STEP_SUMMARY"
