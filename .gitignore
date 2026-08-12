@@ -3,3 +3,5 @@
 /data/
 .worktrees/
 /bin/
+__pycache__/
+*.pyc

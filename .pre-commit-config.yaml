@@ -21,16 +21,19 @@ repos:
         name: section numbers & anchors
         entry: scripts/secfmt.py -l -w
         language: script
-        files: ^docs/specs/.*\.md$
+        files: ^docs/specs2?/.*\.md$
       # Reports, never rewrites: a frontmatter value is a claim about the corpus,
       # so a wrong one is fixed by deciding what it should say. Runs over the
       # whole corpus because a reference breaks from the far end — deleting an
       # anchor dangles inbound refs in files this commit does not touch.
+      # Roots are explicit because pass_filenames is false: `files:` decides
+      # whether the hook fires, not what it checks, so a widened pattern alone
+      # would still scan DEFAULT_ROOTS. Drop docs/specs2 at cutover.
       - id: doc-frontmatter
         name: design-doc frontmatter
-        entry: scripts/secmeta.py
+        entry: scripts/secmeta.py docs/specs docs/specs2 docs/plans
         language: script
-        files: ^docs/(specs|plans)/.*\.md$
+        files: ^docs/(specs2?|plans)/.*\.md$
         pass_filenames: false
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.
