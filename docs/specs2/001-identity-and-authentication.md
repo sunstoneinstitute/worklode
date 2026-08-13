@@ -125,12 +125,11 @@ unconfigured the UI stays open as today.
 
 ## 7. Direct OIDC token exchange (dormant) {#sec-7}
 
-`/auth/oidc/config` and `/auth/oidc/token` are kept as a dormant
+`GET /auth/oidc/config` and `POST /auth/oidc/token` are kept as a dormant
 direct-Keycloak contract, preserved at zero cost for a future client (e.g.
 self-hosted Forgejo). Server-mediated login (§8) already covers
-Keycloak-as-a-provider via the web flow, and no shipped client calls these
-endpoints; they are an additional direct integration point, not what keeps
-Keycloak alive.
+Keycloak-as-a-provider via the web flow; these endpoints are an additional
+direct integration point, not what keeps Keycloak alive.
 
 `POST /auth/oidc/token`, body `{"id_token": "..."}` — registered outside the
 `/api/v1` auth middleware, like `/healthz` and `/hooks/*`. Returns 404 when
@@ -146,15 +145,7 @@ OIDC is unconfigured.
 
 ## 8. CLI login: server-mediated loopback {#sec-8}
 
-`lode login` originally spoke Keycloak OIDC + PKCE **directly from the CLI**: it fetched
-`GET /auth/oidc/config`, ran the auth-code flow against Keycloak itself, and exchanged the ID
-token at `POST /auth/oidc/token`. On a server configured for **GitHub** auth (the hzdev
-deployment) there is no Keycloak, so `lode login` 404s on `/auth/oidc/config` and reports
-"this worklode server does not have SSO enabled." GitHub auth is web-only — it sets a browser
-session cookie and never mints a `wl_` token — so there was no CLI login path for GitHub-auth
-servers at all. The only way to get a CLI token there was an admin minting one by hand.
-
-`lode login` is instead **provider-neutral**: it discovers how to authenticate from the server
+`lode login` is **provider-neutral**: it discovers how to authenticate from the server
 and kicks off whichever web login the server is configured with (Keycloak, GitHub, or a
 chooser when both are enabled), reusing the browser session the user already has, and ends
 with a `wl_` token stored securely. The CLI speaks **no** provider protocol and never sees a
@@ -327,10 +318,11 @@ Env vars, **added** to the existing Keycloak/OIDC config:
 | `LODE_PUBLIC_URL` | config | `https://worklode.dev.sunstoneinstitute.ai` (already required) |
 
 Nothing is removed on the Keycloak side: `LODE_OIDC_ISSUER`,
-`LODE_OIDC_CLIENT_ID`, and the OIDC secret stay. Config after this spec:
-`LODE_GITHUB_APP_CLIENT_ID`, `LODE_GITHUB_APP_CLIENT_SECRET`,
+`LODE_OIDC_CLIENT_ID`, and the OIDC secret stay. Counting the App credentials
+the webhook path already required, the full GitHub-side inventory after this
+spec is therefore `LODE_GITHUB_APP_CLIENT_ID`, `LODE_GITHUB_APP_CLIENT_SECRET`,
 `LODE_TOKEN_ENC_KEY`, `LODE_GITHUB_APP_ID`, `LODE_GITHUB_APP_PRIVATE_KEY`,
-`LODE_GITHUB_WEBHOOK_SECRET` stay; `LODE_GITHUB_ORG` (`sunstoneinstitute`)
+and `LODE_GITHUB_WEBHOOK_SECRET`; `LODE_GITHUB_ORG` (`sunstoneinstitute`)
 and `LODE_GITHUB_ADMIN_TEAM` (`worklode-admins`) are removed.
 
 Deployment impact: the app-deployment **Keycloak/SSO wiring stays**; the GitHub
@@ -384,8 +376,9 @@ App is added alongside the existing Keycloak client (not a replacement).
 
 ### 9.5 GitHub token storage and refresh {#sec-9.5}
 
-`github_user_tokens` holds the stored user token, and the token row **is** the
-link — a link exists iff a row exists, unlink = delete the row. The tokens sit
+`github_user_tokens` holds the stored user token and is reworked by a new
+migration so that the token row **is** the link — a link exists iff a row
+exists, unlink = delete the row. The tokens sit
 in a dedicated table rather than as columns on the actor row because they have
 their own lifecycle and a null-until-first-link state:
 

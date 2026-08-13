@@ -419,8 +419,9 @@ dropped:
   reason: 'spent: pre-023 current-state narrative (two login paths, /auth/choose,
     github:<id> actors, github_user_tokens written but never read). Everything it
     describes removing is stated as removed in folded sec-3. Lost: the corpus''s only
-    mentions of internal/tokencrypt (the AES-GCM sealing package -- the behaviour
-    survives in folded sec-9.5 without the package name) and of internal/githubauth.Roles.'
+    mention of internal/githubauth.Roles. internal/tokencrypt is *not* lost -- the
+    planning tier ruled it carried into folded sec-9.5, since a live Go package must
+    not fall out of the corpus as collateral of a spent drop.'
 - ref: 004-execution-backbone.md#sec-1.2
   reason: 'superseded: pre-delivery task state machine replaced by 011-delivery-lifecycle.md#sec-1,
     which folds into this same document as sec-5.1. Over-scoped: 011 sec-1 extends
@@ -430,8 +431,11 @@ dropped:
     to, eventID)` contract sentence -- atomic from-state check inside the caller''s
     tx, `updated_at` bump, `state_log` row attributed to the event, unknown task `ErrNotFound`,
     wrong from-state `ErrBadTransition` -- which nothing else in the folded corpus
-    states in full. The reopen rules survive via 004 sec-5/sec-7/sec-8 and the state
-    graph via 011 sec-1''s diagram. Resolve before part 5 `git rm`s docs/specs.'
+    states. Both were recovered into folded sec-5.1 by planning-tier ruling rather
+    than left for part 5, the transition table with `in_review -> done` rewritten
+    to 011''s `in_review -> merged`; the two reopen rows were not carried, since 004
+    sec-5/sec-7/sec-8 already state reopen. The state graph survives via 011 sec-1''s
+    diagram.'
 - ref: 008-worklode-plugin.md#preamble
   reason: 'absorbed: the preamble is 014 sec-1''s whole-document amendment in note
     form -- a standing rewrite instruction, "read `ls:governs` / `ls:affects` below

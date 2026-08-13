@@ -175,10 +175,11 @@ documents:
           spent: pre-023 current-state narrative (two login paths,
           /auth/choose, github:<id> actors, github_user_tokens written but
           never read). Everything it describes removing is stated as
-          removed in folded sec-3. Lost: the corpus's only mentions of
-          internal/tokencrypt (the AES-GCM sealing package -- the behaviour
-          survives in folded sec-9.5 without the package name) and of
-          internal/githubauth.Roles.
+          removed in folded sec-3. Lost: the corpus's only mention of
+          internal/githubauth.Roles. internal/tokencrypt is *not* lost --
+          the planning tier ruled it carried into folded sec-9.5, since a
+          live Go package must not fall out of the corpus as collateral of
+          a spent drop.
     allow_dropped_ids:
       "http://localhost:8000": >-
         Deliberate drop, not a source-side artifact: 001 sec-2 registers
@@ -332,10 +333,24 @@ documents:
           sentence -- atomic from-state check inside the caller's tx,
           `updated_at` bump, `state_log` row attributed to the event,
           unknown task `ErrNotFound`, wrong from-state `ErrBadTransition` --
-          which nothing else in the folded corpus states in full. The reopen
-          rules survive via 004 sec-5/sec-7/sec-8 and the state graph via
-          011 sec-1's diagram. Resolve before part 5 `git rm`s docs/specs.
+          which nothing else in the folded corpus states. Both were
+          recovered into folded sec-5.1 by planning-tier ruling rather than
+          left for part 5, the transition table with `in_review -> done`
+          rewritten to 011's `in_review -> merged`; the two reopen rows were
+          not carried, since 004 sec-5/sec-7/sec-8 already state reopen. The
+          state graph survives via 011 sec-1's diagram.
     allow_dropped_ids:
+      "--under <epic>": >-
+        Deliberate drop of a pre-029 spelling: 018 sec-6's CLI block reads
+        `lode task parent <id> --under <epic>`, and 029 sec-2 retired the
+        epic kind, so any ordinary task can be the parent. The folded flag
+        reads `--under <parent-id>`. Nothing is lost -- the flag, the
+        command and the adoption surface all survive under the new
+        spelling.
+      "per-epic": >-
+        Same pre-029 spelling as `--under <epic>`: 018 sec-6 describes
+        `lode task tree` as showing per-epic progress, which the folded
+        text states as per-parent progress. The surface is unchanged.
       "; on **first** sight call ": >-
         Source-side span artifact, not an identifier. 004 sec-1.5 wraps the
         inline span "ON CONFLICT (source, external_id) DO NOTHING" across a
@@ -605,16 +620,6 @@ documents:
         part 5 owes 016 the matching entries.
       "ls:affects": >-
         Same respell as ls:governs above: wl:affects per 014 sec-1.
-      "wt/<id>-<slug>": >-
-        The pre-030 worktree path shape. 030 -- folded into this same
-        document -- amends every 008 section that used it to
-        <worktree_dir>/<branch> (default .worktrees/<id>-<slug>), so
-        absorbing those notes (rule 3) removes the span. 024's two uses
-        (Q024.5 and its acceptance criterion 3) predate 030, were never
-        formally amended, and are settled the same way by rule 2 inside the
-        merged Open-questions and Acceptance-criteria sections. A surviving
-        historical mention in the cutover section is fine; this entry
-        authorises the expected drop.
       ", which ": >-
         Source-side span artifact, not an identifier. 030 sec-3.2 wraps the
         inline span "git config --worktree --get worklode.task-id" across a

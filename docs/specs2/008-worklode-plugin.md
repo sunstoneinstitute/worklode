@@ -21,8 +21,9 @@ all of it to more than one coding agent.
 
 **One coordination model, N harnesses.** Most of the design is harness-neutral already: 016 refuses
 to register skills in any native registry precisely so that "any agent that can read a file
-participates", and 012's `agent_sessions.agent` CHECK lists `codex`, `cursor`, `aider`, `opencode`,
-`pi`, `amp` beside `claude-code`. The gap is delivery: `lode install --agent claude-code` is the
+participates", and 012's `agent_sessions.agent` CHECK already named `codex`, `cursor`, `aider`,
+`opencode`, `pi`, `amp` beside `claude-code` before this spec widened it (§19). The gap was never
+the data model; the gap is delivery: `lode install --agent claude-code` is the
 only value the installer accepts today, and it writes hook bindings into `.claude/settings*.json`.
 Every harness now reads the *same* `SKILL.md`, fires the *same* lifecycle moments, and differs only
 in **which directory it looks in** and **which config file names the hook**. That is a table, not a
@@ -149,8 +150,9 @@ template fails startup rather than every claim. Three conditions:
    `/`, no `@{`, no path component starting with `.` or ending in `.` or
    `.lock`.
 
-Condition 3 is checked in Go rather than by shelling out to `git
-check-ref-format`, since the server does not otherwise require a git binary.
+Condition 3 is checked in Go rather than by shelling out to
+`git check-ref-format`, since the server does not otherwise require a git
+binary.
 
 ## 4. Reverse parsing: branch to task id {#sec-4}
 
@@ -374,7 +376,8 @@ operation. Template validation failure surfaces as a startup error.
 
 Every hook is a **NOP outside a Worklode worktree** (uniform guard, §5.2: does cwd lie exactly one
 segment below the configured worktree base directory, with a backbone-bound lease? absent ⇒
-`exit 0` immediately). Worklode is invisible to ordinary sessions.
+`exit 0` immediately). Worklode is invisible to ordinary sessions. The event names in the table
+below are Claude Code's; §17.4 maps the same lifecycle moments onto each other harness's names.
 
 | Event | Action | Guard / condition |
 |---|---|---|
