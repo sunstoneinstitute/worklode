@@ -36,3 +36,16 @@ docs/specs2/016-org-wide-skills.md:
     sec-7: "## 7. Dependencies"
     sec-8: "## 8. Open questions"
     sec-9: "## 9. Acceptance criteria"
+docs/specs2/017-task-secrets.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Names & catalog"
+    sec-2: "## 2. Declaration"
+    sec-3: "## 3. Claim-time ceremony & materialization"
+    sec-4: "## 4. Execution: `lode secrets exec`"
+    sec-5: "## 5. The `lode-secrets` skill"
+    sec-6: "## 6. Degradation"
+    sec-7: "## 7. Later phases (non-normative)"
+    sec-8: "## 8. Dependencies"
+    sec-9: "## 9. Open questions"
+    sec-10: "## 10. Acceptance criteria"
