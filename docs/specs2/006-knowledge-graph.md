@@ -141,7 +141,7 @@ wl:Section a owl:Class ; rdfs:subClassOf foaf:Document ;
 
 # A Plan is a document but not a DesignDoc: reviewable and accept-gated, yet mutable and
 # anchor-free, so the section lock never binds it. Its acceptance mints the execution subtree.
-wl:Plan a owl:Class ; rdfs:subClassOf foaf:Document .
+wl:Plan a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity .
 
 wl:Task        a owl:Class .   # execution-owned, projected (D11)
 wl:Deliverable a owl:Class .   # declared definition-of-done (D7)
@@ -426,14 +426,12 @@ shows current state only; per-rollout history needs a second node type and is v2
 
 ## 4. Status SKOS scheme {#sec-4}
 
-Ordered, purely editorial lifecycle `draft → proposed → accepted → superseded`:
+Ordered, purely editorial lifecycle `draft → accepted → superseded`:
 
 ```turtle
 wlc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
 wlc:draft       a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "draft" ;
-    skos:definition "Being written; not yet proposed for review." .
-wlc:proposed    a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "proposed" ;
-    skos:definition "Submitted for crit review; awaiting resolution." .
+    skos:definition "Being written, or open for crit review. Not yet accepted as intent." .
 wlc:accepted    a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
     skos:definition "Crit-resolved and approved as intent." .
 wlc:superseded  a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
@@ -441,16 +439,18 @@ wlc:superseded  a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLa
 
 # Lifecycle ORDER as data, not prose (skos:OrderedCollection) — "is X before Y" becomes queryable:
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded ) .
+    skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
 ```
 
 There is no `implemented` status: it would assert that *superseded* precedes *implemented*, and
 implementation is per-section and derived, so a document-level summary of it drifts. **"Is this
 spec implemented?" is a coverage query (014 §5, §6), never a stored status.**
 
-`proposed → accepted` is gated on crit-review resolution. The **order** is data (the
-`skos:memberList` above), but RDF still doesn't *enforce* legal transitions — the transition rules
-(which move is allowed from where) live with the authoring skill (spec 008).
+There is no "under review" status either: a document under review is a **draft with an open review
+task**, so `draft → accepted` is what the crit gate governs and the open task, not the enum, is
+what proves a review is in flight (025 §3). The **order** is data (the `skos:memberList` above),
+but RDF still doesn't *enforce* legal transitions — the transition rules (which move is allowed
+from where) live with the authoring skill (spec 008).
 
 ## 5. Task-kind & model-layer SKOS schemes {#sec-5}
 
@@ -594,7 +594,6 @@ authored there (see §11). Layer 3 — Runtime · Deploy — is the six runtime 
 |---|---|---|---|
 | Component | `wl:Component` | v1 | authored (per-repo manifest declares boundaries, D5) |
 | DesignDoc | `wl:ADR` / `wl:Spec`, addressable by `wl:Section` | v1 | authored |
-| Plan | `wl:Plan` | v1 | authored (executable document, sibling of DesignDoc — §2) |
 | Deliverable | `wl:Deliverable` | v1 | authored (declared definition-of-done) |
 | Effect | `wl:Effect` ⊂ `wl:Deliverable` | v1 | authored; artifact-free definition-of-done for IaC/GitOps state change |
 | Milestone | `wl:Milestone` | **v2** | grouping of Deliverables |
@@ -608,6 +607,7 @@ Intent edges: `wl:governs` (DesignDoc→Component), `wl:reviewer` (Component→A
 |---|---|---|---|
 | Task | `wl:Task` | v1 | **projected from backbone** (D11); carries `wl:taskKind` |
 | Project | `wl:Project` | v1 | projected from backbone; **named-graph anchor**; every Task `wl:inProject` exactly one |
+| Plan | `wl:Plan` | v1 | **authored, not projected** — an executable document, sibling of `wl:DesignDoc` (§2) |
 | Issue | `wl:Issue` ⊂ `prov:Entity` | v1 | projected from VCS ingest; `wl:mirrors` its Task |
 | PullRequest | `wl:PullRequest` ⊂ `prov:Entity` | v1 | projected from VCS ingest |
 | Branch, Event | — | **v2** | finer VCS granularity |
@@ -885,8 +885,8 @@ wlid:deviation/pfas-reads-ingest-cache
 ```
 
 - **Home graph.** Authored into the **declared named graph of the sanctioning ADR**
-  (`…/graph/declared/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
-  declared edge. Superseding or removing that ADR removes the suppression. No new authorisation
+  (`…/graph/declared/<adr-id>`, spec 007), under the same crit gate as any declared edge — a draft
+  with an open review task until it is accepted (§4). Superseding or removing that ADR removes the suppression. No new authorisation
   mechanism: whoever may author intent may author a deviation.
 - **Expiry.** Optional `dct:valid` (an `xsd:date`). Past it, the deviation stops suppressing and
   the violation re-surfaces (spec 007) — a suppression cannot silently outlive its reason. No expiry
