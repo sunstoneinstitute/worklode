@@ -235,13 +235,14 @@ func TestProjectSections(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
+	// Deliverables is absent on purpose: it is a built destination now, with
+	// its own page and creation form (see webform_test.go).
 	sections := map[string]string{
-		"crew":         "spec 029 §6.1",
-		"deliverables": "spec 029 §7",
-		"reviews":      "spec 029 §7",
-		"decisions":    "specs 028 and 029",
-		"documents":    "specs 025 and 026",
-		"activity":     "ordered event view",
+		"crew":      "spec 029 §6.1",
+		"reviews":   "spec 029 §7",
+		"decisions": "specs 028 and 029",
+		"documents": "specs 025 and 026",
+		"activity":  "ordered event view",
 	}
 	for section, want := range sections {
 		t.Run(section, func(t *testing.T) {

@@ -1,4 +1,5 @@
-// web.go implements the read-only web UI: it builds the presentation views
+// web.go implements the web UI's read surfaces (its writes — the two
+// creation forms — live in webform.go): it builds the presentation views
 // internal/ui's templ components render (the shared Page shell, the seven
 // global destinations and the project-local destinations spec 032 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
@@ -46,6 +47,10 @@ func navOutcome(status int) string {
 		return "not_found"
 	case status >= 500:
 		return "error"
+	case status >= 400:
+		// Reachable only on the creation-form routes (a refused cross-origin
+		// POST, a rejected submit); a read page is 200, 404, or 500.
+		return "rejected"
 	default:
 		return "ok"
 	}
@@ -157,23 +162,23 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // projectSections allow-lists the project-local destinations that are not
 // implemented yet, one honest-unavailable message per key naming the owning
 // spec section. Unknown keys 404 (see projectSectionPage).
+// Deliverables is absent: it is a built destination now (see webform.go's
+// deliverablesPage), routed ahead of this wildcard.
 var projectSections = map[string]string{
-	"crew":         "Crew arrives with project participants in spec 029 §6.1.",
-	"deliverables": "Deliverables arrive with spec 029 §7.",
-	"reviews":      "Governed approval reviews arrive with spec 029 §7.",
-	"decisions":    "Research decisions arrive with specs 028 and 029.",
-	"documents":    "Backbone documents arrive with specs 025 and 026.",
-	"activity":     "Project activity arrives when the ordered event view is implemented.",
+	"crew":      "Crew arrives with project participants in spec 029 §6.1.",
+	"reviews":   "Governed approval reviews arrive with spec 029 §7.",
+	"decisions": "Research decisions arrive with specs 028 and 029.",
+	"documents": "Backbone documents arrive with specs 025 and 026.",
+	"activity":  "Project activity arrives when the ordered event view is implemented.",
 }
 
 // projectSectionTitles gives each projectSections key its display heading.
 var projectSectionTitles = map[string]string{
-	"crew":         "Crew",
-	"deliverables": "Deliverables",
-	"reviews":      "Reviews",
-	"decisions":    "Decisions",
-	"documents":    "Documents",
-	"activity":     "Activity",
+	"crew":      "Crew",
+	"reviews":   "Reviews",
+	"decisions": "Decisions",
+	"documents": "Documents",
+	"activity":  "Activity",
 }
 
 // projectSectionPage handles GET /projects/{id}/{section}: an honest

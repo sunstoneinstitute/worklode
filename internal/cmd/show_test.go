@@ -429,6 +429,32 @@ func TestShowMilestoneErrors(t *testing.T) {
 	}
 }
 
+// TestShowDeliverableErrors pins the one "not showable yet" message that does
+// not claim its entity is unbuilt: a deliverable is a real row (spec 029 §3),
+// so `lode show` points at the surfaces that read it instead of sending
+// someone to wait for spec 029.
+func TestShowDeliverableErrors(t *testing.T) {
+	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"show", "WL-DEL-3"}, "WL-DEL-3 is a deliverable id; deliverables are not showable yet " +
+			"(the entity exists; only the project's Deliverables page and GET /api/v1/projects/{id}/deliverables read it so far)"},
+		{[]string{"show", "--deliverable", "3"}, "deliverable 3 is not showable yet " +
+			"(the entity exists; only the project's Deliverables page and GET /api/v1/projects/{id}/deliverables read it so far)"},
+	} {
+		out, err := runLode(t, tt.args...)
+		if err == nil {
+			t.Fatalf("lode %v succeeded\noutput: %s", tt.args, out)
+		}
+		if err.Error() != tt.want {
+			t.Errorf("err = %q; want %q", err.Error(), tt.want)
+		}
+	}
+}
+
 func TestShowUnknownTypeErrors(t *testing.T) {
 	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 

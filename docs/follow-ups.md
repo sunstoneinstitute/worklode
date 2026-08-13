@@ -58,13 +58,34 @@ once an instance is running (dogfooding); until then this file is the list.
 - **The web UI is unauthenticated without an SSO provider**: `webAuth`
   (`internal/api/oidcweb.go:57`) passes every request through when neither
   OIDC nor GitHub login is configured, so the board, project, and task pages
-  are readable by anyone who can reach the server. Spec 021 mirrors that
+  are readable by anyone who can reach the server — and, since the cockpit's
+  creation forms (`internal/api/webform.go`) sit behind the same `webAuth`,
+  writable too: such a deployment accepts a task or a deliverable from anyone
+  who can reach it, recorded with a NULL `created_by` because there is no
+  session to attribute it to. The forms refuse cross-origin submissions, so
+  this is reachability, not CSRF. Gating the UI default-deny fixes the read
+  and the write exposure together. Spec 021 mirrors that
   bypass in `eitherAuth` for consistency — the blob route is the wrong place
   to unilaterally tighten the auth model — which means task screenshots and
   attachments inherit it too. Spec 021 raises the stakes rather than creating
   them: bodies already carried pre-release design work. Fix at the UI level,
   either by refusing to serve web surfaces with no provider configured or by
   gating the whole UI default-deny. Tracked as spec 021 Q021.4.
+- **Deliverables landed without the rest of spec 029**: the cockpit can now
+  declare a deliverable (§3.1's name/description/URL) and read the list back,
+  but four pieces of §2/§3 are deliberately absent. Milestones do not exist,
+  so a deliverable hangs off its project rather than a milestone — the
+  nullable `milestone_id` is a column the milestone table will add. Nothing
+  reports deliverable **state** (§3.2's push emitters and poll prober), so the
+  page says the state is unreported instead of showing one; that is the
+  substantial next slice, and until it lands "is the project published" has no
+  answer. Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
+  is not modelled — only by address. And no CLI verb exists: `lode deliverable
+  list/add` would mirror `POST|GET /api/v1/projects/{id}/deliverables`.
+- **`project_entity_seq` carries only `DEL`**: spec 029 §4 gives milestones,
+  specs, ADRs, and plans their own per-project ordinals from the same counter
+  table. Its `kind` CHECK admits `'DEL'` alone, so each of those arrives with a
+  one-line CHECK widening, the same way the `tasks.kind` CHECK grows.
 - **k8s deployment manifests** (flux) for the server and the watcher; RBAC
   for `lode watch` in-cluster.
 - **Claude Code skill** in the claude-plugins repo teaching the
