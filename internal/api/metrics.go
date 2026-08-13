@@ -47,6 +47,10 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_navigation_requests_total",
 		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
 	}, []string{"destination", "outcome"})
+	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_form_submissions_total",
+		Help: "Web UI creation-form submissions, by form (task, deliverable) and outcome (created, invalid, forbidden, not_found, error).",
+	}, []string{"form", "outcome"})
 	s.docSyncRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_doc_sync_runs_total",
 		Help: "Doc sync requests by result.",
@@ -65,7 +69,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Forced (--force) doc syncs accepted.",
 	})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations,
+		s.cockpitProjections, s.navigations, s.formSubmissions,
 		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -82,10 +86,15 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, destination := range []string{
 		"home", "intake", "projects", "work", "reviews", "deliveries", "knowledge",
-		"project_section", "asset",
+		"project_section", "asset", "deliverables", "deliverable_new", "task_new",
 	} {
-		for _, outcome := range []string{"ok", "not_found", "error"} {
+		for _, outcome := range []string{"ok", "not_found", "error", "rejected"} {
 			s.navigations.WithLabelValues(destination, outcome)
+		}
+	}
+	for _, form := range []string{"task", "deliverable"} {
+		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
+			s.formSubmissions.WithLabelValues(form, outcome)
 		}
 	}
 	s.docSyncRuns.WithLabelValues("ok")
@@ -159,6 +168,33 @@ func (s *server) observeNavigation(destination, outcome string) {
 		return
 	}
 	s.navigations.WithLabelValues(destination, outcome).Inc()
+}
+
+// formOutcome classifies a creation-form error for the
+// worklode_web_form_submissions_total outcome label. Rejected input and a
+// refused cross-origin POST are recorded by their handlers as "invalid" and
+// "forbidden" — neither is an error here.
+func formOutcome(err error) string {
+	if err == nil {
+		return "created"
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		return "not_found"
+	}
+	if errors.Is(err, store.ErrInvalidInput) {
+		return "invalid"
+	}
+	return "error"
+}
+
+// observeFormSubmission records one web creation-form submission, called
+// exactly once per POST from webform.go.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeFormSubmission(form, outcome string) {
+	if s.formSubmissions == nil {
+		return
+	}
+	s.formSubmissions.WithLabelValues(form, outcome).Inc()
 }
 
 // observeDocSync records one sync request. Nil-safe: tests build a *server

@@ -250,6 +250,29 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .btn .sc{font-size:11px;font-weight:500;opacity:.75}
 .btn.ghost{background:transparent}
 
+/* ---------- creation forms (new task, declared deliverable) ---------- */
+/* Hand-authored rather than utility-shaped: the controls need consistent
+ * sizing across input/select/textarea and a target height that clears WCAG
+ * 2.2's minimum, which is a shell rule, not per-page styling. */
+.newlink{font-size:12.5px;font-weight:600}
+.form{max-width:640px}
+.form h1{font-size:21px;margin-bottom:4px}
+.formerr{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:9px 12px;font-size:12.5px;font-weight:600;margin:12px 0 0}
+.fieldrow{display:flex;flex-direction:column;gap:6px;margin:16px 0 0}
+.fieldrow label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
+.fieldrow .hint{font-size:12px;color:var(--ink-3)}
+.fieldrow input[type="text"],.fieldrow input[type="url"],.fieldrow select,.fieldrow textarea{
+  font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line-2);border-radius:9px;padding:9px 11px;min-height:40px;width:100%;
+}
+.fieldrow textarea{min-height:96px;resize:vertical;line-height:1.5}
+.fieldrow input:hover,.fieldrow select:hover,.fieldrow textarea:hover{border-color:var(--ink-3)}
+.fieldrow.check{flex-direction:row;align-items:center;gap:9px}
+.fieldrow.check label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink-2)}
+.fieldrow.check input{width:20px;height:20px;min-height:0;accent-color:var(--link)}
+.btnrow{display:flex;gap:10px;margin-top:22px}
+.btnrow .btn{width:auto;min-height:40px;padding:9px 18px}
+
 .railcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:13px 15px}
 .railcard .rt{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:7px}
 .exrow{display:flex;gap:9px;align-items:flex-start;font-size:12.5px}
