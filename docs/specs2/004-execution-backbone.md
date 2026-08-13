@@ -63,10 +63,10 @@ CREATE TABLE tasks (
 );
 ```
 
-The kind enum matches `wlc:TaskKind`. `review` and `spike` arrived with
-`0009_task_kinds`; `spec` is renamed `design`; and `epic`, added by migration
-`0006` (§6.2), is removed again — §6 states what carries the container role instead. The
-`state` CHECK covers the delivery states of §5.1.
+The kind enum matches `wlc:TaskKind` (014 §8). `review` and `spike` arrived with
+`0009_task_kinds`; `spec` is renamed `design` (025 §6); and `epic`, added by
+migration `0006` (§6.2), is removed again (029 §2) — §6 states what carries the
+container role instead. The `state` CHECK covers the delivery states of §5.1.
 
 ### 1.2 leases, bound to the worktree {#sec-1.2}
 
@@ -93,9 +93,11 @@ CREATE UNIQUE INDEX leases_active_worktree ON leases (worktree) WHERE released_a
 ```
 
 `worktree` is an **opaque, stable identity string** the plugin supplies; the backbone
-never parses it. Recommended canonical form `<host>:<abs-worktree-root>` (deterministic
-worktree name `wt/<id>-<slug>` from D14 makes `/lode-resume`'s lookup trivial). Exact
-composition is fixed in **spec 008**; the backbone only requires it be stable for a
+never parses it. Recommended canonical form `<host>:<abs-worktree-root>`; a
+deterministic worktree path makes `/lode-resume`'s lookup trivial (D14). That path is
+`<worktree_dir>/<branch>` (default `.worktrees/<id>-<slug>`), retiring the
+`wt/<id>-<slug>` spelling. Exact composition is fixed in **spec 008**
+(`008-worklode-plugin.md`); the backbone only requires it be stable for a
 worktree's lifetime and unique per live worktree. *(Open Q2.)*
 
 `DefaultLeaseTTL = 2h` (unchanged). Renewal is a **commit-cadence heartbeat**
@@ -184,8 +186,9 @@ Task IDs are `WL-<n>` for every project: the prefix is the literal `"WL-"`
 | Existing `WL-1…11` | Preserved; worklode's key backfilled to `WL`, counter to 12 |
 | ID format | `<KEY>-<n>` (e.g. `WL-12`, `SW-1`) |
 
-Immutable because the key is baked into permanent task IDs, `wl/<id>` branch
-names, and `WL-Task:` PR markers — changing it would orphan those references.
+Immutable because the key is baked into permanent task IDs, branch names (then
+spelled `wl/<id>`, since retired — §2.5), and `WL-Task:` PR markers — changing it
+would orphan those references.
 
 ### 2.2 Data model — migration `0003_project_keys` {#sec-2.2}
 
@@ -461,8 +464,9 @@ webhook that produced them:
 commits to tasks. Sources:
 
 - pushes to task branches. The branch pattern is derived from
-  `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`; see §2.5) rather than
-  from a fixed prefix; the retired `wl/` prefix is no longer recognized.
+  `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`; `008-worklode-plugin.md`
+  is authoritative, and §2.5 restates it) rather than from a fixed prefix; the
+  retired `wl/` prefix is no longer recognized.
 - PR correlation (existing head-ref / `WL-Task:` body mechanisms; the PR's
   SHAs join this table).
 - task-key references in commit messages on default-branch pushes (fallback
@@ -580,10 +584,10 @@ cluster gets a Provider/Alert pointing at worklode's `/hooks/flux`.
 - `lode task done` remains the manual escape hatch.
 - `lode project add-repo` output gains the discovered delivery profile.
 - The claim and claim-next API responses carry a server-derived `branch`,
-  rendered from `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`), so
-  branch naming is decided in one place; against a server too old to send one
-  the CLI falls back to the bare `<id>-<slug>` (the retired fallback was
-  `lode/<id>-<slug>`).
+  rendered from `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`;
+  `008-worklode-plugin.md` is authoritative), so branch naming is decided in one
+  place; against a server too old to send one the CLI falls back to the bare
+  `<id>-<slug>` (the retired fallback was `lode/<id>-<slug>`).
 
 Repos shared across projects (`provisioning`, `admin-cluster`,
 `rdf-registry`, …) need no special handling: delivery advances a task via the
@@ -644,9 +648,9 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 `kind = 'epic'` is dropped, not renamed: a plan is a document, not a task, and
 accepting it mints its tasks directly — grouped by their reference to the plan
 document, with no root row above them (025 §5). What survives here is the
-`child_of` machinery, narrowed to decomposing an oversized task (§6.10) — the only
-way parent-hood begins, now that creating a container outright and converting one
-in place are both retired. Every mechanism below (ready-set exclusion, restricted
+`child_of` machinery, narrowed to decomposing an oversized task (§6.10), which
+creates parent-hood and its children together now that creating a container outright
+and converting one in place are both retired. Every mechanism below (ready-set exclusion, restricted
 state machine, roll-up, depth cap, single parent, brief) applies to *a task that
 has children*, with no kind to declare: the retired design chose declared over
 inferred because a container had to exist before its children did (§6.1), and with
@@ -835,9 +839,9 @@ Symmetric with the existing `block`/`unblock` pair:
 
 ```
 lode task add --parent <id> …            create a child in one round trip
-lode task parent <id> --under <epic>     adopt an existing task
+lode task parent <id> --under <parent-id>  adopt an existing task
 lode task unparent <id>
-lode task tree [<id>]                    hierarchy with per-epic progress
+lode task tree [<id>]                    hierarchy with per-parent progress
 lode task list --parent <id>
 lode task decompose <id> --into "A" "B"  see below
 ```
@@ -989,8 +993,9 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
 1. ~~Reopen target~~ — **RESOLVED: `done → ready`** (forces a fresh claim; keeps the
    invariant "no `in_progress` without a live lease").
 2. **Worktree identity canonical form** — `<host>:<abs-path>` vs git worktree UUID vs
-   the deterministic `wt/<id>-<slug>` name. Cross-host reclaim implications. The backbone
-   treats it opaque; exact form is fixed in spec 008.
+   the deterministic worktree name (then spelled `wt/<id>-<slug>`, since retired —
+   §1.2). Cross-host reclaim implications. The backbone treats it opaque; exact form
+   is fixed in spec 008.
 3. **Isolation level** — confirm READ COMMITTED + `FOR UPDATE` + unique-index backstop
    (vs SERIALIZABLE).
 4. **Sweeper under multiple replicas** — rely on event idempotency alone, or gate the
@@ -1000,10 +1005,10 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
    the mirror link (projected to the graph as `ls:mirrors`, spec 006); the plugin (008) creates and
    syncs the Issue. Open: create-on-task-create vs. lazy; who wins on divergent edits
    (backbone-authoritative?); handling tasks with no mirror yet.
-6. **Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a
+6. **RESOLVED — Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a
    final integration or documentation step is a child task rather than a reason
    to make closure manual. Revisit if real usage contradicts it.
-7. **Q018.2 — Should `lode task done` on an epic be an error or a manual
+7. **RESOLVED — Q018.2 — Should `lode task done` on an epic be an error or a manual
    override?** An error. `done` is `in_review -> merged` and `in_review` is
    forbidden for epics, so the kind guard in `Transition` rejects it with a
    message naming the roll-up rule. There is no override.
