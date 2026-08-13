@@ -193,6 +193,33 @@ documents:
         Same as http://localhost:8000: the second fixed CLI-callback port
         of the pre-031 flow, dead client config under the ephemeral-port
         loopback.
+      # The three entries below enact one human ruling, made on 2026-08-13
+      # after the fold surfaced the contradiction the corpus had carried
+      # since 023: OIDC (Keycloak) is the only login, and a user's GitHub
+      # account is linked from the identity the OIDC provider already knows,
+      # on first login. GitHub is never a login provider on its own. 031
+      # predates 023 and still described a provider chooser; 023 removed it
+      # but never retracted 031's text, and no supersession edge connects
+      # them. The shipped code has always agreed with the ruling --
+      # internal/api/cliauth.go serves providers: ["keycloak"] and 404s on
+      # s.oidc == nil alone -- so the fold states the design the corpus and
+      # the implementation already had, rather than deciding it.
+      "chooser": >-
+        Dead surface: the provider chooser existed only while GitHub was a
+        second login provider. 023 removed /auth/choose (folded sec-3 lists
+        it among the removals) and the ruling above confirms it. Nothing
+        is lost; no chooser can exist with one provider.
+      "s.oidc == nil && s.gh == nil": >-
+        Retired condition: discovery 404s when no interactive provider is
+        configured, and after 023 the only one is OIDC, so the guard is
+        `s.oidc == nil`. The `s.gh` half tested for the GitHub login
+        provider the ruling above confirms does not exist. Matches
+        internal/api/cliauth.go's wellKnownLogin.
+      '{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["github"] }': >-
+        Same ruling: the discovery payload advertised GitHub as the login
+        provider. The folded text carries the identical payload with
+        providers: ["keycloak"], which is what internal/api/cliauth.go has
+        always served. Only the provider name changed; both URLs survive.
       "docs/plans/2026-07-20-provider-neutral-cli-login-design.md": >-
         Deliberate drop, not a source-side artifact: 031 sec-0 opens with a
         blockquote recording that 031 was promoted from this plan. The
