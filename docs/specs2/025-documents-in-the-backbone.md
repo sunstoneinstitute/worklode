@@ -293,7 +293,7 @@ wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
 ```
 
 A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` names a snapshot whose
-`dcat:version` exceeds 3. Editing §9
+`dcat:version` exceeds 3. Editing any other section of the same document
 therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
 precision, one property.
 
@@ -1650,7 +1650,7 @@ becomes a breaking change the moment that PR lands.
 
 rdf-registry sources move `rdf/ls/` → `rdf/wl/`, but the **published base carries no
 ontology-name segment**: `https://worklode.io/ns/…`, not `…/ns/wl/…`. The `wl` in the source
-path is a repo-layout detail; the base-URL override (006 item 3) maps it away. A rename that
+path is a repo-layout detail; the base-URL override (006 §13.2 item 3) maps it away. A rename that
 stops at the prefix label leaves the IRIs wrong, which is the only part that is actually
 load-bearing.
 
