@@ -173,7 +173,8 @@ wl:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (
 
 # Disjointness — a node can't be two of these at once (consistency reasoning, CI/owlrl):
 [] a owl:AllDisjointClasses ;
-   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Project wl:Skill ) .
+   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Project
+                 wl:Skill ) .
 [] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .
 
 # Deliberately absent, so nobody re-mints them: wl:Workstream and its wl:OngoingMaintenance

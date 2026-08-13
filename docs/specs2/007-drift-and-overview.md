@@ -318,7 +318,7 @@ Read-only by construction — the only ways to change the graph are authoring de
    how GitHub already models it. (Task↔Issue mirroring is a new requirement on 004/008.)
 2. **Layer partition mechanism — confirm named graphs.** This spec commits to one named graph per
    source over RDF-1.2 edge annotation. 006 should ratify (or override) before implementation.
-   (006 confirms these declared/observed source graphs are **orthogonal** to its per-Workstream
+   (006 confirms these declared/observed source graphs are **orthogonal** to its per-Project
    projection graphs.)
 3. ~~**Drift acknowledgement / suppression.**~~ — **RESOLVED (spec 006 §Accepted deviations).**
    An intentional observed-but-unasserted edge is marked accepted with a declared-layer
