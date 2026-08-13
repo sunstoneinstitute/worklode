@@ -370,3 +370,56 @@ blockedBy: [ ]
 - [ ] `./scripts/secindex.py docs/specs2` and commit the regenerated
       `index.yaml`, so the folded corpus ships with the map every consumer
       reads and `--check` stays meaningful.
+
+## Known at hand-off
+
+Carried out of part 2's execution, parked deliberately rather than fixed.
+
+**25 bare mentions of retired spec numbers survive in the folded corpus**, across
+seven of the nine documents: 016 (5), 017 (2), 019 (1), 020 (7), 021 (3), 029
+(6), 032 (1). They name 014, 015, 018, 023, 027 and 028 — all documents that fold
+into a survivor in parts 3 or 4 — in prose shapes the per-document grep never
+matched: `rides spec 014`, `since spec 018`, `027 mints`, `014's document IRI`.
+The ones carrying a `§` (`015 §5`, `014 §11.3`, `018 §8`, `028 §6`) are within
+`refmap.py`'s prose form and get rewritten at cutover; the rest are invisible to
+it and to the grep both, because rule 5 deliberately does not widen the regex — a
+bare three-digit number matches dates, version strings and port numbers, and
+widening it has already caused two critical bugs. **Part 5 must sweep these by
+hand once parts 3 and 4 have established where each retired number lands.** They
+were not repointed during part 2 because that destination did not exist yet.
+
+**The folded corpus keeps retired `ls:` spellings wherever its sources used
+them.** 016 §0's note telling readers to read `ls:` as `wl:` stays, because
+`ls:Skill` and `ls:recommendsSkill` genuinely survive as backtick spans in §1, §3
+and §7 — respelling them would drop text rule 7 and `--check --ids` both require,
+and 016 declares no `allow_dropped_ids`. The `ls:`→`wl:` respelling is a
+corpus-wide cleanup this fold deliberately does not attempt; part 1 hit the same
+wall when it chose to drop 008's preamble rather than place it.
+
+**The part-1 plan's `requires:` wording is ambiguous and produced a bug.** Line
+~290 describes the union as "minus references that resolve inside this fold",
+which was implemented as dropping any target declared anywhere in the fold rather
+than only one folding into the *same* document. It silently deleted 017's edge to
+016, and would have cost 020→019, 021→020, 022→016 and three of 032's. Fixed in
+`fold.py` with a regression test; the part-1 plan is left as the record of what
+part 1 decided. **The corrected rule: drop a `requires:` target only when it is a
+source of the same document** — that is a self-require after cutover — and
+otherwise keep it pointing at `docs/specs/` for `refmap.py` to repoint.
+
+**Rule 4 has an axis the plan does not name.** It reaches document-status
+qualifiers, because drafts count as current in this fold and a document's status
+is a fact the fold changes: "014 is draft", "lands when 014 does". It does not
+reach implementation-status ones, because whether code has shipped is untouched
+by consolidating the corpus: "until 013 ships", "when 014 lands", "today it half
+does". Rewriting one of the latter into an unconditional present-tense assertion
+changed a claim's truth conditions and was part 2's only Critical finding. Where
+one phrase glues both together — "which is Status `draft` with no
+implementation" — drop only the document-status half and keep the rest verbatim.
+
+**Two precedents parts 3 and 4 will need.** A merge needs glue text only when the
+subsection opens on material with no thematic bridge to its parent — 005's did,
+021's two did not, and both of 021's came out byte-identical to source once the
+headings were removed. And a pointer from a surviving section into `dropped:`
+material is rule 5's escalation case, not a deletion; 029 §3.3/§4/§7.3 were
+resolved by deleting the pointer and keeping the claim, which review allowed to
+stand but which parts 3 and 4 should escalate rather than repeat.
