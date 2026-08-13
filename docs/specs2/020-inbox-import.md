@@ -279,8 +279,8 @@ exist — so it ships on its own. The two were never coupled in code.
 
 One asset survives for later: `AppAuth.Tarball`
 (`internal/githubauth/content.go:28`), built for skill sync, is already the
-right mechanism for pulling `docs/specs/**` out of a repo. Fetching is
-solved; only the mapping, which depends on 014, is new.
+right mechanism for pulling `docs/specs/**` out of a repo. When 014 lands,
+fetching is solved and only the mapping is new.
 
 ## 6. Follow-ups this leaves open {#sec-6}
 
