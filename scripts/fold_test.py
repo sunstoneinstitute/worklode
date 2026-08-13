@@ -1472,12 +1472,15 @@ class IdentifierPreservationCheckTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
-# --scaffold fixtures. Three source documents exercise both directions of the
-# `requires:` internal-drop rule (900 and 902 each require the other's fold
-# sibling) plus one kept external target (903), and a nested `new:` number
-# (900's sec-3 lands at "1.1") exercises heading-depth derivation. 950 merges
-# two sources (900 sec-2 + 901 sec-1) into one section, to prove `from:`-order
-# concatenation with a provenance marker per segment.
+# --scaffold fixtures. Three source documents exercise both directions of a
+# cross-document `requires:` edge -- 901 requires 902 and 902 requires 900,
+# each target folding into the *other* docs/specs2/ document, so both survive
+# -- plus one target outside the fold entirely (903), and a nested `new:`
+# number (900's sec-3 lands at "1.1") exercises heading-depth derivation. 950
+# merges two sources (900 sec-2 + 901 sec-1) into one section, to prove
+# `from:`-order concatenation with a provenance marker per segment. The one
+# case where an edge *is* dropped -- a target folding into the same document
+# -- has its own fixtures (SAME_DOC_*) below.
 ALPHA900 = """\
 ---
 status: accepted
@@ -1568,6 +1571,92 @@ documents:
 """
 
 
+# Same-document fixtures for the one `requires:` target fold.py drops: 911
+# requires 910 and both fold into 960, so after cutover the edge would be 960
+# requiring itself. 911's other target (912) folds into 961 instead and is
+# kept, which is what keeps the drop honest -- it is per-document, not "any
+# source named anywhere in the fold". 961 exists to drop 913's only target
+# (912, its own fold sibling) down to an empty union, where the key is omitted
+# rather than emitted as `requires: []`.
+TEN910 = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Ten
+
+## 1. One {#sec-1}
+
+Ten one.
+"""
+
+ELEVEN911 = """\
+---
+status: accepted
+issued: 2026-01-01
+requires:
+  - 910-ten.md
+  - 912-twelve.md
+---
+# Eleven
+
+## 1. One {#sec-1}
+
+Eleven one.
+"""
+
+TWELVE912 = """\
+---
+status: accepted
+issued: 2026-01-01
+---
+# Twelve
+
+## 1. One {#sec-1}
+
+Twelve one.
+"""
+
+THIRTEEN913 = """\
+---
+status: accepted
+issued: 2026-01-01
+requires:
+  - 912-twelve.md
+---
+# Thirteen
+
+## 1. One {#sec-1}
+
+Thirteen one.
+"""
+
+SAME_DOC_SPECS = {
+    "910-ten.md": TEN910,
+    "911-eleven.md": ELEVEN911,
+    "912-twelve.md": TWELVE912,
+    "913-thirteen.md": THIRTEEN913,
+}
+
+SAME_DOC_FOLD = """\
+version: 1
+corpus: {from: docs/specs, to: docs/specs2}
+documents:
+  - to: 960-ten-eleven-folded.md
+    title: Ten and eleven folded
+    sources: [910-ten.md, 911-eleven.md]
+    sections:
+      - {new: "0", heading: "Purpose", from: ["910-ten.md#sec-1", "911-eleven.md#sec-1"]}
+    dropped: []
+  - to: 961-twelve-thirteen-folded.md
+    title: Twelve and thirteen folded
+    sources: [912-twelve.md, 913-thirteen.md]
+    sections:
+      - {new: "0", heading: "Purpose", from: ["912-twelve.md#sec-1", "913-thirteen.md#sec-1"]}
+    dropped: []
+"""
+
+
 def write_scaffold_repo(tmp, fold, specs, extra_scripts=()):
     """A throwaway repo for --scaffold: scripts/fold.py (+ imports, +
     `extra_scripts`), docs/specs2/fold.yaml, and a docs/specs/ mini-corpus
@@ -1617,18 +1706,42 @@ class ScaffoldTest(unittest.TestCase):
             fm, _ = merged.split("\n---\n", 1)
             data = yaml.safe_load(fm[4:] + "\n")
             self.assertEqual(data["status"], "draft")
-            # 900's requires (903-external.md) is kept and repointed at
-            # docs/specs/; 901's requires (902-gamma.md) is dropped because
-            # 902-gamma.md is itself a `sources:` entry in this same fold.
-            self.assertEqual(data["requires"], ["docs/specs/903-external.md"])
+            # Both targets are kept and repointed at docs/specs/: 900's
+            # 903-external.md folds nowhere, and 901's 902-gamma.md folds
+            # into 951 -- a different document, so the edge is real. Sorted,
+            # so 902 leads.
+            self.assertEqual(
+                data["requires"],
+                ["docs/specs/902-gamma.md", "docs/specs/903-external.md"],
+            )
 
             gamma = self.read(repo, "951-gamma-folded.md")
             fm, _ = gamma.split("\n---\n", 1)
             data = yaml.safe_load(fm[4:] + "\n")
             self.assertEqual(data["status"], "draft")
-            # 902's own requires (900-alpha.md) is dropped the same way, in
-            # the other direction -- the union is empty, so the key is absent
-            # rather than emitted as `requires: []`.
+            # The same edge in the other direction: 902 requires 900-alpha.md,
+            # which folds into 950, not into 951.
+            self.assertEqual(data["requires"], ["docs/specs/900-alpha.md"])
+
+    def test_requires_targeting_a_source_of_the_same_document_is_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.scaffold(tmp, fold=SAME_DOC_FOLD, specs=SAME_DOC_SPECS)
+            merged = self.read(repo, "960-ten-eleven-folded.md")
+            fm, _ = merged.split("\n---\n", 1)
+            data = yaml.safe_load(fm[4:] + "\n")
+            # 911 requires its own fold sibling 910: keeping it would leave
+            # 960 requiring itself once refmap.py repoints references at
+            # cutover, so it goes. 912 folds into a different document and
+            # stays -- the drop is per-document, not fold-wide.
+            self.assertEqual(data["requires"], ["docs/specs/912-twelve.md"])
+            self.assertNotIn("910-ten.md", fm)
+            self.assertNotIn("960-ten-eleven-folded.md", fm)
+
+            empty = self.read(repo, "961-twelve-thirteen-folded.md")
+            fm, _ = empty.split("\n---\n", 1)
+            data = yaml.safe_load(fm[4:] + "\n")
+            # 913's only target is its own fold sibling 912, so the union is
+            # empty and the key is absent rather than `requires: []`.
             self.assertNotIn("requires", data)
 
     def test_headings_come_from_fold_yaml_numbered_per_new(self):
