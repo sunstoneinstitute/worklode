@@ -316,6 +316,16 @@ Additions to the list parts 2 and 3 already record.
   `000 §2` and is recorded above as a residual instead. That split is
   deliberate — 026's sits inside a sentence about what a *source* document
   claimed — but part 5 should settle both the same way.
+- **`ns/` mirrors the pre-025 vocabulary in three places, and that is not
+  part 5's to fix.** `ns/concept.ttl` still ships `wlc:epic`, and
+  `ns/ontology.ttl`'s `owl:AllDisjointClasses` still names `wl:Workstream`
+  and includes `wl:Issue`/`wl:PullRequest` where folded 006's axiom carries
+  `wl:Project` and neither. This is the documented `ns/`-lags-the-spec state
+  — 025 is unimplemented, and CLAUDE.md's rule is amend the spec first, then
+  mirror the term — not drift the fold introduced. Ruling 16's one exception
+  went the other way, transcribing `wl:Plan` *from* `ns/` into folded 006,
+  because there `ns/` was ahead. Recorded so part 5 does not read the
+  remaining gaps as breakage and try to close them at cutover.
 - **009's implementation-status qualifiers stay as written** — "done in dev",
   "prod remains blocked on item 1", "the override is not yet implemented in
   rdf-registry". Rule 4 leaves implementation status alone, so folded 006 §13
