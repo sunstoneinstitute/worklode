@@ -24,7 +24,7 @@ Model per `MODEL_SELECTION.md`: implementation `sonnet` (each task is fully
 specified with an objective gate), per-document review `sonnet` (near-1:1
 mechanical diffs), whole-branch review before merge `opus`.
 
-## 029 sec-9 obligations on parts 3 and 4
+## Obligations from 029 sec-9 on parts 3 and 4
 
 The one non-mechanical decision in this part. `029#sec-9` ("What this spec
 changes elsewhere") is dropped as `absorbed`, like the corpus's other four
@@ -318,9 +318,9 @@ blockedBy: [ ]
 
 **Context:** 22 live anchors: 21 placed 1:1, and §9 ("What this spec changes
 elsewhere") is `dropped:` as `absorbed` — its obligations on parts 3 and 4 are
-recorded in this plan's "029 sec-9 obligations" section, so there is nothing
-for this task to carry; do not resurrect the table. Old §10 (Out of scope)
-closes the gap as §9.
+recorded in this plan's "Obligations from 029 sec-9" section, so there is
+nothing for this task to carry; do not resurrect the table. Old §10 (Out of
+scope) closes the gap as §9.
 
 - [ ] `./scripts/fold.py --scaffold --only 029-research-work-in-the-backbone.md`
 - [ ] Rewrite the scaffold following **Rewrite rules** 1–11 of the part-1 plan
@@ -423,3 +423,90 @@ headings were removed. And a pointer from a surviving section into `dropped:`
 material is rule 5's escalation case, not a deletion; 029 §3.3/§4/§7.3 were
 resolved by deleting the pointer and keeping the claim, which review allowed to
 stand but which parts 3 and 4 should escalate rather than repeat.
+
+**013's `dropped:` reasons record a supersession wider than 013 itself claims,
+and part 5 must resolve it before the source is gone.** 013's frontmatter
+supersedes §3, §5 and §8 wholesale to 014 §6, but its inline notes scope the
+supersession far more narrowly: §3's says only `task_docs` gives way and
+`events.applied_at` survives; §5's and §8's sit after the Spec-drift bullet
+only. So the folded 013 loses the `events.applied_at` column declaration and its
+down-migration sentence — which folded §0 still refers to and §2.1 still relies
+on, with nothing left in the corpus declaring it — plus the replay and poll
+tests, the both-doctors test, the replay/poll/doctor acceptance criteria and
+"Every command emits deterministic `--json`". 013 ends up the only folded
+document with neither a Testing nor an Acceptance criteria section. `fold.yaml`
+had no legal alternative: `--check` rejects a retired anchor in a `from:`, so
+this is rot inherited from 013's accepted frontmatter that the fold makes
+permanent rather than causes. The three `dropped:` reasons now name what is
+lost. **Resolve it before part 5's `git rm -r docs/specs` makes it
+irreversible** — that is the last moment the surviving material can be recovered
+from the source.
+
+**Letter-suffix cross-references are invisible to `refmap.py`, and fix 3 was
+only one of them.** The prose regex is `\d+(?:\.\d+)*`, which cannot match a
+letter suffix, so a reference like `019 §4.3a` is neither substituted nor
+reported unmapped — and part 2's bare-number grep cannot see it either, which is
+how a stale `(019 §4.3a)` survived every gate in folded 029. The same shape sits
+at `docs/specs/026-design-doc-queries.md:207` and
+`internal/cmd/show_test.go:774`, and `026 §4.2a` appears at six more sites
+(`CLAUDE.md`, `docs/authoring-design-docs.md`,
+`docs/specs/033-plan-section-coverage.md`, a 2026-08-03 plan, and twice in
+`internal/designdoc/resolve.go`). **Part 5 must handle these by hand or widen
+the regex deliberately** — widening is a planning-tier decision, since rule 5
+records that widening this regex has already caused two critical bugs.
+
+**And hand-repointing one inside `docs/specs2/` sets a trap for cutover.**
+`refmap.py` scans `docs/specs2/` on purpose — a folded document's prose still
+carries the *old* corpus's section numbers, and cutover is where they get
+converted. A letter-suffix reference is exempt only while it stays unreadable:
+the moment folded 029's pointer at 019's old `4.3a` was hand-repointed to the
+new `4.4`, it became visible to the prose regex — and `mapping.yaml` maps old
+`4.4` to new `4.5`, so the cutover run would rewrite the now-correct pointer
+into a wrong one. `--dry-run` already lists that line in its rewrite plan.
+**Part 5 must exclude it from the rewrite** (or re-point it afterwards), and the
+same applies to any other letter-suffix reference resolved by hand inside
+`docs/specs2/` before cutover. Leaving it stale was the worse option: a reader
+would follow it to a section number 019 no longer has.
+
+**Amendment absorptions took three shapes across the nine, and the citation
+should not be one of the variables.** Rule 3 says the note goes away and what it
+said does not, but it does not say where the amended text lands or whether the
+amending spec stays cited: 013 §0 absorbed in place with no citation, 019 §2
+appended with no citation, 016 §1 appended keeping the citation. Placement
+varying with content is fine — some amendments belong where the amended claim
+sits, others read as a coda. The citation varying is not: a reader cannot tell a
+dropped citation from an amendment that never had one. **Parts 3 and 4 need one
+convention, and choosing it is planning-tier work**, not a rewriter's call.
+
+**016 §1 says "Two mints" and then adds a third.** The sentence introduces two
+mints added to 006's mint set and disjointness axiom, the Turtle block declares
+`wl:Skill` and `wl:recommendsSkill`, and the disjointness member list is a third
+addition that never enters the block as its own declaration; §7's dependency
+bullet repeats the undercount. Rule 6 correctly stopped the rewriter fabricating
+Turtle to fix it, so this is a substantive spec correction and therefore
+planning-tier work.
+
+**013 keeps scars whose referents left the corpus.** Folded §0 says "the
+`task_docs` link and the spec-drift engine it supported are superseded" and
+folded §5 (Open questions) refers to "the (now-superseded) engine 3's third
+finding". Neither `task_docs` nor engine 3 appears anywhere else in the folded
+corpus — the reader is pointed at material that no longer exists to be pointed
+at. Same bucket as the 013 over-scoped drops above: resolve both together
+before part 5 removes the source.
+
+**`epic` is live vocabulary in folded 020 but removed by folded 029.** 020 uses
+it in §3.3 (`kind = "epic"` is rejected with 422, `validKinds`,
+`epicForbiddenStates`) and at four other sites (§0, §2.1, and twice in §4's
+table), while 029 §2 states `epic` is removed from `TaskKind`. 020's
+transcription is faithful — 029's own §9 table named 018, 025, 028 and `ns/` as
+the documents its change touches, and not 020 — so the gap is 029's, not the
+fold's. **Parts 3 and 4 should add 020 to the epic sweep** they already owe
+from that table.
+
+**The `ls:` disposition should have gone back to planning tier rather than
+closing as "stays".** `allow_dropped_ids` is the authorised mechanism for a
+deliberate identifier drop with a stated reason, and three entries would have
+let 016 ship respelled to `wl:`. Refusing to edit `fold.yaml` was right *for a
+rewrite task* — rule 10 and the task checklist both forbid it — but the missing
+step was escalating the choice, not the refusal. It is worth one `fold.yaml`
+entry in part 5, not a corpus-wide project.
