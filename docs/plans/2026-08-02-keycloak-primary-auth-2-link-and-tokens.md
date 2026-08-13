@@ -1093,7 +1093,7 @@ git commit -m "Add the GitHub account link flow"
 - Modify: `internal/api/web.go`, `internal/api/server.go`, `internal/api/templates/layout.html`
 - Test: `internal/api/githublink_test.go`
 
-Spec 023 §3.3.4 makes linking lazy, with a settings entry for doing it proactively. This is that entry: one page, no form, no unlink button (§4 keeps unlink to the CLI/admin).
+Spec 023 §3.3 makes linking lazy, with a settings entry for doing it proactively. This is that entry: one page, no form, no unlink button (§4 keeps unlink to the CLI/admin).
 
 - [ ] **Step 1: Write the failing test**
 

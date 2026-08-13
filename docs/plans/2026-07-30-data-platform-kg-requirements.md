@@ -80,9 +80,8 @@ provisional until it actually executes — not this plan's concern.)
    and node IRIs as opaque strings, and the e2e fixture hard-codes its IRIs
    (they are test data, not production minting).
 2. **Published IRI authority: schema now agrees, instances and named graphs
-   still conflict.** Worklode spec 006 (amended by 014 §1;
-   `docs/specs/000-umbrella-architecture.md:94`) puts schema, concepts, and
-   instances under `https://worklode.io/ns/` (`wl:` = `…/ontology#`,
+   still conflict.** Worklode spec 006 (amended by 014 §1) puts schema,
+   concepts, and instances under `https://worklode.io/ns/` (`wl:` = `…/ontology#`,
    `wlid:` = `…/id/…`) — the schema and concept half now matches
    Data-platform ADR-0003's schema base `https://worklode.io/ns/ontology#`.
    The instance and named-graph halves still conflict: ADR-0003 fixes

@@ -86,7 +86,7 @@ wl:SectionShape a sh:NodeShape ;
         sh:node [ sh:property [ sh:path dcat:version ; sh:minCount 1 ] ] ;
         sh:message "wl:lastRevisedIn names a versioned DesignDoc snapshot carrying dcat:version (014 §4)." ;
     ] ;
-    # 014 §7.2 — a superseded section explains itself: a successor, or a reason it
+    # 014 §7 — a superseded section explains itself: a successor, or a reason it
     # went away. A bare superseded section is a broken promise to whoever linked
     # it. Read as an implication: not superseded, OR one of the two explanations.
     sh:or (
@@ -94,7 +94,7 @@ wl:SectionShape a sh:NodeShape ;
         [ sh:property [ sh:path dct:isReplacedBy ; sh:minCount 1 ] ]
         [ sh:property [ sh:path dct:description ; sh:minCount 1 ] ]
     ) ;
-    sh:message "A superseded Section needs dct:isReplacedBy or a dct:description saying why it went away (014 §7.2)." .
+    sh:message "A superseded Section needs dct:isReplacedBy or a dct:description saying why it went away (014 §7)." .
 
 wl:DeliverableShape a sh:NodeShape ;
     # Targets wl:Effect too: sh:targetClass follows rdfs:subClassOf*.

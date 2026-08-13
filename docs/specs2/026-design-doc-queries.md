@@ -703,7 +703,7 @@ edge, and the weakness shows up as prose that has to explain the term every time
 it appears:
 
 > The cockpit plan **covers** spec 032 §3. · Task WL-7 **produces** the
-> graph-live deliverable. · The worklode component **implements** spec 006 §4.2.
+> graph-live deliverable. · The worklode component **implements** spec 006 §4.
 > · The v1.2.0 release **was cut from** commit abc1234.
 
 Every rename below was settled that way, including two abstract candidates —
@@ -957,7 +957,7 @@ a test failure rather than a corpus that means two things.
 - Shorthand (§4.2), Go and Python both driven by `testdata/shorthand.yaml`: `WL-SPEC-23` and
   `WL-SPEC-023` resolve to the same document and normalise to the same string; a fragment
   survives the round trip; `WL-23`, `wl-spec-23` and `WL-PLAN-3` are rejected as malformed;
-  `WL-SPEC-999` is a tier-1 defect; `WL-ADR-23` against a `kind: spec` target is a defect
+  `WLxSPECx999` is a tier-1 defect; `WL-ADR-23` against a `kind: spec` target is a defect
   naming the kind mismatch; `CMS-SPEC-4` with no backbone is reported unresolved and leaves
   the exit code at 0, and becomes a defect under `--strict-refs`.
 - Canonical form: `secfmt.py` rewrites a within-project shorthand to the target's filename and
