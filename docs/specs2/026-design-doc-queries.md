@@ -689,7 +689,7 @@ addressable sections. A plan is `draft` while it is being written and reviewed, 
 carried by one spec. On a plan it names the task the plan's execution hangs off in today's
 tracker — the git-mirror stand-in for the `plan_doc` reference 025 §5's accept transaction will
 put on each of the plan's tasks, which is why a single id suffices here and nothing is built on
-it being one row. It retires with the files, as 025 §11 already records.
+it being one row. It retires with the files.
 
 Both keys are backfilled across the existing corpus (§2.2): every plan carries a `status`, and
 the seventeen with a stand-in execution task carry a `task` naming it.
@@ -840,9 +840,6 @@ Two claims in the old comment were false and do not survive: `wl:implements` was
 never "realisation of intent" in general — that spanned all three edges above —
 and "SHACL enforces presence" named no shape, `ns/shapes.ttl` having never
 mentioned the property. Writing those shapes is left to the implementation (§7).
-
-006 §1.3's own text keeps `ls:implements` as written: it predates 014 §1's
-`ls:`→`wl:` rename, and 014 §12 already records the re-pointing against it.
 
 ### 6.3 The qualified node names both its ends {#sec-6.3}
 
