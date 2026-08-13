@@ -146,6 +146,14 @@ already records.
   exists. The shipped code already agreed — `internal/api/cliauth.go` serves
   `providers: ["keycloak"]` and 404s on `s.oidc == nil` alone — so this
   states a design the corpus and the implementation both already had.
+- **A spec-vs-code drift the fold surfaced and corrected.** 031 spells the CLI
+  discovery endpoint `/.well-known/wl-login` in all four of its mentions; the
+  shipped route has always been `/.well-known/lode-login` (`server.go`'s
+  registration, `router.go`'s guard table, `internal/cli/login.go`'s request,
+  every test). The folded document carries the shipped spelling under three
+  `allow_dropped_ids` entries — the wire protocol is the authority over the
+  prose describing it. Nothing about the endpoint changed but the path's
+  spelling, and part 5 inherits no action.
 - **The `closedStates` set is enumerated nowhere.** Folded 004 §1.3 now
   defines an open task by deferring to `closedStates` (§6.4) — the right
   repair, since `done` was never a state under 011 — but neither §5.1 nor
