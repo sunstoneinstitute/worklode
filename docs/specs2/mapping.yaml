@@ -3,10 +3,58 @@ corpus:
   from: docs/specs
   to: docs/specs2
 documents:
+- from: 001-keycloak-sso.md
+  to: 001-identity-and-authentication.md
+  from_id: WL-SPEC-1
+  to_id: WL-SPEC-1
+- from: 002-github-app-auth.md
+  to: 001-identity-and-authentication.md
+  from_id: WL-SPEC-2
+  to_id: WL-SPEC-1
+- from: 023-keycloak-primary-auth.md
+  to: 001-identity-and-authentication.md
+  from_id: WL-SPEC-23
+  to_id: WL-SPEC-1
+- from: 031-provider-neutral-cli-login.md
+  to: 001-identity-and-authentication.md
+  from_id: WL-SPEC-31
+  to_id: WL-SPEC-1
+- from: 004-execution-backbone.md
+  to: 004-execution-backbone.md
+  from_id: WL-SPEC-4
+  to_id: WL-SPEC-4
+- from: 010-per-project-task-keys.md
+  to: 004-execution-backbone.md
+  from_id: WL-SPEC-10
+  to_id: WL-SPEC-4
+- from: 011-delivery-lifecycle.md
+  to: 004-execution-backbone.md
+  from_id: WL-SPEC-11
+  to_id: WL-SPEC-4
+- from: 018-task-hierarchy.md
+  to: 004-execution-backbone.md
+  from_id: WL-SPEC-18
+  to_id: WL-SPEC-4
 - from: 005-prioritization-and-pickup.md
   to: 005-prioritization-and-pickup.md
   from_id: WL-SPEC-5
   to_id: WL-SPEC-5
+- from: 008-worklode-plugin.md
+  to: 008-worklode-plugin.md
+  from_id: WL-SPEC-8
+  to_id: WL-SPEC-8
+- from: 024-multi-harness-integration.md
+  to: 008-worklode-plugin.md
+  from_id: WL-SPEC-24
+  to_id: WL-SPEC-8
+- from: 030-branch-and-worktree-naming.md
+  to: 008-worklode-plugin.md
+  from_id: WL-SPEC-30
+  to_id: WL-SPEC-8
+- from: 012-agent-sessions.md
+  to: 012-agent-sessions.md
+  from_id: WL-SPEC-12
+  to_id: WL-SPEC-12
 - from: 013-reconciliation.md
   to: 013-reconciliation.md
   from_id: WL-SPEC-13
@@ -44,6 +92,94 @@ documents:
   from_id: WL-SPEC-32
   to_id: WL-SPEC-32
 sections:
+  001-keycloak-sso.md#sec-0: 001-identity-and-authentication.md#sec-0
+  023-keycloak-primary-auth.md#sec-0: 001-identity-and-authentication.md#sec-0
+  002-github-app-auth.md#sec-1: 001-identity-and-authentication.md#sec-1
+  023-keycloak-primary-auth.md#sec-1: 001-identity-and-authentication.md#sec-1
+  001-keycloak-sso.md#sec-1: 001-identity-and-authentication.md#sec-2
+  023-keycloak-primary-auth.md#sec-3.1: 001-identity-and-authentication.md#sec-3
+  001-keycloak-sso.md#sec-2: 001-identity-and-authentication.md#sec-4
+  001-keycloak-sso.md#sec-3: 001-identity-and-authentication.md#sec-5
+  001-keycloak-sso.md#sec-3.2: 001-identity-and-authentication.md#sec-6
+  001-keycloak-sso.md#sec-3.1: 001-identity-and-authentication.md#sec-7
+  031-provider-neutral-cli-login.md#sec-6: 001-identity-and-authentication.md#sec-7
+  031-provider-neutral-cli-login.md#sec-0: 001-identity-and-authentication.md#sec-8
+  031-provider-neutral-cli-login.md#sec-1: 001-identity-and-authentication.md#sec-8
+  031-provider-neutral-cli-login.md#sec-2: 001-identity-and-authentication.md#sec-8
+  031-provider-neutral-cli-login.md#sec-2.1: 001-identity-and-authentication.md#sec-8.1
+  031-provider-neutral-cli-login.md#sec-2.2: 001-identity-and-authentication.md#sec-8.2
+  031-provider-neutral-cli-login.md#sec-2.3: 001-identity-and-authentication.md#sec-8.3
+  031-provider-neutral-cli-login.md#sec-3: 001-identity-and-authentication.md#sec-8.4
+  031-provider-neutral-cli-login.md#sec-4: 001-identity-and-authentication.md#sec-8.5
+  031-provider-neutral-cli-login.md#sec-5: 001-identity-and-authentication.md#sec-8.6
+  002-github-app-auth.md#sec-3: 001-identity-and-authentication.md#sec-9
+  023-keycloak-primary-auth.md#sec-3: 001-identity-and-authentication.md#sec-9
+  002-github-app-auth.md#sec-3.1: 001-identity-and-authentication.md#sec-9.1
+  002-github-app-auth.md#sec-3.6: 001-identity-and-authentication.md#sec-9.1
+  023-keycloak-primary-auth.md#sec-3.6: 001-identity-and-authentication.md#sec-9.1
+  023-keycloak-primary-auth.md#sec-3.2: 001-identity-and-authentication.md#sec-9.2
+  023-keycloak-primary-auth.md#sec-3.3: 001-identity-and-authentication.md#sec-9.3
+  023-keycloak-primary-auth.md#sec-3.4: 001-identity-and-authentication.md#sec-9.4
+  002-github-app-auth.md#sec-3.5: 001-identity-and-authentication.md#sec-9.5
+  023-keycloak-primary-auth.md#sec-3.5: 001-identity-and-authentication.md#sec-9.5
+  002-github-app-auth.md#sec-5: 001-identity-and-authentication.md#sec-10
+  023-keycloak-primary-auth.md#sec-5: 001-identity-and-authentication.md#sec-10
+  001-keycloak-sso.md#sec-5: 001-identity-and-authentication.md#sec-11
+  002-github-app-auth.md#sec-6: 001-identity-and-authentication.md#sec-11
+  023-keycloak-primary-auth.md#sec-6: 001-identity-and-authentication.md#sec-11
+  031-provider-neutral-cli-login.md#sec-7: 001-identity-and-authentication.md#sec-11
+  001-keycloak-sso.md#sec-6: 001-identity-and-authentication.md#sec-12
+  002-github-app-auth.md#sec-4: 001-identity-and-authentication.md#sec-12
+  023-keycloak-primary-auth.md#sec-4: 001-identity-and-authentication.md#sec-12
+  002-github-app-auth.md#sec-7: 001-identity-and-authentication.md#sec-13
+  023-keycloak-primary-auth.md#sec-7: 001-identity-and-authentication.md#sec-13
+  004-execution-backbone.md#sec-0: 004-execution-backbone.md#sec-0
+  004-execution-backbone.md#sec-1: 004-execution-backbone.md#sec-1
+  004-execution-backbone.md#sec-1.1: 004-execution-backbone.md#sec-1.1
+  004-execution-backbone.md#sec-1.3: 004-execution-backbone.md#sec-1.2
+  004-execution-backbone.md#sec-1.4: 004-execution-backbone.md#sec-1.3
+  004-execution-backbone.md#sec-1.5: 004-execution-backbone.md#sec-1.4
+  010-per-project-task-keys.md#sec-0: 004-execution-backbone.md#sec-2
+  010-per-project-task-keys.md#sec-1: 004-execution-backbone.md#sec-2.1
+  010-per-project-task-keys.md#sec-2: 004-execution-backbone.md#sec-2.2
+  010-per-project-task-keys.md#sec-3: 004-execution-backbone.md#sec-2.3
+  010-per-project-task-keys.md#sec-4: 004-execution-backbone.md#sec-2.4
+  010-per-project-task-keys.md#sec-5: 004-execution-backbone.md#sec-2.5
+  011-delivery-lifecycle.md#sec-6: 004-execution-backbone.md#sec-2.5
+  004-execution-backbone.md#sec-2: 004-execution-backbone.md#sec-3
+  004-execution-backbone.md#sec-3: 004-execution-backbone.md#sec-4
+  011-delivery-lifecycle.md#sec-0: 004-execution-backbone.md#sec-5
+  011-delivery-lifecycle.md#sec-1: 004-execution-backbone.md#sec-5.1
+  011-delivery-lifecycle.md#sec-2: 004-execution-backbone.md#sec-5.2
+  011-delivery-lifecycle.md#sec-3: 004-execution-backbone.md#sec-5.3
+  011-delivery-lifecycle.md#sec-4: 004-execution-backbone.md#sec-5.4
+  011-delivery-lifecycle.md#sec-5: 004-execution-backbone.md#sec-5.5
+  011-delivery-lifecycle.md#sec-7: 004-execution-backbone.md#sec-5.6
+  011-delivery-lifecycle.md#sec-8: 004-execution-backbone.md#sec-5.7
+  018-task-hierarchy.md#preamble: 004-execution-backbone.md#sec-6
+  018-task-hierarchy.md#sec-0: 004-execution-backbone.md#sec-6
+  018-task-hierarchy.md#sec-1: 004-execution-backbone.md#sec-6.1
+  018-task-hierarchy.md#sec-2: 004-execution-backbone.md#sec-6.2
+  018-task-hierarchy.md#sec-3: 004-execution-backbone.md#sec-6.3
+  018-task-hierarchy.md#sec-3.1: 004-execution-backbone.md#sec-6.3
+  018-task-hierarchy.md#sec-3.2: 004-execution-backbone.md#sec-6.4
+  018-task-hierarchy.md#sec-3.3: 004-execution-backbone.md#sec-6.5
+  018-task-hierarchy.md#sec-4: 004-execution-backbone.md#sec-6.6
+  018-task-hierarchy.md#sec-5: 004-execution-backbone.md#sec-6.7
+  018-task-hierarchy.md#sec-6: 004-execution-backbone.md#sec-6.8
+  018-task-hierarchy.md#sec-7: 004-execution-backbone.md#sec-6.9
+  018-task-hierarchy.md#sec-8: 004-execution-backbone.md#sec-6.10
+  004-execution-backbone.md#sec-4: 004-execution-backbone.md#sec-7
+  004-execution-backbone.md#sec-5: 004-execution-backbone.md#sec-8
+  010-per-project-task-keys.md#sec-6: 004-execution-backbone.md#sec-9
+  011-delivery-lifecycle.md#sec-9: 004-execution-backbone.md#sec-9
+  018-task-hierarchy.md#sec-9: 004-execution-backbone.md#sec-9
+  010-per-project-task-keys.md#sec-7: 004-execution-backbone.md#sec-10
+  018-task-hierarchy.md#sec-10: 004-execution-backbone.md#sec-10
+  004-execution-backbone.md#sec-6: 004-execution-backbone.md#sec-11
+  004-execution-backbone.md#sec-7: 004-execution-backbone.md#sec-12
+  018-task-hierarchy.md#sec-11: 004-execution-backbone.md#sec-12
+  004-execution-backbone.md#sec-8: 004-execution-backbone.md#sec-13
   005-prioritization-and-pickup.md#sec-0: 005-prioritization-and-pickup.md#sec-0
   005-prioritization-and-pickup.md#sec-1: 005-prioritization-and-pickup.md#sec-1
   005-prioritization-and-pickup.md#sec-2: 005-prioritization-and-pickup.md#sec-2
@@ -55,6 +191,61 @@ sections:
   005-prioritization-and-pickup.md#sec-7: 005-prioritization-and-pickup.md#sec-7
   005-prioritization-and-pickup.md#sec-8: 005-prioritization-and-pickup.md#sec-8
   005-prioritization-and-pickup.md#sec-9: 005-prioritization-and-pickup.md#sec-9
+  008-worklode-plugin.md#sec-0: 008-worklode-plugin.md#sec-0
+  024-multi-harness-integration.md#sec-1: 008-worklode-plugin.md#sec-0
+  030-branch-and-worktree-naming.md#sec-0: 008-worklode-plugin.md#sec-0
+  008-worklode-plugin.md#sec-1: 008-worklode-plugin.md#sec-1
+  008-worklode-plugin.md#sec-2: 008-worklode-plugin.md#sec-1
+  008-worklode-plugin.md#sec-3: 008-worklode-plugin.md#sec-2
+  030-branch-and-worktree-naming.md#sec-1: 008-worklode-plugin.md#sec-3
+  030-branch-and-worktree-naming.md#sec-1.1: 008-worklode-plugin.md#sec-3.1
+  030-branch-and-worktree-naming.md#sec-1.2: 008-worklode-plugin.md#sec-3.2
+  030-branch-and-worktree-naming.md#sec-2: 008-worklode-plugin.md#sec-4
+  030-branch-and-worktree-naming.md#sec-3: 008-worklode-plugin.md#sec-5
+  030-branch-and-worktree-naming.md#sec-3.1: 008-worklode-plugin.md#sec-5.1
+  030-branch-and-worktree-naming.md#sec-3.2: 008-worklode-plugin.md#sec-5.2
+  030-branch-and-worktree-naming.md#sec-4: 008-worklode-plugin.md#sec-6
+  030-branch-and-worktree-naming.md#sec-5: 008-worklode-plugin.md#sec-7
+  030-branch-and-worktree-naming.md#sec-5.1: 008-worklode-plugin.md#sec-7.1
+  030-branch-and-worktree-naming.md#sec-5.2: 008-worklode-plugin.md#sec-7.2
+  030-branch-and-worktree-naming.md#sec-6: 008-worklode-plugin.md#sec-8
+  008-worklode-plugin.md#sec-4: 008-worklode-plugin.md#sec-9
+  008-worklode-plugin.md#sec-5: 008-worklode-plugin.md#sec-10
+  008-worklode-plugin.md#sec-6: 008-worklode-plugin.md#sec-11
+  008-worklode-plugin.md#sec-7: 008-worklode-plugin.md#sec-12
+  008-worklode-plugin.md#sec-8: 008-worklode-plugin.md#sec-13
+  008-worklode-plugin.md#sec-9: 008-worklode-plugin.md#sec-14
+  008-worklode-plugin.md#sec-10: 008-worklode-plugin.md#sec-15
+  024-multi-harness-integration.md#sec-2: 008-worklode-plugin.md#sec-16
+  024-multi-harness-integration.md#sec-2.1: 008-worklode-plugin.md#sec-16.1
+  024-multi-harness-integration.md#sec-2.2: 008-worklode-plugin.md#sec-16.2
+  024-multi-harness-integration.md#sec-2.3: 008-worklode-plugin.md#sec-16.3
+  024-multi-harness-integration.md#sec-2.4: 008-worklode-plugin.md#sec-16.4
+  024-multi-harness-integration.md#sec-2.5: 008-worklode-plugin.md#sec-16.5
+  024-multi-harness-integration.md#sec-3: 008-worklode-plugin.md#sec-17
+  024-multi-harness-integration.md#sec-3.1: 008-worklode-plugin.md#sec-17.1
+  024-multi-harness-integration.md#sec-3.2: 008-worklode-plugin.md#sec-17.2
+  024-multi-harness-integration.md#sec-3.3: 008-worklode-plugin.md#sec-17.3
+  024-multi-harness-integration.md#sec-3.4: 008-worklode-plugin.md#sec-17.4
+  024-multi-harness-integration.md#sec-3.5: 008-worklode-plugin.md#sec-17.5
+  024-multi-harness-integration.md#sec-3.6: 008-worklode-plugin.md#sec-17.6
+  024-multi-harness-integration.md#sec-3.7: 008-worklode-plugin.md#sec-17.7
+  024-multi-harness-integration.md#sec-4: 008-worklode-plugin.md#sec-18
+  008-worklode-plugin.md#sec-11: 008-worklode-plugin.md#sec-19
+  024-multi-harness-integration.md#sec-5: 008-worklode-plugin.md#sec-19
+  008-worklode-plugin.md#sec-12: 008-worklode-plugin.md#sec-20
+  024-multi-harness-integration.md#sec-6: 008-worklode-plugin.md#sec-20
+  008-worklode-plugin.md#sec-13: 008-worklode-plugin.md#sec-21
+  024-multi-harness-integration.md#sec-7: 008-worklode-plugin.md#sec-21
+  024-multi-harness-integration.md#sec-8: 008-worklode-plugin.md#sec-22
+  012-agent-sessions.md#sec-0: 012-agent-sessions.md#sec-0
+  012-agent-sessions.md#sec-1: 012-agent-sessions.md#sec-1
+  012-agent-sessions.md#sec-2: 012-agent-sessions.md#sec-2
+  012-agent-sessions.md#sec-3: 012-agent-sessions.md#sec-3
+  012-agent-sessions.md#sec-4: 012-agent-sessions.md#sec-4
+  012-agent-sessions.md#sec-5: 012-agent-sessions.md#sec-5
+  012-agent-sessions.md#sec-6: 012-agent-sessions.md#sec-6
+  012-agent-sessions.md#sec-7: 012-agent-sessions.md#sec-7
   013-reconciliation.md#sec-0: 013-reconciliation.md#sec-0
   013-reconciliation.md#sec-1: 013-reconciliation.md#sec-1
   013-reconciliation.md#sec-1.1: 013-reconciliation.md#sec-1.1
@@ -185,6 +376,73 @@ sections:
   032-project-cockpit.md#sec-12: 032-project-cockpit.md#sec-12
   032-project-cockpit.md#sec-13: 032-project-cockpit.md#sec-13
 dropped:
+- ref: 001-keycloak-sso.md#sec-4
+  reason: 'superseded: the CLI''s direct Keycloak OIDC+PKCE flow replaced by 031-provider-neutral-cli-login.md
+    (folded here as sec-8). Every surviving behaviour -- browser login ending in a
+    stored `wl_` token -- is restated by the loopback design; lost are only the retired
+    mechanics (fixed callback ports 8000/18000, in-CLI code exchange, `POST /auth/oidc/token`
+    as the CLI path -- the endpoint itself survives, dormant, in folded sec-7).'
+- ref: 002-github-app-auth.md#sec-3.2
+  reason: 'superseded: GitHub web login replaced by 023-keycloak-primary-auth.md#sec-3.1
+    (Keycloak is the only login). The confidential-client signed-state/no-PKCE rationale
+    and the code-for-token exchange survive in 023 sec-3.3''s link flow (folded sec-9.3);
+    lost are the login-only mechanics -- the two-provider login page and GitHub session
+    provisioning.'
+- ref: 002-github-app-auth.md#sec-3.3
+  reason: 'superseded: replaced by 031-provider-neutral-cli-login.md and 023-keycloak-primary-auth.md#sec-3.1
+    -- no device flow was ever built, and GitHub is no longer a CLI login provider
+    at all. Lost: the unimplemented device-flow endpoint design (/auth/github/device/start,
+    /poll), referenced nowhere else. Its keychain-storage decision (zalando/go-keyring)
+    survives as 031 sec-4 (folded sec-8.5), which also retires this section''s 0600
+    cleartext file fallback.'
+- ref: 002-github-app-auth.md#sec-3.4
+  reason: 'superseded: GitHub org/team authorization replaced by 023-keycloak-primary-auth.md#sec-3.1
+    -- roles come from Keycloak groups only. Lost: the org/team -> role mapping and
+    its two GitHub membership endpoints (GET /user/memberships/orgs/{org}, GET /orgs/{org}/teams/{team}/memberships/{username});
+    the removal itself, including `LODE_GITHUB_ORG` / `LODE_GITHUB_ADMIN_TEAM` and
+    the Members: read permission, is stated in folded sec-3.'
+- ref: 002-github-app-auth.md#sec-0
+  reason: 'spent: summary of the dual-provider delta that 023 reversed -- "GitHub
+    as an additional provider alongside Keycloak" is no section''s rule anymore, but
+    023''s replaces never reached this summary, so it stayed live. The durable half
+    (capture a user-to-server token for "SunstoneWork on behalf of <user>" attribution)
+    is restated by 023 sec-0 in folded sec-0; the hzdev-only scope by 023 sec-4''s
+    hzprod non-goal (folded sec-12). Lost: the "no migration of existing users" premise,
+    which 023 sec-3.1''s actor merge reversed anyway.'
+- ref: 002-github-app-auth.md#sec-2
+  reason: 'spent: pre-002 current-state narrative (Keycloak as the only login, plaintext
+    CLI token storage, zero outbound GitHub calls), since rewritten by 023 and 031.
+    Lost: its code-map pointers -- internal/api/oidcauth.go, internal/cli/login.go
+    and internal/oidc/oidc.go appear nowhere else in the folded corpus (the internal/oidc
+    package itself survives via 031 sec-3).'
+- ref: 023-keycloak-primary-auth.md#sec-2
+  reason: 'spent: pre-023 current-state narrative (two login paths, /auth/choose,
+    github:<id> actors, github_user_tokens written but never read). Everything it
+    describes removing is stated as removed in folded sec-3. Lost: the corpus''s only
+    mention of internal/githubauth.Roles. internal/tokencrypt is *not* lost -- the
+    planning tier ruled it carried into folded sec-9.5, since a live Go package must
+    not fall out of the corpus as collateral of a spent drop.'
+- ref: 004-execution-backbone.md#sec-1.2
+  reason: 'superseded: pre-delivery task state machine replaced by 011-delivery-lifecycle.md#sec-1,
+    which folds into this same document as sec-5.1. Over-scoped: 011 sec-1 extends
+    the machine past `merged` but never restates the base transitions it presupposes.
+    Lost with the section: the base table''s trigger annotations (publish, submit
+    for review, rework, release/expiry) and the `Transition(tx, now, taskID, from,
+    to, eventID)` contract sentence -- atomic from-state check inside the caller''s
+    tx, `updated_at` bump, `state_log` row attributed to the event, unknown task `ErrNotFound`,
+    wrong from-state `ErrBadTransition` -- which nothing else in the folded corpus
+    states. Both were recovered into folded sec-5.1 by planning-tier ruling rather
+    than left for part 5, the transition table with `in_review -> done` rewritten
+    to 011''s `in_review -> merged`; the two reopen rows were not carried, since 004
+    sec-5/sec-7/sec-8 already state reopen. The state graph survives via 011 sec-1''s
+    diagram.'
+- ref: 008-worklode-plugin.md#preamble
+  reason: 'absorbed: the preamble is 014 sec-1''s whole-document amendment in note
+    form -- a standing rewrite instruction, "read `ls:governs` / `ls:affects` below
+    as `wl:governs` / `wl:affects`". The fold enacts it: the rewrite states the wl:
+    spellings directly (rule 3), the two ls: entries under allow_dropped_ids authorise
+    the span drops, and the instruction then has nothing left to say. Nothing is lost
+    -- every claim the ls: terms carried survives under the wl: names.'
 - ref: 013-reconciliation.md#sec-2.3
   reason: 'superseded: Engine 3 (spec-doc drift) replaced by 014-design-documents-as-graph-objects.md#sec-6'
 - ref: 013-reconciliation.md#sec-3

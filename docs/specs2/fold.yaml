@@ -12,6 +12,426 @@
 version: 1
 corpus: {from: docs/specs, to: docs/specs2}
 documents:
+  # Part 3: the multi-source folds.
+  #
+  # 001 <- {001, 002, 023, 031}: the auth cluster. The same login design is
+  # told three times at three stages -- 001 (Keycloak SSO), 002 (GitHub as a
+  # second provider), 023 (Keycloak sole login again, GitHub demoted to
+  # link-only) -- plus 031 (provider-neutral CLI login). The folded document
+  # states the end state once: 023's login model and 031's CLI flow, on
+  # 001's Keycloak plumbing, with 002's GitHub App surviving only as the
+  # link-flow substrate. The four retired anchors (001 sec-4,
+  # 002 sec-3.2/3.3/3.4) drop as superseded; the three current-state/summary
+  # narratives of the reversed dual-provider era (002 sec-0, 002 sec-2,
+  # 023 sec-2) drop as spent. 002 sec-3 and 023 sec-3 are empty "Design"
+  # container headings and merge into the new sec-9 container instead of
+  # dropping. 002's amendment notes on 001 (sec-0, sec-1, sec-3.2) were
+  # never retracted when 023 reversed 002's login model; the part-3 plan's
+  # task context rules each of them void rather than leaving the rewriter a
+  # conflict.
+  - to: 001-identity-and-authentication.md
+    title: Identity & authentication
+    sources: [001-keycloak-sso.md, 002-github-app-auth.md,
+              023-keycloak-primary-auth.md, 031-provider-neutral-cli-login.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["001-keycloak-sso.md#sec-0",
+                "023-keycloak-primary-auth.md#sec-0"]}
+      - {new: "1", heading: "Motivation",
+         from: ["002-github-app-auth.md#sec-1",
+                "023-keycloak-primary-auth.md#sec-1"]}
+      - {new: "2", heading: "Decisions",
+         from: ["001-keycloak-sso.md#sec-1"]}
+      - {new: "3", heading: "Keycloak is the only login",
+         from: ["023-keycloak-primary-auth.md#sec-3.1"]}
+      - {new: "4", heading: "Keycloak realm configuration",
+         from: ["001-keycloak-sso.md#sec-2"]}
+      - {new: "5", heading: "Server OIDC configuration and verification",
+         from: ["001-keycloak-sso.md#sec-3"]}
+      - {new: "6", heading: "Web UI sessions",
+         from: ["001-keycloak-sso.md#sec-3.2"]}
+      # 001 sec-3.1 framed this endpoint as *the* CLI flow; 031 sec-6 keeps
+      # it as a dormant direct contract. Merged so the later statement
+      # settles the framing under rule 2.
+      - {new: "7", heading: "Direct OIDC token exchange (dormant)",
+         from: ["001-keycloak-sso.md#sec-3.1",
+                "031-provider-neutral-cli-login.md#sec-6"]}
+      # 031 whole: its Why and Architecture open the parent (031 sec-2 is an
+      # empty container heading and rides along); its subsections keep their
+      # own shape below.
+      - {new: "8", heading: "CLI login: server-mediated loopback",
+         from: ["031-provider-neutral-cli-login.md#sec-0",
+                "031-provider-neutral-cli-login.md#sec-1",
+                "031-provider-neutral-cli-login.md#sec-2"]}
+      - {new: "8.1", heading: "Discovery and CLI login endpoints",
+         from: ["031-provider-neutral-cli-login.md#sec-2.1"]}
+      - {new: "8.2", heading: "The reuse seam: `finishLogin`",
+         from: ["031-provider-neutral-cli-login.md#sec-2.2"]}
+      - {new: "8.3", heading: "One-time code store",
+         from: ["031-provider-neutral-cli-login.md#sec-2.3"]}
+      - {new: "8.4", heading: "Client behavior",
+         from: ["031-provider-neutral-cli-login.md#sec-3"]}
+      - {new: "8.5", heading: "Token storage: OS keychain",
+         from: ["031-provider-neutral-cli-login.md#sec-4"]}
+      - {new: "8.6", heading: "Security",
+         from: ["031-provider-neutral-cli-login.md#sec-5"]}
+      # The parent is assembled from 002's and 023's empty "Design"
+      # container headings, so both are accounted for without a drop and the
+      # group gets a container the way the sources had one.
+      - {new: "9", heading: "GitHub account linking",
+         from: ["002-github-app-auth.md#sec-3",
+                "023-keycloak-primary-auth.md#sec-3"]}
+      # 023 sec-3.6's permission ceiling and config-after list override
+      # 002 sec-3.1's R/W permission set and 002 sec-3.6's org/team vars in
+      # the same section; the part-3 plan's task context carries the ruling.
+      - {new: "9.1", heading: "The GitHub App and its configuration",
+         from: ["002-github-app-auth.md#sec-3.1",
+                "002-github-app-auth.md#sec-3.6",
+                "023-keycloak-primary-auth.md#sec-3.6"]}
+      - {new: "9.2", heading: "Expected GitHub identity from Keycloak",
+         from: ["023-keycloak-primary-auth.md#sec-3.2"]}
+      - {new: "9.3", heading: "Link flow (web)",
+         from: ["023-keycloak-primary-auth.md#sec-3.3"]}
+      - {new: "9.4", heading: "`lode auth` command group",
+         from: ["023-keycloak-primary-auth.md#sec-3.4"]}
+      # 002 sec-3.5 carries the inline "Amended by spec 023" note; 023
+      # sec-3.5 is the amending text, so rule 3 absorbs it in place.
+      - {new: "9.5", heading: "GitHub token storage and refresh",
+         from: ["002-github-app-auth.md#sec-3.5",
+                "023-keycloak-primary-auth.md#sec-3.5"]}
+      - {new: "10", heading: "Error handling",
+         from: ["002-github-app-auth.md#sec-5",
+                "023-keycloak-primary-auth.md#sec-5"]}
+      - {new: "11", heading: "Testing",
+         from: ["001-keycloak-sso.md#sec-5",
+                "002-github-app-auth.md#sec-6",
+                "023-keycloak-primary-auth.md#sec-6",
+                "031-provider-neutral-cli-login.md#sec-7"]}
+      - {new: "12", heading: "Non-goals",
+         from: ["001-keycloak-sso.md#sec-6",
+                "002-github-app-auth.md#sec-4",
+                "023-keycloak-primary-auth.md#sec-4"]}
+      - {new: "13", heading: "Open questions",
+         from: ["002-github-app-auth.md#sec-7",
+                "023-keycloak-primary-auth.md#sec-7"]}
+    dropped:
+      - ref: "001-keycloak-sso.md#sec-4"
+        reason: >-
+          superseded: the CLI's direct Keycloak OIDC+PKCE flow replaced by
+          031-provider-neutral-cli-login.md (folded here as sec-8). Every
+          surviving behaviour -- browser login ending in a stored `wl_`
+          token -- is restated by the loopback design; lost are only the
+          retired mechanics (fixed callback ports 8000/18000, in-CLI code
+          exchange, `POST /auth/oidc/token` as the CLI path -- the endpoint
+          itself survives, dormant, in folded sec-7).
+      - ref: "002-github-app-auth.md#sec-3.2"
+        reason: >-
+          superseded: GitHub web login replaced by
+          023-keycloak-primary-auth.md#sec-3.1 (Keycloak is the only
+          login). The confidential-client signed-state/no-PKCE rationale
+          and the code-for-token exchange survive in 023 sec-3.3's link
+          flow (folded sec-9.3); lost are the login-only mechanics -- the
+          two-provider login page and GitHub session provisioning.
+      - ref: "002-github-app-auth.md#sec-3.3"
+        reason: >-
+          superseded: replaced by 031-provider-neutral-cli-login.md and
+          023-keycloak-primary-auth.md#sec-3.1 -- no device flow was ever
+          built, and GitHub is no longer a CLI login provider at all. Lost:
+          the unimplemented device-flow endpoint design
+          (/auth/github/device/start, /poll), referenced nowhere else. Its
+          keychain-storage decision (zalando/go-keyring) survives as
+          031 sec-4 (folded sec-8.5), which also retires this section's
+          0600 cleartext file fallback.
+      - ref: "002-github-app-auth.md#sec-3.4"
+        reason: >-
+          superseded: GitHub org/team authorization replaced by
+          023-keycloak-primary-auth.md#sec-3.1 -- roles come from Keycloak
+          groups only. Lost: the org/team -> role mapping and its two
+          GitHub membership endpoints (GET /user/memberships/orgs/{org},
+          GET /orgs/{org}/teams/{team}/memberships/{username}); the removal
+          itself, including `LODE_GITHUB_ORG` / `LODE_GITHUB_ADMIN_TEAM`
+          and the Members: read permission, is stated in folded sec-3.
+      - ref: "002-github-app-auth.md#sec-0"
+        reason: >-
+          spent: summary of the dual-provider delta that 023 reversed --
+          "GitHub as an additional provider alongside Keycloak" is no
+          section's rule anymore, but 023's replaces never reached this
+          summary, so it stayed live. The durable half (capture a
+          user-to-server token for "SunstoneWork on behalf of <user>"
+          attribution) is restated by 023 sec-0 in folded sec-0; the
+          hzdev-only scope by 023 sec-4's hzprod non-goal (folded sec-12).
+          Lost: the "no migration of existing users" premise, which
+          023 sec-3.1's actor merge reversed anyway.
+      - ref: "002-github-app-auth.md#sec-2"
+        reason: >-
+          spent: pre-002 current-state narrative (Keycloak as the only
+          login, plaintext CLI token storage, zero outbound GitHub calls),
+          since rewritten by 023 and 031. Lost: its code-map pointers --
+          internal/api/oidcauth.go, internal/cli/login.go and
+          internal/oidc/oidc.go appear nowhere else in the folded corpus
+          (the internal/oidc package itself survives via 031 sec-3).
+      - ref: "023-keycloak-primary-auth.md#sec-2"
+        reason: >-
+          spent: pre-023 current-state narrative (two login paths,
+          /auth/choose, github:<id> actors, github_user_tokens written but
+          never read). Everything it describes removing is stated as
+          removed in folded sec-3. Lost: the corpus's only mention of
+          internal/githubauth.Roles. internal/tokencrypt is *not* lost --
+          the planning tier ruled it carried into folded sec-9.5, since a
+          live Go package must not fall out of the corpus as collateral of
+          a spent drop.
+    allow_dropped_ids:
+      "http://localhost:8000": >-
+        Deliberate drop, not a source-side artifact: 001 sec-2 registers
+        this fixed CLI-callback redirect URI on the Keycloak client, but
+        under 031 (folded sec-8) the server performs the final loopback
+        redirect, the CLI binds an ephemeral port, and the loopback URI
+        needs no pre-registration -- the fixed-port CLI URIs are dead
+        client config the folded document does not carry forward. The web
+        callback URIs in the same list stay.
+      "http://localhost:18000": >-
+        Same as http://localhost:8000: the second fixed CLI-callback port
+        of the pre-031 flow, dead client config under the ephemeral-port
+        loopback.
+      "docs/plans/2026-07-20-provider-neutral-cli-login-design.md": >-
+        Deliberate drop, not a source-side artifact: 031 sec-0 opens with a
+        blockquote recording that 031 was promoted from this plan. The
+        folded document has four sources and was promoted from nothing, so
+        the note states a history that is no longer its own; the promotion
+        is recorded in mapping.yaml and in git. The path is also already
+        dangling -- docs/plans/ has 2026-07-20-provider-neutral-cli-login.md
+        and never had the -design suffix.
+      "docs/authoring-design-docs.md": >-
+        Same blockquote as the entry above: the file is cited there as the
+        authority for "no frozen anchors and no claim to permanence", an
+        argument about why 031 had to be promoted out of a plan. It is a
+        live document and is cited elsewhere in the repo; nothing about it
+        is lost by dropping the promotion note.
+  # Part 3: 004 absorbs its whole amendment cluster -- 010 (per-project task
+  # keys, doc-wide), 011 (delivery lifecycle, which also replaces 004's old
+  # task-state-machine sec-1.2) and 018 (task hierarchy, doc-wide, itself
+  # amended doc-wide by 025 sec-6 and re-ruled by 029 sec-2). 46 live anchors
+  # plus 018's preamble land in 40 sections; one retired anchor (004 sec-1.2)
+  # drops. Two cross-source merges: 010 sec-5 + 011 sec-6 are one section --
+  # both govern the task-key/branch-pattern regex family, and 011 sec-6's
+  # inline 030 notes state the current branch rule, so rule 3 settles
+  # 010 sec-5's stale `wl/` claims -- and 018 sec-3 (a bodyless container
+  # heading) merges into sec-3.1. 018's preamble is placed, not dropped: it
+  # is the corpus's only statement of the post-025 hierarchy rule and opens
+  # the hierarchy section. Testing (010, 011, 018), Out of scope (010, 018)
+  # and Open questions (004 + 018's Resolved) each consolidate into one
+  # section; 011's Known limitations is a delivery-facts list, not scope
+  # prose, and stays with delivery. Per the 029 sec-9 obligation recorded in
+  # the part-2 plan, the hierarchy sections and the tasks DDL state the
+  # post-029 rules -- no `epic` kind, ordinary-task parents via
+  # `checkHierarchy`, `decompose` no longer converts the parent's kind, kind
+  # enum feature/bug/chore/design/review/spike -- and 029 carries no amends:
+  # frontmatter, so the scaffold's provenance block cannot say this; the
+  # part-3 plan's task context must.
+  - to: 004-execution-backbone.md
+    title: Execution backbone
+    sources: [004-execution-backbone.md, 010-per-project-task-keys.md,
+              011-delivery-lifecycle.md, 018-task-hierarchy.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["004-execution-backbone.md#sec-0"]}
+      - {new: "1", heading: "Data model",
+         from: ["004-execution-backbone.md#sec-1"]}
+      - {new: "1.1", heading: "tasks",
+         from: ["004-execution-backbone.md#sec-1.1"]}
+      - {new: "1.2", heading: "leases, bound to the worktree",
+         from: ["004-execution-backbone.md#sec-1.3"]}
+      - {new: "1.3", heading: "task_edges",
+         from: ["004-execution-backbone.md#sec-1.4"]}
+      - {new: "1.4", heading: "events + state_log — append-only log, provenance",
+         from: ["004-execution-backbone.md#sec-1.5"]}
+      - {new: "2", heading: "Per-project task keys",
+         from: ["010-per-project-task-keys.md#sec-0"]}
+      - {new: "2.1", heading: "Decisions",
+         from: ["010-per-project-task-keys.md#sec-1"]}
+      - {new: "2.2", heading: "Data model — migration `0003_project_keys`",
+         from: ["010-per-project-task-keys.md#sec-2"]}
+      - {new: "2.3", heading: "ID generation",
+         from: ["010-per-project-task-keys.md#sec-3"]}
+      - {new: "2.4", heading: "API and CLI",
+         from: ["010-per-project-task-keys.md#sec-4"]}
+      - {new: "2.5", heading: "Task-key parsing and branch names",
+         from: ["010-per-project-task-keys.md#sec-5",
+                "011-delivery-lifecycle.md#sec-6"]}
+      - {new: "3", heading: "Lease lifecycle",
+         from: ["004-execution-backbone.md#sec-2"]}
+      - {new: "4", heading: "The claim transaction",
+         from: ["004-execution-backbone.md#sec-3"]}
+      - {new: "5", heading: "Delivery lifecycle",
+         from: ["011-delivery-lifecycle.md#sec-0"]}
+      - {new: "5.1", heading: "State machine",
+         from: ["011-delivery-lifecycle.md#sec-1"]}
+      - {new: "5.2", heading: "Fact tables",
+         from: ["011-delivery-lifecycle.md#sec-2"]}
+      - {new: "5.3", heading: "Handlers and resolver",
+         from: ["011-delivery-lifecycle.md#sec-3"]}
+      - {new: "5.4", heading: "Surface changes",
+         from: ["011-delivery-lifecycle.md#sec-4"]}
+      - {new: "5.5", heading: "Migration",
+         from: ["011-delivery-lifecycle.md#sec-5"]}
+      - {new: "5.6", heading: "Error handling",
+         from: ["011-delivery-lifecycle.md#sec-7"]}
+      - {new: "5.7", heading: "Known limitations",
+         from: ["011-delivery-lifecycle.md#sec-8"]}
+      - {new: "6", heading: "Task hierarchy & decomposition",
+         from: ["018-task-hierarchy.md#preamble",
+                "018-task-hierarchy.md#sec-0"]}
+      - {new: "6.1", heading: "Decisions",
+         from: ["018-task-hierarchy.md#sec-1"]}
+      - {new: "6.2", heading: "Data model — migration `0006_task_hierarchy`",
+         from: ["018-task-hierarchy.md#sec-2"]}
+      - {new: "6.3", heading: "Never claimable",
+         from: ["018-task-hierarchy.md#sec-3",
+                "018-task-hierarchy.md#sec-3.1"]}
+      - {new: "6.4", heading: "State machine of a task with children",
+         from: ["018-task-hierarchy.md#sec-3.2"]}
+      - {new: "6.5", heading: "Roll-up",
+         from: ["018-task-hierarchy.md#sec-3.3"]}
+      - {new: "6.6", heading: "Roll-up hooks into `Transition`",
+         from: ["018-task-hierarchy.md#sec-4"]}
+      - {new: "6.7", heading: "API",
+         from: ["018-task-hierarchy.md#sec-5"]}
+      - {new: "6.8", heading: "CLI",
+         from: ["018-task-hierarchy.md#sec-6"]}
+      - {new: "6.9", heading: "Brief — exactly one hop up",
+         from: ["018-task-hierarchy.md#sec-7"]}
+      - {new: "6.10", heading: "Decomposition",
+         from: ["018-task-hierarchy.md#sec-8"]}
+      - {new: "7", heading: "Postgres schema & data layer",
+         from: ["004-execution-backbone.md#sec-4"]}
+      - {new: "8", heading: "Claim, lease, and reopen surface",
+         from: ["004-execution-backbone.md#sec-5"]}
+      - {new: "9", heading: "Testing",
+         from: ["010-per-project-task-keys.md#sec-6",
+                "011-delivery-lifecycle.md#sec-9",
+                "018-task-hierarchy.md#sec-9"]}
+      - {new: "10", heading: "Out of scope",
+         from: ["010-per-project-task-keys.md#sec-7",
+                "018-task-hierarchy.md#sec-10"]}
+      - {new: "11", heading: "Dependencies",
+         from: ["004-execution-backbone.md#sec-6"]}
+      - {new: "12", heading: "Open questions",
+         from: ["004-execution-backbone.md#sec-7",
+                "018-task-hierarchy.md#sec-11"]}
+      - {new: "13", heading: "Acceptance criteria",
+         from: ["004-execution-backbone.md#sec-8"]}
+    dropped:
+      - ref: "004-execution-backbone.md#sec-1.2"
+        reason: >-
+          superseded: pre-delivery task state machine replaced by
+          011-delivery-lifecycle.md#sec-1, which folds into this same
+          document as sec-5.1. Over-scoped: 011 sec-1 extends the machine
+          past `merged` but never restates the base transitions it
+          presupposes. Lost with the section: the base table's trigger
+          annotations (publish, submit for review, rework, release/expiry)
+          and the `Transition(tx, now, taskID, from, to, eventID)` contract
+          sentence -- atomic from-state check inside the caller's tx,
+          `updated_at` bump, `state_log` row attributed to the event,
+          unknown task `ErrNotFound`, wrong from-state `ErrBadTransition` --
+          which nothing else in the folded corpus states. Both were
+          recovered into folded sec-5.1 by planning-tier ruling rather than
+          left for part 5, the transition table with `in_review -> done`
+          rewritten to 011's `in_review -> merged`; the two reopen rows were
+          not carried, since 004 sec-5/sec-7/sec-8 already state reopen. The
+          state graph survives via 011 sec-1's diagram.
+    allow_dropped_ids:
+      "--under <epic>": >-
+        Deliberate drop of a pre-029 spelling: 018 sec-6's CLI block reads
+        `lode task parent <id> --under <epic>`, and 029 sec-2 retired the
+        epic kind, so any ordinary task can be the parent. The folded flag
+        reads `--under <parent-id>`. Nothing is lost -- the flag, the
+        command and the adoption surface all survive under the new
+        spelling.
+      "per-epic": >-
+        Same pre-029 spelling as `--under <epic>`: 018 sec-6 describes
+        `lode task tree` as showing per-epic progress, which the folded
+        text states as per-parent progress. The surface is unchanged.
+      "; on **first** sight call ": >-
+        Source-side span artifact, not an identifier. 004 sec-1.5 wraps the
+        inline span "ON CONFLICT (source, external_id) DO NOTHING" across a
+        line break; SPAN_RE's single-backtick branch forbids a newline, so
+        the two nearest surviving backticks re-pair and capture the prose
+        between them. A property of docs/specs/004, computable before any
+        rewrite.
+      ", ": >-
+        Source-side span artifact, not an identifier. 004 sec-2's Acquire
+        bullet wraps "acquired_at = renewed_at = now" and its Renew bullet
+        wraps "expires_at = now + ttl" across line breaks; each re-pairing
+        captures this fragment (one key covers both, and any other source
+        contributing the same string). A property of docs/specs/004.
+      ", binds ": >-
+        Source-side span artifact, not an identifier. Second re-paired
+        capture from 004 sec-2's wrapped Acquire-bullet span. A property of
+        docs/specs/004.
+      " + ": >-
+        Source-side span artifact, not an identifier. Third re-paired
+        capture from 004 sec-2's wrapped Acquire-bullet span. A property of
+        docs/specs/004.
+      " and reverts each still-": >-
+        Source-side span artifact, not an identifier. 004 sec-2's Expiry-
+        sweep bullet wraps "expires_at < now" across a line break; first
+        re-paired capture. A property of docs/specs/004.
+      " task to ": >-
+        Source-side span artifact, not an identifier. Second re-paired
+        capture from 004 sec-2's wrapped Expiry-sweep span. A property of
+        docs/specs/004.
+      ", one ": >-
+        Source-side span artifact, not an identifier. Third re-paired
+        capture from 004 sec-2's wrapped Expiry-sweep span. A property of
+        docs/specs/004.
+      ". Present → ": >-
+        Source-side span artifact, not an identifier. 004 sec-3 wraps the
+        inline span "SELECT id FROM leases WHERE task_id=$1 AND released_at
+        IS NULL" across a line break; the re-pairing captures this fragment.
+        A property of docs/specs/004.
+      ", environment normalized to ": >-
+        Source-side span artifact, not an identifier. 011 sec-2 wraps the
+        inline span "(repo, environment, main_seq, gh_status, flux_status,
+        updated_at)" across a line break; first re-paired capture. A
+        property of docs/specs/011.
+      "/": >-
+        Source-side span artifact, not an identifier. Second re-paired
+        capture from 011 sec-2's wrapped span: the backticks around `dev`
+        and `prod` re-pair and capture the slash between them. A property
+        of docs/specs/011.
+      " and update ": >-
+        Source-side span artifact, not an identifier. 011 sec-3 wraps the
+        inline span "(repo, main seq)" across a line break; first re-paired
+        capture. A property of docs/specs/011.
+      ". Existing ": >-
+        Source-side span artifact, not an identifier. Second re-paired
+        capture from 011 sec-3's wrapped span. A property of docs/specs/011.
+      " through; ": >-
+        Source-side span artifact, not an identifier. 018 sec-1 wraps the
+        inline span "lode task claim <epic-id>" across a line break; the
+        re-pairing captures this fragment. A property of docs/specs/018.
+      "). There is no ": >-
+        Source-side span artifact, not an identifier. 018 sec-1 wraps the
+        inline span "lode task decompose" across a line break; the
+        re-pairing captures this fragment. A property of docs/specs/018.
+      "feature, bug, chore, spec, epic, review, spike": >-
+        Real, accepted loss: the pre-025/029 kind enum, from the inline
+        014 sec-8 amendment note on 004 sec-1.1. The folded sec-1.1 states
+        the current six-kind enum (feature, bug, chore, design, review,
+        spike -- 025 sec-6, 029 sec-2) instead of the retired list; every
+        constituent kind survives individually elsewhere in the document.
+      "done|abandoned → ready": >-
+        Real, accepted loss: 004 sec-5's pre-011 spelling of the reopen
+        path. 011 renamed `done` to `merged` and extended reopen to the
+        delivery states; the folded reopen surface states the post-011 rule
+        and `merged → ready` survives via 011 sec-1's text. The spaced
+        `done → ready` in 004 sec-7's resolved-question record is kept
+        verbatim as a historical disposition and needs no entry.
+      "done→ready": >-
+        Real, accepted loss: the same pre-011 reopen spelling in 004 sec-8's
+        acceptance criterion 6, restated post-011 as `merged→ready` when the
+        criteria are consolidated. `abandoned→ready` is still current and
+        must survive.
   # Part 1's validation fold: one source, one whole-document amendment (018)
   # to absorb, eleven live anchors, no drops. 3.1 folds into its parent --
   # a section with exactly one subsection is the fragmentation this migration
@@ -64,6 +484,195 @@ documents:
   # Each document keeps its own number and folds only its own source. New
   # numbering is gapless, so a drop or merge renumbers everything after it.
 
+  # Part 3: 008 <- {008, 024, 030}. The plugin spec, 024's generalisation of
+  # it from Claude Code to N harnesses, and 030's branch/worktree naming that
+  # amends six of 008's sections. 47 live anchors -> 41 sections. Merges: the
+  # three Purpose & scope sections become one -- rule 2 settles the harness
+  # axis there, and the sources' "out of scope" lists naming material this
+  # document now covers (030's lease model, 024's lease lifecycle/brief/
+  # guard) are self-scoping sentences to be rewritten to scope the folded
+  # document, not claims to preserve; 008's one-line CLI-naming section
+  # joins the design lens; the scaffolding trio folds 008+024 (030 has no
+  # trio -- its Testing section survives, renamed to say it covers naming
+  # and the guard). 030's naming sections sit between the lease lifecycle
+  # and Hooks so the path guard is defined before Hooks invokes it; every
+  # 030 inline note in 008 is absorbed by the fold itself. 008's preamble --
+  # 014 sec-1's whole-document amendment as a standing rewrite instruction
+  # -- is dropped as absorbed and *enacted*: the rewrite writes wl:governs/
+  # wl:affects directly, authorised by the two ls: allow_dropped_ids entries
+  # below. Headings shed the (D13)/(D14)/(Q14.1) design-record tags: 003 is
+  # retired by this fold. Cross-target, carried by the part-3 plan: 024
+  # sec-5's amendment of 012 sec-1 (add copilot to the agent CHECK) is
+  # absorbed by 012's rewriter, and 030's amendments to 011 sec-2/4/6 are
+  # absorbed by 004's rewriter (011 folds into 004) -- but every 024 and 030
+  # anchor still lives here.
+  - to: 008-worklode-plugin.md
+    title: Worklode plugin & agent harness integration
+    sources: [008-worklode-plugin.md, 024-multi-harness-integration.md,
+              030-branch-and-worktree-naming.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["008-worklode-plugin.md#sec-0",
+                "024-multi-harness-integration.md#sec-1",
+                "030-branch-and-worktree-naming.md#sec-0"]}
+      - {new: "1", heading: "Design lens & CLI naming",
+         from: ["008-worklode-plugin.md#sec-1",
+                "008-worklode-plugin.md#sec-2"]}
+      - {new: "2", heading: "Worktree-bound lease lifecycle",
+         from: ["008-worklode-plugin.md#sec-3"]}
+      - {new: "3", heading: "Branch names are a server-rendered template",
+         from: ["030-branch-and-worktree-naming.md#sec-1"]}
+      - {new: "3.1", heading: "Template fields",
+         from: ["030-branch-and-worktree-naming.md#sec-1.1"]}
+      - {new: "3.2", heading: "Template validation",
+         from: ["030-branch-and-worktree-naming.md#sec-1.2"]}
+      - {new: "4", heading: "Reverse parsing: branch to task id",
+         from: ["030-branch-and-worktree-naming.md#sec-2"]}
+      - {new: "5", heading: "Worktree layout",
+         from: ["030-branch-and-worktree-naming.md#sec-3"]}
+      - {new: "5.1", heading: "Base directory",
+         from: ["030-branch-and-worktree-naming.md#sec-3.1"]}
+      - {new: "5.2", heading: "The path guard",
+         from: ["030-branch-and-worktree-naming.md#sec-3.2"]}
+      - {new: "6", heading: "Naming configuration surface",
+         from: ["030-branch-and-worktree-naming.md#sec-4"]}
+      - {new: "7", heading: "Naming cutover",
+         from: ["030-branch-and-worktree-naming.md#sec-5"]}
+      - {new: "7.1", heading: "Migrating an existing worktree",
+         from: ["030-branch-and-worktree-naming.md#sec-5.1"]}
+      - {new: "7.2", heading: "PR and push correlation across the cutover",
+         from: ["030-branch-and-worktree-naming.md#sec-5.2"]}
+      - {new: "8", heading: "Naming and guard tests",
+         from: ["030-branch-and-worktree-naming.md#sec-6"]}
+      - {new: "9", heading: "Hooks",
+         from: ["008-worklode-plugin.md#sec-4"]}
+      - {new: "10", heading: "Hook implementation & coexistence",
+         from: ["008-worklode-plugin.md#sec-5"]}
+      - {new: "11", heading: "`lode task brief <id> --json`",
+         from: ["008-worklode-plugin.md#sec-6"]}
+      - {new: "12", heading: "Slash commands",
+         from: ["008-worklode-plugin.md#sec-7"]}
+      - {new: "13", heading: "Skills (judgment only)",
+         from: ["008-worklode-plugin.md#sec-8"]}
+      - {new: "14", heading: "The worker subagent",
+         from: ["008-worklode-plugin.md#sec-9"]}
+      - {new: "15", heading: "No MCP in v1",
+         from: ["008-worklode-plugin.md#sec-10"]}
+      - {new: "16", heading: "The harness landscape (August 2026)",
+         from: ["024-multi-harness-integration.md#sec-2"]}
+      - {new: "16.1", heading: "`SKILL.md` became a standard",
+         from: ["024-multi-harness-integration.md#sec-2.1"]}
+      - {new: "16.2", heading: "Skill and instruction delivery",
+         from: ["024-multi-harness-integration.md#sec-2.2"]}
+      - {new: "16.3", heading: "Lifecycle hooks",
+         from: ["024-multi-harness-integration.md#sec-2.3"]}
+      - {new: "16.4", heading: "Observability and UI surfaces",
+         from: ["024-multi-harness-integration.md#sec-2.4"]}
+      - {new: "16.5", heading: "What this buys Worklode",
+         from: ["024-multi-harness-integration.md#sec-2.5"]}
+      - {new: "17", heading: "Multi-harness design",
+         from: ["024-multi-harness-integration.md#sec-3"]}
+      - {new: "17.1", heading: "The harness adapter",
+         from: ["024-multi-harness-integration.md#sec-3.1"]}
+      - {new: "17.2", heading: "`lode install` across harnesses",
+         from: ["024-multi-harness-integration.md#sec-3.2"]}
+      - {new: "17.3", heading: "Skill delivery — one store, many doorways",
+         from: ["024-multi-harness-integration.md#sec-3.3"]}
+      - {new: "17.4", heading: "Hook delivery",
+         from: ["024-multi-harness-integration.md#sec-3.4"]}
+      - {new: "17.5", heading: "Status line (Claude Code first)",
+         from: ["024-multi-harness-integration.md#sec-3.5"]}
+      - {new: "17.6", heading: "Telemetry ingest (v2)",
+         from: ["024-multi-harness-integration.md#sec-3.6"]}
+      - {new: "17.7", heading: "Instruction files",
+         from: ["024-multi-harness-integration.md#sec-3.7"]}
+      - {new: "18", heading: "Degradation",
+         from: ["024-multi-harness-integration.md#sec-4"]}
+      - {new: "19", heading: "Dependencies",
+         from: ["008-worklode-plugin.md#sec-11",
+                "024-multi-harness-integration.md#sec-5"]}
+      - {new: "20", heading: "Open questions",
+         from: ["008-worklode-plugin.md#sec-12",
+                "024-multi-harness-integration.md#sec-6"]}
+      - {new: "21", heading: "Acceptance criteria",
+         from: ["008-worklode-plugin.md#sec-13",
+                "024-multi-harness-integration.md#sec-7"]}
+      - {new: "22", heading: "Sources",
+         from: ["024-multi-harness-integration.md#sec-8"]}
+    dropped:
+      - ref: "008-worklode-plugin.md#preamble"
+        reason: >-
+          absorbed: the preamble is 014 sec-1's whole-document amendment in
+          note form -- a standing rewrite instruction, "read `ls:governs` /
+          `ls:affects` below as `wl:governs` / `wl:affects`". The fold
+          enacts it: the rewrite states the wl: spellings directly (rule 3),
+          the two ls: entries under allow_dropped_ids authorise the span
+          drops, and the instruction then has nothing left to say. Nothing
+          is lost -- every claim the ls: terms carried survives under the
+          wl: names.
+    allow_dropped_ids:
+      "ls:governs": >-
+        Deliberate respell to wl:governs, enacting 014 sec-1's prefix rename
+        -- the whole content of 008's doc-wide amendedBy claim, which the
+        source carried only as its preamble note (dropped above as
+        absorbed). Not a loss: the claim survives under the wl: spelling.
+        Folded 016 kept its ls: spans because its planning pass never ruled;
+        part 5 owes 016 the matching entries.
+      "ls:affects": >-
+        Same respell as ls:governs above: wl:affects per 014 sec-1.
+      ", which ": >-
+        Source-side span artifact, not an identifier. 030 sec-3.2 wraps the
+        inline span "git config --worktree --get worklode.task-id" across a
+        line break; SPAN_RE's single-backtick branch forbids a newline, so
+        the two nearest surviving backticks re-pair and capture the prose
+        between them. It is a property of docs/specs/030, computable before
+        any rewrite, and no rewrite of docs/specs2/008 can make it appear.
+  # 012: a near-1:1 fold sitting in part 3 for its amendment, not its size.
+  # Eight live anchors placed 1:1, numbers unchanged, no drops, no preamble;
+  # 012 has no Dependencies/Open questions/Acceptance criteria trio to carry.
+  # sec-1 carries an inline note from 024 sec-5 -- the `agent` CHECK gains
+  # `copilot` -- and 024 folds into 008, so none of its anchors are placed
+  # here: rule 3 absorbs the note into sec-1's CHECK list (SQL block and
+  # prose alike), with no citation of the retired number. The scaffold's
+  # provenance block will also show 012's own whole-document amends of
+  # 004 sec-2; that claim is the 004 fold's to absorb and is informational
+  # here. sec-1's "Superseded by migration `0008_session_cost`" paragraph is
+  # implementation history the spec states about itself, not a corpus
+  # supersession -- it stays, per rule 6.
+  - to: 012-agent-sessions.md
+    title: Agent sessions
+    sources: [012-agent-sessions.md]
+    sections:
+      - {new: "0", heading: "Problem",
+         from: ["012-agent-sessions.md#sec-0"]}
+      - {new: "1", heading: "Schema",
+         from: ["012-agent-sessions.md#sec-1"]}
+      - {new: "2", heading: "Lifecycle",
+         from: ["012-agent-sessions.md#sec-2"]}
+      - {new: "3", heading: "Store and API",
+         from: ["012-agent-sessions.md#sec-3"]}
+      - {new: "4", heading: "Hook wiring",
+         from: ["012-agent-sessions.md#sec-4"]}
+      - {new: "5", heading: "Error handling",
+         from: ["012-agent-sessions.md#sec-5"]}
+      - {new: "6", heading: "Testing",
+         from: ["012-agent-sessions.md#sec-6"]}
+      - {new: "7", heading: "Out of scope",
+         from: ["012-agent-sessions.md#sec-7"]}
+    allow_dropped_ids:
+      " uniqueness. The ": >-
+        Source-side span artifact, not an identifier. 012 sec-3 wraps the
+        inline span "(source, external_id)" across a line break; SPAN_RE's
+        single-backtick branch forbids a newline, so the two nearest
+        surviving backticks re-pair and capture the prose between them. It
+        is a property of docs/specs/012, computable before any rewrite, and
+        no rewrite of docs/specs2/012 can make it appear.
+      " bump is a plain ": >-
+        Source-side span artifact, not an identifier. The second capture
+        from the same wrapped "(source, external_id)" span in 012 sec-3:
+        after the re-paired first capture, the backticks around
+        `last_seen_at` re-pair again with `UPDATE`'s and capture the prose
+        between them. Same property of docs/specs/012 as the entry above.
   # 013: four sections are superseded by 014 sec-6 per 013's frontmatter
   # (Engine 3, Data model, Testing, Acceptance criteria) and drop here; the
   # survivors close the gaps (2.4 -> 2.3, 4 -> 3, 6 -> 4, 7 -> 5). The
