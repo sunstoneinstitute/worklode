@@ -192,6 +192,20 @@ documents:
         Same as http://localhost:8000: the second fixed CLI-callback port
         of the pre-031 flow, dead client config under the ephemeral-port
         loopback.
+      "docs/plans/2026-07-20-provider-neutral-cli-login-design.md": >-
+        Deliberate drop, not a source-side artifact: 031 sec-0 opens with a
+        blockquote recording that 031 was promoted from this plan. The
+        folded document has four sources and was promoted from nothing, so
+        the note states a history that is no longer its own; the promotion
+        is recorded in mapping.yaml and in git. The path is also already
+        dangling -- docs/plans/ has 2026-07-20-provider-neutral-cli-login.md
+        and never had the -design suffix.
+      "docs/authoring-design-docs.md": >-
+        Same blockquote as the entry above: the file is cited there as the
+        authority for "no frozen anchors and no claim to permanence", an
+        argument about why 031 had to be promoted out of a plan. It is a
+        live document and is cited elsewhere in the repo; nothing about it
+        is lost by dropping the promotion note.
   # Part 3: 004 absorbs its whole amendment cluster -- 010 (per-project task
   # keys, doc-wide), 011 (delivery lifecycle, which also replaces 004's old
   # task-state-machine sec-1.2) and 018 (task hierarchy, doc-wide, itself
