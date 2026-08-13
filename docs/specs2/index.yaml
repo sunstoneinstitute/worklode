@@ -11,3 +11,16 @@ docs/specs2/005-prioritization-and-pickup.md:
     sec-7: "## 7. Dependencies"
     sec-8: "## 8. Open questions"
     sec-9: "## 9. Acceptance criteria"
+docs/specs2/013-reconciliation.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Command surface"
+    sec-1.1: "### 1.1 `lode doctor`"
+    sec-1.2: "### 1.2 `lode project doctor [repo]`"
+    sec-2: "## 2. `lode reconcile`"
+    sec-2.1: "### 2.1 Engine 1 — replay stored events"
+    sec-2.2: "### 2.2 Engine 2 — poll GitHub"
+    sec-2.3: "### 2.3 Output"
+    sec-3: "## 3. API"
+    sec-4: "## 4. Dependencies"
+    sec-5: "## 5. Open questions"
