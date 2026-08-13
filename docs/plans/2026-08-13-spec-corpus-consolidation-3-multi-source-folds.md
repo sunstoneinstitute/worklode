@@ -130,17 +130,22 @@ already records.
 - **Folded 008's computed `requires:` lists both 004 and 011.** Cutover's
   `refmap.py` repoints 011→004, leaving 004 listed twice; part 5 dedups
   `requires:` after the rewrite pass.
-- **Folded 001 carries one un-superseded contradiction of the login end
-  state** — the one place it is not stated exactly once. 023 (2026-07-31)
-  postdates 031 (2026-07-20) and its §3 removes GitHub web login and
-  `/auth/choose`, yet 031 §8/§8.1/§8.2 — folded 001's §8/§8.1/§8.2 — still
-  describe the chooser "when both providers are on", `s.gh == nil`,
-  `githubCallback` and `providers: ["github"]`. No supersession edge covers
-  it, so it is transcribed verbatim: de-GitHub'ing those sections would drop
-  normative claims and identifiers the fold has no authority to remove —
-  the contradiction is the corpus's, not the fold's. Resolving it needs a
-  real amendment to the auth design by a human, and part 5 must not let it
-  slip past the `git rm -r docs/specs`.
+- **Folded 001's un-superseded contradiction of the login end state is
+  resolved, by human ruling on 2026-08-13.** 023 (2026-07-31) postdates 031
+  (2026-07-20) and its §3 removes GitHub web login and `/auth/choose`, yet
+  031 §8/§8.1/§8.2 still described the chooser "when both providers are on",
+  `s.gh == nil`, `githubCallback` and `providers: ["github"]`, with no
+  supersession edge connecting them. The fold transcribed both and escalated,
+  because de-GitHub'ing those sections drops normative claims and identifiers
+  a rewriter has no authority to remove. **The ruling:** OIDC is the only
+  login, and a user's GitHub account is linked from the identity the OIDC
+  provider already knows, on first login — GitHub is never a login provider
+  on its own. Folded §8/§8.1/§8.2 now state that, under three
+  `allow_dropped_ids` entries recording the ruling; `githubCallback` survives
+  in an explicitly past-tense clause, since it is why the `finishLogin` seam
+  exists. The shipped code already agreed — `internal/api/cliauth.go` serves
+  `providers: ["keycloak"]` and 404s on `s.oidc == nil` alone — so this
+  states a design the corpus and the implementation both already had.
 - **The `closedStates` set is enumerated nowhere.** Folded 004 §1.3 now
   defines an open task by deferring to `closedStates` (§6.4) — the right
   repair, since `done` was never a state under 011 — but neither §5.1 nor
