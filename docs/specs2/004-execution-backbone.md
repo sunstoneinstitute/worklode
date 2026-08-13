@@ -118,9 +118,16 @@ CREATE TABLE task_edges (
 ```
 
 - **`blocks`**: "A blocks B" (`from_task=A`, `to_task=B`) → B is unclaimable while A
-  is open, and A is open until it reaches a closed state of the machine in §5.1
-  (`closedStates`; see §6.4). `IsBlocked(tx, taskID)` evaluates this inside the
-  claim tx so the gate is checked atomically.
+  is open. A is open until it reaches its repo mapping's `done_state` — the state
+  that counts as delivered for that repo (§5.1) — or a later state on that repo's
+  delivery path, or is `abandoned`. **The closed set is per repo, not one fixed list
+  of states**: a task at `merged` is closed where `done_state = merged` and still
+  open where the repo gates on `released`. The one exception is a task with
+  children, which has no commit of its own and so cannot advance past `merged`
+  (§6.4); it is closed at `merged` in every repo. `closedStates` (`tasks.go:537`)
+  is therefore a predicate joined through the repo mapping rather than a constant
+  state tuple. `IsBlocked(tx, taskID)` evaluates it inside the claim tx so the gate
+  is checked atomically.
 - **`child_of`**: "A child_of B" makes B the parent of A; §6 governs what parent-hood
   means. Cycle detection on insert: `reachesViaChildOf` (BFS up the parent chain)
   rejects an edge that would make the hierarchy cyclic → `ErrCycle`. Self-edges
@@ -779,10 +786,12 @@ specific commit (§5) and a container has no commit of its own.
 children rather than relying on the commit join never matching; the pre-029 guard
 tested `kind = 'epic'`.
 
-Reusing `merged` as the terminal state keeps `closedStates` (`tasks.go:537`)
-correct with no change, so a completed parent stops blocking whatever points at
-it. `0005_delivery` deliberately removed the old `done` state and it is not
-revived. For a task with children, read `merged` as "all children delivered".
+Reusing `merged` as the terminal state is what lets a completed parent stop
+blocking whatever points at it: a task with children cannot advance past `merged`,
+so it is closed there in every repo — the one state-fixed case of the otherwise
+per-repo predicate §1.3 defines. `0005_delivery` deliberately removed the old
+`done` state and it is not revived. For a task with children, read `merged` as
+"all children delivered".
 
 ### 6.5 Roll-up {#sec-6.5}
 
