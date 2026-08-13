@@ -3,6 +3,7 @@ status: draft
 requires:
 - docs/specs/004-execution-backbone.md
 - docs/specs/008-worklode-plugin.md
+- docs/specs/016-org-wide-skills.md
 ---
 # Spec 017 — Task-declared secrets
 
