@@ -1398,6 +1398,29 @@ documents:
         enacts the same rename for its two terms; part 5 owes folded 016 the
         matching entries.
 
+      "draft\u2192proposed\u2192accepted\u2192superseded\u2192implemented": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The pre-014 five-value
+        order, parenthesised under 007 sec-4.4's unimplemented-specs query.
+        007 does not own this enum: 006 declares it, and folded 007 cites
+        rather than restates it, so keeping either span would put a retired
+        scheme in the document that reads the vocabulary rather than the one
+        that defines it.
+      "proposed \u2192 accepted": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The retired transition, in
+        007 sec-2's account of how declared-layer edges are gated; the crit
+        gate survives as review of a draft. 007 does not own this enum: 006
+        declares it, and folded 007 cites rather than restates it, so
+        keeping either span would put a retired scheme in the document that
+        reads the vocabulary rather than the one that defines it.
+
   # Part 2: the near-1:1 folds
   # (docs/plans/2026-08-13-spec-corpus-consolidation-2-near-1to1-folds.md).
   # Each document keeps its own number and folds only its own source. New
