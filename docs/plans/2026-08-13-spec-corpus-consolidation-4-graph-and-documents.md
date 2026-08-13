@@ -133,6 +133,33 @@ recorded here because each had a real alternative:
     `ns/`: §2's own prose explains that a provenanced document without that
     parent is an OWL violation.
 
+12. **Ruling 8 extends to 033 §4.2's closing sentence**, which the 026 fold
+    found and correctly refused to guess at. It reads "006 §1.3's own text
+    keeps `ls:implements` as written: it predates 014 §1's `ls:`→`wl:`
+    rename, and 014 §12 already records the re-pointing against it." Both
+    halves are now false: folded 006 spells it `wl:implements` (ruling 5),
+    and 014 §12 is `absorbed`. State the split of `wl:implements` without the
+    claim about 006's historical spelling — the same disposition ruling 8
+    gives §4.1, which was scoped to one section only because that was the
+    only instance then known.
+13. **A citation naming `dropped:` material states its claim without the
+    citation.** Rule 5 makes a *reference* to dropped material an escalation,
+    and this is the benign form of it: 026 §5's "It retires with the files,
+    as 025 §11 already records" names an absorbed Amendments section. The
+    claim — the `task` key retires with the files — is stated by the sentence
+    itself and by folded 025, so the sentence keeps its claim and loses its
+    pointer. This is not licence to drop a citation that carries information
+    the sentence lacks; that remains an escalation.
+14. **026's `--resolved` acceptance criteria naming specific old documents
+    stand as written**, and part 5 decides them. Criterion 3's
+    `lode show 018 --resolved` names a document this migration retires, and
+    repointing it to folded 004 would not repair it: part-3 ruling 3 keeps
+    only `status` and `requires` in folded frontmatter, so the new corpus
+    carries no amendment edges at all and no document has a doc-wide
+    amendment to render as a banner. The criterion describes the corpus the
+    fold is removing. Rule 6 keeps it; recorded as a residual rather than
+    rewritten into a claim that is false in a different way.
+
 ## Cross-target obligations
 
 An amendment whose *content* one task must absorb while its *anchors* live in
@@ -181,6 +208,14 @@ Additions to the list parts 2 and 3 already record.
 - **Folded 006's §8 heading has already shed `(D6)`** and §12's has shed
   "(resolves spec 007 Open Q3)", both because `fold.yaml` sets the headings.
   Recorded so part 5's D-label sweep does not double-count them.
+- **Folded 026's consolidation machinery outlives the corpus it was written
+  against.** §3, §3.1 and §3.2 render amendment and supersession edges; the
+  folded corpus has none, because the fold absorbed them and part-3 ruling 3
+  keeps only `status` and `requires` in frontmatter. The machinery stays
+  correct for amendments made *after* cutover, but every acceptance criterion
+  naming a specific pre-fold amendment (criteria 3, 9 and 11) tests a state
+  the new corpus does not have. Ruling 14 keeps them as written; part 5
+  decides whether they are re-aimed at post-cutover amendments or retired.
 - **009's implementation-status qualifiers stay as written** — "done in dev",
   "prod remains blocked on item 1", "the override is not yet implemented in
   rdf-registry". Rule 4 leaves implementation status alone, so folded 006 §13
