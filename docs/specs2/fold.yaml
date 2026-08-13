@@ -525,6 +525,902 @@ documents:
         a property of docs/specs/005, computable before any rewrite, and no
         rewrite of docs/specs2/005 can make it appear.
 
+  # Part 4: the graph and document clusters
+  # (docs/plans/2026-08-13-spec-corpus-consolidation-4-graph-and-documents.md).
+  #
+  # 006 <- {006, 003, 009, 015}: the knowledge-graph cluster. 006 states the
+  # vocabulary, entity model, IRI scheme and projection; 015 extends every one
+  # of those with the runtime layer; 009 states what the data-platform must
+  # host for any of it to run. 003 is the superseded design record: its
+  # preamble and all six anchors drop, and it is listed as a source so every
+  # whole-document and WL-SPEC-3 reference to it repoints here -- 003 has six
+  # heirs, of which this is the one that owns its vocabulary decisions (D4,
+  # D6, D7), and a source belongs to exactly one target (part-3 ruling 2).
+  # 015's sections interleave with 006's own structure rather than trailing
+  # it -- runtime classes under Classes, runtime schemes beside the SKOS
+  # schemes, the kind-first grammar under the IRI scheme, the runtime
+  # projection table under Projection -- because 015 extends that structure
+  # and reads as an unrelated appendix any other way. 015 sec-7 is one of the
+  # five "Amendments to existing specs" sections and is absorbed.
+  # Every `ls:`/`lsc:`/`lsid:` span in the placed sections is respelled
+  # `wl:`/`wlc:`/`wlid:` under allow_dropped_ids: that is 014 sec-1's rename,
+  # enacted here exactly as folded 008 enacts it, and 006 is the document the
+  # rename was written about. 014, 016, 025 and 033 all amend 006 sections
+  # and all fold into other targets, so their citations stay for cutover
+  # (ruling 1); 015's dissolve, as does 009's inline 014 note.
+  - to: 006-knowledge-graph.md
+    title: "Knowledge graph: vocabulary, entity model, runtime layer & projection"
+    sources: [006-knowledge-graph.md, 003-platform-graph-design.md,
+              009-data-platform-kg-requirements.md, 015-runtime-layer.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["006-knowledge-graph.md#sec-0",
+                "015-runtime-layer.md#sec-0"]}
+      - {new: "1", heading: "Reuse vs mint",
+         from: ["006-knowledge-graph.md#sec-1.1"]}
+      - {new: "1.1", heading: "Reuse survey: the runtime layer",
+         from: ["015-runtime-layer.md#sec-1"]}
+      - {new: "2", heading: "Classes & subclassing",
+         from: ["006-knowledge-graph.md#sec-1.2"]}
+      - {new: "2.1", heading: "Runtime classes",
+         from: ["015-runtime-layer.md#sec-2"]}
+      - {new: "3", heading: "Properties",
+         from: ["006-knowledge-graph.md#sec-1.3"]}
+      - {new: "3.1", heading: "Runtime properties",
+         from: ["015-runtime-layer.md#sec-4"]}
+      - {new: "4", heading: "Status SKOS scheme",
+         from: ["006-knowledge-graph.md#sec-1.4"]}
+      - {new: "5", heading: "Task-kind & model-layer SKOS schemes",
+         from: ["006-knowledge-graph.md#sec-1.5"]}
+      - {new: "6", heading: "Runtime SKOS schemes",
+         from: ["015-runtime-layer.md#sec-3"]}
+      # 015 sec-7 is the one "Amendments to existing specs" section this fold
+      # places rather than absorbing. Part 1's decision holds for the other
+      # four: once the amendments are folded in there is nothing left to
+      # state. Here there is -- the section appends four new SHACL node
+      # shapes (Artifact, Deployment, Environment, Commit) that are not
+      # amendment and are stated nowhere else, so dropping it would drop
+      # normative claims (rule 6). It merges into the section holding the
+      # shape list it extends, and its amendment table dissolves under rule 3:
+      # every row but one names a section of this same document, and the 007
+      # row is absorbed by 007's own rewriter.
+      - {new: "7", heading: "Reasoning architecture (OWL / SHACL / SPARQL)",
+         from: ["006-knowledge-graph.md#sec-2",
+                "015-runtime-layer.md#sec-7"]}
+      - {new: "8", heading: "Entity model by layer",
+         from: ["006-knowledge-graph.md#sec-3"]}
+      - {new: "8.1", heading: "Layer 1 — Intent (declared)",
+         from: ["006-knowledge-graph.md#sec-3.1"]}
+      - {new: "8.2", heading: "Layer 2 — Execution · VCS (observed)",
+         from: ["006-knowledge-graph.md#sec-3.2"]}
+      - {new: "9", heading: "Deliverable — declared definition-of-done",
+         from: ["006-knowledge-graph.md#sec-4"]}
+      - {new: "10", heading: "Canonical IRI scheme",
+         from: ["006-knowledge-graph.md#sec-5"]}
+      - {new: "10.1", heading: "Runtime IRI grammar",
+         from: ["015-runtime-layer.md#sec-5"]}
+      - {new: "11", heading: "Projection: backbone → graph",
+         from: ["006-knowledge-graph.md#sec-6"]}
+      - {new: "11.1", heading: "Runtime projection",
+         from: ["015-runtime-layer.md#sec-6"]}
+      - {new: "12", heading: "Accepted deviations — drift suppression",
+         from: ["006-knowledge-graph.md#sec-8"]}
+      # 009 whole: its preamble opens the group (it is the scope sentence --
+      # the data-platform hosts the knowledge half, the backbone keeps the
+      # execution half), and its four sections keep their own shape below.
+      - {new: "13", heading: "What the data-platform must host",
+         from: ["009-data-platform-kg-requirements.md#preamble"]}
+      - {new: "13.1", heading: "Context",
+         from: ["009-data-platform-kg-requirements.md#sec-0"]}
+      - {new: "13.2", heading: "Must-have (v1 blockers)",
+         from: ["009-data-platform-kg-requirements.md#sec-1"]}
+      - {new: "13.3", heading: "Should-have",
+         from: ["009-data-platform-kg-requirements.md#sec-2"]}
+      - {new: "13.4", heading: "Explicitly not required from the data-platform",
+         from: ["009-data-platform-kg-requirements.md#sec-3"]}
+      - {new: "14", heading: "Dependencies",
+         from: ["006-knowledge-graph.md#sec-9",
+                "015-runtime-layer.md#sec-8"]}
+      - {new: "15", heading: "Open questions",
+         from: ["006-knowledge-graph.md#sec-10",
+                "015-runtime-layer.md#sec-9"]}
+      # 006's own acceptance criteria (sec-11) are retired by 014 sec-16, so
+      # the folded trio's third member comes from the two sources whose
+      # criteria are still live.
+      - {new: "16", heading: "Acceptance criteria",
+         from: ["009-data-platform-kg-requirements.md#sec-4",
+                "015-runtime-layer.md#sec-10"]}
+    dropped:
+      - ref: "006-knowledge-graph.md#sec-1"
+        reason: >-
+          superseded: the `ls:` prefix block, retired by 014 sec-1. It holds
+          three things and none is lost. The prefix-to-namespace binding is
+          stated post-rename by sec-10 -- 006 sec-5 already carries 014
+          sec-1's clarification that the published base carries no
+          ontology-name segment. The ADR-0006 placement rule (a shared,
+          cross-cutting ontology sits directly under `rdf/`, not under
+          `rdf/domain/`) survives as its consequence, the `rdf/wl/…` source
+          paths in sec-0, sec-13.2 and sec-14. The `@prefix` declarations for
+          `dct`, `foaf`, `prov`, `doap`, `skos`, `fabio`, `rdf`, `rdfs`,
+          `owl` and `xsd` are illustrative: `ns/*.ttl` is the parseable form
+          (CLAUDE.md), and the specs' own Turtle blocks never parsed.
+          Folding the block forward would reinstate the retired spelling in
+          the one document the rename was written about.
+      - ref: "006-knowledge-graph.md#sec-1.6"
+        reason: >-
+          superseded: replaced by 014 sec-2 -- there is no Plan node, so the
+          `Spec ⊃ Plan ⊃ Task` decomposition Turtle states a model the corpus
+          dropped. The section's surviving claims are stated elsewhere in
+          this document: child_of/blocks are backbone-authoritative and
+          surface as projected `dct:isPartOf` and transitive
+          `wl:blocks`/`wl:dependsOn` (sec-3's Turtle and sec-11's projection
+          table).
+      - ref: "006-knowledge-graph.md#sec-3.3"
+        reason: >-
+          superseded: replaced by 015 sec-2 and sec-6, both placed in this
+          same document (sec-2.1 and sec-11.1), which give the Layer 3 nodes
+          real PROV-anchored classes and state which have a v1 projection
+          source. The Layer 3 row of the entity model is therefore a
+          cross-reference in sec-8, not a table this fold carries forward.
+      - ref: "006-knowledge-graph.md#sec-7"
+        reason: >-
+          superseded: replaced by 014 sec-3 -- partial supersession is
+          `dct:isReplacedBy` between addressable section nodes, and
+          `wl:supersededSection` is retired. 014 folds into 025, so the
+          successor text lives there and this document cites it.
+      - ref: "006-knowledge-graph.md#sec-11"
+        reason: >-
+          superseded: replaced by 014 sec-16. The folded document's
+          acceptance criteria come from the two sources whose criteria are
+          still live (009 sec-4, 015 sec-10); 014's replacement set folds
+          into 025 with the rest of 014.
+      - ref: "003-platform-graph-design.md#preamble"
+        reason: >-
+          spent: three notes on a superseded document -- a status correction
+          saying D1–D15 shipped, 014 sec-1's standing prefix-rename
+          instruction (enacted by this fold), and the thesis sentence, which
+          007 sec-1 states as live design.
+      - ref: "003-platform-graph-design.md#sec-1"
+        reason: >-
+          superseded: D1–D8 graduated into 004 (backbone, authority split),
+          005 (pickup) and this document (D4's vocabulary, D6's layers, D7's
+          Deliverable). The design record states them as decisions taken; the
+          specs state them as design.
+      - ref: "003-platform-graph-design.md#sec-2"
+        reason: >-
+          superseded: D9–D12 graduated into 005 (the ranking key, `concern`,
+          `project.focus`) and 007 sec-4 (estimate-free critical path).
+      - ref: "003-platform-graph-design.md#sec-3"
+        reason: >-
+          superseded: replaced wholesale by 009, whose four sections are
+          placed in this document as sec-13.1–13.4 -- the same list, verified
+          against the deployed graph-server rather than proposed.
+      - ref: "003-platform-graph-design.md#sec-4"
+        reason: >-
+          spent: the naming shortlist. D13 chose Worklode and `lode`; the
+          product has shipped under both since, and the rejected candidates
+          decide nothing.
+      - ref: "003-platform-graph-design.md#sec-5"
+        reason: >-
+          superseded: D14's plugin sketch graduated into 008, and its branch
+          and worktree naming was replaced by 011 and 030 (both folded into
+          008 and 004). Folded 008 states the hooks, slash commands, skills
+          and brief this section pencilled in.
+      - ref: "003-platform-graph-design.md#sec-6"
+        reason: >-
+          superseded: D15's graduated decomposition, amended by 014 sec-2 and
+          then settled by 025 sec-5 -- a plan is a document whose acceptance
+          mints tasks. `needs-decomposition` and the token budget survive in
+          folded 004 and 008; both fold elsewhere and neither reads this
+          section.
+
+    allow_dropped_ids:
+      "?c ls:layer lsc:intent": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "?t ls:dependsOn+ ?x": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls": >-
+        The prefix label itself, respelled `wl` / `wlc` / `wlid` per 014
+        sec-1. Reaches this document as a bare token inside a Turtle block,
+        where TOKEN_RE splits `ls:Component` into its two halves.
+      "ls-shapes.ttl": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "ls/id/<type>/<localid>": >-
+        014 sec-1: the published base carries no ontology-name segment, so
+        this reads `…/ontology#`, `…/concept/` or `…/id/`. 006 sec-5's own
+        amendment note instructs the reader to read the row that way; the
+        fold states it directly instead (rule 3).
+      "ls:": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:ADR": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:AcceptedDeviation": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Artifact": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Component": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Component ls:layer lsc:intent": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Deliverable": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Deliverable ls:layer lsc:intent": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Deployment": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:DesignDoc": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Effect": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Issue": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Milestone": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:OngoingMaintenance": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Plan": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Project": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:PullRequest": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Spec": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Task": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Task ls:layer lsc:execution": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:Workstream": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:affects": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:blocks": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:covers": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:deliveredBy": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:dependsOn": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:governs": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:implements": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:inWorkstream": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:layer": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:mirrors": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:reviewer": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:sanctionedBy": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:status": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:supersededSection": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:taskKind": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:taskState": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:taskState \"in_progress\"": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsc": >-
+        The prefix label itself, respelled `wl` / `wlc` / `wlid` per 014
+        sec-1. Reaches this document as a bare token inside a Turtle block,
+        where TOKEN_RE splits `ls:Component` into its two halves.
+      "lsc:": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsc:DesignDocStatus": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsc:ModelLayer": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsc:TaskKind": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsc:spike": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsid": >-
+        The prefix label itself, respelled `wl` / `wlc` / `wlid` per 014
+        sec-1. Reaches this document as a bare token inside a Turtle block,
+        where TOKEN_RE splits `ls:Component` into its two halves.
+      "lsid:": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "lsid:task \u2026 ls:implements \u2026 deliverable": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "rdf/ls/": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "rdf/ls/concept.ttl": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "rdf/ls/ontology.1-2.ttl": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "rdf/ls/ontology.ttl": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "rdf/shapes/ls-shapes.ttl": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "sunstone.institute/rdf/ls/": >-
+        014 sec-1 moves the rdf-registry sources `rdf/ls/` to `rdf/wl/`, and
+        the SHACL shapes file follows as `wl-shapes.ttl` -- which 015 sec-7,
+        placed in this same document, already writes that way.
+      "\u2026/ls/concept/<id>": >-
+        014 sec-1: the published base carries no ontology-name segment, so
+        this reads `…/ontology#`, `…/concept/` or `…/id/`. 006 sec-5's own
+        amendment note instructs the reader to read the row that way; the
+        fold states it directly instead (rule 3).
+      "\u2026/ls/id/<type>/<localid>": >-
+        014 sec-1: the published base carries no ontology-name segment, so
+        this reads `…/ontology#`, `…/concept/` or `…/id/`. 006 sec-5's own
+        amendment note instructs the reader to read the row that way; the
+        fold states it directly instead (rule 3).
+      "\u2026/ls/ontology#<Term>": >-
+        014 sec-1: the published base carries no ontology-name segment, so
+        this reads `…/ontology#`, `…/concept/` or `…/id/`. 006 sec-5's own
+        amendment note instructs the reader to read the row that way; the
+        fold states it directly instead (rule 3).
+      "\u2026/ls/\u2026": >-
+        014 sec-1: the published base carries no ontology-name segment, so
+        this reads `…/ontology#`, `…/concept/` or `…/id/`. 006 sec-5's own
+        amendment note instructs the reader to read the row that way; the
+        fold states it directly instead (rule 3).
+
+      "draft \u2192 proposed \u2192 accepted \u2192 superseded \u2192 implemented": >-
+        Real loss, and the point of the amendment that causes it. 014 sec-5
+        removes `implemented` from the status enum, so the five-value order
+        it names no longer exists; Keeping the span would mean writing the
+        "was X, now Y" archaeology the fold exists to remove (rules 1 and
+        3).
+      "Realised": >-
+        Real loss, and the point of the amendment that causes it. from
+        `wlc:implemented`'s skos:definition ("Realised in code/prod by an
+        implementing Task"), deleted with the concept by 014 sec-5; Keeping
+        the span would mean writing the "was X, now Y" archaeology the fold
+        exists to remove (rules 1 and 3).
+      "code/prod": >-
+        Real loss, and the point of the amendment that causes it. the same
+        skos:definition, deleted with `wlc:implemented` by 014 sec-5;
+        Keeping the span would mean writing the "was X, now Y" archaeology
+        the fold exists to remove (rules 1 and 3).
+      "implementing": >-
+        Real loss, and the point of the amendment that causes it. the same
+        skos:definition, deleted with `wlc:implemented` by 014 sec-5;
+        Keeping the span would mean writing the "was X, now Y" archaeology
+        the fold exists to remove (rules 1 and 3).
+      "feature, bug, chore, spec, review, spike, epic": >-
+        Real loss, and the point of the amendment that causes it. the
+        pre-025 kind enum: 025 sec-6 removes `epic` and renames `spec` to
+        `design`, and rule 2 makes its later statement govern. Folded 004
+        carries an entry for exactly this class; Keeping the span would mean
+        writing the "was X, now Y" archaeology the fold exists to remove
+        (rules 1 and 3).
+      "Workstreams": >-
+        Real loss, and the point of the amendment that causes it. from the
+        `wl:Workstream` Turtle comment, which 025 sec-8 deletes along with
+        the class, `wl:OngoingMaintenance` and `wl:inWorkstream`; Keeping
+        the span would mean writing the "was X, now Y" archaeology the fold
+        exists to remove (rules 1 and 3).
+      "appears": >-
+        Real loss, and the point of the amendment that causes it. the same
+        Workstream comment ("a Task in several Workstreams appears in
+        several graphs"), whose premise 025 sec-8 removes by making
+        `wl:inProject` functional; Keeping the span would mean writing the
+        "was X, now Y" archaeology the fold exists to remove (rules 1 and
+        3).
+      "continuous": >-
+        Real loss, and the point of the amendment that causes it. the
+        `wl:OngoingMaintenance` comment, deleted with the class by 025
+        sec-8; Keeping the span would mean writing the "was X, now Y"
+        archaeology the fold exists to remove (rules 1 and 3).
+      "Further": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+      "Turtle": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+      "amended": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+      "historical": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+      "preserved": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+      "below.": >-
+        Source-side FENCE_RE artifact, not an identifier. 006 sec-1.3's
+        "Further amended by 033 sec-4.2" note wraps a fenced ```sparql block
+        inside a blockquote, so its closing fence is prefixed `> ` and
+        FENCE_RE runs past it, swallowing 1824 characters of note prose and
+        tokenising the words. They are the deleted note's framing prose
+        (rules 1 and 3), computable from docs/specs/006 before any rewrite,
+        and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
+        cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
+
+      "proposed": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The `wlc:proposed` concept
+        itself. Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014
+        sec-5, so no frontmatter edge on 006 records it, which is why plan
+        ruling 10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "Submitted": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. From that concept's
+        skos:definition, deleted with it. Reached 006 sec-1.4 only
+        transitively: 025 sec-3 amends 014 sec-5, so no frontmatter edge on
+        006 records it, which is why plan ruling 10 states it instead.
+        Keeping the span would mean declaring a concept the corpus and the
+        shipped vocabulary have both dropped.
+      "awaiting": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The same skos:definition.
+        Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014 sec-5,
+        so no frontmatter edge on 006 records it, which is why plan ruling
+        10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "resolution.": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The same skos:definition.
+        Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014 sec-5,
+        so no frontmatter edge on 006 records it, which is why plan ruling
+        10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "draft \u2192 proposed \u2192 accepted \u2192 superseded": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The post-014 sec-5, pre-025
+        sec-3 order, carried by 006 sec-1.4's inline 014 note -- the same
+        class as the five-member string already exempted above. Reached 006
+        sec-1.4 only transitively: 025 sec-3 amends 014 sec-5, so no
+        frontmatter edge on 006 records it, which is why plan ruling 10
+        states it instead. Keeping the span would mean declaring a concept
+        the corpus and the shipped vocabulary have both dropped.
+      "proposed \u2192 accepted": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The retired transition, a
+        span in 006 sec-1.4's prose and again in 006 sec-8; the crit gate
+        survives as review of a draft. Reached 006 sec-1.4 only
+        transitively: 025 sec-3 amends 014 sec-5, so no frontmatter edge on
+        006 records it, which is why plan ruling 10 states it instead.
+        Keeping the span would mean declaring a concept the corpus and the
+        shipped vocabulary have both dropped.
+
+  # 007 <- {007}: a near-1:1 fold, in part 4 because its two-layer model,
+  # deriver contract and standing queries only make sense read against the
+  # vocabulary 006 states and the coverage claim 014 sec-6 adds -- both of
+  # which move in this part. 18 live anchors placed 1:1; numbering shifts by
+  # one because Purpose & scope becomes sec-0 as everywhere else in the new
+  # corpus, and the derivers and standing queries lose the parallel `3.N`/
+  # `4.N` split 007's own preamble records having introduced. One retired
+  # anchor (sec-4.3) drops. The `ls:` respell of the placed sections is the
+  # same enactment folded 006 and folded 008 make; the four amendment notes
+  # from 014 and 015 stay cited, since both fold into other targets.
+  - to: 007-drift-and-overview.md
+    title: Drift & overview
+    sources: [007-drift-and-overview.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["007-drift-and-overview.md#sec-1"]}
+      - {new: "1", heading: "The two-layer model",
+         from: ["007-drift-and-overview.md#sec-2"]}
+      - {new: "1.1", heading: "Representation: named graphs per source",
+         from: ["007-drift-and-overview.md#sec-2.1"]}
+      - {new: "2", heading: "Observed-layer derivers",
+         from: ["007-drift-and-overview.md#sec-3"]}
+      - {new: "2.1", heading: "Dependency edges — Go imports / `go.mod` / package manifests",
+         from: ["007-drift-and-overview.md#sec-3.1"]}
+      - {new: "2.2", heading: "`component lives-in repo` — filesystem + component-boundary manifest",
+         from: ["007-drift-and-overview.md#sec-3.2"]}
+      - {new: "2.3", heading: "`task affects component` — PR paths",
+         from: ["007-drift-and-overview.md#sec-3.3"]}
+      - {new: "2.4", heading: "deploy / runtime — existing Worklode hooks",
+         from: ["007-drift-and-overview.md#sec-3.4"]}
+      - {new: "3", heading: "Standing queries",
+         from: ["007-drift-and-overview.md#sec-4"]}
+      - {new: "3.1", heading: "Architectural drift",
+         from: ["007-drift-and-overview.md#sec-4.1"]}
+      - {new: "3.2", heading: "Missing ADRs / doc gaps — Component with no governing DesignDoc",
+         from: ["007-drift-and-overview.md#sec-4.2"]}
+      - {new: "3.3", heading: "Unimplemented specs",
+         from: ["007-drift-and-overview.md#sec-4.4"]}
+      - {new: "3.4", heading: "The ready frontier — ready + unblocked tasks",
+         from: ["007-drift-and-overview.md#sec-4.5"]}
+      - {new: "4", heading: "Critical path v1",
+         from: ["007-drift-and-overview.md#sec-5"]}
+      - {new: "5", heading: "Overview / CLI surface",
+         from: ["007-drift-and-overview.md#sec-6"]}
+      - {new: "6", heading: "Dependencies",
+         from: ["007-drift-and-overview.md#sec-7"]}
+      - {new: "7", heading: "Open questions",
+         from: ["007-drift-and-overview.md#sec-8"]}
+      - {new: "8", heading: "Acceptance criteria",
+         from: ["007-drift-and-overview.md#sec-9"]}
+    dropped:
+      - ref: "007-drift-and-overview.md#preamble"
+        reason: >-
+          absorbed: three notes, each with nothing left to say after the
+          fold. The dependency note ("006 owns the entity model, vocabulary
+          and IRI scheme; predicates taken from the design record are marked
+          (006)") is restated by the placed sec-0 scope list and sec-6, and
+          its `(006)` marks point at a design record this fold retires. The
+          prefix-rename note is 014 sec-1's standing rewrite instruction,
+          which the respell enacts. The numbering note records why the
+          derivers were renumbered `3.1`–`3.4` at anchor assignment; this
+          fold assigns its own numbers, and the freeze rule the note cites is
+          stated by 014 sec-3 (folded 025).
+      - ref: "007-drift-and-overview.md#sec-4.3"
+        reason: >-
+          superseded: replaced by 014 sec-6's stale-claim query. The
+          `dct:modified`-versus-task-closure comparison it holds is the mtime
+          heuristic 014 retires -- it fires on typo fixes and misses semantic
+          changes to a section nobody claimed. Its successor folds into 025
+          with the rest of 014, and sec-3 of this document cites it.
+
+    allow_dropped_ids:
+      "<task> ls:affects <component>": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls": >-
+        The prefix label itself, respelled `wl` / `wlc` / `wlid` per 014
+        sec-1. Reaches this document as a bare token inside a Turtle block,
+        where TOKEN_RE splits `ls:Component` into its two halves.
+      "ls:": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:AcceptedDeviation": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:layer": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:mirrors": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:sanctionedBy": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+      "ls:status": >-
+        Deliberate respell to the `wl:` form, enacting 014 sec-1's prefix
+        rename in the one document the rename was written about. Nothing is
+        lost: every claim the ls: spelling carried survives under the wl:
+        name, and `ns/` has shipped the wl: vocabulary since. Folded 008
+        enacts the same rename for its two terms; part 5 owes folded 016 the
+        matching entries.
+
+      "draft\u2192proposed\u2192accepted\u2192superseded\u2192implemented": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The pre-014 five-value
+        order, parenthesised under 007 sec-4.4's unimplemented-specs query.
+        007 does not own this enum: 006 declares it, and folded 007 cites
+        rather than restates it, so keeping either span would put a retired
+        scheme in the document that reads the vocabulary rather than the one
+        that defines it.
+      "proposed \u2192 accepted": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The retired transition, in
+        007 sec-2's account of how declared-layer edges are gated; the crit
+        gate survives as review of a draft. 007 does not own this enum: 006
+        declares it, and folded 007 cites rather than restates it, so
+        keeping either span would put a retired scheme in the document that
+        reads the vocabulary rather than the one that defines it.
+
   # Part 2: the near-1:1 folds
   # (docs/plans/2026-08-13-spec-corpus-consolidation-2-near-1to1-folds.md).
   # Each document keeps its own number and folds only its own source. New
@@ -1001,6 +1897,342 @@ documents:
          from: ["022-prometheus-metrics.md#sec-8"]}
       - {new: "9", heading: "Scrape path",
          from: ["022-prometheus-metrics.md#sec-9"]}
+
+  # Part 4: 025 <- {025, 014, 027, 028, 034}. The document cluster, and the
+  # largest fold in the corpus: 014 states what a design document is
+  # (sections, anchors, versioning, coverage, frontmatter, the shorthand),
+  # 025 moves the store under it and settles plans and task kinds, 028 adds
+  # the post-acceptance half (escalation, in-place amendment, notes,
+  # grooming), 027 supplies the event log the lifecycle rides on, and 034 the
+  # git->backbone on-ramp that populates the store today. 025's sections are
+  # very largely amendments to 014's -- sec-0/2/4/5/10 amended, sec-8
+  # superseded -- so folding the two together is what lets the end state be
+  # stated once; every one of those amendments dissolves uncited (ruling 1),
+  # as do 027's and 034's amendments of 025 and 033's citations from within
+  # 026 are the reciprocal case and stay.
+  # Placement notes, in order of how much they cost a reader to reconstruct:
+  #   * 014 sec-1 (the `ls:`->`wl:` rename) lands under `ns/` is the schema
+  #     source. It is vocabulary identity, and the fold's other homes for it
+  #     were worse: dropping it loses the rdf-registry source-path move, and
+  #     006 cannot take it because 014 belongs to exactly one target.
+  #   * 014 sec-2.1 (plans are demoted) merges with 025 sec-4 (plans are
+  #     documents), which is the section that amends it. The argument 025
+  #     preserves -- the section lock must never bind a plan -- survives as
+  #     one statement rather than as a claim and its reversal.
+  #   * 027 sec-0 opens the event-log group with sec-1, and 028 sec-0 opens
+  #     the escalation group with sec-1: both are "why" sections for material
+  #     that is a group here rather than a document.
+  #   * 028 sec-9 (the ladder's events) sits under the event log with the
+  #     other event material, not under escalation, because it is a table of
+  #     event types and 027 owns that vocabulary.
+  #   * The scaffolding trio is folded from five sources and consolidated by
+  #     claim (rule 11); 014 sec-12, 025 sec-11 and 027 sec-11 are the
+  #     "Amendments to existing specs" sections and are absorbed.
+  # 034 sec-7 is *not* absorbed: only three of its four paragraphs are
+  # amendment, and the fourth (why the on-ramp is not a second end state)
+  # is design this document keeps.
+  - to: 025-documents-in-the-backbone.md
+    title: Documents in the backbone
+    sources: [025-documents-in-the-backbone.md,
+              014-design-documents-as-graph-objects.md,
+              027-event-watchers.md,
+              028-escalation-and-document-lifecycle.md,
+              034-design-doc-sync.md]
+    sections:
+      - {new: "0", heading: "Why",
+         from: ["025-documents-in-the-backbone.md#sec-0",
+                "014-design-documents-as-graph-objects.md#sec-0"]}
+      - {new: "1", heading: "Principle: rows are things someone made; groupings are queries",
+         from: ["025-documents-in-the-backbone.md#sec-1"]}
+      - {new: "2", heading: "What is, and is not, a design document",
+         from: ["014-design-documents-as-graph-objects.md#sec-2"]}
+      - {new: "2.1", heading: "Resulting class hierarchy",
+         from: ["014-design-documents-as-graph-objects.md#sec-2.2"]}
+      - {new: "3", heading: "Sections as first-class nodes",
+         from: ["014-design-documents-as-graph-objects.md#sec-3"]}
+      - {new: "3.1", heading: "Anchors",
+         from: ["014-design-documents-as-graph-objects.md#sec-3.1"]}
+      - {new: "3.2", heading: "Numbering is identity, so numbering is frozen",
+         from: ["014-design-documents-as-graph-objects.md#sec-3.2"]}
+      - {new: "3.3", heading: "What one mint buys",
+         from: ["014-design-documents-as-graph-objects.md#sec-3.3"]}
+      - {new: "4", heading: "Versioning",
+         from: ["014-design-documents-as-graph-objects.md#sec-4"]}
+      - {new: "4.1", heading: "Canonical plus versioned IRIs",
+         from: ["014-design-documents-as-graph-objects.md#sec-4.1"]}
+      - {new: "4.2", heading: "Relationship to ADR-0006",
+         from: ["014-design-documents-as-graph-objects.md#sec-4.2"]}
+      - {new: "4.3", heading: "Publication is one transaction",
+         from: ["014-design-documents-as-graph-objects.md#sec-4.3"]}
+      - {new: "4.4", heading: "Section-level staleness without section-level versions",
+         from: ["014-design-documents-as-graph-objects.md#sec-4.4"]}
+      - {new: "5", heading: "Documents move into the backbone",
+         from: ["025-documents-in-the-backbone.md#sec-2"]}
+      - {new: "5.1", heading: "The document store",
+         from: ["034-design-doc-sync.md#sec-4"]}
+      - {new: "6", heading: "Constraints on accepted documents",
+         from: ["014-design-documents-as-graph-objects.md#sec-7"]}
+      - {new: "6.1", heading: "Anchor depth",
+         from: ["014-design-documents-as-graph-objects.md#sec-7.1"]}
+      - {new: "7", heading: "Editorial lifecycle",
+         from: ["025-documents-in-the-backbone.md#sec-3",
+                "014-design-documents-as-graph-objects.md#sec-5"]}
+      - {new: "7.1", heading: "`implemented` leaves the status enum",
+         from: ["014-design-documents-as-graph-objects.md#sec-5.1"]}
+      - {new: "7.2", heading: "Revising an accepted document",
+         from: ["014-design-documents-as-graph-objects.md#sec-5.2"]}
+      - {new: "7.3", heading: "Reviewers and the accept gate",
+         from: ["028-escalation-and-document-lifecycle.md#sec-6"]}
+      - {new: "8", heading: "The escalation ladder",
+         from: ["028-escalation-and-document-lifecycle.md#sec-0",
+                "028-escalation-and-document-lifecycle.md#sec-1"]}
+      - {new: "8.1", heading: "Escalation to a human",
+         from: ["028-escalation-and-document-lifecycle.md#sec-2"]}
+      - {new: "8.2", heading: "In-place amendment",
+         from: ["028-escalation-and-document-lifecycle.md#sec-3"]}
+      - {new: "8.3", heading: "What counts as substantive",
+         from: ["028-escalation-and-document-lifecycle.md#sec-3.1"]}
+      - {new: "8.4", heading: "Enforcement is server-side",
+         from: ["028-escalation-and-document-lifecycle.md#sec-3.2"]}
+      - {new: "8.5", heading: "Notes",
+         from: ["028-escalation-and-document-lifecycle.md#sec-4"]}
+      - {new: "8.6", heading: "Stale plans",
+         from: ["028-escalation-and-document-lifecycle.md#sec-5"]}
+      - {new: "8.7", heading: "Grooming",
+         from: ["028-escalation-and-document-lifecycle.md#sec-7"]}
+      - {new: "8.8", heading: "Tier routing on claim",
+         from: ["028-escalation-and-document-lifecycle.md#sec-8"]}
+      - {new: "9", heading: "Plans are documents",
+         from: ["025-documents-in-the-backbone.md#sec-4",
+                "014-design-documents-as-graph-objects.md#sec-2.1"]}
+      - {new: "9.1", heading: "Task declarations — the `## Tasks` section",
+         from: ["025-documents-in-the-backbone.md#sec-4.1"]}
+      - {new: "9.2", heading: "Acceptance mints the plan's tasks",
+         from: ["025-documents-in-the-backbone.md#sec-5"]}
+      - {new: "9.3", heading: "Spec fan-out is a query",
+         from: ["025-documents-in-the-backbone.md#sec-7"]}
+      - {new: "10", heading: "Task kinds",
+         from: ["025-documents-in-the-backbone.md#sec-6"]}
+      - {new: "11", heading: "Implementation coverage",
+         from: ["014-design-documents-as-graph-objects.md#sec-6"]}
+      - {new: "11.1", heading: "Three objects, previously conflated",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.1"]}
+      - {new: "11.2", heading: "`.worklode/implements.yaml`",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.2"]}
+      - {new: "11.3", heading: "The component is derived, never declared",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.3"]}
+      - {new: "11.4", heading: "Single-component repositories",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.4"]}
+      - {new: "11.5", heading: "Deriver: `observed/repo-implements`",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.5"]}
+      - {new: "11.6", heading: "This replaces spec 013's engine 3",
+         from: ["014-design-documents-as-graph-objects.md#sec-6.6"]}
+      - {new: "12", heading: "Authorship",
+         from: ["014-design-documents-as-graph-objects.md#sec-9"]}
+      - {new: "13", heading: "Project, Workstream, Milestone",
+         from: ["025-documents-in-the-backbone.md#sec-8"]}
+      - {new: "14", heading: "Document frontmatter",
+         from: ["014-design-documents-as-graph-objects.md#sec-11"]}
+      - {new: "14.1", heading: "References carry the section",
+         from: ["014-design-documents-as-graph-objects.md#sec-11.1"]}
+      - {new: "14.2", heading: "Amendment references are bidirectional",
+         from: ["014-design-documents-as-graph-objects.md#sec-11.2"]}
+      - {new: "14.3", heading: "The `<KEY>-<TYPE>-<n>` shorthand",
+         from: ["014-design-documents-as-graph-objects.md#sec-11.3"]}
+      - {new: "15", heading: "The event log is totally ordered",
+         from: ["027-event-watchers.md#sec-0",
+                "027-event-watchers.md#sec-1"]}
+      - {new: "15.1", heading: "Subscribers hold offsets",
+         from: ["027-event-watchers.md#sec-2"]}
+      - {new: "15.2", heading: "Events are RDF-shaped",
+         from: ["027-event-watchers.md#sec-3"]}
+      - {new: "15.3", heading: "Emitting",
+         from: ["027-event-watchers.md#sec-4"]}
+      - {new: "15.4", heading: "The `doc-lifecycle` subscriber",
+         from: ["027-event-watchers.md#sec-5"]}
+      - {new: "15.5", heading: "Events of the escalation ladder",
+         from: ["028-escalation-and-document-lifecycle.md#sec-9"]}
+      - {new: "15.6", heading: "Planning cost lands on the planning task",
+         from: ["027-event-watchers.md#sec-7"]}
+      - {new: "15.7", heading: "Metrics",
+         from: ["027-event-watchers.md#sec-8",
+                "034-design-doc-sync.md#sec-10"]}
+      - {new: "16", heading: "Git → backbone sync: the on-ramp",
+         from: ["034-design-doc-sync.md#sec-0",
+                "034-design-doc-sync.md#sec-1"]}
+      - {new: "16.1", heading: "What syncs — corpora and config",
+         from: ["034-design-doc-sync.md#sec-2"]}
+      - {new: "16.2", heading: "The sync command",
+         from: ["034-design-doc-sync.md#sec-3"]}
+      - {new: "16.3", heading: "Identity",
+         from: ["034-design-doc-sync.md#sec-5"]}
+      - {new: "16.4", heading: "Reads",
+         from: ["034-design-doc-sync.md#sec-6"]}
+      - {new: "16.5", heading: "Relationship to the query surface and to 029",
+         from: ["034-design-doc-sync.md#sec-7"]}
+      - {new: "17", heading: "`ns/` is the schema source",
+         from: ["025-documents-in-the-backbone.md#sec-9",
+                "034-design-doc-sync.md#sec-8",
+                "014-design-documents-as-graph-objects.md#sec-1"]}
+      - {new: "18", heading: "Surfaces",
+         from: ["025-documents-in-the-backbone.md#sec-10",
+                "014-design-documents-as-graph-objects.md#sec-10",
+                "027-event-watchers.md#sec-6",
+                "034-design-doc-sync.md#sec-9"]}
+      - {new: "19", heading: "Implementation",
+         from: ["027-event-watchers.md#sec-10"]}
+      - {new: "20", heading: "Testing",
+         from: ["027-event-watchers.md#sec-9"]}
+      - {new: "21", heading: "Dependencies",
+         from: ["014-design-documents-as-graph-objects.md#sec-13"]}
+      - {new: "22", heading: "Out of scope",
+         from: ["025-documents-in-the-backbone.md#sec-12",
+                "014-design-documents-as-graph-objects.md#sec-14",
+                "027-event-watchers.md#sec-12",
+                "034-design-doc-sync.md#sec-11"]}
+      - {new: "23", heading: "Open questions",
+         from: ["014-design-documents-as-graph-objects.md#sec-15",
+                "028-escalation-and-document-lifecycle.md#sec-10"]}
+      - {new: "24", heading: "Acceptance criteria",
+         from: ["025-documents-in-the-backbone.md#sec-13",
+                "014-design-documents-as-graph-objects.md#sec-16",
+                "027-event-watchers.md#sec-13",
+                "034-design-doc-sync.md#sec-12"]}
+    dropped:
+      - ref: "014-design-documents-as-graph-objects.md#sec-8"
+        reason: >-
+          superseded: replaced by 025 sec-6, placed here as sec-10. The
+          reconciliation it describes shipped (migration 0009) and is
+          history; of its forward rules, "`epic` stays" is exactly what 025
+          reverses, and "no kind is added for plans" survives in sec-10's
+          own text.
+      - ref: "014-design-documents-as-graph-objects.md#sec-12"
+        reason: >-
+          absorbed: one of the five "Amendments to existing specs" sections.
+          Its rows amend 006, 007, 008, 010, 011 and 013 -- every one of them
+          recorded in 014's `amends:` frontmatter, so nothing is lost by the
+          table going away, and each amended document's own rewriter states
+          the post-amendment rule in place (rule 3).
+      - ref: "025-documents-in-the-backbone.md#sec-11"
+        reason: >-
+          absorbed: the same, for 025's amendments of 000, 006, 014, 016 and
+          018. 014's row amends sections folded into this same document, so
+          it dissolves outright; the rest are carried by the amended
+          documents' own rewrites and by 025's `amends:` frontmatter.
+      - ref: "027-event-watchers.md#sec-11"
+        reason: >-
+          absorbed: the same, for 027's changes to 025, 004, `ns/` and the
+          lode plugin. The 025 row amends sections folded into this same
+          document (sec-7 and sec-18 state the amended text directly); the
+          004 row -- `events` gains `txid` -- is stated by sec-15, which
+          folded 004 cites.
+
+  # Part 4: 026 <- {026, 033}. The query surface and the coverage semantics
+  # it evaluates. 033 renames the plan-side key to `covers`, qualifies each
+  # entry with a coverage level, and mints the ontology terms behind it;
+  # 026 sec-2.1 is the query that consumes all of it, and was already
+  # rewritten once to cite 033. Merging 033 sec-2 into that section is the
+  # fold's whole point: the resolution table is stated where the query is
+  # defined, not one document away. 033's amendments of 025 sec-4 and sec-7
+  # reach a different target, so folded 025 keeps its citations and this
+  # document is where they land (ruling 1). No drops: every anchor of both
+  # sources is live and placed. 026 sec-4.2a loses its letter suffix and
+  # becomes sec-4.3 -- the suffix records an insert into a published
+  # document, and this fold assigns fresh numbers to a document nobody has
+  # pinned a claim against yet.
+  - to: 026-design-doc-queries.md
+    title: Design-doc queries and plan coverage
+    sources: [026-design-doc-queries.md, 033-plan-section-coverage.md]
+    sections:
+      - {new: "0", heading: "Why",
+         from: ["026-design-doc-queries.md#sec-0",
+                "033-plan-section-coverage.md#sec-0"]}
+      - {new: "1", heading: "Where the answers come from",
+         from: ["026-design-doc-queries.md#sec-1"]}
+      - {new: "2", heading: "`lode doc list`",
+         from: ["026-design-doc-queries.md#sec-2"]}
+      - {new: "2.1", heading: "`--needs-planning`",
+         from: ["026-design-doc-queries.md#sec-2.1",
+                "033-plan-section-coverage.md#sec-2"]}
+      - {new: "2.2", heading: "`--needs-execution`",
+         from: ["026-design-doc-queries.md#sec-2.2"]}
+      - {new: "2.3", heading: "`lode doc sections`",
+         from: ["026-design-doc-queries.md#sec-2.3"]}
+      - {new: "3", heading: "Showing a document: `lode show`",
+         from: ["026-design-doc-queries.md#sec-3"]}
+      - {new: "3.1", heading: "A claim takes effect when its author is accepted",
+         from: ["026-design-doc-queries.md#sec-3.1"]}
+      - {new: "3.2", heading: "Consolidation is a fixpoint, not a depth-bounded walk",
+         from: ["026-design-doc-queries.md#sec-3.2"]}
+      - {new: "4", heading: "Reference resolution and integrity",
+         from: ["026-design-doc-queries.md#sec-4"]}
+      - {new: "4.1", heading: "Anchor permanence, enforced at commit time",
+         from: ["026-design-doc-queries.md#sec-4.1"]}
+      - {new: "4.2", heading: "Shorthand references resolve in three tiers",
+         from: ["026-design-doc-queries.md#sec-4.2"]}
+      - {new: "4.3", heading: "`NO-SPEC` means \"no governing spec\"",
+         from: ["026-design-doc-queries.md#sec-4.2a"]}
+      - {new: "5", heading: "A plan covers sections; it implements none",
+         from: ["033-plan-section-coverage.md#sec-1"]}
+      - {new: "5.1", heading: "Frontmatter shape",
+         from: ["033-plan-section-coverage.md#sec-3"]}
+      - {new: "5.2", heading: "Plans carry `status` and `task`",
+         from: ["026-design-doc-queries.md#sec-5"]}
+      - {new: "6", heading: "Ontology",
+         from: ["033-plan-section-coverage.md#sec-4"]}
+      - {new: "6.1", heading: "Two terms this displaces",
+         from: ["033-plan-section-coverage.md#sec-4.1"]}
+      - {new: "6.2", heading: "`wl:implements` splits, and states its domain",
+         from: ["033-plan-section-coverage.md#sec-4.2"]}
+      - {new: "6.3", heading: "The qualified node names both its ends",
+         from: ["033-plan-section-coverage.md#sec-4.3"]}
+      - {new: "7", heading: "Checks",
+         from: ["033-plan-section-coverage.md#sec-5"]}
+      - {new: "7.1", heading: "Documents the rename reaches",
+         from: ["033-plan-section-coverage.md#sec-5.1"]}
+      - {new: "8", heading: "Documentation changes",
+         from: ["026-design-doc-queries.md#sec-6"]}
+      - {new: "9", heading: "Implementation",
+         from: ["026-design-doc-queries.md#sec-7"]}
+      - {new: "10", heading: "Testing",
+         from: ["026-design-doc-queries.md#sec-8"]}
+      - {new: "11", heading: "Out of scope",
+         from: ["026-design-doc-queries.md#sec-9",
+                "033-plan-section-coverage.md#sec-6"]}
+      - {new: "12", heading: "Acceptance criteria",
+         from: ["026-design-doc-queries.md#sec-10"]}
+
+    allow_dropped_ids:
+      "ls:covers": >-
+        spent: 033 sec-4.1's note that 006's `ls:covers` mention is left as
+        written is retired by plan ruling 8 -- the folded corpus enacts 014
+        sec-1's rename, and folded 006 spells that edge `wl:cutFrom`.
+        Deleting the note necessarily drops its only occurrence of the span.
+        The term's own rename is stated; only the observation about 006's
+        historical spelling goes.
+      "ls:implements": >-
+        spent: the same disposition, one section further down. Plan ruling
+        12 retires 033 sec-4.2's closing sentence, whose halves are both now
+        false -- folded 006 spells it `wl:implements`, and 014 sec-12 is
+        absorbed. The split of `wl:implements` into `wl:covers`,
+        `wl:produces` and the Component→Section claim is stated in full;
+        only the note about 006's spelling goes.
+      "ls:": >-
+        The prefix label, surviving in 033 only inside the two sentences
+        rulings 8 and 12 retire. `wl:` is the corpus-wide spelling and 006
+        sec-1's prefix block is dropped by this same fold.
+      "wl:": >-
+        The same: the bare label appears only in those two `ls:`->`wl:`
+        rename phrases. Every qualified `wl:Term` in the document is
+        untouched.
+      "sec-3.4": >-
+        Hand-repointed, not lost: 026 sec-2.1's fenced sample output line
+        names `007 sec-3.4` as an example planning gap, and that anchor
+        becomes sec-2.4 of folded 007. The plan's residual called the line
+        invisible to refmap.py, which is true, but --ids does see it:
+        check_ids tokenises fenced-block content, so the repoint reads as a
+        dropped identifier. (`sec-5` needs no entry -- it survives as a
+        heading anchor elsewhere in the document.)
 
   # 029: sec-9 is one of the five "Amendments to existing specs" sections and
   # is absorbed -- but unlike the other four, 029 carries no amends:

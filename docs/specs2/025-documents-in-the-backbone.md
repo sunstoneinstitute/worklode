@@ -1,0 +1,1951 @@
+---
+status: draft
+requires:
+- docs/specs/004-execution-backbone.md
+- docs/specs/006-knowledge-graph.md
+- docs/specs/007-drift-and-overview.md
+- docs/specs/012-agent-sessions.md
+- docs/specs/018-task-hierarchy.md
+- docs/specs/019-project-scoping.md
+- docs/specs/022-prometheus-metrics.md
+- docs/specs/026-design-doc-queries.md
+- docs/specs/029-research-work-in-the-backbone.md
+---
+# Spec 025 — Documents in the backbone
+
+## 0. Why {#sec-0}
+
+Spec 004 minted `kind = 'epic'` to stand in for a plan inside the task graph: a row that is
+never claimable, holds no commit, and whose state is computed from its children. That is a
+grouping wearing the `tasks` table's schema, and it exists because plans had no representation
+of their own — their content lived in git files, their execution arrived as a flat list of
+unrelated tasks, and something had to hold the set together.
+
+This spec removes the epic by removing its reason to exist. Documents — specs, ADRs, plans —
+become first-class objects in the backbone, authored and reviewed there, with git files as a
+transitional mirror only. A plan's acceptance mints its tasks directly, each referencing the
+document, so the container is the plan itself rather than a proxy row. The remaining jobs the
+epic might have done are either already owned (cross-plan "ships together" is `wl:Milestone`,
+reserved since 006) or were never legitimate rows at all (§1).
+
+Alongside the epic, this resolves three collisions found on the way:
+
+- `wl:Project` (006: "bounded, goal-oriented") contradicts the backbone's `projects`, which are
+  unbounded umbrellas. The backbone wins (§13).
+- The `--kind spec` task was drifting toward "umbrella open while the spec is unimplemented",
+  which stores a coverage query as a row. Spec-kind tasks are authoring work only (§10).
+- Plan documents carry `- [ ]` checkboxes — execution state, ticked in git — while tasks also
+  track execution state. Two owners of one fact; the plan's task set ends it (§9.2).
+
+Spec 006 already decided that design documents are **graph-authored, never projected** — a Spec or
+ADR is an intent-layer object, not a file. The implementation never caught up: superpowers writes
+`docs/superpowers/{specs,plans}/`, spec 013 models a spec as `task_docs(repo, path)`, and this
+repo keeps design documents as flat files in `docs/specs/`. This spec closes that gap and makes
+design documents durable enough to link against, and it moves the authoritative store with them:
+documents are authored as backbone objects and **projected into** the graph exactly as tasks are.
+The logical model — sections, anchors, versioning, coverage, constraints — is unchanged by where
+the store sits.
+
+The organising problem: **an in-repo file must be able to say "this code satisfies §4.2 of spec 006,
+as validated against version 3" and still be correct a year later.** That single requirement drives
+everything below — addressable sections, immutable accepted content, document versioning, and
+derived (never declared) implementation coverage.
+
+This spec covers, and only covers:
+
+- The **`ls:` → `wl:`** prefix rename, and `ns/` as the source the schema is generated from.
+- **`wl:Section`** — sections as addressable nodes, and the immutability constraints on them.
+- **Document versioning** — canonical plus versioned IRIs, and atomic publication.
+- The **editorial lifecycle**, the revision model for an accepted document, the escalation ladder
+  that amends one in place, and the grooming that closes one nothing acts on.
+- **Implementation coverage** — `.worklode/implements.yaml`, its deriver, and why coverage is
+  derived rather than declared.
+- **Plans** — an executable document with a completion condition, sibling of `wl:DesignDoc` rather
+  than a subclass, and what accepting one mints.
+- The **event log** the lifecycle rides on, and the git→backbone sync that populates the store
+  until authoring moves server-side.
+- The **authoring, review and publication surfaces**.
+
+Out of scope (reference, do not duplicate): the two-layer drift model and the other derivers (007);
+task ranking (005); the lease lifecycle (004); reconciliation of *ingestion* gaps (013 — a different
+diff over different entities); and **adoption** — importing an existing GitHub project's issues,
+documents and repos into this model is a candidate spec of its own, not this one (§22).
+
+## 1. Principle: rows are things someone made; groupings are queries {#sec-1}
+
+A row exists because an act created it: a task row because work was defined, a document row
+because an artifact was authored, a `child_of` edge because one decompose transaction wired it.
+Everything cross-cutting is derived — a plan's task set, a spec's coverage, a milestone's
+membership, "all plans derived from spec N with unfinished work". This is §11's "coverage is
+computed, never stored", applied to execution grouping.
+
+The rule decides concrete cases:
+
+| Candidate row | Verdict |
+|---|---|
+| Epic grouping one plan's tasks | Query over the tasks' document reference — row deleted |
+| Plan root task | Query — same grouping, same verdict; the plan document is the only identity the set needs (§9.2) |
+| Spec-level container over its plans | Query over `covers` + the plans' task-set states — never minted |
+| Spec-umbrella task, open while unimplemented | Coverage query — never minted |
+| Sprint / iteration container | Never minted; time-boxing is ranking and deadlines |
+| Milestone | Row (declared intent: these deliverables ship together), membership derived |
+
+## 2. What is, and is not, a design document {#sec-2}
+
+A **design document** is a Spec or an ADR: a statement that stays true after implementation, and
+that is superseded rather than consumed. A **plan** is a document too, but not a design document —
+reviewable and accept-gated like one, mutable and anchor-free unlike one — so `wl:Plan` is a
+sibling of `wl:DesignDoc` rather than a subclass. §9 gives that argument and states what accepting
+a plan does.
+
+### 2.1 Resulting class hierarchy {#sec-2.1}
+
+```turtle
+wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity ;
+    wl:layer wlc:intent .
+wl:ADR   rdfs:subClassOf wl:DesignDoc .
+wl:Spec  rdfs:subClassOf wl:DesignDoc .
+
+wl:Section a owl:Class ;               # §3
+    rdfs:subClassOf foaf:Document ;
+    wl:layer wlc:intent ;
+    rdfs:comment "An addressable, individually linkable part of a DesignDoc. Stable for the "
+                 "life of the document; never deleted once the document is accepted." .
+
+[] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .   # was ( ADR Spec Plan )
+```
+
+`wl:Section` joins the top-level disjointness axiom in 006 alongside `wl:Component`, `wl:DesignDoc`,
+`wl:Task`, `wl:Deliverable` and — since §13 retires `wl:Workstream` — `wl:Project`.
+
+`prov:Entity` is not decoration: §4 and §12 assert `prov:wasGeneratedBy`, `prov:wasRevisionOf` and
+`prov:wasAttributedTo` on documents, and each has `prov:Entity` as its domain. Without the parent,
+every provenanced document is an OWL violation the moment 006's `owlrl` pass runs.
+
+## 3. Sections as first-class nodes {#sec-3}
+
+Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
+is one requirement: **sections must be addressable nodes.**
+
+Spec 006 explicitly declined this, and was right to for the requirement it had:
+
+> Range is a literal section reference (`"§4.2"`, a heading string) — deliberately **not** a section
+> IRI. […] recommended over minting section sub-IRIs (lighter; no addressable-section namespace to
+> maintain).
+
+That trade-off inverts here. A maintained addressable-section namespace is precisely what makes an
+external link durable, so the cost 006 avoided is now the feature. This spec supersedes that choice
+and, with it, retires `wl:supersededSection`.
+
+### 3.1 Anchors {#sec-3.1}
+
+Anchors are written in the source with **Pandoc/extended-Markdown attribute syntax**, and are
+therefore explicit, author-visible, and portable to any Pandoc-compatible renderer:
+
+```markdown
+## 2.1 Installation and setup {#sec-2.1}
+
+…as described in [Section 2.1](#sec-2.1).
+```
+
+The IRI follows 006's `id/<type>/<localid>` grammar without a new shape:
+
+```
+wlid:section/<doc-slug>/<anchor>      e.g.  wlid:section/spec-worklode-014/sec-3
+```
+
+The anchor is **assigned once, at first publication, and recorded in the document source**. The
+heading text it labels may be freely reworded; the anchor may not change.
+
+**The anchor carries the section number, with a `sec-` prefix.** The prefix is not decoration:
+`{#2.1}` is a legal HTML5 id but an awkward CSS selector (`#\32 \.1` — a leading digit and a `.`
+both need escaping) and an ambiguous URL fragment. `{#sec-2.1}` costs four characters and avoids
+the escaping entirely. Unnumbered sections take a slug on the same pattern (`{#sec-purpose}`).
+
+### 3.2 Numbering is identity, so numbering is frozen {#sec-3.2}
+
+Deriving the anchor from the section number buys readable links and matches how people cite specs
+in conversation. It costs one freedom, and the cost must be stated plainly:
+
+> **Once a document is accepted, sections are never renumbered.** The number is an identifier that
+> happens to look like a position.
+
+This is not an extra rule; it is §6's constraints 1 and 3 restated in the vocabulary of numbers.
+Renumbering re-points an anchor at different subject matter, which is precisely the silent
+corruption constraint 3 forbids.
+
+**Inserts therefore use a letter suffix at the same level** — a new section between `2.1` and `2.2`
+is `2.1a`, not `2.1.1` and not `2.4`:
+
+| Strategy | Reading order | Depth | Verdict |
+|---|---|---|---|
+| Renumber `2.2` → `2.3` | preserved | unchanged | **forbidden** — corrupts inbound claims |
+| Sub-number as `2.1.1` | preserved | **+1 per insert** | collides with the §6 depth limit |
+| Append as `2.4` | **broken** | unchanged | legal but unreadable |
+| **Suffix as `2.1a`** | **preserved** | **unchanged** | **adopted** |
+
+The suffix convention is long-established in legislative drafting for exactly this reason, and it
+sorts correctly both for a reader and for a naive lexical sort. A reader encountering `2.1a` learns
+something true and useful: that section was added after the document was first accepted.
+
+### 3.3 What one mint buys {#sec-3.3}
+
+With `wl:Section` in place, nearly every remaining requirement is expressible in terms that already
+exist:
+
+| Requirement | Expression |
+|---|---|
+| Partial implementation | `<component> wl:implements <section>` — coverage is a **count query** |
+| Section superseded, heading retained | `<section> wl:status wlc:superseded ; dct:isReplacedBy <section>` |
+| Section removed with an explanation | `wl:status wlc:superseded` + `dct:description` |
+| Sections may never be deleted | SHACL/CI over the section-IRI set (§4) |
+| Partial supersession of a document | `dct:replaces` between sections; `wl:supersededSection` retired |
+
+Note that **no `wl:fullyImplements` / `wl:partiallyImplements` is minted.** A declared coverage
+predicate is a second source of truth that goes stale the moment either side changes, and it forces
+an unanswerable question ("is three of five sections partial or full?"). Derived coverage cannot go
+stale. See §11.
+
+## 4. Versioning {#sec-4}
+
+Documents are versioned in the backbone store (§5). The IRI shapes and `wl:lastRevisedIn` below are
+the graph **projection** of that store, and the named-graph publication transaction is an ordinary
+backbone transaction, with the §6 constraints enforced server-side at accept time.
+
+### 4.1 Canonical plus versioned IRIs {#sec-4.1}
+
+Every design document has a **version-free canonical IRI** that always denotes the current version,
+and one **immutable versioned IRI** per published version:
+
+```
+wlid:doc/spec-worklode-014         # canonical — always the current version
+wlid:doc/spec-worklode-014/v3      # immutable snapshot
+```
+
+Reuse rather than mint — DCAT 3 (W3C Recommendation) standardises exactly this pattern:
+
+```turtle
+wlid:doc/spec-worklode-014
+    a wl:Spec ;
+    dcat:hasCurrentVersion wlid:doc/spec-worklode-014/v3 ;
+    dcat:hasVersion        wlid:doc/spec-worklode-014/v1 ,
+                           wlid:doc/spec-worklode-014/v2 ,
+                           wlid:doc/spec-worklode-014/v3 .
+
+wlid:doc/spec-worklode-014/v3
+    a wl:Spec ;                        # a snapshot is an instance of the same class
+    dcat:version        "3" ;
+    dcat:previousVersion wlid:doc/spec-worklode-014/v2 ;
+    prov:wasRevisionOf   wlid:doc/spec-worklode-014/v2 ;
+    prov:wasAttributedTo wlid:agent/stig ;
+    dct:issued "2026-07-26"^^xsd:date .
+```
+
+**A version snapshot carries the document's own class**, so no version class is minted — DCAT's
+pattern, where `dcat:hasVersion` relates a resource to a resource. This is what gives
+`wl:lastRevisedIn` a range, below. **Ordering is `dcat:version`, never the
+IRI:** `…/v10` does not sort after `…/v3` as a string, so a staleness test reads
+`?sec wl:lastRevisedIn/dcat:version ?n` and compares numbers.
+
+> **To verify when authoring the Turtle:** the exact sub-property axioms DCAT 3 declares for
+> `dcat:previousVersion` (relative to `dct:replaces`) should be read off the specification rather
+> than assumed. The property *names* are settled; their axiomatisation is not restated here.
+
+### 4.2 Relationship to ADR-0006 {#sec-4.2}
+
+ADR-0006 requires version-free instance IRIs, and spec 006 restates this ("`<localid>` opaque &
+stable, **never** carrying a git branch or version"). Versioned IRIs are compatible with that
+requirement but the reconciliation must be explicit, because it is not self-evident:
+
+> **The canonical IRI remains version-free and is the only IRI anything links to by default.
+> Versioned IRIs are additional siblings, and appear exclusively in pinned claims (§11).**
+
+This needs a small amendment to rdf-registry ADR-0006 permitting the versioned sibling under a
+named exception, rather than a silent local deviation.
+
+### 4.3 Publication is one transaction {#sec-4.3}
+
+Each version is its own **immutable named graph**; the canonical document node lives in a small
+mutable graph holding little more than the current-version pointer:
+
+| Named graph | Mutability | Holds |
+|---|---|---|
+| `…/graph/declared/<doc>` | mutable, tiny | canonical node, `dcat:hasCurrentVersion`, version list |
+| `…/graph/declared/<doc>/v3` | **immutable once written** | the full section set and content of v3 |
+
+Publishing v4 is therefore a single SPARQL Update — `INSERT` the new version graph, retarget one
+`dcat:hasCurrentVersion` triple — which Oxigraph applies atomically. No reader ever observes a
+document whose current-version pointer disagrees with its content.
+
+Immutable version graphs also make the §3 immutability constraint nearly free: it is a set diff
+between two graphs at publish time (§6), not a bespoke checker over Markdown.
+
+### 4.4 Section-level staleness without section-level versions {#sec-4.4}
+
+Versioning at section granularity would multiply the namespace badly. Instead, each section records
+the document version in which it last changed:
+
+```turtle
+wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
+    rdfs:domain wl:Section ; rdfs:range wl:DesignDoc ;   # the versioned snapshot, typed above
+    rdfs:comment "The document version in which this section's content last changed. Lets a claim "
+                 "pinned at version N be tested for staleness without per-section version IRIs." .
+```
+
+A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` names a snapshot whose
+`dcat:version` exceeds 3. Editing any other section of the same document
+therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
+precision, one property.
+
+## 5. Documents move into the backbone {#sec-5}
+
+Documents are durable, section-addressable, status-gated objects that are not git files. The
+logical model of §2–§4 is the graph's; the authoritative store is the backbone. Documents are
+authored there — Postgres rows, wrapped in the same event-logged transaction machinery as tasks —
+and the graph receives them by projection, exactly as it receives tasks (006 §6). One authoring
+path, one review surface, one place `lode` talks to.
+
+- `docs`: identity, kind (`spec | adr | plan`), title, body, editorial status (§7), frontmatter
+  as columns (`issued`, `requires`, `wasDerivedFrom`, …), version counter.
+- `doc_sections`: anchor, heading, depth, `last_revised_in` — specs and ADRs only (§9).
+  Anchors follow §3 unchanged: assigned at first acceptance, frozen, letter-suffix inserts.
+- `doc_edges`: `covers`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped
+  where the ends are sections. Both directions stored, checked for agreement (§14). Plans
+  additionally take `blocks`/`blockedBy` between whole documents — the ordering edge that would
+  otherwise need a container row to attach to (§9.3).
+
+§4's canonical + versioned IRIs, `dcat:hasVersion` shape and `wl:lastRevisedIn` survive as
+the **projection** of this store; its named-graph publication transaction becomes an ordinary
+backbone transaction followed by projector catch-up. The §6 constraints (append-only
+anchors, no renumbering, superseded-with-explanation) are enforced at accept time by the
+server instead of a SPARQL-side gate.
+
+**Transitional:** `docs/specs/` and `docs/plans/` stay in git, checked by `secfmt.py`, and the
+on-ramp of §16 syncs them continuously into the store while git remains the authoring surface. The
+store-of-record cutover waits for backbone authoring (§7, §9.2) to land.
+
+**Files after import — opt-in sync, not mandatory deletion.** A repository may keep
+`docs/specs/` and `docs/plans/` as a git-tracked mirror of the backbone rather than deleting
+them. This is opt-in per repository through a `[doc_sync]` block in `.worklode/config.toml`
+naming the spec and plan directories (§18). With it, `lode doc pull`/`push` reconcile the files
+against the backbone; without it, the files are deleted at import and `pull`/`push` are no-ops.
+Because the backbone has no branches for documents, sync is directional: **`push` (file→api)
+runs only from the default branch**, while **`pull` (api→file) runs from any branch** — a
+feature branch reads the canonical document, it never writes one. When both the file and the
+backbone doc have changed since the last sync, the command refuses and reports rather than
+overwriting. Either way `.worklode/implements.yaml` (§11) is unchanged — the claim "this
+commit satisfies §X" is a property of the commit and stays in git.
+
+The authority split follows: the backbone owns execution facts **and design-document
+artifacts**; the graph owns the derived, queryable view of both plus the architecture model
+around them. Still no fact with two owners — the graph's copy is a projection, never an
+authoring surface.
+
+### 5.1 The document store {#sec-5.1}
+
+A minimal slice of that store — enough to receive the sync of §16 and serve reads, and no more:
+
+- `docs` — identity (`project`, `kind ∈ {spec, adr, plan}`, ordinal, §16.3),
+  `status`, `title`, `body`, frontmatter, a version counter, and sync
+  provenance (source branch, dirty flag, `synced_at`).
+- `doc_sections` — anchor, heading, depth; specs and ADRs only. Plans take none
+  (§9).
+- `doc_edges` — `implements`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`,
+  section-scoped where an end is a section; plans' document-level `blocks`.
+
+Upsert is idempotent on `(project, kind, ordinal)`: re-syncing an unchanged
+corpus is a no-op, a changed document updates in place, and each sync appends to
+the event log (004). The store carries `status` from frontmatter as data — it
+does **not** run §7's editorial transitions or §9.2's accept-mints-tasks; the
+on-ramp populates, it does not author.
+
+The API is an authenticated `/api/v1/docs` surface: a bulk upsert (the sync
+target), get, and list (backing `lode doc list`). Metrics per §15.7.
+
+## 6. Constraints on accepted documents {#sec-6}
+
+Enforced at publication (§4) and in CI, as a set diff between the current and candidate version
+graphs:
+
+1. **Anchors are append-only.** Every `wl:Section` IRI in version N appears in version N+1. Removal
+   is never permitted; retirement is `wl:status wlc:superseded`, which keeps the anchor resolvable.
+2. **A superseded section carries an explanation** — `dct:isReplacedBy` to its successor, or a
+   `dct:description` saying why it went away. A bare superseded section is a broken promise to
+   whoever linked to it.
+3. **Anchors are immutable, so accepted sections are never renumbered.** An anchor is never
+   re-pointed at different subject matter. Rewording a heading is fine; renumbering, or reusing an
+   anchor for a new topic, silently corrupts every inbound claim. Inserts use the `2.1a` suffix
+   convention (§3).
+4. **Draft documents are exempt from 1–3** — with the single exception in §7: anchors already
+   published in an accepted version are protected even while a revision is in draft.
+5. `wl:lastRevisedIn` is set on exactly those sections whose content actually changed. A publication
+   that touches it on unchanged sections mass-invalidates valid claims and is rejected.
+6. **Anchor depth respects the configured limit** (§6.1 below), evaluated at publication.
+
+### 6.1 Anchor depth {#sec-6.1}
+
+Markdown permits six heading levels. Worklode addresses fewer, because every addressable level is a
+level someone can pin a claim to, and claims at excessive granularity age badly.
+
+**The limit is server-configurable, defaulting to 3.** It governs *addressability*, not authoring:
+headings deeper than the limit are perfectly legal and render normally — they are simply content
+within their nearest anchored ancestor rather than nodes in their own right. Authors are never
+blocked from structuring a document as they wish; they are only prevented from making arbitrarily
+fine-grained promises.
+
+The `2.1a` insert convention (§3) exists partly to keep this limit workable: inserts consume
+suffixes rather than depth, so a document cannot be pushed past the limit by ordinary revision.
+
+**Raising the limit is safe; lowering it is not.** Raising it makes previously-unaddressable
+headings addressable — purely additive. Lowering it would remove anchors that accepted documents
+have already published, which constraint 1 forbids outright. Therefore:
+
+- lowering the limit applies only to documents that have never been accepted;
+- a publication that would orphan an accepted anchor because of a lowered limit is **rejected**,
+  naming the anchors at fault.
+
+This makes the setting one-way-safe by construction, rather than relying on operator discipline.
+
+These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR-0003).
+
+## 7. Editorial lifecycle {#sec-7}
+
+```
+draft ──(manual accept, assignee only)──▶ accepted ──▶ superseded
+```
+
+`proposed` leaves the scheme (it was already reduced to "editorial" by §7.1, which removed
+`implemented`). A document under review is a **draft with an open review task** — review is
+work, tracked as a `kind = 'review'` task against the doc, with crit anchoring comments to
+sections. Storing "under review" as a status would duplicate what the open task already
+proves. §7.2's revision flow keeps its shape — a candidate version against a stable
+identity, accepted version authoritative throughout — with the candidate carrying `draft`
+rather than `proposed`.
+
+Acceptance is always a deliberate human act (`lode doc accept`), never automatic and never a
+side effect. The same applies one step later: decomposing an accepted spec into plans is
+explicitly chosen — skills may *offer* the step, never take it.
+
+Minting a task that *asks for* review or planning is not the act it asks for, so the watchers of
+§15.4 do not breach this: `lode doc submit` emits an event that mints the review task, and
+acceptance mints a task to decide how the spec becomes plans. Whether it becomes one plan or
+four, and what they say, remains entirely the assignee's — and neither watcher ever accepts a
+document.
+
+The escalation ladder of §8 extends this scheme rather than replacing it: §7.3 adds `in_review`
+and a section-level `patched`, §8.6 adds `stale` on a plan, and §8.7 adds `withdrawn`.
+
+### 7.1 `implemented` leaves the status enum {#sec-7.1}
+
+Spec 006's `lsc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
+implemented`, which asserts that *superseded* precedes *implemented* — incoherent on its face. The
+deeper problem is that implementation is per-section and derived (§11), so a document-level
+`implemented` status is a hand-maintained, lossy summary of something computable, and it will
+drift.
+
+The scheme becomes purely **editorial**, and `wlc:proposed` leaves it with `wlc:implemented`
+under §7:
+
+```turtle
+wlc:DesignDocStatusOrder a skos:OrderedCollection ;
+    skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
+```
+
+"Is this spec implemented?" is a coverage query (§11), never a stored
+status. `wl:status` applies to both `wl:DesignDoc` and `wl:Section`; its domain widens accordingly.
+
+### 7.2 Revising an accepted document {#sec-7.2}
+
+Because the canonical IRI is version-free and `wl:status` is functional, "drafting v2" can be
+neither a new document IRI (inbound `wlid:section/…` links would silently continue to denote the
+old content) nor a status flip back to `draft` on the accepted document (the §3 constraints would
+lapse precisely while they are most needed).
+
+It is therefore a **proposed revision against a stable document IRI** — structurally a pull request
+for a spec:
+
+1. A revision is opened against the current accepted version, producing a candidate version graph
+   `…/v(n+1)` with status `wlc:draft`.
+2. The accepted version remains current and authoritative throughout. Readers and drift queries are
+   unaffected.
+3. The revision is reviewed with **crit** (as 006 required for the `proposed → accepted` transition
+   it has since retired).
+4. On resolution, publication runs the §4 single transaction and the §6 constraint check together.
+   Either both succeed or the revision does not land.
+
+Within a revision, sections may be freely added, reworded, or marked superseded. What the revision
+may **not** do is remove an anchor that the accepted version published — that is the one invariant
+that survives into draft, because inbound links do not care that a document is mid-revision.
+
+### 7.3 Reviewers and the accept gate {#sec-7.3}
+
+A document carries an assigned reviewer set and is not accepted until every assigned reviewer
+approves. Who gets assigned stays a social choice, as it is on a pull request; the gate itself
+is mechanical.
+
+`in_review` means a human has begun the review work — entering the document in the review UI
+sets it.
+
+A section amended in place under §8.2 takes section status `patched`: approved text, modified
+since. The document stays `accepted`, because putting the whole document back to `in_review`
+would tell every reader that nothing in it was approved. A `review` task is minted for the
+original approvers, and `lode doc show` and `lode task brief` render a patched section with its
+notes inline, so the next reader sees which paragraph has not passed the gate.
+
+"How much of this document is still what a human approved" is then a query.
+
+## 8. The escalation ladder {#sec-8}
+
+`MODEL_SELECTION.md` splits the work by tier: a high-tier model writes plans precise enough
+that a cheaper model can execute them mechanically. The split has a failure mode it does not
+name. When an executor hits something the plan did not anticipate, resolving it means changing
+the plan, and changing the plan is not an act the executing tier is allowed to perform. Today
+the executor either improvises — which the tier split forbids — or stops with an explanation in
+a session transcript that dies with the session.
+
+Nothing carries the discovery upward, so the corpus never learns that a plan was
+under-specified, and the human who wrote it never finds out.
+
+This section defines the upward path: how an executor escalates, who fixes what, when an
+accepted document may be changed in place, and what makes that change visible afterwards. It
+also defines the downward consequence — an accepted document that nothing ever acts on is not
+neutral, it pollutes the context of every agent and human who reads it, so documents that stall
+are groomed or closed.
+
+Both halves are the same argument: `status: accepted` records that a document passed review at
+a point in time. It does not promise the design was good enough, and it does not promise anyone
+still intends to build it.
+
+An executor that cannot proceed does not stop and wait for a human. It spawns a **fixer
+subagent** at the tier the fix requires — plan defects go to the planning tier, spec defects
+above it — and waits for that subagent to finish.
+
+Stopping for another agent is acceptable; stopping for a human is not, unless human judgment is
+genuinely required. A subagent has bounded latency. A minted task has unbounded queue latency:
+nothing guarantees an agent is free to claim it, so the executor could idle for hours over a
+defect a higher tier resolves in minutes.
+
+The fixer ends in exactly one of three outcomes:
+
+| Outcome | Executor | Document |
+|---|---|---|
+| Resolved, non-substantive | Continues immediately | Amended in place, note attached (§8.5) |
+| Resolved, substantive | Stops | Amended in place, affected sections marked `patched`, review requested (§8.2, §7.3) |
+| Not resolved, or needs human judgment | Stops | Unchanged; `lode task escalate` mints a `design` task (§8.1) |
+
+The rule generalises past this flow: **a synchronous subagent when the work is bounded and tier
+is the only thing missing; a minted task when the work needs human judgment or another
+operator.**
+
+### 8.1 Escalation to a human {#sec-8.1}
+
+`lode task escalate --to plan|spec --reason "..."` runs one transaction:
+
+1. releases the executor's lease and moves the task to `blocked`;
+2. mints a `design` task against the referenced document, carrying the reason and the failing
+   context;
+3. adds a `blocks` edge from the minted task to the blocked one, so execution resumes when the
+   amendment lands;
+4. assigns the minted task to the human who authored the plan;
+5. deduplicates — a second task escalating the same document section joins the open `design`
+   task rather than minting a rival.
+
+Everything but the assignment reuses machinery 004 and this spec already define. `blocked` now
+covers waiting on a decision as well as waiting on work; the blocking task's `kind` distinguishes
+them.
+
+### 8.2 In-place amendment {#sec-8.2}
+
+An accepted document may be edited in place — no amendment edge, no supersession — when nothing
+refers to the section being edited. The amendment machinery of §14 exists to protect inbound
+claims, so where there are no inbound claims it is ceremony.
+
+This narrows §7's accepted-version guarantee rather than breaking it. Read that guarantee
+as **accepted *and used***: what an inbound claim pins is the text it pinned, and a section
+nobody pins has pinned nothing. The revision flow of §7.2 — candidate draft against a stable
+identity, accepted version authoritative throughout — remains the only path for every section
+that has a referrer, which is every section the guarantee was written to protect. §8.3's
+mechanically-substantive list makes "has a referrer" the first rule the server checks, so the
+narrowing is enforced rather than asserted.
+
+**Referrers, for this purpose,** are accepted documents claiming the section through
+`requires`, `covers`, `amends` or `replaces`, and tasks already claimed against a plan that
+covers it. Two things deliberately do not count:
+
+- the plan whose execution triggered this fix — it is being amended in the same breath;
+- plans that have not been executed, which §8.6 marks stale and regenerates instead.
+
+Referrers are a query over the corpus, in line with §1: rows are things someone made,
+groupings are derived.
+
+### 8.3 What counts as substantive {#sec-8.3}
+
+The fixer subagent has an incentive to rule its own change non-substantive, because
+"substantive" stops the executor it was spawned to unblock. The classification therefore has a
+mechanical part the tool decides and a judged part the fixer decides, and the judged part
+defaults against the fixer's interest.
+
+**Mechanically substantive** — the server decides, the fixer has no say:
+
+- the section is referenced by another accepted document (§8.2's referrer query);
+- the edit adds a new dependency, in the document's frontmatter or in its prose;
+- the edit touches anything mirrored in `ns/` — ontology terms, `wlc:` enums, SHACL shapes;
+- the edit changes a schema, migration, API surface, CLI flag, event name, IRI or enum value;
+- the edit changes acceptance criteria or a definition of done.
+
+**Judged substantive** by the fixer:
+
+- removes, reverses or narrows an existing normative statement;
+- changes a default or a threshold;
+- adds a requirement implying work the plan does not contain;
+- contradicts another section of the same document.
+
+**Non-substantive**, and only these:
+
+- wording that changes no assertion;
+- an added example, a typo, a repaired reference or anchor;
+- filling a gap the document was *silent* on, where the fill follows a principle stated
+  elsewhere in the same document.
+
+**Uncertain counts as substantive.** The skill states this in those words: a model judging
+ambiguity while under pressure to continue needs the thumb on the scale made explicit.
+
+### 8.4 Enforcement is server-side {#sec-8.4}
+
+The mechanical rules are enforced at `lode doc edit` time. A silent patch that trips one of them
+is refused with the rule that fired, and the caller must take the review path. Advisory
+enforcement in a skill would leave the gate to the same agent the gate exists to check.
+
+### 8.5 Notes {#sec-8.5}
+
+`lode doc note <doc>#sec-N --body "..."` attaches a note to a frozen section anchor, linked to
+the task and session that raised it. It never blocks execution.
+
+Two callers, one verb:
+
+- an executor recording a defect it is not fixing — the design is wrong or incomplete, but not
+  so wrong that continuing produces garbage;
+- a fixer recording what it changed in place and why, alongside a non-substantive amendment.
+
+Notes accumulate and surface in `lode doc list --has-notes` and on the document's review view.
+Note volume is the corpus's design-quality signal: a section collecting notes from several
+independent tasks was accepted too early.
+
+Agents do not autonomously draft amendment *documents*. 026 §3.1 treats a draft's `amends` as a
+live proposal that changes what the corpus reads as pending, so autonomous drafting would make
+the corpus assert things nobody decided.
+
+### 8.6 Stale plans {#sec-8.6}
+
+A plan that has not been executed and `covers`-refers to a section amended in place is
+regenerated, not patched: its status becomes `stale` and a re-planning task is minted against
+it.
+
+**`stale` is stored, not derived.** Deriving it from amendment timestamps would recompute a
+verdict that an agent session already reached at real cost, and would recompute it differently
+as the corpus moves underneath it — a plan judged stale in August would silently un-stale when
+the amendment that caused it was itself superseded. A stored status also gives the re-planning
+task something to close against. It is set by the §8.2 edit path and cleared by re-acceptance,
+and every transition lands in the event log (§15.5), so the derivation remains reconstructible
+without being the source of truth.
+
+The same treatment applies to the exemption in §8.2: the triggering plan's own tasks that were
+minted but not yet claimed were derived from pre-amendment text. They are re-derived with the
+plan, or flagged at claim time. Without this the exemption ships tasks built against text that
+no longer exists.
+
+### 8.7 Grooming {#sec-8.7}
+
+An accepted document that nothing acts on is worse than absent: it reads as settled design and
+is actually an unbuilt intention, and every agent that loads it pays for the confusion.
+
+The event log of §15 cannot see this, because nothing happens — there is no event for silence.
+The lease sweeper of 004 supplies the clock:
+
+- when an accepted document crosses the staleness threshold with no execution against it, the
+  sweeper emits `doc.stale` into `events`, once, marked so it does not re-fire each sweep;
+- the subscriber machinery of §15.4 mints a `design` grooming task — re-evaluate, adjust, or
+  close;
+- any revision re-arms the clock, so a document groomed but still not built returns.
+
+**Threshold:** 30 days by default, configurable per instance and per project.
+
+Staleness also changes how the document is served, with no human in the loop: a stale accepted
+document is excluded from `lode task brief` assembly, flagged in `lode doc show`, and flagged
+where another document `requires` it. This is the half that addresses the actual harm, and it is
+a rendering rule rather than a workflow.
+
+`withdrawn` joins the status scheme so a document can be closed without pointing at a successor.
+
+The target this serves is **100% resolution**: every accepted document is shipped or explicitly
+closed. Conversion — every accepted document eventually shipped — is the wrong target, because
+it puts pressure on the margin to build designs that reality has already overtaken. The number
+worth watching is the age of the unresolved set, not its size:
+`lode doc list --unresolved --older-than 30d`.
+
+### 8.8 Tier routing on claim {#sec-8.8}
+
+`claim --next --kind <list>` filters the ready set by task kind. Mechanical loops run
+`--kind feature,bug,chore`; high-tier loops run `--kind design,spike,review`.
+
+Without it the ladder is a circle: an escalated `design` task is claimed by the same cheap loop
+that could not resolve it. The `lode:next` skill defaults the flag from the session's model
+tier.
+
+This needs no schema change — §10 already fixes the kind set.
+
+## 9. Plans are documents {#sec-9}
+
+Spec 006 placed `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That was wrong, and
+spec 008 already contradicted it:
+
+> Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `brainstorming`,
+> `subagent-driven-development`), **re-emitting the results as `lode` tasks** with `concern` +
+> `priority`.
+
+The distinguishing axis is **truth-condition and lifetime**, not what-versus-how:
+
+- A **Spec or ADR** stays true after implementation. It is what drift is measured *against*, and
+  what a reader consults to learn why the system has its present shape. It is superseded, never
+  consumed.
+- A **Plan** has a completion condition. Once executed it is *spent*. It never described the
+  repository; it described a transition out of one state into another. Retained in the intent
+  layer, a spent plan is permanent noise in every drift query.
+
+The decisive test is §3's immutability constraint: locking an accepted spec's sections is correct,
+and locking a plan's sections is actively harmful, because plans are rewritten mid-execution when
+reality contradicts them. A class that must stay freely mutable cannot sit under a `wl:DesignDoc`
+that carries the lock.
+
+That argument bounds where a plan sits; it does not deny plans a document form, and the review
+requirement decides the rest. Plans get the same draft → review → accept gate as specs (today
+provided by PR review, which dies with the files), and review machinery — comment anchoring,
+revision tracking, the accept gate — must not be built twice, once for `docs.body` and once for
+`tasks.body`.
+
+**Therefore a plan is a document, and `wl:Plan` is a sibling of DesignDoc, not a subclass:**
+
+```turtle
+wl:Plan a owl:Class ;
+    rdfs:subClassOf foaf:Document , prov:Entity ;   # NOT wl:DesignDoc
+    wl:layer wlc:execution ;
+    rdfs:comment "An executable document: a bundle of task definitions with instructions
+        attached. Reviewable and accept-gated like a DesignDoc, but spent once executed,
+        freely mutable, and carrying no frozen section anchors — nothing may pin a claim
+        to a plan (the §3 argument above). Acceptance mints its tasks (§9.2)." .
+```
+
+Plan documents take no `doc_sections` rows and no anchors. Nothing addresses into a plan.
+`covers` on a plan names the spec sections it undertakes to realise, exactly as plan frontmatter
+does today: each entry is a qualified reference carrying a `coverage:` level (`full`, `partial`,
+`none`) and an optional `fullCoverageWith:`, a bare reference means `full`, and `implements` still
+parses and means `covers` (033 §1).
+
+A plan's *execution* is an ordered task set in the execution backbone — which is what a plan
+already is: a bundle of tasks with instructions attached. The instructions live in task bodies and
+reach the agent through `lode task brief` (008).
+
+**Durable rationale is promoted, not preserved.** Where a plan contains reasoning worth keeping
+("we did it this way because X"), that paragraph is promoted into the governing Spec or a new ADR
+before the plan's tasks close. Preserving whole spent plans to catch the occasional durable
+sentence is the wrong trade; a plan carrying durable rationale is a signal that the spec was
+incomplete.
+
+This also dissolves the `docs/superpowers/plans/` drift completely: there is no free-standing plan
+file to drift, only a mirror of the document.
+
+### 9.1 Task declarations — the `## Tasks` section {#sec-9.1}
+
+A plan body declares the tasks its acceptance mints (§9.2) in exactly one `## Tasks` section,
+containing nothing but one `### Task <N> — <title>` subsection per task; prose sitting
+directly under the heading, outside any task, fails the accept rather than being dropped — it
+is text an author meant for some task's body, and losing it silently is the same failure as
+silently dropping an unknown key. `N` enumerates from 1
+in document order, without gaps, **within each plan file**: a plan series shares no sequence —
+every part restarts at 1 — and `N` never crosses a file. Each subsection opens with a fenced
+YAML metadata block, then prose (what to do, which files, the test that proves it), then an
+optional `- [ ]` step list. Canonical shape:
+
+````markdown
+## Tasks
+
+### Task 1 — Short imperative title
+
+```yaml
+kind: feature            # feature | bug | chore | design
+priority: medium         # critical | high | medium | low
+skills:                  # skills the executing agent loads before starting
+  - superpowers:test-driven-development
+blockedBy: [ ]           # task numbers within this plan
+```
+
+Prose: files to touch, the test that proves it.
+
+- [ ] step
+- [ ] step
+````
+
+The metadata keys, like frontmatter keys, name the backbone column or ontology term that
+receives them; an unknown key is an accept error, never silently dropped:
+
+| Key | Required | Default | Value → destination |
+|---|---|---|---|
+| `kind` | yes | — | one of `feature`, `bug`, `chore`, `design` → `tasks.kind`, projected as `wl:taskKind` |
+| `priority` | no | `medium` | one of `critical`, `high`, `medium`, `low` → `tasks.priority` (ranking input, spec 005; backbone-only, not projected) |
+| `skills` | no | none | list of skill identifiers → the task pin of 016 §3, projected as `wl:requiresSkill` (below) |
+| `blockedBy` | no | none | list of task numbers in this file → `blocks` edges between the minted tasks |
+
+`kind` takes the subset of `wlc:TaskKind` (§10) a plan may mint: `review` tasks are created by
+the review lifecycle (§7), and a spike's outcome is an input to planning, so both are
+authored outside plans.
+
+The task's **title** is the heading text after `Task <N> — ` (em dash, required, non-empty)
+and becomes `tasks.title`. Everything between the metadata block and the next task heading —
+or the section's end — becomes `tasks.body` verbatim. The step list is part of that body:
+executor guidance, never execution state — nothing reads the boxes, and the task's state
+remains the only execution state (§9.2).
+
+**`blockedBy` becomes edges at mint.** For each number `m` it lists, the accept transaction
+(§9.2) wires a `blocks` edge from this plan's task `m` to the declaring task — `task_edges`
+rows, backbone-authoritative (004), projected as `wl:blocks` / `wl:dependsOn`. A number
+naming no task in this file, a self-reference, or a cycle fails the accept, naming the tasks
+at fault. Ordering across the files of a plan series, like all cross-plan ordering, is the
+document-level `blocks` edge (§5, §9.3) — never a task number.
+
+A **skill identifier** is the org skill-registry name (016 §1), written in the
+`plugin:skill` form the skill repos already use (`superpowers:test-driven-development`) when
+the skill ships in a plugin; resolution falls back to the segment after the colon where the
+registry name is unqualified. The fallback is a **second** attempt, never a first: an exact
+match on the written identifier wins outright and the after-colon form is not consulted, so a
+registry holding both `superpowers:tdd` and a bare `tdd` resolves the qualified pin to the
+qualified row. Accept does not require the name to resolve — a pin naming an
+unknown skill is a brief warning, never a failure (016 §3). The key is `skills`, matching the
+doc-frontmatter pin key and the backbone Task field, both from 016 §3; the projected term is
+minted here, amending 016 §1's mint set:
+
+```turtle
+wl:requiresSkill a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range wl:Skill ;
+    rdfs:comment "The executing agent loads this skill before starting: the task pin of
+        016 §3, projected from the backbone Task's skills field and minted onto the task by
+        plan acceptance (§9.1). Brief resolution unions it with the governing design's
+        wl:recommendsSkill; the two stay distinct because their owners differ — the pin on a
+        task is execution-layer fact, the pin in a design document a declared intent." .
+```
+
+Until this spec is implemented, plans under `docs/plans/` carry the same section and humans
+mint the tasks from it by hand; the format is identical so acceptance can take the minting
+over unchanged.
+
+### 9.2 Acceptance mints the plan's tasks {#sec-9.2}
+
+`lode doc accept` on a plan runs one transaction: create the tasks its `## Tasks` section
+declares (§9.1), `draft`, each carrying a reference to the document, and wire the declared
+`blockedBy` numbers as `blocks` edges between them. **Nothing is minted above them.** The invariant is
+`doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
+hand.
+
+The invariant binds `lode doc accept`, which is the only act that mints. Two cases sit outside
+it, both deliberately:
+
+- **Historical import.** Backfilling a plan whose execution already happened — or never will —
+  records the document at the status it actually reached and mints nothing. The importer is
+  not `doc accept`; a plan can therefore arrive `accepted` with an empty task set, and that is
+  a faithful record rather than a broken invariant. Read the invariant as scoped to plans
+  accepted through the verb.
+- **Re-acceptance after an edit.** An accepted plan stays freely mutable (§9), so re-accepting
+  one mints the task declarations that have no row yet and leaves every existing row alone —
+  never mutating a body, never deleting a task whose declaration disappeared. A minted task is
+  execution fact and outlives the declaration it came from; withdrawing work is a task
+  transition, not a document edit.
+
+A plan's task set is the query `tasks WHERE plan_doc = <doc>` — §1's rule applied to the case
+that most tempted a row. A root task would own no fact of its own: its state was computed from
+its children (018 §3.3), its body restated the document's, it was never claimable and never
+held a commit. With the plan itself a real object in the same store, everything a root carried
+is either **on the document** (identity, title, body, editorial status, ordering) or **derived
+from the task set** (progress, completion). Minting it would store a grouping as a row, which
+is what §0 removes the epic for.
+
+Two acts, three things, each owning one fact:
+
+| Entity | Owns | Created by |
+|---|---|---|
+| Authoring task (`kind = 'design'`) | The work of writing the plan | whoever picks up the planning |
+| Plan document | Content, editorial status, and the identity of the set | the authoring work |
+| Tasks + their `plan_doc` reference | Execution state | the accept transaction |
+
+`plan_doc` is nullable: tasks that no plan authored — an inbox promotion, a one-off chore —
+carry none, and their absence from every plan's task set is the correct answer rather than a
+special case.
+
+**What this leaves of 004's task hierarchy.** The `child_of` machinery survives, narrowed to its other job:
+decomposing an oversized task into subtasks (018 §8), which stays the only way a task acquires
+children. Its guards — never claimable, excluded from the ready set, delivery states forbidden,
+closure by roll-up in both directions, progress derived on read, single parent, cross-project
+children rejected, brief showing one hop up — all still apply, but now to *a task that has
+children* rather than to a declared kind. 018 §1 chose declared over inferred because an epic
+had to exist before its children did (`task add --kind epic` created an empty one); with that
+path gone and `decompose` creating parent-hood and children in the same transaction, there is
+no window in which the two disagree, and the predicate "has children" is exactly as sharp as a
+column. The depth cap of 2 (018 §3.2) is unchanged and no longer half-spent on a container:
+task → subtask is the whole of it.
+
+The plan-doc `- [ ]` checkbox convention retires with the files: the tasks' state is the only
+execution state.
+
+### 9.3 Spec fan-out is a query {#sec-9.3}
+
+A spec producing several plans gets no container above their tasks. Each need is owned:
+
+| Need | Owner |
+|---|---|
+| "How far along is spec N?" | `lode doc coverage` — accepted sections × plans × task-set states |
+| "Which specs need planning?" | accepted sections no accepted plan's `covers` discharges — a three-valued resolution over `coverage:` levels, where only a `full` claim or a `fullCoverageWith` set that closes discharges a section (033 §2) |
+| "Which plans need execution?" | accepted plan docs whose task set is unminted or unfinished |
+| Plan B after plan A | `blocks` edge between the two plan documents (§5) |
+| "These land together" | Milestone over their deliverables (§13) |
+| Task Y waits on part of spec N | Y blocks on the plan document(s) covering that section, or on individual tasks when the wait is narrower |
+
+The document-level `blocks` edge is what makes dropping the root affordable: ordering is a
+statement about plans, and a plan is now a real object, so the edge attaches to it directly
+instead of to a proxy task. The ready-set query expands it — a task is blocked while any task
+in a blocking plan's set is open — which is the same predicate 005 §3 already runs, evaluated
+over a set rather than a row.
+
+"All of spec N is done" is not a completion event — coverage grows under amendment — so no row
+may claim to be it. And with no container level to spend, the depth cap of 2 covers task →
+decomposed subtask alone; a plan- or spec-level parent would spend it again for nothing.
+
+## 10. Task kinds {#sec-10}
+
+```sql
+-- target CHECK; ships with the concept.ttl edit and regenerated code, atomically
+CHECK (kind IN ('feature','bug','chore','design','review','spike'))
+```
+
+- **`epic` is removed.** No jobs remain: one-plan grouping is the document reference (§9.2),
+  cross-plan grouping is `wl:Milestone` (§13), everything else is a query (§1).
+- **`spec` is renamed `design`** and widened to every document kind: *author or revise a
+  Worklode document (spec, ADR, or plan); the document produced is reachable via
+  `prov:wasGeneratedBy`* (§12's mechanism, unchanged). A design task is claimable, real
+  work, and closes when its document is accepted — it is never an umbrella held open against
+  coverage. "Is the spec implemented?" is `lode doc coverage`, not a task state.
+- **No structural kind replaces `epic`.** With no container row minted for a plan (§9.2), the
+  only remaining container is a decomposed parent, and its container-ness follows from having
+  children. So the ruling that task kinds describe the nature of work, and that no kind is added
+  for plans, planning, speccing or reconciliation, stands: which document came out is carried by
+  the document, which has its own class; a *speccing* task versus an *implementing* task is
+  distinguished by the predicate, not the kind (§12); and `reconcile` is an activity, not a kind
+  of work, so such tasks are `chore`. The scheme is left with six kinds that all mean the same
+  sort of thing.
+
+Migration: `UPDATE tasks SET kind = 'design' WHERE kind = 'spec'`; forbid `epic` (no rows
+exist); swap the CHECK; regenerate `validKinds` and `wlc:TaskKind` from `ns/` (§17) in the same
+commit so `TestTaskKindsAgreeAcrossSources` never sees the sources disagree.
+
+## 11. Implementation coverage {#sec-11}
+
+`wl:implements` names only the Component→Section evidence below. A Task `wl:produces` a
+Deliverable, and `wl:affects` carries work→Component (033 §4.2).
+
+### 11.1 Three objects, previously conflated {#sec-11.1}
+
+The intuition that an unimplemented spec is future work rather than repository content resolves
+once three distinct objects are separated:
+
+| Object | Home | Why |
+|---|---|---|
+| **Intent** — the Spec/ADR content | Graph | Status-gated, crit-reviewed, section-addressable. Not a git file. |
+| **Work to produce it** | Backbone `wl:Task` | Future work belongs with future work. |
+| **"This repo at this commit satisfies §X of doc Y"** | **Git** | It *is* a property of the commit. |
+
+Only the third belongs in a repository, and it belongs there for a real reason: it is the one claim
+whose truth is a function of the working tree. The commit log cannot substitute, because a later
+commit can silently invalidate an earlier one's claim, and reconstructing the current picture by
+replaying history is both expensive and unreliable.
+
+### 11.2 `.worklode/implements.yaml` {#sec-11.2}
+
+Spec 007 already establishes `.worklode/components.yaml` (path globs → Component IRIs). Its natural
+sibling declares which intent the repository satisfies:
+
+```yaml
+# .worklode/implements.yaml
+implements:
+  - section: wlid:section/spec-worklode-004/sec-4
+    pinned:  wlid:doc/spec-worklode-004/v2     # version validated against
+    by:      [internal/store/lease.go, internal/store/sweeper.go]
+  - section: wlid:section/spec-worklode-013/sec-3.1
+    pinned:  wlid:doc/spec-worklode-013/v1
+    by:      [internal/hooks/apply.go]
+```
+
+Machine-readable, not prose. Maintained by coding agents as part of the work that satisfies a
+section, and reviewable in the same diff as the code that justifies it.
+
+### 11.3 The component is derived, never declared {#sec-11.3}
+
+A claim is made **by a Component**, not by a repository: a repository is a packaging accident,
+whereas a component is the unit the architecture is actually described in.
+
+Note what the manifest above does *not* contain: a `component:` field. The claiming component is
+**derived from the `by:` paths** through `components.yaml`'s existing first-match-wins mapping (007).
+This follows the principle running through the whole spec — derive, never declare — and removes an
+entire class of drift, since a declared component can disagree with the files listed beside it while
+a derived one cannot.
+
+Consequences:
+
+- **A claim whose paths span several components splits into one claim per component**, each pinning
+  the same version independently. This is not a degenerate case but the correct reading: components
+  advance against a spec at their own pace, and two components implementing the same section is
+  exactly what the graph should record.
+- **A path matching no component is a publication error**, naming the offending path. Spec 007
+  already reports unmatched paths as a gap; here it is fatal, because a claim that cannot be
+  attributed is a claim that cannot be checked.
+
+### 11.4 Single-component repositories {#sec-11.4}
+
+Most repositories hold one component, and they should never have to say so. The clean model already
+exists in 006, which defines the Component IRI as `id/component/<slug>` where the slug is *"manifest
+slug; default = repo coords"*, and in 007, which grants a single-component repo *"a trivial
+whole-repo manifest (or a default)"*.
+
+Made explicit: **every mapped repository has at least one component.** Where `components.yaml` is
+absent or declares none, Worklode synthesises an **implicit component** whose IRI is the repo
+coordinates —
+
+```
+wlid:component/github.com/sunstoneinstitute/worklode
+```
+
+— matching a whole-repo path glob. No new machinery, no new IRI shape, and no configuration for the
+common case: a simple repository writes `implements.yaml` and never mentions components at all,
+while a multi-component repository gets correct per-component attribution from the manifest it
+already maintains. The implicit component is promoted to an explicit one the moment
+`components.yaml` declares it, and the IRI is unchanged by that promotion — so adopting
+`components.yaml` later never invalidates existing claims.
+
+### 11.5 Deriver: `observed/repo-implements` {#sec-11.5}
+
+The manifest is a hand-maintained *claim about code*, so it enters the **observed** layer under
+spec 007's existing deriver contract — idempotent, full-replace, confined to its own named graph:
+
+- **Input:** every mapped repo's `.worklode/implements.yaml` at the default branch head.
+- **Output:** `<component> wl:implements <section>` into `…/graph/observed/repo-implements`, plus
+  the pinned version for staleness testing.
+- **Trigger:** push to the default branch; on a schedule as a backstop.
+
+Coverage and staleness then fall out as standing queries over the two-layer diff, with no new
+machinery:
+
+| Query | Reads |
+|---|---|
+| Unimplemented intent | accepted sections with no `wl:implements` edge |
+| Coverage of a document | implemented sections ÷ non-superseded sections |
+| **Stale claim** | claim pinned at vN where `section wl:lastRevisedIn > vN` |
+| Orphaned claim | claim naming an anchor absent from the current version |
+| **Delivered coverage** | implemented sections whose Deliverable is deployed to a given Environment |
+
+The last row is where a claim stops being a claim. A `wl:implements` edge says a component's code
+*asserts* it satisfies a section; it says nothing about whether that code is running anywhere. Joined
+through the component's Deliverable to a `wl:Deployment` (006), the full statement is **"Component A
+implemented Section B by deploying Deliverable C to Environment D"** — so coverage is reported per
+environment rather than as one boolean. The join runs through `wl:deliveredBy`
+(Deliverable→Component), minted in 006 §Properties.
+
+### 11.6 This replaces spec 013's engine 3 {#sec-11.6}
+
+Spec 013 engine 3 detects spec drift by comparing a document file's last commit date against a
+task's closure time — a git-mtime heuristic that fires on typo fixes and misses semantic changes to
+a section nobody claimed. The stale-claim query above is exact and section-scoped. **Engine 3 is
+superseded by this spec** and should be removed from 013 rather than built; 013's `task_docs` table
+likewise gives way to the manifest. Engines 1 and 2 of spec 013 are untouched — they diagnose missed
+*ingestion*, an unrelated problem.
+
+The same argument retires **spec 007 §4.3**, which is the identical heuristic one substrate up:
+`dct:modified` on a DesignDoc compared against the closure time of the last Task that implemented
+it. No timestamp comparison determines whether intent has been satisfied — only a pinned claim
+does. 007 §4.4 keeps its question but re-points its join, since coverage reads the Component→Section
+edge rather than asking whether any Task ever pointed at the document.
+
+## 12. Authorship {#sec-12}
+
+`wl:implements` covers Component → Section ("that code realises this intent"). Nothing expresses "this task
+*wrote* that document," which is what a `design`-kind task actually does. Reuse rather than mint:
+
+```turtle
+wl:Task rdfs:subClassOf prov:Activity .
+wlid:doc/spec-worklode-014 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
+```
+
+Zero mints, and it cleanly separates authoring from executing — the same task graph can now answer
+"which task produced this spec?" and "which tasks implement it?" without conflating them.
+
+One consequence, because PROV declares `prov:Activity` and `prov:Entity` **disjoint**: a Task's own
+author is `prov:wasAssociatedWith` (Activity→Agent), not `prov:wasAttributedTo`, whose domain is
+`prov:Entity`. 006 §Layer 2 listed the latter for every execution node; it stays correct for Issue
+and PullRequest and is wrong for Task, which this section is what makes an Activity.
+
+## 13. Project, Workstream, Milestone {#sec-13}
+
+The backbone's `projects` are unbounded umbrellas over sets of repos (`project_repos` already
+models the set), and that is what `wl:Project` now means; 006's "bounded, goal-oriented"
+definition loses. With the bounded variant gone, `wl:Workstream` has a single subclass and
+collapses; `wl:OngoingMaintenance` is redundant once the umbrella is inherently ongoing.
+
+Target `ns/` state (applied at implementation, §17):
+
+```turtle
+wl:Project a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment "The umbrella for all work in a set of repositories — the backbone's
+        projects table, verbatim. Unbounded. NB: doap:Project is a single repository;
+        a wl:Project owns 1..n of them (project_repos)." .
+
+wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range wl:Project ;
+    rdfs:comment "Derived from tasks.project_id: every Task is in exactly one Project.
+        Replaces wl:inWorkstream. Projection named graphs are anchored per Project." .
+
+# deleted: wl:Workstream, wl:OngoingMaintenance, wl:inWorkstream,
+#          the (Project OngoingMaintenance) disjointness axiom.
+# shapes: the Task shape's inWorkstream minCount-1 becomes inProject exactly-1.
+# disjointness: Workstream's slot in the top-level axiom is taken by wl:Project.
+```
+
+`wl:Milestone` stays reserved for v2 exactly as 006 §1.1 leaves it, and its shape is
+confirmed by this spec's principle: a milestone **groups Deliverables** — the declared intent
+that a set of outcomes ships together, typically ending with a release. Task membership is
+derived through `wl:produces` (033 §4.2, split out of `wl:implements`), so
+milestone progress is a coverage query and no task→milestone edge is ever stored. Bounded
+short-horizon grouping needs no further concept: one intent's tasks are its plan's task set; a
+cross-plan set that must land together is a (small) milestone. A calendar-boxed sprint
+container is deliberately unrepresentable.
+
+## 14. Document frontmatter {#sec-14}
+
+Every design document opens with YAML frontmatter whose **keys are ontology property local
+names**, so the frontmatter is never a second vocabulary to maintain. A key with no term behind it
+is a signal that the ontology is missing one, not licence for a private extension.
+
+| Key | Term | Value |
+|---|---|---|
+| `status` | `wl:status` | one `wlc:DesignDocStatus` concept (§7) |
+| `issued` | `dct:issued` | ISO date of first publication |
+| `covers` | `wl:covers` | the spec sections a plan undertakes to realise; plans only (033 §1) |
+| `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
+| `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
+| `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
+| `amends` / `amendedBy` | — | doc-level amendment; see below |
+
+### 14.1 References carry the section {#sec-14.1}
+
+A reference is a bare filename within the same directory and a repo-relative path across
+directories. Appending a fragment narrows it to a section:
+
+```yaml
+replaces:
+  "#sec-6":
+    - 007-drift-and-overview.md#sec-4.3
+    - 013-reconciliation.md#sec-2.3
+```
+
+The fragment is the §3 anchor — `#sec-<number>` numbered, `#sec-<slug>` unnumbered — so a
+frontmatter reference and an in-document link resolve to the same
+`wlid:section/<doc-slug>/<anchor>` node, and both survive a heading reword. A fragment naming an
+anchor absent from the target's source is a broken reference and fails the same CI check §4
+applies to the section-IRI set.
+
+**Amendment and supersession are section-scoped on both ends**, because "spec 025 amends spec 006"
+is too coarse to act on — the reader needs to know *which* section still binds. The value is
+therefore a map whose keys are the **subject document's own** anchors, with `"."` for the document
+as a whole; each entry names the *other* document's section. A range or genuinely doc-wide
+amendment stays doc-level rather than being expanded into a false list of sections.
+
+### 14.2 Amendment references are bidirectional {#sec-14.2}
+
+`amends`/`amendedBy` and `replaces`/`isReplacedBy` are maintained on both documents. This
+duplicates the edge, which this spec otherwise refuses to do (§11). The justification is read cost:
+an agent asking "what still constrains this section?" must answer it from the file it already has
+open, and a one-directional edge turns that into a scan of every sibling — a real token cost on
+every read, against a one-line authoring cost on the rare write. CI checks that both ends agree.
+
+Neither `amends` nor `amendedBy` has an ontology term, deliberately. Doc-level amendment is not
+`dct:replaces`; §3's section-level `dct:isReplacedBy` is the modelled form. Both keys are in-repo
+indexing metadata that projection reads and reduces to section-level edges — never a graph edge in
+their own right.
+
+### 14.3 The `<KEY>-<TYPE>-<n>` shorthand {#sec-14.3}
+
+A filename is addressable only from inside its own repository, so a reference into another
+project's corpus has no form under §14.1. `wl:` cannot supply one — §17 binds it to the ontology
+namespace, and `wl:SPEC-23` would read as a term. The shorthand reuses the project key spec 004
+already mints:
+
+```
+<PROJECTKEY>-<TYPE>-<n>[#sec-<anchor>]
+
+^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)(#sec-.+)?$
+```
+
+`WL-SPEC-23` · `WL-SPEC-14#sec-2.1` · `WL-ADR-7` · `CMS-SPEC-4`
+
+| Part | Value |
+|---|---|
+| `<PROJECTKEY>` | the project's key (010 §1), the same namespace task ids draw from. 019 §1 makes the project the unit; a repo only names one |
+| `<TYPE>` | `SPEC` or `ADR` |
+| `<n>` | the document's own number as an integer: `023-keycloak-primary-auth.md` is `WL-SPEC-23`, and `023` parses and normalises to `23`. Zero-padding is a filename convention each corpus sets for itself — three digits here, four in rdf-registry — so the canonical form carries none |
+| fragment | unchanged from §14.1 |
+
+`<TYPE>` earns its place by keeping `WL-SPEC-23` from reading as task `WL-23`; a document
+reference must never parse as a task id. Whether it also *selects* is a property of the corpus,
+not of the grammar. Worklode holds specs and ADRs in one flat sequence, so `WL-SPEC-23` and
+`WL-ADR-23` cannot both exist and the token is pure disambiguation. rdf-registry gives ADRs their
+own directory and their own numbering (`docs/adr/0006-iri-namespace-scheme.md`), where `RDF-ADR-6`
+and a `RDF-SPEC-6` would be different documents. In both layouts the token is verified against the
+target's `kind` rather than trusted: reclassifying a document breaks every inbound reference that
+named the old kind, which is correct, because the reference named something that no longer exists.
+
+Two consequences:
+
+- **`SPEC` and `ADR` are reserved project keys**, so the middle token can never also be a project.
+  010 §2's key CHECK gains the exclusion.
+- **Document numbers are not drawn from the task sequence.** 011 §6 floated
+  `<PROJECTKEY>-{ADR,SPEC}-<n>` with the numbers "drawn from the same sequence as tasks", which
+  costs a lookup on every write and is what this section amends. The number is the one already in
+  the filename.
+
+Plans get no shorthand. They carry no number (§9), they are not DesignDocs, and §9.2 mints no
+root task an id could borrow — an accepted plan's tasks reference the document, so the plan's
+handle is its repo-relative path (its backbone doc id once this spec is implemented).
+
+**Distance decides which form is canonical.** A reference within one corpus stays a filename: it
+carries the slug, so `requires: 004-execution-backbone.md` says what it depends on without a
+lookup, and it resolves offline. A reference across corpora is the shorthand, because no path
+crosses a repository. Both forms parse in either position, and `secfmt.py` rewrites each to its
+canonical form the way it already normalises numbering. Resolution and its failure modes are 026
+§4.2.
+
+The corpus holds exactly one cross-project reference today — this document's own
+`amends: rdf-registry:ADR-0006`, in a colon form §14.1 cannot resolve. It becomes `<KEY>-ADR-6`
+once rdf-registry is registered as a project and has a key.
+
+## 15. The event log is totally ordered {#sec-15}
+
+Two steps in the document lifecycle are reliably forgotten because nothing asks for them. A
+spec is written and sits unreviewed because no one minted the review work. A spec is accepted
+and sits unplanned because deciding to decompose it is a separate act that no row prompts.
+Both are cheap to mint and expensive to miss, and both are deterministic functions of a state
+change that the backbone already witnesses.
+
+The backbone has an append-only `events` table (004 §1.5) that everything is derived from, and
+nothing reads it. It is written in the same transaction as the change it records, and then it
+is only ever a provenance trail. This spec turns it into a log with **subscribers**: ordered,
+offset-tracked, at-least-once, so a state change can have consequences beyond the transaction
+that caused it, and so the second consumer costs a row rather than an edit to the producer.
+
+The first subscriber is `doc-lifecycle`, with two hardcoded rules (§15.4). The rules being
+hardcoded is deliberate and temporary: the log, the ordering guarantee, the offsets and the
+event vocabulary are the durable part, and they are what a rule stored in the backbone or in
+the graph would need underneath it either way.
+
+The log automates neither acceptance nor spec→plan decomposition, which stay the deliberate
+human acts §7 requires. A subscriber mints a task *asking for* the work; a prompt is not the
+act, and deciding whether spec N becomes one plan or four, and writing them, remains entirely
+the assignee's.
+
+`events.id` is assigned at `INSERT` and becomes visible at `COMMIT`, and those are not the
+same instant. A reader tracking a `last_seen_id` will see id 105 from a fast transaction,
+advance past it, and never see id 104 from a slow one that started earlier and committed
+later. The event is not lost — it is in the table, behind the cursor, forever unread. Nothing
+detects this; the subscriber simply misses a document acceptance now and then.
+
+The fix is to read only what is below the **commit horizon**:
+
+```sql
+ALTER TABLE events ADD COLUMN txid xid8 NOT NULL DEFAULT pg_current_xact_id();
+CREATE INDEX events_txid_id ON events (txid, id);
+```
+
+```sql
+SELECT id, source, type, payload, received_at
+  FROM events
+ WHERE id > $1                                          -- the subscriber's offset
+   AND txid < pg_snapshot_xmin(pg_current_snapshot())   -- the horizon
+ ORDER BY id
+ LIMIT $2;
+```
+
+`pg_snapshot_xmin` is the oldest transaction still in flight anywhere in the database. A row
+below it was written by a transaction that has finished — and since an aborted one leaves no
+visible row, a visible row below the horizon is committed for good. So no transaction can ever
+again produce an id lower than one the subscriber has read. **The visible log grows only at
+its tail, which is what makes an offset meaningful.**
+
+Three consequences, stated rather than discovered later:
+
+- **Aborted transactions leave holes** in the id sequence. Offsets are monotonic positions,
+  not counts, and nothing depends on contiguity.
+- **Writers are not serialized.** The alternative — assigning the log position under a lock
+  held to commit — gives gapless ids at the cost of funnelling every webhook, claim and task
+  edit through one lock. The horizon costs one column and one predicate.
+- **Any long transaction anywhere holds the horizon back**, not just a slow event writer. An
+  idle-in-transaction session or a long analytical query stalls every subscriber for its
+  duration. That is real, it is the price of not serializing writes, and §15.7's lag metric is
+  how it becomes visible instead of mysterious.
+
+`xid8` rather than `xid`: 64-bit, so the comparison needs no wraparound handling. The migration
+adds the column with a volatile default, so every pre-existing row takes the migration's own
+transaction id and drops below the horizon the moment it commits.
+
+### 15.1 Subscribers hold offsets {#sec-15.1}
+
+```sql
+CREATE TABLE event_subscribers (
+    name              text PRIMARY KEY,
+    last_read_offset  bigint NOT NULL DEFAULT 0,
+    last_acked_offset bigint NOT NULL DEFAULT 0,
+    updated_at        timestamptz NOT NULL,
+    CONSTRAINT event_subscribers_acked_le_read CHECK (last_acked_offset <= last_read_offset)
+);
+```
+
+The model is Kafka's, with the durable parts of a consumer group in one row:
+
+- **Read** takes the batch after `last_read_offset` below the horizon, in id order, and
+  advances `last_read_offset` to the last id in the batch.
+- **Ack** advances `last_acked_offset` to the newest offset the subscriber has *completely*
+  processed, and only forward (`WHERE $1 > last_acked_offset`), so a late or replayed ack
+  cannot rewind the stream.
+- **Restart** resumes at `last_acked_offset`, not `last_read_offset`. Everything read but
+  unacked is redelivered.
+
+That is at-least-once with in-order delivery, and it makes handler idempotency a requirement
+rather than a nicety (§15.4). Events are never deleted or compacted — the log is provenance
+(004 §1.5) and outlives every subscriber's interest in it.
+
+**One active consumer per subscriber.** In-order delivery means exactly one process may hold
+the stream, the same constraint a Kafka partition has. The consuming loop takes a dedicated
+pool connection and `pg_try_advisory_lock(hashtext('wl:subscriber:' || name))` on it for its
+lifetime; a second `lode serve` replica fails the lock, idles, and retries on an interval. A
+crashed process drops its connection, Postgres releases the lock, and the standby takes over
+on its next attempt — failover with no lease table and no heartbeat.
+
+**Releasing is not `Close()`.** A session-scoped advisory lock outlives `(*sql.Conn).Close()`,
+which returns the session to the pool still holding it — the lock would then leak into an
+unrelated query's connection and no replica could ever take over. Release therefore
+`pg_advisory_unlock`s explicitly and then *destroys* the session rather than returning it, so
+a failed unlock dies with the connection instead of poisoning the pool. Any error on the lock
+path is treated as "lock not held", never as "probably still held".
+
+The loop polls (default 1s). `LISTEN`/`NOTIFY` would cut the latency and is deliberately not
+used: a poll is correct when a notification is missed, and nothing here is latency-sensitive
+enough to justify a second delivery path.
+
+A subscriber row is created by the code that owns the subscriber, at startup, with
+`ON CONFLICT DO NOTHING` — starting at offset 0 means a new subscriber replays the whole log,
+which is the right default for a rule set that should have been running all along, and §18's
+offset verb is how an operator chooses otherwise.
+
+### 15.2 Events are RDF-shaped {#sec-15.2}
+
+Domain events carry a curie in `events.type` and JSON-LD in `events.payload`:
+
+```json
+{ "@context": "https://worklode.io/ns/ontology#",
+  "@type":    "wl:DocumentAccepted",
+  "@id":      "wlid:event/4711",
+  "prov:atTime":            "2026-08-03T09:12:00Z",
+  "prov:wasAssociatedWith": "wlid:actor/stig",
+  "wl:subject":             "wlid:doc/spec-025",
+  "wl:fromStatus":          "wlc:draft",
+  "wl:toStatus":            "wlc:accepted" }
+```
+
+`ns/ontology.ttl` gains `wl:Event rdfs:subClassOf prov:Activity`, one subclass per event type,
+`wl:subject` (the thing the event is about) and the per-type properties. Go constants and the
+emit-time validation table are **generated** from `ns/` by §17's codegen step, so the
+vocabulary and the code cannot drift.
+
+**Subclasses, not a SKOS kind scheme.** `wl:RuntimeEvent` takes its kind from
+`wlc:RuntimeEventKind` because crashloops and OOM kills are structurally identical rows that
+differ only in a label. Backbone event types differ in *shape* — `wl:DocumentAccepted` carries
+a status transition, `wl:DocumentSubmitted` carries none — and differing shapes under a shared
+supertype is what a class hierarchy is for. It is also what lets a SHACL shape constrain one
+event type without constraining all of them, and what subscribers match on.
+
+**One log, two populations.** Webhook deliveries keep their vendor payloads and dotted types
+(`push`, `issues.opened`); they are ingest facts, not domain facts, and they are not RDF. No
+`CHECK` is added to `events.type` — it must accept both — and the generated set is enforced in
+Go at emit time instead. Keeping them in one table keeps one offset space and preserves the
+provenance chain from a webhook to what it caused, which two logs and a projection between
+them would break for no gain.
+
+### 15.3 Emitting {#sec-15.3}
+
+A domain event is emitted **in the transaction that makes the change it describes**, through
+`RecordEvent`'s existing `apply` seam. An event that could commit without its change, or a
+change that could commit without its event, is a log that lies; there is no second path.
+
+`external_id` is deterministic for domain events — `<type>:<subject>:<version>` — where CLI
+events today use `randomExternalID()`. The `(source, external_id)` unique constraint then makes
+a retried request idempotent at the log, so a client that resends after a timeout gets the
+existing event rather than a duplicate acceptance.
+
+Emission is a thin typed helper per event type rather than a generic one: the payload is
+generated-code-checked against `ns/`, so a missing property fails at compile time.
+
+The payload's `@id` is `wlid:event/<id>`, which the row does not know at `INSERT` under an
+identity column. The id is therefore **reserved before the insert** — `nextval` on the
+identity's sequence, inserted with `OVERRIDING SYSTEM VALUE` — so the JSON-LD node names the
+row that carries it. Without that the event's own IRI would have to be patched in afterwards,
+which is a second write to an append-only table.
+
+### 15.4 The `doc-lifecycle` subscriber {#sec-15.4}
+
+Two rules, hardcoded in Go behind `Evaluate(event) → []Action`:
+
+| Event | Action | Guard |
+|---|---|---|
+| `wl:DocumentSubmitted` | mint `kind = 'review'`, state `ready`, referencing the document | no open review task references it |
+| `wl:DocumentAccepted` where the document is a spec | mint `kind = 'design'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open design task references it |
+
+"Referencing the document" needs a column, and `plan_doc` (§9.2) is not it — that one says
+*this task was minted by that plan*, whereas a review or design task is *about* a document it
+has not executed. So tasks gain a nullable **`about_doc`**, and both guards are queries over
+open tasks carrying it — a query, not stored state (§1). Minted tasks take the document's
+project and carry `prov:wasInformedBy` back to the event that caused them, so "why does this
+task exist" is answerable from the task.
+
+**Idempotency** has two layers, because it defends against two different things. Redelivery of
+one event is a no-op through the log's own key: an action is itself recorded as an event with
+`external_id = <subscriber>:<rule>:<event-id>`, so `(source, external_id)` refuses the second
+attempt and no side-effect table is needed to remember what was done. A *legitimate*
+repeat — §7.2's revision flow accepting the same document a second time — is handled by the
+guard: while the planning task is still open the acceptance is absorbed and noted on it;
+once it has closed, a further acceptance mints a fresh task, which is correct, because
+sections accepted since the last plan need planning.
+
+**Submission is an event, not a status.** `lode doc submit` emits `wl:DocumentSubmitted` and
+changes no column. The document lifecycle stays `draft → accepted → superseded` (§7) and
+the open review task *is* "under review" — exactly §7's definition, which minting the
+review task at `doc new` would have collapsed by making every draft permanently under review.
+
+**No cascades.** A watcher action must not emit an event its own subscriber consumes. With two
+reviewed rules that is a rule rather than a mechanism; making rules configurable (§22) is what
+would require a cycle check, and it is out of scope here precisely because the check is not
+yet worth building.
+
+### 15.5 Events of the escalation ladder {#sec-15.5}
+
+The whole ladder of §8 is instrumented on this log:
+
+| Event | Emitted when |
+|---|---|
+| `task.gap_found` | executor finds the plan or spec does not cover the case |
+| `fix.started` | fixer subagent spawned, with the tier and the target document |
+| `fix.finished` | fixer done — payload carries `outcome`: `resolved`, `substantive`, `escalated` |
+| `doc.patched` | a section amended in place, with the substantive classification and the rule that decided it |
+| `doc.stale` | §8.7's clock fires |
+
+`fix.finished.outcome` turns the ladder into a funnel: how often executors hit gaps, how often
+the fixer resolves them, how often a human is pulled in. That ratio measures whether the
+planning tier is producing mechanically executable plans, which is the premise the tier split
+rests on. Escalations per plan is the same measurement per document.
+
+### 15.6 Planning cost lands on the planning task {#sec-15.6}
+
+No schema change. `agent_sessions` hangs off `leases`, a lease binds a task to a worktree, and
+`hookrun` bills each turn to the worktree it ran in (012 §4) — so the chain from tokens to task
+already exists. What is missing is that planning is done in the main checkout, which holds no
+lease, and those tokens are dropped.
+
+So a planning session claims its task like any other work: the lode plugin's planning skill
+runs `lode task claim` on the minted `design` task into `wt/<task-id>-<slug>` before it writes
+anything, and `lode task cost` then answers for planning exactly as it does for a feature. This
+also gives planning the brief, the secrets and the hook wiring every other kind of work gets,
+which is the stronger reason.
+
+Tokens spent before the claim — the exploration that decided which task to pick up — stay
+unattributed. Attributing them would mean billing a session to a task it had not yet chosen.
+
+### 15.7 Metrics {#sec-15.7}
+
+Per 022's conventions, each in its owning package — the first three in `internal/eventbus`,
+the last in `internal/watcher`:
+
+| Metric | Type | Labels |
+|---|---|---|
+| `worklode_event_subscriber_lag` | gauge | `subscriber` — horizon offset minus `last_acked_offset` |
+| `worklode_events_processed_total` | counter | `subscriber`, `type`, `outcome` ∈ `applied\|suppressed\|error` |
+| `worklode_event_batch_duration_seconds` | histogram | `subscriber` |
+| `worklode_watcher_actions_total` | counter | `rule`, `outcome` ∈ `applied\|suppressed\|error` |
+
+`type` is bounded by the generated event-type set; an unknown type is counted as `other`. The
+lag gauge is the one that matters operationally: it rises both when a subscriber is stuck and
+when a long transaction holds the horizon back (§15), and those are distinguishable because the
+first affects one subscriber and the second affects all of them.
+
+The sync surface of §16 carries `worklode_*` metrics on the same conventions, with tests: docs
+synced by kind and outcome, sync duration, a forced-sync counter, and store upsert outcomes.
+Every metrics struct here is nil-safe and lives in the owning package, with the
+`prometheus.Registerer` threaded from `serve.go` and label values bounded.
+
+## 16. Git → backbone sync: the on-ramp {#sec-16}
+
+§5 moves specs, ADRs, and plans into the backbone: authored there, reviewed there, projected to
+the graph, with the git `docs/specs/` and `docs/plans/` trees a transitional mirror — deleted, or
+kept as an opt-in git mirror, once the corpus is imported. That end state needs the authoring
+surface §18 reserves — `lode doc new`/`submit`/`accept` — and the document store behind it. None of
+it is built.
+
+Until it is, design documents live only in git. The backbone cannot answer
+`lode doc list --needs-planning`, an agent without the checkout cannot read a
+spec, and "is this spec planned?" stays a script over a working tree rather
+than a query. The corpus is real work with no presence in the system of record.
+
+This section is the on-ramp. It adds a one-way git→backbone sync that populates a
+minimal document store from the git corpus now, so the backbone becomes the
+queryable record for specs and plans before authoring moves server-side.
+Authoring stays in git; reads move to `lode show`/`lode doc list`. When backbone authoring
+(§7, §9.2) lands, the sync retires.
+
+This does not change the destination — backbone-authored documents, with the
+git trees then deleted or kept as an opt-in mirror (§5). It is the
+incremental form of the one-time corpus import §22 defers to
+its final phase: the corpus flows continuously while git remains the authoring
+surface, instead of arriving in one cutover.
+
+§1's rule is "no fact with two owners." The sync relaxes it for the
+transition, but bounds the relaxation so there is still a single authority:
+
+- **One-way.** git → backbone only. The backbone's document rows are a
+  projection; nothing edits them but the sync.
+- **Default-branch gate (§16.2).** The projection is populated only from the
+  reviewed, merged corpus. The authoritative copy is git on the default branch;
+  the store is its read-through image.
+
+So git-on-the-default-branch owns the fact; the backbone holds a derived copy.
+No document has two authors.
+
+### 16.1 What syncs — corpora and config {#sec-16.1}
+
+`.worklode/config.toml` (git-tracked, repo-local) declares which directories
+sync and as which kind. The config reader is a flat `key = "value"` parser with
+no TOML-table support, so the declaration is two optional scalar keys:
+
+```toml
+current_project = "worklode"
+project_key     = "WL"
+
+spec_corpus = "docs/specs"   # synced as SPEC/ADR documents
+plan_corpus = "docs/plans"   # synced as PLAN documents
+```
+
+A key's presence enables sync of that corpus; its value is the repo-relative
+directory. The values shown are the conventional defaults — a repo whose docs
+live elsewhere sets the path, and a repo that syncs specs but not plans (or
+neither) omits the other key. Within `spec_corpus`, a file is an ADR when its
+frontmatter carries `kind: adr` and a spec otherwise (026 §4.2); every file in
+`plan_corpus` is a plan.
+
+These keys are repo-scoped and are not merged from the user-level config, like
+`worktree_dir` (019) — a corpus path means nothing outside its repository. They
+generalize `designdoc.FindCorpus`, which today hardcodes `docs/specs`.
+
+### 16.2 The sync command {#sec-16.2}
+
+```
+lode doc sync [--force] [-n|--dry-run] [--json]
+```
+
+`lode doc sync` reads each configured corpus, parses every document —
+frontmatter, body, and for specs/ADRs the sections and their anchors — through
+`internal/designdoc`, and upserts the results to the backbone (§5.1). It is a
+push: git → backbone, never the reverse.
+
+**Default-branch gate.** Without `--force`, sync refuses unless the checkout is
+on the repository's default branch *and* the working tree is clean. The store
+is a projection of the reviewed corpus (§16); syncing a feature branch or a dirty
+tree would publish unreviewed text as the queryable record. The default branch
+is read from the remote's `HEAD`; cleanliness from `git status --porcelain`.
+
+**`--force`** bypasses the gate — it pushes from a non-default branch and from
+uncommitted working-tree files, for local iteration and previews. A forced sync
+records its provenance on the sync event (source branch, dirty flag), so a
+later default-branch sync overwrites it and a consumer can tell a forced
+projection from a reviewed one.
+
+**`--dry-run`** reports what would change (added, updated, unchanged) and writes
+nothing. **`--json`** emits the same report as objects. A document whose
+frontmatter fails to parse is a sync error, not a silently skipped row.
+
+### 16.3 Identity {#sec-16.3}
+
+Identity is derived from the corpus, per 026's model, so ids are stable and
+resolvable the moment a document exists:
+
+- **Spec / ADR** — `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>`, where `n` is the file's
+  leading number (`014-…​.md` → 14) and `<KEY>` is `project_key`.
+- **Plan** — `<KEY>-PLAN-<spec-ordinal>-<plan-ordinal>`. The spec-ordinal is the
+  number of the spec the plan `implements`; a plan with `implements: NO-SPEC` (or
+  absent) uses `0`. The plan-ordinal counts the plans implementing that spec in a
+  deterministic corpus order — ascending by filename (date prefix, then slug).
+
+029 §4 moves id assignment to server-side per-`(project, kind)` counters. This
+spec keeps derivation on the file side and writes the derived id into the store;
+the grammar matches 029's, so the cutover changes where an id is minted, not the
+id — with one bounded exception: 029 counts a plan-ordinal by mint order, this
+spec by corpus order, so a plan whose corpus order differs from its eventual
+mint order may be renumbered at the 029 cutover. Appending a new plan never
+renumbers an existing one, so the exposure is limited to plans reordered or
+back-inserted before 029 lands.
+
+### 16.4 Reads {#sec-16.4}
+
+Reads are 026's surface — `lode show <ref>` and `lode doc list` (with
+`--kind`/`--status`/`--needs-planning`/`--needs-execution`). On a checkout they
+read the disk corpus (026's `LoadCorpus`); against the backbone — no checkout, or
+a cross-project reference — they read the synced store through the store-backed
+loader 026 §10 anticipates. The on-ramp supplies the store that loader reads; it
+adds no read command of its own. 026 owns the read surface, the on-ramp owns the
+populate-and-store half.
+
+### 16.5 Relationship to the query surface and to 029 {#sec-16.5}
+
+**Extends 026.** 026 is a read-only surface by design (026 §9) and deliberately
+adds no config key, putting the corpus directory on a `--docs` flag (026 §1).
+The on-ramp adds the populate half and the persistent per-corpus config keys
+(§16.1), because a sync needs a durable, git-tracked declaration of what to sync,
+not a per-invocation flag.
+
+**Anticipates 029.** Id derivation is file-side here and counter-side there
+(§16.3); the store's per-kind identity matches 029's grammar so the cutover
+renumbers nothing but the plan-ordinal exception §16.3 names.
+
+## 17. `ns/` is the schema source {#sec-17}
+
+Shared schema — classes, properties, SKOS enums, SHACL shapes — is owned by `ns/*.ttl`; specs
+own the rationale and cite the terms. Where today the Turtle mirrors the specs by hand, a
+**Python codegen step** (rdflib; Go's RDF ecosystem is not worth fighting) reads `ns/` and
+emits the Go constants, SQL `CHECK` fragments and validation tables that currently drift
+apart. Generated artifacts are checked in; CI regenerates and fails on diff. A schema change
+is therefore one commit touching the Turtle, the generated code, and the migration together —
+`ns/` edits stop being a documentation chore and become the change itself.
+
+The vocabulary `ns/` holds is `wl:`, and the rename from `ls:` is part of its identity. `ls:`
+predates the rename from *lodespar* to *Worklode*; no occurrence survives outside
+documentation (187 occurrences across 11 Markdown files; zero in Go, SQL or YAML), and the `ls:`
+ontology has not yet been opened as a PR against rdf-registry. The rename is therefore free now and
+becomes a breaking change the moment that PR lands.
+
+| Role | Old | New | Namespace |
+|---|---|---|---|
+| Schema (classes/properties) | `ls:` | **`wl:`** | `https://worklode.io/ns/ontology#` |
+| Concepts (SKOS) | `lsc:` | **`wlc:`** | `https://worklode.io/ns/concept/` |
+| Instances | `lsid:` | **`wlid:`** | `https://worklode.io/ns/id/` |
+
+rdf-registry sources move `rdf/ls/` → `rdf/wl/`, but the **published base carries no
+ontology-name segment**: `https://worklode.io/ns/…`, not `…/ns/wl/…`. The `wl` in the source
+path is a repo-layout detail; the base-URL override (009 §1 item 3) maps it away. A rename that
+stops at the prefix label leaves the IRIs wrong, which is the only part that is actually
+load-bearing.
+
+`wl:` also matches the existing `WL-<n>` task-id scheme, so the two identifier systems finally read
+as one product.
+
+`ns/ontology.ttl` carries `wl:Plan` as a sibling of `wl:DesignDoc` that takes no sections or
+anchors (§9), with whatever SKOS or shape terms the synced kind needs, validated with `riot
+--validate ns/*.ttl`. That mirror is downstream of the governing spec, never ahead of it: amend
+the spec first, then mirror the term in `ns/`.
+
+## 18. Surfaces {#sec-18}
+
+The document and event surface, backed by the backbone store:
+
+| Surface | Purpose |
+|---|---|
+| `lode doc new --kind spec\|adr\|plan` | Author a draft (skill-guided); takes `--body` or `--body-file` |
+| `lode doc submit <id>` | Hand a draft to review: emits `wl:DocumentSubmitted`, which mints the review task (§15.4) |
+| `lode doc list \| show <slug> [--version vN]` | Read documents and sections; `--json`; `--resolved` inlines amendments and supersessions |
+| `lode doc list --needs-planning` | Accepted specs with unplanned accepted sections |
+| `lode doc list --needs-execution` | Accepted plans whose task set is unminted or unfinished |
+| `lode doc accept <id>` | The manual commit; on a plan, mints its tasks (§9.2) |
+| `lode doc revise <slug>` | Open a candidate revision (§7.2) |
+| `lode doc publish <slug>` | Run the §6 constraints, then the §4 transaction |
+| `lode doc anchors <slug>` | List anchors with depth and addressability; the lint an author runs before publishing |
+| `lode doc coverage <slug>` | Per-section implemented / unimplemented / stale |
+| `lode doc pull [<id>\|--all]` | api→file mirror; any branch; no-op unless `[doc_sync]` is set |
+| `lode doc push [<id>\|--all]` | file→api; default branch only; no-op unless `[doc_sync]` is set |
+| `lode drift --docs` | Stale and orphaned claims (§11), alongside 007's other drift |
+| `lode event tail [--type] [--since]` | Read the log, newest last |
+| `lode event subscribers` | Name, read/acked offset, lag, holder |
+| `lode event seek <name> --to <offset>` | Admin: move a subscriber's offset (replay or skip) |
+| Read-only web view | Rendered document, per-section coverage badges, version history |
+
+`pull` and `push` back the opt-in file mirror of §5, gated on a `[doc_sync]` block in
+`.worklode/config.toml`; with no such block they do nothing. `push` refuses off the default
+branch (the backbone has no doc branches) and both refuse on a since-last-sync conflict rather
+than overwrite. `push` reconciles a file through the same `revise`/`accept` path as any edit,
+so the event log and §6's anchor-freeze and supersession rules still apply — it is not a
+raw body overwrite.
+
+`lode event seek` is admin-gated and the only way an offset moves backwards; it is how a rule
+fixed after the fact gets applied to events it already skipped, and it is safe precisely
+because handlers are idempotent.
+
+Anchor depth (§6.1) is a **server setting**, surfaced through the existing admin configuration
+path rather than a per-repo file — it governs what claims are expressible across the whole
+installation, so it cannot be a per-repository decision.
+
+Review is **crit**, as 006 specified for the `proposed → accepted` transition it has since retired;
+sections give crit comments a natural anchor, so a review comment and an implementation claim
+address the same node. The web view extends spec 007's read-only overview surface rather than
+introducing a new application.
+
+The on-disk path of a document ceases to be its identity. Until documents move into the graph,
+tracked paths stay per-project configuration — which is spec 013's open question 2, now answered:
+configuration, not convention, and temporary either way.
+
+`lode task add` gains a `--body-file <file>` flag beside `--body <string>`,
+matching `gh`: `--body` takes an inline string, `--body-file` reads the body
+from a file, and exactly one may be given. The document write commands
+(`lode doc new`) adopt the same pair. It is a small, standalone change, grouped
+here because the plugin that consumes the on-ramp authors bodies from files.
+
+The lode plugin ships skills for the guided flows — authoring a spec, running its review,
+accepting, offering (never assuming) decomposition into plans, and plan review — so the
+ceremony lives in skills while every state change is one of the deterministic verbs above.
+
+## 19. Implementation {#sec-19}
+
+| Unit | Holds |
+|---|---|
+| `internal/store/events.go` | the horizon read, offset read/ack, `pg_try_advisory_lock` acquisition |
+| `internal/eventbus/loop.go` | the polling loop, batch/ack cycle, lock lifecycle, metrics |
+| `internal/eventbus/emit.go` | typed emit helpers, deterministic `external_id`, payload validation |
+| `internal/watcher/doclifecycle.go` | `Evaluate(event) → []Action` and the two rules of §15.4 |
+| `internal/cmd/event.go` | `lode event tail\|subscribers\|seek` |
+| `ns/ontology.ttl` | `wl:Event`, its subclasses, `wl:subject` and the per-type properties |
+| `deploy/base/migrations` | `events.txid`, `event_subscribers`, `tasks.about_doc` (§15.4) |
+
+`internal/watcher` takes an event and returns actions, with no store handle and no HTTP, so the
+rules are testable as a pure function and the loop is testable without rules.
+
+**Two plans, not one.** §15–§15.3, §18's `lode event` verbs, §15.7 and their tests depend on
+nothing and can ship immediately against the existing log. §15.4 needs §5's `docs` rows to
+exist — until then there is no `wl:DocumentAccepted` to emit — so the doc-lifecycle subscriber
+is a second plan, `blockedBy` the first and by the document store's. §15.6 rides with the
+second, since it is one line in a skill.
+
+## 20. Testing {#sec-20}
+
+- **The ordering trap, directly.** Open transaction A, insert an event, leave it uncommitted;
+  in transaction B insert and commit a later event; read as a subscriber and assert **neither**
+  is delivered; commit A; read again and assert both arrive, A's first. A `last_seen_id` cursor
+  fails this test, which is the point of writing it.
+- Aborted transactions leave a hole and the subscriber advances past it without stalling.
+- Ack is monotonic: a replayed lower ack does not rewind `last_acked_offset`.
+- Restart after read-without-ack redelivers exactly the unacked window, in order.
+- Two loops on one subscriber name: the second acquires no lock and consumes nothing; killing
+  the first lets the second take over.
+- Redelivering one `wl:DocumentAccepted` mints one task, not two.
+- The suppression guard across the full cycle: accept → mint; accept again while open →
+  suppressed and noted; close; accept again → fresh task.
+- `wl:DocumentSubmitted` on a document that already has an open review task is suppressed.
+- Emit-time validation rejects a payload whose properties are not in the generated set.
+- A vendor webhook event passes through the subscriber untouched and is not treated as RDF.
+- e2e: submit and accept a document through the HTTP API only, and assert the tasks appear —
+  no direct store writes, per the `e2e/` contract.
+
+## 21. Dependencies {#sec-21}
+
+- **Spec 006** — the vocabulary this amends; the SHACL gate and `owlrl` closure tests extend to the
+  new terms.
+- **Spec 007** — the deriver contract, named-graph partitioning, and the overview surface.
+- **Spec 004** — the execution backbone: the task set a plan's acceptance mints, the `task_edges`
+  it wires, and the append-only event log §15 turns into a subscribed stream.
+- **rdf-registry** — ADR-0006 amendment; ADR-0003 SHACL gate; the `wl:` rename lands in the same PR
+  as the 006 ontology, never after it.
+- **crit** — review of proposed revisions.
+
+## 22. Out of scope {#sec-22}
+
+The constraints in §6 bind **from a document's first publication onward**. Markdown that has never
+been published is unconstrained, so this spec can ship without touching a single existing file, and
+every existing file in `docs/specs/` keeps working exactly as it does today until someone
+deliberately publishes it. Beyond that:
+
+- **Corpus adoption** — anchor assignment for legacy prose, and deleting the git files (or
+  standing up §5's opt-in mirror). The ongoing sync of §16 populates the store; the
+  store-of-record cutover waits for backbone authoring and is the implementation plan's final
+  phase, not design.
+- **The on-ramp implements neither authoring nor coverage.** §16 populates the store; the
+  authoring verbs (§18), the editorial transitions (§7) and the accept-mints-tasks transaction
+  (§9.2) are not part of it, and neither is `lode doc coverage`, which additionally needs the
+  implementation side (`.worklode/implements.yaml`, §11) — 026 §9.
+- **Bidirectional sync in the on-ramp** — §16 is one-way; `api → git` pull there, and any
+  two-way reconciliation, are out of scope. §5's opt-in file mirror is a separate mechanism.
+- **Server-assigned per-`(project, kind)` counters, milestones, and deliverables** (029).
+- **Milestone implementation** — v2, as reserved; only its shape is pinned here (§13).
+- **Graph projection of documents and events** — the projector work belongs to 006 §6's
+  existing contract, unchanged by this spec.
+- **Review tooling internals** — crit integration details; this spec fixes only that review
+  targets documents.
+- **Rules stored in the backbone or the graph.** The destination, and the reason the log,
+  ordering, offsets and vocabulary are built as they are here. Storing a rule needs a
+  predicate language, an action vocabulary and cycle detection — none of which is answerable
+  before two hardcoded rules have run for a while.
+- **Subscribers beyond `doc-lifecycle`.** Adding one is a row and a handler; none is needed
+  yet.
+- **Retention and compaction.** The log is append-only and kept; when it stops being free,
+  that is its own decision.
+- **Ordering partitions.** One totally ordered stream, one active consumer per subscriber. A
+  throughput problem would be solved by partitioning on subject, and there is no throughput
+  problem.
+- **`wl:DocumentAccepted` on plans.** §9.2's accept transaction already mints a plan's tasks
+  directly; a watcher duplicating that would give the invariant two owners.
+
+Two further pieces of work follow from this spec without belonging to it:
+
+- **Dogfooding Worklode within Worklode** — a task, not a spec. It is how this design earns
+  confidence, and it should not be smuggled in as a migration section.
+- **Onboarding existing projects** — a candidate spec of its own, unwritten and unnumbered.
+  Importing an existing GitHub project wholesale (issues → Tasks, `docs/specs/**` and
+  `docs/adr/**` → published documents at v1, repos → Components, GitHub projects → Projects) is
+  a substantial design in its own right, with real questions this spec should not prejudge: what
+  anchors get assigned to a corpus that never had them, how imported issues reconcile with the
+  already-shipped `lode inbox` promotion path (013), and whether a first publication of legacy
+  prose should be `accepted` or `draft`. This document defines the target state; that spec would
+  define how an existing project reaches it.
+
+## 23. Open questions {#sec-23}
+
+1. ~~Anchor assignment ergonomics~~ — **RESOLVED:** Pandoc attribute syntax, `{#sec-2.1}`, carrying
+   the section number with a `sec-` prefix (§3).
+2. ~~Granularity of a section~~ — **RESOLVED:** server-configurable, default 3, governing
+   addressability rather than authoring; raising is safe, lowering is constrained (§6).
+3. ~~Migrating the existing corpus~~ — **RESOLVED:** out of scope; constraints bind from first
+   publication. Dogfooding is a task; onboarding is a candidate spec of its own (§22).
+4. ~~Does a Component pin, or a repository~~ — **RESOLVED:** the Component pins, derived from the
+   claim's paths rather than declared, with an implicit repo-coords Component for single-component
+   repositories (§11).
+5. **Suffix exhaustion.** `2.1a` handles an insert between `2.1` and `2.2`. An insert between `2.1a`
+   and `2.1b` extends the suffix — `2.1aa` sorts lexically between them and needs no new rule — but
+   this should be stated in the authoring skill before someone invents `2.1a1`.
+6. **Pin repetition.** A Component implementing twelve sections of one document repeats the same
+   `pinned:` value twelve times. A document-level default pin with per-claim override would be
+   kinder to write and to review; it also introduces a second place for the pin to be wrong. Decide
+   on ergonomics once real manifests exist.
+7. **Depth of unnumbered sections.** `{#sec-purpose}` and similar front-matter anchors carry no
+   number, so their depth is nominal. Treating them as depth 1 is the obvious reading; confirm it
+   against a document with a deeply structured appendix.
+8. **Auditing the fixer's judgement.** Whether the judged-substantive classification of §8.3
+   should be spot-audited — sampling `doc.patched` events with a non-substantive verdict and
+   re-judging at a higher tier.
+9. **Notes carrying replacement text.** Whether a note should be able to carry a proposed
+   replacement text without becoming a draft amendment document (§8.5 forbids the latter).
+
+## 24. Acceptance criteria {#sec-24}
+
+1. `tasks.kind`, `validKinds` and `wlc:TaskKind` agree on exactly the six kinds of §10: `epic`
+   is absent and no structural kind replaces it, `design` is present in all three, and the
+   earlier seven-kind reconciliation `feature, bug, chore, spec, review, spike, epic` is gone.
+   The sources are generated from `ns/`, CI fails on drift, and the migration round-trips up and
+   down.
+2. `wl:Plan` is present as a sibling of `wl:DesignDoc`, never its subclass; plan documents carry
+   no section anchors and accept mid-execution edits; no acceptance criterion anywhere still
+   refers to `Spec ⊃ Plan ⊃ Task`.
+3. Accepting a plan document mints its tasks and their `plan_doc` references in one
+   transaction and creates no row above them; the set is reachable only by query, and
+   `doc.status = accepted ⟺ the tasks exist` holds in both directions.
+4. `lode task decompose` is the only path by which a task acquires children; the container
+   guards apply exactly while a task has them, with no kind to declare.
+5. A spec with two accepted plans has no row above either plan's tasks, and a plan-to-plan
+   `blocks` edge orders them; `lode doc coverage`, `--needs-planning` and `--needs-execution`
+   answer from queries alone.
+6. `wlc:implemented` is absent from `wlc:DesignDocStatus`, and `wlc:proposed` with it: the
+   order `draft → proposed → accepted → superseded` reduces to `draft → accepted → superseded`.
+   A document under review is `draft` with an open review task, and `lode doc accept` is manual
+   and assignee-gated.
+7. A revision of an accepted document leaves the accepted version current and drift queries
+   unaffected until crit resolves; the accepted version's anchors are protected throughout.
+8. A section declared `## 2.1 Title {#sec-2.1}` is addressable as
+   `wlid:section/<doc-slug>/sec-2.1` and linkable in-document as `[Section 2.1](#sec-2.1)`;
+   rewording the heading leaves every inbound claim resolving to the same content.
+9. A revision inserting a section between `2.1` and `2.2` names it `2.1a`, renumbers nothing, and
+   leaves every claim against `sec-2.2` resolving to the content it always did. A revision that
+   renumbers `2.2` → `2.3` is **rejected** by the §6 gate, which a spec document runs at accept
+   time.
+10. Publishing v4 of a document is a single transaction: no reader observes a current-version
+    pointer disagreeing with its content, and the v3 graph is byte-identical afterwards.
+11. A publication attempting to delete a section anchor accepted in an earlier version is
+    **rejected** by the SHACL gate; the same publication marking that section `wlc:superseded`
+    with a `dct:isReplacedBy` target **succeeds**.
+12. With the depth limit at 3, a `#####` heading renders but is **not** addressable, and a claim
+    naming it is rejected. Raising the limit to 4 makes it addressable with no other change;
+    lowering the limit to 2 is rejected for any document already accepted with depth-3 anchors,
+    naming those anchors.
+13. `.worklode/implements.yaml` in a repository produces `wl:implements` edges in
+    `observed/repo-implements`; a second run with unchanged input is a no-op; a removed entry
+    disappears from the graph (full-replace).
+14. A repository with no `components.yaml` produces claims attributed to an implicit component whose
+    IRI is its repo coordinates; adding a `components.yaml` that names that same whole-repo
+    component leaves every existing claim's subject IRI **unchanged**.
+15. A claim whose `by:` paths span two declared components yields **two** edges, one per component,
+    each carrying the same pinned version; a claim whose path matches no component is rejected,
+    naming the path.
+16. Coverage of a document is computed, never stored: `lode doc coverage` reports implemented,
+    unimplemented and superseded sections, and no `wl:fullyImplements` predicate exists.
+17. A claim pinned at v3 against a section subsequently revised in v4 reports **stale**; a claim
+    pinned at v3 against a section untouched by v4 does **not**, even though the document version
+    advanced.
+18. A `design`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
+    distinguishable from the components that `wl:implements` that document's sections.
+19. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
+    `rdf/wl/` and publish under `https://worklode.io/ns/`.
+20. `wl:Workstream` and `wl:OngoingMaintenance` are absent from `ns/`; every projected Task
+    carries exactly one `wl:inProject`; no `wl:` term for sprints exists.
+21. No stored task→milestone edge exists when Milestone ships; its task set derives via
+    Deliverables.
+22. `ns/*.ttl` defines `wl:Plan` and passes `riot --validate`.
+23. A subscriber reading concurrently with an out-of-order commit pair delivers both events in
+    id order and skips neither; the equivalent `last_seen_id` implementation fails the same
+    test.
+24. `last_acked_offset ≤ last_read_offset` holds always; restart resumes from
+    `last_acked_offset`; a lower ack never rewinds.
+25. Exactly one process consumes a subscriber at a time, and killing it hands over without an
+    operator step.
+26. `lode doc submit` mints one `ready` review task and changes no document column; a second
+    submit while that task is open mints nothing.
+27. Accepting a spec mints one `ready` design task in the document's project, carrying
+    `prov:wasInformedBy` to the event; re-accepting while it is open mints nothing; re-accepting
+    after it closes mints one more.
+28. Every domain event's `type` and payload properties come from the generated `ns/` set, and CI
+    fails on drift between `ns/` and the generated code.
+29. Vendor webhook events remain in the same log with their dotted types, are readable by
+    `lode event tail`, and no `CHECK` on `events.type` rejects either population.
+30. `worklode_event_subscriber_lag` rises when a subscriber is stopped and returns to zero when
+    it resumes; the metrics of §15.7 are registered and tested, the sync endpoint's and the
+    store operations' among them.
+31. A planning session that claims its design task has its tokens reported by
+    `lode task cost <design-task>`.
+32. `.worklode/config.toml` accepts `spec_corpus` and `plan_corpus`; the loader
+    exposes them repo-scoped, and an unknown key still errors.
+33. `lode doc sync` on the default branch with a clean tree upserts every
+    configured corpus document to the backbone; a second run reports no changes.
+34. Off the default branch, or with a dirty tree, `lode doc sync` refuses; `--force`
+    proceeds and records source branch and dirty flag on the sync event.
+35. `--dry-run` reports adds/updates/unchanged and writes nothing; a document with
+    unparseable frontmatter fails the sync.
+36. Synced specs, ADRs, and plans resolve to `<KEY>-SPEC-<n>`, `<KEY>-ADR-<n>`, and
+    `<KEY>-PLAN-<spec>-<plan>` per §16.3, and `lode doc list` returns them from the
+    store.
+37. `lode task add` accepts `--body-file`; `--body` and `--body-file` are mutually
+    exclusive.
+
+

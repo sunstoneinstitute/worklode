@@ -15,6 +15,18 @@ once an instance is running (dogfooding); until then this file is the list.
   mapping. Keep the one state-fixed case: a task with children cannot advance
   past `merged`, so it is closed there in every repo. Spec and code disagree
   until this lands.
+- **The doc-sync config shape contradicts itself (surfaced by the spec fold,
+  2026-08-14).** 025 §2/§10 make the git file mirror opt-in through a
+  `[doc_sync]` **block** in `.worklode/config.toml`; 034 §2 states the config
+  reader is a flat `key = "value"` parser with no TOML-table support and
+  declares the scalar `spec_corpus` / `plan_corpus` keys instead. Both are
+  accepted-or-draft spec text, no document reconciles them, and folding 034
+  into 025 put them in one document — which now requires a block it also says
+  the parser cannot read. The consolidation deliberately preserved the
+  mismatch rather than picking a winner (part-4 ruling 15: choosing is a
+  design act, not a transcription), so it needs a spec amendment: either the
+  reader grows table support, or the gate becomes the presence of the corpus
+  keys. Whoever implements `lode doc sync` hits this first.
 - **Artifact correlation hardening.** Ingest `registry_package` webhooks so
   `docker_image` artifacts exist; resolve `release.target_commitish` branch
   names to commit SHAs; normalize OCI digests (`sha256:`) in flux
