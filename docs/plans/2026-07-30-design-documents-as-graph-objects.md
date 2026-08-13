@@ -48,7 +48,6 @@ golang-migrate, `gopkg.in/yaml.v3`, standard-library testing.
 
 - **Every 014 amendment callout.** The "Amendments to existing specs" table
   in 014 is applied as `> **Amended/Superseded by 014 …**` blocks in
-  `docs/specs/000-umbrella-architecture.md:51,94`,
   `docs/specs/006-knowledge-graph.md:42,65,109,164,269,297,328,505,576,589,711,722`,
   `docs/specs/007-drift-and-overview.md:12,49,73,146,203,221,293`,
   `docs/specs/008-worklode-plugin.md:7,114,144,151,232`, and
@@ -252,11 +251,6 @@ so the old prefix appears **without a colon** (AC1 greps for `ls:` — `` `ls`
   nonsense; restore them as historical mentions sans colon.
 - `docs/specs/015-runtime-layer.md:21` — "Spec 014 renamed the `ls` prefix to
   `wl:`. This spec is written in `wl:` throughout…".
-- `docs/specs/000-umbrella-architecture.md:128-129` — rewrite the resolved
-  bullet as one statement of the final state: "**[006] RDF namespace →
-  `wl:` under `rdf/wl/`** (originally resolved as the `ls` prefix under
-  `rdf/ls`; superseded by 014 §1)." — spelling `rdf/ls` without a trailing
-  slash so the `/ls/` grep stays clean.
 - `docs/specs/009-data-platform-kg-requirements.md:31` — after the mechanical
   pass this reads "the `wl:` ontology stays in rdf-registry", which is correct;
   just confirm the sentence still parses.
@@ -271,8 +265,6 @@ renamed they say nothing:
 - `docs/specs/007-drift-and-overview.md:12` ("Read every … as `wl:`…")
 - `docs/specs/008-worklode-plugin.md:7` ("Read `ls:governs`… as
   `wl:governs`…")
-- `docs/specs/000-umbrella-architecture.md:94-95` ("Amended by 014 §1. The
-  prefix is `wl:`…")
 
 Keep every other 014/015 amendment callout — they amend content, not spelling.
 Where a surviving sentence names 014 §1 as the source of the now-inline
