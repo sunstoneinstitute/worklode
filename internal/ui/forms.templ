@@ -1,0 +1,108 @@
+package ui
+
+// forms.templ renders the cockpit's two creation forms: a new task and a
+// declared deliverable. Both are plain server-rendered <form method="post">
+// pages — no client state, no HTMX behavior — so they work with the keyboard
+// and without JavaScript, as spec 032 §10 requires of a primary workflow.
+//
+// A rejected submit re-renders the same form with the validation message in
+// an aria-live region and every entered value preserved, so nothing typed is
+// lost to a missing field. Success is a POST-redirect-GET, so a reload never
+// re-creates the object.
+
+// formCard is the shell both forms share: the project sidebar, the heading,
+// the error region, and the surrounding <form>. The caller fills in the
+// fields.
+templ formCard(f FormShell, heading, lede, submit, sidebarActive string) {
+	<div class="shell">
+		@sidebar(f.Project, sidebarActive)
+		<div class="main">
+			<div class="canvas">
+				<section class="card pad form">
+					<h1>{ heading }</h1>
+					<p class="muted small">{ lede }</p>
+					<div aria-live="polite">
+						if f.Error != "" {
+							<p class="formerr" role="alert">{ f.Error }</p>
+						}
+					</div>
+					<form method="post" action={ f.Action }>
+						{ children... }
+						<div class="btnrow">
+							<button type="submit" class="btn primary">{ submit }</button>
+							<a class="btn ghost" href={ f.CancelURL }>Cancel</a>
+						</div>
+					</form>
+				</section>
+			</div>
+		</div>
+	</div>
+}
+
+// selectField renders one labelled <select>. Every option carries its own
+// Selected flag, so a rejected submit comes back with the same choice made.
+templ selectField(id, label string, options []FormOption) {
+	<p class="fieldrow">
+		<label for={ id }>{ label }</label>
+		<select id={ id } name={ id }>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ opt.Selected }>{ opt.Label }</option>
+			}
+		</select>
+	</p>
+}
+
+// NewTask renders the new-task form (GET /projects/{id}/tasks/new).
+templ NewTask(v NewTaskView) {
+	@Page(v.Form.Page) {
+		@formCard(v.Form, "New task in "+v.Form.Project.Name,
+			"The task is created in this project and gets its id from the project's own counter.",
+			"Create task", "") {
+			<p class="fieldrow">
+				<label for="title">Title</label>
+				<input id="title" name="title" type="text" required maxlength="200" autofocus value={ v.Title }/>
+			</p>
+			<p class="fieldrow">
+				<label for="body">Body</label>
+				<textarea id="body" name="body" rows="8" placeholder="What has to be true when this is done?">{ v.Body }</textarea>
+			</p>
+			@selectField("priority", "Priority", v.Priorities)
+			@selectField("kind", "Kind", v.Kinds)
+			@selectField("concern", "Concern", v.Concerns)
+			<p class="fieldrow check">
+				<input id="draft" name="draft" type="checkbox" value="1" checked?={ v.Draft }/>
+				<label for="draft">Create as a draft &mdash; not yet claimable by anyone</label>
+			</p>
+		}
+	}
+}
+
+// NewDeliverable renders the deliverable form (GET
+// /projects/{id}/deliverables/new). It offers no state control on purpose:
+// spec 029 §3.2 makes deliverable state reported, never declared by the
+// person who wrote the row, and the note under the URL field says so.
+templ NewDeliverable(v NewDeliverableView) {
+	@Page(v.Form.Page) {
+		@formCard(v.Form, "Declare a deliverable in "+v.Form.Project.Name,
+			"A deliverable is a declared, checkable output of this project. Declaring it does not make it done.",
+			"Declare deliverable", "deliverables") {
+			<p class="fieldrow">
+				<label for="name">Name</label>
+				<input id="name" name="name" type="text" required maxlength="200" autofocus value={ v.Name }/>
+			</p>
+			<p class="fieldrow">
+				<label for="description">Description</label>
+				<textarea id="description" name="description" rows="6" placeholder="What is shipped, and how would someone recognise it?">{ v.Description }</textarea>
+			</p>
+			<p class="fieldrow">
+				<label for="url">URL <span class="muted">(optional)</span></label>
+				<input id="url" name="url" type="url" inputmode="url" maxlength="2000" placeholder="https://" value={ v.URL }/>
+				<span class="hint">
+					The address this deliverable lives at, when it is known in advance.
+					Adding it records where to look; whether the deliverable is live stays
+					a fact an emitter or prober reports.
+				</span>
+			</p>
+		}
+	}
+}

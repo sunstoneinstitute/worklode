@@ -283,10 +283,9 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	// --- Step 4: honest destinations and embedded assets ---------------------
 
 	honestDestinations := map[string]string{
-		"/projects/proj/crew":         "spec 029 §6.1",
-		"/projects/proj/deliverables": "spec 029 §7",
-		"/intake":                     "spec 032 §5",
-		"/knowledge":                  "specs 025",
+		"/projects/proj/crew": "spec 029 §6.1",
+		"/intake":             "spec 032 §5",
+		"/knowledge":          "specs 025",
 	}
 	for path, wantSpec := range honestDestinations {
 		code, body := getPage(t, srv.URL+path)

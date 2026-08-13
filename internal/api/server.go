@@ -182,6 +182,12 @@ type server struct {
 	// see web.go's navWrap and metrics.go's observeNavigation.
 	navigations *prometheus.CounterVec
 
+	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
+	// deliverable) and outcome; see webform.go and observeFormSubmission.
+	// These are the only web routes that write, so this is where a rejected
+	// or refused cockpit write becomes visible.
+	formSubmissions *prometheus.CounterVec
+
 	// doc sync (spec 034 §10): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 	docSyncRuns     *prometheus.CounterVec
@@ -320,17 +326,27 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	mux := http.NewServeMux()
 
-	// Read-only web UI. When OIDC is enabled these require a valid session
+	// Read-mostly web UI. When OIDC is enabled these require a valid session
 	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
-	// unconfigured webAuth is a passthrough and the UI stays open as in v1.
-	// The seven global destinations (spec 032 §2) and the project-local
-	// destinations below each record one worklode_web_navigation_requests_total
-	// observation via navWrap.
+	// unconfigured webAuth is a passthrough and the UI stays open as in v1 —
+	// which now includes the two creation forms below, the only web routes
+	// that write (see webform.go, and the open-UI follow-up in
+	// docs/follow-ups.md). The seven global destinations (spec 032 §2) and
+	// the project-local destinations below each record one
+	// worklode_web_navigation_requests_total observation via navWrap.
 	mux.HandleFunc("GET /{$}", s.webAuth(s.navWrap("home", s.homePage)))
 	mux.HandleFunc("GET /intake", s.webAuth(s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8."))))
 	mux.HandleFunc("GET /projects", s.webAuth(s.navWrap("projects", s.projectsPage)))
 	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.navWrap("projects", s.projectPage)))
+	// The literal-segment patterns win over the {section} wildcard below for
+	// the destinations that are built; everything else still lands on the
+	// honest placeholder.
+	mux.HandleFunc("GET /projects/{id}/deliverables", s.webAuth(s.navWrap("deliverables", s.deliverablesPage)))
+	mux.HandleFunc("GET /projects/{id}/deliverables/new", s.webAuth(s.navWrap("deliverable_new", s.newDeliverablePage)))
+	mux.HandleFunc("POST /projects/{id}/deliverables", s.webAuth(s.navWrap("deliverable_new", s.createDeliverableFromForm)))
+	mux.HandleFunc("GET /projects/{id}/tasks/new", s.webAuth(s.navWrap("task_new", s.newTaskPage)))
+	mux.HandleFunc("POST /projects/{id}/tasks", s.webAuth(s.navWrap("task_new", s.createTaskFromForm)))
 	mux.HandleFunc("GET /projects/{id}/{section}", s.webAuth(s.navWrap("project_section", s.projectSectionPage)))
 	mux.HandleFunc("GET /work", s.webAuth(s.navWrap("work", s.workPage)))
 	mux.HandleFunc("GET /reviews", s.webAuth(s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
@@ -415,6 +431,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	mux.Handle("GET /api/v1/projects/resolve", s.auth(s.resolveProjectByRemote))
 	mux.Handle("GET /api/v1/projects/{id}", s.auth(s.getProject))
 	mux.Handle("GET /api/v1/projects/{id}/cockpit", s.auth(s.projectCockpit))
+	mux.Handle("GET /api/v1/projects/{id}/deliverables", s.auth(s.listProjectDeliverables))
+	mux.Handle("POST /api/v1/projects/{id}/deliverables", s.auth(s.createDeliverable))
 	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
 	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
 	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))
