@@ -118,7 +118,7 @@ func TestClaimSameWorktreeSecondTask(t *testing.T) {
 	if _, err := s.Claim(ctx, task1.ID, "stig", "host:/wt", 0); err != nil {
 		t.Fatalf("Claim task1: %v", err)
 	}
-	// One worktree cannot hold active leases on two tasks: the
+	// One actor's worktree cannot hold active leases on two tasks: the
 	// leases_active_worktree unique index fires and maps to ErrLeased.
 	if _, err := s.Claim(ctx, task2.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrLeased) {
 		t.Fatalf("claim second task from same worktree: want ErrLeased, got %v", err)
@@ -134,6 +134,70 @@ func TestClaimSameWorktreeSecondTask(t *testing.T) {
 	}
 	if _, err := s.Claim(ctx, task2.ID, "stig", "host:/wt", 0); err != nil {
 		t.Fatalf("claim task2 after release: %v", err)
+	}
+}
+
+// TestClaimSameWorktreePathDifferentActors pins the scope of the worktree
+// index: it stops one actor working two tasks from one directory, and says
+// nothing about two actors whose worktree identities happen to collide. The
+// identity is "<hostname>:<path>", so a collision means two operators sharing
+// a hostname — devcontainers, a shared dev box, identically-named pods — and
+// scoping the index by actor is what stops one of them seeing "worktree
+// already holds an active lease" for a task nobody on their machine claimed.
+func TestClaimSameWorktreePathDifferentActors(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	if err := s.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("CreateActor bob: %v", err)
+	}
+	task1 := createTask(t, s, leaseTestNow, defaultTaskInput())
+	task2 := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	if _, err := s.Claim(ctx, task1.ID, "stig", "devbox:/src/worklode", 0); err != nil {
+		t.Fatalf("Claim task1 as stig: %v", err)
+	}
+	if _, err := s.Claim(ctx, task2.ID, "bob", "devbox:/src/worklode", 0); err != nil {
+		t.Fatalf("Claim task2 as bob on the same worktree identity: %v", err)
+	}
+	mustState(t, s, task2.ID, "in_progress")
+
+	// Bob is still held to one task per worktree.
+	task3 := createTask(t, s, leaseTestNow, defaultTaskInput())
+	if _, err := s.Claim(ctx, task3.ID, "bob", "devbox:/src/worklode", 0); !errors.Is(err, ErrLeased) {
+		t.Fatalf("bob claiming a third task from his worktree: want ErrLeased, got %v", err)
+	}
+}
+
+// TestRebindWorktreeDifferentActors is RebindLeaseWorktree's half of the same
+// scope: rebinding onto a path another actor holds is allowed, onto one the
+// rebinding actor already holds is not.
+func TestRebindWorktreeDifferentActors(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	if err := s.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("CreateActor bob: %v", err)
+	}
+	task1 := createTask(t, s, leaseTestNow, defaultTaskInput())
+	task2 := createTask(t, s, leaseTestNow, defaultTaskInput())
+	task3 := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	if _, err := s.Claim(ctx, task1.ID, "stig", "devbox:/wt-stig", 0); err != nil {
+		t.Fatalf("Claim task1 as stig: %v", err)
+	}
+	if _, err := s.Claim(ctx, task2.ID, "bob", "devbox:/wt-bob", 0); err != nil {
+		t.Fatalf("Claim task2 as bob: %v", err)
+	}
+	if _, err := s.Claim(ctx, task3.ID, "bob", "devbox:/wt-bob-2", 0); err != nil {
+		t.Fatalf("Claim task3 as bob: %v", err)
+	}
+
+	// Onto a path stig holds: allowed, they are different actors.
+	if _, err := s.RebindLeaseWorktree(ctx, task2.ID, "bob", "devbox:/wt-stig"); err != nil {
+		t.Fatalf("rebind onto another actor's worktree path: %v", err)
+	}
+	// Onto a path bob himself holds: refused.
+	if _, err := s.RebindLeaseWorktree(ctx, task3.ID, "bob", "devbox:/wt-stig"); !errors.Is(err, ErrLeased) {
+		t.Fatalf("rebind onto own held worktree: want ErrLeased, got %v", err)
 	}
 }
 

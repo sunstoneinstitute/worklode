@@ -213,12 +213,6 @@ once an instance is running (dogfooding); until then this file is the list.
 
 Design items landed in spec 028. These are the mechanical leftovers.
 
-- **Multi-operator: `leases_active_worktree` is `UNIQUE (worktree)`** on a bare
-  path string (0001_baseline). Two operators whose worktrees resolve to the same
-  absolute path — devcontainers, shared layout conventions — collide across
-  machines, and the error reads as "someone holds this lease" for a task nobody
-  claimed. Change to `UNIQUE (actor_id, worktree)`. The only item in this list
-  that corrupts state rather than annoying someone.
 - **Bare `claim --next` spans every project.** With one operator that is a
   feature; with several, an overnight loop silently drains someone else's focused
   project. Default `--project` from the repo's `.worklode` config (019 already
