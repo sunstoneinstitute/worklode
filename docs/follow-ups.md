@@ -3,6 +3,18 @@
 Non-blocking items from the v1 review rounds. Import these as tracker tasks
 once an instance is running (dogfooding); until then this file is the list.
 
+- **`closedStates` must become per-repo (2026-08-13 ruling, behaviour change).**
+  `internal/store/tasks.go:667` is a constant SQL tuple — `('merged',
+  'deployed_dev', 'deployed_prod', 'released', 'abandoned')` — mirrored by
+  `closedStateSet` and pinned by `TestClosedStateSetMirrorsSQL`. The spec now
+  says a task stops blocking at or past **its repo mapping's `done_state`**
+  (folded 004 §1.3), so a `merged` task in a repo gating on `released` should
+  still block its dependents and today does not. The constant is interpolated
+  into four queries — `tasks.go` (`IsBlocked`), `hierarchy.go`,
+  `project_work.go`, `brief.go` — each of which needs a join through the repo
+  mapping. Keep the one state-fixed case: a task with children cannot advance
+  past `merged`, so it is closed there in every repo. Spec and code disagree
+  until this lands.
 - **Artifact correlation hardening.** Ingest `registry_package` webhooks so
   `docker_image` artifacts exist; resolve `release.target_commitish` branch
   names to commit SHAs; normalize OCI digests (`sha256:`) in flux

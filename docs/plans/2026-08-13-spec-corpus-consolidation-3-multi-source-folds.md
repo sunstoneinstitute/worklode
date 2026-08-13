@@ -154,12 +154,17 @@ already records.
   `allow_dropped_ids` entries — the wire protocol is the authority over the
   prose describing it. Nothing about the endpoint changed but the path's
   spelling, and part 5 inherits no action.
-- **The `closedStates` set is enumerated nowhere.** Folded 004 §1.3 now
-  defines an open task by deferring to `closedStates` (§6.4) — the right
-  repair, since `done` was never a state under 011 — but neither §5.1 nor
-  §6.4 says which states are in that set, and no source states it either.
-  Part 5 must not let the corpus ship with a `blocks` predicate that points
-  at an undefined set; resolving it needs a human ruling, not a fold.
+- **The `closedStates` set was enumerated nowhere; ruled on 2026-08-13.** A task
+  stops blocking at or past its repo mapping's `done_state`, or when abandoned —
+  a per-repo predicate rather than a fixed state tuple, with one exception: a
+  task with children cannot advance past `merged` and is closed there in every
+  repo. Folded 004 §1.3 and §6.4 state it. This is a **behaviour change**: the
+  shipped `closedStates` is a constant tuple that closes `merged` and
+  `deployed_dev` everywhere, so spec and code disagree until the follow-up in
+  `docs/follow-ups.md` lands. Part 5 inherits nothing; the follow-up owns it.
+  What made this a residual: §1.3's repair replaced a `done` state that never
+  existed under 011 with a deferral to `closedStates`, and nothing in the
+  corpus — no source, and neither §5.1 nor §6.4 — said what was in that set.
 - **The `D<n>` / `Q<n>.<n>` design-record labels are half-retired.**
   `fold.yaml` sheds `(D13)`, `(D14)` and `(Q14.1)` from folded 008's
   headings because they name decisions in 003, which this fold retires —
