@@ -105,3 +105,15 @@ docs/specs2/021-images-in-task-bodies.md:
     sec-13: "## 13. Configuration"
     sec-14: "## 14. Open questions"
     sec-15: "## 15. Acceptance criteria"
+docs/specs2/022-prometheus-metrics.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Registry plumbing"
+    sec-2: "## 2. Process and DB-pool collectors"
+    sec-3: "## 3. Lease and claim metrics (`internal/store`)"
+    sec-4: "## 4. Background jobs"
+    sec-5: "## 5. Webhooks (`internal/hooks`)"
+    sec-6: "## 6. Embeddings (`internal/embed`)"
+    sec-7: "## 7. Testing"
+    sec-8: "## 8. Maintenance instructions"
+    sec-9: "## 9. Scrape path"
