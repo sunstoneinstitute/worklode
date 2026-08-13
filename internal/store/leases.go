@@ -12,9 +12,12 @@ import (
 
 // Lease grants one actor exclusive claim to a task until it expires or is
 // released, bound to the worktree the work happens in. At most one active
-// (unreleased) lease exists per task and per worktree — the leases_active
-// and leases_active_worktree partial unique indexes enforce this in the
-// database.
+// (unreleased) lease exists per task, and per (actor, worktree) — the
+// leases_active and leases_active_worktree partial unique indexes enforce
+// this in the database. The worktree index is scoped to the actor on purpose
+// (migration 0016): a worktree identity is "<hostname>:<path>", so two
+// operators sharing a hostname would otherwise collide on their conventional
+// layout.
 type Lease struct {
 	ID         int64
 	TaskID     string
@@ -118,9 +121,10 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 // Claim atomically leases taskID to actorID (bound to worktree) and moves the
 // task from ready to in_progress, all inside one recorded "cli" event. Errors:
 //
-//   - ErrLeased: the task already has an active lease, or the worktree
-//     already holds an active lease on another task (the leases_active and
-//     leases_active_worktree unique indexes are the backstop for races).
+//   - ErrLeased: the task already has an active lease, or actorID already
+//     holds an active lease on another task from this worktree (the
+//     leases_active and leases_active_worktree unique indexes are the
+//     backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task.
 //   - ErrBadTransition: the task is an epic, or is not in state ready
 //     (draft, merged, ...).
@@ -198,7 +202,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				// means the claim is refused the same way; the message says
 				// which backstop fired so the caller knows what to release.
 				if isUniqueViolationOn(err, "leases_active_worktree") {
-					return fmt.Errorf("worktree %s already holds an active lease: %w", worktree, ErrLeased)
+					return fmt.Errorf("%s already holds an active lease on worktree %s: %w", actorID, worktree, ErrLeased)
 				}
 				if isUniqueViolation(err) {
 					return fmt.Errorf("task %s: %w", taskID, ErrLeased)
@@ -304,9 +308,9 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 // A non-holder — no active lease at all, or one held by a different actor —
 // gets ErrNotFound, the same probe-resistant policy as Renew and Release: the
 // two cases are deliberately indistinguishable so a rebind attempt does not
-// leak who holds the task. If the target worktree already holds another active
-// lease, the leases_active_worktree unique index fires and RebindLeaseWorktree
-// returns ErrLeased. Recorded as a "lease.rebound" cli event. On success it
+// leak who holds the task. If actorID already holds another active lease on
+// the target worktree, the leases_active_worktree unique index fires and
+// RebindLeaseWorktree returns ErrLeased. Recorded as a "lease.rebound" cli event. On success it
 // returns the updated lease (with the new worktree) so the caller confirms the
 // rebind without a separate read that could race a release/expiry.
 func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktree string) (*Lease, error) {
@@ -330,7 +334,7 @@ func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktr
 				worktree, l.ID,
 			); err != nil {
 				if isUniqueViolationOn(err, "leases_active_worktree") {
-					return fmt.Errorf("worktree %s already holds an active lease: %w", worktree, ErrLeased)
+					return fmt.Errorf("%s already holds an active lease on worktree %s: %w", actorID, worktree, ErrLeased)
 				}
 				return fmt.Errorf("rebind lease %d worktree: %w", l.ID, err)
 			}

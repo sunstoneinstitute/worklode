@@ -44,3 +44,5 @@ configMapGenerator:
       - migrations/0014_actor_github_expectation.down.sql
       - migrations/0015_deliverables.up.sql
       - migrations/0015_deliverables.down.sql
+      - migrations/0016_lease_worktree_per_actor.up.sql
+      - migrations/0016_lease_worktree_per_actor.down.sql
