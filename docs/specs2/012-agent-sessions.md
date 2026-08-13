@@ -58,7 +58,8 @@ Columns on `leases` would record only the newest session and leave per-session
 cost with nowhere to live.
 
 `agent`'s CHECK constraint mirrors the existing style of `events.source` and
-`actors.kind`; adding a tool is a one-line migration. `external_session_id` is
+`actors.kind`, and admits the harnesses spec 024 §5 names; adding a tool is a
+one-line migration. `external_session_id` is
 the tool's own identifier (a UUID for Claude Code), namespaced by `agent`
 because nothing guarantees two tools won't collide.
 
