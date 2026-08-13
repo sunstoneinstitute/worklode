@@ -173,6 +173,25 @@ recorded here because each had a real alternative:
     024's missing worktree-exit event. Reconciling it is a spec amendment —
     not a fold decision and not a cutover edit.
 
+16. **Rulings 9, 10 and 11 are swept across the sibling documents, and
+    `wl:Plan` joins folded 006's disjointness axiom.** The three rulings
+    landed *after* tasks 2–4 were dispatched, and each scoped itself to the
+    document that raised it, so four sites in the siblings kept saying what
+    folded 006 had stopped saying: folded 025 twice attributes a
+    `proposed → accepted` crit gate to 006 (ruling 10 retired it) and once
+    states that 006 places `wl:Plan` under `wl:DesignDoc` (ruling 11 moved
+    it), and folded 007 calls 006's projection graphs per-Workstream (ruling
+    9 made them per-Project). Each is repaired by past-tensing or by one
+    word, keeping every span rule 7 pins. The fourth is the reverse
+    direction: folded 006's top-level disjointness axiom omits `wl:Plan`
+    while folded 026 asserts as fact that it joins that axiom and reasons
+    from it, and `ns/ontology.ttl` — the shipped, parseable form — already
+    carries it. Adding the token to folded 006 is transcription from the
+    schema, not a design change.
+    **The general lesson, for part 5:** a ruling taken mid-execution binds
+    every document already dispatched, not only the one that raised it. Part
+    4's rulings are now swept; a ruling part 5 takes needs the same sweep.
+
 ## Cross-target obligations
 
 An amendment whose *content* one task must absorb while its *anchors* live in
@@ -229,6 +248,32 @@ Additions to the list parts 2 and 3 already record.
   naming a specific pre-fold amendment (criteria 3, 9 and 11) tests a state
   the new corpus does not have. Ruling 14 keeps them as written; part 5
   decides whether they are re-aimed at post-cutover amendments or retired.
+- **Folded 026's reference-form worked examples break silently under
+  `refmap.py`, and this is the residual part 5 cannot recover without.**
+  `refmap.py -w` rewrites a *mapped* reference without reporting it, so
+  nothing surfaces the damage — unlike the unmapped report, which escalates
+  the references that resolve to nothing. Four sites, each an example whose
+  whole point is the spelling being rewritten: §3's "a spec number (`014`,
+  `014-design-documents`), or 014 §11.3's shorthand (`WL-SPEC-14`…)", where
+  the bare `014` stays while `WL-SPEC-14` becomes `WL-SPEC-25` and the
+  sentence stops showing one document in two spellings; §3's "`--spec 15`
+  and `WL-SPEC-15` resolve and render identically", where `WL-SPEC-15`
+  becomes `WL-SPEC-6` and the claim goes false; §10's "`WL-SPEC-23` and
+  `WL-SPEC-023` resolve to the same document and normalise to the same
+  string", where both sides become `WL-SPEC-1` and the zero-padding test
+  loses its subject; and §12 criterion 7's `WL-SPEC-14#sec-2.1` /
+  `WL-SPEC-4` pairing, which survives coherently but belongs in the same
+  sweep. Exclude the four from the rewrite, or restate them against the new
+  numbering by hand.
+- **The `ls:`→`wl:` respell divergence is wider than part 3 recorded.** That
+  residual names only folded 016. Part 4 respelled folded 006 and 007 as
+  well (ruling 5), which leaves the retired spelling in folded 004 (§'s
+  `ls:mirrors`), folded 025 (`lsc:DesignDocStatus`, and the four `ls:` class
+  spans ruling 16 requires keeping) and all of folded 016. Folded 025 §24
+  also ships the checkable form of the obligation as acceptance criterion 19
+  — "No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`" — which the
+  corpus fails on day one. Part 5 completes the respell or amends the
+  criterion.
 - **Statements that `--ids` pins but the fold makes false.** Rule 7 requires
   every backticked span to survive, so a sentence built around one cannot be
   edited away even when the fold retires what it says. Three in folded 025:
@@ -251,8 +296,26 @@ Additions to the list parts 2 and 3 already record.
 - **Folded 007 spells concept IRIs path-style** — `wl:status wl:status/accepted`
   in §3.3's SPARQL, where folded 006 mints `wlc:accepted`. The inconsistency
   predates the fold (source 007 wrote `ls:status/accepted` against 006's
-  `lsc:` concepts), so reconciling it is a design change rather than a
-  transcription, and no rewriter was licensed to make it.
+  `lsc:` concepts), and no rewriter was licensed to reconcile it mid-fold.
+  Part 5 should not read that as "reconciling it would be a design change",
+  which was this residual's first wording: `wlc:accepted` is what
+  `ns/concept.ttl` already ships, so the repair is transcription from the
+  schema, exactly like ruling 16's disjointness fix.
+- **Two more citation sites for the unmapped report**, recorded so part 5
+  reads them as expected rather than as new breakage: folded 025 cites
+  `007 §4.3` twice, an anchor this part drops — `fold.yaml`'s drop reason
+  anticipates the first — and folded 026 carries a source-verbatim
+  `006 §4.2` that resolves in neither corpus. Both carry a `§`, so
+  `refmap.py` escalates them correctly.
+- **Two more stale doc slugs**, the same class the `spec-worklode-014`
+  entry above records, at sites it does not name: folded 025 §11.2's
+  `wlid:section/spec-worklode-004/sec-4` and
+  `wlid:section/spec-worklode-013/sec-3.1`.
+- **Ruling 7 was applied to two of three dangling `000` pointers.** Folded
+  006 §0 and folded 025 §5 lost theirs; folded 026 §1 keeps a source-verbatim
+  `000 §2` and is recorded above as a residual instead. That split is
+  deliberate — 026's sits inside a sentence about what a *source* document
+  claimed — but part 5 should settle both the same way.
 - **009's implementation-status qualifiers stay as written** — "done in dev",
   "prod remains blocked on item 1", "the override is not yet implemented in
   rdf-registry". Rule 4 leaves implementation status alone, so folded 006 §13
