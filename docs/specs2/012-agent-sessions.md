@@ -266,7 +266,8 @@ debounced — they carry a lease change, not just liveness.
   `git worktree add`, and `EnterWorktree` fails unless the hook prints the path
   it created. Worklode observes rather than creates. Nothing is lost: Claude
   Code's worktrees live under `.claude/worktrees/`, which `worktree.ParseDir`
-  rejects, and Worklode's own `wt/<task-id>` worktrees are covered by
+  rejects, and Worklode's own worktrees (then under `wt/<task-id>`, now under the
+`worktree_dir` layout spec 008 defines) are covered by
   `session-start` (auto-resume) and the matched `EnterWorktree` binding above.
 - `PreCompact` / `PostCompact` — `SessionStart` already re-fires with
   `source: compact`.
