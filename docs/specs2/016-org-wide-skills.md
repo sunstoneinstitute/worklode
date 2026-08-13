@@ -122,10 +122,10 @@ execution layer) is declared in a plan's task metadata and minted onto the task 
   demands). Re-embed on content change; the corpus is dozens–hundreds of skills, cost
   negligible. Changing provider/model invalidates all embeddings (dimension/space mismatch)
   → full re-embed on config change.
-- **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri`, spec
-  014's document IRI, joins the same way) → server assembles query text (task: title +
-  description + governing-spec excerpt — the brief's own material), embeds it, cosine top-k
-  above a server-side score floor. Returns
+- **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri` joins
+  when spec 014 lands) → server assembles query text (task: title + description +
+  governing-spec excerpt — the brief's own material), embeds it, cosine top-k above a
+  server-side score floor. Returns
   `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
   duplicated into matches.
 - **CLI:** `lode skills recommend [--task <id> | --file <path> | --text <s>] --json` — the
@@ -185,7 +185,7 @@ identical behavior.
 - **006 (graph)** — owns the vocabulary; §1 above adds `ls:Skill` and `ls:recommendsSkill` to
   its mint set and disjointness axiom, and the projection lands under 007's deriver contract.
 - **014 (design docs as graph objects)** — frontmatter-pin ingestion. Task pins work without
-  it; doc pins depend on it.
+  it; doc pins land when 014 does.
 - **External** — an embedding API for the default provider; GitHub webhook/API access to the
   skill source repos (existing app auth).
 
