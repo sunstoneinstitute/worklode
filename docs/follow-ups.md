@@ -130,6 +130,13 @@ once an instance is running (dogfooding); until then this file is the list.
   (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
   The transitions are not duplicated — they stay in `internal/store/tasks.go`.
   Worth a check in CI if the graph ever ships.
+- **`ns/` changes owed at spec 029's acceptance**: `wl:Milestone` and
+  `wl:Deliverable` (subsuming 006's reserved terms), `epic` removed from
+  `wlc:TaskKind` (migration + `validKinds` + the test that holds them
+  together), and the participants/approvals vocabulary. Spec 029 carries no
+  `amends:` frontmatter and the specs2 fold absorbs its "What this spec
+  changes elsewhere" table (the spec-target rows live in the part-2 fold
+  plan), so this entry is the only record of the `ns/` row.
 - **`rdf-registry:ADR-0006` is unresolvable** (spec 014's frontmatter, the corpus's
   only cross-project reference). It predates the `<KEY>-<TYPE>-<n>` shorthand
   (014 §11.3) and no reference form parses the colon syntax. The target is

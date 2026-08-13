@@ -673,12 +673,18 @@ def check_ids(doc: Document, specs_dir: Path, written: Path) -> list:
 
 def compute_requires(doc: Document, fold: Fold, specs_dir: Path) -> list:
     """`requires:` for one scaffolded document: the union of every source's
-    own `requires:`, minus any target whose filename is itself a `sources:`
-    entry somewhere in this fold (that dependency folds internal to
-    docs/specs2/), the rest left pointing at docs/specs/ -- refmap.py
-    repoints them at cutover; docs/specs/ still exists today so they still
-    resolve, and translating them to docs/specs2/ paths now would dangle."""
-    internal = {s for d in fold.documents for s in d.sources}
+    own `requires:`, minus any target that is itself a `sources:` entry of
+    *this same* document -- two merged sources that depend on each other
+    would otherwise leave the folded document requiring itself. A target
+    that folds into some other docs/specs2/ document is a genuine edge
+    between two documents and is kept, along with every target outside the
+    fold: all of them stay pointing at docs/specs/ -- refmap.py repoints
+    them at cutover; docs/specs/ still exists today so they still resolve,
+    and translating them to docs/specs2/ paths now would dangle. Widening
+    the drop to every source declared anywhere in the fold deletes those
+    cross-document edges outright, which is the bug this narrow rule
+    replaces."""
+    same_document = set(doc.sources)
     specs_root = fold.corpus.get("from") or DEFAULT_SPECS_DIR
     seen, out = set(), []
     for source in doc.sources:
@@ -688,7 +694,7 @@ def compute_requires(doc: Document, fold: Fold, specs_dir: Path) -> list:
         for ref in refs:
             ref = str(ref)
             target, _, frag = ref.partition("#")
-            if Path(target).name in internal:
+            if Path(target).name in same_document:
                 continue
             full_path = target if "/" in target else f"{specs_root}/{target}"
             full = f"{full_path}#{frag}" if frag else full_path

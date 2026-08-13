@@ -58,3 +58,397 @@ documents:
         surviving backticks re-pair and capture the prose between them. It is
         a property of docs/specs/005, computable before any rewrite, and no
         rewrite of docs/specs2/005 can make it appear.
+
+  # Part 2: the near-1:1 folds
+  # (docs/plans/2026-08-13-spec-corpus-consolidation-2-near-1to1-folds.md).
+  # Each document keeps its own number and folds only its own source. New
+  # numbering is gapless, so a drop or merge renumbers everything after it.
+
+  # 013: four sections are superseded by 014 sec-6 per 013's frontmatter
+  # (Engine 3, Data model, Testing, Acceptance criteria) and drop here; the
+  # survivors close the gaps (2.4 -> 2.3, 4 -> 3, 6 -> 4, 7 -> 5). The
+  # "Engine 1"/"Engine 2" headings stay: two engines remain after Engine 3's
+  # retirement. Only Engine 3 is superseded wholesale -- for the other three
+  # the frontmatter is broader than 013's own inline notes, so material that
+  # was never superseded drops with them. See each `reason:` below and the
+  # part-2 plan's "Known at hand-off"; resolve before part 5 `git rm`s
+  # docs/specs.
+  - to: 013-reconciliation.md
+    title: Reconciliation & setup diagnosis
+    sources: [013-reconciliation.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["013-reconciliation.md#sec-0"]}
+      - {new: "1", heading: "Command surface",
+         from: ["013-reconciliation.md#sec-1"]}
+      - {new: "1.1", heading: "`lode doctor`",
+         from: ["013-reconciliation.md#sec-1.1"]}
+      - {new: "1.2", heading: "`lode project doctor [repo]`",
+         from: ["013-reconciliation.md#sec-1.2"]}
+      - {new: "2", heading: "`lode reconcile`",
+         from: ["013-reconciliation.md#sec-2"]}
+      - {new: "2.1", heading: "Engine 1 — replay stored events",
+         from: ["013-reconciliation.md#sec-2.1"]}
+      - {new: "2.2", heading: "Engine 2 — poll GitHub",
+         from: ["013-reconciliation.md#sec-2.2"]}
+      - {new: "2.3", heading: "Output",
+         from: ["013-reconciliation.md#sec-2.4"]}
+      - {new: "3", heading: "API",
+         from: ["013-reconciliation.md#sec-4"]}
+      - {new: "4", heading: "Dependencies",
+         from: ["013-reconciliation.md#sec-6"]}
+      - {new: "5", heading: "Open questions",
+         from: ["013-reconciliation.md#sec-7"]}
+    dropped:
+      - ref: "013-reconciliation.md#sec-2.3"
+        reason: "superseded: Engine 3 (spec-doc drift) replaced by 014-design-documents-as-graph-objects.md#sec-6"
+      - ref: "013-reconciliation.md#sec-3"
+        reason: >-
+          superseded: Data model replaced by
+          014-design-documents-as-graph-objects.md#sec-6. Over-scoped: 013's
+          frontmatter supersedes the whole section, but its inline note says
+          only `task_docs` gives way and that `events.applied_at` survives.
+          Lost with the section: the `events.applied_at timestamptz` column
+          declaration (nullable, set when an event's apply completes by either
+          path) and its down-migration sentence. Folded sec-0 still refers to
+          the marker and sec-2.1 relies on its behaviour, but nothing in the
+          folded corpus now declares it, and 014 sec-6 is about
+          `.worklode/implements.yaml` coverage claims and never mentions it.
+      - ref: "013-reconciliation.md#sec-5"
+        reason: >-
+          superseded: Testing replaced by
+          014-design-documents-as-graph-objects.md#sec-6. Over-scoped: 013's
+          frontmatter supersedes the whole section, but its inline obsolete
+          note sits after the Spec-drift bullet only. Lost with the section:
+          the replay test, the poll test, "Both doctors: table-driven over
+          broken-setup fixtures", and the ephemeral-Postgres note -- none of
+          which engine 3's retirement touches. 013 ends up the only folded
+          document with no Testing section.
+      - ref: "013-reconciliation.md#sec-8"
+        reason: >-
+          superseded: Acceptance criteria replaced by
+          014-design-documents-as-graph-objects.md#sec-6. Over-scoped: 013's
+          frontmatter supersedes the whole section, but its inline obsolete
+          note sits after the Spec-drift bullet only. Lost with the section:
+          the replay, poll, `lode project doctor` and `lode doctor` criteria
+          and "Every command emits deterministic `--json`". 013 ends up the
+          only folded document with no Acceptance criteria section.
+
+  # 016: straight 1:1, numbers unchanged.
+  - to: 016-org-wide-skills.md
+    title: Org-wide agent skills
+    sources: [016-org-wide-skills.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["016-org-wide-skills.md#sec-0"]}
+      - {new: "1", heading: "Registry & git sync",
+         from: ["016-org-wide-skills.md#sec-1"]}
+      - {new: "2", heading: "Embeddings & recommendation",
+         from: ["016-org-wide-skills.md#sec-2"]}
+      - {new: "3", heading: "Pins",
+         from: ["016-org-wide-skills.md#sec-3"]}
+      - {new: "4", heading: "Distribution & local install",
+         from: ["016-org-wide-skills.md#sec-4"]}
+      - {new: "5", heading: "Brief integration & activation",
+         from: ["016-org-wide-skills.md#sec-5"]}
+      - {new: "6", heading: "Degradation",
+         from: ["016-org-wide-skills.md#sec-6"]}
+      - {new: "7", heading: "Dependencies",
+         from: ["016-org-wide-skills.md#sec-7"]}
+      - {new: "8", heading: "Open questions",
+         from: ["016-org-wide-skills.md#sec-8"]}
+      - {new: "9", heading: "Acceptance criteria",
+         from: ["016-org-wide-skills.md#sec-9"]}
+
+  # 017: straight 1:1, numbers unchanged.
+  - to: 017-task-secrets.md
+    title: Task-declared secrets
+    sources: [017-task-secrets.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["017-task-secrets.md#sec-0"]}
+      - {new: "1", heading: "Names & catalog",
+         from: ["017-task-secrets.md#sec-1"]}
+      - {new: "2", heading: "Declaration",
+         from: ["017-task-secrets.md#sec-2"]}
+      - {new: "3", heading: "Claim-time ceremony & materialization",
+         from: ["017-task-secrets.md#sec-3"]}
+      - {new: "4", heading: "Execution: `lode secrets exec`",
+         from: ["017-task-secrets.md#sec-4"]}
+      - {new: "5", heading: "The `lode-secrets` skill",
+         from: ["017-task-secrets.md#sec-5"]}
+      - {new: "6", heading: "Degradation",
+         from: ["017-task-secrets.md#sec-6"]}
+      - {new: "7", heading: "Later phases (non-normative)",
+         from: ["017-task-secrets.md#sec-7"]}
+      - {new: "8", heading: "Dependencies",
+         from: ["017-task-secrets.md#sec-8"]}
+      - {new: "9", heading: "Open questions",
+         from: ["017-task-secrets.md#sec-9"]}
+      - {new: "10", heading: "Acceptance criteria",
+         from: ["017-task-secrets.md#sec-10"]}
+
+  # 019: 1:1 with one renumber -- the accepted corpus froze 4.3a as a
+  # letter-suffix insert, but the new corpus starts fresh, so it becomes a
+  # gapless 4.4 and old 4.4 becomes 4.5.
+  - to: 019-project-scoping.md
+    title: Repo-scoped CLI commands
+    sources: [019-project-scoping.md]
+    sections:
+      - {new: "0", heading: "Why",
+         from: ["019-project-scoping.md#sec-0"]}
+      - {new: "1", heading: "Decisions",
+         from: ["019-project-scoping.md#sec-1"]}
+      - {new: "2", heading: "Resolution chain",
+         from: ["019-project-scoping.md#sec-2"]}
+      - {new: "3", heading: "Server changes",
+         from: ["019-project-scoping.md#sec-3"]}
+      - {new: "3.1", heading: "`GET /api/v1/projects/resolve?remote=<url>`",
+         from: ["019-project-scoping.md#sec-3.1"]}
+      - {new: "3.2", heading: "`GET /api/v1/inbox?project=<id>`",
+         from: ["019-project-scoping.md#sec-3.2"]}
+      - {new: "3.3", heading: "Unchanged",
+         from: ["019-project-scoping.md#sec-3.3"]}
+      - {new: "4", heading: "Client changes",
+         from: ["019-project-scoping.md#sec-4"]}
+      - {new: "4.1", heading: "Resolution and the cache",
+         from: ["019-project-scoping.md#sec-4.1"]}
+      - {new: "4.2", heading: "`lode project resolve [--refresh]`",
+         from: ["019-project-scoping.md#sec-4.2"]}
+      - {new: "4.3", heading: "Bare task numbers",
+         from: ["019-project-scoping.md#sec-4.3"]}
+      - {new: "4.4", heading: "Typed ids and `lode show`",
+         from: ["019-project-scoping.md#sec-4.3a"]}
+      - {new: "4.5", heading: "Command surface",
+         from: ["019-project-scoping.md#sec-4.4"]}
+      - {new: "5", heading: "Testing",
+         from: ["019-project-scoping.md#sec-5"]}
+      - {new: "6", heading: "Non-goals",
+         from: ["019-project-scoping.md#sec-6"]}
+    allow_dropped_ids:
+      " behaves exactly as ": >-
+        Source-side span artifact, not an identifier. 019 sec-4.3a wraps the
+        inline span "lode show 12" across a line break; SPAN_RE's
+        single-backtick branch forbids a newline, so the two nearest
+        surviving backticks re-pair and capture the prose between them. It is
+        a property of docs/specs/019, computable before any rewrite, and no
+        rewrite of docs/specs2/019 can make it appear.
+
+  # 020: straight 1:1, numbers unchanged.
+  - to: 020-inbox-import.md
+    title: Inbox import (onboarding a repo with history)
+    sources: [020-inbox-import.md]
+    sections:
+      - {new: "0", heading: "Why",
+         from: ["020-inbox-import.md#sec-0"]}
+      - {new: "1", heading: "How the gap stayed invisible",
+         from: ["020-inbox-import.md#sec-1"]}
+      - {new: "2", heading: "Decisions",
+         from: ["020-inbox-import.md#sec-2"]}
+      - {new: "2.1", heading: "Import is inventory, not replay",
+         from: ["020-inbox-import.md#sec-2.1"]}
+      - {new: "2.2", heading: "Synchronous and capped",
+         from: ["020-inbox-import.md#sec-2.2"]}
+      - {new: "2.3", heading: "`--state open` by default",
+         from: ["020-inbox-import.md#sec-2.3"]}
+      - {new: "3", heading: "Design",
+         from: ["020-inbox-import.md#sec-3"]}
+      - {new: "3.1", heading: "Fetch — `internal/githubauth/list.go`",
+         from: ["020-inbox-import.md#sec-3.1"]}
+      - {new: "3.2", heading: "API — `POST /api/v1/inbox/import`",
+         from: ["020-inbox-import.md#sec-3.2"]}
+      - {new: "3.3", heading: "Staging what was imported",
+         from: ["020-inbox-import.md#sec-3.3"]}
+      - {new: "3.4", heading: "Link — `lode inbox link <repo> <number> <task-id>`",
+         from: ["020-inbox-import.md#sec-3.4"]}
+      - {new: "3.5", heading: "Event-subscription check",
+         from: ["020-inbox-import.md#sec-3.5"]}
+      - {new: "4", heading: "Testing",
+         from: ["020-inbox-import.md#sec-4"]}
+      - {new: "5", heading: "What this spec does not cover",
+         from: ["020-inbox-import.md#sec-5"]}
+      - {new: "6", heading: "Follow-ups this leaves open",
+         from: ["020-inbox-import.md#sec-6"]}
+
+  # 021: two single-subsection merges -- 1.1 (the two-booleans rationale)
+  # folds into 1 Storage, 5.1 (Media types) folds into 5 Upload. Parents keep
+  # their numbers, so nothing renumbers. 8.1/8.2 and 11.1/11.2 stay: two
+  # subsections each is structure, not fragmentation.
+  - to: 021-images-in-task-bodies.md
+    title: Images and attachments on tasks
+    sources: [021-images-in-task-bodies.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["021-images-in-task-bodies.md#sec-0"]}
+      - {new: "1", heading: "Storage",
+         from: ["021-images-in-task-bodies.md#sec-1",
+                "021-images-in-task-bodies.md#sec-1.1"]}
+      - {new: "2", heading: "Reference syntax and serving",
+         from: ["021-images-in-task-bodies.md#sec-2"]}
+      - {new: "3", heading: "Surfaces",
+         from: ["021-images-in-task-bodies.md#sec-3"]}
+      - {new: "4", heading: "Auth",
+         from: ["021-images-in-task-bodies.md#sec-4"]}
+      - {new: "5", heading: "Upload",
+         from: ["021-images-in-task-bodies.md#sec-5",
+                "021-images-in-task-bodies.md#sec-5.1"]}
+      - {new: "6", heading: "Serving hardening",
+         from: ["021-images-in-task-bodies.md#sec-6"]}
+      - {new: "7", heading: "Reference rewriting",
+         from: ["021-images-in-task-bodies.md#sec-7"]}
+      - {new: "8", heading: "Rendering",
+         from: ["021-images-in-task-bodies.md#sec-8"]}
+      - {new: "8.1", heading: "Web UI",
+         from: ["021-images-in-task-bodies.md#sec-8.1"]}
+      - {new: "8.2", heading: "CLI",
+         from: ["021-images-in-task-bodies.md#sec-8.2"]}
+      - {new: "9", heading: "Attachments",
+         from: ["021-images-in-task-bodies.md#sec-9"]}
+      - {new: "10", heading: "Brief integration",
+         from: ["021-images-in-task-bodies.md#sec-10"]}
+      - {new: "11", heading: "Lifecycle and garbage collection",
+         from: ["021-images-in-task-bodies.md#sec-11"]}
+      - {new: "11.1", heading: "Unreferenced blobs",
+         from: ["021-images-in-task-bodies.md#sec-11.1"]}
+      - {new: "11.2", heading: "Orphan objects",
+         from: ["021-images-in-task-bodies.md#sec-11.2"]}
+      - {new: "12", heading: "Mirroring on import",
+         from: ["021-images-in-task-bodies.md#sec-12"]}
+      - {new: "13", heading: "Configuration",
+         from: ["021-images-in-task-bodies.md#sec-13"]}
+      - {new: "14", heading: "Open questions",
+         from: ["021-images-in-task-bodies.md#sec-14"]}
+      - {new: "15", heading: "Acceptance criteria",
+         from: ["021-images-in-task-bodies.md#sec-15"]}
+
+  # 022: straight 1:1, numbers unchanged.
+  - to: 022-prometheus-metrics.md
+    title: Prometheus domain metrics
+    sources: [022-prometheus-metrics.md]
+    sections:
+      - {new: "0", heading: "Purpose & scope",
+         from: ["022-prometheus-metrics.md#sec-0"]}
+      - {new: "1", heading: "Registry plumbing",
+         from: ["022-prometheus-metrics.md#sec-1"]}
+      - {new: "2", heading: "Process and DB-pool collectors",
+         from: ["022-prometheus-metrics.md#sec-2"]}
+      - {new: "3", heading: "Lease and claim metrics (`internal/store`)",
+         from: ["022-prometheus-metrics.md#sec-3"]}
+      - {new: "4", heading: "Background jobs",
+         from: ["022-prometheus-metrics.md#sec-4"]}
+      - {new: "5", heading: "Webhooks (`internal/hooks`)",
+         from: ["022-prometheus-metrics.md#sec-5"]}
+      - {new: "6", heading: "Embeddings (`internal/embed`)",
+         from: ["022-prometheus-metrics.md#sec-6"]}
+      - {new: "7", heading: "Testing",
+         from: ["022-prometheus-metrics.md#sec-7"]}
+      - {new: "8", heading: "Maintenance instructions",
+         from: ["022-prometheus-metrics.md#sec-8"]}
+      - {new: "9", heading: "Scrape path",
+         from: ["022-prometheus-metrics.md#sec-9"]}
+
+  # 029: sec-9 is one of the five "Amendments to existing specs" sections and
+  # is absorbed -- but unlike the other four, 029 carries no amends:
+  # frontmatter, so its claims are recorded nowhere else. The dropped reason
+  # and the part-2 plan carry the obligation. Old sec-10 closes the gap.
+  - to: 029-research-work-in-the-backbone.md
+    title: "Research work in the backbone: projects, milestones, deliverables, approvals"
+    sources: [029-research-work-in-the-backbone.md]
+    sections:
+      - {new: "0", heading: "Why",
+         from: ["029-research-work-in-the-backbone.md#sec-0"]}
+      - {new: "1", heading: "The investigation is a project",
+         from: ["029-research-work-in-the-backbone.md#sec-1"]}
+      - {new: "2", heading: "Milestones and deliverables replace the epic",
+         from: ["029-research-work-in-the-backbone.md#sec-2"]}
+      - {new: "3", heading: "Deliverables",
+         from: ["029-research-work-in-the-backbone.md#sec-3"]}
+      - {new: "3.1", heading: "Identity and the check",
+         from: ["029-research-work-in-the-backbone.md#sec-3.1"]}
+      - {new: "3.2", heading: "State",
+         from: ["029-research-work-in-the-backbone.md#sec-3.2"]}
+      - {new: "3.3", heading: "Lineage",
+         from: ["029-research-work-in-the-backbone.md#sec-3.3"]}
+      - {new: "4", heading: "Identifiers",
+         from: ["029-research-work-in-the-backbone.md#sec-4"]}
+      - {new: "5", heading: "References across projects",
+         from: ["029-research-work-in-the-backbone.md#sec-5"]}
+      - {new: "6", heading: "People",
+         from: ["029-research-work-in-the-backbone.md#sec-6"]}
+      - {new: "6.1", heading: "Assignee, participants, contributors",
+         from: ["029-research-work-in-the-backbone.md#sec-6.1"]}
+      - {new: "6.2", heading: "Identity and roles",
+         from: ["029-research-work-in-the-backbone.md#sec-6.2"]}
+      - {new: "7", heading: "Approvals",
+         from: ["029-research-work-in-the-backbone.md#sec-7"]}
+      - {new: "7.1", heading: "One table, every approval",
+         from: ["029-research-work-in-the-backbone.md#sec-7.1"]}
+      - {new: "7.2", heading: "Where requirements come from",
+         from: ["029-research-work-in-the-backbone.md#sec-7.2"]}
+      - {new: "7.3", heading: "The gates",
+         from: ["029-research-work-in-the-backbone.md#sec-7.3"]}
+      - {new: "8", heading: "Intake, events, and notifications",
+         from: ["029-research-work-in-the-backbone.md#sec-8"]}
+      - {new: "8.1", heading: "Intake",
+         from: ["029-research-work-in-the-backbone.md#sec-8.1"]}
+      - {new: "8.2", heading: "Events out",
+         from: ["029-research-work-in-the-backbone.md#sec-8.2"]}
+      - {new: "8.3", heading: "Events in",
+         from: ["029-research-work-in-the-backbone.md#sec-8.3"]}
+      - {new: "9", heading: "Out of scope",
+         from: ["029-research-work-in-the-backbone.md#sec-10"]}
+    dropped:
+      - ref: "029-research-work-in-the-backbone.md#sec-9"
+        reason: >-
+          absorbed: the at-acceptance amendment table has nothing left to
+          state once its rows are folded in. But 029 carries no amends:
+          frontmatter and no target carries an inline note, so these claims
+          are recorded nowhere else in the corpus. Dropping the section
+          obliges parts 3 and 4 to fold the rows into the surviving
+          documents -- 018's row into 004 (part 3); 025 sec-6, 025 sec-8,
+          025 plans 2-4, 028 sec-2 and 028 sec-6 (part 4) -- per the part-2
+          plan's "Obligations from 029 sec-9 on parts 3 and 4" section; the ns/
+          row is recorded in docs/follow-ups.md.
+          Three surviving sections cited this one -- sec-3.3, sec-4 and
+          sec-7.3 each carried a "(sec-9)" pointer. Each pointer was deleted
+          and its sentence kept verbatim. Rule 5 makes a reference to dropped
+          material an escalation rather than a deletion, and this was decided
+          in review instead: the material is absorbed rather than dead, and
+          the new sec-9 is "Out of scope", so a surviving pointer would have
+          retargeted silently at an unrelated section -- worse than either
+          deleting it or escalating. Parts 3 and 4 will meet this shape
+          repeatedly and should escalate it rather than repeat the shortcut.
+
+  # 032: straight 1:1, numbers unchanged.
+  - to: 032-project-cockpit.md
+    title: Project cockpit
+    sources: [032-project-cockpit.md]
+    sections:
+      - {new: "0", heading: "Purpose and boundary",
+         from: ["032-project-cockpit.md#sec-0"]}
+      - {new: "1", heading: "Facts drive the interface",
+         from: ["032-project-cockpit.md#sec-1"]}
+      - {new: "2", heading: "Application and project navigation",
+         from: ["032-project-cockpit.md#sec-2"]}
+      - {new: "3", heading: "One cockpit with lifecycle modes",
+         from: ["032-project-cockpit.md#sec-3"]}
+      - {new: "4", heading: "Focus and the next decision",
+         from: ["032-project-cockpit.md#sec-4"]}
+      - {new: "5", heading: "Intake and promotion",
+         from: ["032-project-cockpit.md#sec-5"]}
+      - {new: "6", heading: "People and agent presentation",
+         from: ["032-project-cockpit.md#sec-6"]}
+      - {new: "7", heading: "Deliverables and review",
+         from: ["032-project-cockpit.md#sec-7"]}
+      - {new: "8", heading: "Automation and unattended execution",
+         from: ["032-project-cockpit.md#sec-8"]}
+      - {new: "9", heading: "Home and the Morning Brief",
+         from: ["032-project-cockpit.md#sec-9"]}
+      - {new: "10", heading: "Accessibility and responsive behavior",
+         from: ["032-project-cockpit.md#sec-10"]}
+      - {new: "11", heading: "First interactive release",
+         from: ["032-project-cockpit.md#sec-11"]}
+      - {new: "12", heading: "Cockpit rendering and styling toolchain",
+         from: ["032-project-cockpit.md#sec-12"]}
+      - {new: "13", heading: "Non-goals",
+         from: ["032-project-cockpit.md#sec-13"]}

@@ -7,6 +7,42 @@ documents:
   to: 005-prioritization-and-pickup.md
   from_id: WL-SPEC-5
   to_id: WL-SPEC-5
+- from: 013-reconciliation.md
+  to: 013-reconciliation.md
+  from_id: WL-SPEC-13
+  to_id: WL-SPEC-13
+- from: 016-org-wide-skills.md
+  to: 016-org-wide-skills.md
+  from_id: WL-SPEC-16
+  to_id: WL-SPEC-16
+- from: 017-task-secrets.md
+  to: 017-task-secrets.md
+  from_id: WL-SPEC-17
+  to_id: WL-SPEC-17
+- from: 019-project-scoping.md
+  to: 019-project-scoping.md
+  from_id: WL-SPEC-19
+  to_id: WL-SPEC-19
+- from: 020-inbox-import.md
+  to: 020-inbox-import.md
+  from_id: WL-SPEC-20
+  to_id: WL-SPEC-20
+- from: 021-images-in-task-bodies.md
+  to: 021-images-in-task-bodies.md
+  from_id: WL-SPEC-21
+  to_id: WL-SPEC-21
+- from: 022-prometheus-metrics.md
+  to: 022-prometheus-metrics.md
+  from_id: WL-SPEC-22
+  to_id: WL-SPEC-22
+- from: 029-research-work-in-the-backbone.md
+  to: 029-research-work-in-the-backbone.md
+  from_id: WL-SPEC-29
+  to_id: WL-SPEC-29
+- from: 032-project-cockpit.md
+  to: 032-project-cockpit.md
+  from_id: WL-SPEC-32
+  to_id: WL-SPEC-32
 sections:
   005-prioritization-and-pickup.md#sec-0: 005-prioritization-and-pickup.md#sec-0
   005-prioritization-and-pickup.md#sec-1: 005-prioritization-and-pickup.md#sec-1
@@ -19,4 +55,174 @@ sections:
   005-prioritization-and-pickup.md#sec-7: 005-prioritization-and-pickup.md#sec-7
   005-prioritization-and-pickup.md#sec-8: 005-prioritization-and-pickup.md#sec-8
   005-prioritization-and-pickup.md#sec-9: 005-prioritization-and-pickup.md#sec-9
-dropped: []
+  013-reconciliation.md#sec-0: 013-reconciliation.md#sec-0
+  013-reconciliation.md#sec-1: 013-reconciliation.md#sec-1
+  013-reconciliation.md#sec-1.1: 013-reconciliation.md#sec-1.1
+  013-reconciliation.md#sec-1.2: 013-reconciliation.md#sec-1.2
+  013-reconciliation.md#sec-2: 013-reconciliation.md#sec-2
+  013-reconciliation.md#sec-2.1: 013-reconciliation.md#sec-2.1
+  013-reconciliation.md#sec-2.2: 013-reconciliation.md#sec-2.2
+  013-reconciliation.md#sec-2.4: 013-reconciliation.md#sec-2.3
+  013-reconciliation.md#sec-4: 013-reconciliation.md#sec-3
+  013-reconciliation.md#sec-6: 013-reconciliation.md#sec-4
+  013-reconciliation.md#sec-7: 013-reconciliation.md#sec-5
+  016-org-wide-skills.md#sec-0: 016-org-wide-skills.md#sec-0
+  016-org-wide-skills.md#sec-1: 016-org-wide-skills.md#sec-1
+  016-org-wide-skills.md#sec-2: 016-org-wide-skills.md#sec-2
+  016-org-wide-skills.md#sec-3: 016-org-wide-skills.md#sec-3
+  016-org-wide-skills.md#sec-4: 016-org-wide-skills.md#sec-4
+  016-org-wide-skills.md#sec-5: 016-org-wide-skills.md#sec-5
+  016-org-wide-skills.md#sec-6: 016-org-wide-skills.md#sec-6
+  016-org-wide-skills.md#sec-7: 016-org-wide-skills.md#sec-7
+  016-org-wide-skills.md#sec-8: 016-org-wide-skills.md#sec-8
+  016-org-wide-skills.md#sec-9: 016-org-wide-skills.md#sec-9
+  017-task-secrets.md#sec-0: 017-task-secrets.md#sec-0
+  017-task-secrets.md#sec-1: 017-task-secrets.md#sec-1
+  017-task-secrets.md#sec-2: 017-task-secrets.md#sec-2
+  017-task-secrets.md#sec-3: 017-task-secrets.md#sec-3
+  017-task-secrets.md#sec-4: 017-task-secrets.md#sec-4
+  017-task-secrets.md#sec-5: 017-task-secrets.md#sec-5
+  017-task-secrets.md#sec-6: 017-task-secrets.md#sec-6
+  017-task-secrets.md#sec-7: 017-task-secrets.md#sec-7
+  017-task-secrets.md#sec-8: 017-task-secrets.md#sec-8
+  017-task-secrets.md#sec-9: 017-task-secrets.md#sec-9
+  017-task-secrets.md#sec-10: 017-task-secrets.md#sec-10
+  019-project-scoping.md#sec-0: 019-project-scoping.md#sec-0
+  019-project-scoping.md#sec-1: 019-project-scoping.md#sec-1
+  019-project-scoping.md#sec-2: 019-project-scoping.md#sec-2
+  019-project-scoping.md#sec-3: 019-project-scoping.md#sec-3
+  019-project-scoping.md#sec-3.1: 019-project-scoping.md#sec-3.1
+  019-project-scoping.md#sec-3.2: 019-project-scoping.md#sec-3.2
+  019-project-scoping.md#sec-3.3: 019-project-scoping.md#sec-3.3
+  019-project-scoping.md#sec-4: 019-project-scoping.md#sec-4
+  019-project-scoping.md#sec-4.1: 019-project-scoping.md#sec-4.1
+  019-project-scoping.md#sec-4.2: 019-project-scoping.md#sec-4.2
+  019-project-scoping.md#sec-4.3: 019-project-scoping.md#sec-4.3
+  019-project-scoping.md#sec-4.3a: 019-project-scoping.md#sec-4.4
+  019-project-scoping.md#sec-4.4: 019-project-scoping.md#sec-4.5
+  019-project-scoping.md#sec-5: 019-project-scoping.md#sec-5
+  019-project-scoping.md#sec-6: 019-project-scoping.md#sec-6
+  020-inbox-import.md#sec-0: 020-inbox-import.md#sec-0
+  020-inbox-import.md#sec-1: 020-inbox-import.md#sec-1
+  020-inbox-import.md#sec-2: 020-inbox-import.md#sec-2
+  020-inbox-import.md#sec-2.1: 020-inbox-import.md#sec-2.1
+  020-inbox-import.md#sec-2.2: 020-inbox-import.md#sec-2.2
+  020-inbox-import.md#sec-2.3: 020-inbox-import.md#sec-2.3
+  020-inbox-import.md#sec-3: 020-inbox-import.md#sec-3
+  020-inbox-import.md#sec-3.1: 020-inbox-import.md#sec-3.1
+  020-inbox-import.md#sec-3.2: 020-inbox-import.md#sec-3.2
+  020-inbox-import.md#sec-3.3: 020-inbox-import.md#sec-3.3
+  020-inbox-import.md#sec-3.4: 020-inbox-import.md#sec-3.4
+  020-inbox-import.md#sec-3.5: 020-inbox-import.md#sec-3.5
+  020-inbox-import.md#sec-4: 020-inbox-import.md#sec-4
+  020-inbox-import.md#sec-5: 020-inbox-import.md#sec-5
+  020-inbox-import.md#sec-6: 020-inbox-import.md#sec-6
+  021-images-in-task-bodies.md#sec-0: 021-images-in-task-bodies.md#sec-0
+  021-images-in-task-bodies.md#sec-1: 021-images-in-task-bodies.md#sec-1
+  021-images-in-task-bodies.md#sec-1.1: 021-images-in-task-bodies.md#sec-1
+  021-images-in-task-bodies.md#sec-2: 021-images-in-task-bodies.md#sec-2
+  021-images-in-task-bodies.md#sec-3: 021-images-in-task-bodies.md#sec-3
+  021-images-in-task-bodies.md#sec-4: 021-images-in-task-bodies.md#sec-4
+  021-images-in-task-bodies.md#sec-5: 021-images-in-task-bodies.md#sec-5
+  021-images-in-task-bodies.md#sec-5.1: 021-images-in-task-bodies.md#sec-5
+  021-images-in-task-bodies.md#sec-6: 021-images-in-task-bodies.md#sec-6
+  021-images-in-task-bodies.md#sec-7: 021-images-in-task-bodies.md#sec-7
+  021-images-in-task-bodies.md#sec-8: 021-images-in-task-bodies.md#sec-8
+  021-images-in-task-bodies.md#sec-8.1: 021-images-in-task-bodies.md#sec-8.1
+  021-images-in-task-bodies.md#sec-8.2: 021-images-in-task-bodies.md#sec-8.2
+  021-images-in-task-bodies.md#sec-9: 021-images-in-task-bodies.md#sec-9
+  021-images-in-task-bodies.md#sec-10: 021-images-in-task-bodies.md#sec-10
+  021-images-in-task-bodies.md#sec-11: 021-images-in-task-bodies.md#sec-11
+  021-images-in-task-bodies.md#sec-11.1: 021-images-in-task-bodies.md#sec-11.1
+  021-images-in-task-bodies.md#sec-11.2: 021-images-in-task-bodies.md#sec-11.2
+  021-images-in-task-bodies.md#sec-12: 021-images-in-task-bodies.md#sec-12
+  021-images-in-task-bodies.md#sec-13: 021-images-in-task-bodies.md#sec-13
+  021-images-in-task-bodies.md#sec-14: 021-images-in-task-bodies.md#sec-14
+  021-images-in-task-bodies.md#sec-15: 021-images-in-task-bodies.md#sec-15
+  022-prometheus-metrics.md#sec-0: 022-prometheus-metrics.md#sec-0
+  022-prometheus-metrics.md#sec-1: 022-prometheus-metrics.md#sec-1
+  022-prometheus-metrics.md#sec-2: 022-prometheus-metrics.md#sec-2
+  022-prometheus-metrics.md#sec-3: 022-prometheus-metrics.md#sec-3
+  022-prometheus-metrics.md#sec-4: 022-prometheus-metrics.md#sec-4
+  022-prometheus-metrics.md#sec-5: 022-prometheus-metrics.md#sec-5
+  022-prometheus-metrics.md#sec-6: 022-prometheus-metrics.md#sec-6
+  022-prometheus-metrics.md#sec-7: 022-prometheus-metrics.md#sec-7
+  022-prometheus-metrics.md#sec-8: 022-prometheus-metrics.md#sec-8
+  022-prometheus-metrics.md#sec-9: 022-prometheus-metrics.md#sec-9
+  029-research-work-in-the-backbone.md#sec-0: 029-research-work-in-the-backbone.md#sec-0
+  029-research-work-in-the-backbone.md#sec-1: 029-research-work-in-the-backbone.md#sec-1
+  029-research-work-in-the-backbone.md#sec-2: 029-research-work-in-the-backbone.md#sec-2
+  029-research-work-in-the-backbone.md#sec-3: 029-research-work-in-the-backbone.md#sec-3
+  029-research-work-in-the-backbone.md#sec-3.1: 029-research-work-in-the-backbone.md#sec-3.1
+  029-research-work-in-the-backbone.md#sec-3.2: 029-research-work-in-the-backbone.md#sec-3.2
+  029-research-work-in-the-backbone.md#sec-3.3: 029-research-work-in-the-backbone.md#sec-3.3
+  029-research-work-in-the-backbone.md#sec-4: 029-research-work-in-the-backbone.md#sec-4
+  029-research-work-in-the-backbone.md#sec-5: 029-research-work-in-the-backbone.md#sec-5
+  029-research-work-in-the-backbone.md#sec-6: 029-research-work-in-the-backbone.md#sec-6
+  029-research-work-in-the-backbone.md#sec-6.1: 029-research-work-in-the-backbone.md#sec-6.1
+  029-research-work-in-the-backbone.md#sec-6.2: 029-research-work-in-the-backbone.md#sec-6.2
+  029-research-work-in-the-backbone.md#sec-7: 029-research-work-in-the-backbone.md#sec-7
+  029-research-work-in-the-backbone.md#sec-7.1: 029-research-work-in-the-backbone.md#sec-7.1
+  029-research-work-in-the-backbone.md#sec-7.2: 029-research-work-in-the-backbone.md#sec-7.2
+  029-research-work-in-the-backbone.md#sec-7.3: 029-research-work-in-the-backbone.md#sec-7.3
+  029-research-work-in-the-backbone.md#sec-8: 029-research-work-in-the-backbone.md#sec-8
+  029-research-work-in-the-backbone.md#sec-8.1: 029-research-work-in-the-backbone.md#sec-8.1
+  029-research-work-in-the-backbone.md#sec-8.2: 029-research-work-in-the-backbone.md#sec-8.2
+  029-research-work-in-the-backbone.md#sec-8.3: 029-research-work-in-the-backbone.md#sec-8.3
+  029-research-work-in-the-backbone.md#sec-10: 029-research-work-in-the-backbone.md#sec-9
+  032-project-cockpit.md#sec-0: 032-project-cockpit.md#sec-0
+  032-project-cockpit.md#sec-1: 032-project-cockpit.md#sec-1
+  032-project-cockpit.md#sec-2: 032-project-cockpit.md#sec-2
+  032-project-cockpit.md#sec-3: 032-project-cockpit.md#sec-3
+  032-project-cockpit.md#sec-4: 032-project-cockpit.md#sec-4
+  032-project-cockpit.md#sec-5: 032-project-cockpit.md#sec-5
+  032-project-cockpit.md#sec-6: 032-project-cockpit.md#sec-6
+  032-project-cockpit.md#sec-7: 032-project-cockpit.md#sec-7
+  032-project-cockpit.md#sec-8: 032-project-cockpit.md#sec-8
+  032-project-cockpit.md#sec-9: 032-project-cockpit.md#sec-9
+  032-project-cockpit.md#sec-10: 032-project-cockpit.md#sec-10
+  032-project-cockpit.md#sec-11: 032-project-cockpit.md#sec-11
+  032-project-cockpit.md#sec-12: 032-project-cockpit.md#sec-12
+  032-project-cockpit.md#sec-13: 032-project-cockpit.md#sec-13
+dropped:
+- ref: 013-reconciliation.md#sec-2.3
+  reason: 'superseded: Engine 3 (spec-doc drift) replaced by 014-design-documents-as-graph-objects.md#sec-6'
+- ref: 013-reconciliation.md#sec-3
+  reason: 'superseded: Data model replaced by 014-design-documents-as-graph-objects.md#sec-6.
+    Over-scoped: 013''s frontmatter supersedes the whole section, but its inline note
+    says only `task_docs` gives way and that `events.applied_at` survives. Lost with
+    the section: the `events.applied_at timestamptz` column declaration (nullable,
+    set when an event''s apply completes by either path) and its down-migration sentence.
+    Folded sec-0 still refers to the marker and sec-2.1 relies on its behaviour, but
+    nothing in the folded corpus now declares it, and 014 sec-6 is about `.worklode/implements.yaml`
+    coverage claims and never mentions it.'
+- ref: 013-reconciliation.md#sec-5
+  reason: 'superseded: Testing replaced by 014-design-documents-as-graph-objects.md#sec-6.
+    Over-scoped: 013''s frontmatter supersedes the whole section, but its inline obsolete
+    note sits after the Spec-drift bullet only. Lost with the section: the replay
+    test, the poll test, "Both doctors: table-driven over broken-setup fixtures",
+    and the ephemeral-Postgres note -- none of which engine 3''s retirement touches.
+    013 ends up the only folded document with no Testing section.'
+- ref: 013-reconciliation.md#sec-8
+  reason: 'superseded: Acceptance criteria replaced by 014-design-documents-as-graph-objects.md#sec-6.
+    Over-scoped: 013''s frontmatter supersedes the whole section, but its inline obsolete
+    note sits after the Spec-drift bullet only. Lost with the section: the replay,
+    poll, `lode project doctor` and `lode doctor` criteria and "Every command emits
+    deterministic `--json`". 013 ends up the only folded document with no Acceptance
+    criteria section.'
+- ref: 029-research-work-in-the-backbone.md#sec-9
+  reason: 'absorbed: the at-acceptance amendment table has nothing left to state once
+    its rows are folded in. But 029 carries no amends: frontmatter and no target carries
+    an inline note, so these claims are recorded nowhere else in the corpus. Dropping
+    the section obliges parts 3 and 4 to fold the rows into the surviving documents
+    -- 018''s row into 004 (part 3); 025 sec-6, 025 sec-8, 025 plans 2-4, 028 sec-2
+    and 028 sec-6 (part 4) -- per the part-2 plan''s "Obligations from 029 sec-9 on
+    parts 3 and 4" section; the ns/ row is recorded in docs/follow-ups.md. Three surviving
+    sections cited this one -- sec-3.3, sec-4 and sec-7.3 each carried a "(sec-9)"
+    pointer. Each pointer was deleted and its sentence kept verbatim. Rule 5 makes
+    a reference to dropped material an escalation rather than a deletion, and this
+    was decided in review instead: the material is absorbed rather than dead, and
+    the new sec-9 is "Out of scope", so a surviving pointer would have retargeted
+    silently at an unrelated section -- worse than either deleting it or escalating.
+    Parts 3 and 4 will meet this shape repeatedly and should escalate it rather than
+    repeat the shortcut.'
