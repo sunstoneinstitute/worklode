@@ -633,12 +633,19 @@ documents:
     dropped:
       - ref: "006-knowledge-graph.md#sec-1"
         reason: >-
-          superseded: the `ls:` prefix block, retired by 014 sec-1. Its
-          content is the prefix-to-namespace binding, which sec-10 states
-          post-rename -- 006 sec-5 already carries 014 sec-1's clarification
-          that the published base carries no ontology-name segment. Folding
-          the block forward would reinstate the retired spelling in the one
-          document the rename was written about.
+          superseded: the `ls:` prefix block, retired by 014 sec-1. It holds
+          three things and none is lost. The prefix-to-namespace binding is
+          stated post-rename by sec-10 -- 006 sec-5 already carries 014
+          sec-1's clarification that the published base carries no
+          ontology-name segment. The ADR-0006 placement rule (a shared,
+          cross-cutting ontology sits directly under `rdf/`, not under
+          `rdf/domain/`) survives as its consequence, the `rdf/wl/…` source
+          paths in sec-0, sec-13.2 and sec-14. The `@prefix` declarations for
+          `dct`, `foaf`, `prov`, `doap`, `skos`, `fabio`, `rdf`, `rdfs`,
+          `owl` and `xsd` are illustrative: `ns/*.ttl` is the parseable form
+          (CLAUDE.md), and the specs' own Turtle blocks never parsed.
+          Folding the block forward would reinstate the retired spelling in
+          the one document the rename was written about.
       - ref: "006-knowledge-graph.md#sec-1.6"
         reason: >-
           superseded: replaced by 014 sec-2 -- there is no Plan node, so the
@@ -1205,6 +1212,66 @@ documents:
         and no rewrite of docs/specs2/006 can make them appear. The FENCE_RE
         cousin of the SPAN_RE artifacts parts 1-3 pre-seed.
 
+      "proposed": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The `wlc:proposed` concept
+        itself. Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014
+        sec-5, so no frontmatter edge on 006 records it, which is why plan
+        ruling 10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "Submitted": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. From that concept's
+        skos:definition, deleted with it. Reached 006 sec-1.4 only
+        transitively: 025 sec-3 amends 014 sec-5, so no frontmatter edge on
+        006 records it, which is why plan ruling 10 states it instead.
+        Keeping the span would mean declaring a concept the corpus and the
+        shipped vocabulary have both dropped.
+      "awaiting": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The same skos:definition.
+        Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014 sec-5,
+        so no frontmatter edge on 006 records it, which is why plan ruling
+        10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "resolution.": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The same skos:definition.
+        Reached 006 sec-1.4 only transitively: 025 sec-3 amends 014 sec-5,
+        so no frontmatter edge on 006 records it, which is why plan ruling
+        10 states it instead. Keeping the span would mean declaring a
+        concept the corpus and the shipped vocabulary have both dropped.
+      "draft \u2192 proposed \u2192 accepted \u2192 superseded": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The post-014 sec-5, pre-025
+        sec-3 order, carried by 006 sec-1.4's inline 014 note -- the same
+        class as the five-member string already exempted above. Reached 006
+        sec-1.4 only transitively: 025 sec-3 amends 014 sec-5, so no
+        frontmatter edge on 006 records it, which is why plan ruling 10
+        states it instead. Keeping the span would mean declaring a concept
+        the corpus and the shipped vocabulary have both dropped.
+      "proposed \u2192 accepted": >-
+        Real loss, and the point of the amendment that causes it: 025 sec-3
+        removes `proposed` from the status scheme -- a document under review
+        is a draft with an open review task -- and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The retired transition, a
+        span in 006 sec-1.4's prose and again in 006 sec-8; the crit gate
+        survives as review of a draft. Reached 006 sec-1.4 only
+        transitively: 025 sec-3 amends 014 sec-5, so no frontmatter edge on
+        006 records it, which is why plan ruling 10 states it instead.
+        Keeping the span would mean declaring a concept the corpus and the
+        shipped vocabulary have both dropped.
+
   # 007 <- {007}: a near-1:1 fold, in part 4 because its two-layer model,
   # deriver contract and standing queries only make sense read against the
   # vocabulary 006 states and the coverage claim 014 sec-6 adds -- both of
@@ -1330,6 +1397,29 @@ documents:
         name, and `ns/` has shipped the wl: vocabulary since. Folded 008
         enacts the same rename for its two terms; part 5 owes folded 016 the
         matching entries.
+
+      "draft\u2192proposed\u2192accepted\u2192superseded\u2192implemented": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The pre-014 five-value
+        order, parenthesised under 007 sec-4.4's unimplemented-specs query.
+        007 does not own this enum: 006 declares it, and folded 007 cites
+        rather than restates it, so keeping either span would put a retired
+        scheme in the document that reads the vocabulary rather than the one
+        that defines it.
+      "proposed \u2192 accepted": >-
+        Real loss, and the point of the amendments that cause it. 014 sec-5
+        ends the status enum at `superseded` and 025 sec-3 then removes
+        `proposed` -- a document under review is a draft with an open review
+        task -- which plan ruling 10 states, and `ns/concept.ttl` ships
+        `draft`, `accepted`, `superseded` alone. The retired transition, in
+        007 sec-2's account of how declared-layer edges are gated; the crit
+        gate survives as review of a draft. 007 does not own this enum: 006
+        declares it, and folded 007 cites rather than restates it, so
+        keeping either span would put a retired scheme in the document that
+        reads the vocabulary rather than the one that defines it.
 
   # Part 2: the near-1:1 folds
   # (docs/plans/2026-08-13-spec-corpus-consolidation-2-near-1to1-folds.md).
@@ -2111,6 +2201,38 @@ documents:
                 "033-plan-section-coverage.md#sec-6"]}
       - {new: "12", heading: "Acceptance criteria",
          from: ["026-design-doc-queries.md#sec-10"]}
+
+    allow_dropped_ids:
+      "ls:covers": >-
+        spent: 033 sec-4.1's note that 006's `ls:covers` mention is left as
+        written is retired by plan ruling 8 -- the folded corpus enacts 014
+        sec-1's rename, and folded 006 spells that edge `wl:cutFrom`.
+        Deleting the note necessarily drops its only occurrence of the span.
+        The term's own rename is stated; only the observation about 006's
+        historical spelling goes.
+      "ls:implements": >-
+        spent: the same disposition, one section further down. Plan ruling
+        12 retires 033 sec-4.2's closing sentence, whose halves are both now
+        false -- folded 006 spells it `wl:implements`, and 014 sec-12 is
+        absorbed. The split of `wl:implements` into `wl:covers`,
+        `wl:produces` and the Component→Section claim is stated in full;
+        only the note about 006's spelling goes.
+      "ls:": >-
+        The prefix label, surviving in 033 only inside the two sentences
+        rulings 8 and 12 retire. `wl:` is the corpus-wide spelling and 006
+        sec-1's prefix block is dropped by this same fold.
+      "wl:": >-
+        The same: the bare label appears only in those two `ls:`->`wl:`
+        rename phrases. Every qualified `wl:Term` in the document is
+        untouched.
+      "sec-3.4": >-
+        Hand-repointed, not lost: 026 sec-2.1's fenced sample output line
+        names `007 sec-3.4` as an example planning gap, and that anchor
+        becomes sec-2.4 of folded 007. The plan's residual called the line
+        invisible to refmap.py, which is true, but --ids does see it:
+        check_ids tokenises fenced-block content, so the repoint reads as a
+        dropped identifier. (`sec-5` needs no entry -- it survives as a
+        heading anchor elsewhere in the document.)
 
   # 029: sec-9 is one of the five "Amendments to existing specs" sections and
   # is absorbed -- but unlike the other four, 029 carries no amends:
