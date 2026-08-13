@@ -72,6 +72,18 @@ CSS v4 build (`internal/ui/styles/app.tailwind.css` →
 depends on nothing beyond stdlib, `internal/store` (if needed), and the templ
 runtime — `internal/api` imports `internal/ui`, never the reverse.
 
+Every route is guarded through one table. `internal/api/router.go`'s
+`routeGuards` names the permission each route requires — or `open("why")` when
+it deliberately needs no worklode identity — and `NewServer` refuses to boot on
+a route the table does not name or a table entry no route uses, so a new
+endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
+`Subject` derived once per request (bearer token, session cookie, or the
+anonymous `authOpen` subject an instance with no login provider serves),
+a `grants` table of permission → roles, and a default-deny `Decide`. There is
+no RBAC model yet — the two roles are the `user`/`admin` Keycloak already
+syncs (023 §3.2), and decisions are not project-scoped — so add real roles by
+editing that table, never by adding a check inside a handler.
+
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 webhooks, Flux notification-controller webhooks — both HMAC-signed),
 `internal/watch` (pod informer for crash loops/OOM kills), and `lode inbox
