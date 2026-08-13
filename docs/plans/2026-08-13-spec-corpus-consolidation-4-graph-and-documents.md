@@ -88,6 +88,29 @@ recorded here because each had a real alternative:
    own statement; the pointer goes. Part 1's folded 005 set this precedent
    for the same dangling number.
 
+8. **006's `covers` mention is respelled `wl:cutFrom`, not `wl:covers`.**
+   006 §4's v1 caveat names `ls:covers` (Artifact→Commit, the delivery
+   frontier). 033 §4.1 renamed that edge `wl:cutFrom` — because `wl:covers`
+   is now Plan→Section and two domains on one property intersect to nothing
+   — and left 006's mention as written on the grounds that it predates the
+   prefix rename and sits in an accepted document. Ruling 5 retires that
+   reasoning: the folded corpus enacts the rename, so a literal respell would
+   have folded 006 contradict its own §3.1, which declares `wl:cutFrom`.
+   **Consequence for task 4:** 033 §4.1's sentence about leaving 006's
+   spelling alone is spent — state the rename of the term, not the note about
+   006's historical spelling.
+9. **025 §8's Workstream→Project change applies document-wide in folded
+   006**, not only in the three sections carrying its inline notes. 025 §8
+   deletes `wl:Workstream`, `wl:OngoingMaintenance` and `wl:inWorkstream`,
+   redefines `wl:Project` as the unbounded umbrella and makes `wl:inProject`
+   functional; 006 states consequences of the old model in its SHACL sketch,
+   Layer 2 table, projection section, open questions and acceptance criteria.
+   Leaving those would make the document contradict its own §1–§3. This
+   carries one normative change that is 025's and not the rewriter's: with
+   `wl:inProject` functional, "a Task in several Workstreams appears in
+   several graphs" is gone, and each Task's quads live in the named graph of
+   its one Project.
+
 ## Cross-target obligations
 
 An amendment whose *content* one task must absorb while its *anchors* live in
