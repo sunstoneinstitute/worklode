@@ -42,9 +42,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// allEvents is the guarded event set (unknown events are handled separately).
-var allEvents = []string{"session-start", "session-end", "pre-commit",
-	"worktree-create", "worktree-remove", "heartbeat", "worktree-enter", "worktree-exit"}
+// allEvents is the guarded event set (unknown events are handled separately),
+// taken from the exported listing so a new event cannot skip these tests.
+var allEvents = EventNames()
 
 // recordingServer stands in for the backbone and flags ANY inbound request.
 // The guard-NOP tests assert it is never hit.
@@ -260,6 +260,32 @@ func TestGuardNOPForEveryEvent(t *testing.T) {
 				t.Fatalf("backbone was called during a guard-NOP: %v", rec.requests)
 			}
 		})
+	}
+}
+
+// Every listed event must reach a handler: `lode hook --list` advertises this
+// set, so an event that only dispatch's default branch answers would be a
+// documented no-op. Run outside any repo, where every handler is a guard NOP
+// and the only possible output is the unknown-event warning.
+func TestEventsAreDispatched(t *testing.T) {
+	newRecordingServer(t)
+	run := func(event string) string {
+		var stdout, stderr bytes.Buffer
+		Run(context.Background(), Options{
+			Event:  event,
+			Stdin:  strings.NewReader(`{"cwd":"` + t.TempDir() + `"}`),
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		return stderr.String()
+	}
+	for _, event := range allEvents {
+		if got := run(event); strings.Contains(got, "unknown hook event") {
+			t.Errorf("listed event %q is not dispatched: %s", event, got)
+		}
+	}
+	if got := run("not-an-event"); !strings.Contains(got, "unknown hook event") {
+		t.Errorf("unlisted event: stderr = %q, want an unknown-event warning", got)
 	}
 }
 

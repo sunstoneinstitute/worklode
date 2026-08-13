@@ -337,6 +337,9 @@ The reporting agent comes from `LODE_AGENT`, defaulting to `claude-code`.
 Accepted values: `claude-code`, `codex`, `cursor`, `aider`, `opencode`, `pi`,
 `amp`, `other`.
 
+`lode hook --list` prints every supported event, what `lode install` binds it
+to, and what its handler does.
+
 Claude Code bindings:
 
 | `lode hook` event | Claude Code event |
