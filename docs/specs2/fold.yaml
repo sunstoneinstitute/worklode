@@ -2202,6 +2202,38 @@ documents:
       - {new: "12", heading: "Acceptance criteria",
          from: ["026-design-doc-queries.md#sec-10"]}
 
+    allow_dropped_ids:
+      "ls:covers": >-
+        spent: 033 sec-4.1's note that 006's `ls:covers` mention is left as
+        written is retired by plan ruling 8 -- the folded corpus enacts 014
+        sec-1's rename, and folded 006 spells that edge `wl:cutFrom`.
+        Deleting the note necessarily drops its only occurrence of the span.
+        The term's own rename is stated; only the observation about 006's
+        historical spelling goes.
+      "ls:implements": >-
+        spent: the same disposition, one section further down. Plan ruling
+        12 retires 033 sec-4.2's closing sentence, whose halves are both now
+        false -- folded 006 spells it `wl:implements`, and 014 sec-12 is
+        absorbed. The split of `wl:implements` into `wl:covers`,
+        `wl:produces` and the Component→Section claim is stated in full;
+        only the note about 006's spelling goes.
+      "ls:": >-
+        The prefix label, surviving in 033 only inside the two sentences
+        rulings 8 and 12 retire. `wl:` is the corpus-wide spelling and 006
+        sec-1's prefix block is dropped by this same fold.
+      "wl:": >-
+        The same: the bare label appears only in those two `ls:`->`wl:`
+        rename phrases. Every qualified `wl:Term` in the document is
+        untouched.
+      "sec-3.4": >-
+        Hand-repointed, not lost: 026 sec-2.1's fenced sample output line
+        names `007 sec-3.4` as an example planning gap, and that anchor
+        becomes sec-2.4 of folded 007. The plan's residual called the line
+        invisible to refmap.py, which is true, but --ids does see it:
+        check_ids tokenises fenced-block content, so the repoint reads as a
+        dropped identifier. (`sec-5` needs no entry -- it survives as a
+        heading anchor elsewhere in the document.)
+
   # 029: sec-9 is one of the five "Amendments to existing specs" sections and
   # is absorbed -- but unlike the other four, 029 carries no amends:
   # frontmatter, so its claims are recorded nowhere else. The dropped reason
