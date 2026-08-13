@@ -1,0 +1,235 @@
+// router.go registers the server's routes against one declarative table of
+// permissions. The table is the point: a route's guard is stated next to its
+// pattern, in one screenful anyone can review, instead of being inferable
+// only from how deeply its handler is wrapped.
+//
+// Two boot-time checks make the table binding rather than advisory, which is
+// what turns "we have middleware" into "nothing is unguarded":
+//
+//   - Registering a pattern the table does not name panics. A new endpoint
+//     cannot ship without someone deciding what may reach it — including
+//     deciding it is public, which is spelled out with a written reason.
+//   - A table entry no route uses fails NewServer. Dead policy is how a table
+//     drifts into fiction: an entry nobody enforces reads like a guard.
+//
+// Neither check can be satisfied by accident, and every existing test that
+// boots a server exercises both.
+package api
+
+import (
+	"fmt"
+	"net/http"
+	"slices"
+	"strings"
+)
+
+// routeGuard is one row of the table: the permission a route requires, plus,
+// for public routes only, why it carries no worklode identity. The reason is
+// mandatory for permPublic (checked by newRouter) because "this endpoint
+// needs no authentication" is a claim that should have to be defended in the
+// place someone reads it.
+type routeGuard struct {
+	perm   Permission
+	public string
+}
+
+// guarded is the ordinary case: a route requiring perm.
+func guarded(perm Permission) routeGuard { return routeGuard{perm: perm} }
+
+// open marks a route as deliberately unauthenticated, with the reason it can
+// be. Note this is about the *worklode* identity: the webhook routes below
+// authenticate every request by HMAC signature, they just do not carry an
+// actor.
+func open(why string) routeGuard { return routeGuard{perm: permPublic, public: why} }
+
+// routeGuards names the guard for every route the server serves, keyed by the
+// exact ServeMux pattern (method included — GET and POST on one path are
+// different capabilities and get different rows).
+//
+// The /metrics and /healthz routes are absent by construction: they are
+// served on the separate admin listener, which is never routed through the
+// public ingress and has no authentication middleware at all.
+var routeGuards = map[string]routeGuard{
+	// --- web UI (spec 032) ---------------------------------------------------
+	"GET /{$}":                            guarded(permWebRead),
+	"GET /intake":                         guarded(permWebRead),
+	"GET /projects":                       guarded(permWebRead),
+	"GET /projects/{id}":                  guarded(permWebRead),
+	"GET /projects/{id}/deliverables":     guarded(permWebRead),
+	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),
+	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
+	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
+	"POST /projects/{id}/tasks":           guarded(permWebWrite),
+	"GET /projects/{id}/{section}":        guarded(permWebRead),
+	"GET /work":                           guarded(permWebRead),
+	"GET /reviews":                        guarded(permWebRead),
+	"GET /deliveries":                     guarded(permWebRead),
+	"GET /knowledge":                      guarded(permWebRead),
+	"GET /tasks/{id}":                     guarded(permWebRead),
+
+	// --- unauthenticated by design ------------------------------------------
+	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
+		"stylesheet request has no session to attach a login redirect to"),
+	"GET /auth/login":             open("starts the login flow"),
+	"GET /auth/callback":          open("finishes the login flow"),
+	"POST /hooks/github":          open("authenticated by HMAC signature, not by an actor"),
+	"POST /hooks/flux":            open("authenticated by HMAC signature, not by an actor"),
+	"GET /auth/oidc/config":       open("issuer discovery the CLI needs before it can log in"),
+	"POST /auth/oidc/token":       open("exchanges a verified Keycloak ID token for a wl_ token"),
+	"GET /.well-known/lode-login": open("login-endpoint discovery, by definition pre-login"),
+	"GET /auth/cli/login":         open("starts the server-mediated CLI login flow"),
+	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
+
+	// --- tasks ---------------------------------------------------------------
+	"POST /api/v1/tasks":                        guarded(permTaskWrite),
+	"GET /api/v1/tasks":                         guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}":                    guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/brief":              guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/timeline":           guarded(permTaskRead),
+	"PATCH /api/v1/tasks/{id}":                  guarded(permTaskWrite),
+	"PUT /api/v1/tasks/{id}/skills":             guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/edges":             guarded(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/edges":           guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/decompose":         guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/done":              guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/abandon":           guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/reopen":            guarded(permTaskWrite),
+	"POST /api/v1/tasks/claim-next":             guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/claim":             guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/renew":             guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/release":           guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/start":             guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/stop":              guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/lease/worktree":    guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/agent-session":     guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/agent-session/end": guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/assign":            guarded(permTaskAssign),
+	"POST /api/v1/tasks/{id}/unassign":          guarded(permTaskAssign),
+	"GET /api/v1/board":                         guarded(permTaskRead),
+
+	// --- skills --------------------------------------------------------------
+	"GET /api/v1/skills":                       guarded(permSkillRead),
+	"GET /api/v1/skills/{name}":                guarded(permSkillRead),
+	"GET /api/v1/skills/{name}/archive/{hash}": guarded(permSkillRead),
+	"POST /api/v1/skills/recommend":            guarded(permSkillRead),
+	"POST /api/v1/skills/sync":                 guarded(permSkillAdmin),
+
+	// --- runtime -------------------------------------------------------------
+	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
+
+	// --- projects, actors, tokens -------------------------------------------
+	"GET /api/v1/projects":                    guarded(permProjectRead),
+	"GET /api/v1/projects/resolve":            guarded(permProjectRead),
+	"GET /api/v1/projects/{id}":               guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/cockpit":       guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/deliverables":  guarded(permDeliverableRead),
+	"POST /api/v1/projects/{id}/deliverables": guarded(permDeliverableWrite),
+	"POST /api/v1/projects":                   guarded(permProjectAdmin),
+	"PATCH /api/v1/projects/{id}":             guarded(permProjectAdmin),
+	"POST /api/v1/projects/{id}/repos":        guarded(permProjectAdmin),
+	"PATCH /api/v1/repos/{owner}/{name}":      guarded(permProjectAdmin),
+	"POST /api/v1/actors":                     guarded(permActorAdmin),
+	"POST /api/v1/actors/{id}/tokens":         guarded(permActorAdmin),
+	"DELETE /api/v1/tokens":                   guarded(permActorAdmin),
+
+	// --- inbox ---------------------------------------------------------------
+	"GET /api/v1/inbox":          guarded(permInboxRead),
+	"POST /api/v1/inbox/promote": guarded(permInboxTriage),
+	"POST /api/v1/inbox/dismiss": guarded(permInboxTriage),
+	"POST /api/v1/inbox/link":    guarded(permInboxTriage),
+	"POST /api/v1/inbox/import":  guarded(permInboxAdmin),
+
+	// --- documents -----------------------------------------------------------
+	"POST /api/v1/docs/sync": guarded(permDocWrite),
+	"GET /api/v1/docs":       guarded(permDocRead),
+	"GET /api/v1/docs/{id}":  guarded(permDocRead),
+}
+
+// router wires handlers onto a ServeMux through routeGuards, recording which
+// entries were used so NewServer can reject a table that has drifted from the
+// routes it claims to describe.
+type router struct {
+	srv *server
+	mux *http.ServeMux
+	// guards is routeGuards for the real server; a test injects its own so a
+	// case about a malformed table never mutates the package-level one.
+	guards map[string]routeGuard
+	used   map[string]bool
+}
+
+func newRouter(s *server, mux *http.ServeMux) *router {
+	return newRouterWithGuards(s, mux, routeGuards)
+}
+
+func newRouterWithGuards(s *server, mux *http.ServeMux, guards map[string]routeGuard) *router {
+	return &router{srv: s, mux: mux, guards: guards, used: make(map[string]bool, len(guards))}
+}
+
+// guardFor returns the declared guard for pattern, panicking when the table
+// does not name it. A panic and not an error: this is a programming mistake
+// discovered at startup with a fixed set of routes, exactly like the pattern
+// conflicts ServeMux itself panics on, and every test that builds a server
+// runs it.
+func (r *router) guardFor(pattern string) routeGuard {
+	g, ok := r.guards[pattern]
+	if !ok {
+		panic(fmt.Sprintf("route %q has no entry in routeGuards: every route "+
+			"declares the permission it requires, or open(\"why\") if it needs none", pattern))
+	}
+	if g.perm == permPublic && g.public == "" {
+		panic(fmt.Sprintf("route %q is public with no stated reason", pattern))
+	}
+	r.used[pattern] = true
+	return g
+}
+
+// api registers a /api/v1 route: bearer-token authentication, then the policy
+// check for the permission the table declares.
+func (r *router) api(pattern string, h http.HandlerFunc) {
+	g := r.guardFor(pattern)
+	r.mux.Handle(pattern, r.srv.auth(r.srv.requirePerm(g.perm, h)))
+}
+
+// web registers a web UI route behind webGuard, which resolves the session
+// (or the open-deployment subject) and applies the same policy.
+func (r *router) web(pattern string, h http.HandlerFunc) {
+	g := r.guardFor(pattern)
+	r.mux.HandleFunc(pattern, r.srv.webGuard(g.perm, h))
+}
+
+// public registers a route that carries no worklode identity. It still goes
+// through the table, so "unauthenticated" is a row someone wrote rather than
+// a wrapper someone forgot.
+func (r *router) public(pattern string, h http.Handler) {
+	g := r.guardFor(pattern)
+	if g.perm != permPublic {
+		panic(fmt.Sprintf("route %q is registered as public but the table requires %q", pattern, g.perm))
+	}
+	r.mux.Handle(pattern, h)
+}
+
+// publicFunc is public for an http.HandlerFunc.
+func (r *router) publicFunc(pattern string, h http.HandlerFunc) { r.public(pattern, h) }
+
+// unusedGuards lists table entries no route claimed, sorted for a stable
+// error message. A non-empty result means the table describes a server that
+// does not exist.
+func (r *router) unusedGuards() []string {
+	var unused []string
+	for pattern := range r.guards {
+		if !r.used[pattern] {
+			unused = append(unused, pattern)
+		}
+	}
+	slices.Sort(unused)
+	return unused
+}
+
+// checkComplete returns an error when the table and the routes disagree.
+func (r *router) checkComplete() error {
+	if unused := r.unusedGuards(); len(unused) > 0 {
+		return fmt.Errorf("routeGuards declares %d route(s) nothing registered: %s",
+			len(unused), strings.Join(unused, ", "))
+	}
+	return nil
+}

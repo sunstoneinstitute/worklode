@@ -47,6 +47,10 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_navigation_requests_total",
 		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
 	}, []string{"destination", "outcome"})
+	s.authzDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_authz_decisions_total",
+		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
+	}, []string{"permission", "outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI creation-form submissions, by form (task, deliverable) and outcome (created, invalid, forbidden, not_found, error).",
@@ -69,7 +73,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Forced (--force) doc syncs accepted.",
 	})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.formSubmissions,
+		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -90,6 +94,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	} {
 		for _, outcome := range []string{"ok", "not_found", "error", "rejected"} {
 			s.navigations.WithLabelValues(destination, outcome)
+		}
+	}
+	// Every declared permission, so a permission that is never exercised
+	// reads as a flat zero rather than as no-data — the difference between
+	// "nobody tried" and "we are not measuring".
+	for perm := range grants {
+		for _, outcome := range []string{"allow", "deny"} {
+			s.authzDecisions.WithLabelValues(string(perm), outcome)
 		}
 	}
 	for _, form := range []string{"task", "deliverable"} {
@@ -185,6 +197,21 @@ func formOutcome(err error) string {
 		return "invalid"
 	}
 	return "error"
+}
+
+// observeAuthz records one authorization decision, called exactly once per
+// guarded request from requirePerm (API) and webGuard (web). permPublic never
+// reaches an enforcement point, so it never appears as a label value.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeAuthz(perm Permission, d Decision) {
+	if s.authzDecisions == nil {
+		return
+	}
+	outcome := "deny"
+	if d.Allowed {
+		outcome = "allow"
+	}
+	s.authzDecisions.WithLabelValues(string(perm), outcome).Inc()
 }
 
 // observeFormSubmission records one web creation-form submission, called

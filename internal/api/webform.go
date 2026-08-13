@@ -15,8 +15,11 @@
 //   - They accept only same-origin submissions (see sameOriginForm). The
 //     session cookie is already SameSite=Lax, which keeps a cross-site POST
 //     from carrying it; the header check is the second lock, and the one that
-//     still holds in a deployment with no login provider configured, where
-//     webAuth is a passthrough and there is no cookie to withhold.
+//     still holds in a deployment with no login provider configured, where the
+//     subject is the anonymous authOpen one and there is no cookie to withhold.
+//
+// Both routes carry permWebWrite (routeGuards), so reaching them at all is a
+// policy decision made in authz.go, not something these handlers re-check.
 package api
 
 import (
@@ -103,28 +106,13 @@ func (s *server) sameOriginForm(r *http.Request) bool {
 	return false
 }
 
-// webActor returns the actor id behind a web request, or "" when there is
-// none: no session cookie, an expired or forged one, or a deployment with no
-// login provider configured. The actor row is confirmed to still exist, so a
-// session that outlived its actor writes an honest NULL created_by instead of
-// failing the insert on a foreign key.
-func (s *server) webActor(ctx context.Context, r *http.Request) string {
-	if s.cfg.SessionSecret == "" {
-		return ""
-	}
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return ""
-	}
-	actorID, ok := verifySession(s.cfg.SessionSecret, c.Value, s.st.Now())
-	if !ok {
-		return ""
-	}
-	a, err := s.st.GetActor(ctx, actorID)
-	if err != nil || a == nil {
-		return ""
-	}
-	return a.ID
+// webActor returns the actor id to attribute a form write to, or "" when
+// there is none: a deployment with no login provider configured, where the
+// subject is permitted but anonymous (authOpen). webGuard already resolved
+// and validated the subject — including confirming the actor row still
+// exists — so this is a context read, not a second authentication.
+func (s *server) webActor(r *http.Request) string {
+	return subjectFrom(r).ActorID
 }
 
 // projectHeader loads the project identity the project-scoped shell needs
@@ -210,7 +198,7 @@ func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := s.recordFormTask(ctx, project.ID, values, s.webActor(ctx, r))
+	created, err := s.recordFormTask(ctx, project.ID, values, s.webActor(r))
 	if err != nil {
 		s.observeFormSubmission("task", formOutcome(err))
 		s.webStoreErr(w, err)
@@ -357,7 +345,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, s.webActor(ctx, r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, s.webActor(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",

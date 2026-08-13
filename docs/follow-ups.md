@@ -71,6 +71,19 @@ once an instance is running (dogfooding); until then this file is the list.
   them: bodies already carried pre-release design work. Fix at the UI level,
   either by refusing to serve web surfaces with no provider configured or by
   gating the whole UI default-deny. Tracked as spec 021 Q021.4.
+- **Authorization is a seam, not a model**: `internal/api/authz.go` puts every
+  route behind one default-deny policy table, but what that table can say is
+  still the two-level truth the server always had — every authenticated actor,
+  plus instance admins. Three things a real model needs are absent. Roles are
+  **global**: `Decide` takes the resource it would scope on (`Request.Resource`)
+  and ignores it, because project membership is spec 029 §6's Crew and does not
+  exist; the day it does, project roles become rows and `Decide` gains a lookup
+  rather than a new signature. There is no **ownership** rule — any authenticated
+  actor may edit any task, which is deliberate for a small org and wrong for a
+  large one. And roles come only from Keycloak's `admin` group at login, so a
+  role a person holds in one project cannot be expressed at all. The failure
+  direction is safe (unknown permission → deny, open deployment → never admin),
+  which is what makes it a scaffold rather than a hazard.
 - **Deliverables landed without the rest of spec 029**: the cockpit can now
   declare a deliverable (§3.1's name/description/URL) and read the list back,
   but four pieces of §2/§3 are deliberately absent. Milestones do not exist,
