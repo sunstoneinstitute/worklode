@@ -633,12 +633,19 @@ documents:
     dropped:
       - ref: "006-knowledge-graph.md#sec-1"
         reason: >-
-          superseded: the `ls:` prefix block, retired by 014 sec-1. Its
-          content is the prefix-to-namespace binding, which sec-10 states
-          post-rename -- 006 sec-5 already carries 014 sec-1's clarification
-          that the published base carries no ontology-name segment. Folding
-          the block forward would reinstate the retired spelling in the one
-          document the rename was written about.
+          superseded: the `ls:` prefix block, retired by 014 sec-1. It holds
+          three things and none is lost. The prefix-to-namespace binding is
+          stated post-rename by sec-10 -- 006 sec-5 already carries 014
+          sec-1's clarification that the published base carries no
+          ontology-name segment. The ADR-0006 placement rule (a shared,
+          cross-cutting ontology sits directly under `rdf/`, not under
+          `rdf/domain/`) survives as its consequence, the `rdf/wl/…` source
+          paths in sec-0, sec-13.2 and sec-14. The `@prefix` declarations for
+          `dct`, `foaf`, `prov`, `doap`, `skos`, `fabio`, `rdf`, `rdfs`,
+          `owl` and `xsd` are illustrative: `ns/*.ttl` is the parseable form
+          (CLAUDE.md), and the specs' own Turtle blocks never parsed.
+          Folding the block forward would reinstate the retired spelling in
+          the one document the rename was written about.
       - ref: "006-knowledge-graph.md#sec-1.6"
         reason: >-
           superseded: replaced by 014 sec-2 -- there is no Plan node, so the
