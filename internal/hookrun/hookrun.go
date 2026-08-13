@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -158,16 +159,36 @@ func defaultClient() (*cli.Client, error) {
 	return cli.NewClient(cfg), nil
 }
 
-// knownEvents is the accepted <event> set.
-var knownEvents = map[string]bool{
-	"session-start":   true,
-	"session-end":     true,
-	"pre-commit":      true,
-	"worktree-create": true,
-	"worktree-remove": true,
-	"heartbeat":       true,
-	"worktree-enter":  true,
-	"worktree-exit":   true,
+// Event is one accepted `lode hook <event>`.
+type Event struct {
+	Name    string
+	Summary string // one line, present tense: what the handler does
+}
+
+// events is the accepted <event> set, in lifecycle order, and the source of
+// truth for `lode hook --list` and the command's own help. dispatch below must
+// name exactly these — TestEventsAreDispatched holds the two together.
+var events = []Event{
+	{"session-start", "Renew the lease, open the agent session, inject the brief."},
+	{"heartbeat", "Report the session as still alive (at most once a minute)."},
+	{"session-end", "Close the agent session and bill its tokens to the lease."},
+	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
+	{"worktree-create", "Auto-resume the task's lease when its worktree is created."},
+	{"worktree-remove", "Release the task's lease when its worktree is removed."},
+	{"worktree-enter", "Open an agent session against the worktree just entered."},
+	{"worktree-exit", "Close the agent session on the worktree just left."},
+}
+
+// Events returns the accepted hook events in lifecycle order.
+func Events() []Event { return slices.Clone(events) }
+
+// EventNames returns just the names, in the same order.
+func EventNames() []string {
+	names := make([]string, 0, len(events))
+	for _, e := range events {
+		names = append(names, e.Name)
+	}
+	return names
 }
 
 // Run executes one hook invocation and returns the process exit code. It reads
