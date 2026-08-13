@@ -55,9 +55,9 @@ once an instance is running (dogfooding); until then this file is the list.
   entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
-- **The web UI is unauthenticated without an SSO provider**: `webAuth`
-  (`internal/api/oidcweb.go:57`) passes every request through when neither
-  OIDC nor GitHub login is configured, so the board, project, and task pages
+- **The web UI is unauthenticated without an SSO provider**: `webGuard`
+  (`internal/api/authz.go`) serves the anonymous `authOpen` subject when
+  neither OIDC nor GitHub login is configured, so the board, project, and task pages
   are readable by anyone who can reach the server — and, since the cockpit's
   creation forms (`internal/api/webform.go`) sit behind the same `webAuth`,
   writable too: such a deployment accepts a task or a deliverable from anyone
@@ -99,10 +99,8 @@ once an instance is running (dogfooding); until then this file is the list.
   specs, ADRs, and plans their own per-project ordinals from the same counter
   table. Its `kind` CHECK admits `'DEL'` alone, so each of those arrives with a
   one-line CHECK widening, the same way the `tasks.kind` CHECK grows.
-- **k8s deployment manifests** (flux) for the server and the watcher; RBAC
-  for `lode watch` in-cluster.
-- **Claude Code skill** in the claude-plugins repo teaching the
-  claim → work → report → complete loop.
+- **k8s deployment manifests for the watcher**; RBAC for `lode watch`
+  in-cluster. The server's own manifests landed in `deploy/base/`.
 - **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s
   `eventually` timeout and flaked once under heavy host load; bump the fence
   timeout or make it load-tolerant.
@@ -245,8 +243,6 @@ Design items landed in spec 028. These are the mechanical leftovers.
   survive. Customising or hook-patching the brainstorming skill is the wrong
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
-- **CLAUDE.md says the web UI is unauthenticated.** `internal/api/oidcweb.go`
-  gates the web pages behind Keycloak when OIDC is enabled. Fix the sentence.
 - **The copy of the `lode` plugin in `claude-public-plugins` still documents
   `wt/<id>-<slug>` (spec 030 follow-up).** The in-repo `plugins/lode/` copy was
   updated when spec 030 landed, but the duplicate published from the other
@@ -283,15 +279,16 @@ Design items landed in spec 028. These are the mechanical leftovers.
   cockpit shell, if the CSS contract test (`TestAppCSSContent`) proves
   insufficient to catch a real layout regression at those breakpoints.
 - **Part 1's honest-unavailable pages** (`/projects/{id}/crew`,
-  `/projects/{id}/deliverables`, `/projects/{id}/reviews`,
-  `/projects/{id}/decisions`, `/projects/{id}/documents`,
-  `/projects/{id}/activity`, `/intake`, `/reviews`, `/deliveries`,
-  `/knowledge`) are placeholders naming their owning spec section; replace
-  each with its real implementation as Parts 2–4 land.
-- **Mode facts and project-lead-authorized pinned focus** (spec 032's
-  `PinnedFocus`/`NextDecision`, and `modeFactsForProject`'s intake/promotion
-  facts) stay nil/false in Part 1 — `internal/api/cockpit.go` documents this
-  as a Part 2 dependency on spec 029's stores.
+  `/projects/{id}/reviews`, `/projects/{id}/decisions`,
+  `/projects/{id}/documents`, `/projects/{id}/activity`, `/intake`,
+  `/reviews`, `/deliveries`, `/knowledge`) are placeholders naming their
+  owning spec section; replace each with its real implementation as Parts 2–4
+  land. Deliverables has left this list — it is a built destination now.
+- **Mode facts stay all-false**: `modeFactsForProject`
+  (`internal/api/cockpit.go`) returns an empty `modeFacts` because spec 029's
+  intake and promotion stores do not exist, so mode selection cannot see them.
+  Spec 032's `PinnedFocus`/`NextDecision` no longer belong here — both are
+  built.
 - **`worklode_doc_upserts_total` is incremented inside `ApplyDocSync`'s
   transaction (spec 034 follow-up).** `internal/store/docs.go` calls
   `s.metrics.docUpsert(outcome)` per doc before the transaction commits; a
