@@ -39,7 +39,10 @@ templ Cockpit(v CockpitView) {
 						<section class="card" id="work" aria-labelledby="work-heading">
 							<div class="hd">
 								<h3 id="work-heading">Active work</h3>
-								<div class="meta muted">people &amp; delegated agents</div>
+								<div class="meta">
+									<span class="muted">people &amp; delegated agents</span>
+									<a class="newlink" href={ v.NewTaskURL }>New task</a>
+								</div>
 							</div>
 							<div class="bd wl">
 								for _, item := range v.Work.InProgress {

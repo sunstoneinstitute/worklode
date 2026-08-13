@@ -142,6 +142,7 @@ type PlaceholderView struct {
 type CockpitView struct {
 	Page              PageProps
 	CanonicalURL      string
+	NewTaskURL        string
 	Project           CockpitProject
 	ModeName          string
 	ModeBasis         string
@@ -226,6 +227,78 @@ type CockpitDecision struct {
 	Title       string
 	Accountable string
 	Readiness   string
+}
+
+// --- deliverables -----------------------------------------------------------
+
+// DeliverablesView is a project's declared deliverables (spec 029 §3), the
+// project-local Deliverables destination. NewURL is the "Declare a
+// deliverable" form; an empty Deliverables slice renders an honest empty
+// state next to that form, never a fabricated row.
+type DeliverablesView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	NewURL       string
+	Deliverables []DeliverableRow
+}
+
+// DeliverableRow is one declared deliverable. It carries no state: spec 029
+// §3.2 makes deliverable state a fact emitters and probers report, and no
+// such report exists yet, so the page says the state is unreported rather
+// than showing one.
+type DeliverableRow struct {
+	ID          string
+	Name        string
+	Description string
+	URL         string
+	CreatedBy   string
+	CreatedAt   time.Time
+}
+
+// --- creation forms ---------------------------------------------------------
+
+// FormOption is one choice in a form's <select>, pre-selected when Selected.
+type FormOption struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+// FormShell is what every project-scoped creation form needs from the shell:
+// where to POST, where Cancel returns to, and the validation message from a
+// rejected submit ("" on first render). The entered values live on the
+// concrete view so a rejected submit re-renders what the person typed.
+type FormShell struct {
+	Page      PageProps
+	Project   CockpitProject
+	Action    string
+	CancelURL string
+	Error     string
+}
+
+// NewTaskView is the "New task" form (POST to Form.Action), rendering the
+// same fields POST /api/v1/tasks takes: the two required choices (priority,
+// kind), the optional concern, and the draft switch that decides whether the
+// task lands claimable.
+type NewTaskView struct {
+	Form       FormShell
+	Title      string
+	Body       string
+	Priorities []FormOption
+	Kinds      []FormOption
+	Concerns   []FormOption
+	Draft      bool
+}
+
+// NewDeliverableView is the "Declare a deliverable" form: exactly the three
+// descriptive fields spec 029 §3.1 gives a custom deliverable, and nothing
+// that would let a person assert its state.
+type NewDeliverableView struct {
+	Form        FormShell
+	Name        string
+	Description string
+	URL         string
 }
 
 // --- presentation helpers ---------------------------------------------------

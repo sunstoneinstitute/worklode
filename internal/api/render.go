@@ -7,6 +7,8 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -112,6 +114,7 @@ func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
 	return ui.CockpitView{
 		Page:         ui.PageProps{Title: title},
 		CanonicalURL: c.CanonicalURL,
+		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks/new",
 		Project:      cockpitProject(c.Project),
 		ModeName:     string(c.Mode.Name),
 		ModeBasis:    c.Mode.Basis.Summary,
@@ -128,6 +131,93 @@ func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
 		Repositories:      cockpitRepos(c.Repositories),
 		CostTotals:        cockpitCostTotals(c.Cost),
 	}
+}
+
+// deliverablesView maps a project's declared deliverables into the project's
+// Deliverables page. No row carries a state, because none is stored (spec 029
+// §3.2) — the page says so once rather than per row.
+func deliverablesView(project ui.CockpitProject, items []store.Deliverable) ui.DeliverablesView {
+	v := ui.DeliverablesView{
+		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Deliverables"},
+		CanonicalURL: "/projects/" + project.ID + "/deliverables",
+		Project:      project,
+		NewURL:       "/projects/" + project.ID + "/deliverables/new",
+		Deliverables: make([]ui.DeliverableRow, 0, len(items)),
+	}
+	for _, d := range items {
+		v.Deliverables = append(v.Deliverables, ui.DeliverableRow{
+			ID:          d.ID,
+			Name:        d.Name,
+			Description: d.Description,
+			URL:         d.URL,
+			CreatedBy:   d.CreatedBy,
+			CreatedAt:   d.CreatedAt,
+		})
+	}
+	return v
+}
+
+// newTaskView builds the new-task form, with the submitted values selected in
+// the menus and errMsg shown ("" on first render).
+func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.NewTaskView {
+	return ui.NewTaskView{
+		Form: ui.FormShell{
+			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new task"},
+			Project:   project,
+			Action:    "/projects/" + project.ID + "/tasks",
+			CancelURL: "/projects/" + project.ID,
+			Error:     errMsg,
+		},
+		Title:      v.Title,
+		Body:       v.Body,
+		Priorities: formOptions(webTaskPriorities, v.Priority, ""),
+		Kinds:      formOptions(webTaskKinds, v.Kind, ""),
+		Concerns:   formOptions(webTaskConcerns, v.Concern, "None"),
+		Draft:      v.Draft,
+	}
+}
+
+// newDeliverableView builds the deliverable form the same way.
+func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string) ui.NewDeliverableView {
+	return ui.NewDeliverableView{
+		Form: ui.FormShell{
+			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new deliverable"},
+			Project:   project,
+			Action:    "/projects/" + project.ID + "/deliverables",
+			CancelURL: "/projects/" + project.ID + "/deliverables",
+			Error:     errMsg,
+		},
+		Name:        v.Name,
+		Description: v.Description,
+		URL:         v.URL,
+	}
+}
+
+// formOptions renders a menu from a fixed value list, marking the selected
+// one. A non-empty emptyLabel prepends an empty-valued choice (the optional
+// concern's "None"), selected when nothing is chosen.
+func formOptions(values []string, selected, emptyLabel string) []ui.FormOption {
+	out := make([]ui.FormOption, 0, len(values)+1)
+	if emptyLabel != "" {
+		out = append(out, ui.FormOption{Value: "", Label: emptyLabel, Selected: selected == ""})
+	}
+	for _, value := range values {
+		out = append(out, ui.FormOption{
+			Value:    value,
+			Label:    formOptionLabel(value),
+			Selected: value == selected,
+		})
+	}
+	return out
+}
+
+// formOptionLabel capitalizes a menu value for display ("critical" ->
+// "Critical"), leaving the submitted value itself untouched.
+func formOptionLabel(value string) string {
+	if value == "" {
+		return value
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
 }
 
 // cockpitProject maps the project identity, reused by the cockpit and the

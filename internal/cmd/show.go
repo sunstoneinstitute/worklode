@@ -54,6 +54,18 @@ var unshowableKindWords = map[string]string{
 	"DEL":  "deliverable",
 }
 
+// unshowableReason is the parenthetical each "not showable yet" error ends
+// with, keyed by the singular kind word. Plans and milestones do not exist
+// yet; a deliverable does (spec 029 §3), and saying otherwise would send
+// someone looking for a row that is already there — so its reason names the
+// surfaces that do read it.
+var unshowableReason = map[string]string{
+	"plan":      "spec 029 §4 defines them; the entities land with spec 029",
+	"milestone": "spec 029 §4 defines them; the entities land with spec 029",
+	"deliverable": "the entity exists; only the project's Deliverables page and " +
+		"GET /api/v1/projects/{id}/deliverables read it so far",
+}
+
 // classify decides what arg names, by grammar alone — no filesystem or
 // network access, so it is table-testable without cobra or a server.
 func classify(arg string) showTarget {
@@ -163,7 +175,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by ordinal (e.g. --plan 4-1); not showable yet (spec 029 §4)")
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2); not showable yet (spec 029 §4)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
-	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet (spec 029 §4)")
+	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	return cmd
 }
@@ -236,7 +248,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 		if !showOrdinalShape[kind].MatchString(value) {
 			return ordinalShapeError(kind, value)
 		}
-		return fmt.Errorf("%s %s is not showable yet (spec 029 §4 defines them; the entities land with spec 029)", kind, value)
+		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
 	case "project":
 		if value == "" {
 			return errors.New("--project needs a value")
@@ -295,7 +307,7 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet 
 		return runDocShow(cmd, arg, section, "")
 	case targetUnshowable:
 		word := unshowableKindWords[t.Type]
-		return fmt.Errorf("%s is a %s id; %ss are not showable yet (spec 029 §4 defines them; the entities land with spec 029)", arg, word, word)
+		return fmt.Errorf("%s is a %s id; %ss are not showable yet (%s)", arg, word, word, unshowableReason[word])
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:

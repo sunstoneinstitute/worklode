@@ -1,0 +1,80 @@
+package ui
+
+// deliverables.templ renders a project's Deliverables destination (GET
+// /projects/{id}/deliverables): the declared outputs of the project (spec 029
+// §3) and the affordance to declare another.
+//
+// Each row shows only what is stored — id, name, description, optional
+// address, and who declared it when. No row shows a state: spec 029 §3.2
+// makes deliverable state something emitters and probers report, and no such
+// report exists yet, so the page names that gap once instead of dressing a
+// declaration up as a status.
+
+templ Deliverables(v DeliverablesView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		<div class="shell">
+			@sidebar(v.Project, "deliverables")
+			<div class="main">
+				<div class="canvas">
+					<section class="card">
+						<div class="hd">
+							<h3>Deliverables</h3>
+							<div class="meta">
+								<a class="newlink" href={ v.NewURL }>Declare a deliverable</a>
+							</div>
+						</div>
+						<div class="bd">
+							if len(v.Deliverables) == 0 {
+								<p class="muted">
+									No deliverable is declared for this project yet. A deliverable is
+									what the project ships &mdash; a dataset, an analysis, a report,
+									a story &mdash; and declaring one states the intent, not that it exists.
+								</p>
+							} else {
+								<div class="dod">
+									for _, d := range v.Deliverables {
+										@deliverableRow(d)
+									}
+								</div>
+							}
+						</div>
+					</section>
+					<p class="muted small">
+						Deliverable state is reported, never declared: the emitter and prober
+						paths that would say whether these are live are not built yet
+						(spec 029 §3.2), so this page shows what was declared and by whom.
+					</p>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// deliverableRow renders one declared deliverable. The evidence chip is
+// "Declared" for every row — the only evidence category a typed-in
+// deliverable can honestly carry (spec 032 §1).
+templ deliverableRow(d DeliverableRow) {
+	<div class="dodrow">
+		<div>
+			<div class="name">{ d.Name }</div>
+			<div class="def mono">{ d.ID }</div>
+			if d.Description != "" {
+				<div class="def">{ d.Description }</div>
+			}
+			if d.URL != "" {
+				<div class="ev"><a href={ d.URL } rel="noreferrer">{ d.URL }</a></div>
+			}
+		</div>
+		<div class="st">
+			<span class="chip declared"><span class="cd" aria-hidden="true"></span>Declared</span>
+			<div class="def">
+				if d.CreatedBy != "" {
+					{ "by " + d.CreatedBy + " · " + FmtTime(d.CreatedAt) }
+				} else {
+					{ FmtTime(d.CreatedAt) }
+				}
+			</div>
+		</div>
+	</div>
+}
