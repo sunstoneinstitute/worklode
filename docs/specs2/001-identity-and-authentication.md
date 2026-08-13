@@ -146,10 +146,11 @@ OIDC is unconfigured.
 ## 8. CLI login: server-mediated loopback {#sec-8}
 
 `lode login` is **provider-neutral**: it discovers how to authenticate from the server
-and kicks off whichever web login the server is configured with (Keycloak, GitHub, or a
-chooser when both are enabled), reusing the browser session the user already has, and ends
+and kicks off whichever web login the server is configured with — Keycloak, the sole
+interactive login provider (§3) — reusing the browser session the user already has, and ends
 with a `wl_` token stored securely. The CLI speaks **no** provider protocol and never sees a
-provider token.
+provider token. Provider-neutrality is a property of the CLI, not a claim that more than
+one login provider exists.
 
 The provider-specific logic lives entirely in the **server**, reusing the existing web login
 flows. The CLI only opens a URL and waits on a localhost listener.
@@ -159,7 +160,7 @@ lode login
   1. GET  {server}/.well-known/wl-login       -> { authorize_url, token_url, providers }
   2. bind loopback listener on an ephemeral port (localhost:0)
   3. open browser: {authorize_url}?redirect_uri=http://localhost:PORT/&state=CLISTATE
-        server runs its normal web login (Keycloak / GitHub / chooser),
+        server runs its normal Keycloak web login,
         reusing the session the browser already has -> provisions the actor
         -> mints a one-time code -> 302 to the loopback redirect_uri
   4. loopback receives ?code=OTC&state=CLISTATE   (state checked by the CLI)
@@ -169,16 +170,17 @@ lode login
 
 Because the **server** performs the final redirect to the loopback URI (the provider redirects
 to the server's own callback, not to localhost), the loopback URI needs no pre-registration
-with Keycloak or GitHub. The CLI is therefore free to bind an **ephemeral port** and is immune
+with Keycloak. The CLI is therefore free to bind an **ephemeral port** and is immune
 to port conflicts.
 
 ### 8.1 Discovery and CLI login endpoints {#sec-8.1}
 
 - **`GET /.well-known/wl-login`** — discovery. Returns
-  `{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["github"] }`.
-  `providers` is informational (lets the CLI print "Signing in with GitHub…").
+  `{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["keycloak"] }`.
+  `providers` is informational (lets the CLI print "Signing in with Keycloak…") and always
+  names the one interactive provider.
   Returns **404** when the server has no interactive provider configured
-  (`s.oidc == nil && s.gh == nil`); the CLI then prints a clear message telling the
+  (`s.oidc == nil`); the CLI then prints a clear message telling the
   user to ask an admin for a token. Registered outside the bearer-auth middleware,
   like `/healthz` and `/auth/oidc/*`.
 
@@ -186,8 +188,8 @@ to port conflicts.
   **loopback-only** (host in `localhost` / `127.0.0.1` / `::1`, scheme `http`,
   explicit non-zero port), stores the CLI intent (`redirect_uri` + `state`) in a
   short-lived signed cookie (signed with `SessionSecret`), then redirects into the
-  existing `loginTarget(next)` entrypoint — the chooser when both providers are on,
-  or the single provider otherwise. No new provider code.
+  existing `loginTarget(next)` entrypoint, which resolves to the sole configured
+  login provider. No new provider code.
 
 - **`POST /auth/cli/token` `{code, state}`** — validates the one-time code (exists,
   unexpired, unused, `state` matches the value bound at mint time), mints a 30-day
@@ -198,9 +200,9 @@ to port conflicts.
 
 ### 8.2 The reuse seam: `finishLogin` {#sec-8.2}
 
-Both `authCallback` (Keycloak, `oidcweb.go`) and `githubCallback` (`githubweb.go`) ended
-identically: provision actor → set the session cookie → redirect to `next`. That shared tail
-is extracted into:
+`authCallback` (Keycloak, `oidcweb.go`) and, while GitHub web login still existed,
+`githubCallback` (`githubweb.go`) ended identically: provision actor → set the session
+cookie → redirect to `next`. That shared tail is extracted into:
 
 ```
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID string)
@@ -213,8 +215,8 @@ func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID str
   set — this browser tab exists only to complete the CLI login);
 - **absent** → behave exactly as before (set session cookie, redirect to `next`).
 
-Both providers gain CLI login from this one change; neither provider handler is otherwise
-touched.
+The login handler gains CLI login from this one change and is not otherwise touched. Since
+§3 removed the GitHub login path, `finishLogin` is now reached only from `authCallback`.
 
 ### 8.3 One-time code store {#sec-8.3}
 
