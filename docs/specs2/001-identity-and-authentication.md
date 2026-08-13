@@ -157,7 +157,7 @@ flows. The CLI only opens a URL and waits on a localhost listener.
 
 ```
 lode login
-  1. GET  {server}/.well-known/wl-login       -> { authorize_url, token_url, providers }
+  1. GET  {server}/.well-known/lode-login       -> { authorize_url, token_url, providers }
   2. bind loopback listener on an ephemeral port (localhost:0)
   3. open browser: {authorize_url}?redirect_uri=http://localhost:PORT/&state=CLISTATE
         server runs its normal Keycloak web login,
@@ -175,7 +175,7 @@ to port conflicts.
 
 ### 8.1 Discovery and CLI login endpoints {#sec-8.1}
 
-- **`GET /.well-known/wl-login`** — discovery. Returns
+- **`GET /.well-known/lode-login`** — discovery. Returns
   `{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["keycloak"] }`.
   `providers` is informational (lets the CLI print "Signing in with Keycloak…") and always
   names the one interactive provider.
@@ -450,7 +450,7 @@ the ~6-month refresh-token lifetime.
   redirects to the loopback; `/auth/cli/token` valid / expired / reused /
   wrong-state paths; one-time-code store TTL and single-use.
 - **CLI unit** (mirrors `login_test.go`): injected browser driver + `httptest`
-  server implementing `/.well-known/wl-login` and `/auth/cli/token`, driving the
+  server implementing `/.well-known/lode-login` and `/auth/cli/token`, driving the
   loopback callback end to end; ephemeral-port listener; `tokenStore` via
   `keyring.MockInit()`; `LoadConfig` resolution order incl. legacy fallback;
   `lode logout` deletes the keychain entry.
