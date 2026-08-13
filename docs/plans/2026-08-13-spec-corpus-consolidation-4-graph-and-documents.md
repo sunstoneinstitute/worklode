@@ -111,6 +111,28 @@ recorded here because each had a real alternative:
    several graphs" is gone, and each Task's quads live in the named graph of
    its one Project.
 
+10. **Folded 006 §4 states the status scheme 025 §3 leaves, not 014 §5's.**
+    The amendment chain is transitive and no frontmatter edge records it:
+    006 §1.4 is amended by 014 §5 (which removes `implemented`), and 025 §3
+    then removes `proposed` — but 025 §3 amends *014 §5*, so nothing on 006
+    points at it. Left alone, folded 006 would declare `wlc:proposed` and gate
+    `proposed → accepted` on crit review while folded 025 states
+    `draft → accepted → superseded` and `ns/concept.ttl` ships only those
+    three. Two documents contradicting each other on one enum is the exact
+    fragmentation this migration removes, so §4 states the three-value scheme
+    and cites 025 (a different target, so the citation stays). A document
+    under review is a draft with an open review task; the crit gate survives
+    as review of a draft rather than as a status transition.
+11. **`wl:Plan` belongs to the execution layer, so it is listed in folded
+    006 §8.2, not §8.1.** 006 §3.1's Layer 1 table carried Plan inside the
+    DesignDoc row; 014 §2 removed it and 025 §4 returned it as a sibling of
+    `wl:DesignDoc` carrying `wl:layer wlc:execution`, which `ns/ontology.ttl`
+    ships. A Plan row under "Layer 1 — Intent" asserts `wl:layer wlc:intent`
+    by the same convention §5 states, and is therefore wrong. Its Turtle in
+    §2 also carries `prov:Entity` alongside `foaf:Document`, per 025 §4 and
+    `ns/`: §2's own prose explains that a provenanced document without that
+    parent is an OWL violation.
+
 ## Cross-target obligations
 
 An amendment whose *content* one task must absorb while its *anchors* live in
@@ -153,6 +175,12 @@ Additions to the list parts 2 and 3 already record.
   §4), and the example is prose inside a fenced sample line, so `refmap.py`
   will not see it. Task 4 repoints it by hand; the residual is recorded so
   part 5's review does not read the hand-repoint as a stale reference.
+- **Folded 006 §9's Deliverable example names `wlid:doc/spec-worklode-009`**,
+  a document this part retires. It is illustrative Turtle, and rewriting the
+  slug would report as a dropped identifier, so it stands until cutover.
+- **Folded 006's §8 heading has already shed `(D6)`** and §12's has shed
+  "(resolves spec 007 Open Q3)", both because `fold.yaml` sets the headings.
+  Recorded so part 5's D-label sweep does not double-count them.
 - **009's implementation-status qualifiers stay as written** — "done in dev",
   "prod remains blocked on item 1", "the override is not yet implemented in
   rdf-registry". Rule 4 leaves implementation status alone, so folded 006 §13
