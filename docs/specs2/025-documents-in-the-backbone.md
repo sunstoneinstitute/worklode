@@ -468,7 +468,8 @@ for a spec:
    `…/v(n+1)` with status `wlc:draft`.
 2. The accepted version remains current and authoritative throughout. Readers and drift queries are
    unaffected.
-3. The revision is reviewed with **crit** (as 006 already requires for `proposed → accepted`).
+3. The revision is reviewed with **crit** (as 006 required for the `proposed → accepted` transition
+   it has since retired).
 4. On resolution, publication runs the §4 single transaction and the §6 constraint check together.
    Either both succeed or the revision does not land.
 
@@ -695,8 +696,8 @@ This needs no schema change — §10 already fixes the kind set.
 
 ## 9. Plans are documents {#sec-9}
 
-Spec 006 places `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That is wrong, and
-spec 008 already contradicts it:
+Spec 006 placed `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That was wrong, and
+spec 008 already contradicted it:
 
 > Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `brainstorming`,
 > `subagent-driven-development`), **re-emitting the results as `lode` tasks** with `concern` +
@@ -1701,9 +1702,10 @@ Anchor depth (§6.1) is a **server setting**, surfaced through the existing admi
 path rather than a per-repo file — it governs what claims are expressible across the whole
 installation, so it cannot be a per-repository decision.
 
-Review is **crit**, as 006 already specifies for `proposed → accepted`; sections give crit comments a
-natural anchor, so a review comment and an implementation claim address the same node. The web view
-extends spec 007's read-only overview surface rather than introducing a new application.
+Review is **crit**, as 006 specified for the `proposed → accepted` transition it has since retired;
+sections give crit comments a natural anchor, so a review comment and an implementation claim
+address the same node. The web view extends spec 007's read-only overview surface rather than
+introducing a new application.
 
 The on-disk path of a document ceases to be its identity. Until documents move into the graph,
 tracked paths stay per-project configuration — which is spec 013's open question 2, now answered:
