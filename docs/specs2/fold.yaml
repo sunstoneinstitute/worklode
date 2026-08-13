@@ -379,6 +379,15 @@ documents:
           025 plans 2-4, 028 sec-2 and 028 sec-6 (part 4) -- per the part-2
           plan's "029 sec-9 obligations on parts 3 and 4" section; the ns/
           row is recorded in docs/follow-ups.md.
+          Three surviving sections cited this one -- sec-3.3, sec-4 and
+          sec-7.3 each carried a "(sec-9)" pointer. Each pointer was deleted
+          and its sentence kept verbatim. Rule 5 makes a reference to dropped
+          material an escalation rather than a deletion, and this was decided
+          in review instead: the material is absorbed rather than dead, and
+          the new sec-9 is "Out of scope", so a surviving pointer would have
+          retargeted silently at an unrelated section -- worse than either
+          deleting it or escalating. Parts 3 and 4 will meet this shape
+          repeatedly and should escalate it rather than repeat the shortcut.
 
   # 032: straight 1:1, numbers unchanged.
   - to: 032-project-cockpit.md
