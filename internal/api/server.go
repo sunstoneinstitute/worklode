@@ -188,6 +188,10 @@ type server struct {
 	// or refused cockpit write becomes visible.
 	formSubmissions *prometheus.CounterVec
 
+	// authzDecisions counts policy decisions by permission and outcome; see
+	// authz.go and observeAuthz.
+	authzDecisions *prometheus.CounterVec
+
 	// doc sync (spec 034 §10): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 	docSyncRuns     *prometheus.CounterVec
@@ -325,42 +329,46 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	s.initMetrics(reg)
 
 	mux := http.NewServeMux()
+	// Every route below is registered through r, which looks its guard up in
+	// routeGuards (router.go) and panics on a pattern the table does not
+	// name. The permission a route requires is therefore stated as data, in
+	// one reviewable place, rather than implied by how its handler is
+	// wrapped; see authz.go for the policy it is checked against.
+	r := newRouter(s, mux)
 
-	// Read-mostly web UI. When OIDC is enabled these require a valid session
-	// cookie (webAuth 302s to /auth/login otherwise); when OIDC is
-	// unconfigured webAuth is a passthrough and the UI stays open as in v1 —
-	// which now includes the two creation forms below, the only web routes
-	// that write (see webform.go, and the open-UI follow-up in
-	// docs/follow-ups.md). The seven global destinations (spec 032 §2) and
-	// the project-local destinations below each record one
-	// worklode_web_navigation_requests_total observation via navWrap.
-	mux.HandleFunc("GET /{$}", s.webAuth(s.navWrap("home", s.homePage)))
-	mux.HandleFunc("GET /intake", s.webAuth(s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
-		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8."))))
-	mux.HandleFunc("GET /projects", s.webAuth(s.navWrap("projects", s.projectsPage)))
-	mux.HandleFunc("GET /projects/{id}", s.webAuth(s.navWrap("projects", s.projectPage)))
+	// Read-mostly web UI. These resolve a session cookie to a subject and
+	// apply the policy (webGuard); an unauthenticated visitor is sent to
+	// /auth/login, and when no login provider is configured the UI stays open
+	// as in v1 — as one named decision rather than a silent passthrough (see
+	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The seven
+	// global destinations (spec 032 §2) and the project-local destinations
+	// below each record one worklode_web_navigation_requests_total
+	// observation via navWrap.
+	r.web("GET /{$}", s.navWrap("home", s.homePage))
+	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
+		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
+	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
+	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
 	// The literal-segment patterns win over the {section} wildcard below for
 	// the destinations that are built; everything else still lands on the
 	// honest placeholder.
-	mux.HandleFunc("GET /projects/{id}/deliverables", s.webAuth(s.navWrap("deliverables", s.deliverablesPage)))
-	mux.HandleFunc("GET /projects/{id}/deliverables/new", s.webAuth(s.navWrap("deliverable_new", s.newDeliverablePage)))
-	mux.HandleFunc("POST /projects/{id}/deliverables", s.webAuth(s.navWrap("deliverable_new", s.createDeliverableFromForm)))
-	mux.HandleFunc("GET /projects/{id}/tasks/new", s.webAuth(s.navWrap("task_new", s.newTaskPage)))
-	mux.HandleFunc("POST /projects/{id}/tasks", s.webAuth(s.navWrap("task_new", s.createTaskFromForm)))
-	mux.HandleFunc("GET /projects/{id}/{section}", s.webAuth(s.navWrap("project_section", s.projectSectionPage)))
-	mux.HandleFunc("GET /work", s.webAuth(s.navWrap("work", s.workPage)))
-	mux.HandleFunc("GET /reviews", s.webAuth(s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
-		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7."))))
-	mux.HandleFunc("GET /deliveries", s.webAuth(s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
-		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 011."))))
-	mux.HandleFunc("GET /knowledge", s.webAuth(s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
-		"Documents and graph-backed expert views arrive with specs 025, 026, and 006."))))
-	mux.HandleFunc("GET /tasks/{id}", s.webAuth(s.taskPage))
-	// Styles and fonts carry no project data: registered outside webAuth so
-	// an OIDC-gated deployment never redirects an asset request to login.
-	mux.Handle("GET /assets/", s.assetHandler())
-	mux.HandleFunc("GET /auth/login", s.authLogin)
-	mux.HandleFunc("GET /auth/callback", s.authCallback)
+	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
+	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
+	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
+	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
+	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
+	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
+	r.web("GET /work", s.navWrap("work", s.workPage))
+	r.web("GET /reviews", s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
+		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7.")))
+	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
+		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 011.")))
+	r.web("GET /knowledge", s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
+		"Documents and graph-backed expert views arrive with specs 025, 026, and 006.")))
+	r.web("GET /tasks/{id}", s.taskPage)
+	r.public("GET /assets/", s.assetHandler())
+	r.publicFunc("GET /auth/login", s.authLogin)
+	r.publicFunc("GET /auth/callback", s.authCallback)
 
 	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
 	// handler itself rejects all requests with 503 when its secret is empty.
@@ -375,85 +383,92 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return true
 	}
 	hookMetrics := hooks.NewMetrics(reg)
-	mux.Handle("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, hookMetrics))
-	mux.Handle("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, hookMetrics))
+	r.public("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
 	// Both 404 when OIDC is unconfigured (s.oidc == nil).
-	mux.HandleFunc("GET /auth/oidc/config", s.oidcConfig)
-	mux.HandleFunc("POST /auth/oidc/token", s.oidcTokenExchange)
+	r.publicFunc("GET /auth/oidc/config", s.oidcConfig)
+	r.publicFunc("POST /auth/oidc/token", s.oidcTokenExchange)
 
 	// Provider-neutral, server-mediated CLI login (see cliauth.go).
-	mux.HandleFunc("GET /.well-known/lode-login", s.wellKnownLogin)
-	mux.HandleFunc("GET /auth/cli/login", s.cliLogin)
-	mux.HandleFunc("POST /auth/cli/token", s.cliToken)
+	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
+	r.publicFunc("GET /auth/cli/login", s.cliLogin)
+	r.publicFunc("POST /auth/cli/token", s.cliToken)
 
-	mux.Handle("POST /api/v1/tasks", s.auth(s.createTask))
-	mux.Handle("GET /api/v1/tasks", s.auth(s.listTasks))
-	mux.Handle("GET /api/v1/tasks/{id}", s.auth(s.getTask))
-	mux.Handle("GET /api/v1/tasks/{id}/brief", s.auth(s.taskBrief))
-	mux.Handle("PATCH /api/v1/tasks/{id}", s.auth(s.patchTask))
-	mux.Handle("PUT /api/v1/tasks/{id}/skills", s.auth(s.setTaskSkills))
-	mux.Handle("POST /api/v1/tasks/{id}/edges", s.auth(s.addEdge))
-	mux.Handle("DELETE /api/v1/tasks/{id}/edges", s.auth(s.removeEdge))
-	mux.Handle("POST /api/v1/tasks/{id}/decompose", s.auth(s.decomposeTask))
-	mux.Handle("POST /api/v1/tasks/claim-next", s.auth(s.claimNext))
-	mux.Handle("POST /api/v1/tasks/{id}/claim", s.auth(s.claimTask))
-	mux.Handle("POST /api/v1/tasks/{id}/renew", s.auth(s.renewLease))
-	mux.Handle("POST /api/v1/tasks/{id}/release", s.auth(s.releaseLease))
-	mux.Handle("POST /api/v1/tasks/{id}/assign", s.auth(s.assignTask))
-	mux.Handle("POST /api/v1/tasks/{id}/unassign", s.auth(s.unassignTask))
-	mux.Handle("POST /api/v1/tasks/{id}/start", s.auth(s.startTask))
-	mux.Handle("POST /api/v1/tasks/{id}/stop", s.auth(s.stopTask))
-	mux.Handle("POST /api/v1/tasks/{id}/lease/worktree", s.auth(s.rebindWorktree))
-	mux.Handle("POST /api/v1/tasks/{id}/agent-session", s.auth(s.touchAgentSession))
-	mux.Handle("POST /api/v1/tasks/{id}/agent-session/end", s.auth(s.endAgentSession))
-	mux.Handle("POST /api/v1/tasks/{id}/done", s.auth(s.doneTask))
-	mux.Handle("POST /api/v1/tasks/{id}/abandon", s.auth(s.abandonTask))
-	mux.Handle("POST /api/v1/tasks/{id}/reopen", s.auth(s.reopenTask))
-	mux.Handle("GET /api/v1/tasks/{id}/timeline", s.auth(s.taskTimeline))
+	r.api("POST /api/v1/tasks", s.createTask)
+	r.api("GET /api/v1/tasks", s.listTasks)
+	r.api("GET /api/v1/tasks/{id}", s.getTask)
+	r.api("GET /api/v1/tasks/{id}/brief", s.taskBrief)
+	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
+	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
+	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
+	r.api("DELETE /api/v1/tasks/{id}/edges", s.removeEdge)
+	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
+	r.api("POST /api/v1/tasks/claim-next", s.claimNext)
+	r.api("POST /api/v1/tasks/{id}/claim", s.claimTask)
+	r.api("POST /api/v1/tasks/{id}/renew", s.renewLease)
+	r.api("POST /api/v1/tasks/{id}/release", s.releaseLease)
+	r.api("POST /api/v1/tasks/{id}/assign", s.assignTask)
+	r.api("POST /api/v1/tasks/{id}/unassign", s.unassignTask)
+	r.api("POST /api/v1/tasks/{id}/start", s.startTask)
+	r.api("POST /api/v1/tasks/{id}/stop", s.stopTask)
+	r.api("POST /api/v1/tasks/{id}/lease/worktree", s.rebindWorktree)
+	r.api("POST /api/v1/tasks/{id}/agent-session", s.touchAgentSession)
+	r.api("POST /api/v1/tasks/{id}/agent-session/end", s.endAgentSession)
+	r.api("POST /api/v1/tasks/{id}/done", s.doneTask)
+	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
+	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
+	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
 
-	mux.Handle("GET /api/v1/skills", s.auth(s.listSkills))
-	mux.Handle("GET /api/v1/skills/{name}", s.auth(s.getSkill))
-	mux.Handle("GET /api/v1/skills/{name}/archive/{hash}", s.auth(s.skillArchive))
-	mux.Handle("POST /api/v1/skills/recommend", s.auth(s.recommendSkills))
-	mux.Handle("POST /api/v1/skills/sync", s.auth(requireAdmin(s.syncSkills)))
+	r.api("GET /api/v1/skills", s.listSkills)
+	r.api("GET /api/v1/skills/{name}", s.getSkill)
+	r.api("GET /api/v1/skills/{name}/archive/{hash}", s.skillArchive)
+	r.api("POST /api/v1/skills/recommend", s.recommendSkills)
+	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
-	mux.Handle("POST /api/v1/runtime-events", s.auth(s.createRuntimeEvent))
+	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
 
-	// Project, actor, and token management is admin-only: any bearer token
-	// may otherwise mint further tokens (verified privilege escalation).
-	mux.Handle("POST /api/v1/projects", s.auth(requireAdmin(s.createProject)))
-	mux.Handle("GET /api/v1/projects", s.auth(s.listProjects))
+	// Project, actor, and token management is admin-only (permProjectAdmin /
+	// permActorAdmin in routeGuards): any bearer token may otherwise mint
+	// further tokens, which is privilege escalation.
+	r.api("POST /api/v1/projects", s.createProject)
+	r.api("GET /api/v1/projects", s.listProjects)
 	// Literal segment, so Go's mux prefers it over the wildcard route below.
-	// Both are read-only: no requireAdmin.
-	mux.Handle("GET /api/v1/projects/resolve", s.auth(s.resolveProjectByRemote))
-	mux.Handle("GET /api/v1/projects/{id}", s.auth(s.getProject))
-	mux.Handle("GET /api/v1/projects/{id}/cockpit", s.auth(s.projectCockpit))
-	mux.Handle("GET /api/v1/projects/{id}/deliverables", s.auth(s.listProjectDeliverables))
-	mux.Handle("POST /api/v1/projects/{id}/deliverables", s.auth(s.createDeliverable))
-	mux.Handle("PATCH /api/v1/projects/{id}", s.auth(requireAdmin(s.patchProject)))
-	mux.Handle("POST /api/v1/projects/{id}/repos", s.auth(requireAdmin(s.addRepo)))
-	mux.Handle("PATCH /api/v1/repos/{owner}/{name}", s.auth(requireAdmin(s.patchRepo)))
+	r.api("GET /api/v1/projects/resolve", s.resolveProjectByRemote)
+	r.api("GET /api/v1/projects/{id}", s.getProject)
+	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
+	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
+	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
+	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
+	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
+	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
 
-	mux.Handle("POST /api/v1/actors", s.auth(requireAdmin(s.createActor)))
-	mux.Handle("POST /api/v1/actors/{id}/tokens", s.auth(requireAdmin(s.createToken)))
-	mux.Handle("DELETE /api/v1/tokens", s.auth(requireAdmin(s.revokeToken)))
+	r.api("POST /api/v1/actors", s.createActor)
+	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
+	r.api("DELETE /api/v1/tokens", s.revokeToken)
 
 	// The repo half of an inbox item contains a slash ("owner/name"), so
 	// promote/dismiss take it as a body field instead of a path segment.
-	mux.Handle("GET /api/v1/inbox", s.auth(s.listInbox))
-	mux.Handle("POST /api/v1/inbox/promote", s.auth(s.promoteInbox))
-	mux.Handle("POST /api/v1/inbox/dismiss", s.auth(s.dismissInbox))
-	mux.Handle("POST /api/v1/inbox/link", s.auth(s.linkInbox))
-	mux.Handle("POST /api/v1/inbox/import", s.auth(requireAdmin(s.importInbox)))
+	r.api("GET /api/v1/inbox", s.listInbox)
+	r.api("POST /api/v1/inbox/promote", s.promoteInbox)
+	r.api("POST /api/v1/inbox/dismiss", s.dismissInbox)
+	r.api("POST /api/v1/inbox/link", s.linkInbox)
+	r.api("POST /api/v1/inbox/import", s.importInbox)
 
-	mux.Handle("GET /api/v1/board", s.auth(s.board))
+	r.api("GET /api/v1/board", s.board)
 
-	mux.Handle("POST /api/v1/docs/sync", s.auth(s.syncDocs))
-	mux.Handle("GET /api/v1/docs", s.auth(s.listDocs))
-	mux.Handle("GET /api/v1/docs/{id}", s.auth(s.getDoc))
+	r.api("POST /api/v1/docs/sync", s.syncDocs)
+	r.api("GET /api/v1/docs", s.listDocs)
+	r.api("GET /api/v1/docs/{id}", s.getDoc)
+
+	// The table describes exactly the routes above: an entry nothing
+	// registered is dead policy that reads like a guard, so it fails the boot
+	// rather than sitting in the file looking enforced.
+	if err := r.checkComplete(); err != nil {
+		return nil, nil, err
+	}
 
 	// Admin handler: health and metrics on a dedicated listener, never routed
 	// through the public ingress. No auth or request-metrics middleware — the
@@ -581,8 +596,11 @@ func (s *server) metrics(next http.Handler) http.Handler {
 // actorKey is the context key for the authenticated actor.
 type actorKey struct{}
 
-// auth wraps an /api/v1 handler with bearer-token authentication and puts
-// the actor into the request context.
+// auth wraps an /api/v1 handler with bearer-token authentication: it is the
+// authentication half only, and puts both the actor (for handlers that
+// attribute a write) and the derived Subject (for the policy check) into the
+// request context. Authorization is requirePerm's job, which the router
+// always composes inside this — see authz.go.
 func (s *server) auth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -599,7 +617,8 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 			s.mapStoreErr(w, err)
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
+		r = r.WithContext(context.WithValue(r.Context(), actorKey{}, actor))
+		next(w, withSubject(r, subjectFromActor(actor, authToken)))
 	})
 }
 
@@ -610,17 +629,10 @@ func actorFrom(r *http.Request) *store.Actor {
 	return a
 }
 
-// requireAdmin wraps a handler that must only be reachable by admin actors.
-// It runs inside s.auth, which put the actor into the request context.
-func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if a := actorFrom(r); a == nil || !a.Admin {
-			writeErr(w, http.StatusForbidden, "admin required")
-			return
-		}
-		next(w, r)
-	}
-}
+// requireAdmin is gone: "admin only" is now a property of a permission in
+// authz.go's grants table (permProjectAdmin, permActorAdmin, permSkillAdmin,
+// permInboxAdmin), applied by requirePerm to whichever routes routeGuards
+// names. The refusal is unchanged, message included — see denialMessage.
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")

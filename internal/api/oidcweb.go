@@ -58,24 +58,12 @@ func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }
 
-// webAuth wraps a web page handler with session-cookie enforcement. It is a
-// passthrough only when OIDC is disabled. Unauthenticated requests 302 to
-// loginTarget with the current path preserved in ?next.
-func (s *server) webAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.oidc == nil {
-			next(w, r)
-			return
-		}
-		if c, err := r.Cookie(sessionCookieName); err == nil {
-			if _, ok := verifySession(s.cfg.SessionSecret, c.Value, s.st.Now()); ok {
-				next(w, r)
-				return
-			}
-		}
-		http.Redirect(w, r, s.loginTarget(r.URL.Path), http.StatusFound)
-	}
-}
+// Session enforcement for web pages moved to webGuard (authz.go), which does
+// what webAuth did — resolve the session cookie, 302 to loginTarget when
+// there is none, pass everything through when no login provider is configured
+// — and then additionally applies the route's permission. It resolves the
+// cookie to an actor rather than merely checking the signature, so the web
+// surface knows who is acting.
 
 // authLogin handles GET /auth/login: begin the auth-code + PKCE flow.
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
