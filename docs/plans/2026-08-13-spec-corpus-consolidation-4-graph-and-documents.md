@@ -160,6 +160,19 @@ recorded here because each had a real alternative:
     fold is removing. Rule 6 keeps it; recorded as a residual rather than
     rewritten into a claim that is false in a different way.
 
+15. **The `[doc_sync]` contradiction is preserved, not reconciled.** Folded
+    025 §5 states the file mirror is opt-in through a `[doc_sync]` block in
+    `.worklode/config.toml` (025 §2, §10); §16.1 states the config reader is
+    a flat `key = "value"` parser with no TOML-table support and declares the
+    scalar `spec_corpus` / `plan_corpus` keys (034 §2). Both are
+    source-verbatim, no source reconciles them, and the folded document
+    therefore requires a block the same document says the parser cannot read.
+    The 025 fold surfaced this and correctly declined to resolve it: choosing
+    between them is a design decision, and rule 6 forbids a rewriter making
+    it. Folded 025 visibly carries the mismatch, exactly as folded 008 carries
+    024's missing worktree-exit event. Reconciling it is a spec amendment —
+    not a fold decision and not a cutover edit.
+
 ## Cross-target obligations
 
 An amendment whose *content* one task must absorb while its *anchors* live in
@@ -216,6 +229,30 @@ Additions to the list parts 2 and 3 already record.
   naming a specific pre-fold amendment (criteria 3, 9 and 11) tests a state
   the new corpus does not have. Ruling 14 keeps them as written; part 5
   decides whether they are re-aimed at post-cutover amendments or retired.
+- **Statements that `--ids` pins but the fold makes false.** Rule 7 requires
+  every backticked span to survive, so a sentence built around one cannot be
+  edited away even when the fold retires what it says. Three in folded 025:
+  §14.3's "the corpus holds exactly one cross-project reference today — this
+  document's own `amends: rdf-registry:ADR-0006`", which no folded document
+  can carry since part-3 ruling 3 keeps only `status` and `requires`;
+  §14.3's `023` / `WL-SPEC-23` worked examples, whose "023 parses and
+  normalises to 23" arithmetic `refmap.py` will rewrite into nonsense; and
+  the `spec-worklode-014` doc slugs in §4.1's IRI examples. Part 5 decides
+  each: an exemption added at cutover, or an amendment after it.
+- **Bare document numbers `refmap.py` cannot see, beyond the per-document
+  grep's reach.** Folded 026 §3.2 and §10 name `014` twice in prose with no
+  `§` and no filename ("entering spec 006's consolidation and entering
+  014's"), and §1 and §4.1 carry a `000 §2` and a
+  `003-platform-graph-design.md` naming documents that never existed or that
+  this part retires. The latter two carry a `§` or a filename, so
+  `refmap.py`'s unmapped report is the designed escalation; the former two
+  are invisible to it and to the grep, and belong with the criteria-3/9/11
+  sweep ruling 14 defers.
+- **Folded 007 spells concept IRIs path-style** — `wl:status wl:status/accepted`
+  in §3.3's SPARQL, where folded 006 mints `wlc:accepted`. The inconsistency
+  predates the fold (source 007 wrote `ls:status/accepted` against 006's
+  `lsc:` concepts), so reconciling it is a design change rather than a
+  transcription, and no rewriter was licensed to make it.
 - **009's implementation-status qualifiers stay as written** — "done in dev",
   "prod remains blocked on item 1", "the override is not yet implemented in
   rdf-registry". Rule 4 leaves implementation status alone, so folded 006 §13
