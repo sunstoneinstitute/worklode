@@ -141,6 +141,23 @@ already records.
   the contradiction is the corpus's, not the fold's. Resolving it needs a
   real amendment to the auth design by a human, and part 5 must not let it
   slip past the `git rm -r docs/specs`.
+- **The `closedStates` set is enumerated nowhere.** Folded 004 §1.3 now
+  defines an open task by deferring to `closedStates` (§6.4) — the right
+  repair, since `done` was never a state under 011 — but neither §5.1 nor
+  §6.4 says which states are in that set, and no source states it either.
+  Part 5 must not let the corpus ship with a `blocks` predicate that points
+  at an undefined set; resolving it needs a human ruling, not a fold.
+- **The `D<n>` / `Q<n>.<n>` design-record labels are half-retired.**
+  `fold.yaml` sheds `(D13)`, `(D14)` and `(Q14.1)` from folded 008's
+  headings because they name decisions in 003, which this fold retires —
+  but `D7`, `D8`, `D15`, `Q14.2` and `Q14.3` survive in body text, and
+  folded 004 and 016 still cite `D14` and `Q14.1`. Part 5 sweeps the whole
+  label scheme or keeps it; it should not stay half-and-half.
+- **Four references become self-citations at cutover**: folded 008 cites
+  `008` at lines ~114, ~220 and ~225, and folded 004 cites `004` at ~436.
+  All map correctly, so nothing resolves wrongly — but a document citing
+  itself by number reads badly, and part 5 may want to strip the document
+  number. The sites are recorded here so that pass is a lookup, not a hunt.
 
 ## Global Constraints
 
@@ -215,14 +232,22 @@ artifacts. The sources' one span-artifact site (023 §3.2's nested
 struct-tag markup) yields real identifiers — `json:"github_username"`,
 `expected_github_login` — that must survive; nothing is seeded for them, and
 rule 9 applies doubly: keep the struct tag whole on one line. `fold.yaml`
-was amended once during execution, by the planning tier, not by a task:
-folding 001 needed two more `allow_dropped_ids` entries —
+was amended during execution and review, always by the planning tier, never
+by a task. First: folding 001 needed two more `allow_dropped_ids` entries —
 `docs/plans/2026-07-20-provider-neutral-cli-login-design.md` and
 `docs/authoring-design-docs.md`, both cited only in 031 §0's promotion
 blockquote, which the fold deletes (the folded document has four sources
-and was promoted from nothing). The rewriter reported it as a `fold.yaml`
+and was promoted from nothing); the rewriter reported it as a `fold.yaml`
 defect and did not edit the file — exactly the behaviour the template
-demands, and the plan keeps demanding it. Provenance
+demands, and the plan keeps demanding it. Three more amendments landed in
+the review wave: the 023 §2 `dropped:` reason was corrected — it claimed
+`internal/tokencrypt` survives "without the package name", which the
+carry-forward ruling reversed; the 004 §1.2 `dropped:` reason was rewritten
+to say both claims were recovered into §5.1 rather than left to part 5; and
+the redundant `wt/<id>-<slug>` entry was removed (the span survives in
+folded 008's §7, so it excused a drop that never happened) while two
+entries were added for `--under <epic>` and `per-epic`, the pre-029 CLI
+spellings folded 004 retires. Provenance
 block: 001 is doc-wide `amendedBy` 031, per-section `amendedBy` from 002,
 `isReplacedBy` §4 → 031; 002 `amends` 001 doc-wide and per-section, is
 doc-wide `amendedBy` 031, `isReplacedBy` §3.2–3.4 → 023 §3.1; 023 `replaces`
@@ -352,11 +377,13 @@ fallback — the cross-target absorption recorded above), 011 §6 (014 §11.3
 and 030), 018 preamble (025 doc-wide). Citations per ruling 1: notes from
 010/011/018 dissolve uncited (same target); the 014, 012, 030 and 025
 citations stay in old-corpus, refmap-visible form for cutover to repoint.
-`allow_dropped_ids` seeds 17 entries: the 14 source-side span artifacts
-(8 from 004, 4 from 011, 2 from 018; 010 has none) plus three real,
+`allow_dropped_ids` holds 19 entries: the 14 source-side span artifacts
+(8 from 004, 4 from 011, 2 from 018; 010 has none) plus five real,
 accepted losses — the pre-025/029 kind-enum span
-`feature, bug, chore, spec, epic, review, spike` and the pre-011 reopen
-spellings `done|abandoned → ready` (004 §5) and `done→ready` (004 §8).
+`feature, bug, chore, spec, epic, review, spike`, the pre-011 reopen
+spellings `done|abandoned → ready` (004 §5) and `done→ready` (004 §8), and
+the pre-029 CLI spellings `--under <epic>` and `per-epic` (added in the
+review wave; see task 1's amendment record).
 Provenance block: 010 and 018 amend 004 doc-wide; 018 amends 011 (folded
 §6.4 states that `ResolveDelivery` leaves a task with children alone; §5
 does not repeat it) and 005 (absorbed in part 1, not ours); 025 §6 amends
@@ -373,13 +400,20 @@ Rulings the rewrite applies (fold decisions, not rewriter calls):
   release/expiry) and the full `Transition(tx, now, taskID, from, to,
   eventID)` contract sentence (atomic from-state check inside the caller's
   tx, `updated_at` bump, `state_log` row attributed to the event, unknown
-  task `ErrNotFound`, wrong from-state `ErrBadTransition`) — are carried
-  into the new §1.1 **verbatim**, notwithstanding rewrite rule 6's "never
-  add a normative claim". This is a planning-tier placement decision, made
-  here because part 5's `git rm -r docs/specs` is the last moment the
-  material could be recovered; it is an authorised exception, not a
-  precedent a rewriter may take on its own. The `dropped:` reason's
-  "resolve before part 5" clause is thereby discharged.
+  task `ErrNotFound`, wrong from-state `ErrBadTransition`) — are recovered
+  into **§5.1**, where the state machine lives: the rewriter correctly
+  stopped and asked rather than putting state-machine material in §1.1's
+  `tasks` DDL, and this plan's original §1.1 placement was wrong. The
+  recovery is a repair, not a verbatim carry: the transition table's
+  `in_review → done` row is written `in_review → merged` per 011's rename,
+  and its two reopen rows were not carried because §5.1's bullets and §8
+  already state reopen; the trigger annotations and the contract sentence
+  are otherwise carried whole. Authorised notwithstanding rewrite rule 6's
+  "never add a normative claim" — a planning-tier placement decision, made
+  because part 5's `git rm -r docs/specs` is the last moment the material
+  could be recovered; an authorised exception, not a precedent a rewriter
+  may take on its own. The `dropped:` reason was rewritten in the review
+  wave to record the recovery (see task 1's amendment record).
 - **§1.1's tasks DDL states the current schema:** the `state` CHECK becomes
   `('draft','ready','in_progress','in_review','merged','deployed_dev',
   'deployed_prod','released','abandoned')` (011 §1/§5); the `kind` CHECK
@@ -497,10 +531,12 @@ targets). Absorbing 030 also means writing the post-030 path
 criterion 3, which predate 030 and carry no note**. 030's `amends` list
 omits 024 (source rot); the merge ratified the structural settlement: both
 anchors land in merged sections whose 008 half carries an absorbed 030
-note, rule 2 governs the seam, and the `wt/<id>-<slug>` entry authorises
-the expected span drop — a reviewer should not flag the rewrite as
-unlicensed, and a surviving historical mention in the cutover section
-(§7) is fine. The fourth seeded entry is `", which "` — 030 §3.2's
+note, and rule 2 governs the seam — a reviewer should not flag the rewrite
+as unlicensed. A `wt/<id>-<slug>` `allow_dropped_ids` entry was seeded for
+the expected span drop, then removed in the review wave: §7's historical
+mention keeps the span alive, so the entry excused a drop that never
+happened (see task 1's amendment record). The one span-artifact entry
+kept is `", which "` — 030 §3.2's
 source-side artifact from the wrapped span `git config --worktree --get
 worklode.task-id`; keep that span on one line in the rewrite (rule 9). The
 bare-number grep will hit many self-references ("spec 030", "(024)", "008
@@ -560,12 +596,12 @@ agent_sessions` block the `agent` CHECK becomes
 `copilot` inserted between `codex` and `cursor` and nothing else changed;
 and the body prose already saying the CHECK "mirrors the existing style of
 `events.source` and `actors.kind`; adding a tool is a one-line migration"
-stays verbatim, because the amendment exercised exactly the reservation it
-describes. Per ruling 1 the absorption keeps one citation: 024 folds into a
-*different* target (008), so the amended text retains a refmap-visible
-pointer in old-corpus form — the "spec 024 §5" spelling the note already
-uses is fine — for cutover to repoint into folded 008; never a bare retired
-number, and never a hand-repoint to new-corpus numbering (ruling 5). Two
+stays — the amendment exercised exactly the reservation it describes —
+gaining one clause, "and admits the harnesses spec 024 §5 names", which is
+ruling 1's kept citation: 024 folds into a *different* target (008), so the
+amended text retains a refmap-visible pointer in old-corpus form for
+cutover to repoint into folded 008; never a bare retired number, and never
+a hand-repoint to new-corpus numbering (ruling 5). Two
 look-alikes in the same section are not amendment notes: the bold
 "Superseded by migration `0008_session_cost`" paragraph is the spec's own
 statement of where cost detail now lives — substance, kept under rule 6,
