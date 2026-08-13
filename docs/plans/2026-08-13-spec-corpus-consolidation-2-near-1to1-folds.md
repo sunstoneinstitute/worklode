@@ -455,18 +455,25 @@ at `docs/specs/026-design-doc-queries.md:207` and
 the regex deliberately** — widening is a planning-tier decision, since rule 5
 records that widening this regex has already caused two critical bugs.
 
-**And hand-repointing one inside `docs/specs2/` sets a trap for cutover.**
-`refmap.py` scans `docs/specs2/` on purpose — a folded document's prose still
-carries the *old* corpus's section numbers, and cutover is where they get
-converted. A letter-suffix reference is exempt only while it stays unreadable:
-the moment folded 029's pointer at 019's old `4.3a` was hand-repointed to the
-new `4.4`, it became visible to the prose regex — and `mapping.yaml` maps old
-`4.4` to new `4.5`, so the cutover run would rewrite the now-correct pointer
-into a wrong one. `--dry-run` already lists that line in its rewrite plan.
-**Part 5 must exclude it from the rewrite** (or re-point it afterwards), and the
-same applies to any other letter-suffix reference resolved by hand inside
-`docs/specs2/` before cutover. Leaving it stale was the worse option: a reader
-would follow it to a section number 019 no longer has.
+**Do not hand-repoint one inside `docs/specs2/`.** The final review called folded
+029's `(019 §4.3a)` stale and it was repointed to `(019 §4.4)`; that was reverted,
+and the revert is the rule to carry forward. `refmap.py` scans `docs/specs2/` on
+purpose, because a folded document's prose still carries the *old* corpus's
+section numbers and cutover is where they get converted. A letter-suffix
+reference is exempt from that pass only while it stays unreadable. Repointing it
+to `4.4` made it visible to the prose regex — and `mapping.yaml` maps old `4.4`
+to new `4.5`, so the cutover run would have rewritten the now-correct pointer
+into a wrong one, which `--dry-run` duly listed.
+
+The invariant that keeps this coherent: **hand-repointing inside `docs/specs2/`
+is only ever done for references `refmap.py` cannot see**, which is exactly what
+the per-document grep selects for. Repointing a reference the rewriter *can* see
+double-maps it. And a stale `§4.3a` is not an anomaly in a folded document —
+every one of the nine still cites the pre-fold corpus wherever it names a
+document parts 3 and 4 have not folded yet (`014 §11.3`, `028 §6`, `027`). One
+more pre-fold-shaped reference is consistent with that state, and part 5 resolves
+the whole set together rather than carrying one hand-made exception that needs
+its own exclusion.
 
 **Amendment absorptions took three shapes across the nine, and the citation
 should not be one of the variables.** Rule 3 says the note goes away and what it

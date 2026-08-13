@@ -204,7 +204,7 @@ Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch nam
 (`[A-Z][A-Z0-9]*-[0-9]+`) are untouched by construction. The scheme generalizes
 014 §11.3's cross-corpus shorthand (`WL-SPEC-23`), which already reads as an
 instance of it. The type segment is also what `lode show <id>` dispatches on, with an
-equivalent `--kind`/per-kind flag spelling for each (019 §4.4); kinds in this table
+equivalent `--kind`/per-kind flag spelling for each (019 §4.3a); kinds in this table
 whose entities do not exist yet are recognized and reported, never treated as typos.
 
 Documents drawing identity from these sequences changes 025's assumptions; its
