@@ -193,6 +193,25 @@ documents:
         Same as http://localhost:8000: the second fixed CLI-callback port
         of the pre-031 flow, dead client config under the ephemeral-port
         loopback.
+      # The three wl-login entries below correct a spec-vs-code drift the
+      # fold surfaced: 031 spells the CLI discovery endpoint
+      # /.well-known/wl-login in all four of its mentions, and the shipped
+      # route has always been /.well-known/lode-login -- server.go's
+      # registration, router.go's guard table, internal/cli/login.go's
+      # request and every test agree. The wire protocol is the authority
+      # over the prose describing it, so the folded document carries the
+      # shipped spelling. Nothing is lost: the endpoint, its payload and
+      # its 404 behaviour are unchanged, only the path is spelled the way
+      # a client must actually spell it. docs/specs/031 is left untouched
+      # per the migration's constraint; part 5 deletes it.
+      "well-known/wl-login": >-
+        Corrected to well-known/lode-login (031 sec-1's step-1 trace).
+      "GET /.well-known/wl-login": >-
+        Corrected to GET /.well-known/lode-login (031 sec-2.1's endpoint
+        heading).
+      "/.well-known/wl-login": >-
+        Corrected to /.well-known/lode-login (031 sec-6's added-routes
+        list and its e2e fake-server bullet).
       # The three entries below enact one human ruling, made on 2026-08-13
       # after the fold surfaced the contradiction the corpus had carried
       # since 023: OIDC (Keycloak) is the only login, and a user's GitHub
