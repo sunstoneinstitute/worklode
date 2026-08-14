@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: draft
 issued: 2026-07-22
 ---
 # Spec 007 — Drift & overview

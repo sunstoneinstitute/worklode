@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: draft
 issued: 2026-07-28
 requires:
 - docs/specs/004-execution-backbone.md
