@@ -6,7 +6,11 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      # A named volume, not a ./data bind mount: Postgres chowns its data
+      # directory to uid 999 mode 0700, and a directory the developer cannot
+      # read inside the checkout breaks every `go vet ./...` and `go build
+      # ./...` on the host — Go walks it and stops on the permission error.
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -55,3 +59,6 @@ services:
     # there is no in-container binary to run an HTTP probe with. /healthz and
     # /metrics live on the admin port (:9090), which compose does not publish;
     # add a "127.0.0.1:9090:9090" port mapping to probe liveness from the host.
+
+volumes:
+  postgres-data:
