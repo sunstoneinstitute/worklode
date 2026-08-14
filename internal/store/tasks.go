@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 )
@@ -64,7 +66,7 @@ type TaskFilter struct {
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
-// blocked until A reaches a closed state (see closedStates); "A child_of B"
+// blocked until A reaches a closed state (see taskClosed); "A child_of B"
 // makes B a container.
 type Edge struct {
 	FromTask string
@@ -672,23 +674,93 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
-// closedStates is the SQL tuple of task states that no longer block
-// dependents: everything from merged onward, plus abandoned.
-const closedStates = `('merged', 'deployed_dev', 'deployed_prod', 'released', 'abandoned')`
+// deliveryRanks places the delivery states on one "how far delivered" axis, so
+// "at or past a repo's done_state" is a single integer comparison.
+//
+// The two terminals share a rank deliberately. §5.1's branches never meet: a
+// prod repo walks merged → deployed_dev → deployed_prod, a release repo walks
+// merged → deployed_dev → released, and `deployed_prod → released` is not a
+// legal transition. Ordering one terminal above the other would wedge a task
+// that reached the *other* branch's terminal — after `lode project set-repo
+// --done-state` (§5.4), or when a multi-repo task's prod deploy lands before
+// its release — permanently open with no state left to advance to. Calling
+// them peers under-blocks in that corner instead, which is where the old
+// fixed tuple already sat.
+var deliveryRanks = map[string]int{
+	"merged": 1, "deployed_dev": 2, "deployed_prod": 3, "released": 3,
+}
 
-// closedStateSet mirrors closedStates for in-Go checks. Both must list the
-// same states — see TestClosedStateSetMirrorsSQL, which pins that.
-var closedStateSet = map[string]bool{
-	"merged": true, "deployed_dev": true, "deployed_prod": true,
-	"released": true, "abandoned": true,
+// deliveredStateSet is every ranked state plus abandoned: the states in which
+// a task has no work left for anyone to own, whatever repo it belongs to. It
+// answers the state-only question assign.go asks. It is *not* the blocking
+// predicate — that is per repo, see taskClosed.
+var deliveredStateSet = func() map[string]bool {
+	m := map[string]bool{"abandoned": true}
+	for st := range deliveryRanks {
+		m[st] = true
+	}
+	return m
+}()
+
+// deliveryRank renders the SQL rank of a state expression. A task's state and
+// a repo's done_state both map through the same CASE, so the two are directly
+// comparable. Anything before merged ranks 0, below every done_state.
+func deliveryRank(expr string) string {
+	var b strings.Builder
+	b.WriteString("(CASE " + expr)
+	for _, st := range slices.Sorted(maps.Keys(deliveryRanks)) {
+		fmt.Fprintf(&b, " WHEN '%s' THEN %d", st, deliveryRanks[st])
+	}
+	b.WriteString(" ELSE 0 END)")
+	return b.String()
+}
+
+// taskClosed renders the "no longer blocks its dependents" predicate for the
+// tasks row aliased as alias. Per spec 004 §1.3 the closed set is per repo,
+// not one fixed tuple of states: a task is closed when it is abandoned, or
+// when its state is at or past the done_state of every repo its work *landed*
+// in. The same merged task is closed where done_state = 'merged' and still
+// open where the repo gates on 'released'.
+//
+// Landed, not merely attributed: a task branch's pushes each write a
+// task_commits row whether or not that work ever reaches the default branch
+// (internal/hooks/push.go), so the repo set is the one LandedMainID reads —
+// task_commits joined to main_commits. Without the join, an abandoned approach
+// pushed to a branch in some other repo would gate the task on that repo's
+// done_state forever, and ResolveDelivery — which walks the same join — could
+// never advance it.
+//
+// A repo the task landed in that no project maps takes DefaultDoneState,
+// matching RepoDoneState: an unconfigured repo must not block forever.
+//
+// A task with children is the one state-fixed case (§6.4): it has no commit of
+// its own, cannot advance past merged, and so is closed at merged in every
+// repo. It is checked explicitly rather than left to "a container has no
+// commits", since AddEdge can give children to a task that already landed some.
+// A task with no landed commit at all — marked merged by hand — has no repo to
+// gate on and closes at merged too.
+//
+// The rendered subqueries bind `ch`, `tc`, `mc` and `pr`; an enclosing query
+// must not reuse those aliases.
+func taskClosed(alias string) string {
+	state := alias + ".state"
+	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
+	     AND (EXISTS (SELECT 1 FROM task_edges ch
+	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'child_of')
+	          OR NOT EXISTS (SELECT 1 FROM task_commits tc
+	                         JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
+	                         LEFT JOIN project_repos pr ON pr.repo = tc.repo
+	                         WHERE tc.task_id = ` + alias + `.id
+	                           AND ` + deliveryRank(state) + ` <
+	                               ` + deliveryRank(`COALESCE(pr.done_state, '`+DefaultDoneState+`')`) + `))))`
 }
 
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
 // open, i.e. the edge currently blocks its to_task.
-const blockedCondition = `e.type = 'blocks'
+var blockedCondition = `e.type = 'blocks'
 	 AND EXISTS (SELECT 1 FROM tasks b
 	             WHERE b.id = e.from_task
-	               AND b.state NOT IN ` + closedStates + `)`
+	               AND NOT ` + taskClosed("b") + `)`
 
 // BlockedTaskIDs returns the ids of tasks that have at least one open
 // 'blocks' edge pointing at them (the blocker is not in a closed state).

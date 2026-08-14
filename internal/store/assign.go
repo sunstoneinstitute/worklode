@@ -11,7 +11,7 @@ import (
 // transaction, recording provenance via LogChange. assignee must name an
 // existing actor (ErrNotFound otherwise); a missing task is also
 // ErrNotFound. A task with children, or one in a closed state (see
-// closedStateSet), cannot be assigned (ErrInvalidInput) — a container's
+// deliveredStateSet), cannot be assigned (ErrInvalidInput) — a container's
 // ownership follows its children, and a closed task has nothing left to own.
 func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) error {
 	var one int
@@ -38,7 +38,7 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 	if container {
 		return fmt.Errorf("task %s has children and cannot be assigned: %w", id, ErrInvalidInput)
 	}
-	if closedStateSet[state] {
+	if deliveredStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
 	}
 
@@ -53,7 +53,7 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 }
 
 // UnassignTask clears taskID's assignee inside the given transaction,
-// recording provenance via LogChange. A closed task (see closedStateSet)
+// recording provenance via LogChange. A closed task (see deliveredStateSet)
 // rejects the change with ErrInvalidInput — it has nothing left to own.
 // Unlike AssignTask/StartTask there is no container guard: a task with
 // children is never assigned by this package, but clearing a stray assignee
@@ -69,7 +69,7 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 		}
 		return fmt.Errorf("lock task %s: %w", id, err)
 	}
-	if closedStateSet[state] {
+	if deliveredStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot unassign: %w", id, state, ErrInvalidInput)
 	}
 
@@ -91,7 +91,7 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 // If the task is unassigned, actorID is assigned to it first (recorded via
 // LogChange); if it is already assigned to someone else, StartTask refuses
 // with ErrInvalidInput rather than silently reassigning. A task with
-// children, a closed task (see closedStateSet), or a blocked task are rejected the same way
+// children, a closed task (see deliveredStateSet), or a blocked task are rejected the same way
 // (ErrInvalidInput) — see IsBlocked and Claim for the equivalent lease-based
 // guards. A missing task is ErrNotFound. Returns the assignee the task
 // settled on (actorID, whether it was already assigned or just
@@ -121,7 +121,7 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 	if container {
 		return "", fmt.Errorf("task %s has children and cannot be started: %w", id, ErrInvalidInput)
 	}
-	if closedStateSet[state] {
+	if deliveredStateSet[state] {
 		return "", fmt.Errorf("task %s is %s: cannot start: %w", id, state, ErrInvalidInput)
 	}
 	if assignee != "" && assignee != actorID {

@@ -125,9 +125,17 @@ CREATE TABLE task_edges (
   of states**: a task at `merged` is closed where `done_state = merged` and still
   open where the repo gates on `released`. The one exception is a task with
   children, which has no commit of its own and so cannot advance past `merged`
-  (§6.4); it is closed at `merged` in every repo. `closedStates` (`tasks.go:537`)
+  (§6.4); it is closed at `merged` in every repo. `taskClosed` (`tasks.go`)
   is therefore a predicate joined through the repo mapping rather than a constant
-  state tuple. `IsBlocked(tx, taskID)` evaluates it inside the claim tx so the gate
+  state tuple. A task's repos are the ones its work **landed** in — the
+  `task_commits ⋈ main_commits` set `ResolveDelivery` itself walks, not bare
+  attribution, since a task branch's pushes are attributed whether or not that
+  work ever reaches the default branch — and a task landing in several is closed
+  only once it satisfies the strictest of them. `deployed_prod` and `released`
+  count as peers, not one past the other: §5.1's two branches never meet and
+  there is no transition between their terminals, so ranking either above the
+  other would leave a task that reached the wrong one open with nowhere to
+  advance. `IsBlocked(tx, taskID)` evaluates it inside the claim tx so the gate
   is checked atomically.
 - **`child_of`**: "A child_of B" makes B the parent of A; §6 governs what parent-hood
   means. Cycle detection on insert: `reachesViaChildOf` (BFS up the parent chain)

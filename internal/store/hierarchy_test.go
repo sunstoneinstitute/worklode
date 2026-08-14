@@ -380,6 +380,42 @@ func TestChildProgress(t *testing.T) {
 	}
 }
 
+// TestChildProgressPerRepoDoneState pins ChildProgress on the same per-repo
+// predicate the blocking queries use (taskClosed, spec 004 §1.3): a merged
+// child whose repo gates on released has not finished delivering, so it must
+// not be counted closed until it is released.
+func TestChildProgressPerRepoDoneState(t *testing.T) {
+	s := openTaskStore(t)
+	mapRepo(t, s, "horndb", "acme/app", "released")
+
+	container := createTask(t, s, taskTestNow, containerInput())
+	kid := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+	landCommit(t, s, kid.ID, "acme/app", "sha-kid")
+
+	walkTo(t, s, kid.ID, "merged")
+	got, err := s.ChildProgress(t.Context(), container.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if want := (HierarchyProgress{Closed: 0, Total: 1}); got != want {
+		t.Fatalf("progress with merged child in a release-gated repo = %+v, want %+v", got, want)
+	}
+
+	if err := transition(t, s, taskTestNow, kid.ID, "merged", "released"); err != nil {
+		t.Fatalf("release child: %v", err)
+	}
+	got, err = s.ChildProgress(t.Context(), container.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if want := (HierarchyProgress{Closed: 1, Total: 1}); got != want {
+		t.Fatalf("progress with released child = %+v, want %+v", got, want)
+	}
+}
+
 func TestChildProgressNoChildren(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
@@ -617,28 +653,86 @@ func TestResolveDeliveryIgnoresParents(t *testing.T) {
 	}
 }
 
+// closedKids builds children whose closedness follows the default merged-gated
+// reading: every state from merged onward, plus abandoned, counts as closed.
+func closedKids(states ...string) []childState {
+	if states == nil {
+		return nil
+	}
+	kids := make([]childState, len(states))
+	for i, st := range states {
+		kids[i] = childState{State: st, Closed: deliveredStateSet[st]}
+	}
+	return kids
+}
+
 func TestContainerTarget(t *testing.T) {
 	cases := []struct {
-		name   string
-		states []string
-		want   string
+		name     string
+		children []childState
+		want     string
 	}{
 		{"no children", nil, ""},
-		{"all draft or ready", []string{"draft", "ready"}, "ready"},
-		{"one started", []string{"ready", "in_progress"}, "in_progress"},
-		{"one in review", []string{"ready", "in_review"}, "in_progress"},
-		{"one landed, one open", []string{"merged", "ready"}, "in_progress"},
-		{"all closed, one delivered", []string{"merged", "abandoned"}, "merged"},
-		{"all closed via deploy", []string{"deployed_dev", "released"}, "merged"},
-		{"all abandoned", []string{"abandoned", "abandoned"}, "abandoned"},
-		{"all delivered", []string{"merged", "deployed_prod"}, "merged"},
+		{"all draft or ready", closedKids("draft", "ready"), "ready"},
+		{"one started", closedKids("ready", "in_progress"), "in_progress"},
+		{"one in review", closedKids("ready", "in_review"), "in_progress"},
+		{"one landed, one open", closedKids("merged", "ready"), "in_progress"},
+		{"all closed, one delivered", closedKids("merged", "abandoned"), "merged"},
+		{"all closed via deploy", closedKids("deployed_dev", "released"), "merged"},
+		{"all abandoned", closedKids("abandoned", "abandoned"), "abandoned"},
+		{"all delivered", closedKids("merged", "deployed_prod"), "merged"},
+		// Per-repo closedness (004 §1.3): a landed child that has not reached
+		// its repo's done_state holds the parent at in_progress rather than
+		// rolling it up — and must not read as un-started either, which would
+		// send the parent back to ready.
+		{"landed but not delivered", []childState{{State: "merged", Closed: false}}, "in_progress"},
+		{"one delivered, one still delivering", []childState{
+			{State: "released", Closed: true}, {State: "deployed_dev", Closed: false},
+		}, "in_progress"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := containerTarget(tc.states); got != tc.want {
-				t.Fatalf("containerTarget(%v) = %q, want %q", tc.states, got, tc.want)
+			if got := containerTarget(tc.children); got != tc.want {
+				t.Fatalf("containerTarget(%v) = %q, want %q", tc.children, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestResolveHierarchyPerRepoDoneState pins the roll-up on the same per-repo
+// predicate as ChildProgress: a parent whose only child is merged in a
+// release-gated repo stays in_progress, and rolls up to merged only once that
+// child is actually released. Roll-up and progress must never disagree about
+// which children are done.
+func TestResolveHierarchyPerRepoDoneState(t *testing.T) {
+	s := openTaskStore(t)
+	mapRepo(t, s, "horndb", "acme/app", "released")
+
+	container := createTask(t, s, taskTestNow, containerInput())
+	kid := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+	landCommit(t, s, kid.ID, "acme/app", "sha-kid")
+
+	walkTo(t, s, kid.ID, "merged")
+	got, err := s.GetTask(t.Context(), container.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != "in_progress" {
+		t.Fatalf("parent state = %s, want in_progress (child merged, repo gates on released)", got.State)
+	}
+
+	if err := transition(t, s, taskTestNow, kid.ID, "merged", "released"); err != nil {
+		t.Fatalf("release child: %v", err)
+	}
+	got, err = s.GetTask(t.Context(), container.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != "merged" {
+		t.Fatalf("parent state = %s, want merged (child released)", got.State)
 	}
 }
 
