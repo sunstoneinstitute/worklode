@@ -9,6 +9,10 @@ covers:
     coverage: partial
   - spec: docs/specs/032-project-cockpit.md#sec-11
     coverage: none
+requires:
+  - docs/plans/2026-08-14-cockpit-page-frame-unification.md
+  - docs/plans/2026-08-14-project-crew-participants.md
+  - docs/plans/2026-08-14-approvals-1-table-and-web-act.md
 ---
 # Home as the project list — implementation plan
 
@@ -693,10 +697,12 @@ suite seeds through the API as today.
 
 Docs alignment:
 
-- `docs/follow-ups.md`: add one entry for the deferred remainder of 032 §9
+- Add **nothing** to `docs/follow-ups.md`. The deferred remainder of 032 §9
   (Morning Brief, event-boundary cutoff, "Reviewed through now",
-  assigned-work and supervised-agent summaries), unless an equivalent entry
-  already exists — check first, per CLAUDE.md.
+  assigned-work and supervised-agent summaries) is exactly what this plan's
+  `coverage: partial` on §9 already declares, in a form a coverage query can
+  read. A second copy in `docs/follow-ups.md` is unqueryable and drifts from
+  the first.
 - Sweep `internal/api/web.go` / `internal/ui` comments for leftover claims
   that Home shows the board (the package comment's page list included).
   Keep the edits short and precise — no debugging diary.

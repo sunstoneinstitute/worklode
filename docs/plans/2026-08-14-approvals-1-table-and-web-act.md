@@ -9,6 +9,10 @@ covers:
     coverage: partial
   - spec: docs/specs/032-project-cockpit.md#sec-11
     coverage: none
+requires:
+  - docs/plans/2026-08-14-project-crew-participants.md
+isRequiredBy:
+  - docs/plans/2026-08-14-home-project-list.md
 ---
 
 # Approvals part 1 — the table, the PR ingest, and the web approve act
