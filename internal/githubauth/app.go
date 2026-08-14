@@ -202,3 +202,37 @@ func (a *AppAuth) DiscoverDoneState(ctx context.Context, repo string) (string, e
 		return "", fmt.Errorf("latest release for %s: status %d", repo, code)
 	}
 }
+
+// BranchSHA returns the head commit sha of a branch, or "" when the branch
+// does not exist. Callers correlating a release's target_commitish use it to
+// turn a branch name into a commit; a missing branch is an ordinary outcome
+// (the commitish was a tag, or the branch was deleted after the release), not
+// an error.
+func (a *AppAuth) BranchSHA(ctx context.Context, repo, branch string) (string, error) {
+	path, err := repoPath(repo)
+	if err != nil {
+		return "", err
+	}
+	token, err := a.InstallationToken(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	var ref struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	refURL := a.BaseURL + "/repos/" + path + "/git/ref/heads/" + url.PathEscape(branch)
+	code, err := githubJSON(ctx, http.MethodGet, refURL, "Bearer "+token, &ref)
+	if err != nil {
+		return "", err
+	}
+	switch code {
+	case http.StatusOK:
+		return ref.Object.SHA, nil
+	case http.StatusNotFound:
+		return "", nil
+	default:
+		return "", fmt.Errorf("branch sha %s#%s: status %d", repo, branch, code)
+	}
+}
