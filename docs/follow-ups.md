@@ -93,22 +93,8 @@ Each item carries a priority tag (assessed 2026-08-14):
   entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
-- `[P0]` **The web UI is unauthenticated without an SSO provider**: `webGuard`
-  (`internal/api/authz.go`) serves the anonymous `authOpen` subject when
-  neither OIDC nor GitHub login is configured, so the board, project, and task pages
-  are readable by anyone who can reach the server — and, since the cockpit's
-  creation forms (`internal/api/webform.go`) sit behind the same `webAuth`,
-  writable too: such a deployment accepts a task or a deliverable from anyone
-  who can reach it, recorded with a NULL `created_by` because there is no
-  session to attribute it to. The forms refuse cross-origin submissions, so
-  this is reachability, not CSRF. Gating the UI default-deny fixes the read
-  and the write exposure together. Spec 021 mirrors that
-  bypass in `eitherAuth` for consistency — the blob route is the wrong place
-  to unilaterally tighten the auth model — which means task screenshots and
-  attachments inherit it too. Spec 021 raises the stakes rather than creating
-  them: bodies already carried pre-release design work. Fix at the UI level,
-  either by refusing to serve web surfaces with no provider configured or by
-  gating the whole UI default-deny. Tracked as spec 021 Q021.4.
+- `[P0]` **The web UI is unauthenticated without an SSO provider.** Planned in
+  `docs/plans/2026-08-14-web-ui-requires-a-login-provider.md`.
 - `[gated]` **Authorization is a seam, not a model**: `internal/api/authz.go` puts every
   route behind one default-deny policy table, but what that table can say is
   still the two-level truth the server always had — every authenticated actor,
