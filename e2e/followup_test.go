@@ -21,7 +21,7 @@ func TestFollowUpLoop(t *testing.T) {
 	ctx := context.Background()
 
 	st := store.OpenTestStore(t)
-	handler, _, err := api.NewServer(st, api.Config{BootstrapToken: bootstrapToken})
+	handler, _, err := api.NewServer(st, api.Config{BootstrapToken: bootstrapToken, WebOpen: true})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

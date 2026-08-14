@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -59,6 +60,20 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// LODE_WEB_OPEN serves the web UI unauthenticated on an instance
+			// with no login provider (the local stack, CI). An unparseable
+			// value is a typo in a security-relevant setting, so it fails the
+			// boot rather than defaulting quietly to either answer — and it
+			// fails here, before the store is opened, so the operator sees the
+			// typo and not a connection error.
+			webOpen := false
+			if v := os.Getenv("LODE_WEB_OPEN"); v != "" {
+				b, err := strconv.ParseBool(v)
+				if err != nil {
+					return fmt.Errorf("LODE_WEB_OPEN: %q is not a boolean", v)
+				}
+				webOpen = b
+			}
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(collectors.NewGoCollector())
 			reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -86,6 +101,7 @@ func newServeCmd() *cobra.Command {
 				OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
 				PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
 				SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
+				WebOpen:             webOpen,
 				GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
 				GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
 				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
