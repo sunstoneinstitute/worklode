@@ -226,16 +226,16 @@ lode show <ref> [--resolved] [--section|-s <anchor>]
 `--section` (short `-s`) takes an anchor in any of three spellings: `sec-3`, `#sec-3`,
 or the bare number `3`, which is expanded to `sec-3`.
 
-`<ref>` is a path, a bare filename, a spec number (`014`, `014-design-documents`), or
-025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as sugar for `--section sec-2.1`)
+`<ref>` is a path, a bare filename, a spec number (`025`, `025-documents-in-the-backbone`), or
+025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as sugar for `--section sec-9`)
 that matches exactly one document; an ambiguous ref is an error listing the candidates.
 A shorthand naming another project is reported unresolved rather than fetched — §4.2's tier 2
 is dormant until 025. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
 the same ref forms as everything else.
 
-A kind flag (`--spec 15`, `--adr 7`, 019 §4.3a) is an equivalent spelling of a
-local ref: in a keyed corpus, `--spec 15` and `WL-SPEC-6` resolve and render
+A kind flag (`--spec 6`, `--adr 7`, 019 §4.4) is an equivalent spelling of a
+local ref: in a keyed corpus, `--spec 6` and `WL-SPEC-6` resolve and render
 identically, so a reader who knows only the kind and the number never has to
 build the typed id by hand. A kind flag always means the local corpus, so
 without a `project_key` it still resolves by bare number, whereas a
@@ -252,8 +252,8 @@ act on it:
   replaced.
 - **Document-scoped** entries (`"."`, or a value with no fragment) are rendered once as a
   banner above the body, as references rather than inlined text. A doc-wide amendment
-  already carries a prose note next to the heading it affects (018's is the model), and
-  inlining a whole document under another document produces something nobody reads.
+  already carries a prose note next to the heading it affects, and inlining a whole
+  document under another document produces something nobody reads.
 
 Only **effective** claims are inlined (§3.1); a pending one is listed as a reference marked
 `pending`, so a draft spec's proposed amendment never reads as settled design.
@@ -266,7 +266,7 @@ Every inlined block leads with its attribution on its own line, so borrowed text
 mistakable for the document's own:
 
 ```markdown
-**[superseding 014#sec-6]:**<br>
+**[superseding 025#sec-11]:**<br>
 <the inlined body>
 
 **[amending 012#sec-4]:**<br>
@@ -284,7 +284,7 @@ says so in its header.
 
 `--section <anchor>` prints one section, its subsections, and — with `--resolved` — that
 section's consolidation. This is the cheap form: an agent that needs `004 §5.4` should not pay
-for 011. A section is always its whole subtree: inlining `#sec-2` carries `#sec-2.1` and
+for all of 004. A section is always its whole subtree: inlining `#sec-2` carries `#sec-2.1` and
 `#sec-2.3` with it, each consolidated in its own right, because a claim against a parent is a
 claim against what it contains.
 
@@ -306,8 +306,8 @@ cannot be status-checked and is trusted rather than dropped.
 
 `--with-drafts` treats draft claims as effective, which answers the other useful question:
 what the corpus says once the open drafts land. Both readings are legitimate and neither is
-safe as the only one — specs 014 and 015 are draft today, and reading their claims on 000 §2
-and 005 §1 as settled would have the corpus describe a vocabulary that does not exist.
+safe as the only one — specs 025 and 006 are draft today, and reading their claims on 005 §1
+as settled would have the corpus describe a vocabulary that does not exist.
 
 Both directions of every edge are read and unioned (`amends` with `amendedBy`, `replaces`
 with `isReplacedBy`), so a half-maintained mirror still registers the claim; §4 reports the
@@ -353,13 +353,13 @@ Three rules make that total and bounded without a depth limit:
   amendment targeting two sections, or two documents amending one — and it caps output at
   the size of the live corpus rather than at the size of the walk.
 - **Cycle marker.** A visited set along each expansion path; revisiting a section emits
-  `[cycle: 014#sec-1 → 0NN#sec-2 → 014#sec-1]` and stops, and the cycle is reported through
+  `[cycle: 025#sec-17 → 0NN#sec-2 → 025#sec-17]` and stops, and the cycle is reported through
   §4's defect machinery. Acting edges point new→old, so cycles are near-impossible today and
   become constructible under revision; the visited set is cheaper than the incident.
 
 Because every emitted body is either live or shown beside its successor, and because backfill
 makes the traversal symmetric, the choice of root document changes *where* a body appears,
-never *whether* it appears: entering spec 006's consolidation and entering 014's surface the
+never *whether* it appears: entering spec 006's consolidation and entering 025's surface the
 same live sections of the lineage they share. The property is over that shared component and
 not over the corpus — a section no edge touches is reachable only from its own document, so
 each root necessarily also carries material the other cannot. That is what makes "start from
@@ -391,16 +391,17 @@ Every frontmatter reference resolves through one function, by the shape of its p
 | Form | Resolved against | Example |
 |---|---|---|
 | No `/` at all | the referring document's own directory | `004-execution-backbone.md` |
-| Leading `./` or `../` | the referring document's own directory | `../specs/011-delivery-lifecycle.md` |
-| Any other path containing `/` | the repo root, leading `/` optional | `docs/specs/011-…md`, `/docs/specs/011-…md` |
+| Leading `./` or `../` | the referring document's own directory | `../specs/004-execution-backbone.md` |
+| Any other path containing `/` | the repo root, leading `/` optional | `docs/specs/004-…md`, `/docs/specs/004-…md` |
 
 `#sec-N` narrows any of them to an anchor that must exist in the target's source.
 
 A reference may carry a **trailing parenthetical annotation** — `wasDerivedFrom:
-003-platform-graph-design.md (D1–D15)`, naming which of that document's decisions were
-inherited. It is stripped before resolution and otherwise ignored. Six accepted specs (000,
-004, 005, 006, 007, 008) already write it, so the alternative to admitting it is editing
-frozen documents to satisfy a parser.
+006-knowledge-graph.md (D1–D15)`, naming which of that document's decisions were
+inherited. The annotation's content is opaque — that example's labels named a design
+record this corpus retired, and the parser neither knew nor cared. It is stripped before resolution and otherwise ignored. Six accepted specs wrote
+it before the corpus was consolidated, so the alternative to admitting it is editing frozen
+documents to satisfy a parser.
 
 The rule is exhaustive and has no legacy branch: a path with a `/` in it is repo-relative
 unless it explicitly says otherwise with `./` or `../`. That is what the corpus's 36
@@ -543,7 +544,7 @@ no way to reach. A malformed shorthand, a tier-1 miss, and a tier-2 miss are all
 `--strict-refs` promotes tier-3 to a defect for the one caller that can afford it — a CI job
 with the backbone reachable. No hook passes it.
 
-The corpus's one existing cross-project reference, 014's `amends: rdf-registry:ADR-0006`, is
+The corpus's one existing cross-project reference, 025's `amends: rdf-registry:ADR-0006`, is
 in a colon form no tier parses. It is **reported `unresolved`, exit code unaffected** — the
 tier-3 treatment, reached by §4's exception rather than by a tier, since the syntax never
 parses far enough to select one. Making it a defect would be unenforceable as well as wrong:
@@ -774,13 +775,13 @@ commit". Two `rdfs:domain` assertions on one property intersect, and `wl:Artifac
 ⊓ wl:Plan` is empty under 006's disjointness axiom, so this was a contradiction
 rather than a clash of taste.
 
-**015's edge is renamed `wl:cutFrom`** — the commit a release was cut from. That
+**006's edge is renamed `wl:cutFrom`** — the commit a release was cut from. That
 is the fact `release_frontiers` actually stores: `target_commitish` where it
 resolves, else the default branch head at publish time. "Covers everything up to
 it" was never a separate assertion but a consequence of the object being a commit
 on the default branch, so the old name described the query rather than the edge,
 and needed three words to do it. The frontier reading moves into the term's
-comment, where a consequence belongs. 015 is draft and no code reads the term —
+comment, where a consequence belongs. 006 is draft and no code reads the term —
 `release_frontiers` is a table name and is untouched — so this costs nothing.
 
 **`wl:Plan` had to come back.** 025 §2 dropped it and `ns/` still listed it under
@@ -954,7 +955,7 @@ a test failure rather than a corpus that means two things.
 - Reference resolution: a bare path resolves from the repo root and a `../` path from the
   referring document's directory, on the same target, from the same file.
 - Shorthand (§4.2), Go and Python both driven by `testdata/shorthand.yaml`: `WL-SPEC-1` and
-  `WL-SPEC-1` resolve to the same document and normalise to the same string; a fragment
+  `WL-SPEC-001` resolve to the same document and normalise to the same string; a fragment
   survives the round trip; `WL-23`, `wl-spec-23` and `WL-PLAN-3` are rejected as malformed;
   `WL-SPEC-999` is a tier-1 defect; `WL-ADR-23` against a `kind: spec` target is a defect
   naming the kind mismatch; `CMS-SPEC-4` with no backbone is reported unresolved and leaves
@@ -977,11 +978,11 @@ a test failure rather than a corpus that means two things.
   emits the body once and a back-reference thereafter; a constructed cycle emits the cycle
   marker, is reported as a defect, and terminates; two effective replacements of one section
   both render, in the defined order.
-- Root-independence: the consolidations of 006 and of 014 surface the same set of live
+- Root-independence: the consolidations of 006 and of 025 surface the same set of live
   sections **within the lineage they share** — compared as a set of `<doc>#anchor` keys
   (emitted or back-referenced), not as rendered strings, since body-once means the two
   orderings legitimately differ. Sections outside the shared component are excluded rather
-  than expected to match. 014 is `draft`, so this runs with `--with-drafts`; without it the
+  than expected to match. 025 is `draft`, so this runs with `--with-drafts`; without it the
   edges under test are `pending` and the assertion is vacuous.
 - `--section` on a replaced anchor forward-resolves to its replacement's consolidation.
 - The §3.1 gate: a draft document's `replaces` leaves its target listed and marked
@@ -1044,29 +1045,21 @@ is the whole of what makes them possible, and it is what ships here.
 2. `lode doc list --needs-execution` lists every plan with `status: accepted` whose `task` is
    absent or open, and no `superseded` plan; every plan in the corpus carries a `status`, and
    one that does not is a reported defect.
-3. `lode show 018 --resolved` shows 025 §10's doc-wide amendment as a banner and labels
-   its output a consolidated view naming its sources; in the fixture corpus a chain of three
-   section-scoped amendments is fully expanded, and no rendering is depth-truncated.
-4. A dangling reference anywhere in `docs/` fails `go test ./internal/designdoc`.
-5. `scripts/secfrozen.py` refuses a commit that removes or renames a published anchor on a
+3. A dangling reference anywhere in `docs/` fails `go test ./internal/designdoc`.
+4. `scripts/secfrozen.py` refuses a commit that removes or renames a published anchor on a
    document whose committed status is `accepted` or `superseded`, refuses one that closes a
    cycle in the `amends`/`replaces` graph, and permits a letter-suffix insert; it is wired
    into `.pre-commit-config.yaml`, never rewrites a file, and runs with no `lode` binary
    present.
-6. Every query is computed without contacting the server except `--needs-execution`.
-7. `lode show WL-SPEC-25#sec-9` prints 025 §9, and `secfmt.py` rewrites a
+5. Every query is computed without contacting the server except `--needs-execution`.
+6. `lode show WL-SPEC-25#sec-9` prints 025 §9, and `secfmt.py` rewrites a
    `requires: WL-SPEC-4` in a worklode document to `004-execution-backbone.md` while leaving
    a foreign `CMS-SPEC-4` untouched.
-8. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
-   unresolvable references name unreachable projects — including 014's colon-form
+7. With no server reachable, `secfmt.py` and `secfrozen.py` both exit 0 on a corpus whose only
+   unresolvable references name unreachable projects — including 025's colon-form
    `rdf-registry:ADR-0006` — and both name them on stderr as `unresolved`.
-9. Entering the consolidation of 006 and of 014 surfaces the same live sections of the lineage
-   they share, under `--with-drafts`, with backfill supplying the older text when the newer
-   document is the root.
-10. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
+8. `lode doc sections` matches `scripts/currentspec.py` on the current corpus, and that
    script — and only that one — is deleted in the same change; `secfmt.py` keeps its hook and
    `secindex.py` stays a manual regeneration.
-11. Specs 014 and 015 being `draft` leaves their targets' sections listed as current and
-   marked `pending`, for `amends` as much as for `replaces`; `--with-drafts` applies both.
-12. The verb names, flags and semantics match 025 §18 and 025 §9.3 as §2.1 resolves it, so
+9. The verb names, flags and semantics match 025 §18 and 025 §9.3 as §2.1 resolves it, so
    replacing `LoadCorpus` with a store-backed loader is the whole of the migration.

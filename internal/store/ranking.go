@@ -59,7 +59,7 @@ func prefixedTaskColumns(alias string) string {
 // epic, not needs_decomposition, unleased, and not blocked by an open 'blocks'
 // edge from a task that is not in a closed state. An empty projectID matches
 // every project. Epics are excluded because the worktree is the unit of
-// Worklode work and a container has nothing to check out (spec 018).
+// Worklode work and a container has nothing to check out (spec 004).
 func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+prefixedTaskColumns("t")+` FROM tasks t

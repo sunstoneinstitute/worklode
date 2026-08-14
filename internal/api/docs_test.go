@@ -60,7 +60,7 @@ func TestDocsSync(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 
-	// Idempotent: second run reports unchanged (034 §12.2).
+	// Idempotent: second run reports unchanged (025 §24 item 33).
 	rr = doReq(t, h, http.MethodPost, "/api/v1/docs/sync", token, syncBody(false, specDocPayload()))
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)

@@ -244,7 +244,7 @@ func TestUpsertHumanActor(t *testing.T) {
 }
 
 // TestUpsertHumanActorSyncsGitHubExpectation asserts expected_github_login is
-// re-synced on every login exactly like the admin flag (spec 023 §3.2): the
+// re-synced on every login exactly like the admin flag (spec 001 §9.2): the
 // first upsert with a github_username persists it, and a later login without
 // the attribute clears it back to NULL (round-tripped as "").
 func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {

@@ -97,7 +97,7 @@ func (c Coverage) isNoSpecScalar() bool {
 
 // MarshalYAML keeps the reserved no-governing-spec sentinel unqualified. It
 // has no section or coverage level to express, so the mapping form is invalid
-// under spec 033 even when an unrelated frontmatter edit triggers rendering.
+// under spec 026 even when an unrelated frontmatter edit triggers rendering.
 func (c Coverage) MarshalYAML() (any, error) {
 	if c.isNoSpecScalar() {
 		return c.Spec, nil

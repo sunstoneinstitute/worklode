@@ -14,10 +14,8 @@
 <https://worklode.io/ns/concept/>
     dct:title "Worklode concept schemes" ;
     dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-014> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-015> ,
                <https://worklode.io/ns/id/doc/spec-worklode-025> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-033> .
+               <https://worklode.io/ns/id/doc/spec-worklode-026> .
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +53,10 @@ wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none
 
 
 # ---------------------------------------------------------------------------
-# Task kind — the union reconciled by 014 §8, matching the tasks.kind CHECK
-# constraint. Kinds describe the nature of work, not the artifact produced;
-# wlc:epic is the one structural member, and it is here because the scheme
-# mirrors the constraint (018).
+# Task kind — the union matching the tasks.kind CHECK constraint. Kinds
+# describe the nature of work, not the artifact produced; wlc:epic is the one
+# structural member, and it is here because the scheme mirrors the
+# constraint (004).
 # ---------------------------------------------------------------------------
 
 wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
@@ -76,7 +74,7 @@ wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review"
 wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
 wlc:epic a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "epic" ;
-    skos:definition """A declared container task (018): its state and delivery follow its children,
+    skos:definition """A declared container task (004): its state and delivery follow its children,
         it is never claimed directly, and it holds no commit. Structural rather than a nature of
         work, and in the scheme because the backbone declares it in tasks.kind.""" .
 

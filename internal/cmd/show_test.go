@@ -771,7 +771,7 @@ func TestShowMilestoneFlagErrors(t *testing.T) {
 
 // TestShowPlanFlagOrdinalShape guards showOrdinalShape["plan"]'s
 // `^\d+(-\d+)?$` regex — the branch's only kind-specific ordinal shape
-// (019 §4.3a) — by exercising its second-ordinal form ("4-1") end to end.
+// (019 §4.4) — by exercising its second-ordinal form ("4-1") end to end.
 func TestShowPlanFlagOrdinalShape(t *testing.T) {
 	out, err := runLode(t, "show", "--plan", "4-1")
 	if err == nil {
@@ -830,7 +830,7 @@ func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
 }
 
 // TestDocHasNoShowVerb pins that only the "show" verb was consolidated out of
-// `lode doc` and into `lode show`'s kind flags (026 §3). Spec 034 reinstates
+// `lode doc` and into `lode show`'s kind flags (026 §3). Spec 025 reinstates
 // `lode doc` as the namespace for sync/list (and, later, new/submit/accept);
 // this guards against "show" creeping back in as `lode doc show`, not
 // against the "doc" command existing at all. (An unrecognized subcommand of
@@ -844,7 +844,7 @@ func TestDocHasNoShowVerb(t *testing.T) {
 		}
 	}
 	if doc == nil {
-		t.Fatal(`rootCmd has no "doc" command; lode doc sync/list (spec 034) must be registered`)
+		t.Fatal(`rootCmd has no "doc" command; lode doc sync/list (spec 025) must be registered`)
 	}
 	haveSync, haveList := false, false
 	for _, c := range doc.Commands() {
@@ -859,9 +859,9 @@ func TestDocHasNoShowVerb(t *testing.T) {
 		}
 	}
 	if !haveSync {
-		t.Error(`"doc" has no "sync" child command; lode doc sync (spec 034) must be registered`)
+		t.Error(`"doc" has no "sync" child command; lode doc sync (spec 025) must be registered`)
 	}
 	if !haveList {
-		t.Error(`"doc" has no "list" child command; lode doc list (spec 034) must be registered`)
+		t.Error(`"doc" has no "list" child command; lode doc list (spec 025) must be registered`)
 	}
 }

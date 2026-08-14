@@ -62,7 +62,7 @@ document-level `blocks` edge, never a task number.
 
 ## Frontmatter
 
-Keys are **ontology property local names** (spec 006 as amended by 014/015), so
+Keys are **ontology property local names** (spec 006, as amended by 025), so
 the frontmatter is not a second vocabulary. A key with no term behind it means
 the ontology is missing one — raise that rather than inventing a key. The term
 set is extracted to `ns/ontology.ttl` (classes and properties) and
@@ -125,9 +125,9 @@ the shorthand spec 025 §14.3 defines:
 `WL-SPEC-1` · `WL-SPEC-25#sec-9` · `WL-ADR-7` · `CMS-SPEC-4`
 
 `<PROJECTKEY>` is the project's key (the `WL` in `WL-42`), and `<n>` is the
-document's own number, unpadded — `023-keycloak-primary-auth.md` is
-`WL-SPEC-1`. The `SPEC`/`ADR` token is what keeps `WL-SPEC-1` from reading as
-task `WL-23`; it is checked against the document's kind, so it has to be right.
+document's own number, unpadded — `004-execution-backbone.md` is
+`WL-SPEC-4`. The `SPEC`/`ADR` token is what keeps `WL-SPEC-4` from reading as
+task `WL-4`; it is checked against the document's kind, so it has to be right.
 
 **Distance decides which form is canonical.** Within one corpus, write the
 filename — it carries the slug, so the reference says what it points at. Across
@@ -146,7 +146,7 @@ writes `covers: NO-SPEC` rather than omitting the key, because an absent
 will not be one, so it is the only reference that resolves to nothing without
 being a defect. It takes no project key in any corpus — absence of a spec is not
 one project's spec 0 — so `WL-SPEC-0` is recognised but reported: write
-`NO-SPEC`. Valid on a plan's `covers` and nowhere else (026 §4.2a).
+`NO-SPEC`. Valid on a plan's `covers` and nowhere else (026 §4.3).
 
 A shorthand naming a project this checkout cannot reach is reported as
 `unresolved`, not as an error. Commit hooks run without a network or a built
@@ -159,7 +159,7 @@ Every section of every spec is numbered, and the anchor is the number. The
 orientation section is **`0.`**, so the body still starts at 1:
 
 ```markdown
-# Spec 023 — Title             <- H1, never numbered
+# Spec 004 — Title             <- H1, never numbered
 
 ## 0. Purpose & scope {#sec-0}
 ## 1. First body section {#sec-1}
@@ -178,10 +178,8 @@ orientation section is **`0.`**, so the body still starts at 1:
 **`0.` is opt-in and only for orientation** — the section a reader needs before
 the substance (`Purpose & scope`, `Why`, `Problem`, `Summary`, `Context`).
 Writing the `0.` is enough; the sequence follows it, and `secfmt.py` defaults to
-starting at 1 otherwise. Three specs have no `0.` because they open with
-substance rather than orientation: 000 (`Architecture in one screen`), 003
-(`Resolved decisions`) and 007, whose `Purpose & scope` is the design's payoff
-argument.
+starting at 1 otherwise. A spec that opens directly with substance simply
+omits it.
 
 Write a new spec numbered from `## 0.` or `## 1.`. If you inherit an unnumbered
 draft, run `secfmt.py --assign -w` once to number it (add `--start 0` to begin at
@@ -263,9 +261,9 @@ false list of sections.
 Same shape, with `replaces` / `isReplacedBy`, and it works per-section:
 
 ```yaml
-# in 014 — its §6 replaces one section of 013
+# in 025 — its §11 replaces one section of 013
 replaces:
-  "#sec-6":
+  "#sec-11":
     - 013-reconciliation.md#sec-2.3
 ```
 
@@ -329,6 +327,6 @@ and replaced sections drop out, amended sections carry a note. A `replaces`
 claim only takes effect once the document making it is `accepted`, so a draft's
 claim shows as `pending` on the target; `--with-drafts` shows the corpus as it
 will be once the open drafts land. It also names references that point at
-sections which do not exist. Pass a spec — `23`, `023`,
-`023-keycloak-primary-auth.md`, or the repo-relative path — to see just that
+sections which do not exist. Pass a spec — `4`, `004`,
+`004-execution-backbone.md`, or the repo-relative path — to see just that
 document; supersession is still resolved against the whole corpus.

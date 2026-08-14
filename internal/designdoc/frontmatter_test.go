@@ -261,7 +261,7 @@ func TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges(t *testing.T) {
 	}
 }
 
-// TestCoveredSectionsReadsRetiredSpelling pins 033 §3: `implements` still
+// TestCoveredSectionsReadsRetiredSpelling pins 026 §5.1: `implements` still
 // parses so a branch written before the rename merges, and CoveredSections
 // reports it without the caller knowing which spelling was on disk.
 func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {

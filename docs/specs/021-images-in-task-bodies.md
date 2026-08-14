@@ -32,7 +32,7 @@ rewriting on task create/update, mirroring remote images on import, rendering in
 CLI, `brief` integration, two-directional garbage collection, and the sanitisation that
 rendering markdown as HTML now requires.
 
-**Out of scope:** attachments on design documents (spec 014 — same blob store, a second
+**Out of scope:** attachments on design documents (spec 025 — same blob store, a second
 reference table, later); the alt-text lint (§14, v2); inline terminal rendering (§8, v2).
 
 ---
@@ -80,7 +80,7 @@ No object key column: the key is a pure function of the hash, so storing it woul
 second source of truth that can disagree.
 
 Dedup is free — the same screenshot on five tasks is one object and one `blobs` row.
-`blobs` is deliberately not task-scoped, so spec 014 document sections can reference the same
+`blobs` is deliberately not task-scoped, so spec 025 document sections can reference the same
 bytes through a `section_blobs` table without a migration or a copy.
 
 `embedded` is **derived**: on every task create and update, the body is parsed, its
@@ -450,7 +450,7 @@ sweep catches. The reverse order would leave a row pointing at a deleted object 
 broken image. Symmetric with the write path (§5): both fail toward orphan objects, never toward
 dangling rows.
 
-When spec 014 adds `section_blobs`, the `NOT EXISTS` grows a second clause. That is the one
+When spec 025 adds `section_blobs`, the `NOT EXISTS` grows a second clause. That is the one
 place adding a reference table touches GC, and it is worth a comment in the migration saying so.
 
 ### 11.2 Orphan objects {#sec-11.2}

@@ -1,11 +1,11 @@
 # Worklode ontology — the `wl:` vocabulary (classes, properties, axioms).
 #
-# Extracted from the specs, which remain authoritative: spec 006 (§1) defines
-# the vocabulary, spec 014 amends it (prefix rename, wl:Section, versioning,
-# status enum), spec 015 adds the runtime layer, spec 016 asks 006 to mint two
-# skill-registry terms, spec 025 restores Plan as a sibling document class, and
-# spec 033 adds qualified plan-section coverage. Where a spec section is cited
-# below, that section is the reason the term exists.
+# Extracted from the specs, which remain authoritative: spec 006 defines the
+# vocabulary and the runtime layer, spec 016 asks 006 to mint two
+# skill-registry terms, spec 025 amends the vocabulary (prefix rename,
+# wl:Section, versioning, status enum) and restores Plan as a sibling document
+# class, and spec 026 adds qualified plan-section coverage. Where a spec
+# section is cited below, that section is the reason the term exists.
 #
 # This file is a reference, not a deployment: the graph is not implemented, and
 # publication under https://worklode.io/ns/ belongs to rdf-registry (006 §14).
@@ -34,11 +34,9 @@
     rdfs:comment """Intent, execution and runtime vocabulary for Worklode. Standards-first: a
         term is minted only where no community vocabulary carries the intended meaning.""" ;
     dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-014> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-015> ,
                <https://worklode.io/ns/id/doc/spec-worklode-016> ,
                <https://worklode.io/ns/id/doc/spec-worklode-025> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-033> ;
+               <https://worklode.io/ns/id/doc/spec-worklode-026> ;
     owl:versionInfo "unpublished draft, extracted from docs/specs" .
 
 
@@ -56,8 +54,8 @@ wl:DesignDoc a owl:Class ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:intent ;
     rdfs:comment """A statement of intent that stays true after implementation: what drift is
-        measured against. Superseded, never consumed (025 §2). prov:Entity because 014 asserts
-        prov:wasGeneratedBy (§9, the task that wrote it), prov:wasRevisionOf and
+        measured against. Superseded, never consumed (025 §2). prov:Entity because 025 asserts
+        prov:wasGeneratedBy (§12, the task that wrote it), prov:wasRevisionOf and
         prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
 
 wl:Plan a owl:Class ;
@@ -227,7 +225,7 @@ wl:RuntimeEvent a owl:Class ;
     wl:layer wlc:runtime ;
     rdfs:comment """An observed runtime incident affecting a deployed Artifact — a crashloop, an OOM
         kill, a Flux reconciliation failure or recovery. Declared but unprojectable until it has a
-        natural key (015 open question 1).""" .
+        natural key (006 §15 item 7).""" .
 
 
 # ---------------------------------------------------------------------------

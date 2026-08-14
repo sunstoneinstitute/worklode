@@ -111,7 +111,7 @@ rendering the **whole** branch name; it takes the place of the fixed
 `LODE_BRANCH_PREFIX`. The default is `{{ .id }}-{{ .slug }}`, which yields
 `WL-3-fix-the-thing`.
 
-The server remains the sole authority on branch names (004 §5.2, 008 §2). It
+The server remains the sole authority on branch names (004 §5.2, §2). It
 renders the template once per claim and returns the result; no client renders a
 template, and the CLI's only fallback — used when a response carries no branch —
 is the literal `<id>-<slug>`.
@@ -218,12 +218,12 @@ naming choice for the *branch*, and there is no reason for it to reshape the
 local directory tree.
 
 Deriving the directory from the branch rather than re-deriving it from the task
-keeps 008 §2's determinism (the path is still a pure function of the task) while
+keeps §2's determinism (the path is still a pure function of the task) while
 leaving the client with one authority to consult instead of two.
 
 ### 5.2 The path guard {#sec-5.2}
 
-008 §9's uniform hook guard — *no bound worktree ⇒ no Worklode behavior* —
+§9's uniform hook guard — *no bound worktree ⇒ no Worklode behavior* —
 previously asked whether a path's parent directory was named `wt`. It now asks:
 
 1. Is the path *exactly one segment* below a segment equal to the configured
@@ -381,9 +381,9 @@ below are Claude Code's; §17.4 maps the same lifecycle moments onto each other 
 | Event | Action | Guard / condition |
 |---|---|---|
 | `EnterWorktree` | **Auto-resume** — re-acquire the bound lease | In a Worklode worktree **and** no already-running session for it **and** the bound lease has **expired**. (Safe: re-acquiring your own stalled worktree.) |
-| `SessionStart` (in worktree) | **Resume** — inject `lode task brief <id> --json`; re-acquire lease if expired | In a Worklode worktree. **Resume-only — never a silent claim** (Q14.3). |
+| `SessionStart` (in worktree) | **Resume** — inject `lode task brief <id> --json`; re-acquire lease if expired | In a Worklode worktree. **Resume-only — never a silent claim.** |
 | `SessionStart` (outside worktree) | **Offer** to resume an abandoned worktree | Cheap compiled scan finds a worktree with a bound, **expired** lease and no running session. Prompt, if any, is Haiku/script-level — never an expensive call. Offer only; never auto-claims. |
-| `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat, D8) | NOP when the session isn't on a Worklode task. |
+| `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat) | NOP when the session isn't on a Worklode task. |
 | `ExitWorktree` / `SessionEnd` | **Release** the worktree's lease **if idle** | In a Worklode worktree with a held lease. |
 
 Notes:
@@ -391,7 +391,7 @@ Notes:
 - **Auto-resume vs. offer-to-resume.** *Inside* a Worklode worktree, entering/starting re-acquires the
   bound lease automatically (it's provably yours). *Outside*, the session only gets a cheap *offer* to
   adopt an abandoned worktree — acquisition stays a deliberate act.
-- **Heartbeat, not timer.** Renewal is driven by `PreToolUse` on `git commit` (D8): renew right before
+- **Heartbeat, not timer.** Renewal is driven by `PreToolUse` on `git commit`: renew right before
   each commit-batch. No session-side timer; a stalled session simply stops committing and its lease
   ages out to the sweeper.
 - **`SessionStart` outside-worktree scan must stay fast** — a compiled `lode` scan of existing worktrees
@@ -405,7 +405,7 @@ Notes:
   `execve`s the next command, passing the hook payload through. This lets Worklode's hook compose with
   whatever hooks a repo already has rather than owning the event.
 - **`lode install`** wires the commit-cadence heartbeat for **editor-agnostic** use (plain
-  `git`, not just Claude Code). It **must coexist — chain existing hooks, never clobber them** (Q14.2):
+  `git`, not just Claude Code). It **must coexist — chain existing hooks, never clobber them**:
   an existing `.git/hooks/pre-commit` is preserved and invoked via the `--next`/`execve` chain.
 - **Sensible default:** if `.pre-commit-config.yaml` exists in the repo root, **always chain
   `pre-commit`** — Worklode's heartbeat runs, then `execve`s the `pre-commit` framework so its checks
@@ -425,13 +425,13 @@ Payload (bounded, JSON):
   `wl:governs` (006) and bounded by construction (025 §3); not a Spec or Plan excerpt, and never
   the whole doc.
 - **Affected components** — the `wl:affects` component set (006).
-- **Definition-of-done** — the declared Deliverable target (D7).
+- **Definition-of-done** — the declared Deliverable target.
 - **Branch** — the server-rendered `LODE_BRANCH_TEMPLATE` name (default `{{ .id }}-{{ .slug }}`),
   and the `<worktree_dir>/<branch>` path below it (default `.worktrees/<id>-<slug>`).
 
 Injected by `SessionStart`/resume and by `/lode-next` right after claim. **No file spelunking** — the
 brief is the context contract. If the brief is insufficient, that's a signal the task needs
-decomposition (D15), not that the agent should go reading the repo.
+decomposition, not that the agent should go reading the repo.
 
 ## 12. Slash commands {#sec-12}
 
@@ -442,7 +442,7 @@ decomposition (D15), not that the agent should go reading the repo.
 | `/lode-done` | Mark the task done (Deliverable met) → release lease. Worktree cleanup per finishing-a-branch flow. |
 | `/lode-block <id>` | Record a blocking dependency / mark blocked → release lease so the frontier reflects reality. |
 | `/lode-status` | Show the current worktree's task, lease state, and heartbeat freshness (read-only). |
-| `/lode-spec` | Enter graduated design authoring (D15) — produce only the artifacts the task warrants, drawn from {ADR, Spec, task subtree} and never a Plan document (025 §2); see *authoring-design-as-graph*. |
+| `/lode-spec` | Enter graduated design authoring — produce only the artifacts the task warrants, drawn from {ADR, Spec, task subtree} and never a Plan document (025 §2); see *authoring-design-as-graph*. |
 
 Renewal has **no** slash command — it's hook-enforced (heartbeat). Commands are thin wrappers over
 `lode … --json`; the judgment lives in the skills, not the commands.
@@ -455,12 +455,12 @@ Skills carry only what needs model judgment; anything deterministic is a hook or
   (Deliverable met, not "code written")? *When* to block vs. push through? *When* to release a worktree
   vs. keep it. Explicitly **does not** cover renewal (hook-enforced) — the skill tells the model *not*
   to think about heartbeats.
-- **`authoring-design-as-graph`** — graduated to task complexity (D15). There is no Plan artifact:
+- **`authoring-design-as-graph`** — graduated to task complexity. There is no Plan artifact:
   the output is {nothing, task subtree, **Spec/ADR**}, most tasks need only a task subtree, many
   need neither, and durable rationale is promoted into a Spec or ADR before the tasks close
   (025 §2) — do not ceremony-tax small tasks. Get **crit** review; write the **declared-layer**
   edges (`wl:governs`, `wl:affects`, `dct:requires`/`hasPart`) into the graph (006). Sets
-  `needs-decomposition` when projected context would blow the ~100k budget (D15), routing to
+  `needs-decomposition` when projected context would blow the ~100k budget, routing to
   decomposition-as-a-Worklode-task.
 - **`architectural-review`** — reads the **knowledge graph** (existing ADRs/Specs/Components and their
   edges, 006) to review a new design against the *existing* architecture: pushes back to keep the new
@@ -477,7 +477,7 @@ Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `b
 
 **`lode-worker`** — a headless subagent for 24/7 unattended loops: `claim --next` → work → `done`/`block`
 → repeat, with no human in the loop. Safe *because* the coordination is deterministic — the atomic
-`claim --next` (no list→pick→claim collision window, D8), the worktree-bound lease, and the
+`claim --next` (no list→pick→claim collision window), the worktree-bound lease, and the
 commit-cadence heartbeat mean many workers can run in parallel on a well-spec'd project without
 stepping on each other. Optional in v1; the plugin works fully in interactive sessions without it.
 

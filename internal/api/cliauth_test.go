@@ -134,7 +134,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 
 // TestCLILoginRequiresOIDC asserts the server-mediated CLI login 404s when
 // OIDC is unconfigured, even if the dormant GitHub App OAuth client (s.gh,
-// spec 023 §3.3) is set — it never gates login.
+// spec 001 §9.3) is set — it never gates login.
 func TestCLILoginRequiresOIDC(t *testing.T) {
 	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 

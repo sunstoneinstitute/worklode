@@ -156,7 +156,7 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("lock task %s: %w", taskID, err)
 			}
 			// An epic has nothing to check out; decomposition work that needs a
-			// worktree is a child task (spec 018).
+			// worktree is a child task (spec 004).
 			if kind == kindEpic {
 				return fmt.Errorf("task %s is an epic and cannot be claimed: %w", taskID, ErrBadTransition)
 			}

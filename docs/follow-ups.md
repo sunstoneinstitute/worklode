@@ -161,7 +161,7 @@ once an instance is running (dogfooding); until then this file is the list.
   `amends:` frontmatter and the specs2 fold absorbs its "What this spec
   changes elsewhere" table (the spec-target rows live in the part-2 fold
   plan), so this entry is the only record of the `ns/` row.
-- **`rdf-registry:ADR-0006` is unresolvable** (spec 014's frontmatter, the corpus's
+- **`rdf-registry:ADR-0006` is unresolvable** (spec 025's frontmatter, the corpus's
   only cross-project reference). It predates the `<KEY>-<TYPE>-<n>` shorthand
   (025 §14.3) and no reference form parses the colon syntax. The target is
   `rdf-registry/docs/adr/0006-iri-namespace-scheme.md`. Rewrite it to `<KEY>-ADR-6`
@@ -199,9 +199,9 @@ once an instance is running (dogfooding); until then this file is the list.
   graph-server returns, and no method sends `If-Match`. graph-server has
   honoured If-Match compare-and-swap since 2026-07-25
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
-  Needed before a second work-graph writer exists; spec 009 should-have 6.
+  Needed before a second work-graph writer exists; spec 006 should-have 6.
   Adding it changes `PutGraph`'s signature.
-- **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 009
+- **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 006
   must-have 3, publishing half): decided 2026-08-06 that this repo serves the
   files from its own site, without rdf-registry (rdf-registry#31 closed).
   `deploy-www.yml` uploads only `www/`, so `ns/` is not served today — the
@@ -209,10 +209,10 @@ once an instance is running (dogfooding); until then this file is the list.
   namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
   fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
   content-negotiate — pick a serving strategy deliberately. Specs 006 §14,
-  009 item 3, 025 §17 and the `ns/ontology.ttl` header still record the
+  006 §13.2 item 3, 025 §17 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
 - **Design-doc sync normalizes frontmatter YAML timestamps to RFC3339**
-  (spec 034): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
+  (spec 025): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
   `issued: 2026-01-01` as `"2026-01-01T00:00:00Z"` in the stored JSON —
   deterministic and idempotency-safe, but not byte-faithful to the source
   file. Preserving the original lexical form is deliberately deferred.
@@ -235,7 +235,7 @@ once an instance is running (dogfooding); until then this file is the list.
 
 ## From the 2026-08-04 architecture grilling
 
-Design items landed in spec 028. These are the mechanical leftovers.
+Design items landed in spec 025. These are the mechanical leftovers.
 
 - **Bare `claim --next` spans every project.** With one operator that is a
   feature; with several, an overnight loop silently drains someone else's focused
@@ -248,7 +248,7 @@ Design items landed in spec 028. These are the mechanical leftovers.
 - **Compose gets its own graph-server**, sharing the Postgres instance on a
   separate database. Requires vendoring graph-server's migrations. Severs the
   dependency on the data-platform prod deployment (006 §13.2's only v1 blocker), so
-  006/007/014/015 become testable in `docker compose up` and in e2e.
+  006/007/025 become testable in `docker compose up` and in e2e.
 - **Review API before review UI.** Embedding crit in the worklode web UI is the
   plan; agents review too (Claude reviews Codex's work and vice versa), so
   comment/thread/resolve/approve must exist as API + `lode doc` verbs with the
@@ -269,17 +269,17 @@ Design items landed in spec 028. These are the mechanical leftovers.
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
 - **The copy of the `lode` plugin in `claude-public-plugins` still documents
-  `wt/<id>-<slug>` (spec 030 follow-up).** The in-repo `plugins/lode/` copy was
-  updated when spec 030 landed, but the duplicate published from the other
+  `wt/<id>-<slug>` (spec 008 follow-up).** The in-repo `plugins/lode/` copy was
+  updated when spec 008's naming cutover landed, but the duplicate published from the other
   marketplace was not — it needs the same edit, or to be dropped as part of the
   de-duplication already tracked above.
 - **`handleWorktreeEnter`/`Create`/`Remove` resolve the layout from the wrong
-  cwd (spec 030 follow-up).** `internal/hookrun/hookrun.go` resolves the
+  cwd (spec 008 follow-up).** `internal/hookrun/hookrun.go` resolves the
   worktree layout once from the payload cwd, then applies it to a
   `tool_input` path that may live in a different repo. `runResume` fixed the
   equivalent hazard by resolving from the target dir; these three hooks did
   not.
-- **`applyPush`'s branch-pattern match is looser than a prefix check (spec 030
+- **`applyPush`'s branch-pattern match is looser than a prefix check (spec 008
   follow-up).** `internal/hooks/push.go` short-circuits on a branch-pattern
   shape match, skipping default-branch and `last-deploy/` handling; the
   pattern is now `^KEY-N-anything$` rather than prefix-anchored. Theoretical
@@ -288,12 +288,12 @@ Design items landed in spec 028. These are the mechanical leftovers.
 - **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of 026 §3
   only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (026
   §3.1–§3.2) remains unimplemented. `lode doc sync` and `lode doc list` now
-  exist (spec 034); `lode doc sections`, `--strict-refs`, and the 026 §2
+  exist (spec 025); `lode doc sections`, `--strict-refs`, and the 026 §2
   planning-status flags (`--needs-planning` / `--needs-execution`) remain
   unimplemented.
-- **025 §18 (accepted, frozen) and 028 (draft) still spell the command
-  `lode doc show`; 026 §3 implements the same command spelled `lode show`
-  (2026-08-07).** `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
+- **025 (draft; §18 and elsewhere) still spells the command `lode doc show`;
+  026 §3 implements the same command spelled `lode show` (2026-08-07).**
+  `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
   (draft, implements 026 §3) is titled "consolidated `lode doc show`" too.
   Reconcile the spelling when 025's reserved surface is next revisited.
 - **Full WCAG 2.2 AA assistive-technology walkthrough** is deferred to the
@@ -315,9 +315,47 @@ Design items landed in spec 028. These are the mechanical leftovers.
   Spec 032's `PinnedFocus`/`NextDecision` no longer belong here — both are
   built.
 - **`worklode_doc_upserts_total` is incremented inside `ApplyDocSync`'s
-  transaction (spec 034 follow-up).** `internal/store/docs.go` calls
+  transaction (spec 025 follow-up).** `internal/store/docs.go` calls
   `s.metrics.docUpsert(outcome)` per doc before the transaction commits; a
   mid-batch DB failure that rolls the tx back leaves the counter already
   advanced for docs earlier in the batch, even though no rows were written.
   Extreme edge (requires a failure partway through a multi-doc sync). Move the
   increment to after commit when this is next touched.
+
+## From the 2026-08-14 spec-corpus consolidation (part 5)
+
+Deliberately not fixed by the cutover — recorded so a reviewer does not read
+them as consolidation-introduced drift.
+
+- **`ns/` mirrors pre-025 vocabulary** (part-4 residual). `ns/concept.ttl`
+  still ships `wlc:epic`, and `ns/ontology.ttl`'s `owl:AllDisjointClasses`
+  still names `wl:Workstream` and includes `wl:Issue`/`wl:PullRequest`, where
+  folded 006 §2's own axiom carries `wl:Project` and neither. CLAUDE.md's rule
+  is amend the spec first, then mirror the term; 025 amends it, and the
+  mirror follows once 025 ships.
+- **Folded 001 §8.3 states a stale infrastructure fact.** The one-time CLI
+  login code store is justified as in-memory-safe because "the server is
+  single-instance (one PVC + litestream)"; the backbone is Postgres today,
+  not a single-instance litestream deployment.
+- **Folded 008 relies on an `ExitWorktree` harness event its own event map
+  never covers.** §9 defines lease release on `ExitWorktree`/`SessionEnd`,
+  but §17.4's per-harness event map (derived from §9's vocabulary) has no
+  `ExitWorktree`/`WorktreeExit` row — only `WorktreeEnter` is mapped per
+  harness.
+- **Folded 006 §13 ships an implementation-status report verified in
+  2026-07** ("done in dev", must-have 1 "prod remains blocked on item 1", and
+  must-have 3's base-URL override "not yet implemented" in rdf-registry) that
+  needs refreshing against current state.
+- **Folded 020 uses `epic` as live vocabulary; folded 029 §2 removes it from
+  `TaskKind`.** 020 has six sites — §0, §2.1, §3.3's `kind = "epic"` 422
+  rejection with `validKinds` and `epicForbiddenStates`, and two rows of §4's
+  table. 020's transcription was faithful to its pre-fold source and 029's own
+  change table never named 020, so the gap is 029's. Fixing it is a spec-plus-
+  code change: the enum is held together by the `tasks.kind` CHECK constraint,
+  `validKinds`, and `wlc:TaskKind`, which a test keeps in agreement.
+- **Folded 026 §4 documents a frontmatter form the corpus no longer uses.**
+  Its parenthetical-annotation rule is written against `wasDerivedFrom`, and
+  the fold left frontmatter carrying only `status`, `issued` and `requires`.
+  Same class as the three acceptance criteria ruling 23 retired: the machinery
+  stays correct for a document written after the cutover, but nothing exercises
+  it today.
