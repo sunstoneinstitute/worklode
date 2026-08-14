@@ -53,7 +53,8 @@ registry_package webhooks`) are not — regardless of their priority tag.
    `covers: NO-SPEC` when nothing governs it. Load
    `superpowers:writing-plans` to write the body.
 2. Replace the follow-ups entry with one that keeps the original priority tag
-   and title, whose body is a single sentence pointing at the new plan.
+   and title, whose body is a single sentence pointing at the new plan,
+   and that it should be executed with subagents.
 3. Land that as the change. It is docs-only; the frontmatter hook is what
    checks it.
 
