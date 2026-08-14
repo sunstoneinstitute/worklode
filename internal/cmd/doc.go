@@ -79,7 +79,7 @@ func newDocSyncCmd() *cobra.Command {
 	var force, dryRun bool
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Push the configured git corpora to the backbone (spec 034)",
+		Short: "Push the configured git corpora to the backbone (spec 025 §16.2)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {

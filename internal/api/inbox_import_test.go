@@ -603,7 +603,7 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		t.Errorf("active lease on %s: %v — import must not close a lease held by an active claim", taskID, err)
 	}
 
-	// Spec 018's roll-up runs off Transition, so an epic that moved is proof a
+	// Spec 004's roll-up runs off Transition, so an epic that moved is proof a
 	// child transition happened even where the child's own state looks benign.
 	epic, err := st0.GetTask(ctx, epicID)
 	if err != nil {

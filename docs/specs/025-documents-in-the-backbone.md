@@ -150,7 +150,7 @@ therefore explicit, author-visible, and portable to any Pandoc-compatible render
 The IRI follows 006's `id/<type>/<localid>` grammar without a new shape:
 
 ```
-wlid:section/<doc-slug>/<anchor>      e.g.  wlid:section/spec-worklode-014/sec-3
+wlid:section/<doc-slug>/<anchor>      e.g.  wlid:section/spec-worklode-025/sec-3
 ```
 
 The anchor is **assigned once, at first publication, and recorded in the document source**. The
@@ -217,25 +217,25 @@ Every design document has a **version-free canonical IRI** that always denotes t
 and one **immutable versioned IRI** per published version:
 
 ```
-wlid:doc/spec-worklode-014         # canonical — always the current version
-wlid:doc/spec-worklode-014/v3      # immutable snapshot
+wlid:doc/spec-worklode-025         # canonical — always the current version
+wlid:doc/spec-worklode-025/v3      # immutable snapshot
 ```
 
 Reuse rather than mint — DCAT 3 (W3C Recommendation) standardises exactly this pattern:
 
 ```turtle
-wlid:doc/spec-worklode-014
+wlid:doc/spec-worklode-025
     a wl:Spec ;
-    dcat:hasCurrentVersion wlid:doc/spec-worklode-014/v3 ;
-    dcat:hasVersion        wlid:doc/spec-worklode-014/v1 ,
-                           wlid:doc/spec-worklode-014/v2 ,
-                           wlid:doc/spec-worklode-014/v3 .
+    dcat:hasCurrentVersion wlid:doc/spec-worklode-025/v3 ;
+    dcat:hasVersion        wlid:doc/spec-worklode-025/v1 ,
+                           wlid:doc/spec-worklode-025/v2 ,
+                           wlid:doc/spec-worklode-025/v3 .
 
-wlid:doc/spec-worklode-014/v3
+wlid:doc/spec-worklode-025/v3
     a wl:Spec ;                        # a snapshot is an instance of the same class
     dcat:version        "3" ;
-    dcat:previousVersion wlid:doc/spec-worklode-014/v2 ;
-    prov:wasRevisionOf   wlid:doc/spec-worklode-014/v2 ;
+    dcat:previousVersion wlid:doc/spec-worklode-025/v2 ;
+    prov:wasRevisionOf   wlid:doc/spec-worklode-025/v2 ;
     prov:wasAttributedTo wlid:agent/stig ;
     dct:issued "2026-07-26"^^xsd:date .
 ```
@@ -436,7 +436,7 @@ and a section-level `patched`, §8.6 adds `stale` on a plan, and §8.7 adds `wit
 
 ### 7.1 `implemented` leaves the status enum {#sec-7.1}
 
-Spec 006's `lsc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
+Spec 006's `wlc:DesignDocStatus` is ordered `draft → proposed → accepted → superseded →
 implemented`, which asserts that *superseded* precedes *implemented* — incoherent on its face. The
 deeper problem is that implementation is per-section and derived (§11), so a document-level
 `implemented` status is a hand-maintained, lossy summary of something computable, and it will
@@ -695,7 +695,7 @@ This needs no schema change — §10 already fixes the kind set.
 
 ## 9. Plans are documents {#sec-9}
 
-Spec 006 placed `ls:Plan` alongside `ls:ADR` and `ls:Spec` under `ls:DesignDoc`. That was wrong, and
+Spec 006 placed `wl:Plan` alongside `wl:ADR` and `wl:Spec` under `wl:DesignDoc`. That was wrong, and
 spec 008 already contradicted it:
 
 > Decomposition itself reuses existing **superpowers** skills (`writing-plans`, `brainstorming`,
@@ -973,10 +973,10 @@ sibling declares which intent the repository satisfies:
 ```yaml
 # .worklode/implements.yaml
 implements:
-  - section: wlid:section/spec-worklode-004/sec-4
+  - section: wlid:section/spec-worklode-004/sec-3
     pinned:  wlid:doc/spec-worklode-004/v2     # version validated against
     by:      [internal/store/lease.go, internal/store/sweeper.go]
-  - section: wlid:section/spec-worklode-013/sec-3.1
+  - section: wlid:section/spec-worklode-013/sec-2.1
     pinned:  wlid:doc/spec-worklode-013/v1
     by:      [internal/hooks/apply.go]
 ```
@@ -1077,7 +1077,7 @@ edge rather than asking whether any Task ever pointed at the document.
 
 ```turtle
 wl:Task rdfs:subClassOf prov:Activity .
-wlid:doc/spec-worklode-014 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
+wlid:doc/spec-worklode-025 prov:wasGeneratedBy wlid:task/01H8XZ7K… .
 ```
 
 Zero mints, and it cleanly separates authoring from executing — the same task graph can now answer
@@ -1197,13 +1197,13 @@ already mints:
 |---|---|
 | `<PROJECTKEY>` | the project's key (004 §2.1), the same namespace task ids draw from. 019 §1 makes the project the unit; a repo only names one |
 | `<TYPE>` | `SPEC` or `ADR` |
-| `<n>` | the document's own number as an integer: `023-keycloak-primary-auth.md` is `WL-SPEC-1`, and `023` parses and normalises to `23`. Zero-padding is a filename convention each corpus sets for itself — three digits here, four in rdf-registry — so the canonical form carries none |
+| `<n>` | the document's own number as an integer: `001-identity-and-authentication.md` is `WL-SPEC-1`, and `001` parses and normalises to `1`. Zero-padding is a filename convention each corpus sets for itself — three digits here, four in rdf-registry — so the canonical form carries none |
 | fragment | unchanged from §14.1 |
 
-`<TYPE>` earns its place by keeping `WL-SPEC-1` from reading as task `WL-23`; a document
+`<TYPE>` earns its place by keeping `WL-SPEC-1` from reading as task `WL-1`; a document
 reference must never parse as a task id. Whether it also *selects* is a property of the corpus,
 not of the grammar. Worklode holds specs and ADRs in one flat sequence, so `WL-SPEC-1` and
-`WL-ADR-23` cannot both exist and the token is pure disambiguation. rdf-registry gives ADRs their
+`WL-ADR-1` cannot both exist and the token is pure disambiguation. rdf-registry gives ADRs their
 own directory and their own numbering (`docs/adr/0006-iri-namespace-scheme.md`), where `RDF-ADR-6`
 and a `RDF-SPEC-6` would be different documents. In both layouts the token is verified against the
 target's `kind` rather than trusted: reclassifying a document breaks every inbound reference that
@@ -1229,9 +1229,11 @@ crosses a repository. Both forms parse in either position, and `secfmt.py` rewri
 canonical form the way it already normalises numbering. Resolution and its failure modes are 026
 §4.2.
 
-The corpus holds exactly one cross-project reference today — this document's own
-`amends: rdf-registry:ADR-0006`, in a colon form §14.1 cannot resolve. It becomes `<KEY>-ADR-6`
-once rdf-registry is registered as a project and has a key.
+No frontmatter in the corpus carries a cross-project reference today: the keys kept are `status`,
+`issued` and `requires`, all of them intra-corpus. The one cross-project claim that exists —
+this document's amendment of rdf-registry's ADR-0006 (§4.2) — is stated in prose, in a colon form
+§14.1 cannot resolve. It becomes `<KEY>-ADR-6` once rdf-registry is registered as a project and
+has a key.
 
 ## 15. The event log is totally ordered {#sec-15}
 
@@ -1589,7 +1591,7 @@ Identity is derived from the corpus, per 026's model, so ids are stable and
 resolvable the moment a document exists:
 
 - **Spec / ADR** — `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>`, where `n` is the file's
-  leading number (`014-…​.md` → 14) and `<KEY>` is `project_key`.
+  leading number (`025-…​.md` → 25) and `<KEY>` is `project_key`.
 - **Plan** — `<KEY>-PLAN-<spec-ordinal>-<plan-ordinal>`. The spec-ordinal is the
   number of the spec the plan `implements`; a plan with `implements: NO-SPEC` (or
   absent) uses `0`. The plan-ordinal counts the plans implementing that spec in a
@@ -1905,8 +1907,9 @@ Two further pieces of work follow from this spec without belonging to it:
     advanced.
 18. A `design`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
     distinguishable from the components that `wl:implements` that document's sections.
-19. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/`; the rdf-registry sources sit at
-    `rdf/wl/` and publish under `https://worklode.io/ns/`.
+19. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/` except where the old spelling is
+    the subject rather than a use — §0's scope bullet, §17's prefix table, and this criterion;
+    the rdf-registry sources sit at `rdf/wl/` and publish under `https://worklode.io/ns/`.
 20. `wl:Workstream` and `wl:OngoingMaintenance` are absent from `ns/`; every projected Task
     carries exactly one `wl:inProject`; no `wl:` term for sprints exists.
 21. No stored task→milestone edge exists when Milestone ships; its task set derives via

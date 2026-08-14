@@ -14,7 +14,7 @@ requires:
 Org-wide coding-agent skills become a Worklode-distributed, Worklode-recommended resource.
 Discovery moves from "every session pre-ingests every skill description" to **server-side
 selection** (embeddings + pins) with **deterministic delivery** (task brief + local files).
-This is D14 applied to skills: machinery finds and fetches; the model only judges "is this
+Machinery finds and fetches; the model only judges "is this
 offered skill relevant?"
 
 Agent-neutral by construction: skills are **never registered in any native skill registry**
@@ -25,9 +25,6 @@ agent that can read a file participates — activation is "read
 **v1:** git sync, embeddings + recommendation endpoint, pins, `lode skills` CLI, brief
 integration. **v2:** usage feedback loop (which sessions read which skills → ranking signal,
 joined via `agent_sessions`), federation beyond a simple repo list, non-skill plugin assets.
-
-> **Prefix renamed by 025 §17.** Read every `ls:` below as `wl:` under
-> `https://worklode.io/ns/ontology#`.
 
 ## 1. Registry & git sync {#sec-1}
 
@@ -80,11 +77,12 @@ CREATE TABLE skill_versions (
 **Versioning: git is the version.** "Latest on the source ref" is what gets recommended and
 installed; the content hash pins exactness. No semver.
 
-**Graph projection:** an `ls:Skill` node per skill (name, description, source-repo IRI) so
+**Graph projection:** a `wl:Skill` node per skill (name, description, source-repo IRI) so
 design docs can assert pin edges. Content and versions stay in the backbone — the graph gets
-identity, not blobs (authority split, D1–D3).
+identity, not blobs.
 
-Two mints, added to 006's mint set (§1.1) and its top-level disjointness axiom (§1.2):
+Two mints, added to 006's mint set (§1.1); a third addition extends its top-level disjointness
+axiom (§1.2) to include `wl:Skill`:
 
 ```turtle
 wl:Skill a owl:Class ;
@@ -124,7 +122,7 @@ execution layer) is declared in a plan's task metadata and minted onto the task 
   negligible. Changing provider/model invalidates all embeddings (dimension/space mismatch)
   → full re-embed on config change.
 - **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri` joins
-  when spec 014 lands) → server assembles query text (task: title + description +
+  when spec 025 lands) → server assembles query text (task: title + description +
   governing-spec excerpt — the brief's own material), embeds it, cosine top-k above a
   server-side score floor. Returns
   `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
@@ -138,7 +136,7 @@ execution layer) is declared in a plan's task metadata and minted onto the task 
 - **Task pins:** a `skills` name list on the Task (backbone field, settable at
   create/update).
 - **Design-doc pins:** `skills: [name, …]` in doc frontmatter, declared as
-  `ls:recommendsSkill` edges when the doc is ingested (rides spec 014).
+  `wl:recommendsSkill` edges when the doc is ingested (rides spec 025).
 - **Brief resolution:** task pins ∪ governing-design pins. A pin naming an unknown skill is a
   brief warning, never a failure.
 
@@ -162,10 +160,10 @@ execution layer) is declared in a plan's task metadata and minted onto the task 
   survive local-fetch failure), plus the local path for sibling files.
 - **`recommended`** — name + one-line description + score + local path only. The brief
   instructs: *"read `<path>/SKILL.md` if relevant to this task."* The relevance call is the
-  model's (D14: fuzzy signal → judgment, never auto-trust).
+  model's: fuzzy signal → judgment, never auto-trust.
 
 Pinned bodies count toward the brief's bounded budget; pins alone blowing the budget is a
-`needs-decomposition`-style signal surfaced in the brief (D15). Injection happens wherever
+`needs-decomposition`-style signal surfaced in the brief. Injection happens wherever
 the brief is injected (spec 008 hooks for Claude Code); any agent that renders the brief gets
 identical behavior.
 
@@ -183,21 +181,22 @@ identical behavior.
 - **004 (backbone)** — new tables, pgvector extension (aligns with the backbone-postgres
   plan), webhook ingest path.
 - **008 (plugin)** — brief payload extension; hook-side lazy fetch before brief injection.
-- **006 (graph)** — owns the vocabulary; §1 above adds `ls:Skill` and `ls:recommendsSkill` to
-  its mint set and disjointness axiom, and the projection lands under 007's deriver contract.
-- **014 (design docs as graph objects)** — frontmatter-pin ingestion. Task pins work without
-  it; doc pins land when 014 does.
+- **006 (graph)** — owns the vocabulary; §1 above adds `wl:Skill` and `wl:recommendsSkill` to
+  its mint set, and `wl:Skill` to its disjointness axiom, and the projection lands under 007's
+  deriver contract.
+- **025 (documents in the backbone)** — frontmatter-pin ingestion. Task pins work without it;
+  doc pins land when 025 does.
 - **External** — an embedding API for the default provider; GitHub webhook/API access to the
   skill source repos (existing app auth).
 
 ## 8. Open questions {#sec-8}
 
-- **Q15.1 — Score floor tuning.** Start conservative (few, high-confidence matches); revisit
+- **Score floor tuning.** Start conservative (few, high-confidence matches); revisit
   once the v2 usage signal exists.
-- **Q15.2 — Mid-task free-text recommend.** Should agents call
+- **Mid-task free-text recommend.** Should agents call
   `lode skills recommend --text` mid-session as things come up? Cheap to allow (same
   endpoint); decide whether the working-under-worklode skill mentions it.
-- **Q15.3 — Embedding of tasks/docs.** v1 embeds the query at recommend time. If briefs get
+- **Embedding of tasks/docs.** v1 embeds the query at recommend time. If briefs get
   hot, cache task embeddings keyed by content hash — optimization only, not semantics.
 
 ## 9. Acceptance criteria {#sec-9}

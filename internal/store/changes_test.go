@@ -96,7 +96,7 @@ func TestTaskIDFromRefCustomTemplate(t *testing.T) {
 	cases := map[string]string{
 		"lode/WL-7-fix-thing": "WL-7",
 		"WL-7-fix-thing":      "", // no longer matches without the configured prefix
-		"wl/WL-7-fix-thing":   "", // legacy prefix is not recognized (spec 030 §5)
+		"wl/WL-7-fix-thing":   "", // legacy prefix is not recognized (spec 008 §7)
 		"main":                "",
 		"lode/wl-7-lower":     "",
 	}

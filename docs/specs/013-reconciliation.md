@@ -19,8 +19,7 @@ This spec covers, and only covers:
 - **`lode project doctor`** — telling an operator that ingestion is broken for a repo, before
   anyone goes hunting for missing tasks.
 - **`lode doctor`** — telling a developer why their own setup misbehaves.
-- The **`events.applied_at`** marker the above require. The `task_docs` link and the spec-drift
-  engine it supported are superseded; only `events.applied_at` remains in scope.
+- The **`events.applied_at`** marker the above require.
 
 Out of scope (reference, do not duplicate): architectural drift between declared and observed
 graph layers (007 — a different diff over different entities, blocked on 006); promoting *untracked*
@@ -101,9 +100,11 @@ handler and the replayer. This is the highest-risk change in the spec and is seq
 transition points at the real GitHub event. The timeline reads correctly — the event was simply
 applied late.
 
-**Completion marker.** `events.applied_at` is set by both the webhook path and the replayer. The
-applies are idempotent (upserts, and `Transition` guards on the from-state), so re-running is
-harmless; the marker exists so reconcile can find outstanding work without rescanning history.
+**Completion marker.** `events.applied_at timestamptz` — nullable; set when an event's apply
+completes, by either the webhook path or the replayer. The applies are idempotent (upserts, and
+`Transition` guards on the from-state), so re-running is harmless; the marker exists so reconcile
+can find outstanding work without rescanning history. The down migration drops the column; the
+repo's `migrate up`/`down` round-trip check covers it.
 
 ### 2.2 Engine 2 — poll GitHub {#sec-2.2}
 
@@ -167,9 +168,38 @@ No dependency on 006, 007, or 009.
 1. **Candidate set for engine 2.** "Not terminal, or landed but below `done_state`" may still be
    too large for an org-wide unscoped run. Confirm against real task counts before assuming
    `--since` is optional.
-2. **Tracked doc paths for the (now-superseded) engine 3's third finding** ("doc with no spec
-   task") were per-project configuration, not a convention like `docs/specs/**` and
-   `docs/adr/**` — and temporary, since documents move into the graph.
+2. **Tracked doc paths.** The paths a project's design documents live under were per-project
+   configuration, not a convention like `docs/specs/**` and `docs/adr/**` — and temporary, since
+   documents move into the graph. The finding that raised the question has since been retired.
 3. **Scheduled invocation.** Out of scope here (the command is on-demand), but if reconcile proves
    it should run continuously, does it become a server loop — and does that need the sweeper's
    single-instance election (004, open Q4)?
+
+## 6. Testing {#sec-6}
+
+- **Replay:** seed `*.ignored` events (the existing tests at `internal/hooks/github_test.go:566`
+  and `push_test.go:230` already produce those rows), map the repo, replay, assert the typed tables
+  and `state_log` match what a live delivery would have produced — and that a second replay is a
+  no-op.
+- **Poll:** an `httptest.Server` standing in for the GitHub API via `AppAuth.BaseURL` (already
+  documented as test-overridable, `internal/githubauth/app.go:32`). Seed a task whose PR the
+  backbone believes is open and GitHub reports merged; assert the facts are written, the task
+  advances, and the transition attributes to the `reconcile.poll` system event. Run twice; assert
+  convergence.
+- **Both doctors:** table-driven over broken-setup fixtures, asserting exit code and that each
+  failure names its fix.
+- `store` tests run against ephemeral Postgres, as the rest of the suite does.
+
+## 7. Acceptance criteria {#sec-7}
+
+- **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
+  exactly the typed-table and `state_log` result a live delivery would have; the resulting
+  transition references the original event id; `applied_at` is set; a second replay changes nothing.
+- **Poll:** a task whose PR merged while ingestion was down reaches its correct delivery state
+  after one reconcile run, with the transition attributed to a `reconcile.poll` system event; a
+  second run is a no-op. `--dry-run` reports the same repair and writes nothing.
+- **`lode project doctor`** identifies a mapped repo with no App installation, a repo whose last
+  webhook predates its mapping, and a repo sending events that maps to no project.
+- **`lode doctor`** exits non-zero and names the fix for each of: missing config, unreachable
+  server, invalid token, unset `current_project`, missing git hooks.
+- Every command emits deterministic `--json`.

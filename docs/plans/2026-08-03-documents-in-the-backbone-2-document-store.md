@@ -118,7 +118,7 @@ blockedBy: [ ]
 `0012_docs.up.sql`:
 
 ```sql
--- Documents in the backbone (docs/specs/025-documents-in-the-backbone.md §2).
+-- Documents in the backbone (docs/specs/025-documents-in-the-backbone.md §5).
 -- The status CHECK mirrors ns.DesignDocStatuses (generated from ns/concept.ttl);
 -- the kind CHECK mirrors the wl:Spec/wl:ADR/wl:Plan classes.
 

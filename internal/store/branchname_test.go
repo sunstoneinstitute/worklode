@@ -30,7 +30,7 @@ func TestSetBranchTemplateValid(t *testing.T) {
 }
 
 // TestSetBranchTemplateRejects also covers the "rejected template leaves the
-// previous configuration in place" invariant (spec 030 §1.2): it configures a
+// previous configuration in place" invariant (spec 008 §3.2): it configures a
 // known-good, non-default template up front, then after every rejection
 // checks that BranchTemplate() (and TaskIDFromRef, at least once) still
 // reflect that good template rather than the rejected one or the default.
@@ -117,7 +117,7 @@ func TestBranchRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBranchForSanitizesProjectID covers spec 030 §1.1's render-time
+// TestBranchForSanitizesProjectID covers spec 008 §3.1's render-time
 // sanitization: projects.id is free text (no ref-safety guarantee), so
 // SetBranchTemplate's sample-render validation cannot catch a real project id
 // that would render an illegal branch. BranchFor must run .projectId (like
@@ -146,7 +146,7 @@ func TestTaskIDFromRefRejects(t *testing.T) {
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
 	}
-	// Legacy prefixes are gone (spec 030 §5); a lowercase id never matches;
+	// Legacy prefixes are gone (spec 008 §7); a lowercase id never matches;
 	// a bare id has no slug separator under the default template; trailing
 	// garbage after a would-be match must not match either (derivePattern's
 	// "$" anchor, not just "^").

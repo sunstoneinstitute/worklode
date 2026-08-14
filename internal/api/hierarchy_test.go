@@ -122,7 +122,7 @@ func TestCreateTaskWithNonEpicParentIsUnprocessable(t *testing.T) {
 
 // TestCrossProjectParentIsUnprocessable drives create's "parent" field, the
 // only path that reaches this rule: the edges endpoint (POST
-// /tasks/{id}/edges) predates spec 018 and is already covered by
+// /tasks/{id}/edges) predates spec 004 and is already covered by
 // internal/store/hierarchy_test.go and tasks_test.go's TestEdges/
 // TestEdgeValidation. This also proves the transaction rolls back on a 422,
 // not just on the 404 TestCreateTaskWithUnknownParentCreatesNothing covers.

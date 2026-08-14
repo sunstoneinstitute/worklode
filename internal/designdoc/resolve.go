@@ -100,7 +100,7 @@ func kindArticle(kind string) string {
 }
 
 // ErrNoSpec is returned for the NO-SPEC sentinel ref, or its equivalent
-// <KEY>-SPEC-0 (026 §4.2a): the ref explicitly means "no governing spec",
+// <KEY>-SPEC-0 (026 §4.3): the ref explicitly means "no governing spec",
 // never a document, so the tier table of §4.2 never runs.
 var ErrNoSpec = errors.New("no governing spec")
 
@@ -109,7 +109,7 @@ var ErrNoSpec = errors.New("no governing spec")
 // bare sentinel text. errors.Is(err, ErrNoSpec) still holds through the
 // wrap.
 func noSpecError(ref string) error {
-	return fmt.Errorf("%s is the no-governing-spec sentinel (026 §4.2a), not a document: %w", ref, ErrNoSpec)
+	return fmt.Errorf("%s is the no-governing-spec sentinel (026 §4.3), not a document: %w", ref, ErrNoSpec)
 }
 
 // numberFormPattern recognizes ref form 2 (026 §3): a bare spec number, with

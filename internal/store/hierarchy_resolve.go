@@ -1,4 +1,4 @@
-// Hierarchy resolver: the single place the spec-018 epic roll-up table lives.
+// Hierarchy resolver: the single place the spec-004 §6.5 epic roll-up table lives.
 // Progress (closed/total) is derived on read in hierarchy.go; closure is
 // stored as real transitions, attributed to the triggering event, by
 // ResolveHierarchy. Transition itself calls the resolver, so every state
@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// epicTarget returns the state the spec-018 roll-up table implies for an epic
+// epicTarget returns the state the spec-004 §6.5 roll-up table implies for an epic
 // whose direct children are in the given states, or "" when no roll-up
 // applies. An epic with no children never moves: that is a modelling mistake,
 // not a completed epic. All-abandoned rolls up to abandoned rather than
@@ -49,7 +49,7 @@ func epicTarget(states []string) string {
 }
 
 // ResolveHierarchy moves parentID to the state its children imply, per the
-// spec-018 roll-up table, inside the given transaction. Non-epics and draft
+// spec-004 §6.5 roll-up table, inside the given transaction. Non-epics and draft
 // epics are left alone: draft -> ready is a manual publish, not a roll-up.
 //
 // A closed epic whose children reopened routes through ready, the only edge
