@@ -32,6 +32,15 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWithBranchResolver(t, nil)
+}
+
+// newEnvWithBranchResolver builds an env like newEnv, wiring resolveBranch
+// into the handler so a release's target_commitish resolves through it
+// instead of the (disabled by default) GitHub App lookup. A nil resolveBranch
+// matches newEnv: resolution disabled, same as no App configured.
+func newEnvWithBranchResolver(t *testing.T, resolveBranch func(repo, branch string) (string, error)) *env {
+	t.Helper()
 	st := store.OpenTestStore(t)
 
 	ctx := context.Background()
@@ -41,9 +50,15 @@ func newEnv(t *testing.T) *env {
 	if err := st.AddRepo(ctx, "demo", "sunstoneinstitute/demo"); err != nil {
 		t.Fatalf("add repo: %v", err)
 	}
+	var resolve func(ctx context.Context, repo, branch string) (string, error)
+	if resolveBranch != nil {
+		resolve = func(_ context.Context, repo, branch string) (string, error) {
+			return resolveBranch(repo, branch)
+		}
+	}
 	return &env{
 		st: st,
-		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default(), nil, nil),
+		h:  hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil),
 	}
 }
 
@@ -226,7 +241,7 @@ func TestMissingHeaders(t *testing.T) {
 
 func TestEmptySecretIs503(t *testing.T) {
 	e := newEnv(t)
-	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil)
+	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil, nil)
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
@@ -500,6 +515,47 @@ func releaseBody(tag, targetCommitish string) []byte {
 			"published_at": "2026-07-19T12:00:00Z"
 		}
 	}`)
+}
+
+// TestReleaseResolvesBranchCommitish: a release cut from a release branch
+// resolves that branch to its head commit through the GitHub App, so the
+// frontier and the artifact name the branch tip rather than main's head.
+func TestReleaseResolvesBranchCommitish(t *testing.T) {
+	e := newEnvWithBranchResolver(t, func(repo, branch string) (string, error) {
+		if repo == demoRepo && branch == "release-1.2" {
+			return "9999999999999999999999999999999999999999", nil
+		}
+		return "", nil
+	})
+	deliverPushOK(t, e, "d-1", "push_main_merge.json")
+
+	rr := deliverBody(t, e.h, "release", "d-2", releaseBody("v1.2.4", "release-1.2"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	arts, err := e.st.ArtifactsBySourceSHA(context.Background(),
+		"9999999999999999999999999999999999999999")
+	if err != nil || len(arts) != 1 {
+		t.Fatalf("artifacts = %v, err = %v, want 1", arts, err)
+	}
+}
+
+// TestReleaseUnresolvableBranchFallsBackToMainHead: with no App configured
+// the handler keeps the release-on-merge fallback rather than failing.
+func TestReleaseUnresolvableBranchFallsBackToMainHead(t *testing.T) {
+	e := newEnv(t) // nil resolver
+	deliverPushOK(t, e, "d-1", "push_main_merge.json")
+
+	rr := deliverBody(t, e.h, "release", "d-2", releaseBody("v1.2.4", "release-1.2"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	got := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
+	if got != e.mainCommitID(t, "3333333333333333333333333333333333333333") {
+		t.Fatalf("frontier = %d, want main head", got)
+	}
 }
 
 // TestReleaseArtifactUsesResolvedSHA: a release whose target_commitish is a

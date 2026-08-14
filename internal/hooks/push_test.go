@@ -319,7 +319,7 @@ func TestPushTruncationIsDetectedAndStillApplies(t *testing.T) {
 	e := newEnv(t)
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
-	h := hooks.NewGitHubHandler(e.st, testSecret, slog.Default(), nil, m)
+	h := hooks.NewGitHubHandler(e.st, testSecret, slog.Default(), nil, nil, m)
 
 	// A push whose array reaches its own head is complete.
 	if rr := deliverBody(t, h, "push", "d-complete", fixture(t, "push_main_ff.json")); rr.Code != http.StatusOK {

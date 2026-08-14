@@ -383,7 +383,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return true
 	}
 	hookMetrics := hooks.NewMetrics(reg)
-	r.public("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, hookMetrics))
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered

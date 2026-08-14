@@ -2,6 +2,9 @@ package hooks_test
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"log/slog"
 	"net/http/httptest"
 	"testing"
 
@@ -16,7 +19,7 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 	st := store.OpenTestStore(t)
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
-	h := hooks.NewGitHubHandler(st, testSecret, nil, nil, m)
+	h := hooks.NewGitHubHandler(st, testSecret, nil, nil, nil, m)
 
 	// Unmapped repo → ignored (no project mapping exists in this store).
 	body := []byte(`{"action":"opened","repository":{"full_name":"acme/unmapped"}}`)
@@ -67,6 +70,54 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 		got := testutil.ToFloat64(m.Events().WithLabelValues("github", tc.event, tc.result))
 		if got != tc.want {
 			t.Fatalf("events{github,%s,%s} = %v, want %v", tc.event, tc.result, got, tc.want)
+		}
+	}
+}
+
+// TestReleaseBranchResolveMetrics: outcome is recorded for every case
+// resolveReleaseCommitish covers — resolved, unknown branch, resolver error,
+// no App configured (skipped) — bounded to those four label values.
+func TestReleaseBranchResolveMetrics(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st.AddRepo(ctx, "demo", demoRepo); err != nil {
+		t.Fatalf("add repo: %v", err)
+	}
+
+	resolve := func(_ context.Context, _, branch string) (string, error) {
+		switch branch {
+		case "release-1.2":
+			return "9999999999999999999999999999999999999999", nil
+		case "gone":
+			return "", nil
+		case "boom":
+			return "", errors.New("api down")
+		}
+		t.Fatalf("unexpected branch %q", branch)
+		return "", nil
+	}
+	h := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, m)
+	deliverBody(t, h, "release", "d-1", releaseBody("v1", "release-1.2")) // resolved
+	deliverBody(t, h, "release", "d-2", releaseBody("v2", "gone"))        // unknown
+	deliverBody(t, h, "release", "d-3", releaseBody("v3", "boom"))        // error
+
+	noResolver := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, nil, m)
+	deliverBody(t, noResolver, "release", "d-4", releaseBody("v4", "release-1.2")) // skipped
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{"resolved", 1}, {"unknown", 1}, {"error", 1}, {"skipped", 1},
+	} {
+		got := testutil.ToFloat64(m.BranchResolve().WithLabelValues(tc.outcome))
+		if got != tc.want {
+			t.Fatalf("branch_resolve{%s} = %v, want %v", tc.outcome, got, tc.want)
 		}
 	}
 }

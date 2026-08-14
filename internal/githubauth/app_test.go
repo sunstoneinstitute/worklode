@@ -34,13 +34,14 @@ var testKey = sync.OnceValue(func() *rsa.PrivateKey {
 // token mint, and the two discovery endpoints, recording the Authorization
 // header seen on each path.
 type appFixture struct {
-	environments []string // names returned by GET .../environments
-	envStatus    int      // 0 means 200
-	releaseCode  int      // status for GET .../releases/latest (0 means 404)
-	tokenCode    int      // status for the token mint (0 means 201)
-	tarball      []byte   // body for GET .../tarball/<ref>
-	tarballCode  int      // status for the tarball (0 means 200)
-	tarballTo    string   // when set, the tarball 302s here (as codeload does)
+	environments []string          // names returned by GET .../environments
+	envStatus    int               // 0 means 200
+	releaseCode  int               // status for GET .../releases/latest (0 means 404)
+	tokenCode    int               // status for the token mint (0 means 201)
+	tarball      []byte            // body for GET .../tarball/<ref>
+	tarballCode  int               // status for the tarball (0 means 200)
+	tarballTo    string            // when set, the tarball 302s here (as codeload does)
+	branchSHAs   map[string]string // branch name -> head sha for .../git/ref/heads/<branch>; unlisted branches 404
 
 	mu      sync.Mutex
 	auth    map[string]string
@@ -136,6 +137,21 @@ func (f *appFixture) start(t *testing.T) *AppAuth {
 				json.NewEncoder(w).Encode(map[string]any{"tag_name": "v1"})
 			}
 		default:
+			// The branch ref is matched by prefix so a test can pick any
+			// branch name and the fixture 404s ones it wasn't told about.
+			if strings.HasPrefix(r.URL.Path, "/repos/acme/app/git/ref/heads/") {
+				branch := strings.TrimPrefix(r.URL.Path, "/repos/acme/app/git/ref/heads/")
+				sha, ok := f.branchSHAs[branch]
+				if !ok {
+					http.NotFound(w, r)
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{
+					"ref":    "refs/heads/" + branch,
+					"object": map[string]any{"sha": sha, "type": "commit"},
+				})
+				return
+			}
 			// The tarball ref is matched by prefix so a test can pick any ref
 			// and inspect how it was escaped.
 			if strings.HasPrefix(r.URL.Path, "/repos/acme/app/tarball/") {
@@ -333,6 +349,34 @@ func TestInstallationTokenUnknownRepo(t *testing.T) {
 	f := &appFixture{}
 	if _, err := f.start(t).InstallationToken(context.Background(), "acme/nosuch"); err == nil {
 		t.Fatal("want error when the repo has no installation")
+	}
+}
+
+func TestBranchSHA(t *testing.T) {
+	f := &appFixture{branchSHAs: map[string]string{
+		"release-1.2": "abc1230000000000000000000000000000000000",
+	}}
+	a := f.start(t)
+
+	sha, err := a.BranchSHA(context.Background(), "acme/app", "release-1.2")
+	if err != nil {
+		t.Fatalf("BranchSHA: %v", err)
+	}
+	if sha != "abc1230000000000000000000000000000000000" {
+		t.Fatalf("sha = %q", sha)
+	}
+}
+
+func TestBranchSHAUnknownBranchIsEmpty(t *testing.T) {
+	f := &appFixture{} // no branches registered, so every ref 404s
+	a := f.start(t)
+
+	sha, err := a.BranchSHA(context.Background(), "acme/app", "nope")
+	if err != nil {
+		t.Fatalf("BranchSHA: %v", err)
+	}
+	if sha != "" {
+		t.Fatalf("sha = %q, want empty for a 404", sha)
 	}
 }
 
