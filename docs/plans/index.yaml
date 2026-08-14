@@ -573,7 +573,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md:
     task-5-swap-the-task-kinds-in-one-commit: "### Task 5 — Swap the task kinds in one commit"
     task-6-apply-the-ontology-edits-project-workstream-plan-proposed: "### Task 6 — Apply the ontology edits: Project, Workstream, Plan, `proposed`"
     task-7-rework-the-e2e-hierarchy-loop-without-epics: "### Task 7 — Rework the e2e hierarchy loop without epics"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
+    done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-2-document-store.md:
   sections:
     decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
@@ -585,7 +585,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-2-document-store.md:
     task-4-implement-the-editorial-lifecycle-accept-revise-supersede: "### Task 4 — Implement the editorial lifecycle: accept, revise, supersede"
     task-5-serve-the-api-and-web-read-surface: "### Task 5 — Serve the API and web read surface"
     task-6-prove-the-spec-lifecycle-end-to-end: "### Task 6 — Prove the spec lifecycle end to end"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
+    done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
   sections:
     decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
@@ -598,7 +598,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
     task-5-ship-the-lode-doc-verbs: "### Task 5 — Ship the `lode doc` verbs"
     task-6-prove-plan-acceptance-end-to-end: "### Task 6 — Prove plan acceptance end to end"
     task-7-resolve-qualified-skill-pins-with-the-after-colon-fallback: "### Task 7 — Resolve qualified skill pins with the after-colon fallback"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
+    done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-4-corpus-cutover.md:
   sections:
     tasks: "## Tasks"
@@ -620,7 +620,7 @@ docs/plans/2026-08-03-event-watchers-1-ordered-log.md:
     task-7-read-surfaces-store-queries-api-cli: "### Task 7 — Read surfaces: store queries, API, CLI"
     task-8-e2e-the-log-is-readable-through-public-surfaces: "### Task 8 — e2e: the log is readable through public surfaces"
     task-9-docs-amend-004-fix-027s-citation-claudemd: "### Task 9 — Docs: amend 004, fix 027's citation, CLAUDE.md"
-    done-when-maps-to-027-13: "## Done when (maps to 025 §24)"
+    done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
   sections:
     file-structure: "## File structure"
@@ -633,7 +633,7 @@ docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
     task-6-e2e-the-lifecycle-through-public-surfaces-only: "### Task 6 — e2e: the lifecycle through public surfaces only"
     task-7-7-the-planning-skill-claims-its-task-claude-plugins-repo: "### Task 7 — §7: the planning skill claims its task (claude-plugins repo)"
     task-8-docs-claudemd-and-the-indexes: "### Task 8 — Docs: CLAUDE.md and the indexes"
-    done-when-maps-to-027-13: "## Done when (maps to 025 §24)"
+    done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-multi-harness-1-adapter-core.md:
   sections:
     what-exists-vs-what-this-builds: "## What exists vs. what this builds"
@@ -769,3 +769,107 @@ docs/plans/2026-08-11-keycloak-primary-auth-identity.md:
     task-1-remove-the-github-web-login: "### Task 1 — Remove the GitHub web login"
     task-2-record-the-keycloak-asserted-github-login: "### Task 2 — Record the Keycloak-asserted GitHub login"
     task-3-actor-merge-script-for-github169939: "### Task 3 — Actor-merge script for github:169939"
+docs/plans/2026-08-11-spec-corpus-consolidation-1-fold-tooling.md:
+  sections:
+    decisions-this-plan-implements: "## Decisions this plan implements"
+    the-foldyaml-schema: "## The fold.yaml schema"
+    derived-mappingyaml: "## Derived mapping.yaml"
+    rewrite-rules: "## Rewrite rules"
+    global-constraints: "## Global Constraints"
+    file-structure: "## File Structure"
+    tasks: "## Tasks"
+    task-1-parse-foldyaml-and-emit-mappingyaml: "### Task 1 — Parse fold.yaml and emit mapping.yaml"
+    task-2-corpus-completeness-check: "### Task 2 — Corpus completeness check"
+    task-3-scaffold-assembly: "### Task 3 — Scaffold assembly"
+    task-4-anchor-drift-check-against-written-prose: "### Task 4 — Anchor-drift check against written prose"
+    task-5-reference-rewriter: "### Task 5 — Reference rewriter"
+    task-6-identifier-preservation-guard: "### Task 6 — Identifier-preservation guard"
+    task-7-validate-end-to-end-on-spec-005: "### Task 7 — Validate end-to-end on spec 005"
+    the-per-document-task-template: "## The per-document task template"
+    what-folding-005-established: "## What folding 005 established"
+    known-at-hand-off: "## Known at hand-off"
+    series: "## Series"
+docs/plans/2026-08-11-worklode-scoop-bucket.md:
+  sections:
+    prerequisite-one-time-human-run-before-the-first-scoop-release: "## Prerequisite (one-time, human-run before the first Scoop release)"
+    file-structure: "## File Structure"
+    task-1-scoop-manifest-template-render-script: "## Task 1 — Scoop manifest template + render script"
+    task-2-build-windowsyml-reusable-workflow: "## Task 2 — `_build-windows.yml` reusable workflow"
+    task-3-update-scoop-bucket-composite-action: "## Task 3 — `update-scoop-bucket` composite action"
+    task-4-wire-into-releaseyml: "## Task 4 — Wire into `release.yml`"
+    task-5-wire-into-promote-prodyml: "## Task 5 — Wire into `promote-prod.yml`"
+    task-6-deploy-key-setup-wizard: "## Task 6 — Deploy-key setup wizard"
+    task-7-document-the-windows-install-path: "## Task 7 — Document the Windows install path"
+    task-8-windows-cross-compile-fix-pidalive-platform-split: "## Task 8 — Windows cross-compile fix (`pidAlive` platform split)"
+    verification: "## Verification"
+docs/plans/2026-08-13-spec-corpus-consolidation-2-near-1to1-folds.md:
+  sections:
+    obligations-from-029-sec-9-on-parts-3-and-4: "## Obligations from 029 sec-9 on parts 3 and 4"
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-fold-013-reconciliationmd: "### Task 1 — Fold `013-reconciliation.md`"
+    task-2-fold-016-org-wide-skillsmd: "### Task 2 — Fold `016-org-wide-skills.md`"
+    task-3-fold-017-task-secretsmd: "### Task 3 — Fold `017-task-secrets.md`"
+    task-4-fold-019-project-scopingmd: "### Task 4 — Fold `019-project-scoping.md`"
+    task-5-fold-020-inbox-importmd: "### Task 5 — Fold `020-inbox-import.md`"
+    task-6-fold-021-images-in-task-bodiesmd: "### Task 6 — Fold `021-images-in-task-bodies.md`"
+    task-7-fold-022-prometheus-metricsmd: "### Task 7 — Fold `022-prometheus-metrics.md`"
+    task-8-fold-029-research-work-in-the-backbonemd: "### Task 8 — Fold `029-research-work-in-the-backbone.md`"
+    task-9-fold-032-project-cockpitmd: "### Task 9 — Fold `032-project-cockpit.md`"
+    known-at-hand-off: "## Known at hand-off"
+docs/plans/2026-08-13-spec-corpus-consolidation-3-multi-source-folds.md:
+  sections:
+    rulings-from-the-planning-merge: "## Rulings from the planning merge"
+    cross-target-obligations: "## Cross-target obligations"
+    residuals-for-part-5: "## Residuals for part 5"
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-fold-001-identity-and-authenticationmd: "### Task 1 — Fold `001-identity-and-authentication.md`"
+    task-2-fold-004-execution-backbonemd: "### Task 2 — Fold `004-execution-backbone.md`"
+    task-3-fold-008-worklode-pluginmd: "### Task 3 — Fold `008-worklode-plugin.md`"
+    task-4-fold-012-agent-sessionsmd: "### Task 4 — Fold `012-agent-sessions.md`"
+docs/plans/2026-08-13-spec-corpus-consolidation-4-graph-and-documents.md:
+  sections:
+    rulings-from-the-planning-pass: "## Rulings from the planning pass"
+    cross-target-obligations: "## Cross-target obligations"
+    residuals-for-part-5: "## Residuals for part 5"
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-fold-006-knowledge-graphmd: "### Task 1 — Fold `006-knowledge-graph.md`"
+    task-2-fold-007-drift-and-overviewmd: "### Task 2 — Fold `007-drift-and-overview.md`"
+    task-3-fold-025-documents-in-the-backbonemd: "### Task 3 — Fold `025-documents-in-the-backbone.md`"
+    task-4-fold-026-design-doc-queriesmd: "### Task 4 — Fold `026-design-doc-queries.md`"
+    what-part-5-inherits: "## What part 5 inherits"
+docs/plans/2026-08-14-artifact-correlation-hardening.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    decision-required-before-task-3: "## Decision required before Task 3"
+    task-1-release-artifacts-carry-a-commit-sha-not-a-branch-name: "## Task 1: Release artifacts carry a commit SHA, not a branch name"
+    task-2-registry-package-webhooks-mint-docker-image-artifacts: "## Task 2: `registry_package` webhooks mint `docker_image` artifacts"
+    task-3-flux-correlates-oci-digest-revisions-through-the-artifact: "## Task 3: Flux correlates OCI-digest revisions through the artifact"
+    task-4-resolve-a-branch-target-commitish-through-the-github-app: "## Task 4: Resolve a branch `target_commitish` through the GitHub App"
+    verification: "## Verification"
+    follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
+docs/plans/2026-08-14-spec-corpus-consolidation-5-cutover.md:
+  sections:
+    the-gate-is-already-discharged: "## The gate is already discharged"
+    rulings: "## Rulings"
+    tasks: "## Tasks"
+    task-1-the-mechanical-cutover: "### Task 1 — The mechanical cutover"
+    task-2-the-references-refmappy-cannot-see: "### Task 2 — The references `refmap.py` cannot see"
+    task-3-recover-what-013s-over-scoped-supersession-dropped: "### Task 3 — Recover what 013's over-scoped supersession dropped"
+    task-4-complete-the-lswl-respell: "### Task 4 — Complete the `ls:`→`wl:` respell"
+    task-5-strip-the-design-record-labels: "### Task 5 — Strip the design-record labels"
+    task-6-the-remaining-part-4-residuals: "### Task 6 — The remaining part-4 residuals"
+    task-7-close-the-books: "### Task 7 — Close the books"
+    what-this-part-does-not-do: "## What this part does not do"
+    what-execution-found: "## What execution found"
+docs/plans/2026-08-14-web-ui-requires-a-login-provider.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    decision-made-by-this-plan-and-the-alternative-it-rejects: "## Decision made by this plan, and the alternative it rejects"
+    task-1-webguard-refuses-to-serve-without-a-provider-or-an-opt-in: "## Task 1: `webGuard` refuses to serve without a provider or an opt-in"
+    task-2-wire-lode-web-open-through-serve-compose-and-e2e: "## Task 2: Wire `LODE_WEB_OPEN` through serve, compose, and e2e"
+    task-3-amend-the-specs-and-close-q0214: "## Task 3: Amend the specs and close Q021.4"
+    verification: "## Verification"
+    follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
