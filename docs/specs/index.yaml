@@ -431,3 +431,13 @@ docs/specs/032-project-cockpit.md:
     sec-11: "## 11. First interactive release"
     sec-12: "## 12. Cockpit rendering and styling toolchain"
     sec-13: "## 13. Non-goals"
+docs/specs/036-one-model-across-packages.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. The rule"
+    sec-3: "## 3. What stays package-local"
+    sec-4: "## 4. Package constraints"
+    sec-5: "## 5. What this costs"
+    sec-6: "## 6. Migration"
+    sec-7: "## 7. Relationship to other documents"
