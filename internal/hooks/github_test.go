@@ -156,6 +156,16 @@ func (e *env) rawQueryInt(t *testing.T, query string, args ...any) int {
 	return n
 }
 
+// rawQueryString runs a single-value SQL query against the store's database.
+func (e *env) rawQueryString(t *testing.T, query string, args ...any) string {
+	t.Helper()
+	var s string
+	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&s); err != nil {
+		t.Fatalf("raw query %q: %v", query, err)
+	}
+	return s
+}
+
 func (e *env) eventCount(t *testing.T) int {
 	return e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE source = 'github'`)
 }
@@ -436,18 +446,17 @@ func TestReleasePublished(t *testing.T) {
 	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	arts, err := e.st.ArtifactsBySourceSHA(context.Background(),
-		"abc1230000000000000000000000000000000000")
-	if err != nil || len(arts) != 1 {
-		t.Fatalf("artifacts = %v, err = %v, want 1", arts, err)
+	// No main commit has ever been seen for the repo: target_commitish
+	// (a sha here) does not resolve and there is no head to fall back to, so
+	// the frontier is unresolvable and the artifact is stored with no
+	// source_sha rather than the uncorrelatable literal. Look it up by
+	// kind/name/version since ArtifactsBySourceSHA("") would not find it.
+	sha := e.rawQueryString(t,
+		`SELECT source_sha FROM artifacts WHERE kind = 'git_tag' AND name = $1 AND version = 'v1.2.3'`,
+		"sunstoneinstitute/demo")
+	if sha != "" {
+		t.Fatalf("artifact source_sha = %q, want empty (unresolvable frontier)", sha)
 	}
-	a := arts[0]
-	if a.Kind != "git_tag" || a.Name != "sunstoneinstitute/demo" || a.Version != "v1.2.3" ||
-		a.Repo != "sunstoneinstitute/demo" || a.BuiltAt.IsZero() {
-		t.Fatalf("artifact = %+v", a)
-	}
-	// No main commit has ever been seen for the repo: there is nothing for
-	// the release to cover, so no frontier is recorded.
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 0 {
 		t.Fatalf("release_frontiers rows = %d, want 0", n)
 	}
@@ -491,6 +500,35 @@ func releaseBody(tag, targetCommitish string) []byte {
 			"published_at": "2026-07-19T12:00:00Z"
 		}
 	}`)
+}
+
+// TestReleaseArtifactUsesResolvedSHA: a release whose target_commitish is a
+// branch name must store the commit the frontier resolved to, not the branch
+// name — an artifact whose source_sha is "main" can never correlate to a
+// Flux revision.
+func TestReleaseArtifactUsesResolvedSHA(t *testing.T) {
+	e := newEnv(t)
+	deliverPushOK(t, e, "d-1", "push_main_merge.json")
+	head := "3333333333333333333333333333333333333333"
+
+	rr := deliverBody(t, e.h, "release", "d-2", releaseBody("v2.0.0", "main"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	arts, err := e.st.ArtifactsBySourceSHA(context.Background(), head)
+	if err != nil {
+		t.Fatalf("artifacts by source sha: %v", err)
+	}
+	var found bool
+	for _, a := range arts {
+		if a.Kind == "git_tag" && a.Version == "v2.0.0" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no git_tag artifact for v2.0.0 at %s; got %+v", head, arts)
+	}
 }
 
 // TestReleaseFrontierNarrowsToTaggedCommit: a release whose target_commitish

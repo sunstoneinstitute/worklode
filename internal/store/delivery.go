@@ -150,6 +150,21 @@ func MainIDForSHA(tx *sql.Tx, repo, sha string) (*int64, error) {
 	return &id, nil
 }
 
+// MainSHAForID returns the commit sha of a main_commits row, or "" if the
+// id names no row. Callers that resolved an id from a frontier use it to
+// recover the sha for artifact attribution.
+func MainSHAForID(tx *sql.Tx, mainID int64) (string, error) {
+	var sha string
+	err := tx.QueryRow(`SELECT sha FROM main_commits WHERE id = $1`, mainID).Scan(&sha)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("main sha for id %d: %w", mainID, err)
+	}
+	return sha, nil
+}
+
 // MainIDForSHAAnyRepo resolves a sha with no repo context (Flux events don't
 // carry one). Returns the owning repo and id, or ("", nil) if unknown. If the
 // sha exists in more than one repo (forks, repo migration), picks the most
