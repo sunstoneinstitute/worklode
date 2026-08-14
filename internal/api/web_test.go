@@ -580,6 +580,33 @@ func TestTaskPageShowsProgress(t *testing.T) {
 	bodyContains(t, rr.Body.String(), "(0/2 closed)", `href="/tasks/`+childIDs[0]+`"`)
 }
 
+// TestTaskPageShowsFollowUps checks both directions of the provenance edge
+// render on the task page: the origin lists its follow-ups, the follow-up
+// names its origin.
+func TestTaskPageShowsFollowUps(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Origin", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Loose end", "priority": "medium", "kind": "chore",
+		"follow_up_to": "WL-1",
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("follow-up page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Follow-up to", `/tasks/WL-1`)
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("origin page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Follow-ups", `/tasks/WL-2`)
+}
+
 func TestProjectPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

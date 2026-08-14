@@ -89,16 +89,18 @@ type ProjectsView struct {
 // TaskView is one task's detail page. Task/Holder/Progress embed store types
 // directly; the edge lists are task ids.
 type TaskView struct {
-	Page      PageProps
-	Task      store.Task
-	Blocked   bool
-	Holder    *store.Lease
-	Blocks    []string
-	BlockedBy []string
-	Parent    string
-	Children  []string
-	Progress  store.HierarchyProgress
-	Timeline  []TimelineRow
+	Page       PageProps
+	Task       store.Task
+	Blocked    bool
+	Holder     *store.Lease
+	Blocks     []string
+	BlockedBy  []string
+	Parent     string
+	Children   []string
+	FollowUpTo string
+	FollowUps  []string
+	Progress   store.HierarchyProgress
+	Timeline   []TimelineRow
 }
 
 // TimelineRow is one rendered row of a task's timeline: a type label and a
