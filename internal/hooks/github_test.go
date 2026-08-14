@@ -746,6 +746,37 @@ func TestRegistryPackagePublished(t *testing.T) {
 	}
 }
 
+// TestRegistryPackageWithoutPackageURL: with no package_url the name is
+// reconstructed as a GHCR reference, so it still matches the image reference a
+// Kubernetes manifest carries. The bare package name never would.
+func TestRegistryPackageWithoutPackageURL(t *testing.T) {
+	e := newEnv(t)
+	body := []byte(`{
+		"action": "published",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"registry_package": {
+			"name": "demo",
+			"package_type": "CONTAINER",
+			"package_version": {
+				"version": "sha256:feed",
+				"container_metadata": {"tag": {"name": "v1.2.3"}}
+			}
+		}
+	}`)
+	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	a, err := e.st.FindArtifactByImage(context.Background(),
+		"ghcr.io/sunstoneinstitute/demo:v1.2.3")
+	if err != nil {
+		t.Fatalf("find artifact by image: %v", err)
+	}
+	if a.Kind != "docker_image" {
+		t.Fatalf("kind = %q, want docker_image", a.Kind)
+	}
+}
+
 // TestRegistryPackageUntaggedIsRecordedNotApplied: a package version with no
 // container tag has no (name, version) key to store under, so it is recorded
 // as an event with no artifact rather than failing the delivery.
