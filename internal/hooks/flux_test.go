@@ -326,6 +326,13 @@ func TestFluxOCIRevisionCorrelatesThroughArtifact(t *testing.T) {
 	if got != 1 {
 		t.Fatalf("deployments linked to the digest artifact = %d, want 1", got)
 	}
+	// The apply half only links the artifact. The correlation this test is
+	// named for happens in confirmFluxDelivery, which reads the artifact's
+	// source_sha back to a main commit and advances the Flux frontier.
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM env_deploys WHERE flux_seen AND flux_main_id IS NOT NULL`); n != 1 {
+		t.Fatalf("latched env_deploys rows = %d, want 1 (digest resolved to a main commit)", n)
+	}
 }
 
 // TestFluxOCIRevisionNoArtifactDoesNotLatch: an OCI digest revision with no
