@@ -97,12 +97,16 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 	if err != nil {
 		return nil, fmt.Errorf("marshal applies_to_versions: %w", err)
 	}
-	if _, err := tx.Exec(
+	res, err := tx.Exec(
 		`UPDATE issues SET triage_state = 'promoted', task_id = $1, applies_to_versions = $2
-		 WHERE repo = $3 AND number = $4`,
+		 WHERE repo = $3 AND number = $4 AND triage_state = 'new'`,
 		task.ID, string(versionsJSON), repo, number,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, fmt.Errorf("promote issue %s#%d: %w", repo, number, err)
+	}
+	if err := requireTriaged(res, repo, number); err != nil {
+		return nil, err
 	}
 	return task, nil
 }
@@ -135,13 +139,15 @@ func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
 
-	if _, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'promoted', task_id = $1 WHERE repo = $2 AND number = $3`,
+	res, err := tx.Exec(
+		`UPDATE issues SET triage_state = 'promoted', task_id = $1
+		 WHERE repo = $2 AND number = $3 AND triage_state = 'new'`,
 		taskID, repo, number,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("link issue %s#%d to %s: %w", repo, number, taskID, err)
 	}
-	return nil
+	return requireTriaged(res, repo, number)
 }
 
 // DismissIssue marks an inbox issue triage_state=dismissed. The issue must
@@ -161,11 +167,30 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 	if triageState != "new" {
 		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
 	}
-	if _, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'dismissed' WHERE repo = $1 AND number = $2`,
+	res, err := tx.Exec(
+		`UPDATE issues SET triage_state = 'dismissed'
+		 WHERE repo = $1 AND number = $2 AND triage_state = 'new'`,
 		repo, number,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("dismiss issue %s#%d: %w", repo, number, err)
+	}
+	return requireTriaged(res, repo, number)
+}
+
+// requireTriaged turns a triage UPDATE that matched no row into
+// ErrBadTransition. Every triage verb reads triage_state and then writes,
+// under READ COMMITTED: two concurrent calls can both read 'new', so the
+// UPDATE carries the same predicate and this check is what makes the loser
+// fail instead of silently overwriting the winner. The caller's transaction
+// rolls back, which is also what undoes a promote's already-created task.
+func requireTriaged(res sql.Result, repo string, number int64) error {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("triage issue %s#%d: %w", repo, number, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("issue %s#%d was triaged concurrently: %w", repo, number, ErrBadTransition)
 	}
 	return nil
 }
