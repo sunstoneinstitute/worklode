@@ -459,8 +459,8 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 		t.Fatalf("out edges = %+v, want a follow_up_to edge to %s", detail.Edges.Out, origin.ID)
 	}
 
-	if _, err := c.Unfollow(ctx, followUp.ID, origin.ID); err != nil {
-		t.Fatalf("Unfollow: %v", err)
+	if _, err := c.UnfollowUp(ctx, followUp.ID, origin.ID); err != nil {
+		t.Fatalf("UnfollowUp: %v", err)
 	}
 	detail, _, err = c.GetTask(ctx, followUp.ID)
 	if err != nil {
@@ -468,7 +468,7 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 	}
 	for _, e := range detail.Edges.Out {
 		if e.Type == "follow_up_to" {
-			t.Fatalf("out edges = %+v, want no follow_up_to edge after Unfollow", detail.Edges.Out)
+			t.Fatalf("out edges = %+v, want no follow_up_to edge after UnfollowUp", detail.Edges.Out)
 		}
 	}
 }

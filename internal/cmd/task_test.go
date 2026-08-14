@@ -458,6 +458,80 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	}
 }
 
+func TestTaskFollowUpCommands(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	setupRepoConfig(t, "proj") // so a bare task number resolves
+
+	origin := createTestTask(t, c, "Origin")
+
+	// add --follow-up-to records the origin edge in one round trip.
+	out, err := runLode(t, "task", "add", "--json", "--project", "proj",
+		"--title", "Follow-up", "--follow-up-to", origin.ID)
+	if err != nil {
+		t.Fatalf("task add --follow-up-to: %v\noutput: %s", err, out)
+	}
+	var followUp cli.Task
+	if err := json.Unmarshal([]byte(out), &followUp); err != nil {
+		t.Fatalf("decode add output %q: %v", out, err)
+	}
+
+	detail, _, err := c.GetTask(context.Background(), followUp.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	found := false
+	for _, e := range detail.Edges.Out {
+		if e.Type == "follow_up_to" && e.To == origin.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("out edges after add --follow-up-to = %+v, want a follow_up_to edge to %s", detail.Edges.Out, origin.ID)
+	}
+
+	// follow-up --of records the same edge on an already-created task.
+	other := createTestTask(t, c, "Second origin")
+	spun := createTestTask(t, c, "Spun out")
+	if out, err := runLode(t, "task", "follow-up", spun.ID, "--of", other.ID); err != nil {
+		t.Fatalf("task follow-up --of: %v\noutput: %s", err, out)
+	}
+	detail, _, err = c.GetTask(context.Background(), spun.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	found = false
+	for _, e := range detail.Edges.Out {
+		if e.Type == "follow_up_to" && e.To == other.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("out edges after follow-up --of = %+v, want a follow_up_to edge to %s", detail.Edges.Out, other.ID)
+	}
+
+	// unfollow-up reads the origin back and drops the edge.
+	if out, err := runLode(t, "task", "unfollow-up", spun.ID); err != nil {
+		t.Fatalf("task unfollow-up: %v\noutput: %s", err, out)
+	}
+	detail, _, err = c.GetTask(context.Background(), spun.ID)
+	if err != nil {
+		t.Fatalf("get task after unfollow-up: %v", err)
+	}
+	for _, e := range detail.Edges.Out {
+		if e.Type == "follow_up_to" {
+			t.Fatalf("out edges after unfollow-up = %+v, want no follow_up_to edge", detail.Edges.Out)
+		}
+	}
+
+	// unfollow-up on a task with no origin hits the error branch.
+	loose := createTestTask(t, c, "No origin")
+	if _, err := runLode(t, "task", "unfollow-up", loose.ID); err == nil ||
+		!strings.Contains(err.Error(), "is not a follow-up to anything") {
+		t.Fatalf("task unfollow-up %s = %v, want \"is not a follow-up to anything\" error", loose.ID, err)
+	}
+}
+
 func TestResolveBody(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "body.md")
 	if err := os.WriteFile(f, []byte("from file\n"), 0o644); err != nil {
