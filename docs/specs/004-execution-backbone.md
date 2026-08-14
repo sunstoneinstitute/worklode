@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: draft
 issued: 2026-07-29
 ---
 # Spec 004 — Execution backbone
