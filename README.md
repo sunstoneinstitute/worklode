@@ -151,10 +151,21 @@ The read-only web UI is at http://localhost:8080/.
 
 The compose file publishes port 8080 on loopback only
 (`"127.0.0.1:8080:8080"`). Keep it that way on shared hosts: the web board
-and `/metrics` are unauthenticated (bearer tokens cover `/api/v1` only), so
-anyone who can reach the port can read every task. To serve other machines,
-change the mapping to `"8080:8080"` (or a specific interface) and put a
-TLS-terminating reverse proxy or firewall in front.
+is unauthenticated *because* the compose file sets `LODE_WEB_OPEN=1`, and
+`/metrics` is unauthenticated by construction (bearer tokens cover `/api/v1`
+only), so anyone who can reach the port can read every task. Compose sets the
+flag for you — following the quickstart verbatim needs no extra step, and no
+export to add.
+
+A server with neither `LODE_WEB_OPEN` nor `LODE_OIDC_*` refuses to serve any
+web page at all: `503`, naming the missing configuration. That is the default
+outside compose, and it is deliberate — accidental openness is the hazard, so
+serving anonymously is an explicit choice.
+
+To serve other machines, configure `LODE_OIDC_ISSUER` and
+`LODE_OIDC_CLIENT_ID` and drop `LODE_WEB_OPEN` rather than only widening the
+mapping to `"8080:8080"`; then put a TLS-terminating reverse proxy or
+firewall in front.
 
 ## GitHub App setup
 

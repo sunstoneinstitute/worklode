@@ -120,8 +120,6 @@ outright once it is fixed over annotating it as resolved.
   entirely to the 5-minute TTL (the vendor default), which underprices a 1-hour
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
-- `[P0]` **The web UI is unauthenticated without an SSO provider.** Planned in
-  `docs/plans/2026-08-14-web-ui-requires-a-login-provider.md`.
 - `[P3]` **Follow-up edges shipped without four adjacent pieces (spec 004 §1.3
   follow-up, 2026-08-14).** The `lode` plugin (`plugins/lode/`, the
   `lode-worker` agent and `/lode:*` commands) does not yet know to reach for
