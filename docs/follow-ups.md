@@ -27,8 +27,32 @@ Each item carries a priority tag (assessed 2026-08-14):
   (`internal/cli/client.go`'s flat parser, `internal/cmd/doc.go` citing §16.1),
   so the code has already chosen and 025 §5/§10 contradict it; the
   unimplemented `doc pull`/`push` still reference the block.
-- `[P0]` **Artifact correlation hardening.** Planned in
-  `docs/plans/2026-08-14-artifact-correlation-hardening.md`.
+- `[P2]` **Per-artifact delivery tracking** (004 §5.3, already deferred there): a
+  repo shipping two images plus a CLI binary has one `done_state`. The
+  `registry_package` handler mints every image as an artifact, but delivery is
+  still decided per repo, so the second image's deploy tells the tracker
+  nothing the first one didn't.
+- `[P4]` **`registry_package` ignores non-container packages**: PyPI/npm
+  versions are recorded as events and dropped. The `pypi` artifact kind exists
+  in the `artifacts.kind` CHECK, nothing writes it, and nothing reads it —
+  wiring one end alone buys nothing.
+- `[P4]` **`target_commitish` on a package version is stored verbatim**: a
+  branch name there stays uncorrelated. Unlike a release it has no frontier to
+  fall back on, so it would need the release path's GitHub App resolver. Worth
+  doing only if real container deliveries show a branch arriving there.
+- `[P2]` **A re-pushed mutable tag orphans the old digest**: `CreateArtifact`
+  upserts on `(kind, name, version)`, so re-pushing `:latest` (or any moving
+  tag) overwrites `digest`, and the previous digest stops resolving through
+  `ArtifactByDigest`. A Flux event for the still-running old image then cannot
+  correlate. Inherent to keying an image artifact on `(name, tag)`; fixing it
+  means keying on the digest and treating the tag as a pointer.
+- `[P1]` **The GitHub App needs `Packages: read` and a `registry_package`
+  subscription** (operator action, not a code change): `registry_package` is in
+  `handledEvents`, so `lode project add-repo` warns "github app is not
+  subscribed to: registry_package" on every existing install until the App
+  gains the permission — and a GitHub App permission change requires each
+  installation to approve it. Until then no `docker_image` artifacts are minted
+  and the Flux OCI correlation has nothing to resolve against.
 - `[P2]` **One `tasks.state` cannot express per-repo delivery.** `taskClosed`
   (004 §1.3) asks one scalar state to satisfy every repo the task landed in,
   but `ResolveDelivery` is repo-scoped — it advances on the frontiers of the
