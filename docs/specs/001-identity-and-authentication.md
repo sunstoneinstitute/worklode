@@ -166,7 +166,7 @@ lode login
         -> mints a one-time code -> 302 to the loopback redirect_uri
   4. loopback receives ?code=OTC&state=CLISTATE   (state checked by the CLI)
   5. POST {token_url} {code, state}            -> { token, actor_id, expires_at }
-  6. store token in the OS keychain; write only `server` to config.toml
+  6. store token in the OS keychain (or the 0600 token file, §8.5); write only `server` to config.toml
 ```
 
 Because the **server** performs the final redirect to the loopback URI (the provider redirects
@@ -257,40 +257,66 @@ simply re-runs `lode login`. No DB migration. (If we ever go multi-replica, prom
   pastes are both injectable and the flow is testable without a terminal; the flow's
   progress messages go to `Stdout` rather than straight to `os.Stdout`.
 
-### 8.5 Token storage: OS keychain {#sec-8.5}
+### 8.5 Token storage: OS keychain, then a 0600 file {#sec-8.5}
 
 `SaveConfig` previously wrote `server` **and** `token` into
 `~/.config/worklode/config.toml` at 0600 — cleartext on disk. Secret is split from
 non-secret:
 
-- **`config.toml` keeps only `server`.** The token never touches disk.
+- **`config.toml` keeps only `server`.** The token never goes in config.toml.
 - **Token lives in the OS keychain**, keyed by server URL (service `worklode`,
   account = server URL) so one machine can hold tokens for several servers and
   `LODE_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
   Keychain · Linux Secret Service · Windows Credential Manager; no cgo).
 - **`tokenStore` abstraction** in the `cli` package — `Get/Set/Delete(server)` —
-  with a keychain implementation and a mock (`keyring.MockInit()`) for tests, since
-  CI has no Secret Service.
+  with a keychain implementation, a file implementation, and a mock
+  (`keyring.MockInit()`) for tests, since CI has no Secret Service.
 - **Token resolution order** in `LoadConfig`: `LODE_TOKEN` env → keychain(server) →
-  legacy cleartext `token` in config.toml (read-only fallback so existing installs
-  keep working).
-- **`lode login`** writes the token to the keychain, writes only `server` to
-  config.toml, and if it finds a legacy cleartext `token` there it strips it and
-  prints a one-line note — migrating people off cleartext.
-- **`lode logout`** deletes the token from the keychain for the current server.
-- **Headless / no keychain:** if the keychain write genuinely fails, `lode login`
-  errors with guidance to use `LODE_TOKEN` instead — it never silently falls back to
-  cleartext. Automation (`lode watch` in-cluster) already uses `LODE_TOKEN` and is
-  unaffected.
+  token file(server) → legacy cleartext `token` in config.toml (read-only fallback so
+  existing installs keep working).
+- **`lode login`** writes the token through `tokenStore` (keychain, or the token
+  file below), writes only `server` to config.toml, and if it finds a legacy
+  cleartext `token` there it strips it and prints a one-line note — migrating
+  people off cleartext.
+- **`lode logout`** deletes the token for the current server from **both** stores,
+  so a token cannot survive in the file because a keychain appeared after it was
+  written.
+- **No keychain: the token file.** On a machine with no keychain at all, the token
+  goes to `~/.config/worklode/token` at mode 0600, one `<server> <token>` line per
+  server — keyed by server for the same reason the keychain is, so `LODE_SERVER`
+  cannot carry a token minted for one server to another. The file is written
+  temp-file-plus-rename, which is atomic (no truncated token) and replaces the mode
+  along with the inode (an existing looser file comes out 0600). The last token
+  deleted removes the file. `lode login` prints the path when it takes this route,
+  so the fallback is never silent. Automation (`lode watch` in-cluster) already uses
+  `LODE_TOKEN` and is unaffected.
+- **Absence, not failure, is what earns the fallback.** `keychainAvailable` probes
+  by asking go-keyring for an account no server URL can equal: a backend that is
+  present answers `ErrNotFound` even when empty. Only `ErrUnsupportedPlatform`, a
+  D-Bus `ServiceUnknown`/`NameHasNoOwner` reply (session bus up, nothing serving
+  `org.freedesktop.secrets`), or a failure to reach a bus at all count as absence.
+  A keychain that exists and refuses — locked collection, dismissed prompt — is
+  still an **error** carrying the `export LODE_TOKEN=…` guidance: writing the token
+  to disk instead would silently downgrade a working secret store, which is the
+  outcome this section has always been about preventing.
 
-  This bullet used to justify the keychain-only rule with "`lode login` opens a
-  browser, so it runs on a desktop with a keychain." Manual mode (§8.7) retracts that
-  premise: its whole purpose is the machine with no browser, which on Linux is usually
-  also the machine with no Secret Service. The rule stands — a token still never
-  touches disk in cleartext — but the failure is now an expected outcome rather than a
-  corner case, so the error names the token it just obtained and the exact
-  `export LODE_TOKEN=…` line that puts it to use. Losing a token the user watched
-  arrive, and making them log in again to get another one, is the worse failure.
+  That failing write still records `server` in config.toml. The server URL is not
+  a secret, and `LODE_TOKEN` alone does not make a working client: without it every
+  later command fails with "server URL not set", which is the guidance quietly not
+  working. The one thing that path must not do is strip a legacy cleartext `token`
+  — nothing migrated it into the keychain, so stripping it would destroy the only
+  copy.
+
+  Until 2026-08-14 there was no fallback: *any* failed keychain write errored, on
+  the rule that a token must never touch disk. Manual mode (§8.7) had already
+  retracted the premise that login implies a desktop — its whole purpose is the
+  machine with no browser, which on Linux is usually also the machine with no
+  Secret Service — leaving every headless install to re-export a token by hand on
+  every new shell, which in practice means a token pasted into a shell history or a
+  dotfile. A 0600 file the CLI manages, tells the user about, and `lode logout` can
+  clear is the better of the two cleartext outcomes. Losing a token the user
+  watched arrive was always the worse failure; the file now prevents it outright
+  rather than softening it with an error message.
 
 ### 8.6 Security {#sec-8.6}
 
@@ -322,7 +348,7 @@ lode login --no-browser        (or: any login where no browser can be launched)
         -> mints a one-time code -> renders it on a page with a copy button
   3. user pastes the code into the waiting prompt
   4. POST {token_url} {code, state}            -> { token, actor_id, expires_at }
-  5. store token in the OS keychain; write only `server` to config.toml
+  5. store token in the OS keychain (or the 0600 token file, §8.5); write only `server` to config.toml
 ```
 
 Steps 1, 4 and 5 are byte-identical to §8; only how the code travels changes.
@@ -557,7 +583,8 @@ the ~6-month refresh-token lifetime.
   server implementing `/.well-known/lode-login` and `/auth/cli/token`, driving the
   loopback callback end to end; ephemeral-port listener; `tokenStore` via
   `keyring.MockInit()`; `LoadConfig` resolution order incl. legacy fallback;
-  `lode logout` deletes the keychain entry.
+  `lode logout` clears both the keychain entry and the token file; the token
+  file's mode, per-server keying, and the absence-vs-failure classifier (§8.5).
 - **e2e** (`e2e/`): happy-path CLI login against a server with GitHub auth stubbed.
 - **Manual mode** (§8.7), server: `mode=manual` accepted without a `redirect_uri` and
   still rejected without a `state`; a missing/non-loopback `redirect_uri` without
