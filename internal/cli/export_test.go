@@ -38,3 +38,19 @@ func SwapTokenStoreForTest(ts TokenStore) func() {
 	tokenStore = ts
 	return func() { tokenStore = prev }
 }
+
+// NoKeychainBackendForTest exposes the availability classifier, which is the
+// one piece of the fallback that cannot be exercised through a real keychain:
+// CI has no Secret Service, and a developer machine has one.
+func NoKeychainBackendForTest(err error) bool { return noKeychainBackend(err) }
+
+// NewFallbackTokenStoreForTest builds a fallback store over explicit halves
+// with the keychain probe already decided, so tests need neither a keychain
+// nor a D-Bus session.
+func NewFallbackTokenStoreForTest(keychain, file TokenStore, keychainPresent bool) *FallbackTokenStore {
+	return &FallbackTokenStore{
+		keychain: keychain,
+		file:     file,
+		probe:    func() bool { return keychainPresent },
+	}
+}
