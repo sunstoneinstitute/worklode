@@ -20,8 +20,9 @@ type agentSessionJSON struct {
 	StartedAt    time.Time  `json:"started_at"`
 	LastSeenAt   time.Time  `json:"last_seen_at"`
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
-	// Usage is whatever a previous end reported; null until one does. Cost
-	// is a decimal string for the same reason the end request takes one.
+	// Usage is whatever a previous touch or end reported; null until one
+	// does. Cost is a decimal string for the same reason the requests take
+	// one.
 	InputTokens  *int64  `json:"input_tokens"`
 	OutputTokens *int64  `json:"output_tokens"`
 	CostAmount   *string `json:"cost_amount"`
@@ -48,6 +49,10 @@ type agentSessionRequest struct {
 	Agent        string `json:"agent"`
 	AgentVersion string `json:"agent_version"`
 	SessionID    string `json:"session_id"`
+	// Usage is the session's spend so far, in the same form and with the same
+	// nil-vs-empty meaning as the end request's. A session that never ends
+	// cleanly reports here or nowhere.
+	Usage []usageBucketJSON `json:"usage"`
 }
 
 // touchAgentSession handles POST /api/v1/tasks/{id}/agent-session: record
@@ -61,10 +66,15 @@ func (s *server) touchAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
+	buckets, err := toUsageBuckets(req.Usage)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	actor := actorFrom(r)
 
 	sess, err := s.st.TouchAgentSession(r.Context(), id, actor.ID,
-		req.Agent, req.AgentVersion, req.SessionID)
+		req.Agent, req.AgentVersion, req.SessionID, buckets)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

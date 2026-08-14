@@ -130,9 +130,16 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // blocks until this call commits, or wins the race and makes the re-check
 // fail.
 //
+// Buckets, when non-nil, replaces the session's recorded usage the same way
+// EndAgentSession's does. A session that never ends cleanly — a crashed agent,
+// or a lease the sweeper expires — is closed with no usage at all, so the
+// heartbeat is the only place its spend can land. The write is
+// replace-not-accumulate, so reporting the same running total every minute is
+// safe to repeat and the last report before the crash is what survives.
+//
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
-func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, agentVersion, sessionID string) (*AgentSession, error) {
+func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, agentVersion, sessionID string, buckets []SessionUsageBucket) (*AgentSession, error) {
 	if !validAgents[agent] {
 		return nil, fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
 	}
@@ -185,7 +192,41 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 		}
 	}
 
+	if buckets != nil {
+		if err := s.replaceAgentSessionUsage(ctx, lease.ID, agent, sessionID, buckets); err != nil {
+			return nil, err
+		}
+	}
+
 	return s.AgentSession(ctx, lease.ID, agent, sessionID)
+}
+
+// replaceAgentSessionUsage records buckets as the complete usage of the
+// session identified by (leaseID, agent, sessionID), in its own transaction.
+//
+// It runs after the touch above rather than inside it because the touch's
+// event apply only fires on the inserting call: a heartbeat takes RecordEvent's
+// already-recorded path, so usage riding that apply would be written once per
+// session and never again — the opposite of what the heartbeat is for.
+//
+// A row that is not there is not an error. The only way to reach that is a
+// lease close landing between the touch and here, which already ended the
+// session; there is nothing left to attribute the tokens to.
+func (s *Store) replaceAgentSessionUsage(ctx context.Context, leaseID int64, agent, sessionID string, buckets []SessionUsageBucket) error {
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		var rowID int64
+		err := tx.QueryRow(
+			`SELECT id FROM agent_sessions
+			  WHERE lease_id = $1 AND agent = $2 AND external_session_id = $3`,
+			leaseID, agent, sessionID).Scan(&rowID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find agent session %s/%s on lease %d: %w", agent, sessionID, leaseID, err)
+		}
+		return applySessionUsageTx(ctx, tx, rowID, buckets)
+	})
 }
 
 // bumpAgentSessionLastSeen advances last_seen_at (and clears ended_at, so a

@@ -77,12 +77,6 @@ Each item carries a priority tag (assessed 2026-08-14):
   lines across projects, actors/tokens, inbox, and the board. The inbox section
   alone is ~233 lines, and `internal/api/inbox_import.go` already exists as the
   sibling to move them next to.
-- `[P0]` **Cost is lost when a session never ends cleanly**: usage is reported on
-  `session-end` and `worktree-exit`. A crashed agent, or a lease swept by
-  `ExpireLeases`, closes the session with `ended_at` but no usage, so its spend
-  never lands. Reporting on the debounced heartbeat as well would close the gap
-  — the write is already replace-not-accumulate, so a mid-session report is
-  safe to repeat.
 - `[P4]` **Unmodelled billing dimensions**: `service_tier` (batch is half price) and
   server-side tool use (`web_search_requests`, billed per request) are both
   present in the transcript's `usage` block and both ignored. Claude Code runs
