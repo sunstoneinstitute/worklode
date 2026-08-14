@@ -19,11 +19,12 @@ const (
 	agentClaudeCode = "claude-code"
 )
 
-// hookTargets is the pair of integrations one install or uninstall run acts on.
-// An empty field means "skip this one".
+// hookTargets is the set of integrations one install or uninstall run acts on.
+// An empty vcs or agent means "skip this one", as does a false statusLine.
 type hookTargets struct {
-	vcs   string
-	agent string
+	vcs        string
+	agent      string
+	statusLine bool
 }
 
 // addHookFlags declares the flags shared by `lode install` and `lode uninstall`.
@@ -32,6 +33,11 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().String("agent", agentClaudeCode, "coding agent whose hooks to manage")
 	cmd.Flags().Bool("no-vcs", false, "skip the version control system hooks")
 	cmd.Flags().Bool("no-agent", false, "skip the coding agent hooks")
+	// No backticks in these descriptions: cobra reads them as the argument-name
+	// placeholder, which turns a bool flag into "--statusline lode statusline".
+	cmd.Flags().Bool("statusline", true,
+		"manage the agent's status line, pointing it at 'lode statusline'")
+	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
 	cmd.Flags().String("scope", scopeLocal,
 		"which agent settings file to write: local (settings.local.json) or project (settings.json)")
 }
@@ -46,12 +52,23 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	agent, _ := flags.GetString("agent")
 	noVCS, _ := flags.GetBool("no-vcs")
 	noAgent, _ := flags.GetBool("no-agent")
+	statusLine, _ := flags.GetBool("statusline")
+	noStatusLine, _ := flags.GetBool("no-statusline")
 
 	if noVCS && flags.Changed("vcs") {
 		return hookTargets{}, errors.New("--vcs and --no-vcs are mutually exclusive")
 	}
 	if noAgent && flags.Changed("agent") {
 		return hookTargets{}, errors.New("--agent and --no-agent are mutually exclusive")
+	}
+	if noStatusLine && flags.Changed("statusline") {
+		return hookTargets{}, errors.New("--statusline and --no-statusline are mutually exclusive")
+	}
+	// The status line lives in the agent's settings file, so skipping the agent
+	// skips it too. Only an explicit --statusline contradicts --no-agent;
+	// inheriting the default does not, or --no-agent alone could never run.
+	if noAgent && flags.Changed("statusline") && statusLine {
+		return hookTargets{}, errors.New("--statusline and --no-agent are mutually exclusive")
 	}
 
 	if noVCS {
@@ -67,14 +84,18 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	if vcs == "" && agent == "" {
 		return hookTargets{}, errors.New("nothing to do: --no-vcs and --no-agent were both given")
 	}
-	return hookTargets{vcs: vcs, agent: agent}, nil
+	if noStatusLine || agent == "" {
+		statusLine = false
+	}
+	return hookTargets{vcs: vcs, agent: agent, statusLine: statusLine}, nil
 }
 
 // installResult is what one `lode install` run did. A nil field means that
 // integration was skipped, and is omitted from the JSON entirely.
 type installResult struct {
-	VCS   *vcsInstall   `json:"vcs,omitempty"`
-	Agent *agentInstall `json:"agent,omitempty"`
+	VCS        *vcsInstall        `json:"vcs,omitempty"`
+	Agent      *agentInstall      `json:"agent,omitempty"`
+	StatusLine *statusLineInstall `json:"status_line,omitempty"`
 }
 
 type vcsInstall struct {
@@ -88,10 +109,25 @@ type agentInstall struct {
 	Path  string `json:"path"`
 }
 
+// statusLineInstall reports an action, unlike its hook sibling, because the
+// install can decline: an existing status line is left alone.
+type statusLineInstall struct {
+	Agent  string `json:"agent"`
+	Path   string `json:"path"`
+	Action string `json:"action"`
+}
+
 // uninstallResult is the same, for `lode uninstall`.
 type uninstallResult struct {
-	VCS   *vcsUninstall   `json:"vcs,omitempty"`
-	Agent *agentUninstall `json:"agent,omitempty"`
+	VCS        *vcsUninstall        `json:"vcs,omitempty"`
+	Agent      *agentUninstall      `json:"agent,omitempty"`
+	StatusLine *statusLineUninstall `json:"status_line,omitempty"`
+}
+
+type statusLineUninstall struct {
+	Agent  string `json:"agent"`
+	Path   string `json:"path"`
+	Action string `json:"action"`
 }
 
 type vcsUninstall struct {
@@ -118,10 +154,15 @@ type agentUninstall struct {
 // treats the same failure the same way.
 func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope string) (installResult, error) {
 	var res installResult
-	if targets.vcs != "" {
+	// The extension is what makes worklode.task-id worktree-scoped, so both
+	// the task-id stamping the VCS side supports and the status line's read of
+	// that stamp need it. Enable it once for either.
+	if targets.vcs != "" || targets.statusLine {
 		if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: enable git worktree config extension: %v\n", err)
 		}
+	}
+	if targets.vcs != "" {
 		hooksDir, chainedTo, err := installGitHooks(dir)
 		if err != nil {
 			return res, err
@@ -137,6 +178,14 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 			return res, err
 		}
 		res.Agent = &agentInstall{Agent: targets.agent, Path: path}
+
+		if targets.statusLine {
+			action, err := installStatusLine(path)
+			if err != nil {
+				return res, err
+			}
+			res.StatusLine = &statusLineInstall{Agent: targets.agent, Path: path, Action: action}
+		}
 	}
 	return res, nil
 }
@@ -164,6 +213,14 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 			return res, err
 		}
 		res.Agent = &agentUninstall{Agent: targets.agent, Path: path, Action: action}
+
+		if targets.statusLine {
+			slAction, err := uninstallStatusLine(path)
+			if err != nil {
+				return res, err
+			}
+			res.StatusLine = &statusLineUninstall{Agent: targets.agent, Path: path, Action: slAction}
+		}
 	}
 	return res, nil
 }
@@ -177,7 +234,12 @@ func newInstallCmd() *cobra.Command {
 			"chaining any pre-commit hook already present or the pre-commit framework. The agent " +
 			"side writes Worklode's lifecycle hook bindings (session start/end, heartbeat, worktree " +
 			"enter) into the repo's Claude Code settings file. Use --no-vcs or --no-agent to skip " +
-			"either. Safe to re-run: both converge rather than accumulate.",
+			"either. Safe to re-run: both converge rather than accumulate.\n\n" +
+			"The agent side also points the status line at `lode statusline`, and enables the git " +
+			"worktree config extension that lets it read a workspace's own worklode.task-id. That " +
+			"is safe to have on by default because it never takes a slot it does not already own: " +
+			"the slot holds exactly one command, so a status line someone else configured is " +
+			"reported and left alone. Use --no-statusline to skip it entirely.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targets, err := resolveHookTargets(cmd)
@@ -215,7 +277,9 @@ func newUninstallCmd() *cobra.Command {
 			"recognize untouched. The agent side removes every `lode hook` binding from the repo's " +
 			"Claude Code settings file, leaving all other settings — including third-party hooks on " +
 			"the same events — in place. Use --no-vcs or --no-agent to skip either. A repo with " +
-			"nothing installed is not an error.",
+			"nothing installed is not an error.\n\n" +
+			"The agent side also removes the status line, but only if it is ours; one someone else " +
+			"configured is reported and left alone. Use --no-statusline to leave ours in place.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targets, err := resolveHookTargets(cmd)
@@ -264,6 +328,16 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 	if res.Agent != nil {
 		fmt.Fprintf(out, "%s: installed hooks in %s\n", res.Agent.Agent, res.Agent.Path)
 	}
+	if sl := res.StatusLine; sl != nil {
+		switch sl.Action {
+		case hookActionInstalled:
+			fmt.Fprintf(out, "%s: status line set to `%s` in %s\n", sl.Agent, lodeStatusLineCommand, sl.Path)
+		case hookActionKept:
+			fmt.Fprintf(out, "%s: kept the status line already configured in %s\n", sl.Agent, sl.Path)
+		default:
+			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
+		}
+	}
 	return nil
 }
 
@@ -299,6 +373,18 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 			fmt.Fprintf(out, "%s: no Worklode hooks in %s\n", res.Agent.Agent, res.Agent.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.Agent.Agent, res.Agent.Action, res.Agent.Path)
+		}
+	}
+	if sl := res.StatusLine; sl != nil {
+		switch sl.Action {
+		case hookActionRemoved:
+			fmt.Fprintf(out, "%s: removed the status line from %s\n", sl.Agent, sl.Path)
+		case hookActionKept:
+			fmt.Fprintf(out, "%s: left the status line in %s alone (not ours)\n", sl.Agent, sl.Path)
+		case hookActionNone:
+			fmt.Fprintf(out, "%s: no status line in %s\n", sl.Agent, sl.Path)
+		default:
+			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
 		}
 	}
 	return nil
