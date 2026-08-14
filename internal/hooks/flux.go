@@ -221,7 +221,18 @@ func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment
 		// signal we cannot confirm would gate the repo/env forever.
 		return nil
 	}
-	repo, mainID, err := store.MainIDForSHAAnyRepo(tx, sha)
+	// The OCI path already knows the repo from the artifact, so it resolves
+	// exactly; the git path has nothing to go on and must guess when a sha
+	// exists in several repos.
+	var repo string
+	var mainID *int64
+	var err error
+	if artifact != nil {
+		repo = artifact.Repo
+		mainID, err = store.MainIDForSHA(tx, repo, sha)
+	} else {
+		repo, mainID, err = store.MainIDForSHAAnyRepo(tx, sha)
+	}
 	if err != nil {
 		return err
 	}
