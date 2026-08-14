@@ -563,17 +563,17 @@ func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 func TestTaskPageShowsProgress(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epic := createEpic(t, h, token, "proj", "Container")
+	container := createContainer(t, h, token, "proj", "Container")
 	var childIDs []string
 	for _, title := range []string{"A", "B"} {
 		child := createTaskViaAPI(t, h, token, map[string]any{
 			"project": "proj", "title": title, "priority": "medium", "kind": "feature",
-			"parent": epic,
+			"parent": container,
 		})
 		childIDs = append(childIDs, child["id"].(string))
 	}
 
-	rr := doReq(t, h, "GET", "/tasks/"+epic, "", nil)
+	rr := doReq(t, h, "GET", "/tasks/"+container, "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
 	}

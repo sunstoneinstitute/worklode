@@ -154,13 +154,11 @@ once an instance is running (dogfooding); until then this file is the list.
   (`sh:in`), so widening the `CHECK` in a migration means widening that shape.
   The transitions are not duplicated — they stay in `internal/store/tasks.go`.
   Worth a check in CI if the graph ever ships.
-- **`ns/` changes owed at spec 029's acceptance**: `wl:Milestone` and
-  `wl:Deliverable` (subsuming 006's reserved terms), `epic` removed from
-  `wlc:TaskKind` (migration + `validKinds` + the test that holds them
-  together), and the participants/approvals vocabulary. Spec 029 carries no
-  `amends:` frontmatter and the specs2 fold absorbs its "What this spec
-  changes elsewhere" table (the spec-target rows live in the part-2 fold
-  plan), so this entry is the only record of the `ns/` row.
+- **`ns/` changes still owed at spec 029's acceptance**: `wl:Milestone` and
+  `wl:Deliverable` (subsuming 006's reserved terms), and the
+  participants/approvals vocabulary. The task-kind half is **done** — the
+  `0017` CHECK, `validKinds`, and `wlc:TaskKind` landed together under
+  `TestTaskKindsAgreeAcrossSources`.
 - **`rdf-registry:ADR-0006` is unresolvable** (spec 025's frontmatter, the corpus's
   only cross-project reference). It predates the `<KEY>-<TYPE>-<n>` shorthand
   (025 §14.3) and no reference form parses the colon syntax. The target is
@@ -327,12 +325,6 @@ Design items landed in spec 025. These are the mechanical leftovers.
 Deliberately not fixed by the cutover — recorded so a reviewer does not read
 them as consolidation-introduced drift.
 
-- **`ns/` mirrors pre-025 vocabulary** (part-4 residual). `ns/concept.ttl`
-  still ships `wlc:epic`, and `ns/ontology.ttl`'s `owl:AllDisjointClasses`
-  still names `wl:Workstream` and includes `wl:Issue`/`wl:PullRequest`, where
-  folded 006 §2's own axiom carries `wl:Project` and neither. CLAUDE.md's rule
-  is amend the spec first, then mirror the term; 025 amends it, and the
-  mirror follows once 025 ships.
 - **Folded 001 §8.3 states a stale infrastructure fact.** The one-time CLI
   login code store is justified as in-memory-safe because "the server is
   single-instance (one PVC + litestream)"; the backbone is Postgres today,
@@ -346,13 +338,6 @@ them as consolidation-introduced drift.
   2026-07** ("done in dev", must-have 1 "prod remains blocked on item 1", and
   must-have 3's base-URL override "not yet implemented" in rdf-registry) that
   needs refreshing against current state.
-- **Folded 020 uses `epic` as live vocabulary; folded 029 §2 removes it from
-  `TaskKind`.** 020 has six sites — §0, §2.1, §3.3's `kind = "epic"` 422
-  rejection with `validKinds` and `epicForbiddenStates`, and two rows of §4's
-  table. 020's transcription was faithful to its pre-fold source and 029's own
-  change table never named 020, so the gap is 029's. Fixing it is a spec-plus-
-  code change: the enum is held together by the `tasks.kind` CHECK constraint,
-  `validKinds`, and `wlc:TaskKind`, which a test keeps in agreement.
 - **Folded 026 §4 documents a frontmatter form the corpus no longer uses.**
   Its parenthetical-annotation rule is written against `wasDerivedFrom`, and
   the fold left frontmatter carrying only `status`, `issued` and `requires`.

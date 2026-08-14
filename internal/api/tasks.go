@@ -15,16 +15,16 @@ var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
 
-// validKinds mirrors the tasks.kind CHECK constraint (migration 0009) and
-// wlc:TaskKind in ns/concept.ttl; all three carry the same seven kinds.
+// validKinds mirrors the tasks.kind CHECK constraint (migration 0017) and
+// wlc:TaskKind in ns/concept.ttl; all three carry the same six kinds.
 var validKinds = map[string]bool{
-	"feature": true, "bug": true, "chore": true, "spec": true, "epic": true,
+	"feature": true, "bug": true, "chore": true, "spec": true,
 	"review": true, "spike": true,
 }
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
 // message cannot drift from the map when a kind is added.
-const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, epic, review, or spike"
+const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, review, or spike"
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true,
@@ -116,7 +116,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	if req.Parent != "" {
 		// Named 404 here, ahead of the transaction: AddEdge's own lookup
 		// inside RecordEvent stays the authority for everything else (same
-		// project, parent is an epic, no cycle, one parent per task), but its
+		// project, no cycle, one parent per task, depth cap), but its
 		// ErrNotFound would otherwise collide with GetProject's and be
 		// reported as an anonymous 404.
 		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
@@ -271,8 +271,9 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=. state
-// is repeatable and/or comma-separated.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=.
+// state is repeatable and/or comma-separated; has_children=true narrows to
+// containers.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -290,6 +291,8 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Kind:     q.Get("kind"),
 		Parent:   q.Get("parent"),
 		Assignee: q.Get("assignee"),
+
+		HasChildren: q.Get("has_children") == "true",
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

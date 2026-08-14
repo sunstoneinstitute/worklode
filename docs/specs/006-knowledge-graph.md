@@ -177,10 +177,6 @@ wl:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (
                  wl:Skill ) .
 [] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .
 
-# Deliberately absent, so nobody re-mints them: wl:Workstream and its wl:OngoingMaintenance
-# subclass, the wl:inWorkstream membership edge, and the (Project OngoingMaintenance)
-# disjointness axiom. One unbounded umbrella — wl:Project — covers what they modelled (025 §13).
-
 # Repo grouping reuses doap; a repo holds many components:
 # <repo> a doap:Project ; dct:hasPart wlid:component/... .
 ```
@@ -480,10 +476,9 @@ wlc:runtime   a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "ru
     skos:definition "Observed runtime/deploy layer — artifacts, deployments, environments." .
 ```
 
-`wlc:TaskKind` is exactly `feature, bug, chore, design, review, spike`, matching the `tasks.kind`
-constraint. Every kind names a nature of work; no structural member replaces the `epic` container,
-because a plan is a document whose tasks are grouped by their reference to it rather than under a
-container row (025 §9.2, §6).
+`wlc:TaskKind` is exactly `feature, bug, chore, spec, review, spike`, matching the `tasks.kind`
+constraint. Every kind names a nature of work, and none names a container: a plan is a document
+whose tasks are grouped by their reference to it rather than under a container row (025 §9.2, §6).
 
 Every minted class/property carries a `wl:layer` tag (e.g. `wl:Component wl:layer wlc:intent`,
 `wl:Task wl:layer wlc:execution`, `wl:Deliverable wl:layer wlc:intent`) so the model is queryable

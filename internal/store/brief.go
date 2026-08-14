@@ -25,7 +25,7 @@ type Brief struct {
 	Body               string   // task body (mirrors Task.Body for the wire contract)
 	Branch             string   // <prefix><id>-<slug>
 	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
-	Parent             *Task    // the task's epic, or nil; only ID/Title/State are populated
+	Parent             *Task    // the task's parent, or nil; only ID/Title/State are populated
 	Lease              *Lease   // active lease, or nil
 	GoverningDesign    *string  // reserved: spec 006 (nil in v1)
 	AffectedComponents []string // reserved: spec 006 (nil in v1)

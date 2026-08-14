@@ -19,11 +19,11 @@ func TestProjectTableShowsKey(t *testing.T) {
 	}
 }
 
-// TestBoardSectionGroupsChildren checks that an epic's children render
+// TestBoardSectionGroupsChildren checks that a parent's children render
 // directly beneath it while the rest of the rows keep the order the server
 // sent — the server already sorts by priority, so a plain id sort would be
 // wrong. The fixture is built so id order and the wanted order disagree:
-// WL-5 is critical and arrives first, and epic WL-1's children are WL-9 and
+// WL-5 is critical and arrives first, and parent WL-1's children are WL-9 and
 // WL-4.
 func TestBoardSectionGroupsChildren(t *testing.T) {
 	var buf bytes.Buffer
@@ -39,15 +39,15 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 	}}})
 	got := buf.String()
 	urgent := strings.Index(got, "WL-5")
-	epic := strings.Index(got, "WL-1")
+	parent := strings.Index(got, "WL-1")
 	childB := strings.Index(got, "WL-9")
 	childA := strings.Index(got, "WL-4")
 	orphan := strings.Index(got, "WL-2")
-	if !(epic < childB && childB < childA) {
-		t.Fatalf("children are not grouped under their epic in arrival order:\n%s", got)
+	if !(parent < childB && childB < childA) {
+		t.Fatalf("children are not grouped under their parent in arrival order:\n%s", got)
 	}
-	if urgent > epic {
-		t.Fatalf("grouping moved the critical task below the epic:\n%s", got)
+	if urgent > parent {
+		t.Fatalf("grouping moved the critical task below the parent:\n%s", got)
 	}
 	if orphan < childA {
 		t.Fatalf("the orphan should keep its own position, last:\n%s", got)
@@ -74,7 +74,7 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 	buf.Reset()
 	TaskDetailRender(&buf, TaskDetail{
 		Task: Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
-			Kind: "epic", State: "in_progress"},
+			Kind: "feature", State: "in_progress"},
 		Hierarchy: TaskHierarchy{Progress: TaskProgress{Closed: 3, Total: 7}},
 	})
 	if got := buf.String(); !strings.Contains(got, "progress: 3/7") {
@@ -85,7 +85,7 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
 	TreeRender(&buf, []TreeNode{{
-		Epic:     Task{ID: "WL-1", Title: "Container", State: "in_progress"},
+		Parent:   Task{ID: "WL-1", Title: "Container", State: "in_progress"},
 		Progress: TaskProgress{Closed: 1, Total: 2},
 		Children: []Task{
 			{ID: "WL-2", Title: "Done piece", State: "merged"},

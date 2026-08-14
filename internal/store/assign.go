@@ -10,9 +10,9 @@ import (
 // AssignTask sets taskID's assignee to assignee inside the given
 // transaction, recording provenance via LogChange. assignee must name an
 // existing actor (ErrNotFound otherwise); a missing task is also
-// ErrNotFound. An epic, or a task in a closed state (see closedStateSet),
-// cannot be assigned (ErrInvalidInput) — an epic's ownership follows its
-// children, and a closed task has nothing left to own.
+// ErrNotFound. A task with children, or one in a closed state (see
+// closedStateSet), cannot be assigned (ErrInvalidInput) — a container's
+// ownership follows its children, and a closed task has nothing left to own.
 func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) error {
 	var one int
 	if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, assignee).Scan(&one); err != nil {
@@ -22,17 +22,21 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 		return fmt.Errorf("check actor %s: %w", assignee, err)
 	}
 
-	var state, kind, prev string
+	var state, prev string
 	if err := tx.QueryRow(
-		`SELECT state, kind, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &kind, &prev); err != nil {
+		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &prev); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		return fmt.Errorf("lock task %s: %w", id, err)
 	}
-	if kind == kindEpic {
-		return fmt.Errorf("task %s is an epic and cannot be assigned: %w", id, ErrInvalidInput)
+	container, err := hasChildren(tx, id)
+	if err != nil {
+		return err
+	}
+	if container {
+		return fmt.Errorf("task %s has children and cannot be assigned: %w", id, ErrInvalidInput)
 	}
 	if closedStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot assign: %w", id, state, ErrInvalidInput)
@@ -51,10 +55,10 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 // UnassignTask clears taskID's assignee inside the given transaction,
 // recording provenance via LogChange. A closed task (see closedStateSet)
 // rejects the change with ErrInvalidInput — it has nothing left to own.
-// Unlike AssignTask/StartTask there is no epic guard: an epic is never
-// assigned by this package, but clearing a stray assignee (e.g. left over
-// from before a task's kind changed) must not be blocked by the very fact
-// that needs cleaning up. A missing task is ErrNotFound.
+// Unlike AssignTask/StartTask there is no container guard: a task with
+// children is never assigned by this package, but clearing a stray assignee
+// (e.g. left over from before the task took children) must not be blocked by
+// the very fact that needs cleaning up. A missing task is ErrNotFound.
 func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 	var state, prev string
 	if err := tx.QueryRow(
@@ -86,8 +90,8 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 // tasks.assignee foreign-key violation and poison the caller's transaction).
 // If the task is unassigned, actorID is assigned to it first (recorded via
 // LogChange); if it is already assigned to someone else, StartTask refuses
-// with ErrInvalidInput rather than silently reassigning. An epic, a closed
-// task (see closedStateSet), or a blocked task are rejected the same way
+// with ErrInvalidInput rather than silently reassigning. A task with
+// children, a closed task (see closedStateSet), or a blocked task are rejected the same way
 // (ErrInvalidInput) — see IsBlocked and Claim for the equivalent lease-based
 // guards. A missing task is ErrNotFound. Returns the assignee the task
 // settled on (actorID, whether it was already assigned or just
@@ -101,17 +105,21 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 		return "", fmt.Errorf("check actor %s: %w", actorID, err)
 	}
 
-	var state, kind, assignee string
+	var state, assignee string
 	if err := tx.QueryRow(
-		`SELECT state, kind, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &kind, &assignee); err != nil {
+		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &assignee); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		return "", fmt.Errorf("lock task %s: %w", id, err)
 	}
-	if kind == kindEpic {
-		return "", fmt.Errorf("task %s is an epic and cannot be started: %w", id, ErrInvalidInput)
+	container, err := hasChildren(tx, id)
+	if err != nil {
+		return "", err
+	}
+	if container {
+		return "", fmt.Errorf("task %s has children and cannot be started: %w", id, ErrInvalidInput)
 	}
 	if closedStateSet[state] {
 		return "", fmt.Errorf("task %s is %s: cannot start: %w", id, state, ErrInvalidInput)

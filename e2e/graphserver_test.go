@@ -29,9 +29,9 @@ func TestGraphServerAcceptance(t *testing.T) {
 
 	// Unique fixture per run: comp-a is governed, comp-b is the drift.
 	// IRIs follow spec 006 as amended by 014 §1 (base worklode.io/ns/);
-	// the workstream graph family follows the knowledge-graph plan.
+	// the project graph family follows the knowledge-graph plan.
 	nonce := fmt.Sprintf("e2e-%d", time.Now().UnixNano())
-	graphIRI := "https://worklode.io/ns/graph/workstream/" + nonce
+	graphIRI := "https://worklode.io/ns/graph/project/" + nonce
 	compA := "https://worklode.io/ns/id/component/" + nonce + "/comp-a"
 	compB := "https://worklode.io/ns/id/component/" + nonce + "/comp-b"
 	doc := "https://worklode.io/ns/id/doc/" + nonce + "-doc"

@@ -131,12 +131,12 @@ func TestAssignTaskTerminalStateRejected(t *testing.T) {
 	}
 }
 
-func TestAssignTaskEpicRejected(t *testing.T) {
+func TestAssignTaskWithChildrenRejected(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	parent, _ := parentWithChildren(t, s, 1)
 
-	if err := assignTask(t, s, taskTestNow, epic.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("assign on epic: want ErrInvalidInput, got %v", err)
+	if err := assignTask(t, s, taskTestNow, parent.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("assign on a task with children: want ErrInvalidInput, got %v", err)
 	}
 }
 

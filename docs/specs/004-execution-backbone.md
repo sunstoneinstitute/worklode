@@ -54,7 +54,7 @@ CREATE TABLE tasks (
     body       text,
     priority   text NOT NULL CHECK (priority IN ('critical','high','medium','low')),
     kind       text NOT NULL CHECK (kind IN
-                 ('feature','bug','chore','design','review','spike')),
+                 ('feature','bug','chore','spec','review','spike')),
     state      text NOT NULL CHECK (state IN
                  ('draft','ready','in_progress','in_review','merged',
                   'deployed_dev','deployed_prod','released','abandoned')),
@@ -65,9 +65,9 @@ CREATE TABLE tasks (
 ```
 
 The kind enum matches `wlc:TaskKind` (025 §10). `review` and `spike` arrived with
-`0009_task_kinds`; `spec` is renamed `design` (025 §10); and `epic`, added by
-migration `0006` (§6.2), is removed again (029 §2) — §6 states what carries the
-container role instead. The `state` CHECK covers the delivery states of §5.1.
+`0009_task_kinds`. Every kind names a nature of work; container-ness is
+structural rather than a kind, and §6 states what carries it. The `state` CHECK
+covers the delivery states of §5.1.
 
 ### 1.2 leases, bound to the worktree {#sec-1.2}
 
@@ -653,20 +653,16 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 
 ## 6. Task hierarchy & decomposition {#sec-6}
 
-`kind = 'epic'` is dropped, not renamed: a plan is a document, not a task, and
-accepting it mints its tasks directly — grouped by their reference to the plan
-document, with no root row above them (025 §9.2). What survives here is the
-`child_of` machinery, narrowed to decomposing an oversized task (§6.10), which
-creates parent-hood and its children together now that creating a container outright
-and converting one in place are both retired. Every mechanism below (ready-set exclusion, restricted
-state machine, roll-up, depth cap, single parent, brief) applies to *a task that
-has children*, with no kind to declare: the retired design chose declared over
-inferred because a container had to exist before its children did (§6.1), and with
-`decompose` creating parent-hood and children in one transaction, "has children" is
-exactly as sharp as a column. `decompose` no longer converts the parent's kind, and
-`checkHierarchy` accepts an ordinary task as parent; what the epic was built *for*
-is carried by the project and the milestone, both real objects with facts of their
-own (029 §2).
+A plan is a document, not a task: accepting it mints its tasks directly —
+grouped by their reference to the plan document, with no root row above them
+(025 §9.2). The `child_of` machinery here is therefore narrowed to decomposing
+an oversized task (§6.10), which creates parent-hood and its children together.
+Every mechanism below (ready-set exclusion, restricted state machine, roll-up,
+depth cap, single parent, brief) applies to *a task that has children* —
+container-ness is inferred from the edges and never declared (§6.1), so
+`checkHierarchy` accepts any ordinary task as parent. A declared container above
+a plan's tasks would carry no facts the project and the milestone do not already
+carry, and both of those are real objects (029 §2).
 
 The `child_of` machinery is half-built. The edge type exists and is
 cycle-checked, the HTTP API accepts it, and the web task page renders
@@ -704,26 +700,22 @@ Taken here with rationale.
 | Cross-project children | Rejected in v1 |
 | Child ordering | Out of scope |
 | Blocker inheritance | Out of scope — hierarchy and blocking stay orthogonal |
-| Parent kind | Any ordinary task; `checkHierarchy` requires no declared kind |
+| Parent kind | Any ordinary task; `checkHierarchy` requires no particular kind |
 | Direct claim of a parent | Rejected in `Claim` as well as excluded from the ready set |
 
-**Why inferred rather than declared:** the retired design declared the container
-with `kind = 'epic'`, on the reasoning that inference means one `AddEdge` call
-silently changes whether a task can be claimed and what a live lease on it means,
-while declaring makes conversion an explicit act that can validate its
-preconditions and turns the ready-set exclusion into a column predicate. With
-`decompose` creating parent-hood and its children in one transaction there is no
-window in which a container exists without children, so "has children" is exactly
-as sharp as a column, and 029 §2 leaves no kind to declare.
+**Why inferred rather than declared:** the case for a declared container is that
+inference lets one `AddEdge` call silently change whether a task can be claimed
+and what a live lease on it means, while a column makes the change an explicit
+act that can validate its preconditions and turns the ready-set exclusion into a
+column predicate. `decompose` closes that window: it creates parent-hood and its
+children in one transaction, so no container ever exists without children, and
+"has children" is exactly as sharp as a column would be. No structural kind is
+minted for it (025 §10, 029 §2).
 
 **Why a parent still needs its own guard:** `ready -> in_progress` is a legal
 transition for a task with children — it is the roll-up trigger — so excluding
 such tasks from the ready set alone would still let `lode task claim
-<parent-id>` through; `Claim` carries the same guard. `checkHierarchy` accepts an
-ordinary task as parent (029 §2); the retired rule required the parent to already
-be `kind = 'epic'` and `AddEdge` rejected any other parent (422), with two
-supported ways to get one — create it (`lode task add --kind epic`) or convert in
-place (`lode task decompose`). There is no `lode task edit --kind`.
+<parent-id>` through; `Claim` carries the same guard.
 
 **Why a depth cap:** the brief is a bounded-payload contract (`brief.go:9-19`)
 and the tree walks that feed roll-up and breadcrumbs are unbounded without one.
@@ -733,10 +725,6 @@ task → subtask only, it stops binding in practice.
 ### 6.2 Data model — migration `0006_task_hierarchy` {#sec-6.2}
 
 ```sql
-ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_kind_check
-    CHECK (kind IN ('feature','bug','chore','spec','epic'));
-
 -- A task has at most one parent. Two child_of edges out of one task are legal
 -- today, and web.go:167 silently keeps whichever was inserted last.
 CREATE UNIQUE INDEX task_edges_single_parent
@@ -748,18 +736,18 @@ CREATE INDEX task_edges_children
     ON task_edges (to_task) WHERE type = 'child_of';
 ```
 
-The `.down.sql` drops both indexes and restores the four-kind CHECK, failing if
-any `kind = 'epic'` row survives. The kind enum has since moved on again — §1.1
-states the current CHECK, which carries no `epic`.
+The `.down.sql` drops both indexes. Hierarchy touches no column on `tasks`:
+container-ness lives entirely in the edges, and §1.1 states the kind enum in
+force.
 
 ### 6.3 Never claimable {#sec-6.3}
 
 One predicate in the `readyCandidates` query (`ranking.go:62-72`) keeps a task
-that has children out of the ready set. The pre-029 form of that predicate was a
-test on the declared kind:
+that has children out of the ready set:
 
 ```sql
-AND t.kind <> 'epic'
+AND NOT EXISTS (SELECT 1 FROM task_edges c
+                WHERE c.to_task = t.id AND c.type = 'child_of')
 ```
 
 The worktree is the unit of Worklode work (spec 008) and a container has nothing
@@ -784,8 +772,7 @@ The state of a task with children is driven entirely by those children.
 task with children. Those states are earned by observed deploy facts about a
 specific commit (§5) and a container has no commit of its own.
 `ResolveDelivery` (`delivery_resolve.go:78`) returns early for a task with
-children rather than relying on the commit join never matching; the pre-029 guard
-tested `kind = 'epic'`.
+children rather than relying on the commit join never matching.
 
 Reusing `merged` as the terminal state is what lets a completed parent stop
 blocking whatever points at it: a task with children cannot advance past `merged`,
@@ -1015,13 +1002,13 @@ No MCP — agents drive `lode --json`; no per-tool schema tokens in context.
    the mirror link (projected to the graph as `wl:mirrors`, spec 006); the plugin (008) creates and
    syncs the Issue. Open: create-on-task-create vs. lazy; who wins on divergent edits
    (backbone-authoritative?); handling tasks with no mirror yet.
-6. **RESOLVED — Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a
-   final integration or documentation step is a child task rather than a reason
-   to make closure manual. Revisit if real usage contradicts it.
-7. **RESOLVED — Q018.2 — Should `lode task done` on an epic be an error or a manual
-   override?** An error. `done` is `in_review -> merged` and `in_review` is
-   forbidden for epics, so the kind guard in `Transition` rejects it with a
-   message naming the roll-up rule. There is no override.
+6. **RESOLVED — Q018.1 — Does a task with children need wrap-up work?** No. Closure is
+   automatic, and a final integration or documentation step is a child task rather
+   than a reason to make closure manual. Revisit if real usage contradicts it.
+7. **RESOLVED — Q018.2 — Should `lode task done` on a task with children be an error or a
+   manual override?** An error. `done` is `in_review -> merged` and `in_review` is
+   forbidden for a task with children (§6.4), so the guard in `Transition` rejects it
+   with a message naming the roll-up rule. There is no override.
 
 ## 13. Acceptance criteria {#sec-13}
 

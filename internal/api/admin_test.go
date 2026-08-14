@@ -743,14 +743,14 @@ func TestBoard(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Will be blocked", "priority": "high", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Claimed", "priority": "medium", "kind": "feature"})
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "In review", "priority": "low", "kind": "chore"})
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Container", "priority": "high", "kind": "epic"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Container", "priority": "high", "kind": "feature"})
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add blocking edge status = %d", rr.Code)
 	}
 
-	// WL-1 becomes a child of the epic, so the board must carry its parent.
+	// WL-1 becomes a child of the container, so the board must carry its parent.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-5", "type": "child_of"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add child_of edge status = %d, body %s", rr.Code, rr.Body.String())
@@ -806,7 +806,7 @@ func TestBoard(t *testing.T) {
 		t.Fatalf("ready[0] parent = %q, want WL-5", p.Ready[0].Parent)
 	}
 	if p.Ready[1].Parent != "" {
-		t.Fatalf("the epic reported a parent of %q, want none", p.Ready[1].Parent)
+		t.Fatalf("the container reported a parent of %q, want none", p.Ready[1].Parent)
 	}
 	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WL-2" {
 		t.Fatalf("blocked = %+v", p.Blocked)

@@ -55,8 +55,8 @@ Projects gain three pieces of metadata:
 - **`horizon`** — `bounded` or `standing`. An investigation is bounded: it ends.
   A project holding an in-house infrastructure component is standing: it does not.
 
-`horizon` is an attribute, not a class. 025 §13 deleted `wl:OngoingMaintenance`, and
-that deletion stands — restoring it would make "unbounded" a *kind of thing* disjoint
+`horizon` is an attribute, not a class, and 025 §13's single unbounded `wl:Project`
+stands. A class for unbounded work would make "unbounded" a *kind of thing* disjoint
 from Project, so a standing infrastructure project could not be a Project at all, and
 could not carry a project key, tasks or a focus. Being unbounded is something a
 project *is*, not something it *is instead of*. The task-level reading of the same
@@ -78,7 +78,7 @@ Once all required deliverables are terminal, Worklode may recommend closure, but
 lead explicitly closes the project after reviewing every unfinished item. Closure, not
 deliverable state alone, ends the bounded project and its active Crew.
 
-## 2. Milestones and deliverables replace the epic {#sec-2}
+## 2. Milestones and deliverables {#sec-2}
 
 The container hierarchy becomes:
 
@@ -99,15 +99,15 @@ identity, title, and ordering. This preserves 025 §1's rule: groupings are quer
   milestone are **ongoing maintenance** — legal everywhere, and the norm for
   engineering projects. The sunstone-way skill requires milestone attachment for
   research-project tasks; the server does not.
-- Task → subtask survives exactly as 004 §6.10 left it, minus the epic: `decompose`
-  creates parent-hood and children in one transaction, and `checkHierarchy` accepts
-  an ordinary task as parent instead of requiring `kind = 'epic'`. The depth cap of
-  2 edges now spans task → subtask only and stops binding in practice.
-- **`epic` is removed from `TaskKind`** — convergent with 025 §10's kind list, which
-  already dropped it. What 004 built the epic *for* (a declared container above
-  tasks) is carried by the project and the milestone, both real objects with facts
-  of their own. The migration follows the standing rule: the kind CHECK,
-  `validKinds`, and `wlc:TaskKind` change together, held by the existing test.
+- Task → subtask is exactly what 004 §6.10 describes: `decompose` creates
+  parent-hood and children in one transaction, and `checkHierarchy` accepts any
+  ordinary task as parent. The depth cap of 2 edges spans task → subtask only and
+  stops binding in practice.
+- **No task kind is a container** — convergent with 025 §10's kind list. A declared
+  container above tasks would carry nothing the project and the milestone do not
+  already carry, and both of those are real objects with facts of their own. Where
+  the kind CHECK does change, it follows the standing rule: the CHECK, `validKinds`,
+  and `wlc:TaskKind` change together, held by the existing test.
 
 The default shape, minted at promotion (§8) for `kind=sunstone-story` projects: two
 milestones, **internal review** and **publication**, with deliverables dataset/data

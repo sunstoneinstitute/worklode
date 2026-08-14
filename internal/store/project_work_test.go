@@ -84,8 +84,8 @@ func recordStateEvent(t *testing.T, s *Store, source, externalID, taskID string,
 // event.
 //
 // project-a has exactly 3 tasks: the critical-priority task (claimed by
-// agent-x, with a github-sourced state event), an epic's high-priority
-// child, and the epic itself (medium priority, blocked by a task in
+// agent-x, with a github-sourced state event), a parent's high-priority
+// child, and the parent itself (medium priority, blocked by a task in
 // project-b — 'blocks' edges are not project-scoped, unlike child_of).
 func TestListProjectWorkFacts(t *testing.T) {
 	s := openProjectWorkStore(t)
@@ -93,13 +93,13 @@ func TestListProjectWorkFacts(t *testing.T) {
 
 	critical := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "critical", "feature", "Critical task"))
 	child := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "high", "feature", "Child task"))
-	epic := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "medium", "epic", "Epic parent"))
+	container := createTask(t, s, taskTestNow, projectWorkTaskInput("project-a", "medium", "feature", "Parent task"))
 	blocker := createTask(t, s, taskTestNow, projectWorkTaskInput("project-b", "medium", "feature", "Blocker task"))
 
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("child_of edge: %v", err)
 	}
-	if err := addEdge(t, s, blocker.ID, epic.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocker.ID, container.ID, "blocks"); err != nil {
 		t.Fatalf("blocks edge: %v", err)
 	}
 
@@ -117,7 +117,7 @@ func TestListProjectWorkFacts(t *testing.T) {
 		t.Fatalf("record github state event: %v", err)
 	}
 
-	criticalID, parentID, blockerID, agentID := critical.ID, epic.ID, blocker.ID, "agent-x"
+	criticalID, parentID, blockerID, agentID := critical.ID, container.ID, blocker.ID, "agent-x"
 
 	facts, err := s.ListProjectWorkFacts(ctx, "project-a")
 	if err != nil {

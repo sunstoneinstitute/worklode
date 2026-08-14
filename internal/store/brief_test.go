@@ -252,9 +252,9 @@ func TestBriefResolvesDeletedPin(t *testing.T) {
 
 func TestBriefParent(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("child_of: %v", err)
 	}
 
@@ -262,15 +262,15 @@ func TestBriefParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Brief: %v", err)
 	}
-	if b.Parent == nil || b.Parent.ID != epic.ID || b.Parent.Title != epic.Title ||
-		b.Parent.State != epic.State {
-		t.Fatalf("parent = %+v, want %s", b.Parent, epic.ID)
+	if b.Parent == nil || b.Parent.ID != container.ID || b.Parent.Title != container.Title ||
+		b.Parent.State != container.State {
+		t.Fatalf("parent = %+v, want %s", b.Parent, container.ID)
 	}
 	if b.Parent.Body != "" {
 		t.Fatalf("parent body = %q, want empty (one hop carries id, title, state only)", b.Parent.Body)
 	}
 
-	root, err := s.Brief(t.Context(), epic.ID, BriefOptions{Skills: true})
+	root, err := s.Brief(t.Context(), container.ID, BriefOptions{Skills: true})
 	if err != nil {
 		t.Fatalf("Brief root: %v", err)
 	}

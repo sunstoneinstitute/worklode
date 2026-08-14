@@ -29,7 +29,8 @@ func doForm(t *testing.T, h http.Handler, path string, form url.Values, headers 
 // --- new task ---------------------------------------------------------------
 
 // TestNewTaskFormRenders checks the form offers every field the task needs,
-// and that it does not offer the retired "epic" kind (specs 025 §6, 029 §2).
+// and that every kind it offers is one the API would accept — the form and
+// validKinds cannot drift apart (025 §10).
 func TestNewTaskFormRenders(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
@@ -46,8 +47,15 @@ func TestNewTaskFormRenders(t *testing.T) {
 		`name="concern"`, `name="draft"`,
 	)
 	main := mainContent(t, body)
-	if strings.Contains(main, `value="epic"`) {
-		t.Error("the new-task form offers the retired epic kind")
+	// The six kinds of 025 §10, all of which name a nature of work. Anything
+	// the form offers beyond them the API would reject on submit.
+	for _, kind := range []string{"feature", "bug", "chore", "spec", "review", "spike"} {
+		if !strings.Contains(main, `value="`+kind+`"`) {
+			t.Errorf("the new-task form is missing kind %q", kind)
+		}
+	}
+	if got := strings.Count(main, `name="kind"`); got != 1 {
+		t.Errorf("kind inputs = %d, want 1", got)
 	}
 
 	if rr := doReq(t, h, "GET", "/projects/nosuch/tasks/new", "", nil); rr.Code != http.StatusNotFound {

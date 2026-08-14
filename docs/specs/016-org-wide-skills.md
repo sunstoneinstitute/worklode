@@ -94,8 +94,9 @@ wl:recommendsSkill a owl:ObjectProperty ;
     rdfs:domain wl:DesignDoc ; rdfs:range wl:Skill ;
     rdfs:comment "This design document pins that skill; see §3." .
 
-[] a owl:AllDisjointClasses ;      # 006 §2, extended
-   owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream wl:Skill ) .
+[] a owl:AllDisjointClasses ;      # 006 §2's axiom; wl:Skill is what this spec adds
+   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Project
+                 wl:Skill ) .
 ```
 
 The layers split because the two facts have different owners: a Skill node mirrors git through

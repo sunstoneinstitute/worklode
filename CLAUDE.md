@@ -112,9 +112,10 @@ is implemented):
   the document is accepted. "Is the spec implemented?" is a coverage query,
   never a task state — do not create long-lived umbrella tasks per spec.
 - A **plan** is an executable document; its execution is the set of tasks
-  minted when the plan is accepted. Today that set hangs off a `kind =
-  'epic'` root (spec 004); 025 §9.2 drops the root and groups the tasks by a
-  reference to the plan document instead. Do not create free-standing epics.
+  minted when the plan is accepted. 025 §9.2 mints no root row above them and
+  groups them by a reference to the plan document instead. No kind declares a
+  container: container-ness is inferred from a task's `child_of` children
+  (004 §6.1). Do not create free-standing container tasks.
 - **Groupings are queries, not rows** (025 §1): one plan's tasks = the tasks
   referencing it; cross-plan "ships together" = Milestone over Deliverables
   (v2); everything in a repo set = the project. There is no sprint concept

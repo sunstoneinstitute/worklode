@@ -19,9 +19,11 @@ func TestDecomposeEndpoint(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	epic := got["epic"].(map[string]any)
-	if epic["kind"] != "epic" || epic["id"] != id {
-		t.Fatalf("epic = %v, want %s converted in place", epic, id)
+	// The response names the parent, and 029 §2 / 004 §6.10 leave its kind
+	// untouched — the child_of edges are what make it a container.
+	gotParent := got["parent"].(map[string]any)
+	if gotParent["kind"] != "feature" || gotParent["id"] != id {
+		t.Fatalf("parent = %v, want %s split in place with kind feature", gotParent, id)
 	}
 	children := got["children"].([]any)
 	if len(children) != 2 {
@@ -67,18 +69,25 @@ func TestDecomposeEndpointRejectsLeasedTask(t *testing.T) {
 	}
 }
 
-// TestDecomposeEndpointRejectsExistingEpic covers store.Decompose's rejection
-// of re-splitting a container: an epic already has its children, so it is
-// rejected with 422 rather than silently taken as a new "feature" child kind.
-func TestDecomposeEndpointRejectsExistingEpic(t *testing.T) {
+// TestDecomposeEndpointRejectsTaskWithChildren covers store.Decompose's
+// rejection of re-splitting a container: a task that already has children is
+// rejected with 422 — add more children with the edges endpoint instead.
+func TestDecomposeEndpointRejectsTaskWithChildren(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Already an epic", "priority": "high", "kind": "epic",
+		"project": "proj", "title": "Already split", "priority": "high", "kind": "feature",
 	})
+	id := parent["id"].(string)
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/"+parent["id"].(string)+"/decompose", token,
+	first := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decompose", token,
 		map[string]any{"into": []string{"A"}})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first decompose status = %d, body %s", first.Code, first.Body.String())
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decompose", token,
+		map[string]any{"into": []string{"B"}})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422, body %s", rr.Code, rr.Body.String())
 	}

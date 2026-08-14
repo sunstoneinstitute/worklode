@@ -526,14 +526,14 @@ type TaskEdgeIn struct {
 	Type string `json:"type"`
 }
 
-// TaskParent is the one-hop-up projection of a task's parent epic.
+// TaskParent is the one-hop-up projection of a task's parent.
 type TaskParent struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	State string `json:"state"`
 }
 
-// TaskProgress is an epic's derived roll-up: closed of total direct children.
+// TaskProgress is a parent's derived roll-up: closed of total direct children.
 type TaskProgress struct {
 	Closed int `json:"closed"`
 	Total  int `json:"total"`
@@ -569,7 +569,7 @@ type CreateTaskInput struct {
 	Concern  string   `json:"concern,omitempty"`
 	Draft    bool     `json:"draft"`
 	Skills   []string `json:"skills,omitempty"`
-	// Parent, when set, files the new task under this epic in the same
+	// Parent, when set, files the new task under this parent in the same
 	// request instead of a separate edge call.
 	Parent string `json:"parent,omitempty"`
 }
@@ -597,6 +597,8 @@ type TaskListFilter struct {
 	Parent string
 	// Assignee narrows to tasks assigned to this actor id.
 	Assignee string
+	// HasChildren narrows to containers — tasks with at least one child.
+	HasChildren bool
 }
 
 // TaskListResponse is the response body of ListTasks.
@@ -624,6 +626,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListRespo
 	}
 	if f.Assignee != "" {
 		q.Set("assignee", f.Assignee)
+	}
+	if f.HasChildren {
+		q.Set("has_children", "true")
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
@@ -774,7 +779,7 @@ type Brief struct {
 	AffectedComponents []string            `json:"affected_components"`
 	DefinitionOfDone   *string             `json:"definition_of_done"`
 	Skills             SkillRecommendation `json:"skills"`
-	// Parent is the task's epic, one hop up; nil for a root task.
+	// Parent is the task's parent, one hop up; nil for a root task.
 	Parent *TaskParent `json:"parent"`
 }
 
@@ -1099,27 +1104,27 @@ func (c *Client) Unblock(ctx context.Context, id, by string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", edgeBody{From: &by, Type: "blocks"})
 }
 
-// Parent calls POST /api/v1/tasks/{id}/edges to file id under an epic.
-func (c *Client) Parent(ctx context.Context, id, epic string) ([]byte, error) {
+// Parent calls POST /api/v1/tasks/{id}/edges to file id under a parent.
+func (c *Client) Parent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &epic, Type: "child_of"})
+		edgeBody{To: &parent, Type: "child_of"})
 }
 
-// Unparent calls DELETE /api/v1/tasks/{id}/edges to detach id from its epic.
-func (c *Client) Unparent(ctx context.Context, id, epic string) ([]byte, error) {
+// Unparent calls DELETE /api/v1/tasks/{id}/edges to detach id from its parent.
+func (c *Client) Unparent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &epic, Type: "child_of"})
+		edgeBody{To: &parent, Type: "child_of"})
 }
 
 // DecomposeResponse is the wire form of POST /api/v1/tasks/{id}/decompose:
-// the converted epic, keeping its id, and the children it now tracks.
+// the parent, keeping its id and kind, and the children it now tracks.
 type DecomposeResponse struct {
-	Epic     Task   `json:"epic"`
+	Parent   Task   `json:"parent"`
 	Children []Task `json:"children"`
 }
 
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
-// epic and files titles as new children under it.
+// parent and files titles as new children under it.
 func (c *Client) Decompose(ctx context.Context, id string, titles []string) (DecomposeResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose",
 		map[string]any{"into": titles})
@@ -1712,7 +1717,7 @@ type Holder struct {
 }
 
 // BoardTask is a Task as it appears on the board, with its lease holder when
-// in progress. Parent is its epic's id when it has one, so the board can
+// in progress. Parent is its parent's id when it has one, so the board can
 // group children under it.
 type BoardTask struct {
 	Task

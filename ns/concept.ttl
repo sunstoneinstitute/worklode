@@ -53,10 +53,10 @@ wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none
 
 
 # ---------------------------------------------------------------------------
-# Task kind — the union matching the tasks.kind CHECK constraint. Kinds
-# describe the nature of work, not the artifact produced; wlc:epic is the one
-# structural member, and it is here because the scheme mirrors the
-# constraint (004).
+# Task kind — the union matching the tasks.kind CHECK constraint. Every kind
+# describes a nature of work, not the artifact produced and not a structural
+# role: container-ness is inferred from child_of edges (004 §6.1), never
+# declared here.
 # ---------------------------------------------------------------------------
 
 wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
@@ -73,10 +73,6 @@ wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review"
     skos:definition "Review/evaluate someone else's work." .
 wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
-wlc:epic a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "epic" ;
-    skos:definition """A declared container task (004): its state and delivery follow its children,
-        it is never claimed directly, and it holds no commit. Structural rather than a nature of
-        work, and in the scheme because the backbone declares it in tasks.kind.""" .
 
 
 # ---------------------------------------------------------------------------
