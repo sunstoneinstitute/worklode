@@ -1074,11 +1074,11 @@ func newTaskFollowUpCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			of, err = resolveTaskID(cmd.Context(), of, c, cfg)
+			origin, err := resolveTaskID(cmd.Context(), of, c, cfg)
 			if err != nil {
 				return err
 			}
-			raw, err := c.FollowUp(cmd.Context(), id, of)
+			raw, err := c.FollowUp(cmd.Context(), id, origin)
 			if err != nil {
 				return err
 			}
@@ -1086,7 +1086,7 @@ func newTaskFollowUpCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now a follow-up to %s\n", id, of)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is now a follow-up to %s\n", id, origin)
 			return nil
 		},
 	}
@@ -1125,7 +1125,7 @@ func newTaskUnfollowUpCmd() *cobra.Command {
 			if origin == "" {
 				return fmt.Errorf("%s is not a follow-up to anything", id)
 			}
-			raw, err := c.Unfollow(cmd.Context(), id, origin)
+			raw, err := c.UnfollowUp(cmd.Context(), id, origin)
 			if err != nil {
 				return err
 			}

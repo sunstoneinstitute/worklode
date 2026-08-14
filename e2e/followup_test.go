@@ -99,8 +99,8 @@ func TestFollowUpLoop(t *testing.T) {
 		t.Fatalf("origin page missing \"Follow-ups\" / follow-up id %s:\n%s", followUp.ID, body)
 	}
 
-	// 6. Unfollow removes the edge.
-	if _, err := agent.Unfollow(ctx, followUp.ID, origin.ID); err != nil {
+	// 6. UnfollowUp removes the edge.
+	if _, err := agent.UnfollowUp(ctx, followUp.ID, origin.ID); err != nil {
 		t.Fatalf("unfollow: %v", err)
 	}
 	detail, _, err = agent.GetTask(ctx, followUp.ID)
