@@ -284,19 +284,31 @@ func agentName() string {
 // heartbeat time. Like every hookrun backbone call it is bounded and
 // downgrades failure to a warning.
 //
+// transcriptPath, when set, also reports what the session has billed in root
+// so far. Only a clean end reports usage otherwise, so a crashed agent — or
+// one whose lease the sweeper expires — would never have its spend recorded
+// at all. The report is a running total and replaces the stored one, so the
+// last heartbeat before the crash is what survives. Callers with no
+// transcript (pre-commit, which reads only the marker) pass "".
+//
 // A touch can come back with EndedAt set: the lease closed between this
 // call's ActiveLease check and its write, so the store left the session
 // closed instead of reopening it (see TouchAgentSession's doc comment). That
 // is not a heartbeat — stamping the marker here would suppress the next
 // real one for up to heartbeatDebounce, so the marker is only stamped when
 // the returned session is actually open.
-func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID string) {
+func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID, transcriptPath string) {
 	if sessionID == "" {
 		return
 	}
+	// Parsed before the timeout below is started, for the reason endSession
+	// gives: a transcript is local file IO and must not eat the backbone
+	// budget.
+	usage := sessionUsage(opts, transcriptPath, root)
+
 	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID)
+	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID, usage)
 	if err != nil {
 		warn(opts, "report agent session on %s: %v", taskID, err)
 		return
@@ -411,7 +423,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
 		warn(opts, "write session marker: %v", err)
 	}
-	reportSession(ctx, opts, c, taskID, root, p.SessionID)
+	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief)
 	emitAdditionalContext(opts.Stdout, compactBrief(brief, skillPaths))
@@ -631,7 +643,9 @@ func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.L
 
 	if heartbeatDue(root, opts.now()) {
 		sessionID, _ := markerSessionID(root)
-		reportSession(ctx, opts, c, taskID, root, sessionID)
+		// No payload, so no transcript: a git hook is not the place to
+		// find one, and the next heartbeat reports the spend anyway.
+		reportSession(ctx, opts, c, taskID, root, sessionID, "")
 	}
 }
 
@@ -732,7 +746,7 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 		warn(opts, "load config: %v", err)
 		return
 	}
-	reportSession(ctx, opts, c, taskID, root, sessionID)
+	reportSession(ctx, opts, c, taskID, root, sessionID, p.TranscriptPath)
 }
 
 // handleWorktreeEnter reports the session against the lease of the worktree it
@@ -765,7 +779,7 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 			warn(opts, "write session marker: %v", err)
 		}
 	}
-	reportSession(ctx, opts, c, taskID, root, p.SessionID)
+	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
 }
 
 // handleWorktreeExit closes the session's row on the worktree it is leaving

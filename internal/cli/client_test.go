@@ -1408,7 +1408,7 @@ func TestClientAgentSession(t *testing.T) {
 		t.Fatalf("ClaimTask: %v", err)
 	}
 
-	sess, _, err := c.TouchAgentSession(ctx, task.ID, "claude-code", "2.0.1", "sess-1")
+	sess, _, err := c.TouchAgentSession(ctx, task.ID, "claude-code", "2.0.1", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("TouchAgentSession: %v", err)
 	}

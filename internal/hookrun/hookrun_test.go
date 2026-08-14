@@ -1691,18 +1691,20 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 
 // --- session-end reports transcript usage -----------------------------------
 
-// endRecorder stands in for the backbone's agent-session/end endpoint and
-// keeps every request body, so a test can assert on the exact usage posted.
-type endRecorder struct {
+// sessionRecorder stands in for one of the backbone's agent-session endpoints
+// and keeps every request body, so a test can assert on the exact usage posted.
+type sessionRecorder struct {
 	mu     sync.Mutex
 	bodies []map[string]json.RawMessage
 }
 
-func newEndRecorder(t *testing.T) *endRecorder {
+// newSessionRecorder serves route and records its bodies. reply is the JSON
+// the route answers with; nil means 204, which is what the end route sends.
+func newSessionRecorder(t *testing.T, route, reply string) *sessionRecorder {
 	t.Helper()
-	rec := &endRecorder{}
+	rec := &sessionRecorder{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/tasks/{id}/agent-session/end", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1711,7 +1713,12 @@ func newEndRecorder(t *testing.T) *endRecorder {
 		rec.mu.Lock()
 		rec.bodies = append(rec.bodies, body)
 		rec.mu.Unlock()
-		w.WriteHeader(http.StatusNoContent)
+		if reply == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(reply))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -1723,8 +1730,21 @@ func newEndRecorder(t *testing.T) *endRecorder {
 	return rec
 }
 
+func newEndRecorder(t *testing.T) *sessionRecorder {
+	t.Helper()
+	return newSessionRecorder(t, "POST /api/v1/tasks/{id}/agent-session/end", "")
+}
+
+// newTouchRecorder serves the heartbeat's own endpoint. Its reply must decode
+// as an open session: reportSession skips the marker stamp on a closed one.
+func newTouchRecorder(t *testing.T) *sessionRecorder {
+	t.Helper()
+	return newSessionRecorder(t, "POST /api/v1/tasks/{id}/agent-session",
+		`{"lease_id":1,"agent":"claude-code","session_id":"sess-1"}`)
+}
+
 // only returns the single recorded body, failing if there was not exactly one.
-func (r *endRecorder) only(t *testing.T) map[string]json.RawMessage {
+func (r *sessionRecorder) only(t *testing.T) map[string]json.RawMessage {
 	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1803,6 +1823,51 @@ func TestSessionEndPostsTranscriptUsage(t *testing.T) {
 	}}
 	if len(usage) != 1 || usage[0] != want[0] {
 		t.Fatalf("posted usage = %+v, want %+v", usage, want)
+	}
+}
+
+// TestHeartbeatPostsTranscriptUsage covers the only path a crashed or swept
+// session's spend can reach the backbone by: usage rides the heartbeat, and
+// carries the same per-worktree filtering the clean end applies. A heartbeat
+// with no transcript posts no usage field at all, so it leaves whatever the
+// backbone already recorded alone rather than clearing it.
+func TestHeartbeatPostsTranscriptUsage(t *testing.T) {
+	rec := newTouchRecorder(t)
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, "WL-1", "bill-me")
+	elsewhere := t.TempDir()
+
+	path := writeTranscript(t,
+		transcriptLine(wtDir, "msg_1", "claude-opus-5", 100, 200, 300, 400, 50),
+		transcriptLine(elsewhere, "msg_2", "claude-opus-5", 9_000, 9_000, 9_000, 9_000, 9_000),
+	)
+
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
+
+	var usage []cli.SessionUsageBucket
+	if err := json.Unmarshal(rec.only(t)["usage"], &usage); err != nil {
+		t.Fatalf("decode usage: %v", err)
+	}
+	want := cli.SessionUsageBucket{
+		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
+		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
+		CacheRead: 400, OutputTokens: 50,
+	}
+	if len(usage) != 1 || usage[0] != want {
+		t.Fatalf("posted usage = %+v, want %+v", usage, want)
+	}
+
+	// A second worktree, so this heartbeat is not debounced by the first's
+	// marker.
+	quiet := addWorktree(t, root, "WL-2", "no-transcript")
+	runHook(t, "heartbeat", Payload{Cwd: quiet, SessionID: "sess-2"})
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.bodies) != 2 {
+		t.Fatalf("agent-session called %d times, want 2", len(rec.bodies))
+	}
+	if raw, ok := rec.bodies[1]["usage"]; ok {
+		t.Fatalf("heartbeat with no transcript posted usage %s, want the key absent", raw)
 	}
 }
 
