@@ -138,6 +138,12 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 @media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
 
 .canvas{min-width:0;display:flex;flex-direction:column;gap:16px}
+/* The CLI-code page (spec 001 §8.7) renders outside the app shell, so it needs
+   its own centred column and a row that puts the code beside its copy button. */
+.canvas.narrow{max-width:560px;margin:56px auto;padding:0 20px}
+.copyrow{display:flex;gap:10px;align-items:stretch;margin:16px 0}
+.copyrow .btn{width:auto;padding:9px 18px;flex:0 0 auto}
+.code-block{flex:1 1 auto;min-width:0;display:flex;align-items:center;overflow-wrap:anywhere;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;user-select:all}
 
 .mode-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .mode-banner .mode-name{font-size:12px;font-weight:700;letter-spacing:.02em;padding:5px 10px;border-radius:7px;background:var(--info-bg);color:var(--info);display:flex;align-items:center;gap:7px}

@@ -132,6 +132,123 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 	}
 }
 
+// Manual mode has no listener to redirect to, so it carries no redirect_uri and
+// the loopback check does not apply to it (spec 001 §8.7). Everything else about
+// the request is unchanged — a state is still required.
+func TestCLILoginManualMode(t *testing.T) {
+	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
+
+	rr := httptest.NewRecorder()
+	s.cliLogin(rr, httptest.NewRequest(http.MethodGet, "/auth/cli/login?mode=manual&state=clistate", nil))
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d; want 302", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/auth/login") {
+		t.Fatalf("redirect = %q; want /auth/login", loc)
+	}
+
+	var intent string
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == cliCookieName {
+			intent = c.Value
+		}
+	}
+	ci, ok := verifyCLIIntent("sek", intent, time.Unix(1000, 0))
+	if !ok {
+		t.Fatal("intent cookie missing or unverifiable")
+	}
+	if ci.Mode != cliModeManual || ci.State != "clistate" || ci.Redirect != "" {
+		t.Fatalf("intent = %+v; want manual mode, state clistate, no redirect", ci)
+	}
+
+	// A manual request still needs a state.
+	rr = httptest.NewRecorder()
+	s.cliLogin(rr, httptest.NewRequest(http.MethodGet, "/auth/cli/login?mode=manual", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("stateless manual status = %d; want 400", rr.Code)
+	}
+
+	// Manual mode is the *only* way to omit redirect_uri: without it, a missing
+	// or non-loopback target is still a 400.
+	for _, q := range []string{"state=x", "state=x&mode=loopback", "state=x&redirect_uri=https%3A%2F%2Fevil.com%2F"} {
+		rr = httptest.NewRecorder()
+		s.cliLogin(rr, httptest.NewRequest(http.MethodGet, "/auth/cli/login?"+q, nil))
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("query %q: status %d; want 400", q, rr.Code)
+		}
+	}
+}
+
+// On a manual intent finishLogin renders the code instead of redirecting, and
+// that code redeems for a token exactly as the loopback one does.
+func TestFinishLoginManualRendersRedeemableCode(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return now })}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
+	req.AddCookie(&http.Cookie{
+		Name: cliCookieName,
+		Value: signCLIIntent("sek", cliIntent{
+			Mode: cliModeManual, State: "clistate", Exp: now.Add(cliCodeTTL).Unix(),
+		}),
+	})
+	rr := httptest.NewRecorder()
+
+	s.finishLogin(rr, req, "stig", "/")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (a page, not a redirect)", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("content-type = %q; want html", ct)
+	}
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == sessionCookieName && c.Value != "" {
+			t.Fatal("manual branch must not set a session cookie")
+		}
+	}
+
+	// The page must carry a code that redeems to this actor. Pull it out of the
+	// store rather than parsing HTML: the assertion is about what was minted.
+	var code string
+	for c := range s.cliCodes.codes {
+		code = c
+	}
+	if code == "" {
+		t.Fatal("no code minted")
+	}
+	if !strings.Contains(rr.Body.String(), code) {
+		t.Fatal("rendered page does not show the minted code")
+	}
+	// The 30-day token itself must never reach the page (§8.7).
+	if strings.Contains(rr.Body.String(), "wl_") {
+		t.Fatal("page appears to leak a wl_ token; it must show only the one-time code")
+	}
+	if actor, ok := s.cliCodes.redeem(code, "clistate"); !ok || actor != "stig" {
+		t.Fatalf("redeem = %q,%v; want stig,true", actor, ok)
+	}
+}
+
+// A cookie minted before Mode existed has an empty Mode and must still mean
+// loopback, so a login in flight across a server upgrade completes.
+func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return now })}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  cliCookieName,
+		Value: signCLIIntent("sek", cliIntent{Redirect: "http://localhost:5555/", State: "s", Exp: now.Add(cliCodeTTL).Unix()}),
+	})
+	rr := httptest.NewRecorder()
+
+	s.finishLogin(rr, req, "stig", "/")
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d; want 302 to the loopback", rr.Code)
+	}
+}
+
 // TestCLILoginRequiresOIDC asserts the server-mediated CLI login 404s when
 // OIDC is unconfigured, even if the dormant GitHub App OAuth client (s.gh,
 // spec 001 §9.3) is set — it never gates login.
