@@ -27,11 +27,8 @@ Each item carries a priority tag (assessed 2026-08-14):
   (`internal/cli/client.go`'s flat parser, `internal/cmd/doc.go` citing §16.1),
   so the code has already chosen and 025 §5/§10 contradict it; the
   unimplemented `doc pull`/`push` still reference the block.
-- `[P0]` **Artifact correlation hardening.** Ingest `registry_package` webhooks so
-  `docker_image` artifacts exist; resolve `release.target_commitish` branch
-  names to commit SHAs; normalize OCI digests (`sha256:`) in flux
-  `revisionSHA`. Today only `git_tag` artifacts are created, so the
-  flux-revision → artifact → task chain rarely connects.
+- `[P0]` **Artifact correlation hardening.** Planned in
+  `docs/plans/2026-08-14-artifact-correlation-hardening.md`.
 - `[P2]` **One `tasks.state` cannot express per-repo delivery.** `taskClosed`
   (004 §1.3) asks one scalar state to satisfy every repo the task landed in,
   but `ResolveDelivery` is repo-scoped — it advances on the frontiers of the
