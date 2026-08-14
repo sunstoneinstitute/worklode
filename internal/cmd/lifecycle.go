@@ -46,19 +46,42 @@ func layoutFrom(dir string) (worktree.Layout, error) {
 // resolveWorktreeTask resolves dir to its enclosing git worktree root and its
 // task id — the explicit worklode.task-id git config when the worktree carries
 // one, else the <base>/<branch> path. It errors when dir is not inside a git
-// repository, or when the repo root is not a Worklode worktree by either rule.
-func resolveWorktreeTask(l worktree.Layout, dir string) (taskID, root string, err error) {
+// repository, or when the repo root carries no task binding.
+//
+// byName is the caller's own "say which task instead of inferring it" form —
+// an id for the commands that have an explicit-id sibling ("lode task done
+// <id>"), a directory for `resume`. It is offered first in the failure because
+// the user is standing in a checkout that holds no task, and the shortest way
+// forward is usually to name the one they mean. Callers with no such form
+// pass "".
+func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root string, err error) {
 	root, ok := worktree.Root(dir)
 	if !ok {
 		return "", "", fmt.Errorf("%s is not inside a git repository", dir)
 	}
 	taskID, ok = l.TaskID(root)
 	if !ok {
-		return "", "", fmt.Errorf(
-			"%s is not a Worklode worktree (no worklode.task-id git config, and not %s/<branch>); "+
-				"run this from inside one", root, l.Base())
+		return "", "", fmt.Errorf("%s is not bound to a Worklode task\n\n%s", root, unboundHelp(l, byName))
 	}
 	return taskID, root, nil
+}
+
+// unboundHelp renders the two ways out of an unbound checkout: say which task,
+// or claim one into a worktree that carries the binding. The description
+// column is sized to the widest form so a long one (`lode task block <id>
+// --by <blocker-id>`) does not shear the alignment.
+func unboundHelp(l worktree.Layout, byName string) string {
+	const claim = "lode next [id]"
+	width := len(claim)
+	if len(byName) > width {
+		width = len(byName)
+	}
+	var b strings.Builder
+	if byName != "" {
+		fmt.Fprintf(&b, "  %-*s  say which task to act on\n", width, byName)
+	}
+	fmt.Fprintf(&b, "  %-*s  claim a task and work it under %s/\n", width, claim, l.Base())
+	return b.String()
 }
 
 // pendingIdentity returns a temporary lease-worktree identity for a claim
@@ -93,12 +116,48 @@ func addWorktree(root, dir, branch string) error {
 		branch, dir, strings.TrimSpace(string(out)), strings.TrimSpace(string(out2)))
 }
 
+// clearTaskBinding drops the worklode.task-id stamp from a checkout whose
+// lease has just ended, so a worktree left on disk after the work is over no
+// longer answers for that task. Best-effort by design: the command it trails
+// has already succeeded on the server, and a checkout under <base>/<branch>
+// still resolves by directory name regardless (worktree.UnsetTaskID).
+func clearTaskBinding(cmd *cobra.Command, root string) {
+	if err := worktree.UnsetTaskID(root); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: clear task id in worktree git config: %v\n", err)
+	}
+}
+
+// clearTaskBindingIfCurrent is the explicit-id counterpart to
+// clearTaskBinding, for the `lode task ...  <id>` commands that end a lease
+// but take the task by name and may be run from anywhere. It clears the stamp
+// only when the checkout the command was invoked from is bound to that very
+// task: ending WL-5's lease from inside WL-9's worktree must leave WL-9 alone,
+// and from an unbound checkout there is nothing to clear. Silent on every
+// failure to resolve — this is a side effect of a command that has already
+// succeeded, never a reason to report one.
+func clearTaskBindingIfCurrent(cmd *cobra.Command, taskID string) {
+	layout, err := layoutFrom(".")
+	if err != nil {
+		return
+	}
+	root, ok := worktree.Root(".")
+	if !ok {
+		return
+	}
+	if bound, ok := layout.TaskID(root); !ok || bound != taskID {
+		return
+	}
+	clearTaskBinding(cmd, root)
+}
+
 // rollbackClaim undoes a `lode next` claim after a later step (worktree add,
 // rebind, or brief fetch) fails: it releases the lease and best-effort
-// removes a half-created worktree. Both steps are best-effort — the caller
-// is already returning the original error and this must not mask it.
+// removes a half-created worktree, clearing the task stamp first in case the
+// removal is the step that fails. All three are best-effort — the caller is
+// already returning the original error and this must not mask it.
 func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string) {
 	if dir != "" {
+		worktree.UnsetTaskID(dir)                                                   //nolint:errcheck
 		exec.Command("git", "-C", root, "worktree", "remove", "--force", dir).Run() //nolint:errcheck
 	}
 	c.ReleaseLease(ctx, taskID) //nolint:errcheck
@@ -305,7 +364,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 	if err != nil {
 		return err
 	}
-	taskID, root, err := resolveWorktreeTask(layout, dir)
+	taskID, root, err := resolveWorktreeTask(layout, dir, "lode resume <dir>")
 	if err != nil {
 		return err
 	}
@@ -352,7 +411,7 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, root, err := resolveWorktreeTask(layout, ".")
+			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task done <id>")
 			if err != nil {
 				return err
 			}
@@ -360,6 +419,7 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -389,7 +449,7 @@ func newBlockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, _, err := resolveWorktreeTask(layout, ".")
+			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task block <id> --by <blocker-id>")
 			if err != nil {
 				return err
 			}
@@ -405,6 +465,7 @@ func newBlockCmd() *cobra.Command {
 			if _, err := c.ReleaseLease(ctx, taskID); err != nil {
 				return fmt.Errorf("recorded %s blocked by %s, but failed to release the lease: %w", taskID, on, err)
 			}
+			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -478,7 +539,7 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, root, err := resolveWorktreeTask(layout, ".")
+			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task brief <id>")
 			if err != nil {
 				return err
 			}
