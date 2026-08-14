@@ -2,10 +2,9 @@
 status: accepted
 issued: 2026-07-31
 requires:
-  - 002-github-app-auth.md
-  - 011-delivery-lifecycle.md
-  - 018-task-hierarchy.md
-  - 019-project-scoping.md
+- docs/specs/001-identity-and-authentication.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/019-project-scoping.md
 ---
 # Spec 020 — Inbox import (onboarding a repo with history)
 
@@ -87,7 +86,7 @@ second.
 
 Those transitions encode *this just happened*. Replaying two years of merged
 PRs through them would resolve delivery for tasks that were never in flight,
-and — since spec 018 — `store.Transition` now ends in `resolveParent`
+and — since spec 004 — `store.Transition` now ends in `resolveParent`
 (`internal/store/tasks.go:220`), so it would roll that fiction up into epic
 state as well. Import therefore calls the two `Upsert*` functions directly and
 nothing else. Correlation still happens, because it lives inside `UpsertPR`
@@ -197,7 +196,7 @@ Three changes to `promoteRequest` (`internal/api/admin.go:411`),
   same `RecordEvent` as the promotion, mirroring `createTask`
   (`internal/api/tasks.go:154-159`) including its named-404 pre-check
   (`:104-114`), which exists so `AddEdge`'s `ErrNotFound` is not reported
-  anonymously. `AddEdge` remains the authority on the spec-018 invariants.
+  anonymously. `AddEdge` remains the authority on the spec-004 invariants.
 - **`kind = "epic"` is rejected with 422.** `validKinds` admits `epic`
   (`internal/api/tasks.go:18`), but `epicForbiddenStates`
   (`internal/store/tasks.go:108`) bars an epic from `in_review`,
@@ -259,28 +258,28 @@ fixtures.
 
 ## 5. What this spec does not cover {#sec-5}
 
-Spec 014 §*Adoption is out of scope* forward-declares a spec 020 that onboards
+Spec 025 §22's *Corpus adoption* bullet forward-declares a spec 020 that onboards
 an existing project wholesale: issues → Tasks, `docs/specs/**` and
 `docs/adr/**` → published documents, repos → Components, GitHub projects →
 Workstreams. **This spec delivers the first of those four and defers the rest.**
 
 The reason is dependency order, not preference. The three deferred halves all
-land in spec 014's document and component model, which is Status `draft` with
-no implementation: there is no document or section table, and no RDF layer at
-all. Spec 014 in turn depends on 006 (the vocabulary it amends, its SHACL gate
-and closure tests) and 007 (the deriver contract and named-graph
-partitioning), both unimplemented, plus a `wl:` ontology PR against
-rdf-registry. Importing documents therefore has no destination, and inventing
-one here would prejudge exactly the questions 014 reserves: what anchors a
-corpus that never had them receives, and whether a first publication of legacy
-prose is `accepted` or `draft`.
+land in spec 025's document and component model, which has no implementation:
+there is no document or section table, and no RDF layer at all. Spec 025 in
+turn depends on 006 (the vocabulary it amends, its SHACL gate and closure
+tests) and 007 (the deriver contract and named-graph partitioning), both
+unimplemented, plus a `wl:` ontology PR against rdf-registry. Importing
+documents therefore has no destination, and inventing one here would prejudge
+exactly the questions 025 reserves: what anchors a corpus that never had them
+receives, and whether a first publication of legacy prose is `accepted` or
+`draft`.
 
 The issues half has no such dependency — `issues`, `prs`, and `tasks` all
 exist — so it ships on its own. The two were never coupled in code.
 
 One asset survives for later: `AppAuth.Tarball`
 (`internal/githubauth/content.go:28`), built for skill sync, is already the
-right mechanism for pulling `docs/specs/**` out of a repo. When 014 lands,
+right mechanism for pulling `docs/specs/**` out of a repo. When 025 lands,
 fetching is solved and only the mapping is new.
 
 ## 6. Follow-ups this leaves open {#sec-6}
@@ -289,4 +288,4 @@ fetching is solved and only the mapping is new.
   dismissal untenable. Not in scope; the narrow default is the mitigation,
   and it is recorded in `docs/follow-ups.md`.
 - **Documents, components, and workstreams.** The other three quarters of
-  014's adoption story, blocked as above.
+  025's adoption story, blocked as above.

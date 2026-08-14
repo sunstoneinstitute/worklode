@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultBranchTemplate is the branch name Worklode hands out when
-// LODE_BRANCH_TEMPLATE is unset (spec 030 §1).
+// LODE_BRANCH_TEMPLATE is unset (spec 008 §3).
 const DefaultBranchTemplate = "{{ .id }}-{{ .slug }}"
 
 // The branch template and the correlation pattern derived from it are read by
@@ -26,7 +26,7 @@ var (
 // meaningful, so every render supplies all of them. There is no bare
 // ".project" field: a project id, name, and key are three different things,
 // and Task only ever carries an id — projectID is the only project-shaped
-// field exposed until the store carries more (human ruling, spec 030 §1.1).
+// field exposed until the store carries more (human ruling, spec 008 §3.1).
 type branchFields struct{ id, slug, projectID, kind string }
 
 func (f branchFields) asMap() map[string]string {
@@ -39,7 +39,7 @@ func (f branchFields) asMap() map[string]string {
 // cannot collide with a literal. A template that branches on field values
 // (e.g. "{{ if .kind }}...{{ end }}") could still emit a raw NUL from this
 // render that validateRef never saw; that only makes derivePattern produce a
-// pattern that matches nothing, not a collision (spec 030 §2).
+// pattern that matches nothing, not a collision (spec 008 §4).
 var sentinels = branchFields{
 	id:        "\x00id\x00",
 	slug:      "\x00slug\x00",
@@ -82,7 +82,7 @@ func render(t *template.Template, f branchFields) (string, error) {
 
 // derivePattern builds the branch → task-id pattern from the template itself:
 // render with sentinels, quote the literal parts, then swap the sentinels for
-// the field patterns (spec 030 §2).
+// the field patterns (spec 008 §4).
 func derivePattern(t *template.Template) (*regexp.Regexp, error) {
 	out, err := render(t, sentinels)
 	if err != nil {
@@ -104,7 +104,7 @@ var refBadChars = regexp.MustCompile(`[\x00-\x20\x7f ~^:?*\[\\]`)
 
 // validateRef reports why ref is not a legal git branch name, or nil.
 // Mirrors git check-ref-format, which is not shelled out to because the
-// server does not otherwise need a git binary (spec 030 §1.2).
+// server does not otherwise need a git binary (spec 008 §3.2).
 func validateRef(ref string) error {
 	switch {
 	case ref == "":
@@ -137,7 +137,7 @@ func validateRef(ref string) error {
 // "" means DefaultBranchTemplate) and the correlation pattern derived from it.
 // It validates before installing anything, so a rejected template leaves the
 // previous one in place. Called once at server start — a bad template is a
-// startup failure, not a per-claim one (spec 030 §1.2).
+// startup failure, not a per-claim one (spec 008 §3.2).
 func SetBranchTemplate(text string) error {
 	if text == "" {
 		text = DefaultBranchTemplate
@@ -179,7 +179,7 @@ func BranchTemplate() string {
 // projects.id is free text with no ref-safety guarantee, and a project id
 // containing e.g. a space or ".." would otherwise render an illegal branch
 // that SetBranchTemplate's sample-render validation cannot see coming, since
-// it validates a sample, not the real value (spec 030 §1.1).
+// it validates a sample, not the real value (spec 008 §3.1).
 func BranchFor(t *Task) string {
 	branchMu.RLock()
 	tmpl := branchTmpl

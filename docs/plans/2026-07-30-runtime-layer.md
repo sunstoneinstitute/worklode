@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-13
-covers: docs/specs/015-runtime-layer.md
+covers: docs/specs/006-knowledge-graph.md
 ---
 # Runtime layer (spec 015) — Implementation Plan
 
@@ -26,13 +26,13 @@ talks to a graph server yet — that is 007's deriver, out of scope here.
 rdflib, pyshacl, owlrl (rdf-registry harness); Go with standard-library
 testing (worklode).
 
-**Spec:** `docs/specs/015-runtime-layer.md`
+**Spec:** `docs/specs/006-knowledge-graph.md`
 
 ---
 
 ## Two repositories
 
-Tasks 1–4 run in **`/Users/stig/git/sunstone/rdf-registry`** (spec 015 §7
+Tasks 1–4 run in **`/Users/stig/git/sunstone/rdf-registry`** (spec 006 §7
 places the TTL there); Tasks 5–7 run in **`/Users/stig/git/sunstone/worklode`**.
 Every command below states its working directory. Each repo gets its own
 branch and its own commits. rdf-registry uses conventional-commit messages
@@ -46,7 +46,7 @@ branch and its own commits. rdf-registry uses conventional-commit messages
   `artifacts`/`deployments`/`runtime_events` in
   `deploy/base/migrations/0001_baseline.up.sql:137-168`;
   `main_commits`/`env_deploys`/`release_frontiers` in
-  `deploy/base/migrations/0005_delivery.up.sql:29-66`. Spec 015 §7: **no
+  `deploy/base/migrations/0005_delivery.up.sql:29-66`. Spec 006 §7: **no
   migration** — every enum mirrors an existing `CHECK`.
 - Ingest: `applyRelease` (`internal/hooks/github.go:400`) creates `git_tag`
   artifacts and release frontiers; `internal/hooks/flux.go`,
@@ -54,7 +54,7 @@ branch and its own commits. rdf-registry uses conventional-commit messages
   deployments/env_deploys/main_commits; store code in
   `internal/store/artifacts.go`, `internal/store/delivery.go`,
   `internal/store/runtime.go`.
-- Spec-document amendments (015 §7): already applied as callout blocks —
+- Spec-document amendments (006 §7): already applied as callout blocks —
   006 mint list (`docs/specs/006-knowledge-graph.md:67`), disjointness
   (`:109`), Layer 2 WorkflowRun drop + Commit promotion (`:400`), Layer 3
   supersession (`:417`), Deliverable typing (`:434`), Artifact IRI grammar
@@ -164,7 +164,7 @@ Record the pass/skip counts so later failures are attributable to this work.
 - Create: `rdf/wl/concept.ttl`
 - Test: `tests/test_wl_runtime.py`
 
-Namespaces (spec 014 §1, already reflected in 006): `wl:` =
+Namespaces (spec 025 §17, already reflected in 006): `wl:` =
 `https://worklode.io/ns/ontology#`, `wlc:` =
 `https://worklode.io/ns/concept/`, instances under
 `https://worklode.io/ns/id/`. Note: instance IRIs contain `/` in the
@@ -238,7 +238,7 @@ def test_prov_anchors(vocab):
     assert (WL.Build, RDFS.subClassOf, prov.Activity) in vocab
     assert (WL.Deployment, RDFS.subClassOf, prov.Activity) in vocab
     assert (WL.RuntimeEvent, RDFS.subClassOf, prov.Activity) in vocab
-    # wl:Environment is deliberately parentless (015 §2).
+    # wl:Environment is deliberately parentless (006 §2.1).
     assert vocab.value(WL.Environment, RDFS.subClassOf) is None
 
 
@@ -299,7 +299,7 @@ Expected: ERROR in the `vocab` fixture — `rdf/wl/ontology.ttl` does not exist.
 
 - [ ] **Step 3: Write `rdf/wl/ontology.ttl`**
 
-The class/property Turtle is spec 015 §2 and §4 verbatim, with `rdfs:label`
+The class/property Turtle is spec 006 §2.1 and §4 verbatim, with `rdfs:label`
 added per rdf-registry template conventions and the layer tag on properties
 as AC1 requires:
 
@@ -332,7 +332,7 @@ wl:Deliverable a owl:Class ;
     rdfs:comment "Declared definition-of-done (spec 006). Minimal declaration so runtime fixtures resolve a Deliverable's dct:relation targets to typed nodes." .
 
 # ---------------------------------------------------------------------------
-# Runtime classes (spec 015 §2)
+# Runtime classes (spec 006 §2.1)
 # ---------------------------------------------------------------------------
 
 wl:Artifact a owl:Class ; rdfs:subClassOf prov:Entity ;
@@ -344,7 +344,7 @@ wl:Artifact a owl:Class ; rdfs:subClassOf prov:Entity ;
 wl:Build a owl:Class ; rdfs:subClassOf prov:Activity ;
     rdfs:label "Build" ;
     rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Build/Build> ;
-    rdfs:comment "The activity that produced an Artifact — a CI workflow run. No v1 projection source exists (015 §6); declared now so wl:Artifact can carry prov:wasGeneratedBy without a later breaking change." ;
+    rdfs:comment "The activity that produced an Artifact — a CI workflow run. No v1 projection source exists (006 §11.1); declared now so wl:Artifact can carry prov:wasGeneratedBy without a later breaking change." ;
     wl:layer wlc:runtime .
 
 wl:Deployment a owl:Class ; rdfs:subClassOf prov:Activity ;
@@ -371,7 +371,7 @@ wl:RuntimeEvent a owl:Class ; rdfs:subClassOf prov:Activity ;
    owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .
 
 # ---------------------------------------------------------------------------
-# Runtime properties (spec 015 §4)
+# Runtime properties (spec 006 §3.1)
 # ---------------------------------------------------------------------------
 
 wl:artifactKind a owl:ObjectProperty, owl:FunctionalProperty ;
@@ -413,13 +413,13 @@ wl:runtimeEventKind a owl:ObjectProperty, owl:FunctionalProperty ;
 wl:covers a owl:ObjectProperty ;
     rdfs:label "covers" ;
     rdfs:domain wl:Artifact ; rdfs:range wl:Commit ;
-    rdfs:comment "This artifact carries every commit up to and including that commit — the delivery frontier of a published release. Domain is Artifact, not Deployment: the per-environment frontier has no node (015 §6)." ;
+    rdfs:comment "This artifact carries every commit up to and including that commit — the delivery frontier of a published release. Domain is Artifact, not Deployment: the per-environment frontier has no node (006 §11.1)." ;
     wl:layer wlc:runtime .
 ```
 
 - [ ] **Step 4: Write `rdf/wl/concept.ttl`**
 
-Spec 015 §3 verbatim, plus the `wlc:ModelLayer` scaffolding:
+Spec 006 §6 verbatim, plus the `wlc:ModelLayer` scaffolding:
 
 ```turtle
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -429,7 +429,7 @@ Spec 015 §3 verbatim, plus the `wlc:ModelLayer` scaffolding:
 wlc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
 wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runtime" .
 
-# --- Runtime enums (spec 015 §3); each mirrors an existing CHECK constraint. ---
+# --- Runtime enums (spec 006 §6); each mirrors an existing CHECK constraint. ---
 
 wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
 wlc:docker_image a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "docker image" ;
@@ -559,7 +559,7 @@ exist yet.
 
 - [ ] **Step 3: Write `rdf/shapes/wl-shapes.ttl`**
 
-The four node shapes from spec 015 §7. Instance IRIs are written in full —
+The four node shapes from spec 006 §7. Instance IRIs are written in full —
 `/` is not legal in a Turtle prefixed local name.
 
 ```turtle
@@ -586,7 +586,7 @@ wlsh:DeploymentShape a sh:NodeShape ; sh:targetClass wl:Deployment ;
         sh:in (wlc:pending wlc:reconciling wlc:deployed wlc:failed) ] ;
     sh:property [ sh:path prov:used ; sh:maxCount 1 ] .
 
-# Environment: the instance set is closed to dev and prod (015 §2, Open Q3).
+# Environment: the instance set is closed to dev and prod (006 §2.1, Open Q3).
 wlsh:EnvironmentShape a sh:NodeShape ; sh:targetClass wl:Environment ;
     sh:in (<https://worklode.io/ns/id/environment/dev>
            <https://worklode.io/ns/id/environment/prod>) .
@@ -777,7 +777,7 @@ shapes over the tree — `rdf/wl/` contains TBox only, so it conforms.
 ```bash
 cd /Users/stig/git/sunstone/rdf-registry
 git add rdf/shapes/wl-shapes.ttl tests/fixtures/wl tests/test_wl_runtime.py scripts/validate_shacl.py
-git commit -m "feat(wl): add runtime-layer SHACL shapes and gate wiring (spec 015 §7)"
+git commit -m "feat(wl): add runtime-layer SHACL shapes and gate wiring (spec 006 §7)"
 ```
 
 ---
@@ -928,7 +928,7 @@ git commit -m "test(wl): seeded-graph semantics for the runtime layer (spec 015 
 ## Phase 4 — Projection functions (worklode)
 
 The pure row→IRI/triple half of 007's future `observed/deploy` deriver:
-deterministic functions of the relational natural keys, per 015 §5's
+deterministic functions of the relational natural keys, per 006 §10.1's
 principle. No graph-server client, no named-graph management — only what
 AC3 and AC8 require. Package `internal/graphproj` depends on
 `internal/store` types only (no DB), so its tests need no Postgres.
@@ -961,7 +961,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
-// The expected strings are spec 015 §5's examples verbatim, minted by the
+// The expected strings are spec 006 §10.1's examples verbatim, minted by the
 // shared internal/kg/iri package this package depends on.
 func TestIRIGrammar(t *testing.T) {
 	cases := []struct {
@@ -1189,7 +1189,7 @@ git commit -m "Render projection triples as sorted deterministic N-Triples"
 Store types being projected: `store.Artifact` and `store.Deployment`
 (`internal/store/artifacts.go:14-36`). DB enum quirk: `deployments.target_kind`
 stores `pypi` (`0001_baseline.up.sql:153`) but the SKOS concept is
-`wlc:pypi_target` (015 §3) — the projector owns that mapping.
+`wlc:pypi_target` (006 §6) — the projector owns that mapping.
 
 IRI minting goes through `internal/kg/iri` (Task 5); its constructors return
 `(string, error)`, so the row→triple functions below do too. `GitHubHost` and
@@ -1282,7 +1282,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatalf("branch-name source_sha minted a commit edge:\n%s", got)
 	}
-	// The git_tag coordinate is host-qualified (015 §5 example).
+	// The git_tag coordinate is host-qualified (006 §10.1 example).
 	if !strings.Contains(got, "<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v1>") {
 		t.Fatalf("git_tag artifact IRI not host-qualified:\n%s", got)
 	}
@@ -1327,7 +1327,7 @@ func TestDeploymentTriples(t *testing.T) {
 	}
 }
 
-// deployments.artifact_id is null in practice today (015 §6, Open Q5):
+// deployments.artifact_id is null in practice today (006 §11.1, Open Q5):
 // the prov:used edge is specified but must simply be absent, not invented.
 func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	d := store.Deployment{
@@ -1340,7 +1340,7 @@ func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	}
 }
 
-// The DB stores target_kind 'pypi'; the concept is wlc:pypi_target (015 §3).
+// The DB stores target_kind 'pypi'; the concept is wlc:pypi_target (006 §6).
 func TestPyPITargetKindConcept(t *testing.T) {
 	d := store.Deployment{
 		Environment: "prod", TargetKind: "pypi", TargetName: "sunstone-py",
@@ -1410,7 +1410,7 @@ import (
 // grammar wants host-qualified, owner/repo-split coordinates.
 const GitHubHost = "github.com"
 
-// External vocabulary terms the projection reuses (015 §4 table).
+// External vocabulary terms the projection reuses (006 §3.1 table).
 const (
 	rdfType        = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 	dctIdentifier  = "http://purl.org/dc/terms/identifier"
@@ -1451,7 +1451,7 @@ func artifactCoordinate(a store.Artifact) (name, artifactIRI string, err error) 
 	return name, artifactIRI, err
 }
 
-// ArtifactTriples projects one artifacts row (015 §6). The commit edge is
+// ArtifactTriples projects one artifacts row (006 §11.1). The commit edge is
 // guarded: target_commitish is frequently a branch name, and minting a
 // commit IRI from one would create a plausible, permanently wrong node —
 // emit prov:wasDerivedFrom only when source_sha resolves via known. An
@@ -1488,7 +1488,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) ([]Triple, error) {
 
 // DeploymentTriples projects one deployments row. artifact is the row
 // deployments.artifact_id resolves to, nil when unset — null in practice
-// today (015 §6, Open Q5), so prov:used is simply absent.
+// today (006 §11.1, Open Q5), so prov:used is simply absent.
 func DeploymentTriples(d store.Deployment, artifact *store.Artifact) ([]Triple, error) {
 	s, err := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
 	if err != nil {
@@ -1553,7 +1553,7 @@ func CommitTriples(host, repo, sha string) ([]Triple, error) {
 
 // ReleaseCoversTriples projects one release_frontiers row joined to its
 // main_commits sha: the release's git_tag artifact wl:covers the frontier
-// commit (015 §6 — release_frontiers projects as an edge, not a node). repo
+// commit (006 §11.1 — release_frontiers projects as an edge, not a node). repo
 // is "owner/name" (GitHub full_name).
 func ReleaseCoversTriples(repo, tag, sha string) ([]Triple, error) {
 	artifactIRI, err := iri.Artifact("git_tag", GitHubHost+"/"+repo, tag)
@@ -1578,7 +1578,7 @@ func ReleaseCoversTriples(repo, tag, sha string) ([]Triple, error) {
 // targetKindConcept maps a deployments.target_kind DB value to its concept
 // id. The DB stores 'pypi' for the target kind, but the concept is
 // wlc:pypi_target — the artifact kind and target kind are different concepts
-// that share a name in the relational schema (015 §3).
+// that share a name in the relational schema (006 §6).
 func targetKindConcept(dbKind string) string {
 	if dbKind == "pypi" {
 		return "pypi_target"

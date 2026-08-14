@@ -3,13 +3,83 @@ package designdoc
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-// TestParseFrontmatterRealSpec uses spec 025 because it is the one document
-// exercising every shape at once: scalars, a list, and two anchor-keyed maps.
+// TestParseFrontmatterAllShapes exercises every shape at once: scalars, a
+// list, and two anchor-keyed maps. It runs on a fixture rather than a real
+// spec because the corpus consolidation absorbed every amendment and
+// supersession edge into the text that states the end result, so no shipped
+// document carries `amends:` or `replaces:` any more. The parser still has to
+// read them: an amendment made after the consolidation writes them again.
+func TestParseFrontmatterAllShapes(t *testing.T) {
+	const src = `---
+status: accepted
+issued: 2026-08-02
+requires:
+- docs/specs/004-execution-backbone.md
+- docs/specs/006-knowledge-graph.md
+amends:
+  "#sec-3":
+  - docs/specs/006-knowledge-graph.md#sec-5
+  "#sec-8":
+  - docs/specs/004-execution-backbone.md#sec-1
+  - docs/specs/006-knowledge-graph.md#sec-2
+  - docs/specs/007-drift-and-overview.md#sec-4
+replaces:
+  "#sec-6":
+  - docs/specs/006-knowledge-graph.md#sec-8
+---
+# Spec 999 — Fixture
+
+## 0. Purpose & scope {#sec-0}
+
+Body.
+`
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	fm := doc.Frontmatter
+	if fm == nil {
+		t.Fatal("Frontmatter is nil")
+	}
+	if fm.Status != "accepted" {
+		t.Errorf("Status = %q, want accepted", fm.Status)
+	}
+	if fm.Issued != "2026-08-02" {
+		t.Errorf("Issued = %q, want 2026-08-02", fm.Issued)
+	}
+	wantRequires := []string{
+		"docs/specs/004-execution-backbone.md",
+		"docs/specs/006-knowledge-graph.md",
+	}
+	if !reflect.DeepEqual([]string(fm.Requires), wantRequires) {
+		t.Errorf("Requires = %v, want %v", fm.Requires, wantRequires)
+	}
+	if got := []string(fm.Amends["#sec-3"]); !reflect.DeepEqual(got, []string{"docs/specs/006-knowledge-graph.md#sec-5"}) {
+		t.Errorf("Amends[#sec-3] = %v", got)
+	}
+	if got := len(fm.Amends["#sec-8"]); got != 3 {
+		t.Errorf("Amends[#sec-8] has %d refs, want 3", got)
+	}
+	if got := []string(fm.Replaces["#sec-6"]); !reflect.DeepEqual(got, []string{"docs/specs/006-knowledge-graph.md#sec-8"}) {
+		t.Errorf("Replaces[#sec-6] = %v", got)
+	}
+	// The H1 must not be swallowed into the frontmatter block.
+	if doc.Preamble == "" || doc.Sections[0].Anchor != "sec-0" {
+		t.Errorf("Preamble = %q, first anchor = %q", doc.Preamble, doc.Sections[0].Anchor)
+	}
+}
+
+// TestParseFrontmatterRealSpec keeps one assertion against a shipped
+// document, so a change to the corpus that the parser cannot read still
+// fails a test. It pins the shapes the consolidated corpus actually carries
+// — status, a repo-relative `requires:` list, and the section split — not a
+// particular lifecycle state.
 func TestParseFrontmatterRealSpec(t *testing.T) {
 	src, err := os.ReadFile("../../docs/specs/025-documents-in-the-backbone.md")
 	if err != nil {
@@ -23,33 +93,18 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	if fm == nil {
 		t.Fatal("Frontmatter is nil")
 	}
-	// Status moves as the document is accepted; pin the parsed shape
-	// (a recognised value), not the current lifecycle state.
 	switch fm.Status {
 	case "draft", "accepted", "superseded":
 	default:
 		t.Errorf("Status = %q, want one of draft/accepted/superseded", fm.Status)
 	}
-	if fm.Issued != "2026-08-02" {
-		t.Errorf("Issued = %q, want 2026-08-02", fm.Issued)
+	if len(fm.Requires) == 0 {
+		t.Error("Requires is empty; spec 025 depends on the backbone")
 	}
-	wantRequires := []string{
-		"004-execution-backbone.md",
-		"006-knowledge-graph.md",
-		"014-design-documents-as-graph-objects.md",
-		"018-task-hierarchy.md",
-	}
-	if !reflect.DeepEqual([]string(fm.Requires), wantRequires) {
-		t.Errorf("Requires = %v, want %v", fm.Requires, wantRequires)
-	}
-	if got := []string(fm.Amends["#sec-3"]); !reflect.DeepEqual(got, []string{"014-design-documents-as-graph-objects.md#sec-5"}) {
-		t.Errorf("Amends[#sec-3] = %v", got)
-	}
-	if got := len(fm.Amends["#sec-8"]); got != 3 {
-		t.Errorf("Amends[#sec-8] has %d refs, want 3", got)
-	}
-	if got := []string(fm.Replaces["#sec-6"]); !reflect.DeepEqual(got, []string{"014-design-documents-as-graph-objects.md#sec-8"}) {
-		t.Errorf("Replaces[#sec-6] = %v", got)
+	for _, r := range fm.Requires {
+		if !strings.HasPrefix(r, "docs/specs/") {
+			t.Errorf("Requires entry %q is not repo-relative", r)
+		}
 	}
 	// The H1 must not be swallowed into the frontmatter block.
 	if doc.Preamble == "" || doc.Sections[0].Anchor != "sec-0" {
@@ -206,7 +261,7 @@ func TestFrontmatterNoSpecRemainsBareWhenOtherFieldChanges(t *testing.T) {
 	}
 }
 
-// TestCoveredSectionsReadsRetiredSpelling pins 033 §3: `implements` still
+// TestCoveredSectionsReadsRetiredSpelling pins 026 §5.1: `implements` still
 // parses so a branch written before the rename merges, and CoveredSections
 // reports it without the caller knowing which spelling was on disk.
 func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {

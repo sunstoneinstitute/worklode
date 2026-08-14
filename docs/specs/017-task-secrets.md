@@ -2,9 +2,9 @@
 status: accepted
 issued: 2026-07-28
 requires:
-  - 004-execution-backbone.md
-  - 008-worklode-plugin.md
-  - 016-org-wide-skills.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/016-org-wide-skills.md
 ---
 # Spec 017 — Task-declared secrets
 
@@ -72,7 +72,7 @@ description = "Kubernetes access to the hzdev cluster, for troubleshooting tasks
 Mirrors 016's skill pins exactly:
 
 - **Task:** a `secrets` name list on the Task (backbone field, settable at create/update).
-- **Design docs:** `secrets: [NAME, …]` in doc frontmatter, ingested when 014 lands; until then
+- **Design docs:** `secrets: [NAME, …]` in doc frontmatter, ingested when 025 lands; until then
   plans state them and the planner copies them onto tasks at `lode task add` time.
 - **Resolution at claim:** task pins ∪ governing-doc pins ∪ baseline set.
 - A declared name missing from the catalog is a **brief warning, never a failure** — same
@@ -188,7 +188,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 - **008 (plugin)** — claim/resume/exit hooks host the ceremony and purge; brief carries the
   declared/materialized names; the `lode-secrets` skill joins the plugin skill set.
 - **016 (org-wide skills)** — the pin pattern and brief-integration shape this mirrors; doc
-  frontmatter pins ride 014 in both.
+  frontmatter pins ride 025 in both.
 - **External** — 1Password CLI (`op`) on every executing laptop; the deployment repo hosting the
   catalog ConfigMap; macOS keychain / ssh-agent.
 

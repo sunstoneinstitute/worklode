@@ -120,7 +120,7 @@ func (o Options) now() time.Time {
 }
 
 // layoutFor resolves the worktree layout for dir — the payload cwd (the same
-// directory resolveDir picks), never the process cwd. Spec 030 §3.1: a hook
+// directory resolveDir picks), never the process cwd. Spec 008 §5.1: a hook
 // running inside a worktree resolves the base directory from its OWN cwd,
 // because .worklode/config.toml is repo content checked out into every
 // worktree; resolving from os.Getwd() (as cli.LoadConfig does) can silently
@@ -502,7 +502,7 @@ func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, ident
 // whose session marker is stale/absent as adoptable. No claim, no model call.
 //
 // One flat ReadDir, not a walk: the layout puts every worktree exactly one
-// level below the base (spec 030 §3.1), so there is nothing deeper to find.
+// level below the base (spec 008 §5.1), so there is nothing deeper to find.
 func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.Layout) {
 	base := filepath.Join(repoRoot, filepath.FromSlash(l.Base()))
 	entries, err := os.ReadDir(base)

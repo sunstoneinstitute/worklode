@@ -2,8 +2,8 @@
 status: draft
 covers:
   - docs/specs/026-design-doc-queries.md#sec-4.1
-  - docs/specs/026-design-doc-queries.md#sec-7
-  - docs/specs/026-design-doc-queries.md#sec-8
+  - docs/specs/026-design-doc-queries.md#sec-9
+  - docs/specs/026-design-doc-queries.md#sec-10
 requires:
   - 2026-08-03-spec-shorthand-references.md
 ---
@@ -107,7 +107,7 @@ task that implements it; revisit at the spec tier if any looks wrong):
   exists twice (script as gate, Go as query layer); §8's Go test over the
   real corpus keeps them agreeing and lives in part 1, not here.
 - `secfmt.py` changes. This plan only imports from it.
-- The `docs/authoring-design-docs.md` and `CLAUDE.md` prose of 026 §6 —
+- The `docs/authoring-design-docs.md` and `CLAUDE.md` prose of 026 §8 —
   part 1 owns those. The one §6 item shipped here is the
   `.pre-commit-config.yaml` entry, because §4.1 mandates it and a gate that
   is not wired gates nothing; part 1's docs task should find it done.
@@ -382,7 +382,7 @@ def main():
     if refusals:
         for r in refusals:
             err(f"secfrozen: {r}")
-        err("\nPublished anchors are frozen (014 §3, 026 §4.1). Restore the "
+        err("\nPublished anchors are frozen (025 §3, 026 §4.1). Restore the "
             "anchor, or insert with a letter suffix (2.1a) instead of "
             "renumbering. A superseded section keeps its heading and anchor. "
             "This gate never rewrites files.")
@@ -732,7 +732,7 @@ git commit -m "Wire secfrozen into pre-commit and lint CI"
 
 ## Done when
 
-Maps to 026 §10 AC5 and AC8, restricted to this plan's slice:
+Maps to 026 §12 AC5 and AC8, restricted to this plan's slice:
 
 1. `scripts/secfrozen.py` refuses: a deleted published anchor, a renamed
    one, a number changed together with its anchor, a deleted frozen

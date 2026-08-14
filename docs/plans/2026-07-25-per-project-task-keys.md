@@ -1,6 +1,6 @@
 ---
 status: superseded
-covers: docs/specs/010-per-project-task-keys.md
+covers: docs/specs/004-execution-backbone.md
 ---
 # Per-project task keys Implementation Plan
 
@@ -12,7 +12,7 @@ covers: docs/specs/010-per-project-task-keys.md
 
 **Tech Stack:** Go 1.26, PostgreSQL (pgx), golang-migrate SQL files, cobra CLI, Kustomize. Store tests run against a real Postgres via `store.OpenTestStore` (skips if unreachable and `CI` unset).
 
-**Spec:** `docs/specs/010-per-project-task-keys.md`
+**Spec:** `docs/specs/004-execution-backbone.md`
 
 **Test prerequisite:** a local Postgres reachable at `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable` (override with `TEST_POSTGRES_DSN`). Bring one up with `docker compose up -d postgres` if needed. Without it, store tests **skip** (they do not fail), so also run them once with `CI=1` before the final commit to force execution.
 

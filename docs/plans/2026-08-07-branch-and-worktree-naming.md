@@ -1,6 +1,6 @@
 ---
 status: accepted
-covers: docs/specs/030-branch-and-worktree-naming.md
+covers: docs/specs/008-worklode-plugin.md
 ---
 # Branch and worktree naming — implementation plan
 
@@ -11,7 +11,7 @@ server-rendered Go template defaulting to `{{ .id }}-{{ .slug }}`, and move
 worktrees from `<git-root>/wt/` to a configurable base directory defaulting to
 `.worktrees`.
 
-**Architecture:** The server owns branch names (spec 030 §1) — it renders the
+**Architecture:** The server owns branch names (spec 008 §3) — it renders the
 template and hands the result to clients, who never render one. The correlation
 pattern that reverses a branch back to a task id is derived from the same
 template at configuration time (§2). The worktree path is the client's
@@ -24,7 +24,7 @@ dependencies.
 
 ## Global Constraints
 
-- **Clean break, no legacy recognition** (spec 030 §5). `wl/`, `lode/`, and
+- **Clean break, no legacy recognition** (spec 008 §7). `wl/`, `lode/`, and
   `wt/` disappear entirely. Do not add compatibility fallbacks.
 - **Default branch template:** `{{ .id }}-{{ .slug }}` — exact string.
 - **Default worktree base:** `.worktrees` — exact string.
@@ -195,7 +195,7 @@ func TestTaskIDFromRefRejects(t *testing.T) {
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
 	}
-	// Legacy prefixes are gone (spec 030 §5); a lowercase id never matches;
+	// Legacy prefixes are gone (spec 008 §7); a lowercase id never matches;
 	// a bare id has no slug separator under the default template.
 	for _, ref := range []string{"lode/WL-7-x", "wl/WL-7-x", "wl-7-x", "main", "WL-7", "feature/WL-7-x"} {
 		if got := TaskIDFromRef(ref); got != "" {
@@ -265,7 +265,7 @@ import (
 )
 
 // DefaultBranchTemplate is the branch name Worklode hands out when
-// LODE_BRANCH_TEMPLATE is unset (spec 030 §1).
+// LODE_BRANCH_TEMPLATE is unset (spec 008 §3).
 const DefaultBranchTemplate = "{{ .id }}-{{ .slug }}"
 
 // The branch template and the correlation pattern derived from it are read by
@@ -291,7 +291,7 @@ func (f branchFields) asMap() map[string]string {
 
 // sentinels are substituted for the fields when deriving the correlation
 // pattern. NUL cannot survive validateRef, so a sentinel can never collide
-// with a literal in an accepted template (spec 030 §2).
+// with a literal in an accepted template (spec 008 §4).
 var sentinels = branchFields{
 	id:        "\x00id\x00",
 	slug:      "\x00slug\x00",
@@ -334,7 +334,7 @@ func render(t *template.Template, f branchFields) (string, error) {
 
 // derivePattern builds the branch → task-id pattern from the template itself:
 // render with sentinels, quote the literal parts, then swap the sentinels for
-// the field patterns (spec 030 §2).
+// the field patterns (spec 008 §4).
 func derivePattern(t *template.Template) (*regexp.Regexp, error) {
 	out, err := render(t, sentinels)
 	if err != nil {
@@ -356,7 +356,7 @@ var refBadChars = regexp.MustCompile(`[\x00-\x20\x7f ~^:?*\[\\]`)
 
 // validateRef reports why ref is not a legal git branch name, or nil.
 // Mirrors git check-ref-format, which is not shelled out to because the
-// server does not otherwise need a git binary (spec 030 §1.2).
+// server does not otherwise need a git binary (spec 008 §3.2).
 func validateRef(ref string) error {
 	switch {
 	case ref == "":
@@ -389,7 +389,7 @@ func validateRef(ref string) error {
 // "" means DefaultBranchTemplate) and the correlation pattern derived from it.
 // It validates before installing anything, so a rejected template leaves the
 // previous one in place. Called once at server start — a bad template is a
-// startup failure, not a per-claim one (spec 030 §1.2).
+// startup failure, not a per-claim one (spec 008 §3.2).
 func SetBranchTemplate(text string) error {
 	if text == "" {
 		text = DefaultBranchTemplate
@@ -479,7 +479,7 @@ prefix to use `SetBranchTemplate` instead.
 ```bash
 go test ./internal/store
 git add internal/store/
-git commit -m "store: render branch names from a template (spec 030 §1, §2)"
+git commit -m "store: render branch names from a template (spec 008 §3, §2)"
 ```
 
 ### Task 2 — Wire the template through the API server
@@ -602,7 +602,7 @@ In `internal/cmd/serve.go:84`, replace the `BranchPrefix` line:
 go build ./... && go vet ./internal/api ./internal/cmd
 go test ./internal/api
 git add internal/api/ internal/cmd/serve.go
-git commit -m "api: hand out template-rendered branch names (spec 030 §1)"
+git commit -m "api: hand out template-rendered branch names (spec 008 §3)"
 ```
 
 Expected: `internal/api` green. `internal/cmd` still fails to build until Task
@@ -753,11 +753,11 @@ package worktree
 // ...existing imports, plus nothing new...
 
 // DefaultBase is the worktree base directory used when worktree_dir /
-// LODE_WORKTREE_DIR is unset (spec 030 §3.1).
+// LODE_WORKTREE_DIR is unset (spec 008 §5.1).
 const DefaultBase = ".worktrees"
 
 // idRe matches a task id anywhere in the path below the base directory. The
-// base directory is the guard; this only extracts (spec 030 §3.2).
+// base directory is the guard; this only extracts (spec 008 §5.2).
 var idRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-[0-9]+`)
 
 // Layout is the resolved worktree directory layout for a checkout. Construct
@@ -836,7 +836,7 @@ func lastIndexOf(segs, sub []string) int {
 
 // BranchName is the client-side fallback branch for a task, used only when a
 // server response carries no branch. The server is the authority: it renders
-// LODE_BRANCH_TEMPLATE and every response carries the result (spec 030 §1).
+// LODE_BRANCH_TEMPLATE and every response carries the result (spec 008 §3).
 func BranchName(taskID, slug string) string { return taskID + "-" + slug }
 ```
 
@@ -895,7 +895,7 @@ In `internal/cli/client.go`, add to `Config` (after `CurrentProjectPath`):
 
 ```go
 	// WorktreeDir is the worktree base directory, relative to the git root
-	// (spec 030 §3.1). Empty means worktree.DefaultBase.
+	// (spec 008 §5.1). Empty means worktree.DefaultBase.
 	WorktreeDir string
 ```
 
@@ -928,7 +928,7 @@ In `loadConfigFrom`, beside the other environment overrides — before the
 ```bash
 go test ./internal/worktree ./internal/cli
 git add internal/worktree/ internal/cli/
-git commit -m "worktree: configurable base directory via Layout (spec 030 §3)"
+git commit -m "worktree: configurable base directory via Layout (spec 008 §5)"
 ```
 
 ### Task 4 — Thread the layout through the CLI lifecycle commands
@@ -1073,7 +1073,7 @@ wt/<task-id> worktrees` with `Worklode's own worktrees`.
 go build ./... && go vet ./...
 go test ./internal/cmd ./internal/cli
 git add internal/cmd/
-git commit -m "cmd: place worktrees under the configured base dir (spec 030 §3)"
+git commit -m "cmd: place worktrees under the configured base dir (spec 008 §5)"
 ```
 
 Expected: `go build ./...` fully green for the first time since Task 1.
@@ -1138,7 +1138,7 @@ Add to `internal/hookrun/hookrun_test.go`, modelled on
 ```go
 // offerScan runs when session-start fires OUTSIDE a worktree. A worktree whose
 // lease has expired and whose marker is absent is offered for adoption; the
-// walk must reach one nested under a "/"-containing branch (spec 030 §3.1).
+// walk must reach one nested under a "/"-containing branch (spec 008 §5.1).
 func TestOfferScanFindsNestedWorktree(t *testing.T) {
 	st, c, _ := newRealServer(t)
 	root := initGitRepo(t)
@@ -1163,7 +1163,7 @@ func TestOfferScanFindsNestedWorktree(t *testing.T) {
 	}
 }
 
-// Spec 030 §5: the legacy wt/ directory is not recognised any more.
+// Spec 008 §7: the legacy wt/ directory is not recognised any more.
 func TestOfferScanIgnoresLegacyWtDir(t *testing.T) {
 	st, c, _ := newRealServer(t)
 	root := initGitRepo(t)
@@ -1268,7 +1268,7 @@ handler and pass `l` down where a helper needs it.
 - [ ] **Step 5: Rewrite `offerScan`**
 
 Replace the body of `offerScan` (lines 452–503). The `filepath.WalkDir` depth
-cap of 3 below the base matches spec 030 §3.2; the five-worktree fetch cap is
+cap of 3 below the base matches spec 008 §5.2; the five-worktree fetch cap is
 existing behaviour and stays:
 
 ```go
@@ -1303,7 +1303,7 @@ func offerScan(ctx context.Context, opts Options, repoRoot string) {
 		if relErr != nil {
 			return nil
 		}
-		// A branch may nest (spec 030 §3.1); cap the walk rather than recurse
+		// A branch may nest (spec 008 §5.1); cap the walk rather than recurse
 		// into a worktree's own contents.
 		if depth := len(strings.Split(filepath.ToSlash(rel), "/")); depth > 3 {
 			return filepath.SkipDir
@@ -1355,7 +1355,7 @@ dir` → `not under the worktree base dir`).
 go build ./... && go vet ./internal/hookrun
 go test ./internal/hookrun
 git add internal/hookrun/
-git commit -m "hookrun: guard on the configured worktree base dir (spec 030 §3.2)"
+git commit -m "hookrun: guard on the configured worktree base dir (spec 008 §5.2)"
 ```
 
 ### Task 6 — Docs, gitignore, and the worktree migration
@@ -1426,7 +1426,7 @@ git commit -m "docs: adopt template branch names and .worktrees (spec 030)"
 
 - [ ] **Step 6: Migrate this checkout's worktree**
 
-Worklode worktrees exist on one machine only (spec 030 §5), so this is a manual
+Worklode worktrees exist on one machine only (spec 008 §7), so this is a manual
 two-command move rather than a compatibility layer. From the main checkout:
 
 ```bash
@@ -1442,5 +1442,5 @@ git worktree list   # confirm the new path and branch
 
 WL-3's lease is already expired, so the stale `<host>:<path>` worktree identity
 in the backbone rebinds on the next `/lode:resume` — the same path an expired
-lease already takes (spec 008 §3, step 3). Do not commit anything here; this
+lease already takes (spec 008 §2, step 3). Do not commit anything here; this
 step changes only local git state.

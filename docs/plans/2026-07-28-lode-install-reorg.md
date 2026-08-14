@@ -975,7 +975,7 @@ Living docs only. Dated files under `docs/plans/` are execution records of past 
 - Modify: `README.md:216-262` (the "Worklode plugin (Claude Code)" section)
 - Modify: `docs/specs/008-worklode-plugin.md:104`, `:207`, `:225`
 - Modify: `docs/specs/013-reconciliation.md:55`
-- Modify: `docs/specs/003-platform-graph-design.md:185`
+- Modify: `docs/specs/006-knowledge-graph.md:185`
 
 - [ ] **Step 1: Replace the README's git-hook paragraph**
 
@@ -1026,7 +1026,7 @@ In each of these lines, replace the literal `lode install-git-hooks` with `lode 
 - `docs/specs/008-worklode-plugin.md:207` — "…get the `install-git-hooks` path"
 - `docs/specs/008-worklode-plugin.md:225` — "4. `lode install-git-hooks` in a repo with an existing `pre-commit` hook…"
 - `docs/specs/013-reconciliation.md:55` — "5. Git hooks installed in this repo (`lode install-git-hooks`)."
-- `docs/specs/003-platform-graph-design.md:185` — "`lode install-git-hooks` wires the…"
+- `docs/specs/006-knowledge-graph.md:185` — "`lode install-git-hooks` wires the…"
 
 - [ ] **Step 4: Verify no living doc still names the old commands**
 

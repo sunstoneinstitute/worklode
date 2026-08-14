@@ -103,7 +103,7 @@ root:
 
 ```toml
 current_project = "sunstone-web"
-project_key = "WL"   # design-doc shorthand key for this repo, e.g. WL-SPEC-14
+project_key = "WL"   # design-doc shorthand key for this repo, e.g. WL-SPEC-25
 ```
 
 ```bash
@@ -474,7 +474,7 @@ NNNN_name.down.sql
 
 where `NNNN` is the next sequence number.
 
-### Graph-server acceptance (spec 009)
+### Graph-server acceptance (spec 006 §13)
 
 `e2e/graphserver_test.go` proves the knowledge-graph hand-off end-to-end
 against a live data-platform graph-server: Keycloak client-credentials

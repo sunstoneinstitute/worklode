@@ -2,9 +2,9 @@
 #
 # Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
 # fixed enum; the runtime four each mirror a CHECK constraint that already
-# exists in the schema (015 §3). Sources: spec 006 §1.4/§1.5, spec 014 §5/§8
-# (status enum and task kinds), spec 015 §3 (runtime enums), spec 025 §3
-# (document lifecycle), and spec 033 §1 (plan coverage levels).
+# exists in the schema (006 §6). Sources: spec 006 §4/§1.5, spec 025 §7/§8
+# (status enum and task kinds), spec 006 §6 (runtime enums), spec 025 §7
+# (document lifecycle), and spec 026 §5 (plan coverage levels).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -14,16 +14,14 @@
 <https://worklode.io/ns/concept/>
     dct:title "Worklode concept schemes" ;
     dct:source <https://worklode.io/ns/id/doc/spec-worklode-006> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-014> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-015> ,
                <https://worklode.io/ns/id/doc/spec-worklode-025> ,
-               <https://worklode.io/ns/id/doc/spec-worklode-033> .
+               <https://worklode.io/ns/id/doc/spec-worklode-026> .
 
 
 # ---------------------------------------------------------------------------
-# DesignDoc lifecycle — purely editorial. `implemented` was removed by 014 §5:
+# DesignDoc lifecycle — purely editorial. `implemented` was removed by 025 §7:
 # implementation is per-section and derived, so a document-level status would be
-# a hand-maintained, lossy summary of something computable. 025 §3 removed
+# a hand-maintained, lossy summary of something computable. 025 §7 removed
 # `proposed`: a document under review stays `draft` with an open review task.
 # ---------------------------------------------------------------------------
 
@@ -42,7 +40,7 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
     skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
 
 
-# How completely one plan covers one spec section (033 §1). Only wlc:full — or a
+# How completely one plan covers one spec section (026 §5). Only wlc:full — or a
 # wlc:partial whose wl:completedWith set closes — discharges the section.
 wlc:CoverageLevel a skos:ConceptScheme ; skos:prefLabel "Plan coverage level" .
 
@@ -55,10 +53,10 @@ wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none
 
 
 # ---------------------------------------------------------------------------
-# Task kind — the union reconciled by 014 §8, matching the tasks.kind CHECK
-# constraint. Kinds describe the nature of work, not the artifact produced;
-# wlc:epic is the one structural member, and it is here because the scheme
-# mirrors the constraint (018).
+# Task kind — the union matching the tasks.kind CHECK constraint. Kinds
+# describe the nature of work, not the artifact produced; wlc:epic is the one
+# structural member, and it is here because the scheme mirrors the
+# constraint (004).
 # ---------------------------------------------------------------------------
 
 wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
@@ -76,7 +74,7 @@ wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review"
 wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
 wlc:epic a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "epic" ;
-    skos:definition """A declared container task (018): its state and delivery follow its children,
+    skos:definition """A declared container task (004): its state and delivery follow its children,
         it is never claimed directly, and it holds no commit. Structural rather than a nature of
         work, and in the scheme because the backbone declares it in tasks.kind.""" .
 
@@ -96,8 +94,8 @@ wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runt
 
 
 # ---------------------------------------------------------------------------
-# Artifact kind (015 §3). In v1 only git_tag rows are ever created; the other
-# three are grammar, not data (015 §6).
+# Artifact kind (006 §6). In v1 only git_tag rows are ever created; the other
+# three are grammar, not data (006 §11.1).
 # ---------------------------------------------------------------------------
 
 wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
@@ -113,7 +111,7 @@ wlc:binary a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "bin
 
 
 # ---------------------------------------------------------------------------
-# Deployment status (015 §3).
+# Deployment status (006 §6).
 # ---------------------------------------------------------------------------
 
 wlc:DeploymentStatus a skos:ConceptScheme ; skos:prefLabel "Deployment status" .
@@ -130,7 +128,7 @@ wlc:failed a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Deployment target kind (015 §3). wlc:pypi_target is spelled apart from
+# Deployment target kind (006 §6). wlc:pypi_target is spelled apart from
 # wlc:pypi deliberately: the artifact kind and the target kind are different
 # concepts that happen to share a name in the relational schema.
 # ---------------------------------------------------------------------------
@@ -148,7 +146,7 @@ wlc:manual a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Runtime event kind (015 §3).
+# Runtime event kind (006 §6).
 # ---------------------------------------------------------------------------
 
 wlc:RuntimeEventKind a skos:ConceptScheme ; skos:prefLabel "Runtime event kind" .

@@ -1,18 +1,18 @@
 ---
 status: superseded
-covers: docs/specs/018-task-hierarchy.md
+covers: docs/specs/004-execution-backbone.md
 ---
 # Task Hierarchy Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement `docs/specs/018-task-hierarchy.md`: finish the half-built `child_of` edge with a declared `kind = 'epic'` container, one parent per task, a two-edge depth cap, epics excluded from the ready set, automatic closure roll-up, and `lode task decompose` to close the loop from spec 005.
+**Goal:** Implement `docs/specs/004-execution-backbone.md`: finish the half-built `child_of` edge with a declared `kind = 'epic'` container, one parent per task, a two-edge depth cap, epics excluded from the ready set, automatic closure roll-up, and `lode task decompose` to close the loop from spec 005.
 
 **Architecture:** Two mechanisms, kept apart. *Progress* (`closed/total` direct children) is derived on read and never stored. *Closure* is stored: `store.ResolveHierarchy` applies the epic roll-up table and is called from the tail of `store.Transition` itself, not from its eleven call sites, so the invariant cannot break by a forgotten caller. Epic identity is declared (`kind = 'epic'`), never inferred from having children, which makes the ready-set exclusion a column predicate and makes conversion an explicit act that validates its preconditions.
 
 **Tech Stack:** Go 1.25+, Postgres (golang-migrate `*.up.sql`/`*.down.sql` files), net/http `ServeMux`, cobra CLI, `html/template` web pages. Store and API tests need Postgres from `docker-compose.yml` (`store.OpenTestStore` skips the test if unreachable and `CI` is unset).
 
-**Read first:** `docs/specs/018-task-hierarchy.md` (the spec), `internal/store/tasks.go` (`legalTransitions`, `Transition`, `AddEdge`, `reachesViaChildOf`, `closedStates`), `internal/store/ranking.go:61` (`readyCandidates`), `internal/store/delivery_resolve.go:78` (`ResolveDelivery`), `internal/store/events.go` (`RecordEvent`).
+**Read first:** `docs/specs/004-execution-backbone.md` (the spec), `internal/store/tasks.go` (`legalTransitions`, `Transition`, `AddEdge`, `reachesViaChildOf`, `closedStates`), `internal/store/ranking.go:61` (`readyCandidates`), `internal/store/delivery_resolve.go:78` (`ResolveDelivery`), `internal/store/events.go` (`RecordEvent`).
 
 **Conventions:**
 - Run `go test ./internal/...` for the unit suite; `go test -tags e2e ./e2e/...` for e2e.
@@ -68,7 +68,7 @@ Two rules the spec implies but does not state, adopted here and recorded in Task
 `deploy/base/migrations/0006_task_hierarchy.up.sql`:
 
 ```sql
--- Task hierarchy (docs/specs/018-task-hierarchy.md): epics as declared
+-- Task hierarchy (docs/specs/004-execution-backbone.md): epics as declared
 -- containers, at most one parent per task, indexed child lookups.
 
 ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;
@@ -350,7 +350,7 @@ Expected: FAIL — every new case succeeds where it should be rejected, except t
 - [ ] **Step 3: Write `internal/store/hierarchy.go`**
 
 ```go
-// Task hierarchy (docs/specs/018-task-hierarchy.md): epics are declared
+// Task hierarchy (docs/specs/004-execution-backbone.md): epics are declared
 // containers, a task has at most one parent, and a chain is at most
 // maxHierarchyDepth edges deep. Progress is derived on read; closure is
 // stored, one transition per event, by ResolveHierarchy.
@@ -2997,7 +2997,7 @@ git commit -m "Show epic progress on the web task page"
 
 **Files:**
 - Create: `e2e/hierarchy_test.go`
-- Modify: `docs/specs/018-task-hierarchy.md`
+- Modify: `docs/specs/004-execution-backbone.md`
 - Modify: `README.md` (task command list, if it enumerates subcommands)
 
 - [ ] **Step 1: Write the e2e test**
@@ -3119,7 +3119,7 @@ Expected: PASS
 
 - [ ] **Step 3: Record the resolved questions in the spec**
 
-In `docs/specs/018-task-hierarchy.md`, replace the `## Open questions` section with:
+In `docs/specs/004-execution-backbone.md`, replace the `## Open questions` section with:
 
 ```markdown
 ## Resolved
@@ -3169,7 +3169,7 @@ Expected: all four succeed. Paste the output before claiming completion.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add e2e/hierarchy_test.go docs/specs/018-task-hierarchy.md README.md
+git add e2e/hierarchy_test.go docs/specs/004-execution-backbone.md README.md
 git commit -m "Cover the hierarchy loop end-to-end and record the resolved spec questions"
 ```
 

@@ -2,20 +2,7 @@
 status: accepted
 issued: 2026-07-25
 requires:
-  - 004-execution-backbone.md
-  - 011-delivery-lifecycle.md
-amendedBy:
-  "#sec-0":
-    - 014-design-documents-as-graph-objects.md#sec-6
-isReplacedBy:
-  "#sec-2.3":
-    - 014-design-documents-as-graph-objects.md#sec-6
-  "#sec-3":
-    - 014-design-documents-as-graph-objects.md#sec-6
-  "#sec-5":
-    - 014-design-documents-as-graph-objects.md#sec-6
-  "#sec-8":
-    - 014-design-documents-as-graph-objects.md#sec-6
+- docs/specs/004-execution-backbone.md
 ---
 # Spec 013 — Reconciliation & setup diagnosis
 
@@ -32,9 +19,7 @@ This spec covers, and only covers:
 - **`lode project doctor`** — telling an operator that ingestion is broken for a repo, before
   anyone goes hunting for missing tasks.
 - **`lode doctor`** — telling a developer why their own setup misbehaves.
-- The **`task_docs`** link and the **`events.applied_at`** marker the above require.
-
-> **Amended by 014 §6.** Only `events.applied_at` remains in scope; the `task_docs` link and the spec-drift engine are superseded. Engines 1 and 2 are untouched.
+- The **`events.applied_at`** marker the above require.
 
 Out of scope (reference, do not duplicate): architectural drift between declared and observed
 graph layers (007 — a different diff over different entities, blocked on 006); promoting *untracked*
@@ -88,17 +73,17 @@ delivery predates its mapping, is the signal that sends an operator to `lode rec
 
 ## 2. `lode reconcile` {#sec-2}
 
-Three engines behind one command, run in order, cheapest first. Facts are repaired; findings are
-reported. `--dry-run` suppresses the writes of engines 1 and 2; engine 3 never writes.
+Two engines behind one command, run in order, cheapest first. Facts are repaired; findings are
+reported. `--dry-run` suppresses the writes of both.
 
 `--repo` / `--task` / `--since` bound the candidate set. Unbounded is the scheduled-caller case.
 `--since` accepts an RFC 3339 date or a Go duration (`720h`), resolved against the server clock.
 
-**Implementation order.** Three separable phases, shipped in engine order: engine 1 is
+**Implementation order.** Two separable phases, shipped in engine order: engine 1 is
 self-contained and immediately useful once the apply refactor lands; engine 2 carries the GitHub
-pagination and rate-limit work; engine 3 depends on `task_docs` and its backfill. `lode doctor` and
-`lode project doctor` can land alongside any phase — `project doctor` is most useful before
-engine 1, since it is what tells an operator to run reconcile at all.
+pagination and rate-limit work. `lode doctor` and `lode project doctor` can land alongside either
+phase — `project doctor` is most useful before engine 1, since it is what tells an operator to run
+reconcile at all.
 
 ### 2.1 Engine 1 — replay stored events {#sec-2.1}
 
@@ -115,9 +100,11 @@ handler and the replayer. This is the highest-risk change in the spec and is seq
 transition points at the real GitHub event. The timeline reads correctly — the event was simply
 applied late.
 
-**Completion marker.** `events.applied_at` is set by both the webhook path and the replayer. The
-applies are idempotent (upserts, and `Transition` guards on the from-state), so re-running is
-harmless; the marker exists so reconcile can find outstanding work without rescanning history.
+**Completion marker.** `events.applied_at timestamptz` — nullable; set when an event's apply
+completes, by either the webhook path or the replayer. The applies are idempotent (upserts, and
+`Transition` guards on the from-state), so re-running is harmless; the marker exists so reconcile
+can find outstanding work without rescanning history. The down migration drops the column; the
+repo's `migrate up`/`down` round-trip check covers it.
 
 ### 2.2 Engine 2 — poll GitHub {#sec-2.2}
 
@@ -142,55 +129,13 @@ reconcile observed it, not because a webhook arrived.
 `--repo` are the intended controls for large orgs; an unscoped run over every non-terminal task is
 the scheduled case.
 
-### 2.3 Engine 3 — spec-doc drift {#sec-2.3}
-
-> **Superseded by 014 §6.** The git-mtime heuristic is replaced by the exact, section-scoped stale-claim query over `.worklode/implements.yaml`; engine 3 should be removed rather than built.
-
-Report-only; there is nothing to write. For each `spec`-kind task with a linked doc, compare the
-last commit touching that path on the default branch against the task's closure time from
-`state_log`:
-
-- **doc changed after closure** — the spec and its implementation have diverged;
-- **doc path does not resolve** — a spec task pointing at a file that no longer exists;
-- **doc with no spec task** — a design doc under a tracked path that nothing tracks.
-
-Specs are already first-class here: `kind='spec'` is a task kind
-(`deploy/base/migrations/0001_baseline.up.sql:53`) and WL-1…WL-7 are exactly that. No knowledge
-graph is required. What is missing is the structured link — today a spec task names its file only
-in prose (`Source: docs/specs/007-drift-and-overview.md` in the body).
-
-### 2.4 Output {#sec-2.4}
+### 2.3 Output {#sec-2.3}
 
 One report per run, per engine: what was repaired, what was found. `--json` for scheduled callers.
 
 ---
 
-## 3. Data model {#sec-3}
-
-**`task_docs`** — a table rather than a column, because a spec task can govern several files:
-
-```sql
-CREATE TABLE task_docs (
-    task_id    text NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
-    repo       text NOT NULL,
-    path       text NOT NULL,
-    created_at timestamptz NOT NULL,
-    UNIQUE (task_id, repo, path)
-);
-```
-
-Populated by `lode task add --doc <path>` (repeatable). Backfilled by parsing the `Source: …`
-lines already present in task bodies.
-
-> **Superseded by 014 §6.** `task_docs` gives way to `.worklode/implements.yaml`; only `events.applied_at` survives from this section.
-
-**`events.applied_at timestamptz`** — nullable; set when an event's apply completes, by either path.
-
-The down migration drops both; the repo's `migrate up`/`down` round-trip check covers it.
-
----
-
-## 4. API {#sec-4}
+## 3. API {#sec-3}
 
 All under the existing `s.auth(...)` bearer middleware.
 
@@ -209,7 +154,28 @@ a token belongs to.
 
 ---
 
-## 5. Testing {#sec-5}
+## 4. Dependencies {#sec-4}
+
+- **004 — execution backbone:** tasks, events, `state_log`, `Transition`.
+- **`internal/hooks/`:** the apply routing engine 1 extracts and reuses.
+- **`internal/githubauth`:** installation tokens for engine 2. Already built.
+- **`internal/store/delivery_resolve.go`:** `ResolveDelivery`, unchanged.
+
+No dependency on 006, 007, or 009.
+
+## 5. Open questions {#sec-5}
+
+1. **Candidate set for engine 2.** "Not terminal, or landed but below `done_state`" may still be
+   too large for an org-wide unscoped run. Confirm against real task counts before assuming
+   `--since` is optional.
+2. **Tracked doc paths.** The paths a project's design documents live under were per-project
+   configuration, not a convention like `docs/specs/**` and `docs/adr/**` — and temporary, since
+   documents move into the graph. The finding that raised the question has since been retired.
+3. **Scheduled invocation.** Out of scope here (the command is on-demand), but if reconcile proves
+   it should run continuously, does it become a server loop — and does that need the sweeper's
+   single-instance election (004, open Q4)?
+
+## 6. Testing {#sec-6}
 
 - **Replay:** seed `*.ignored` events (the existing tests at `internal/hooks/github_test.go:566`
   and `push_test.go:230` already produce those rows), map the repo, replay, assert the typed tables
@@ -220,41 +186,11 @@ a token belongs to.
   backbone believes is open and GitHub reports merged; assert the facts are written, the task
   advances, and the transition attributes to the `reconcile.poll` system event. Run twice; assert
   convergence.
-- **Spec drift:** seeded `task_docs` and a fake commit history — a doc modified after closure
-  reports, one modified before does not.
-
-> **Obsolete with engine 3 (014 §6).** There is no `task_docs` table and no mtime comparison to test.
-
 - **Both doctors:** table-driven over broken-setup fixtures, asserting exit code and that each
   failure names its fix.
 - `store` tests run against ephemeral Postgres, as the rest of the suite does.
 
----
-
-## 6. Dependencies {#sec-6}
-
-- **004 — execution backbone:** tasks, events, `state_log`, `Transition`.
-- **`internal/hooks/`:** the apply routing engine 1 extracts and reuses.
-- **`internal/githubauth`:** installation tokens for engine 2. Already built.
-- **`internal/store/delivery_resolve.go`:** `ResolveDelivery`, unchanged.
-
-No dependency on 006, 007, or 009.
-
-## 7. Open questions {#sec-7}
-
-1. **Candidate set for engine 2.** "Not terminal, or landed but below `done_state`" may still be
-   too large for an org-wide unscoped run. Confirm against real task counts before assuming
-   `--since` is optional.
-2. **Tracked doc paths for engine 3's third finding** ("doc with no spec task"). Per-project
-   configuration, or a convention like `docs/specs/**` and `docs/adr/**`?
-
-> **Closed by 014 §10.** Per-project configuration, not convention — and temporary, since documents move into the graph.
-
-3. **Scheduled invocation.** Out of scope here (the command is on-demand), but if reconcile proves
-   it should run continuously, does it become a server loop — and does that need the sweeper's
-   single-instance election (004, open Q4)?
-
-## 8. Acceptance criteria {#sec-8}
+## 7. Acceptance criteria {#sec-7}
 
 - **Replay:** an event recorded as `*.ignored` before its repo was mapped, then replayed, produces
   exactly the typed-table and `state_log` result a live delivery would have; the resulting
@@ -262,11 +198,6 @@ No dependency on 006, 007, or 009.
 - **Poll:** a task whose PR merged while ingestion was down reaches its correct delivery state
   after one reconcile run, with the transition attributed to a `reconcile.poll` system event; a
   second run is a no-op. `--dry-run` reports the same repair and writes nothing.
-- **Spec drift:** a spec task whose doc changed after closure is reported; one whose doc changed
-  before is not; a spec task with an unresolvable doc path is reported.
-
-> **Obsolete with engine 3 (014 §6).** Replaced by 014's stale-claim and orphaned-claim criteria (its acceptance criterion 8).
-
 - **`lode project doctor`** identifies a mapped repo with no App installation, a repo whose last
   webhook predates its mapping, and a repo sending events that maps to no project.
 - **`lode doctor`** exits non-zero and names the fix for each of: missing config, unreachable

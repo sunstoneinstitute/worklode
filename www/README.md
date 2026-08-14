@@ -50,7 +50,7 @@ Apply the `can-be-tested` label to force a full run.
 
 The copy was derived from the umbrella spec, which has since been removed
 (the corpus is its own map — `docs/specs/index.yaml`). The two-store split and
-the ambition-reconciliation thesis are stated in `docs/specs/003-platform-graph-design.md`
+the ambition-reconciliation thesis are stated in `docs/specs/006-knowledge-graph.md`
 and `docs/specs/006-knowledge-graph.md`; the layer model in
 `docs/specs/007-drift-and-overview.md`. When the architecture changes materially,
 update this copy too — nothing derives it automatically.

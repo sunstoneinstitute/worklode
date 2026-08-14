@@ -64,7 +64,7 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 //
 // Delivery never touches the lease: a lease records that a worktree is
 // occupied, and landing, deploying or releasing the code says nothing about
-// that (spec 004 §2). Leases end on release, abandon, reopen, or the expiry
+// that (spec 004 §3). Leases end on release, abandon, reopen, or the expiry
 // sweep. Mutual exclusion is unaffected — Claim requires state "ready", so a
 // delivered task cannot be claimed out from under its holder anyway.
 //

@@ -1,123 +1,60 @@
 ---
-status: accepted
-issued: 2026-07-22
-wasDerivedFrom: 003-platform-graph-design.md  # D4, D6, D7, D11
+status: draft
 requires:
-  - 004-execution-backbone.md
-isRequiredBy:
-  - 007-drift-and-overview.md
-  - 009-data-platform-kg-requirements.md
-amendedBy:
-  "#sec-1.1":
-    - 014-design-documents-as-graph-objects.md
-    - 015-runtime-layer.md
-    - 016-org-wide-skills.md#sec-1
-    - 025-documents-in-the-backbone.md#sec-8
-  "#sec-1.2":
-    - 014-design-documents-as-graph-objects.md#sec-2
-    - 016-org-wide-skills.md#sec-1
-    - 025-documents-in-the-backbone.md#sec-8
-  "#sec-1.3":
-    - 014-design-documents-as-graph-objects.md#sec-6
-    - 025-documents-in-the-backbone.md#sec-8
-    - 033-plan-section-coverage.md#sec-4
-    - 033-plan-section-coverage.md#sec-4.2
-  "#sec-1.4":
-    - 014-design-documents-as-graph-objects.md#sec-5
-  "#sec-1.5":
-    - 014-design-documents-as-graph-objects.md#sec-8
-    - 025-documents-in-the-backbone.md#sec-6
-  "#sec-3.2":
-    - 014-design-documents-as-graph-objects.md#sec-9
-    - 015-runtime-layer.md#sec-7
-  "#sec-4":
-    - 015-runtime-layer.md#sec-7
-  "#sec-11":
-    - 014-design-documents-as-graph-objects.md
-    - 015-runtime-layer.md
-    - 016-org-wide-skills.md#sec-1
-replaces:
-  ".":
-    - 003-platform-graph-design.md
-isReplacedBy:
-  "#sec-1":
-    - 014-design-documents-as-graph-objects.md#sec-1
-  "#sec-1.6":
-    - 014-design-documents-as-graph-objects.md#sec-2
-  "#sec-3.3":
-    - 015-runtime-layer.md#sec-2
-    - 015-runtime-layer.md#sec-6
-  "#sec-7":
-    - 014-design-documents-as-graph-objects.md#sec-3
-  "#sec-11":
-    - 014-design-documents-as-graph-objects.md#sec-16
+- docs/specs/004-execution-backbone.md
+- docs/specs/007-drift-and-overview.md
+- docs/specs/025-documents-in-the-backbone.md
 ---
-# Spec 006 — Knowledge graph: the `ls:` vocabulary, entity model & projection
+# Spec 006 — Knowledge graph: vocabulary, entity model, runtime layer & projection
 
 ## 0. Purpose & scope {#sec-0}
 
-Defines the *knowledge* half of Worklode: the `ls:` RDF vocabulary, the entity model across
-the three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, and the
-backbone→graph projection. This is the model that spec 007 queries for drift and overview.
+Defines the *knowledge* half of Worklode: the `wl:` RDF vocabulary, the entity model across the
+three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, the
+backbone→graph projection, and what the data-platform must host for any of it to run. This is the
+model that spec 007 queries for drift and overview.
 
 The vocabulary ships as a **PR to `rdf-registry`** as three files (per ADR-0007 file naming):
-`rdf/ls/ontology.ttl` (RDF 1.1 — classes + plain properties), `rdf/ls/ontology.1-2.ttl` (RDF 1.2 —
-the triple-term annotations, e.g. section-level supersession), and `rdf/ls/concept.ttl` (SKOS
-scheme). rdf-registry now **publishes RDF 1.2 alongside 1.1**, with 1.2 files suffixed `.1-2.ttl`,
-so triple-term annotations ship natively. Must conform to ADR-0006 (IRI scheme), ADR-0001 (RDF-1.2
-edge annotation), ADR-0007 (filenames = purpose).
+`rdf/wl/ontology.ttl` (RDF 1.1 — classes + plain properties), `rdf/wl/ontology.1-2.ttl` (RDF 1.2 —
+the triple-term annotations), and `rdf/wl/concept.ttl` (SKOS scheme). rdf-registry **publishes RDF
+1.2 alongside 1.1**, with 1.2 files suffixed `.1-2.ttl`, so triple-term annotations ship natively.
+Must conform to ADR-0006 (IRI scheme), ADR-0001 (RDF-1.2 edge annotation), ADR-0007 (filenames =
+purpose).
 
-**Hosting (decided).** The `ls:` ontology **stays in rdf-registry** (reusing its validated pipeline:
+**Hosting (decided).** The `wl:` ontology **stays in rdf-registry** (reusing its validated pipeline:
 SHACL gate + the RDF-1.2 round-trip), but the published IRI base is **`https://worklode.io/ns/`**,
 not `sunstone.institute/rdf/`. rdf-registry's pipeline emits the `worklode.io/ns/` base for the
-`rdf/ls/` sources. This breaks ADR-0006's implicit "repo path = host path" mapping (`rdf/ls/` ↔
-`sunstone.institute/rdf/ls/`); rdf-registry owns closing that wrinkle (a base-URL override for the
-`ls` ontology) — tracked in spec 009.
+`rdf/wl/` sources. This breaks ADR-0006's implicit "repo path = host path" mapping (`rdf/wl/` ↔
+`sunstone.institute/rdf/wl/`); rdf-registry owns closing that wrinkle (a base-URL override for the
+`wl` ontology) — tracked in §13.2 item 3.
 
-**In scope:** the `ls:` terms (reuse vs mint), entity model with v1/v2 marks, Deliverable as
-declared definition-of-done, the IRI grammar, backbone→graph projection, partial supersession.
+**In scope:** the `wl:` terms (reuse vs mint), the entity model with v1/v2 marks, the runtime
+classes and their SKOS schemes, Deliverable as declared definition-of-done, the natural-key IRI
+grammar, the backbone→graph projection — which relational table feeds each node and which nodes
+have no source yet — and the data-platform requirements the whole thing rests on.
 **Out of scope (referenced):** backbone tables/lease (004), ranking (005), observed-layer derivers
-& query implementation (007 — this spec defines the *model* it reads), data-platform ops (009 —
-this spec defines the IRI scheme, they host it), plugin (008).
+& query implementation (007 — this spec defines the *model* it reads), the delivery resolver and
+its frontier arithmetic (004 §5 — this spec models the *facts* it reads, not
+the state machine), and the plugin (008).
 
-**Binding conventions (umbrella):** standards-first; **mint `ls:` sparingly**; **no gtio
-ontologies at all** (research-scoped/experimental). The physical `gtio-sc:Component` is a
-supply-chain term — a TRAP; software `ls:Component` is minted fresh.
+**Why the runtime layer is modelled here.** The Layer 3 nodes — Artifact, Deployment,
+Environment, Commit — are the observed half a Deliverable's declared `dct:relation` targets point
+at, so they need real classes: untyped instance IRIs leave a `wl:Deliverable` declaring its
+definition-of-done against nothing, and give 007's `observed/deploy` deriver no vocabulary to emit.
+The delivery lifecycle (004 §5) also makes the layer load-bearing for task
+state — `deployed_dev`, `deployed_prod`, `released`, over `main_commits`, `env_deploys` and
+`release_frontiers` — which puts Commit on the critical path of the state machine. §1.1, §2.1,
+§3.1, §6, §10.1 and §11.1 supply it: the reuse survey behind each runtime mint, the six
+classes anchored on PROV-O, the four runtime SKOS schemes, the natural-key IRI grammar, and the
+projection table.
+
+**Binding conventions:** standards-first; **mint `wl:` sparingly**; **no gtio ontologies at all**
+(research-scoped/experimental). The physical `gtio-sc:Component` is a supply-chain term — a TRAP;
+software `wl:Component` is minted fresh.
 
 ---
 
-## 1. The `ls:` vocabulary {#sec-1}
-
-> **Superseded by 014 §1.** The prefixes are `wl:` / `wlc:` / `wlid:` and the namespaces `https://worklode.io/ns/{ontology#,concept/,id/}`; the rename precedes shipping this spec.
-
-`ls` is a **shared, cross-cutting** ontology (platform infrastructure, not a research domain),
-so per ADR-0006 §1 it sits directly under `rdf/`, not under `rdf/domain/`.
-
-```turtle
-@prefix ls:      <https://worklode.io/ns/ontology#> .
-@prefix lsc:     <https://worklode.io/ns/concept/> .
-@prefix lsid:    <https://worklode.io/ns/id/> .
-@prefix dct: <http://purl.org/dc/terms/> .
-@prefix foaf:    <http://xmlns.com/foaf/0.1/> .
-@prefix prov:    <http://www.w3.org/ns/prov#> .
-@prefix doap:    <http://usefulinc.com/ns/doap#> .
-@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
-@prefix fabio:   <http://purl.org/spar/fabio/> .
-@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl:     <http://www.w3.org/2002/07/owl#> .
-@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
-```
-
-### 1.1 Reuse vs mint {#sec-1.1}
-
-> **Amended by 014.** `wl:Plan` and `wl:supersededSection` leave the mint set; `wl:Section` and `wl:lastRevisedIn` join it, and `wl:status` widens to Sections.
-
-> **Amended by 025 §8.** `wl:Workstream`, `wl:OngoingMaintenance` and `wl:inWorkstream` leave the mint set; `wl:Project` is redefined as the unbounded umbrella over a set of repos (the backbone's `projects` table) and `wl:inProject` (Task→Project, exactly one, derived) replaces the Workstream membership row. 025 §4 also returns `wl:Plan` as a non-DesignDoc document class.
-
-> **Amended by 015.** Six runtime classes (`wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`, `wl:RuntimeEvent`), four SKOS schemes and seven properties join the mint set.
-
-> **Amended by 016 §1.** `wl:Skill` (execution layer) and `wl:recommendsSkill` (intent layer, DesignDoc→Skill) join the mint set; 016 declares both.
+## 1. Reuse vs mint {#sec-1}
 
 Standards-first: reuse a community term wherever one carries the intended meaning; mint only
 where nothing does.
@@ -126,322 +63,518 @@ where nothing does.
 |---|---|---|
 | Dependency (needs) | `dct:requires` | **reuse** |
 | Decomposition (part-of) | `dct:hasPart` / `dct:isPartOf` | **reuse** |
-| Supersession (replaces) | `dct:replaces` / `dct:isReplacedBy` | **reuse** |
+| Supersession (replaces), whole-document and section-level | `dct:replaces` / `dct:isReplacedBy` | **reuse** — between addressable Section nodes for the partial case; no `wl:supersededSection` annotation predicate is minted (025 §3) |
 | Owner / author | `foaf:Agent`, `prov:Agent`, `prov:wasAttributedTo` | **reuse** |
 | Provenance | `prov:wasGeneratedBy`, `prov:wasDerivedFrom`, `prov:Activity` | **reuse** |
 | Repo / project grouping | `doap:Project` (`doap:repository`, `doap:Version`) | **reuse** |
 | Status scheme & enums | `skos:Concept`, `skos:ConceptScheme`, `skos:inScheme` | **reuse** |
 | Titles / descriptions / dates | `dct:title` / `description` / `created` / `modified` | **reuse** |
 | Design docs as documents | `foaf:Document` (opt. `fabio:` alignment) | **reuse** |
-| **Software component** | `ls:Component` | **MINT** — `gtio-sc:Component` is supply-chain (TRAP); no gtio |
-| **Design document** | `ls:DesignDoc` + `ls:ADR` / `ls:Spec` / `ls:Plan` | **MINT** — real subclasses |
-| **Task** | `ls:Task` | **MINT** — projected from the backbone (D11) |
-| **Deliverable** | `ls:Deliverable` | **MINT** — no standard for "declared definition-of-done" (D7); see Open Q1 |
-| **Effect** (artifact-free deliverable) | `ls:Effect` ⊂ `ls:Deliverable` | **MINT** — IaC/GitOps work alters system state and ships nothing; edges differ from Deliverable, so a subclass not a kind attribute |
-| Design→component governance | `ls:governs` | **MINT** |
-| Deliverable→component delivery | `ls:deliveredBy` | **MINT** — no standard term; closes the implementation statement (§Properties) |
-| Execution→intent realisation | `ls:implements` | **MINT** |
-| Execution→component impact | `ls:affects` | **MINT** |
-| DesignDoc lifecycle status | `ls:status` (+ `lsc:` SKOS scheme) | **MINT** (D4) |
-| Section-level supersession | `ls:supersededSection` (annotation) | **MINT** — partial supersession; see Open Q2 |
-| **Accepted deviation** (drift suppression) | `ls:AcceptedDeviation` | **MINT** — sanctioned observed-but-unasserted edge; see §Accepted deviations |
-| Deviation → sanctioning decision | `ls:sanctionedBy` | **MINT** — deviation → authorising ADR (alt: reuse `dct:source`; see Open Q6) |
+| **Software component** | `wl:Component` | **MINT** — `gtio-sc:Component` is supply-chain (TRAP); no gtio |
+| **Design document** | `wl:DesignDoc` + `wl:ADR` / `wl:Spec` | **MINT** — real subclasses |
+| **Document section** | `wl:Section` (+ `wl:lastRevisedIn`) | **MINT** — the addressable, individually linkable part of a DesignDoc that durable links and partial implementation both need; `wl:status` widens to it (025 §2, §3) |
+| **Plan** | `wl:Plan` | **MINT** — an executable document, sibling of `wl:DesignDoc` rather than a subclass: reviewable and accept-gated, but mutable and anchor-free (025 §9) |
+| **Task** | `wl:Task` | **MINT** — projected from the backbone |
+| **Deliverable** | `wl:Deliverable` | **MINT** — no standard for "declared definition-of-done"; see open question 1 |
+| **Effect** (artifact-free deliverable) | `wl:Effect` ⊂ `wl:Deliverable` | **MINT** — IaC/GitOps work alters system state and ships nothing; edges differ from Deliverable, so a subclass not a kind attribute |
+| Design→component governance | `wl:governs` | **MINT** |
+| Deliverable→component delivery | `wl:deliveredBy` | **MINT** — no standard term; closes the implementation statement (§3) |
+| Component→section evidence | `wl:implements` | **MINT** — the manifest claim "that code meets this section" (025 §11); the remaining work edge is `wl:produces`, Task→Deliverable (026 §6.2) |
+| Execution→component impact | `wl:affects` | **MINT** |
+| DesignDoc lifecycle status | `wl:status` (+ `wlc:` SKOS scheme) | **MINT** |
+| **Accepted deviation** (drift suppression) | `wl:AcceptedDeviation` | **MINT** — sanctioned observed-but-unasserted edge; see §12 |
+| Deviation → sanctioning decision | `wl:sanctionedBy` | **MINT** — deviation → authorising ADR (alt: reuse `dct:source`; see open question 6) |
 | Edge a deviation names, un-asserted | `rdf:subject` / `rdf:predicate` / `rdf:object` | **reuse** — RDF reification names a triple without asserting it |
-| **Workstream** grouping (named-graph anchor) | `ls:Workstream` → `ls:Project` / `ls:OngoingMaintenance` | **MINT** — work-grouping a Task belongs to (≥1); anchors projection named graphs |
-| Task kind | `ls:taskKind` (+ `lsc:TaskKind` SKOS) | **MINT** — feature/bug/chore/review/spike |
-| Task execution-state mirror | `ls:taskState` (literal, no SKOS scheme) | **MINT** — projected literal mirroring the backbone enum, so the graph does not fork the state machine (Open Q3, §Projection). Legal values are `tasks.state`'s `CHECK`; transitions stay in `internal/store/tasks.go` and are not modelled |
-| Component reviewer (notify on PRs) | `ls:reviewer` | **MINT** — Component → `foaf:Agent` (GitHub user/team IRI) |
-| Model-layer tag on vocabulary terms | `ls:layer` (+ `lsc:ModelLayer` SKOS) | **MINT** — intent/execution/runtime; lets you list all intent classes |
-| Task ↔ GitHub issue mirror | `ls:mirrors` | **MINT** — symmetric; domain and range are the same `Task ∪ Issue` union, because a symmetric property with differing domain and range entails every Issue is a Task. SHACL pins the intended pairing. PR→Task join piggybacks GitHub `Closes #N` |
-| **Issue** / **PullRequest** | `ls:Issue`, `ls:PullRequest` | **MINT** — §Layer 2 pencilled in "reuse `doap:`", but DOAP offers only `doap:bug-database` (a URL of a tracker, not a class for one issue) and OSLC CM is rejected on the grounds 015 §1 gives. Both `prov:Entity`, so `prov:wasAttributedTo` is domain-correct |
-| Task→Task dependency (transitive) | `ls:dependsOn` / `ls:blocks` | **MINT** — type-homogeneous `owl:TransitiveProperty` (ADR-0004); runtime reachability via property paths |
-| Task→Workstream membership | `ls:inWorkstream` | **MINT** — split from `dct:isPartOf` to keep the Task→Task closure type-homogeneous |
+| **Project** umbrella (named-graph anchor) | `wl:Project` | **MINT** — the unbounded umbrella over a set of repos (the backbone's `projects` table), not a bounded, goal-oriented grouping; anchors projection named graphs (025 §13) |
+| Task kind | `wl:taskKind` (+ `wlc:TaskKind` SKOS) | **MINT** — feature/bug/chore/design/review/spike |
+| Task execution-state mirror | `wl:taskState` (literal, no SKOS scheme) | **MINT** — projected literal mirroring the backbone enum, so the graph does not fork the state machine (open question 3, §11). Legal values are `tasks.state`'s `CHECK`; transitions stay in `internal/store/tasks.go` and are not modelled |
+| Component reviewer (notify on PRs) | `wl:reviewer` | **MINT** — Component → `foaf:Agent` (GitHub user/team IRI) |
+| Model-layer tag on vocabulary terms | `wl:layer` (+ `wlc:ModelLayer` SKOS) | **MINT** — intent/execution/runtime; lets you list all intent classes |
+| Task ↔ GitHub issue mirror | `wl:mirrors` | **MINT** — symmetric; domain and range are the same `Task ∪ Issue` union, because a symmetric property with differing domain and range entails every Issue is a Task. SHACL pins the intended pairing. PR→Task join piggybacks GitHub `Closes #N` |
+| **Issue** / **PullRequest** | `wl:Issue`, `wl:PullRequest` | **MINT** — §8.2 pencilled in "reuse `doap:`", but DOAP offers only `doap:bug-database` (a URL of a tracker, not a class for one issue) and OSLC CM is rejected on the grounds §1.1 gives. Both `prov:Entity`, so `prov:wasAttributedTo` is domain-correct |
+| Task→Task dependency (transitive) | `wl:dependsOn` / `wl:blocks` | **MINT** — type-homogeneous `owl:TransitiveProperty` (ADR-0004); runtime reachability via property paths |
+| Task→Project membership | `wl:inProject` | **MINT** — Task→Project, exactly one, derived from `tasks.project_id`; split from `dct:isPartOf` to keep the Task→Task closure type-homogeneous (025 §13) |
+| **Skill** and its design-doc pin | `wl:Skill`, `wl:recommendsSkill` | **MINT** — 016 §1 declares both: the Skill node in the execution layer, the DesignDoc→Skill pin in the intent layer |
+| **Runtime layer** | `wl:Artifact`, `wl:Build`, `wl:Deployment`, `wl:Environment`, `wl:Commit`, `wl:RuntimeEvent`, four SKOS schemes and seven properties | **MINT** — §1.1 surveys what was rejected; §2.1, §3.1 and §6 declare them |
 
-Nothing else is minted in v1. Milestone (v2) will mint `ls:Milestone` then, not now.
+Nothing else is minted in v1. Milestone (v2) will mint `wl:Milestone` then, not now.
 
-### 1.2 Classes & subclassing {#sec-1.2}
+### 1.1 Reuse survey: the runtime layer {#sec-1.1}
 
-> **Amended by 014 §2.** `wl:Plan` is removed and `wl:Section` added; both disjointness axioms change accordingly, and 015 §2 adds a third for the runtime classes.
+Standards-first, **mint sparingly**. Every candidate below was checked against its published
+specification, not from memory. The result is unusual — the runtime layer is a genuine gap in the
+standards landscape, and forcing a reuse here would be worse than a clean mint.
 
-> **Amended by 016 §1.** `wl:Skill` joins the top-level disjointness axiom.
+| Vocabulary | Offers | Verdict |
+|---|---|---|
+| **PROV-O** | `prov:Entity`, `prov:Activity`, `prov:used`, `prov:wasGeneratedBy`, `prov:wasDerivedFrom`, timing properties | **REUSE as the anchor.** Exactly the right shape for "an activity produced an artifact from a source". Carries no version, digest or registry-coordinate term — those are ours. |
+| **SPDX 3.0.1** | A real, fetchable OWL model with `Build/Build` and `Software/Package` | **Reference only.** The Build profile is one class bolted onto Core's `Element`/`Relationship` scaffolding: adopting it imports ~46 classes to get one class of payload, with no supported way to cherry-pick a profile. The RDF is generated from a Markdown-authored spec, tooling consumes the JSON-LD, and there is **no PROV-O alignment** to inherit. Cite it with `rdfs:seeAlso`; do not import it. |
+| **DOAP** | `doap:Version`, `doap:release`, `doap:revision` | **Rejected for artifacts.** `doap:Version` is "version information of a project release" — a changelog entry hanging off `doap:Project`, with no digest, no registry coordinate and no artifact-kind discrimination. Effectively dormant since 2022. The use of `doap:Project` for **repository** grouping (§1) is unaffected and stays. |
+| **DCAT v3** | `dcat:Distribution`, `dcat:downloadURL`, `spdx:checksum` | **Rejected.** DCAT scopes `Distribution` to "an accessible form of *a dataset*" and explicitly directs implementers to subclass `dcat:Resource` for other artifacts, naming them out of scope. Reusing it would contradict the spec's own guidance. |
+| **schema.org** | `SoftwareApplication`, `softwareVersion`, `downloadUrl` | **Rejected.** Describes a software *product*; `softwareVersion` is a bare string. No build, deployment or environment concept exists. |
+| **OSLC Automation** | `AutomationPlan` / `Request` / `Result`, CI-shaped state enums | **Rejected.** Conceptually apt but frozen at Project Specification Draft 01 (2021) with adoption confined to Eclipse Lyo and IBM ELM. Not a standard mainstream CI recognises. |
+| **`sd:` Software Description Ontology** | `sd:SoftwareImage` ("for example, a Docker container") | **Rejected as a dependency.** The closest-named term found anywhere, but last released 2021 and scoped to scientific-software cataloguing. Worth an `rdfs:seeAlso`, not a parent class. |
+| **SLSA / in-toto, CycloneDX** | Build provenance and SBOM formats | **Not candidates.** JSON/protobuf only; neither publishes an RDF or OWL form. |
+| **TOSCA** | Deployment topology | **Not candidates.** OASIS TOSCA has no RDF binding; the only RDF forms are single-paper academic artifacts with no resolvable namespace and no third-party use. |
+| **Deployment environment (dev/prod)** | — | **Nothing exists.** No surveyed vocabulary has the concept; SPDX's `Build.environment` is a free-form dictionary, not a stage. `prov:Location` is spatial in intent and would mislead. Honest mint. |
 
-> **Amended by 025 §8 and §4.** `wl:Workstream` and `wl:OngoingMaintenance` are deleted; `wl:Project` (redefined, unbounded umbrella) takes Workstream's slot in the top-level disjointness axiom and the `(Project OngoingMaintenance)` axiom goes away. `wl:Plan` returns as a sibling of `wl:DesignDoc` — a mutable, anchor-free, executable document (025 §4).
+**Conclusion.** Mint six runtime classes, every one subclassed from a PROV-O anchor where a truthful
+anchor exists, so that PROV-aware tooling traverses the runtime layer without any Worklode-specific
+knowledge. `wl:Environment` alone has no parent — a wrong parent is worse than none.
+
+---
+
+## 2. Classes & subclassing {#sec-2}
 
 ```turtle
-ls:Component  a owl:Class ;
+wl:Component  a owl:Class ;
     rdfs:comment "A software component — the atomic unit of the platform graph. "
                  "Repo/project (doap:Project) is a coarser grouping via dct:hasPart." .
 
-ls:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document .
-ls:ADR   rdfs:subClassOf ls:DesignDoc .
-ls:Spec  rdfs:subClassOf ls:DesignDoc .
-ls:Plan  rdfs:subClassOf ls:DesignDoc .
+wl:DesignDoc  a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity .
+wl:ADR   rdfs:subClassOf wl:DesignDoc .
+wl:Spec  rdfs:subClassOf wl:DesignDoc .
 
-ls:Task        a owl:Class .   # execution-owned, projected (D11)
-ls:Deliverable a owl:Class .   # declared definition-of-done (D7)
+wl:Section a owl:Class ; rdfs:subClassOf foaf:Document ;
+    rdfs:comment "An addressable, individually linkable part of a DesignDoc. Stable for the "
+                 "life of the document; never deleted once the document is accepted." .
+
+# A Plan is a document but not a DesignDoc: reviewable and accept-gated, yet mutable and
+# anchor-free, so the section lock never binds it. Its acceptance mints the execution subtree.
+wl:Plan a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity .
+
+wl:Task        a owl:Class .   # execution-owned, projected
+wl:Deliverable a owl:Class .   # declared definition-of-done
 
 # An Effect is a Deliverable that ships no artifact: IaC (provisioning) and GitOps
 # (admin-cluster) work alters the state of an existing system instead. A subclass rather
-# than an ls:deliverableKind attribute because the edges differ, not just the coordinates
-# (015's own test): an Effect names no Artifact, and its witness is a Commit, not an Artifact.
+# than a wl:deliverableKind attribute because the edges differ, not just the coordinates
+# (§2.1's own test): an Effect names no Artifact, and its witness is a Commit, not an Artifact.
 # Effect inherits Deliverable's disjointness — the AllDisjointClasses axiom below is unchanged.
-ls:Effect a owl:Class ; rdfs:subClassOf ls:Deliverable ;
+wl:Effect a owl:Class ; rdfs:subClassOf wl:Deliverable ;
     rdfs:comment "A deliverable whose definition-of-done is a state of an existing system, not "
                  "the existence and placement of an artifact — 'admin-cluster has Keycloak SSO "
                  "configured'. Declares its target as a Deployment IRI (stable: environment + "
                  "target kind + target name) and MUST NOT declare an Artifact. Witnessed by that "
                  "Deployment reaching wlc:deployed over a Commit on the delivering component's "
                  "default branch — the commit is discovered, never declared: its IRI carries a "
-                 "SHA (015 §5) and so cannot be named in advance." .
+                 "SHA (§10.1) and so cannot be named in advance." .
 
-ls:Workstream a owl:Class ;    # named-graph anchor; a Task ls:inWorkstream ≥1 Workstream
-    rdfs:comment "A grouping of work a Task belongs to. Projection named graphs are anchored "
-                 "per Workstream; a Task in several Workstreams appears in several graphs." .
-ls:Project            a owl:Class ; rdfs:subClassOf ls:Workstream .   # bounded, goal-oriented — NB distinct from doap:Project (= repo)
-ls:OngoingMaintenance a owl:Class ; rdfs:subClassOf ls:Workstream .   # unbounded, continuous
+wl:Project a owl:Class ;       # named-graph anchor; every Task wl:inProject exactly one Project
+    rdfs:comment "The umbrella for all work in a set of repositories — the backbone's projects "
+                 "table, verbatim. Unbounded. NB: doap:Project is a single repository; a "
+                 "wl:Project owns 1..n of them (project_repos). Projection named graphs are "
+                 "anchored per Project." .
 
-ls:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (§Accepted deviations)
+wl:AcceptedDeviation a owl:Class ;   # sanctioned observed-but-unasserted edge (§12)
     rdfs:comment "A tolerated architectural deviation that drift queries suppress. Names the "
                  "accepted edge via RDF reification (rdf:subject/predicate/object) WITHOUT "
                  "asserting it — the edge stays out of the intent layer." .
 
 # Disjointness — a node can't be two of these at once (consistency reasoning, CI/owlrl):
 [] a owl:AllDisjointClasses ;
-   owl:members ( ls:Component ls:DesignDoc ls:Task ls:Deliverable ls:Workstream ) .
-[] a owl:AllDisjointClasses ; owl:members ( ls:ADR ls:Spec ls:Plan ) .
-[] a owl:AllDisjointClasses ; owl:members ( ls:Project ls:OngoingMaintenance ) .
+   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Project
+                 wl:Skill ) .
+[] a owl:AllDisjointClasses ; owl:members ( wl:ADR wl:Spec ) .
+
+# Deliberately absent, so nobody re-mints them: wl:Workstream and its wl:OngoingMaintenance
+# subclass, the wl:inWorkstream membership edge, and the (Project OngoingMaintenance)
+# disjointness axiom. One unbounded umbrella — wl:Project — covers what they modelled (025 §13).
 
 # Repo grouping reuses doap; a repo holds many components:
-# <repo> a doap:Project ; dct:hasPart lsid:component/... .
+# <repo> a doap:Project ; dct:hasPart wlid:component/... .
 ```
 
 `foaf:Document` gives design docs a standard super-type; a later SPAR/`fabio:` alignment is
-optional and additive (Open Q).
+optional and additive (open question). `prov:Entity` on `wl:DesignDoc` is not decoration: documents
+carry `prov:wasGeneratedBy`, `prov:wasRevisionOf` and `prov:wasAttributedTo`, each of which has
+`prov:Entity` as its domain, so without the parent every provenanced document is an OWL violation
+the moment the `owlrl` pass runs (025 §2).
 
-### 1.3 Properties {#sec-1.3}
-
-> **Amended by 025 §8.** `ls:inWorkstream` is replaced by `wl:inProject` — Task→Project, functional, derived from `tasks.project_id`.
-
-> **Amended by 033 §4.** `wl:Plan` is a sibling of `wl:DesignDoc`, so the current
-> `wl:status` domain is the union of `wl:DesignDoc`, `wl:Plan`, and `wl:Section`.
-> SHACL requires every Plan to carry one status from `wlc:DesignDocStatus`.
-
-> **`ls:implements` amended by 014 §6 and 015.** The Task/PR/Issue→DesignDoc form declared below is
-> superseded. Implementation is one statement, not three ranges:
->
-> **"Component A implemented Section B by deploying Deliverable C to Environment D."**
->
-> It is a **query, not a node** — each clause already exists, and the sentence is true exactly where
-> the declared and observed halves join:
->
-> ```sparql
-> ?component   wl:implements  ?section .                    # 014 §6 manifest — observed
-> ?deliverable wl:deliveredBy ?component ;                 # 006 §Properties — declared
->              dct:relation ?artifact , ?env .             # 006 §Deliverable — declared
-> ?deployment  prov:used ?artifact ;                       # 015 — observed
->              wl:toEnvironment ?env .
-> ```
->
-> For a `wl:Effect` (artifact-free IaC/GitOps delivery, §Deliverable) the last two clauses bind a
-> **Commit** rather than an Artifact, and the deliverable declares the Deployment target directly.
-> The statement is unchanged; only the witness differs.
->
-> This is the ambition-reconciliation thesis at its narrowest useful grain, and it answers
-> "is this spec implemented?" **per environment** — satisfied in dev, not yet in prod — rather than
-> as one boolean. It also gives Deliverable auto-confirmation (v2, below) its concrete shape.
->
-> **Component ↔ Deliverable — minted as `ls:deliveredBy`** (`wl:deliveredBy` after 014 §1), declared
-> below. Without it the two meet only through the Spec that `dct:hasPart`s both, which is far too
-> coarse — one Spec scopes many deliverables and many components. It is *declared*, not derived,
-> because the derivable route (Artifact → Build → Commit → paths → Component) is closed in v1: 015
-> declares `wl:Build` with **no v1 projection source**. Declaring suits a node 006 already treats as
-> declared-only.
-
-> **Further amended by 033 §4.2.** The Turtle below is preserved as the accepted
-> historical statement. In the current vocabulary `wl:implements` is only
-> Component→Section. The remaining work edge is `wl:produces`, with domain
-> `wl:Task` and range `wl:Deliverable`; Component left that range, and Issue and
-> PullRequest left the domain. `wl:affects` carries work→Component.
+### 2.1 Runtime classes {#sec-2.1}
 
 ```turtle
-ls:governs a owl:ObjectProperty ;                 # intent → component (declared)
-    rdfs:domain ls:DesignDoc ; rdfs:range ls:Component ;
+wl:Artifact a owl:Class ; rdfs:subClassOf prov:Entity ;
+    rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Software/Package> ;
+    rdfs:comment "One built, versioned unit deployed elsewhere: a container image, a PyPI "
+                 "package, a git tag or a binary release. Kind is an attribute "
+                 "(wl:artifactKind), not a subclass — the kinds differ in coordinates, not in "
+                 "the edges they carry." .
+
+wl:Build a owl:Class ; rdfs:subClassOf prov:Activity ;
+    rdfs:seeAlso <https://spdx.org/rdf/3.0.1/terms/Build/Build> ;
+    rdfs:comment "The activity that produced an Artifact — a CI workflow run. No v1 projection "
+                 "source exists (see §11.1); declared now so wl:Artifact can carry "
+                 "prov:wasGeneratedBy without a later breaking change." .
+
+wl:Deployment a owl:Class ; rdfs:subClassOf prov:Activity ;
+    rdfs:comment "The rollout of an Artifact OR a Commit to one target in one Environment — a Flux "
+                 "Kustomization, a PyPI publish, or a manually tracked target. prov:used binds an "
+                 "Artifact for built units and a Commit for IaC/GitOps repos, which ship nothing "
+                 "and reconcile a git revision instead (the wl:Effect case, §9). "
+                 "Mirrors current state, one node per (environment, target kind, target name); "
+                 "rollout history is v2." .
+
+wl:Environment a owl:Class ;
+    rdfs:comment "A deployment stage. Deliberately parentless: no surveyed vocabulary models a "
+                 "deployment stage, and prov:Location is spatial in intent. The instance set is "
+                 "closed to dev and prod by SHACL, matching the normalisation the delivery "
+                 "handlers already enforce." .
+
+wl:Commit a owl:Class ; rdfs:subClassOf prov:Entity ;
+    rdfs:comment "One commit on a repository's default branch. Promoted from v2 because "
+                 "delivery resolution is defined in terms of commit coverage." .
+
+wl:RuntimeEvent a owl:Class ; rdfs:subClassOf prov:Activity ;
+    rdfs:comment "An observed runtime incident affecting a deployed Artifact — a crashloop, an "
+                 "OOM kill, a Flux reconciliation failure or recovery." .
+
+# Every runtime term is tagged, per the §5 convention:
+wl:Artifact wl:layer wlc:runtime .    wl:Build        wl:layer wlc:runtime .
+wl:Deployment wl:layer wlc:runtime .  wl:Environment  wl:layer wlc:runtime .
+wl:Commit wl:layer wlc:runtime .      wl:RuntimeEvent wl:layer wlc:runtime .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .
+```
+
+**Why `wl:Artifact` has no subclasses.** §2 mints real subclasses for `wl:DesignDoc` because
+ADR and Spec play different structural roles, and §5 uses a SKOS scheme for `wl:taskKind` because
+kind is a mere attribute there. Artifact kind is the latter case: a `docker_image` and a `pypi`
+package carry identical edges and differ only in how their coordinates are spelled. One class plus
+`wl:artifactKind` — consistent with `wl:taskKind`, and with the fixed-enum convention.
+
+**Why a git tag is not a `wl:Release`.** The release handler already records a published release as
+an `artifacts` row of kind `git_tag`; a separate class would duplicate it. A release is
+`wl:Artifact` with `wl:artifactKind wlc:git_tag` plus a `wl:cutFrom` edge to the commit its frontier
+reaches. `release_frontiers` projects as that edge, not as a node.
+
+---
+
+## 3. Properties {#sec-3}
+
+```turtle
+wl:governs a owl:ObjectProperty ;                 # intent → component (declared)
+    rdfs:domain wl:DesignDoc ; rdfs:range wl:Component ;
     rdfs:comment "This design doc governs the architecture of that component." .
 
-ls:deliveredBy a owl:ObjectProperty ;             # deliverable → component (declared)
-    rdfs:domain ls:Deliverable ; rdfs:range ls:Component ;
+wl:deliveredBy a owl:ObjectProperty ;             # deliverable → component (declared)
+    rdfs:domain wl:Deliverable ; rdfs:range wl:Component ;
     rdfs:comment "The component that delivers this deliverable. Deliberately NOT functional: a "
                  "deliverable may be delivered by several components, each advancing at its own "
                  "pace. Closes the Component→Section → Deliverable → Environment join that makes "
                  "'component A implemented section B by deploying deliverable C to environment D' "
                  "answerable per environment. Declared rather than derived because the derivable "
-                 "route (Artifact→Build→Commit→paths→Component) needs ls:Build, which has no v1 "
-                 "projection source (spec 015 §6). SHACL enforces >=1." .
+                 "route (Artifact→Build→Commit→paths→Component) needs wl:Build, which has no v1 "
+                 "projection source (§11.1). SHACL enforces >=1." .
 
-ls:implements a owl:ObjectProperty ;              # execution → intent
-    rdfs:range [ a owl:Class ; owl:unionOf ( ls:DesignDoc ls:Deliverable ls:Component ) ] ;
-    rdfs:comment "A Task/PullRequest/Issue realises a DesignDoc, Deliverable, or Component. "
-                 "Declared when authored; observed when derived (spec 007). Union range is "
-                 "machine-readable; SHACL (ls-shapes.ttl) enforces presence." .
+wl:implements a owl:ObjectProperty ;              # component → intent (observed)
+    rdfs:domain wl:Component ; rdfs:range wl:Section ;
+    rdfs:comment "That component's code meets that section: wl:implements is only "
+                 "Component→Section. Derived by observed/repo-implements from "
+                 ".worklode/implements.yaml (025 §11), never declared on a task." .
 
-ls:affects a owl:ObjectProperty ;                 # execution → component (observed)
-    rdfs:range ls:Component ;
+wl:produces a owl:ObjectProperty ;                # execution → intent
+    rdfs:domain wl:Task ; rdfs:range wl:Deliverable ;
+    rdfs:comment "This task is what makes that deliverable exist (026 §6.2). Component left that "
+                 "range, and Issue and PullRequest left the domain. Each reaches a deliverable "
+                 "through the task it is bound to; wl:affects carries work→Component." .
+
+wl:affects a owl:ObjectProperty ;                 # execution → component (observed)
+    rdfs:range wl:Component ;
     rdfs:comment "A Task/Issue/PullRequest touches/changes that component." .
 
-ls:status a owl:ObjectProperty, owl:FunctionalProperty ;   # D4 — exactly one status
-    rdfs:domain ls:DesignDoc ; rdfs:range skos:Concept ;
-    rdfs:comment "Lifecycle status in lsc:DesignDocStatus; inherited by ADR/Spec/Plan. "
-                 "Functional catches >1; SHACL enforces ≥1." .
+wl:status a owl:ObjectProperty, owl:FunctionalProperty ;   # exactly one status
+    rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan wl:Section ) ] ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Lifecycle status in wlc:DesignDocStatus; inherited by ADR and Spec. "
+                 "Functional catches >1; SHACL enforces >=1, on a Plan as on a DesignDoc." .
 
-ls:sanctionedBy a owl:ObjectProperty ;            # deviation → authorising decision record
-    rdfs:domain ls:AcceptedDeviation ; rdfs:range ls:DesignDoc ;
+wl:sanctionedBy a owl:ObjectProperty ;            # deviation → authorising decision record
+    rdfs:domain wl:AcceptedDeviation ; rdfs:range wl:DesignDoc ;
     rdfs:comment "The DesignDoc/ADR that authorises this accepted deviation." .
 
-ls:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;  # Task → lsc:TaskKind (exactly one)
-    rdfs:domain ls:Task ; rdfs:range skos:Concept ;
-    rdfs:comment "Kind of task (feature/bug/chore/review/spike); see lsc:TaskKind." .
+wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;  # Task → wlc:TaskKind (exactly one)
+    rdfs:domain wl:Task ; rdfs:range skos:Concept ;
+    rdfs:comment "Kind of task (feature/bug/chore/design/review/spike); see wlc:TaskKind." .
 
-# Type-homogeneous Task→Task closure (ADR-0004 rule): transitive, so `?t ls:dependsOn+ ?x`
+# Type-homogeneous Task→Task closure (ADR-0004 rule): transitive, so `?t wl:dependsOn+ ?x`
 # gives reachability at query time in Oxigraph (no reasoner) and CI/owlrl proves the closure.
-ls:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;   # Task → Task
+wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;   # Task → Task
     rdfs:subPropertyOf dct:requires ;
-    rdfs:domain ls:Task ; rdfs:range ls:Task ;
+    rdfs:domain wl:Task ; rdfs:range wl:Task ;
     rdfs:comment "This task needs that task done first (backbone `blocks`/dependency mirror). "
                  "Transitive: A→B→C ⊧ A→C." .
-ls:blocks a owl:ObjectProperty, owl:TransitiveProperty ;      # Task → Task (inverse sense of dependsOn)
-    owl:inverseOf ls:dependsOn ;
-    rdfs:domain ls:Task ; rdfs:range ls:Task ;
+wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;      # Task → Task (inverse sense of dependsOn)
+    owl:inverseOf wl:dependsOn ;
+    rdfs:domain wl:Task ; rdfs:range wl:Task ;
     rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
-ls:inWorkstream a owl:ObjectProperty ;            # Task → Workstream (named-graph anchor membership)
-    rdfs:domain ls:Task ; rdfs:range ls:Workstream ;
-    rdfs:comment "Membership of a Task in a Workstream. Split from dct:isPartOf so the "
-                 "Task→Task decomposition stays type-homogeneous and cleanly transitive." .
+wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;   # Task → Project (named-graph anchor)
+    rdfs:domain wl:Task ; rdfs:range wl:Project ;
+    rdfs:comment "Derived from tasks.project_id: every Task is in exactly one Project. Split "
+                 "from dct:isPartOf so the Task→Task decomposition stays type-homogeneous and "
+                 "cleanly transitive." .
 
-ls:reviewer a owl:ObjectProperty ;                # Component → Agent (notify on PRs)
-    rdfs:domain ls:Component ; rdfs:range foaf:Agent ;
+wl:reviewer a owl:ObjectProperty ;                # Component → Agent (notify on PRs)
+    rdfs:domain wl:Component ; rdfs:range foaf:Agent ;
     rdfs:comment "Agent (GitHub user/team IRI) to notify about PRs affecting this component." .
 
-ls:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;   # Task ↔ Issue
+wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;   # Task ↔ Issue
     rdfs:comment "Bidirectional mirror between a backbone Task and a GitHub Issue. The PR→Task "
                  "join piggybacks GitHub's native Closes #N (the PR closes the mirrored Issue)." .
 
-ls:layer a owl:AnnotationProperty ;               # tags a class/property with its model layer
+wl:layer a owl:AnnotationProperty ;               # tags a class/property with its model layer
     rdfs:range skos:Concept ;
-    rdfs:comment "Model-layer membership (lsc:ModelLayer: intent/execution/runtime) of a "
+    rdfs:comment "Model-layer membership (wlc:ModelLayer: intent/execution/runtime) of a "
                  "vocabulary term, so all intent classes etc. can be listed. Annotation only." .
 ```
 
-Note `ls:status` domain is `ls:DesignDoc`, inherited by all three subclasses. **Task
-execution-state is NOT `ls:status`** — the task state machine is backbone-owned (spec 004); the
-graph mirrors it as a projected literal, it does not fork the enum (Open Q3).
+`wl:status`'s domain is the union of `wl:DesignDoc`, `wl:Plan` and `wl:Section`, inherited by the
+ADR and Spec subclasses (026 §6). **Task execution-state is NOT `wl:status`** — the task state
+machine is backbone-owned (spec 004); the graph mirrors it as a projected literal, it does not fork
+the enum (open question 3).
 
-### 1.4 Status SKOS scheme (D4) {#sec-1.4}
+**Implementation is one statement.** Not one edge and not three ranges: the sentence the
+vocabulary has to answer is **"Component A implemented Section B by deploying Deliverable C to
+Environment D."** It is a **query, not a node** — each clause already exists above, and the
+sentence is true exactly where the declared and observed halves join:
 
-> **Amended by 014 §5.** `implemented` leaves the enum — the order is `draft → proposed → accepted → superseded` — and implementation becomes a derived coverage query.
-
-Ordered lifecycle `draft → proposed → accepted → superseded → implemented`:
-
-```turtle
-lsc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
-lsc:draft       a skos:Concept ; skos:inScheme lsc:DesignDocStatus ; skos:prefLabel "draft" ;
-    skos:definition "Being written; not yet proposed for review." .
-lsc:proposed    a skos:Concept ; skos:inScheme lsc:DesignDocStatus ; skos:prefLabel "proposed" ;
-    skos:definition "Submitted for crit review; awaiting resolution." .
-lsc:accepted    a skos:Concept ; skos:inScheme lsc:DesignDocStatus ; skos:prefLabel "accepted" ;
-    skos:definition "Crit-resolved and approved as intent." .
-lsc:superseded  a skos:Concept ; skos:inScheme lsc:DesignDocStatus ; skos:prefLabel "superseded" ;
-    skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
-lsc:implemented a skos:Concept ; skos:inScheme lsc:DesignDocStatus ; skos:prefLabel "implemented" ;
-    skos:definition "Realised in code/prod by an implementing Task." .
-
-# Lifecycle ORDER as data, not prose (skos:OrderedCollection) — "is X before Y" becomes queryable:
-lsc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( lsc:draft lsc:proposed lsc:accepted lsc:superseded lsc:implemented ) .
+```sparql
+?component   wl:implements  ?section .           # 025 §11 manifest — observed
+?deliverable wl:deliveredBy ?component ;         # declared, above
+             dct:relation ?artifact , ?env .     # declared, §9
+?deployment  prov:used ?artifact ;               # observed, §11.1
+             wl:toEnvironment ?env .
 ```
 
-`proposed → accepted` is gated on crit-review resolution (umbrella convention). The **order** is
-now data (the `skos:memberList` above), but RDF still doesn't *enforce* legal transitions — the
-transition rules (which move is allowed from where) live with the authoring skill (spec 008).
+For a `wl:Effect` (artifact-free IaC/GitOps delivery, §9) the last two clauses bind a **Commit**
+rather than an Artifact, and the deliverable declares the Deployment target directly. The statement
+is unchanged; only the witness differs.
 
-### 1.5 Task-kind & model-layer SKOS schemes {#sec-1.5}
+This is the ambition-reconciliation thesis at its narrowest useful grain, and it answers "is this
+spec implemented?" **per environment** — satisfied in dev, not yet in prod — rather than as one
+boolean. It also gives Deliverable auto-confirmation (v2, §9) its concrete shape.
 
-> **Amended by 014 §8.** `wlc:TaskKind` becomes exactly `feature, bug, chore, spec, review, spike, epic`, matching the `tasks.kind` constraint. `epic` is spec 018's declared container task — structural rather than a nature of work, and in the scheme because the constraint carries it.
+**Component ↔ Deliverable is what closes it**, minted as `wl:deliveredBy` and declared above.
+Without it the two meet only through the Spec that `dct:hasPart`s both, which is far too coarse —
+one Spec scopes many deliverables and many components. It is *declared*, not derived, because the
+derivable route (Artifact → Build → Commit → paths → Component) is closed in v1: `wl:Build` has
+**no v1 projection source**. Declaring suits a node this spec already treats as declared-only.
 
-> **Amended by 025 §6.** The scheme becomes `feature, bug, chore, design, review, spike`: `epic` is removed with no structural member replacing it — a plan is a document, not a task, and its tasks are grouped by their reference to the plan document rather than under a container row — and `spec` is renamed `design` (authoring any Worklode document). Every kind left in the scheme names a nature of work.
+### 3.1 Runtime properties {#sec-3.1}
 
-```turtle
-lsc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
-lsc:feature a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "feature" ;
-    skos:definition "New capability or behaviour." .
-lsc:bug     a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "bug" ;
-    skos:definition "Fix incorrect existing behaviour." .
-lsc:chore   a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "chore" ;
-    skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
-lsc:review  a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "review" ;
-    skos:definition "Review/evaluate someone else's work." .
-lsc:spike   a skos:Concept ; skos:inScheme lsc:TaskKind ; skos:prefLabel "spike" ;
-    skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
-
-lsc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
-lsc:intent    a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "intent" ;
-    skos:definition "Declared design layer — what should be true." .
-lsc:execution a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "execution" ;
-    skos:definition "Observed execution/VCS layer — tasks, issues, PRs." .
-lsc:runtime   a skos:Concept ; skos:inScheme lsc:ModelLayer ; skos:prefLabel "runtime" ;
-    skos:definition "Observed runtime/deploy layer — artifacts, deployments, environments." .
-```
-
-Every minted class/property carries an `ls:layer` tag (e.g. `ls:Component ls:layer lsc:intent`,
-`ls:Task ls:layer lsc:execution`, `ls:Deliverable ls:layer lsc:intent`) so the model is queryable
-by layer. `ls:taskKind` is backbone-projected like the rest of the Task node; `lsc:spike` is the
-time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 005), not free text.
-
-### 1.6 Decomposition & dependency {#sec-1.6}
-
-> **Obsolete (014 §2).** There is no Plan node: a Spec decomposes straight into an ordered task subtree in the backbone.
+Seven mints. Everything a standard covers truthfully is reused.
 
 ```turtle
-# Decomposition (D4): Spec ⊃ Plan ⊃ Task
-lsid:doc/spec-worklode-006 dct:hasPart lsid:doc/plan-006-projection .
-lsid:doc/plan-006-projection dct:hasPart lsid:task/01H8XZ... .
+wl:artifactKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Artifact ; rdfs:range skos:Concept ;
+    rdfs:comment "Kind of artifact; see wlc:ArtifactKind. Functional catches >1, SHACL catches 0." .
 
-# Dependency
-lsid:doc/spec-worklode-007 dct:requires lsid:doc/spec-worklode-006 .
+wl:digest a owl:DatatypeProperty ;
+    rdfs:domain wl:Artifact ; rdfs:range xsd:string ;
+    rdfs:comment "Content digest as an opaque prefixed string, e.g. \"sha256:abc…\". Minted "
+                 "rather than reusing spdx:checksum: that is a class requiring an algorithm/value "
+                 "node, and the ingested value is a single opaque string. A spdx:Checksum "
+                 "alignment is additive if SBOM interop is ever wanted." .
+
+wl:toEnvironment a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deployment ; rdfs:range wl:Environment ;
+    rdfs:comment "The environment this deployment targets." .
+
+wl:deploymentStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deployment ; rdfs:range skos:Concept ;
+    rdfs:comment "Current rollout status; see wlc:DeploymentStatus." .
+
+wl:targetKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deployment ; rdfs:range skos:Concept ;
+    rdfs:comment "Kind of deployment target; see wlc:DeployTargetKind." .
+
+wl:runtimeEventKind a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:RuntimeEvent ; rdfs:range skos:Concept ;
+    rdfs:comment "Kind of runtime incident; see wlc:RuntimeEventKind." .
+
+wl:cutFrom a owl:ObjectProperty ;
+    rdfs:domain wl:Artifact ; rdfs:range wl:Commit ;
+    rdfs:comment "This artifact carries every commit up to and including that commit — the "
+                 "delivery frontier of a published release. Domain is Artifact, not Deployment: "
+                 "see the grain note in §11.1 for why the per-environment frontier has no node." .
 ```
 
-Task-level `child_of` / `blocks` edges are **backbone-authoritative** (spec 004); they surface in
-the graph as projected `dct:isPartOf` (child_of) and **`ls:blocks` / `ls:dependsOn`** (dependency)
-mirrors keyed by IRI. `ls:dependsOn`/`ls:blocks` are Task→Task and **transitive**, so overview
-reachability (`?t ls:dependsOn+ ?dep`) runs in SPARQL without a reasoner and the critical-path
-closure (spec 007) is expressible as property paths. Task→Workstream membership is `ls:inWorkstream`
-(kept separate so the Task→Task closure stays type-homogeneous).
+**Reused, with the column each projects from:**
+
+| Fact | Term | Notes |
+|---|---|---|
+| artifact built by | `prov:wasGeneratedBy` → `wl:Build` | no v1 source; see §11.1 |
+| artifact built from source | `prov:wasDerivedFrom` → `wl:Commit` | `artifacts.source_sha` |
+| build time | `prov:generatedAtTime` | `artifacts.built_at`; domain `prov:Entity`, so it hangs on the Artifact — correct, since v1 has no Build node |
+| deployment uses artifact | `prov:used` | `deployments.artifact_id` |
+| runtime event affects artifact | `prov:used` | `runtime_events.artifact_id` |
+| deployment first seen | `prov:startedAtTime` | `deployments.first_seen` |
+| deployment last updated | `dct:modified` | `deployments.last_update` |
+| event / publication time | `dct:date` | `runtime_events.occurred_at`, `release_frontiers.published_at` |
+| version string | `owl:versionInfo` | `artifacts.version` |
+| name, target name, commit sha | `dct:identifier` | the coordinate, also encoded in the IRI |
+| repository grouping | `doap:Project` + `dct:hasPart` | as §1 already establishes |
+| human label | `dct:title` | |
+
+**A modelling tension, stated plainly.** `deployments` is a mutable current-state row (unique per
+environment/target), not an immutable event, yet `wl:Deployment` subclasses `prov:Activity`. This is
+deliberate: a rollout *is* an activity, `prov:startedAtTime` genuinely means "first seen", and the
+alternative — a state node with no PROV anchor — buys nothing. The consequence is that the graph
+shows current state only; per-rollout history needs a second node type and is v2.
 
 ---
 
-## 2. Reasoning architecture (OWL / SHACL / SPARQL) {#sec-2}
+## 4. Status SKOS scheme {#sec-4}
+
+Ordered, purely editorial lifecycle `draft → accepted → superseded`:
+
+```turtle
+wlc:DesignDocStatus a skos:ConceptScheme ; skos:prefLabel "DesignDoc lifecycle" .
+wlc:draft       a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "draft" ;
+    skos:definition "Being written, or open for crit review. Not yet accepted as intent." .
+wlc:accepted    a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
+    skos:definition "Crit-resolved and approved as intent." .
+wlc:superseded  a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
+    skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
+
+# Lifecycle ORDER as data, not prose (skos:OrderedCollection) — "is X before Y" becomes queryable:
+wlc:DesignDocStatusOrder a skos:OrderedCollection ;
+    skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
+```
+
+There is no `implemented` status: it would assert that *superseded* precedes *implemented*, and
+implementation is per-section and derived, so a document-level summary of it drifts. **"Is this
+spec implemented?" is a coverage query (025 §7, §6), never a stored status.**
+
+There is no "under review" status either: a document under review is a **draft with an open review
+task**, so `draft → accepted` is what the crit gate governs and the open task, not the enum, is
+what proves a review is in flight (025 §7). The **order** is data (the `skos:memberList` above),
+but RDF still doesn't *enforce* legal transitions — the transition rules (which move is allowed
+from where) live with the authoring skill (spec 008).
+
+## 5. Task-kind & model-layer SKOS schemes {#sec-5}
+
+```turtle
+wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
+wlc:feature a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "feature" ;
+    skos:definition "New capability or behaviour." .
+wlc:bug     a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
+    skos:definition "Fix incorrect existing behaviour." .
+wlc:chore   a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "chore" ;
+    skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
+wlc:design  a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "design" ;
+    skos:definition "Author or revise a Worklode document — spec, ADR or plan; the document "
+                    "produced is reachable via prov:wasGeneratedBy." .
+wlc:review  a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review" ;
+    skos:definition "Review/evaluate someone else's work." .
+wlc:spike   a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
+    skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
+
+wlc:ModelLayer a skos:ConceptScheme ; skos:prefLabel "Model layer" .
+wlc:intent    a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "intent" ;
+    skos:definition "Declared design layer — what should be true." .
+wlc:execution a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "execution" ;
+    skos:definition "Observed execution/VCS layer — tasks, issues, PRs." .
+wlc:runtime   a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runtime" ;
+    skos:definition "Observed runtime/deploy layer — artifacts, deployments, environments." .
+```
+
+`wlc:TaskKind` is exactly `feature, bug, chore, design, review, spike`, matching the `tasks.kind`
+constraint. Every kind names a nature of work; no structural member replaces the `epic` container,
+because a plan is a document whose tasks are grouped by their reference to it rather than under a
+container row (025 §9.2, §6).
+
+Every minted class/property carries a `wl:layer` tag (e.g. `wl:Component wl:layer wlc:intent`,
+`wl:Task wl:layer wlc:execution`, `wl:Deliverable wl:layer wlc:intent`) so the model is queryable
+by layer. `wl:taskKind` is backbone-projected like the rest of the Task node; `wlc:spike` is the
+time-boxed validation experiment. Kind is a **fixed enum** (like `concern`, spec 005), not free text.
+
+## 6. Runtime SKOS schemes {#sec-6}
+
+Four fixed enums, each mirroring a `CHECK` constraint that already exists in the schema. These are
+controlled vocabularies, never free text.
+
+```turtle
+wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
+wlc:docker_image a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "docker image" ;
+    skos:definition "An OCI container image in a registry, identified by name, tag and digest." .
+wlc:pypi     a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "PyPI package" ;
+    skos:definition "A Python distribution published to a package index." .
+wlc:git_tag  a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "git tag" ;
+    skos:definition "A published release tag on a repository." .
+wlc:binary   a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "binary release" ;
+    skos:definition "A compiled executable published as a release asset." .
+
+wlc:DeploymentStatus a skos:ConceptScheme ; skos:prefLabel "Deployment status" .
+wlc:pending      a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "pending" ;
+    skos:definition "Target known; no reconciliation observed yet." .
+wlc:reconciling  a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "reconciling" ;
+    skos:definition "Rollout in progress." .
+wlc:deployed     a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "deployed" ;
+    skos:definition "Reconciliation succeeded; what the deployment used — an artifact, or a "
+                    "commit for IaC/GitOps targets — is live on this target." .
+wlc:failed       a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel "failed" ;
+    skos:definition "Reconciliation failed; the target is not serving the intended artifact." .
+
+wlc:DeployTargetKind a skos:ConceptScheme ; skos:prefLabel "Deployment target kind" .
+wlc:flux_kustomization a skos:Concept ; skos:inScheme wlc:DeployTargetKind ;
+    skos:prefLabel "Flux Kustomization" ;
+    skos:definition "A Flux-reconciled target. v1 files HelmRelease events here too; the "
+                    "distinction survives in the event type, not the target kind." .
+wlc:pypi_target a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel "PyPI publish" ;
+    skos:definition "Publication to a package index as the delivery target." .
+wlc:manual      a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel "manual" ;
+    skos:definition "A target tracked by hand, with no automated reconciliation signal." .
+
+wlc:RuntimeEventKind a skos:ConceptScheme ; skos:prefLabel "Runtime event kind" .
+wlc:crashloop     a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "crashloop" .
+wlc:oom           a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "OOM kill" .
+wlc:flux_failure  a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux failure" .
+wlc:flux_recovery a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux recovery" .
+```
+
+`wlc:pypi_target` is spelled apart from `wlc:pypi` deliberately: the artifact kind and the target
+kind are different concepts that happen to share a name in the relational schema.
+
+---
+
+## 7. Reasoning architecture (OWL / SHACL / SPARQL) {#sec-7}
 
 Reasoning runs in **three tiers**; each idiom pays off in exactly one, so the vocabulary is built
 to the tier that can use it.
 
 | Tier | Where | Does | Idioms used here |
 |---|---|---|---|
-| **Runtime** | `graph-server` / Oxigraph (ADR-0005) | SPARQL 1.1 — **no OWL/RDFS reasoner** | **property paths** (`?t ls:dependsOn+ ?x` reachability), `?c ls:layer lsc:intent` classification |
+| **Runtime** | `graph-server` / Oxigraph (ADR-0005) | SPARQL 1.1 — **no OWL/RDFS reasoner** | **property paths** (`?t wl:dependsOn+ ?x` reachability), `?c wl:layer wlc:intent` classification |
 | **CI · OWL 2 RL** | `owlrl` in tests (ADR-0004 pattern; Jena `infer` is RDFS-only) | classification, disjointness & transitive closure — proof, not publish | `owl:AllDisjointClasses`, `owl:TransitiveProperty`, `owl:FunctionalProperty`, `owl:unionOf`, `owl:inverseOf` |
-| **CI · SHACL gate** | Jena `shacl` over `rdf/shapes/ls-shapes.ttl` (ADR-0003) | closed-world **constraints** (required, cardinality) | node shapes below |
+| **CI · SHACL gate** | Jena `shacl` over `rdf/shapes/wl-shapes.ttl` (ADR-0003) | closed-world **constraints** (required, cardinality) | node shapes below |
 
 **The load-bearing split.** OWL is open-world with no unique-names → it **never** flags a missing
 required field or a duplicate. So **OWL classifies and checks consistency; SHACL enforces
-presence/cardinality.** `owl:FunctionalProperty` on `ls:status`/`ls:taskKind` catches *>1*; the
+presence/cardinality.** `owl:FunctionalProperty` on `wl:status`/`wl:taskKind` catches *>1*; the
 SHACL shapes catch *0*.
 
-**`ls-shapes.ttl` — v1 node shapes (sketch):**
-- **Task** — exactly one `ls:taskKind`; exactly one projected state literal; ≥1 `ls:inWorkstream`.
-- **Component** — ≥1 `ls:reviewer`.
-- **Deliverable** — `dct:description` + ≥1 `dct:relation` target + ≥1 `ls:deliveredBy`.
-- **Effect** — inherits the Deliverable shape, plus: ≥1 `dct:relation` naming an `ls:Deployment`,
-  and **zero** naming an `ls:Artifact` (an Effect that ships something is a Deliverable).
-- **AcceptedDeviation** — `rdf:subject`/`predicate`/`object` + `ls:sanctionedBy` (optional `dct:valid`).
-- **DesignDoc** — exactly one `ls:status` drawn from `lsc:DesignDocStatus`.
+**`wl-shapes.ttl` — v1 node shapes (sketch):**
+- **Task** — exactly one `wl:taskKind`; exactly one projected state literal; exactly one
+  `wl:inProject`.
+- **Component** — ≥1 `wl:reviewer`.
+- **Deliverable** — `dct:description` + ≥1 `dct:relation` target + ≥1 `wl:deliveredBy`.
+- **Effect** — inherits the Deliverable shape, plus: ≥1 `dct:relation` naming a `wl:Deployment`,
+  and **zero** naming a `wl:Artifact` (an Effect that ships something is a Deliverable).
+- **AcceptedDeviation** — `rdf:subject`/`predicate`/`object` + `wl:sanctionedBy` (optional `dct:valid`).
+- **DesignDoc** — exactly one `wl:status` drawn from `wlc:DesignDocStatus`; `wl:PlanShape` requires
+  the same of every Plan (026 §6).
+- **Artifact** — exactly one `wl:artifactKind` from `wlc:ArtifactKind`; exactly one
+  `owl:versionInfo`; exactly one `dct:identifier`.
+- **Deployment** — exactly one each of `wl:toEnvironment`, `wl:targetKind`, `wl:deploymentStatus`;
+  at most one `prov:used`.
+- **Environment** — `sh:in (wlid:environment/dev wlid:environment/prod)`, closing the set to what
+  the delivery handlers normalise to.
+- **Commit** — exactly one `dct:identifier` (the sha).
+
+The runtime half of this vocabulary needs **no migration**: it adds no column and changes no
+constraint, and every runtime enum mirrors a `CHECK` the schema already carries.
 
 **Closure is not published** (ADR-0004): the pipeline ships declared edges + TBox only. The
 transitive/disjointness entailments are materialized by `owlrl` in CI to *prove* the axioms, and
@@ -449,102 +582,85 @@ re-derived live via SPARQL property paths — never baked into `dist/`.
 
 ---
 
-## 3. Entity model by layer (D6) {#sec-3}
+## 8. Entity model by layer {#sec-8}
 
 Three layers, joined vertically at **Deliverable**. `[v2]` = deferred. "Projected" = the node
 already exists relationally in the Worklode backbone / ingest and is mirrored into the graph, not
-authored there (see Projection).
+authored there (see §11). Layer 3 — Runtime · Deploy — is the six runtime classes of §2.1, and
+§11.1 states which of them have a v1 projection source.
 
-### 3.1 Layer 1 — Intent (declared; authored graph-side, crit-reviewed) {#sec-3.1}
+### 8.1 Layer 1 — Intent (declared) {#sec-8.1}
 
 | Node | Class | v1/v2 | Origin |
 |---|---|---|---|
-| Component | `ls:Component` | v1 | authored (per-repo manifest declares boundaries, D5) |
-| DesignDoc | `ls:ADR`/`ls:Spec`/`ls:Plan` | v1 | authored |
-| Deliverable | `ls:Deliverable` | v1 | authored (declared definition-of-done) |
-| Effect | `ls:Effect` ⊂ `ls:Deliverable` | v1 | authored; artifact-free definition-of-done for IaC/GitOps state change |
-| Milestone | `ls:Milestone` | **v2** | grouping of Deliverables |
+| Component | `wl:Component` | v1 | authored (per-repo manifest declares boundaries) |
+| DesignDoc | `wl:ADR` / `wl:Spec`, addressable by `wl:Section` | v1 | authored |
+| Deliverable | `wl:Deliverable` | v1 | authored (declared definition-of-done) |
+| Effect | `wl:Effect` ⊂ `wl:Deliverable` | v1 | authored; artifact-free definition-of-done for IaC/GitOps state change |
+| Milestone | `wl:Milestone` | **v2** | grouping of Deliverables |
 
-Intent edges: `ls:governs` (DesignDoc→Component), `ls:reviewer` (Component→Agent, notify on PRs),
-`ls:deliveredBy` (Deliverable→Component), `dct:hasPart`, `dct:requires`, `dct:replaces`.
+Intent edges: `wl:governs` (DesignDoc→Component), `wl:reviewer` (Component→Agent, notify on PRs),
+`wl:deliveredBy` (Deliverable→Component), `dct:hasPart`, `dct:requires`, `dct:replaces`.
 
-### 3.2 Layer 2 — Execution · VCS (observed; mostly projected) {#sec-3.2}
-
-> **Amended by 015 §7.** WorkflowRun is dropped (subsumed by `wl:Build`) and Commit is promoted to v1 as `wl:Commit`.
+### 8.2 Layer 2 — Execution · VCS (observed) {#sec-8.2}
 
 | Node | Class / term | v1/v2 | Notes |
 |---|---|---|---|
-| Task | `ls:Task` | v1 | **projected from backbone** (D11); carries `ls:taskKind` |
-| Workstream | `ls:Project` / `ls:OngoingMaintenance` | v1 | projected from backbone; **named-graph anchor**; a Task `ls:inWorkstream` ≥1 |
-| Issue | `ls:Issue` ⊂ `prov:Entity` | v1 | projected from VCS ingest; `ls:mirrors` its Task |
-| PullRequest | `ls:PullRequest` ⊂ `prov:Entity` | v1 | projected from VCS ingest |
-| Branch, Commit, WorkflowRun, Event | — | **v2** | finer VCS granularity |
+| Task | `wl:Task` | v1 | **projected from backbone**; carries `wl:taskKind` |
+| Project | `wl:Project` | v1 | projected from backbone; **named-graph anchor**; every Task `wl:inProject` exactly one |
+| Plan | `wl:Plan` | v1 | **authored, not projected** — an executable document, sibling of `wl:DesignDoc` (§2) |
+| Issue | `wl:Issue` ⊂ `prov:Entity` | v1 | projected from VCS ingest; `wl:mirrors` its Task |
+| PullRequest | `wl:PullRequest` ⊂ `prov:Entity` | v1 | projected from VCS ingest |
+| Branch, Event | — | **v2** | finer VCS granularity |
 
-Execution edges: `ls:implements` (→ DesignDoc/Deliverable/Component), `ls:affects`
-(→ Component), `ls:taskKind` (→ kind), `ls:mirrors` (Task↔Issue), `ls:inWorkstream`
-(Task→Workstream), `ls:dependsOn`/`ls:blocks` (Task↔Task, transitive), `dct:isPartOf`
-(child_of), and authorship: `prov:wasAttributedTo` from an Issue or PullRequest, but
-**`prov:wasAssociatedWith` from a Task** — 014 §9 makes Task a `prov:Activity`, PROV declares
-Activity and Entity disjoint, and `prov:wasAttributedTo` has an Entity domain, so using it on a
-Task makes every authored Task inconsistent.
+Commit is not deferred: it is a v1 runtime-layer class (`wl:Commit`, §2.1), because delivery
+resolution is defined over commit coverage. `WorkflowRun` is not a node of its own either —
+`wl:Build` subsumes it.
 
-### 3.3 Layer 3 — Runtime · Deploy (observed; projected) {#sec-3.3}
+Execution edges: `wl:produces` (Task→Deliverable), `wl:affects` (→ Component), `wl:taskKind`
+(→ kind), `wl:mirrors` (Task↔Issue), `wl:inProject` (Task→Project),
+`wl:dependsOn`/`wl:blocks` (Task↔Task, transitive), `dct:isPartOf` (child_of), and authorship:
+`prov:wasAttributedTo` from an Issue or PullRequest, but **`prov:wasAssociatedWith` from a Task** —
+025 §12 makes Task a `prov:Activity`, PROV declares Activity and Entity disjoint, and
+`prov:wasAttributedTo` has an Entity domain, so using it on a Task makes every authored Task
+inconsistent.
 
-> **Superseded by 015 §2 and §6.** Artifact/Deployment/Environment get real PROV-anchored classes there, `wl:Commit` joins v1, and §6 states which nodes actually have a v1 projection source.
+## 9. Deliverable — declared definition-of-done {#sec-9}
 
-| Node | v1/v2 | Notes |
-|---|---|---|
-| Artifact (image `repo:tag`@digest) | v1 | declared/observed target of a Deliverable |
-| Deployment | v1 | |
-| Environment (`dev`, `prod`) | v1 | |
-| Cluster, Namespace, Flux* | **v2** | live deploy view via Flux notifications |
-
-Most of layers 2–3 **already exist relationally** in Worklode's ingest → these are a
-projection, not a new build. v1 keeps runtime nodes minimal (declared targets); observed
-confirmation of Deliverables by probing artifacts/deployments is **v2** (D7).
-
----
-
-## 4. Deliverable — declared definition-of-done (D7) {#sec-4}
-
-> **Amended by 015 §7.** The declared `dct:relation` targets are now typed nodes (`wl:Artifact`, `wl:Environment`), not bare IRIs; auto-confirmation stays v2.
-
-> **Amended by the implementation statement (§Properties).** A Deliverable also declares the
-> **Component** that delivers it (`ls:deliveredBy`, ≥1, SHACL-enforced), closing the
-> Component→Section → Deliverable → Environment join. The `lsid:task … ls:implements … deliverable` line below is the
-> superseded Task→intent form; the Deliverable's own `dct:hasPart` from its Spec is unaffected.
-
-A `ls:Deliverable` is the **declared target** that reconciles intent with prod reality: the
+A `wl:Deliverable` is the **declared target** that reconciles intent with prod reality: the
 vertical join point where a Spec's ambition meets a running system. In v1 it is **declared
-only** — its acceptance criteria are declared, not auto-confirmed.
+only** — its acceptance criteria are declared, not auto-confirmed. It declares the **Component**
+that delivers it (`wl:deliveredBy`, ≥1, SHACL-enforced), closing the Component→Section →
+Deliverable → Environment join of §3, and its `dct:relation` targets are typed runtime nodes
+(`wl:Artifact`, `wl:Environment`), not bare IRIs.
 
 ```turtle
-lsid:deliverable/worklode-graph-live
-    a ls:Deliverable ;
+wlid:deliverable/worklode-graph-live
+    a wl:Deliverable ;
     dct:title "Worklode KG live in prod" ;
     dct:description "graph-server image pushed as ghcr.io/…:vX and service live in prod" ;
-    # who delivers it — closes the join to the Component→Section claim (§Properties):
-    ls:deliveredBy lsid:component/graph-server ;
-    # declared targets — plain references to the runtime IRIs (may not yet exist):
-    dct:relation lsid:artifact/ghcr.io/sunstoneinstitute/graph-server/v1 ,
-                     lsid:environment/prod .
+    # who delivers it — closes the join to the Component→Section claim (§3):
+    wl:deliveredBy wlid:component/graph-server ;
+    # declared targets — typed references to the runtime nodes (may not yet exist):
+    dct:relation wlid:artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1 ,
+                     wlid:environment/prod .
 
 # A Spec scopes the deliverable; a Task realises it:
-lsid:doc/spec-worklode-009 dct:hasPart lsid:deliverable/worklode-graph-live .
-lsid:task/01H8XZ...       ls:implements    lsid:deliverable/worklode-graph-live .
+wlid:doc/spec-worklode-006 dct:hasPart wlid:deliverable/worklode-graph-live .
+wlid:task/01H8XZ...       wl:produces      wlid:deliverable/worklode-graph-live .
 
 # --- Effect: an artifact-free deliverable (IaC / GitOps) ---
 # "admin-cluster has Keycloak SSO configured" ships nothing; it changes the state of a
 # running system. The declared target is the DEPLOYMENT, whose IRI is stable and
-# predictable (environment + target kind + target name, 015 §5) — unlike a Commit IRI,
+# predictable (environment + target kind + target name, §10.1) — unlike a Commit IRI,
 # which carries a SHA and so cannot be named before the work exists.
-lsid:effect/admin-cluster-keycloak-sso
-    a ls:Effect ;
+wlid:effect/admin-cluster-keycloak-sso
+    a wl:Effect ;
     dct:title "Keycloak SSO live on admin-cluster" ;
     dct:description "oauth2-proxy fronting the admin-cluster dashboards, OIDC client in the sunstone realm" ;
-    ls:deliveredBy lsid:component/admin-cluster ;
+    wl:deliveredBy wlid:component/admin-cluster ;
     # declared target — the Flux target, NOT an artifact:
-    dct:relation lsid:deployment/prod/flux_kustomization/admin-cluster .
+    dct:relation wlid:deployment/prod/flux_kustomization/admin-cluster .
 ```
 
 **Two witness forms.** A Deliverable and an Effect declare different targets and are confirmed by
@@ -552,20 +668,19 @@ different observations — the same `wl:Deployment` node, reached two ways:
 
 | | declares | confirmed when |
 |---|---|---|
-| `ls:Deliverable` | Artifact + Environment | a Deployment `prov:used` that **Artifact** reaches `wlc:deployed` |
-| `ls:Effect` | Deployment target (no Artifact) | that Deployment `prov:used` a **Commit** on the delivering component's default branch and reaches `wlc:deployed` |
+| `wl:Deliverable` | Artifact + Environment | a Deployment `prov:used` that **Artifact** reaches `wlc:deployed` |
+| `wl:Effect` | Deployment target (no Artifact) | that Deployment `prov:used` a **Commit** on the delivering component's default branch and reaches `wlc:deployed` |
 
-For an Effect the component *is* the coordinate: `ls:deliveredBy` → Component → repo → default
+For an Effect the component *is* the coordinate: `wl:deliveredBy` → Component → repo → default
 branch fully specifies "what", so there is nothing left to name. This is why neither a placeholder
 commit IRI nor a reified "where the SHA will be found" triple is needed — the declaration never
 refers to a commit at all.
 
-**v1 caveat.** `ls:covers` (Artifact→Commit) carries the delivery frontier, and 015 deliberately
-keeps its domain off Deployment (015 §6 grain note: the per-environment frontier has no node). An
-Effect therefore has no *graphed* frontier in v1 — the relational `env_deploys.main_seq` (spec 011)
-remains authoritative for "has main advanced far enough in this environment". Whether the graph
-should carry a Commit-side or Deployment-side frontier is left to 015's grain question, not decided
-here.
+**v1 caveat.** `wl:cutFrom` (Artifact→Commit, §3.1) carries the delivery frontier, and its domain
+is deliberately kept off Deployment (§11.1's grain note: the per-environment frontier has no node).
+An Effect therefore has no *graphed* frontier in v1 — the relational `env_deploys.main_seq`
+(spec 004) remains authoritative for "has main advanced far enough in this environment". Whether the
+graph should carry a Commit-side or Deployment-side frontier is open question 10, not decided here.
 
 Acceptance criteria are `dct:description` (human-readable) plus declared `dct:relation`
 links to the target Artifact/Environment IRIs. **Auto-confirmation** — probing whether the
@@ -574,24 +689,21 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 
 ---
 
-## 5. Canonical IRI scheme (rdf-registry ADR-0006) {#sec-5}
-
-> **Artifact IRI superseded by 015 §5.** The pattern is kind-first — `id/artifact/<kind>/<name>/<version>` — and 015 adds Deployment, Environment, Commit and Build patterns.
-
-> **Base clarified by 014 §1, amended by §4.** The published base carries no ontology-name segment — read the `…/ls/…` rows below as `…/ontology#`, `…/concept/` and `…/id/`. Design documents additionally carry immutable versioned sibling IRIs (`…/doc/<slug>/v3`) used only in pinned claims.
+## 10. Canonical IRI scheme {#sec-10}
 
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
-commitment** that spec 009 references (item 3) and that the data-platform must host.
+commitment** that §13.2 item 3 commits the data-platform to hosting.
 
-**Base:** `https://worklode.io/ns/`
+**Base:** `https://worklode.io/ns/` — the published base carries **no ontology-name segment**,
+whatever the source path in rdf-registry is (025 §17).
 
 | Purpose | Namespace | Prefix |
 |---|---|---|
-| Schema (classes/properties) | `…/ls/ontology#<Term>` (hash) | `ls:` |
-| Status concepts (SKOS) | `…/ls/concept/<id>` (slash) | `lsc:` |
-| Instances / KG nodes | `…/ls/id/<type>/<localid>` (slash) | `lsid:` |
+| Schema (classes/properties) | `…/ontology#<Term>` (hash) | `wl:` |
+| Status concepts (SKOS) | `…/concept/<id>` (slash) | `wlc:` |
+| Instances / KG nodes | `…/id/<type>/<localid>` (slash) | `wlid:` |
 
-**Instance grammar** — `ls/id/<type>/<localid>`, `<localid>` opaque & stable, **never**
+**Instance grammar** — `id/<type>/<localid>`, `<localid>` opaque & stable, **never**
 carrying a git branch or version:
 
 | Type | Pattern | Example |
@@ -602,104 +714,149 @@ carrying a git branch or version:
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
 | Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
 | Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/worklode/42` |
-| Artifact | `id/artifact/<registry>/<repo>/<tag-or-digest>` | `…/id/artifact/ghcr.io/sunstoneinstitute/graph-server/v1` |
-| Deployment / Environment | `id/deployment/<…>` , `id/environment/<name>` | `…/id/environment/prod` |
+| Artifact, Build, Commit, Deployment / Environment | natural-key grammar — `id/deployment/<…>` , `id/environment/<name>` and the rest in §10.1 | `…/id/environment/prod` |
 
-The per-repo **component manifest** (D5) fixes each component's slug so the IRI is stable even
+A design document additionally carries an immutable **versioned sibling** IRI (`…/doc/<slug>/v3`),
+used only in pinned claims; the canonical IRI above stays version-free (025 §17, §4).
+
+The per-repo **component manifest** fixes each component's slug so the IRI is stable even
 when directory layout shifts. Component IRIs are **branch-free**: the work graph lives on one
-fixed graph-server branch (project is a *property*, not a branch — D1/spec 009 item 5).
+fixed graph-server branch (project is a *property*, not a branch — §13.2 item 5).
 
 Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
 
 ---
 
-## 6. Projection: backbone → graph {#sec-6}
+### 10.1 Runtime IRI grammar {#sec-10.1}
 
-**Authority stays split** (D2/D3): the **backbone owns execution facts** (task state, leases,
+**Principle: an instance IRI mirrors the relational natural key.** Projection is then a pure
+function of the row, which is what makes 007's deriver contract (deterministic, idempotent,
+full-replace) satisfiable without a side table mapping rows to IRIs.
+
+A container-shaped Artifact pattern — `id/artifact/<registry>/<repo>/<tag-or-digest>`, e.g.
+`…/id/artifact/ghcr.io/sunstoneinstitute/graph-server/v1` — cannot spell a PyPI package or a binary
+release, though the `artifacts` table has allowed all four kinds since the baseline migration. The
+grammar is therefore kind-first, matching `UNIQUE (kind, name, version)` exactly. Nothing is
+published yet, so the shape is free to fix now and breaking once the rdf-registry PR lands — the
+same argument 025 §17 makes for the prefix rename.
+
+| Type | Pattern | Natural key | Example |
+|---|---|---|---|
+| Artifact | `id/artifact/<kind>/<name>/<version>` | `(kind, name, version)` | `…/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1` |
+| — PyPI | | | `…/id/artifact/pypi/sunstone-py/0.4.1` |
+| — git tag | | | `…/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4` |
+| Deployment | `id/deployment/<environment>/<target-kind>/<target-name>` | `(environment, target_kind, target_name)` | `…/id/deployment/prod/flux_kustomization/graph-server` |
+| Environment | `id/environment/<name>` | `name` | `…/id/environment/prod` |
+| Commit | `id/commit/<host>/<org>/<repo>/<sha>` | `(repo, sha)` | `…/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7` |
+| Build | `id/build/<host>/<org>/<repo>/<run-id>` | — | reserved; no v1 source |
+| RuntimeEvent | — | **none** | see open question 7 |
+
+Slashes inside a local id remain permissible (slash namespace, opaque path), as §10 establishes.
+
+---
+
+## 11. Projection: backbone → graph {#sec-11}
+
+**Authority stays split**: the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,
-`requires`, `replaces`, Deliverable). Task is the **bridge** (D11): backbone-authoritative, mirrored
+`requires`, `replaces`, Deliverable). Task is the **bridge**: backbone-authoritative, mirrored
 read-only into the graph. Design nodes are authored graph-side and are **never** projected from
 the backbone.
 
 **Mechanism.** A single Go **projector** service consumes the backbone's provenance/outbox event
-stream and writes projected quads to `graph-server` over GSP (spec 009 items 2, 4, 5), on the
+stream and writes projected quads to `graph-server` over GSP (§13.2 items 2, 4, 5), on the
 fixed work-graph branch, authenticating via Keycloak client-credentials (`dataplatform-svc`).
-Projection named graphs are **anchored per Workstream** (Open Q4): a Task's quads live in the
-named graph of **each** Workstream it `ls:inWorkstream`, so a Task in several Workstreams appears
-in several graphs (a triple in N graphs = N distinct quads; no conflict). Because a graph holds
-many tasks, the projector maintains a task by a **per-subject replace** — `DELETE` the task IRI's
-existing quads then `INSERT` the new ones, scoped to each of its Workstream graphs — rather than a
-whole-graph `PUT`. **Keyed by subject IRI** → idempotent per (task, graph). A single projector +
-per-branch write lock makes If-Match CAS unnecessary for v1 (spec 009 item 6). (The declared/&lt;doc&gt;
-and observed/&lt;source&gt; graph families of spec 007 are orthogonal to these Workstream graphs.)
+Projection named graphs are **anchored per Project** (open question 4): a Task's quads live in the
+named graph of the one Project it `wl:inProject`. Because a graph holds many tasks, the projector
+maintains a task by a **per-subject replace** — `DELETE` the task IRI's existing quads then
+`INSERT` the new ones, scoped to that Project graph — rather than a whole-graph `PUT`. **Keyed by
+subject IRI** → idempotent per (task, graph). A single projector + per-branch write lock makes
+If-Match CAS unnecessary for v1 (§13.3 item 6). (The declared/&lt;doc&gt; and observed/&lt;source&gt;
+graph families of spec 007 are orthogonal to these Project graphs.)
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
-| Task node + `concern`/`priority`/state/`ls:taskKind` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
-| `ls:affects` (Task→Component) | 2 | backbone | v1 | yes | task edit / ingest |
-| `ls:implements` (Task→DesignDoc/Deliverable) | 2 | backbone | v1 | yes | task edit |
+| Task node + `concern`/`priority`/state/`wl:taskKind` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
+| `wl:affects` (Task→Component) | 2 | backbone | v1 | yes | task edit / ingest |
+| `wl:produces` (Task→Deliverable) | 2 | backbone | v1 | yes | task edit |
 | `dct:isPartOf` (child_of mirror) | 2 | backbone | v1 | yes | task lifecycle |
-| `ls:dependsOn` / `ls:blocks` (Task↔Task, transitive) | 2 | backbone | v1 | yes | task edit / block |
-| `ls:inWorkstream` (Task→Workstream) + Workstream node | 2 | backbone | v1 | yes | project edit |
-| `ls:mirrors` (Task↔Issue) | 2 | backbone+ingest | v1 | yes | task create / issue ingest |
-| Issue / PullRequest + `implements`/`affects` | 2 | ingest | v1 | yes | VCS ingest (PR/issue open/merge) |
+| `wl:dependsOn` / `wl:blocks` (Task↔Task, transitive) | 2 | backbone | v1 | yes | task edit / block |
+| `wl:inProject` (Task→Project) + Project node | 2 | backbone | v1 | yes | project edit |
+| `wl:mirrors` (Task↔Issue) | 2 | backbone+ingest | v1 | yes | task create / issue ingest |
+| Issue / PullRequest + `affects` | 2 | ingest | v1 | yes | VCS ingest (PR/issue open/merge) |
 | Artifact / Deployment / Environment | 3 | ingest | v1 | yes (minimal) | deploy hook (declared target) |
 | Component, DesignDoc, `governs`, `reviewer`, `requires`, `replaces` | 1 | **graph** | v1 | **no** (authored) | crit-approved design authoring |
-| Deliverable + acceptance criteria + `ls:deliveredBy` | 1 | **graph** | v1 | no (authored) | design authoring |
+| Deliverable + acceptance criteria + `wl:deliveredBy` | 1 | **graph** | v1 | no (authored) | design authoring |
 | observed confirmation of Deliverable | 3 | derivers | **v2** | — | spec 007 |
 
-> **`ls:implements` row amended by 014 §6.** The DesignDoc half is no longer projected from the
-> backbone: Component→Section claims are derived by `observed/repo-implements` from
-> `.worklode/implements.yaml` as `wl:implements` (033 §4.2). The Deliverable half projects from the backbone as tabled.
+`wl:implements` has no row: Component→Section claims are not projected from the backbone at all,
+they are derived by `observed/repo-implements` from `.worklode/implements.yaml` (025 §11, 026 §6.2).
 
-Task execution-state is projected as a **literal** (e.g. `ls:taskState "in_progress"`) mirroring
-the backbone enum; it is not modelled as `ls:status` and does not fork the backbone state machine
-(Open Q3). Reads (drift, overview) run against the graph via the SPARQL path (spec 009 item 2 /
+Task execution-state is projected as a **literal** (e.g. `wl:taskState "in_progress"`) mirroring
+the backbone enum; it is not modelled as `wl:status` and does not fork the backbone state machine
+(open question 3). Reads (drift, overview) run against the graph via the SPARQL path (§13.2 item 2 /
 spec 007).
 
 ---
 
-## 7. Partial supersession (review add-on) {#sec-7}
+### 11.1 Runtime projection {#sec-11.1}
 
-> **Superseded by 014 §3.** Sections are addressable `wlid:section/<doc-slug>/<anchor>` nodes; partial supersession is `dct:isReplacedBy` between sections, and `wl:supersededSection` is retired.
+Feeds 007's `observed/deploy` named graph. Authority is unchanged: the backbone and ingest own every
+runtime fact, the graph mirrors them read-only.
 
-An ADR can be superseded **only in specific subsections**, not wholesale. Modelled as a
-**scoped `dct:replaces` edge annotated with the affected section** (RDF-1.2 triple term,
-ADR-0001) — **recommended over minting section sub-IRIs** (lighter; no addressable-section
-namespace to maintain).
+| Node / edge | Source | v1? | Trigger |
+|---|---|---|---|
+| `wl:Artifact` + kind, version, digest | `artifacts` | v1 | `release.published` (see below) |
+| `prov:wasDerivedFrom` → `wl:Commit` | `artifacts.source_sha` | v1 | same, when the sha resolves |
+| `wl:Deployment` + status, target | `deployments` | v1 | Flux webhook, PyPI publish |
+| `prov:used` (Deployment → Artifact) | `deployments.artifact_id` | v1 | blocked in practice; see below |
+| `wl:Environment` | fixed instance set | v1 | static |
+| `wl:Commit` | `main_commits` | v1 | default-branch push |
+| `wl:cutFrom` (release → commit) | `release_frontiers` | v1 | `release.published` |
+| environment frontier → commit | `env_deploys` | **v2** | grain mismatch; see below |
+| `wl:RuntimeEvent` | `runtime_events` | **v2** | blocked on open question 7 |
+| `wl:Build` | — | **v2** | no source; needs workflow-run ingest |
+| Deliverable auto-confirmation | derived | **v2** | §9, spec 007 |
 
-```turtle
-# Full supersession — plain edge, no annotation:
-lsid:doc/adr-0009 dct:replaces lsid:doc/adr-0003 .
+**What the ingest actually produces today.** `store.CreateArtifact` has exactly one call site,
+`applyRelease` in `internal/hooks/github.go`, which writes `kind = 'git_tag'`. Nothing creates
+`docker_image`, `pypi` or `binary` rows, though the baseline `CHECK` constraint permits all four.
+Two consequences the vocabulary cannot paper over:
 
-# Partial supersession — same edge, annotated with the affected section:
-lsid:doc/adr-0012 dct:replaces lsid:doc/adr-0004 .
-<< lsid:doc/adr-0012 dct:replaces lsid:doc/adr-0004 >>
-    ls:supersededSection "§4 Deployment" .
-```
+- **In v1 the graph will contain `git_tag` artifacts and nothing else.** The kind-first IRI grammar
+  (§10.1) is still specified for all four, because the constraint allows them and an image-publish
+  hook is the obvious next ingest — but the other three kinds are grammar, not data.
+- **`prov:used` from a Deployment to its Artifact will be absent.** `deployments.artifact_id` is
+  resolved by `FindArtifactByImage`, which matches only `kind = 'docker_image'` — a kind with no
+  producer. The column is therefore null in practice, so the edge is specified and unpopulated
+  until image ingest exists. This is an ingest gap, not a modelling one, and is the single highest-value
+  thing to fix if the runtime layer is meant to carry weight (open question 11).
 
-**Semantics (ADR-0001 asserted-occurrence).** The inner triple `adr-0012 replaces adr-0004`
-*is* asserted as a plain triple; the annotation **scopes** it. Convention:
-- `dct:replaces` **with no** `ls:supersededSection` → full supersession (the superseded doc
-  moves to `lsc:superseded`).
-- `dct:replaces` **with** one or more `ls:supersededSection` → partial; only those sections
-  are stale. The superseded doc stays `lsc:accepted`; drift queries (spec 007) read the
-  annotation to report which sections are stale.
+Two classes are likewise declared but not projected, and the spec says so rather than implying
+coverage. `wl:Build` exists so `prov:wasGeneratedBy` is available the day workflow-run ingest lands;
+until then `prov:generatedAtTime` on the Artifact carries `built_at` and no Build node is minted.
+`wl:RuntimeEvent` is declared but unprojectable until it has a natural key.
 
-`ls:supersededSection` is a **domain-free annotation predicate** (ADR-0001 caveat: an annotation
-predicate must not declare an `rdfs:domain` of an endpoint class, or a reasoner mis-types the
-triple term). Range is a literal section reference (`"§4.2"`, a heading string) — deliberately
-**not** a section IRI.
+**The environment frontier has no node to hang on.** `release_frontiers` is keyed `(repo, tag)`,
+which is exactly a `git_tag` artifact — so `wl:cutFrom` projects cleanly from it. `env_deploys` is
+keyed `(repo, environment)`, a grain that matches nothing: `wl:Deployment` is keyed
+`(environment, target_kind, target_name)` and `wl:Environment` is global. Representing it needs
+either a new per-repo-per-environment node or a qualified relation, and neither is worth minting
+before a query wants it. Deferred to v2; the delivery resolver reads `env_deploys` relationally in
+the meantime and loses nothing.
 
-> **Publishing (resolved).** rdf-registry now publishes **RDF 1.2 alongside 1.1**: 1.1 files as
-> `/rdf/ls/ontology.ttl`, 1.2 files as `/rdf/ls/ontology.1-2.ttl`. The triple-term
-> `ls:supersededSection` annotations live in the `.1-2.ttl` file and ship natively — no round-trip
-> blocker. (`graph-server`, pyoxigraph-backed, also handles them for runtime authoring.)
+**Guarding the `wl:Commit` edge.** `applyRelease` populates `source_sha` from the release's
+`target_commitish`, which is frequently a *branch name* rather than a sha — the delivery lifecycle
+(004 §5.2) already handles this by falling back to main's head. The projector
+must therefore emit `prov:wasDerivedFrom` only when `source_sha` resolves to a known `main_commits`
+row, and drop it otherwise. Minting `wlid:commit/…/main` from a branch name would produce a
+plausible, permanently wrong node. An artifact whose `repo` is set but whose `source_sha` is null or
+unresolvable projects no commit edge at all: a repository alone does not identify a commit.
 
 ---
 
-## 8. Accepted deviations — drift suppression (resolves spec 007 Open Q3) {#sec-8}
+## 12. Accepted deviations — drift suppression {#sec-12}
 
 Some observed-but-unasserted edges are **intentional** — a sanctioned coupling the architecture
 tolerates but never elevated to intent. Without suppression, spec 007's violation query reports them
@@ -716,21 +873,21 @@ standard RDF reification vocabulary (`rdf:subject`/`predicate`/`object`), which 
 and stays plain RDF 1.1 (no `.1-2.ttl`).
 
 ```turtle
-lsid:deviation/pfas-reads-ingest-cache
-    a ls:AcceptedDeviation ;
-    rdf:subject   lsid:component/.../pfas ;       # the tolerated edge — UN-asserted
+wlid:deviation/pfas-reads-ingest-cache
+    a wl:AcceptedDeviation ;
+    rdf:subject   wlid:component/.../pfas ;       # the tolerated edge — UN-asserted
     rdf:predicate dct:requires ;
-    rdf:object    lsid:component/.../ingest ;
-    ls:sanctionedBy lsid:doc/adr-0014 ;           # the decision that authorises it
+    rdf:object    wlid:component/.../ingest ;
+    wl:sanctionedBy wlid:doc/adr-0014 ;           # the decision that authorises it
     dct:description "pfas reads ingest's on-disk cache directly; migration tracked in WT-812" ;
-    prov:wasAttributedTo lsid:agent/stig ;
+    prov:wasAttributedTo wlid:agent/stig ;
     dct:created "2026-07-21"^^xsd:date ;
     dct:valid   "2026-12-31"^^xsd:date .       # OPTIONAL expiry; absent = indefinite
 ```
 
 - **Home graph.** Authored into the **declared named graph of the sanctioning ADR**
-  (`…/graph/declared/<adr-id>`, spec 007), under the same crit gate (`proposed → accepted`) as any
-  declared edge. Superseding or removing that ADR removes the suppression. No new authorisation
+  (`…/graph/declared/<adr-id>`, spec 007), under the same crit gate as any declared edge — a draft
+  with an open review task until it is accepted (§4). Superseding or removing that ADR removes the suppression. No new authorisation
   mechanism: whoever may author intent may author a deviation.
 - **Expiry.** Optional `dct:valid` (an `xsd:date`). Past it, the deviation stops suppressing and
   the violation re-surfaces (spec 007) — a suppression cannot silently outlive its reason. No expiry
@@ -738,90 +895,158 @@ lsid:deviation/pfas-reads-ingest-cache
 - **Scope.** Predicate-general (names any `s/p/o`); in v1 only spec 007's 4.1 `dct:requires`
   violation query consumes it.
 
-## 9. Dependencies {#sec-9}
+## 13. What the data-platform must host {#sec-13}
+
+Worklode's **knowledge graph** (the declared architecture graph + the projected work graph)
+lives in the data-platform `graph-server` (Postgres RDF quad store). The **execution backbone**
+(tasks, leases, events) stays in Worklode's own Postgres — so the data-platform only has to host
+the *knowledge* half. This section is the minimum the data-platform must ship for that.
+
+### 13.1 Context {#sec-13.1}
+
+Verified against the data-platform `graph-server`, 2026-07. Built and deployed in **dev**:
+named-graph writes with a genuine single-writer serialization point
+(`SELECT … FOR UPDATE` per-branch + one ACID Postgres txn), O(1) copy-on-write branch create,
+child-wins overlay reads, Keycloak-authenticated HTTP (GSP), the outbox table, and **Oxigraph plus
+the outbox→Oxigraph materializer** behind a real `/sparql` endpoint. The full projector path —
+client-credentials token → `PUT` named graph to `main` → GSP read-back → drift query over SPARQL —
+is proven end-to-end in dev by data-platform's runbook
+`docs/runbooks/2026-07-22-worklode-projector-acceptance.md`.
+
+Still open: **prod** (no graph-server manifests under `deploy/overlays/prod/`; the prod-deploy plan
+is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL override.
+
+### 13.2 Must-have (v1 blockers) {#sec-13.2}
+
+1. **Prod deployment of `graph-server`** — **open**. Dev-only today; no graph-server manifests in
+   `deploy/overlays/prod/`, and data-platform's prod-deploy plan is deferred until the Hetzner prod
+   cluster exists. The KG cannot be authoritative for the platform on a dev service. Items 2, 4 and
+   5 are proven in dev and ride on this one to reach prod.
+2. **A working query/read path** — **done in dev**. Oxigraph and the outbox→Oxigraph materializer
+   are deployed (`deploy/overlays/dev/`), giving a real SPARQL endpoint; the drift query in the
+   acceptance runbook returns over it. The GSP-`GET`-per-graph-and-query-in-Worklode fallback is
+   dropped. Remaining work is the prod copy of these manifests (item 1).
+3. **A stable, documented IRI scheme** for Worklode entities — **scheme agreed, override open**;
+   aligned with rdf-registry ADR-0006
+   (branch-free term IRIs; `/id/…` for instances). Worklode mints IRIs for `Component`,
+   `DesignDoc`, `Task`; the host/namespace grammar must be fixed and agreed. (The canonical scheme
+   is authored in §10; this item is the data-platform-side commitment to host it.)
+   **Base = `https://worklode.io/ns/`** (decided): the `wl:` ontology stays in rdf-registry but its
+   pipeline **publishes under the `worklode.io/ns/` base**, not `sunstone.institute/rdf/`. The
+   sources live at `rdf/wl/` while the published base carries no `wl/` segment (025 §17), so this
+   needs a **base-URL override** for the `wl` ontology in rdf-registry (ADR-0006's implicit "repo
+   path = host path" mapping doesn't hold for a foreign domain) — a required rdf-registry change,
+   not yet implemented.
+4. **External-service write auth confirmed** — **done in dev**. Worklode's projector is a Go service
+   authenticating via Keycloak client-credentials (`dataplatform-svc`) and `PUT`-ing named graphs.
+   The acceptance runbook proves the client-credentials path end-to-end for an external caller; no
+   graph-server-side config was needed, because the `dataplatform-dev:readwrite` client role travels
+   under its owning client regardless of `azp`.
+5. **A writable, fixed branch** for the work graph — **confirmed**. Project = property, not branch
+   (sibling branches are invisible to each other, which would hide cross-project edges). The runbook
+   commits to the fixed `main` branch and reads it back.
+
+### 13.3 Should-have {#sec-13.3}
+
+6. **`If-Match` / ETag CAS on GSP writes** (their spec's v1.1). With a *single* Worklode projector
+   plus the per-branch lock, lost-update risk is already contained, so this is non-blocking — but
+   wanted before any second writer touches the work graph.
+7. **Per-branch / per-namespace write ACLs** (their first future-enforcement candidate). Lets
+   Worklode's writes be access-scoped from other data-platform writers. Fine to defer for v1.
+
+### 13.4 Explicitly not required from the data-platform {#sec-13.4}
+
+- The **lease/claim/job primitive** (`graph.job` + `SKIP LOCKED`) — stays on the Worklode backbone.
+- **Branch merge/diff** — design-review branches can defer merge to CI-side conflict detection.
+- **Markdown-as-asset** — design content stays as files in the designs repo; only RDF *descriptors*
+  (IRI, status, `governs`/`requires` edges) live in `graph-server`.
+
+## 14. Dependencies {#sec-14}
 
 - **Spec 004 (backbone):** owns Task state, leases, `blocks`/`child_of`; emits the event/outbox
-  stream the projector consumes.
-- **Spec 007 (drift/query):** consumes this model — reads the two-layer diff; owns observed-layer
-  derivers and Deliverable auto-confirmation (v2).
-- **Spec 009 (data-platform):** hosts the IRI scheme defined here; must ship prod `graph-server`,
+  stream the projector consumes. Its delivery lifecycle (004 §5) owns the
+  state machine and frontier arithmetic; this spec models the facts that machine reads.
+- **Spec 007 (drift/query):** consumes this model — reads the two-layer diff; owns the deriver
+  contract, the `observed/deploy` named graph the runtime nodes land in, and Deliverable
+  auto-confirmation (v2).
+- **The data-platform:** hosts the IRI scheme defined here; must ship prod `graph-server`,
   a SPARQL read path (Oxigraph + outbox materializer), external write auth, and a fixed writable
-  branch.
-- **rdf-registry:** the `ls:` PR must satisfy ADR-0006 (IRI), ADR-0007 (filenames), ADR-0001
+  branch (§13).
+- **`internal/hooks/`** (`flux.go`, `github.go`, `deployment.go`) and `internal/store/artifacts.go`
+  — the ingest whose rows project into the runtime nodes.
+- **rdf-registry:** the `wl:` PR must satisfy ADR-0006 (IRI), ADR-0007 (filenames), ADR-0001
   (triple-term annotation), split the ontology into `ontology.ttl` (1.1) + `ontology.1-2.ttl`
-  (1.2), add `rdf/shapes/ls-shapes.ttl` behind the **SHACL gate (ADR-0003)**, add an `owlrl`
+  (1.2), add `rdf/shapes/wl-shapes.ttl` behind the **SHACL gate (ADR-0003)**, add an `owlrl`
   closure test in the **ADR-0004** style (Jena `infer` is RDFS-only, can't prove OWL closure), and
-  add `ls` to the `/rdf/` DCAT/VoID index (ADR-0006 §5).
+  add `wl` to the `/rdf/` DCAT/VoID index (ADR-0006 §5). The gate and the closure test cover the
+  runtime terms as well as the rest.
 
-## 10. Open questions {#sec-10}
+## 15. Open questions {#sec-15}
 
-1. ~~Deliverable minting~~ — **CONFIRMED:** mint `ls:Deliverable` (no standard for "declared
+1. ~~Deliverable minting~~ — **CONFIRMED:** mint `wl:Deliverable` (no standard for "declared
    definition-of-done").
-2. ~~`ls:supersededSection` vs. a standard~~ — **CONFIRMED:** mint the domain-free annotation
-   predicate.
+2. ~~Section-level supersession: mint or reuse~~ — **RESOLVED:** reuse `dct:isReplacedBy` between
+   addressable `wl:Section` nodes; no annotation predicate is minted (025 §3).
 3. ~~Task-state representation~~ — **CONFIRMED:** projected as a literal mirror; does not fork the
    backbone-owned state machine (004).
 4. ~~Named-graph granularity~~ — **RESOLVED.** Projection named graphs are anchored on
-   **Workstreams** (`ls:Project`/`ls:OngoingMaintenance`, parent `ls:Workstream`). A Task
-   `ls:inWorkstream` ≥1 Workstream and its quads live in each such graph (a triple in N graphs =
-   N distinct quads; RDF has no exclusivity constraint). The projector maintains a task by a
-   per-subject `DELETE`/`INSERT` within each of its Workstream graphs (see Projection). Separate
-   from the declared/&lt;doc&gt; and observed/&lt;source&gt; graph families (spec 007).
+   **Projects** (`wl:Project`, the backbone's `projects` table). Every Task is `wl:inProject`
+   exactly one Project and its quads live in that graph; the projector maintains a task by a
+   per-subject `DELETE`/`INSERT` within it (§11). Separate from the declared/&lt;doc&gt; and
+   observed/&lt;source&gt; graph families (spec 007).
 5. ~~RDF-1.2 publish blocker~~ — **RESOLVED:** rdf-registry publishes 1.2 alongside 1.1
-   (`.1-2.ttl` files), so `ls:supersededSection` annotations ship natively; no interim workaround needed.
-6. ~~`ls:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
+   (`.1-2.ttl` files), so triple-term annotations ship natively; no interim workaround needed.
+6. ~~`wl:sanctionedBy` — mint vs. reuse~~ — **CONFIRMED:** mint it.
+7. **`wl:RuntimeEvent` has no natural key.** `runtime_events` has only a surrogate id, so no
+   deterministic IRI can be derived from a row and 007's idempotent full-replace contract cannot be
+   met. Options: add a natural key to the table (`(cluster, kind, workload, occurred_at)` is
+   plausibly unique), hash the tuple into the local id, or leave the class declared and unprojected.
+   Projection stays v2 until this is settled.
+8. **Should `wl:Build` be minted before its ingest exists?** It is declared here so
+   `prov:wasGeneratedBy` never becomes a breaking addition, at the cost of a class with no
+   instances. The alternative is deferring both to the workflow-run ingest and accepting the churn.
+9. **Environment as a closed instance set.** SHACL `sh:in` over `{dev, prod}` matches today's
+   normalisation, but v2 wants Cluster and Namespace beneath an Environment, and a per-cluster
+   preview environment would force the shape open. Confirm the closure is worth the constraint.
+10. **How should the per-environment frontier be modelled when v2 needs it?** `env_deploys`' grain
+    `(repo, environment)` matches no node in this vocabulary (§11.1). A per-repo-per-environment
+    node and a qualified relation are both defensible; the choice should be driven by the first
+    query that actually needs "what is live in dev for repo X", not settled speculatively now.
+11. **The artifact ingest gap is the real blocker.** Only `git_tag` artifacts are ever created, and
+    `deployments.artifact_id` resolves through a `docker_image` lookup that can never match (§11.1).
+    No vocabulary decision fixes this. Whether image-publish ingest lands before or after the `wl:`
+    PR determines whether the runtime layer ships with a populated `prov:used` edge or an empty one
+    — worth deciding deliberately rather than discovering at projection time.
 
-## 11. Acceptance criteria {#sec-11}
+## 16. Acceptance criteria {#sec-16}
 
-1. `ls:` ontology authored as `rdf/ls/ontology.ttl` (1.1) + `rdf/ls/ontology.1-2.ttl` (1.2
-   annotations) + `rdf/ls/concept.ttl` (SKOS) + `rdf/shapes/ls-shapes.ttl` (SHACL),
-   ADR-0006/0007-conformant, opened as a PR to rdf-registry with a `/rdf/` index entry.
-2. The mint set is exactly {`ls:Component`, `ls:DesignDoc`, `ls:ADR`, `ls:Spec`, `ls:Plan`,
-   `ls:Task`, `ls:Deliverable`, `ls:Effect`, `ls:Workstream`, `ls:Project`, `ls:OngoingMaintenance`,
-   `ls:governs`, `ls:implements`, `ls:affects`, `ls:deliveredBy`, `ls:reviewer`, `ls:taskKind`, `ls:mirrors`,
-   `ls:dependsOn`, `ls:blocks`, `ls:inWorkstream`, `ls:status`, `ls:layer`, `ls:supersededSection`,
-   `ls:AcceptedDeviation`, `ls:sanctionedBy`} plus SKOS schemes `lsc:DesignDocStatus`,
-   `lsc:TaskKind`, `lsc:ModelLayer`; everything else reuses
-   `dcterms`/`foaf`/`prov`/`doap`/`skos`/`rdf`/`owl`. **No gtio term appears.**
-
-> **Amended by 014, 015 and 016.** The mint set loses `Plan` and `supersededSection`, gains `Section`/`lastRevisedIn`, gains the six runtime classes plus their schemes and properties, gains `Skill`/`recommendsSkill` (016 §1), and includes the `taskState` literal this spec's own §Projection already emits. The extracted Turtle is `ns/ontology.ttl`, `ns/concept.ttl` and `ns/shapes.ttl`.
-
-3. The IRI grammar for Component / DesignDoc / Task / Deliverable / Issue / PR / Artifact /
-   Deployment / Environment is documented and branch-free (ADR-0006 §3); spec 009 can host it.
-4. The projector can `PUT` a Task's named graph (keyed by its `lsid:task/…` IRI) to the fixed
-   work-graph branch on a backbone lifecycle event, idempotently, and a SPARQL read returns it.
-5. Decomposition (`Spec ⊃ Plan ⊃ Task` via `dct:hasPart`), dependency (`dct:requires`),
-   full supersession (`dct:replaces`), and **partial** supersession (annotated triple term
-   with `ls:supersededSection`) each validate against the vocabulary and are distinguishable by a
-   drift query (spec 007).
-
-> **Superseded by 014 acceptance criteria 2 and 5.** Decomposition is Spec → task subtree, and partial supersession is tested at section-IRI granularity, not via a triple-term annotation.
-
-6. A Deliverable declares its definition-of-done (`dct:description` + declared
-   Artifact/Environment `dct:relation` targets) and names its delivering Component via
-   `ls:deliveredBy` (≥1). Joined to a Component's `ls:implements` section claim and to a
-   `ls:Deployment` on the declared Artifact/Environment, this answers "component A implemented
-   section B by deploying deliverable C to environment D" **per environment**.
-   An `ls:Effect` satisfies the same criterion with **no** Artifact: it declares a Deployment
-   target instead, and is witnessed by that Deployment reaching `wlc:deployed` over a Commit on
-   the delivering component's default branch. A round-trip proves both forms.
-7. An `ls:AcceptedDeviation` names a `dct:requires` edge via `rdf:subject`/`predicate`/`object`
-   **without** asserting it (the edge is absent from the declared layer), carries `ls:sanctionedBy`
-   → an ADR and an optional `dct:valid` expiry, and is distinguishable by a drift query
-   (spec 007) as suppressing vs. expired.
-8. **Workstream named graphs:** a Task belonging to two Workstreams (`ls:inWorkstream`) has its
-   quads present in **both** Workstream named graphs; a per-subject re-projection updates the task
-   in each without disturbing other tasks in those graphs.
-9. **Task kind, reviewer, layer, mirror:** `ls:taskKind` resolves to a `lsc:TaskKind` concept
-   (incl. `lsc:spike`); a Component's `ls:reviewer` resolves to a GitHub user/team Agent IRI;
-   every minted class/property carries an `ls:layer` so `SELECT ?c WHERE { ?c ls:layer lsc:intent }`
-   lists all intent terms; a Task and its GitHub Issue are joined by symmetric `ls:mirrors`, and a
-   PR that `Closes #N` the mirrored Issue resolves to the Task.
-10. **Reasoning architecture:** (a) an OWL 2 RL pass (`owlrl`) over the TBox + a seeded ABox proves
-    the disjointness axioms (a node typed both `ls:Task` and `ls:Deliverable` is flagged
-    inconsistent) and the `ls:dependsOn`/`ls:blocks` transitive closure (`A→B→C ⊧ A→C`); (b) the
-    same reachability is returned live by a SPARQL property-path query (`?t ls:dependsOn+ ?x`)
-    against Oxigraph with **no** reasoner; (c) `rdf/shapes/ls-shapes.ttl` (Jena `shacl`, ADR-0003)
-    rejects a Task missing `ls:taskKind` or with two, a Deliverable missing its `dct:relation`
-    target or its `ls:deliveredBy`, and an `ls:Effect` that names an Artifact target;
-    (d) closure is **not** present in published `dist/`.
+1. Worklode's projector can, against prod `graph-server`: authenticate, `PUT` a Worklode named graph
+   to the fixed branch under the agreed IRI scheme, and read it back via a SPARQL query that answers
+   a drift question (e.g. "components with no governing DesignDoc"). This passes against **dev**
+   today (data-platform runbook `docs/runbooks/2026-07-22-worklode-projector-acceptance.md`); prod
+   remains blocked on §13.2 item 1.
+2. `rdf/wl/ontology.ttl` and `rdf/wl/concept.ttl` declare all six runtime classes, seven properties
+   and four SKOS schemes; every class and property carries `wl:layer wlc:runtime`, so
+   `SELECT ?c WHERE { ?c wl:layer wlc:runtime }` returns exactly the runtime terms.
+3. No term is imported from SPDX, DOAP, DCAT, schema.org, OSLC or `sd:`; the only external terms
+   used are `prov:`, `dcterms:`, `doap:Project`, `skos:` and `owl:versionInfo`. `rdfs:seeAlso`
+   citations to SPDX carry no import.
+4. Each of the four artifact kinds mints a distinct, deterministic IRI under the §10.1 grammar, and
+   re-projecting an unchanged `artifacts` row is a byte-identical no-op.
+5. On a **seeded** graph, a `wl:Deployment` resolves to its `wl:Artifact` via `prov:used` and to
+   `wlid:environment/prod` via `wl:toEnvironment`, and a SPARQL read returns the artifact currently
+   live in prod for a given target. Seeded, not projected: `deployments.artifact_id` is null in
+   practice today (§11.1), so this criterion tests the vocabulary, and closing the ingest gap is
+   tracked separately as open question 11.
+6. A `wl:Deliverable` whose `dct:relation` names an artifact IRI and `wlid:environment/prod`
+   resolves both to typed nodes (§9's Deliverable example round-trips against this vocabulary).
+7. The SHACL gate rejects: an Artifact with two `wl:artifactKind` values or none; a Deployment
+   missing `wl:toEnvironment`; an Environment outside `{dev, prod}`.
+8. An `owlrl` pass over the TBox plus a seeded ABox flags a node typed both `wl:Artifact` and
+   `wl:Deployment` as inconsistent, and infers `prov:Entity` for every Artifact and
+   `prov:Activity` for every Deployment — confirming PROV-aware tooling traverses the layer.
+9. A release tag artifact `wl:cutFrom` the commit its `release_frontiers` row names, and that commit
+   resolves to a `wl:Commit` projected from `main_commits`. A release whose `target_commitish` is a
+   branch name projects **no** `prov:wasDerivedFrom` edge rather than a fabricated commit node.
+10. `wl:Build` and `wl:RuntimeEvent` are declared with no instances in v1, and no acceptance
+    criterion anywhere claims they are projected.

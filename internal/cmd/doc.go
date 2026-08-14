@@ -25,7 +25,7 @@ func init() {
 	rootCmd.AddCommand(newDocCmd())
 }
 
-// syncGate is the observed git state the default-branch gate judges (034 §3).
+// syncGate is the observed git state the default-branch gate judges (025 §16.2).
 type syncGate struct {
 	Branch        string
 	DefaultBranch string
@@ -33,7 +33,7 @@ type syncGate struct {
 	Clean         bool
 }
 
-// checkSyncGate enforces spec 034 §3: without --force, sync only from the
+// checkSyncGate enforces spec 025 §16.2: without --force, sync only from the
 // default branch with a clean tree. Every refusal names --force as the
 // escape hatch.
 func checkSyncGate(g syncGate, force bool) error {
@@ -79,7 +79,7 @@ func newDocSyncCmd() *cobra.Command {
 	var force, dryRun bool
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Push the configured git corpora to the backbone (spec 034)",
+		Short: "Push the configured git corpora to the backbone (spec 025 §16.2)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -90,7 +90,7 @@ func newDocSyncCmd() *cobra.Command {
 				return err
 			}
 			if corpora.SpecDir == "" && corpora.PlanDir == "" {
-				return errors.New(`nothing configured to sync: set spec_corpus and/or plan_corpus in .worklode/config.toml (spec 034 §2)`)
+				return errors.New(`nothing configured to sync: set spec_corpus and/or plan_corpus in .worklode/config.toml (spec 025 §16.1)`)
 			}
 
 			root, ok := worktree.Root(cwd)

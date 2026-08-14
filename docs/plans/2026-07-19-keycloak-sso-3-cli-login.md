@@ -1,11 +1,11 @@
 ---
 status: superseded
-covers: docs/specs/001-keycloak-sso.md
+covers: docs/specs/001-identity-and-authentication.md
 requires:
   - 2026-07-19-keycloak-sso-1-server-core.md
 isReplacedBy:
   ".":
-    - docs/specs/031-provider-neutral-cli-login.md
+    - docs/specs/001-identity-and-authentication.md
 ---
 # Keycloak SSO — Plan 3: CLI `wl login` Implementation Plan
 

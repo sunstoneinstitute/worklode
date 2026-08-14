@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-3
-covers: docs/specs/009-data-platform-kg-requirements.md
+covers: docs/specs/006-knowledge-graph.md
 ---
 # Data-platform KG requirements (spec 009) — Implementation Plan
 
@@ -26,7 +26,7 @@ SPARQL. The remaining cross-repo work becomes five precisely-scoped issues.
 `golang.org/x/oauth2/clientcredentials` (`go.mod:14`), `gh` CLI for the
 hand-off issues.
 
-**Spec:** `docs/specs/009-data-platform-kg-requirements.md`
+**Spec:** `docs/specs/006-knowledge-graph.md`
 
 ---
 
@@ -43,7 +43,7 @@ both repos:
 |---|---|---|---|
 | 1 | Prod deployment of graph-server | data-platform | **Open.** `deploy/overlays/prod/kustomization.yaml` deploys the Nessie/Iceberg base only — no graph-server, Oxigraph, or materializer resources. The dev and hzdev overlays have all three (`deploy/overlays/dev/graph-server-deployment.yaml`, `oxigraph-deployment.yaml`, `oxigraph-materializer-deployment.yaml`). → Issue A. |
 | 2 | Query/read path (Oxigraph + outbox materializer) | data-platform | **Done in dev** — the spec's "Oxigraph is not deployed" is outdated. Materializer deployed (`deploy/overlays/dev/oxigraph-materializer-deployment.yaml`); `/sparql` is a read-only proxy to Oxigraph (`crates/graph-server/src/proxy.rs:25`). Prod pending item 1. |
-| 3 | Stable, agreed IRI scheme + rdf-registry base-URL override | Worklode spec 006/014 + rdf-registry + data-platform | **Open, narrowed.** Data-platform ADR-0003 (`docs/adr/0003-hosting-worklode-kg-iri-scheme.md:105-109`) now agrees with Worklode spec 006 as amended by 014 §1 on the schema base, but still disagrees on instance and named-graph authority — see Overlaps §2. The rdf-registry base-URL override exists only as an unlanded plan (branch `worklode-io-spec`, commit 56768ba, `docs/superpowers/plans/2026-07-22-worklode-ns-base-override.md`) and predates the 014 §1 base. → Issues B and C. |
+| 3 | Stable, agreed IRI scheme + rdf-registry base-URL override | Worklode spec 006/014 + rdf-registry + data-platform | **Open, narrowed.** Data-platform ADR-0003 (`docs/adr/0003-hosting-worklode-kg-iri-scheme.md:105-109`) now agrees with Worklode spec 006 as amended by 025 §17 on the schema base, but still disagrees on instance and named-graph authority — see Overlaps §2. The rdf-registry base-URL override exists only as an unlanded plan (branch `worklode-io-spec`, commit 56768ba, `docs/superpowers/plans/2026-07-22-worklode-ns-base-override.md`) and predates the 025 §17 base. → Issues B and C. |
 | 4 | External-service write auth confirmed | data-platform + Worklode | **Done in dev, manually.** Runbook `docs/runbooks/2026-07-22-worklode-projector-acceptance.md` proves `dataplatform-svc` client-credentials → GSP PUT → GET → SPARQL against dev. The Worklode-side, repeatable form is this plan's harness (Tasks 1–4). |
 | 5 | Writable fixed branch | data-platform | **Done.** `PUT /branches/main/graphs?graph=<iri>` (`crates/graph-server/src/app.rs:53-59`); ADR-0003 §2: "every project writes to the one fixed writable branch `main`". |
 | 6–7 | If-Match/ETag CAS; per-branch write ACLs (should-have) | data-platform | ACLs have a plan (`docs/plans/2026-07-22-graph-server-write-acls.md`); no CAS plan found. Non-blocking for v1 (single projector + per-branch lock). → Issue D. |
@@ -80,9 +80,8 @@ provisional until it actually executes — not this plan's concern.)
    and node IRIs as opaque strings, and the e2e fixture hard-codes its IRIs
    (they are test data, not production minting).
 2. **Published IRI authority: schema now agrees, instances and named graphs
-   still conflict.** Worklode spec 006 (amended by 014 §1;
-   `docs/specs/000-umbrella-architecture.md:94`) puts schema, concepts, and
-   instances under `https://worklode.io/ns/` (`wl:` = `…/ontology#`,
+   still conflict.** Worklode spec 006 (amended by 025 §17) puts schema,
+   concepts, and instances under `https://worklode.io/ns/` (`wl:` = `…/ontology#`,
    `wlid:` = `…/id/…`) — the schema and concept half now matches
    Data-platform ADR-0003's schema base `https://worklode.io/ns/ontology#`.
    The instance and named-graph halves still conflict: ADR-0003 fixes
@@ -775,7 +774,7 @@ func TestGraphServerAcceptance(t *testing.T) {
 	ctx := context.Background()
 
 	// Unique fixture per run: comp-a is governed, comp-b is the drift.
-	// IRIs follow spec 006 as amended by 014 §1 (base worklode.io/ns/);
+	// IRIs follow spec 006 as amended by 025 §17 (base worklode.io/ns/);
 	// the workstream graph family follows the knowledge-graph plan.
 	nonce := fmt.Sprintf("e2e-%d", time.Now().UnixNano())
 	graphIRI := "https://worklode.io/ns/graph/workstream/" + nonce
@@ -950,7 +949,7 @@ gh issue create -R sunstoneinstitute/data-platform \
   --title "Prod deployment of graph-server, Oxigraph and the materializer (Worklode spec 009, must-haves 1-2)" \
   --body "$(cat <<'EOF'
 Worklode's knowledge graph treats graph-server as its system of record
-(worklode docs/specs/009-data-platform-kg-requirements.md). The dev and
+(worklode docs/specs/006-knowledge-graph.md). The dev and
 hzdev overlays carry the full stack (graph-server-deployment.yaml,
 oxigraph-deployment.yaml, oxigraph-materializer-deployment.yaml,
 graph-server-migrate-job.yaml, ingress/services/PVC), but
@@ -984,7 +983,7 @@ https://worklode.io/ns/ontology#<Term>:
   https://data.sunstone.institute/wl/id/<type>/<local-id>; named graphs
   https://data.sunstone.institute/wl/graph/project/<name>. It explicitly
   rejects minting instances under worklode.io.
-- Worklode spec 006 as amended by 014 §1 (the canonical scheme per spec
+- Worklode spec 006 as amended by 025 §17 (the canonical scheme per spec
   009 item 3): instances https://worklode.io/ns/id/…, concepts
   https://worklode.io/ns/concept/…, and (per Worklode's knowledge-graph
   plan) projection graphs https://worklode.io/ns/graph/workstream/<project-id>.
@@ -1017,7 +1016,7 @@ pipeline needs a base-URL override.
 
 A plan already exists on branch worklode-io-spec (commit 56768ba,
 docs/superpowers/plans/2026-07-22-worklode-ns-base-override.md) but
-predates Worklode spec 014 §1, which moved the sources to rdf/wl/ and the
+predates Worklode spec 025 §17, which moved the sources to rdf/wl/ and the
 published base to https://worklode.io/ns/ (sources stay under rdf/wl/; the
 published base has no wl/ segment — schema namespace is
 https://worklode.io/ns/ontology#). Update the plan to that base and land it.
@@ -1047,7 +1046,7 @@ the work graph:
   other producers — docs/plans/2026-07-22-graph-server-write-acls.md
   already covers this; this issue tracks Worklode's dependency on it.
 
-Source: worklode docs/specs/009-data-platform-kg-requirements.md,
+Source: worklode docs/specs/006-knowledge-graph.md,
 "Should-have".
 EOF
 )"
@@ -1073,7 +1072,7 @@ No action needed yet; Worklode needs to know which way to converge:
 - if branch-scoped SPARQL Update (or a per-subject patch operation) is on
   the roadmap, the per-subject design stands.
 
-Source: worklode docs/specs/009-data-platform-kg-requirements.md items
+Source: worklode docs/specs/006-knowledge-graph.md items
 2/4; worklode plan overlap notes.
 EOF
 )"

@@ -197,7 +197,7 @@ type progressJSON struct {
 	Total  int `json:"total"`
 }
 
-// hierarchyJSON is the spec-018 hierarchy block on a task detail. parent is
+// hierarchyJSON is the spec-004 hierarchy block on a task detail. parent is
 // null for a root task; progress is zeroed for a task with no children.
 type hierarchyJSON struct {
 	Parent   *parentRefJSON `json:"parent"`

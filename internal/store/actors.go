@@ -22,7 +22,7 @@ type Actor struct {
 	DisplayName string
 	Admin       bool
 	// ExpectedGitHubLogin is the GitHub login Keycloak asserts for this actor
-	// via the realm's github_username user attribute (spec 023 §3.2), re-synced
+	// via the realm's github_username user attribute (spec 001 §9.2), re-synced
 	// on every login. Empty when the Keycloak account carries no such
 	// attribute.
 	ExpectedGitHubLogin string

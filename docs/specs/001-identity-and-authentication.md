@@ -1,5 +1,6 @@
 ---
-status: draft
+status: accepted
+issued: 2026-07-31
 ---
 # Spec 001 — Identity & authentication
 

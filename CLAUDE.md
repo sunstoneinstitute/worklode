@@ -81,7 +81,7 @@ endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 anonymous `authOpen` subject an instance with no login provider serves),
 a `grants` table of permission → roles, and a default-deny `Decide`. There is
 no RBAC model yet — the two roles are the `user`/`admin` Keycloak already
-syncs (023 §3.2), and decisions are not project-scoped — so add real roles by
+syncs (001 §9.2), and decisions are not project-scoped — so add real roles by
 editing that table, never by adding a check inside a handler.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
@@ -99,7 +99,7 @@ registry with pgvector embeddings (`internal/skillsync`, `skillstore`).
 The backbone (this repo, Postgres) owns execution facts and — once spec 025
 is implemented — design-document artifacts (specs, ADRs, plans); derived
 architecture facts and the queryable view of both belong to the data-platform
-knowledge graph (specs 003/006/025), which receives documents by projection.
+knowledge graph (specs 006/025), which receives documents by projection.
 No fact has two owners — keep new state on the right side of that split.
 
 ## Specs, plans, tasks
@@ -113,7 +113,7 @@ is implemented):
   never a task state — do not create long-lived umbrella tasks per spec.
 - A **plan** is an executable document; its execution is the set of tasks
   minted when the plan is accepted. Today that set hangs off a `kind =
-  'epic'` root (spec 018); 025 §5 drops the root and groups the tasks by a
+  'epic'` root (spec 004); 025 §9.2 drops the root and groups the tasks by a
   reference to the plan document instead. Do not create free-standing epics.
 - **Groupings are queries, not rows** (025 §1): one plan's tasks = the tasks
   referencing it; cross-plan "ships together" = Milestone over Deliverables
@@ -174,7 +174,7 @@ ground without adding a Python stack to a Go repo.
   stamps on creation (`worktree.SetTaskID`), falling back to the id in the
   directory name (`Layout.ParseDir`) for worktrees created before this field
   existed. Both share the same guard — the path must be exactly one level
-  below the base — so only id resolution costs a git subprocess (030 §3.2).
+  below the base — so only id resolution costs a git subprocess (008 §5.2).
   `git config --worktree` needs `extensions.worktreeConfig` enabled in the
   repo's own local config — global config does not count — which `lode
   install` sets per-repo; `lode next` also sets it defensively before
@@ -184,13 +184,13 @@ ground without adding a Python stack to a Go repo.
 - **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
   frontmatter — no exceptions.** A spec needs `status` and, once accepted,
   `issued`. A plan needs `status` and `covers` — the spec sections it undertakes
-  to see built, optionally qualified by a `coverage:` level (033 §1). It is
+  to see built, optionally qualified by a `coverage:` level (026 §5). It is
   `covers` rather than `implements` because a plan writes no code: `implements`
   is a component's claim that its code meets a section, and one word for the
   promise and for the evidence leaves them indistinguishable. `implements` still
   parses on a plan and is reported as retired.
   When no spec governs it, write `covers: NO-SPEC` (the reserved "no governing
-  spec" sentinel, which takes no project key — 026 §4.2a) rather than omitting
+  spec" sentinel, which takes no project key — 026 §4.3) rather than omitting
   the key, because an absent `covers` is
   indistinguishable from a forgotten one. Frontmatter keys are ontology
   property names, ordered lifecycle → `covers` → dependency → amendment →
@@ -202,12 +202,12 @@ ground without adding a Python stack to a Go repo.
   `docs/authoring-design-docs.md`: filenames, the frontmatter schema, and how
   to amend/supersede. `scripts/secfmt.py` enforces the numbering (pre-commit
   hook; docs-only PRs skip CI, so the hooks are the real gate).
-- `ns/` holds the `wl:` ontology extracted from specs 006/014/015/016:
+- `ns/` holds the `wl:` ontology extracted from specs 006/016/025/026:
   `ontology.ttl` (classes, properties, axioms), `concept.ttl` (SKOS enums),
   `shapes.ttl` (SHACL). It is the vocabulary the frontmatter keys come from, and
   the parseable form — the specs' own Turtle blocks are illustrative and do not
   parse. `ns/` owns the shared schema and the specs own the rationale
-  (025 §9); until the codegen step exists, amend the spec first, then mirror
+  (025 §17); until the codegen step exists, amend the spec first, then mirror
   the term here (`riot --validate ns/*.ttl`) — and never edit `wlc:TaskKind`
   apart from the migration and `validKinds`, which a test holds together.
 

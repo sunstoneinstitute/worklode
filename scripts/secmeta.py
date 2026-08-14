@@ -67,10 +67,10 @@ SPEC_ZERO = re.compile(r"^[A-Za-z][\w-]*[-:]SPEC-0+(#|$)", re.I)
 REFERENCE = re.compile(r"^[\w./-]+\.md(#sec-[\w.]+)?$")
 
 SCALAR_REFS = {"wasDerivedFrom"}
-# `covers` is the plan's undertaking to realise a section (033 §1); `implements`
+# `covers` is the plan's undertaking to realise a section (026 §5); `implements`
 # is its retired spelling, still parsed so in-flight branches merge.
 PLAN_COVERAGE = {"covers", "implements"}
-# The qualified entry form (033 §3). `full` and `none` leave nothing to
+# The qualified entry form (026 §5.1). `full` and `none` leave nothing to
 # complete, so `fullCoverageWith` is only meaningful beside `partial`.
 COVERAGE_KEYS = {"spec", "coverage", "fullCoverageWith"}
 COVERAGE_LEVELS = ("full", "partial", "none")
@@ -176,7 +176,7 @@ def check_ref(ref, home, where, out, anchors):
 
 
 def check_coverage_entry(entry, home, where, out, anchors):
-    """Check one qualified `covers` entry (033 §3). Whether a named
+    """Check one qualified `covers` entry (026 §5.1). Whether a named
     fullCoverageWith plan really covers the section needs that plan's own
     frontmatter, so cross_check does it."""
     unknown = sorted(str(k) for k in set(entry) - COVERAGE_KEYS)
@@ -260,43 +260,43 @@ def cross_check(index):
         for section, bare, _level, completions in entries:
             if section and bare and status == "accepted" and "#sec-" in section:
                 # A whole-document reference names no section, so it is outside
-                # this rule; 033 §3 requires the qualified form only where a
+                # this rule; 026 §5.1 requires the qualified form only where a
                 # section is shared, which is the case the bare form cannot say.
                 others = accepted.get(section, set()) - {rel}
                 if others:
                     out.append((shown, "unresolved",
                                 f"{section} is also covered by {', '.join(sorted(others))}; "
                                 "more than one accepted plan on a section needs the qualified "
-                                "form (033 §3)"))
+                                "form (026 §5.1)"))
             for target in completions:
                 if target == rel:
                     out.append((shown, "error",
                                 "fullCoverageWith cannot name its own plan — a partial plan "
-                                "cannot close itself (033 §2)"))
+                                "cannot close itself (026 §2.1)"))
                     continue
                 if target not in index:
                     path, _, _ = target.partition("#")
                     if (REPO / path).is_file():
                         out.append((shown, "unresolved",
                                     f"fullCoverageWith names {target}, which does not itself cover "
-                                    f"{section} — closure is checked, never trusted (033 §2)"))
+                                    f"{section} — closure is checked, never trusted (026 §2.1)"))
                     continue  # no file — check() reports that
                 target_status = index[target][1]
                 if target_status != "accepted":
                     out.append((shown, "unresolved",
                                 f"fullCoverageWith names {target_status} plan {target}; only "
-                                "accepted plans can close coverage (033 §2)"))
+                                "accepted plans can close coverage (026 §2.1)"))
                     continue
                 same_section = [level for s, _, level, _ in index[target][2]
                                 if section and s == section]
                 if not same_section:
                     out.append((shown, "unresolved",
                                 f"fullCoverageWith names {target}, which does not itself cover "
-                                f"{section} — closure is checked, never trusted (033 §2)"))
+                                f"{section} — closure is checked, never trusted (026 §2.1)"))
                 elif not any(level in {"full", "partial"} for level in same_section):
                     out.append((shown, "unresolved",
                                 f"fullCoverageWith names {target}, whose coverage: none contributes "
-                                f"nothing to {section} closure (033 §2)"))
+                                f"nothing to {section} closure (026 §2.1)"))
     return out
 
 
@@ -321,10 +321,10 @@ def check(path, anchors):
 
     if PLAN_COVERAGE <= set(data):
         out.append(("error", "covers and implements are the same key under two "
-                             "names (033 §3) — keep covers"))
+                             "names (026 §5.1) — keep covers"))
     elif "implements" in data:
         out.append(("unresolved", "implements is retired on a plan; write covers "
-                                  "(033 §1)"))
+                                  "(026 §5)"))
 
     status = data.get("status")
     if status is None:

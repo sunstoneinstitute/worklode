@@ -69,9 +69,9 @@ func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
 }
 
 // TestNewServerAcceptsGitHubWithoutOrg asserts NewServer succeeds with the
-// dormant GitHub App OAuth client configured (spec 023 §3.3) and no org
+// dormant GitHub App OAuth client configured (spec 001 §9.3) and no org
 // setting: the org-membership guard that used to gate the GitHub login flow
-// is gone along with that flow (spec 023 §3.1).
+// is gone along with that flow (spec 001 §3).
 func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
@@ -170,7 +170,7 @@ func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
 }
 
 // TestOIDCTokenExchangeSyncsGitHubUsername asserts expected_github_login is
-// re-synced on every login exactly like the admin flag (spec 023 §3.2): a
+// re-synced on every login exactly like the admin flag (spec 001 §9.2): a
 // login carrying github_username sets it, and a later login without the
 // claim clears it back to empty while still succeeding (201).
 func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {

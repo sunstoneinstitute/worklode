@@ -61,7 +61,7 @@ and 10b). Deferred to later plans:
   AcceptedDeviation instances and their crit-gated named graphs): spec 014
   reworks the document model; authoring surfaces belong to 014/008 plans. The
   *vocabulary* for all of it ships here.
-- **Partial supersession**: 014 §3 retires `wl:supersededSection` for section
+- **Partial supersession**: 025 §3 retires `wl:supersededSection` for section
   IRIs, so 006's triple-term mechanism (acceptance criterion 5) is not built
   at all; sections land with 014. Consequence: no `ontology.1-2.ttl` is needed
   in this phase — the annotation predicate was 006's only RDF-1.2 content.
@@ -85,10 +85,10 @@ backbone:
 
 ### Amendments honored, and gaps this plan closes
 
-Spec 014 §1 says the `ls:`→`wl:` rename "must happen before spec 006 ships",
+Spec 025 §17 says the `ls:`→`wl:` rename "must happen before spec 006 ships",
 so everything here uses `wl:`/`wlc:`/`wlid:` under
-`https://worklode.io/ns/`. Also honored: no `wl:Plan` (014 §2), no
-`wl:supersededSection` (014 §3), status enum without `implemented` (014 §5),
+`https://worklode.io/ns/`. Also honored: no `wl:Plan` (025 §2), no
+`wl:supersededSection` (025 §3), status enum without `implemented` (025 §7),
 six-value TaskKind including `spec` (014 §8, matching today's `tasks.kind`
 CHECK plus the two values 014 adds). `wl:Section`, `wl:lastRevisedIn` and the
 015 runtime terms ship with those specs' plans.
@@ -239,11 +239,11 @@ Expected: FAIL — `no required module provides package .../internal/kg/iri`
 
 ```go
 // Package iri mints the canonical Worklode IRIs (spec 006 §Canonical IRI
-// scheme, prefixes renamed per spec 014 §1). IRIs are branch-free and
+// scheme, prefixes renamed per spec 025 §17). IRIs are branch-free and
 // version-free; local ids are opaque and stable, and slashes inside a local
 // id are permitted (slash namespace, opaque path).
 //
-// The Artifact pattern is deliberately absent: spec 015 §5 replaces 006's
+// The Artifact pattern is deliberately absent: spec 006 §10.1 replaces 006's
 // docker-only grammar with a kind-first one and ships with 015's plan.
 package iri
 
@@ -427,7 +427,7 @@ func TestConceptSchemes(t *testing.T) {
 	for _, want := range []string{
 		"wlc:DesignDocStatus a skos:ConceptScheme",
 		"wlc:draft", "wlc:proposed", "wlc:accepted", "wlc:superseded",
-		// 014 §5: implemented left the enum, so the ordered list has 4 members.
+		// 025 §7: implemented left the enum, so the ordered list has 4 members.
 		"skos:memberList ( wlc:draft wlc:proposed wlc:accepted wlc:superseded )",
 		"wlc:TaskKind a skos:ConceptScheme",
 		"wlc:feature", "wlc:bug", "wlc:chore", "wlc:spec", "wlc:review", "wlc:spike",

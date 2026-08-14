@@ -1,18 +1,18 @@
 ---
 status: draft
 covers:
-  - docs/specs/027-event-watchers.md#sec-1
-  - docs/specs/027-event-watchers.md#sec-2
-  - docs/specs/027-event-watchers.md#sec-3
-  - docs/specs/027-event-watchers.md#sec-4
-  - docs/specs/027-event-watchers.md#sec-6
-  - docs/specs/027-event-watchers.md#sec-8
+  - docs/specs/025-documents-in-the-backbone.md#sec-15
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.1
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.2
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.3
+  - docs/specs/025-documents-in-the-backbone.md#sec-18
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.7
 ---
 # Event watchers 1/2: the ordered log
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Series:** Part 1 of 2 (spec 027 §10 mandates the split). Task numbers
+**Series:** Part 1 of 2 (spec 025 §19 mandates the split). Task numbers
 restart at 1 per part.
 
 - **Part 1 — the ordered log (this file, 9 tasks):** `events.txid` and the
@@ -27,7 +27,7 @@ restart at 1 per part.
   `wl:DocumentAccepted` to emit.
 
 **Goal:** Turn the append-only `events` table into a totally ordered,
-offset-tracked log with at-least-once subscribers (027 §1–§4), plus the
+offset-tracked log with at-least-once subscribers (025 §15–§4), plus the
 `lode event` verbs (§6) and eventbus metrics (§8) — with the §9 ordering-trap
 test proving a naive `last_seen_id` cursor would skip late-committing events.
 
@@ -48,7 +48,7 @@ one — so the loop is proven by store-backed package tests.
 golang-migrate, cobra, prometheus/client_golang.
 
 **Read first:**
-- `docs/specs/027-event-watchers.md` §1–§4, §6, §8–§10 — the whole design
+- `docs/specs/025-documents-in-the-backbone.md` §1–§4, §6, §8–§10 — the whole design
 - `internal/store/events.go` — `Event`, `RecordEvent` and its `apply` seam
 - `internal/store/store.go:140-152` — `Tx`; note the pool is `database/sql`
   over pgx (16 conns max), which is why the subscriber lock must pin a
@@ -90,7 +90,7 @@ golang-migrate, cobra, prometheus/client_golang.
 | `internal/cli/client.go`, `internal/cli/render.go` | client methods + table rendering |
 | `internal/cmd/event.go` (new) | `lode event tail\|subscribers\|seek` |
 | `ns/ontology.ttl` | `wl:Event`, `wl:DocumentSubmitted`, `wl:DocumentAccepted`, `wl:subject`, `wl:fromStatus`, `wl:toStatus` |
-| `docs/specs/004-execution-backbone.md`, `docs/specs/027-event-watchers.md`, `CLAUDE.md` | amendment note + mirrors, architecture blurb |
+| `docs/specs/004-execution-backbone.md`, `docs/specs/025-documents-in-the-backbone.md`, `CLAUDE.md` | amendment note + mirrors, architecture blurb |
 | `e2e/events_test.go` (new) | webhook delivery visible through `GET /api/v1/events` |
 
 ---
@@ -116,7 +116,7 @@ blockedBy: [ ]
 `deploy/base/migrations/0013_event_log.up.sql`:
 
 ```sql
--- Spec 027 §1: total order for the event log. txid records the writing
+-- Spec 025 §15: total order for the event log. txid records the writing
 -- transaction; readers take only rows below the commit horizon
 -- (pg_snapshot_xmin), so a transaction that commits late can never surface
 -- an id behind a subscriber's offset. xid8 is 64-bit: no wraparound
@@ -134,7 +134,7 @@ blockedBy: [ ]
 ALTER TABLE events ADD COLUMN txid xid8 NOT NULL DEFAULT pg_current_xact_id();
 CREATE INDEX events_txid_id ON events (txid, id);
 
--- Spec 027 §2: the durable half of a consumer group, one row per
+-- Spec 025 §15.1: the durable half of a consumer group, one row per
 -- subscriber. Offsets are event ids: monotonic positions, not counts —
 -- aborted transactions leave holes and nothing depends on contiguity.
 CREATE TABLE event_subscribers (
@@ -281,7 +281,7 @@ Expected: FAIL (undefined: EnsureEventSubscriber etc.).
 - [ ] **Step 3: Implement in `internal/store/events.go`**
 
 ```go
-// EventSubscriber mirrors one event_subscribers row (spec 027 §2).
+// EventSubscriber mirrors one event_subscribers row (spec 025 §15.1).
 type EventSubscriber struct {
 	Name      string
 	LastRead  int64
@@ -291,7 +291,7 @@ type EventSubscriber struct {
 
 // EnsureEventSubscriber creates the subscriber row if absent. Offset 0
 // means a new subscriber replays the whole log — the right default for a
-// rule set that should have been running all along (027 §2).
+// rule set that should have been running all along (025 §15.1).
 func (s *Store) EnsureEventSubscriber(ctx context.Context, name string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO event_subscribers (name, updated_at) VALUES ($1, $2)
@@ -327,7 +327,7 @@ SELECT last_read_offset FROM event_subscribers WHERE name = $1 FOR UPDATE;
 SELECT id, source, external_id, type, payload, received_at
   FROM events
  WHERE id > $2                                          -- last_read_offset
-   AND txid < pg_snapshot_xmin(pg_current_snapshot())   -- the horizon (027 §1)
+   AND txid < pg_snapshot_xmin(pg_current_snapshot())   -- the horizon (025 §15)
  ORDER BY id
  LIMIT $3;
 
@@ -420,7 +420,7 @@ pinned out of the pool, not silently recycled.
 
 ```go
 // SubscriberLock pins one pool connection holding the pg_try_advisory_lock
-// for a subscriber (spec 027 §2: one active consumer). The connection is
+// for a subscriber (spec 025 §15.1: one active consumer). The connection is
 // held for the consumer's lifetime; a crashed process drops it and
 // Postgres releases the lock — failover with no lease table.
 type SubscriberLock struct {
@@ -487,8 +487,8 @@ blockedBy: [ ]
 - Modify: `ns/ontology.ttl`
 - Create: `internal/eventbus/vocab.go`, `internal/eventbus/vocab_test.go`
 
-**Codegen caveat (read before starting):** spec 027 §3 says the Go
-constants are *generated* from `ns/` by 025 §9's codegen, which is Task 1 of
+**Codegen caveat (read before starting):** spec 025 §15.2 says the Go
+constants are *generated* from `ns/` by 025 §17's codegen, which is Task 1 of
 plan `2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md`
 (`scripts/nsgen.py`) and may or may not be merged when you get here.
 - If `scripts/nsgen.py` **exists**: extend it to emit the event-type set
@@ -496,7 +496,7 @@ plan `2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md`
   `internal/eventbus/vocab.go` a thin alias over the generated code.
 - If it **does not**: hand-mirror per the current `CLAUDE.md` `ns/` rule
   (Turtle first, then the mirror), mark `vocab.go` with a
-  `// TODO(025 §9): fold into scripts/nsgen.py output` comment, and write
+  `// TODO(025 §17): fold into scripts/nsgen.py output` comment, and write
   the drift test below so the mirror cannot rot silently.
 
 - [ ] **Step 1: Add the terms to `ns/ontology.ttl`**
@@ -507,28 +507,28 @@ Next to `wl:RuntimeEvent` (~line 203), matching the file's comment style:
 wl:Event a owl:Class ;
     rdfs:subClassOf prov:Activity ;
     wl:layer wlc:execution ;
-    rdfs:comment "A domain event in the backbone's append-only log (spec 027 §3):
+    rdfs:comment "A domain event in the backbone's append-only log (spec 025 §15.2):
         a state change witnessed at commit, curie in events.type, JSON-LD in
         events.payload. One subclass per event type — types differ in shape, so a
         class hierarchy, not a SKOS kind scheme. Vendor webhook deliveries share
-        the events table but are not wl:Events (027 §3: one log, two populations)." .
+        the events table but are not wl:Events (025 §15.2: one log, two populations)." .
 
 wl:DocumentSubmitted a owl:Class ;
     rdfs:subClassOf wl:Event ;
     wl:layer wlc:execution ;
-    rdfs:comment "A draft document was handed to review (lode doc submit, 027 §5).
-        Changes no document column: the open review task is 'under review' (025 §3)." .
+    rdfs:comment "A draft document was handed to review (lode doc submit, 025 §15.4).
+        Changes no document column: the open review task is 'under review' (025 §7)." .
 
 wl:DocumentAccepted a owl:Class ;
     rdfs:subClassOf wl:Event ;
     wl:layer wlc:execution ;
-    rdfs:comment "A document moved draft → accepted (025 §3). Carries the status
+    rdfs:comment "A document moved draft → accepted (025 §7). Carries the status
         transition as wl:fromStatus / wl:toStatus." .
 
 wl:subject a owl:ObjectProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Event ;
-    rdfs:comment "The thing the event is about (027 §3). Range deliberately open:
+    rdfs:comment "The thing the event is about (025 §15.2). Range deliberately open:
         any backbone entity." .
 
 wl:fromStatus a owl:ObjectProperty, owl:FunctionalProperty ;
@@ -561,8 +561,8 @@ false.
 // offset-tracked subscriber loop over the store's events table.
 package eventbus
 
-// Hand-mirrored from ns/ontology.ttl (spec 027 §3).
-// TODO(025 §9): fold into scripts/nsgen.py output when the codegen lands.
+// Hand-mirrored from ns/ontology.ttl (spec 025 §15.2).
+// TODO(025 §17): fold into scripts/nsgen.py output when the codegen lands.
 // vocab_test.go holds the mirror together.
 const (
 	TypeDocumentSubmitted = "wl:DocumentSubmitted"
@@ -577,7 +577,7 @@ var baseProperties = []string{
 // payloadProperties maps each event type to its additional allowed payload
 // properties. Emit-time validation (emit.go) enforces membership; there is
 // deliberately no CHECK on events.type — the log also holds vendor webhook
-// deliveries with dotted types (027 §3).
+// deliveries with dotted types (025 §15.2).
 var payloadProperties = map[string][]string{
 	TypeDocumentSubmitted: {},
 	TypeDocumentAccepted:  {"wl:fromStatus", "wl:toStatus"},
@@ -611,11 +611,11 @@ blockedBy: [4]
 - Modify: `internal/store/events.go`, `internal/store/events_test.go`
 - Create: `internal/eventbus/emit.go`, `internal/eventbus/emit_test.go`
 
-Two pieces. The payload's `@id` is `wlid:event/<id>` (027 §3), but
+Two pieces. The payload's `@id` is `wlid:event/<id>` (025 §15.2), but
 `RecordEvent` writes the payload in the same INSERT that assigns the id —
 so the store gains `RecordEventWithID`, which reserves the id from the
 sequence first and builds the payload from it. Emission stays a thin typed
-helper per event type (027 §4); nothing in this part calls the helpers yet
+helper per event type (025 §15.3); nothing in this part calls the helpers yet
 (part 2's doc lifecycle does), so the tests are the consumer.
 
 - [ ] **Step 1: Failing store test**
@@ -653,7 +653,7 @@ RETURNING id;
 
 On conflict, look up the existing id and skip `apply`, exactly as
 `RecordEvent` does. A retry burns a sequence value — fine, offsets are
-positions, not counts (027 §1).
+positions, not counts (025 §15).
 
 - [ ] **Step 3: Failing eventbus tests**
 
@@ -668,7 +668,7 @@ positions, not counts (027 §1).
   `wl:subject = wlid:doc/spec-025`, `prov:wasAssociatedWith = wlid:actor/stig`,
   `wl:fromStatus`/`wl:toStatus`.
 - `TestEmitIdempotentAtTheLog` — emit the same value twice; second call
-  returns the same id, `inserted == false` (027 §4: a resent request gets
+  returns the same id, `inserted == false` (025 §15.3: a resent request gets
   the existing event, not a duplicate acceptance).
 - `TestValidatePayloadRejectsUnknownProperty` — `validatePayload("wl:DocumentAccepted", keys)`
   with an extra `"wl:bogus"` key returns an error naming it (§9's
@@ -677,12 +677,12 @@ positions, not counts (027 §1).
 - [ ] **Step 4: Implement `internal/eventbus/emit.go`**
 
 ```go
-// DomainEvent is one emittable event type (spec 027 §4): it knows its
+// DomainEvent is one emittable event type (spec 025 §15.3): it knows its
 // type curie, its deterministic external id, and its JSON-LD payload.
 type DomainEvent interface {
 	EventType() string
 	// ExternalID is <type>:<subject>:<version> — what makes a retried
-	// request idempotent at the log (027 §4).
+	// request idempotent at the log (025 §15.3).
 	ExternalID() string
 	// Properties returns the payload minus @context/@type/@id, keyed by
 	// ontology property curie.
@@ -706,7 +706,7 @@ type DocumentAccepted struct {
 
 // Emit validates ev's payload against the generated property set and
 // records it through the store in one transaction with apply — the same
-// seam every other write uses (027 §4: an event that could commit without
+// seam every other write uses (025 §15.3: an event that could commit without
 // its change is a log that lies).
 func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 	apply func(tx *sql.Tx, eventID int64) error) (int64, bool, error) {
@@ -733,7 +733,7 @@ func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 `prov:wasAssociatedWith` (`wlid:actor/` + Actor), `wl:subject` (Doc), and
 for `DocumentAccepted` the from/to pair. `validatePayload` checks keys ⊆
 base + per-type set **and** that every per-type property is present
-(a missing property fails at emit, 027 §4 — compile-time via the struct,
+(a missing property fails at emit, 025 §15.3 — compile-time via the struct,
 runtime via this check).
 
 - [ ] **Step 5: Tests PASS, commit**
@@ -813,7 +813,7 @@ calls a new store method:
 ```sql
 -- Store.EventSubscriberLags: horizon tail minus acked, per subscriber.
 -- Rises when a subscriber is stuck AND when any long transaction holds
--- the horizon back (027 §1/§8) — one gauge, both pathologies.
+-- the horizon back (025 §15/§8) — one gauge, both pathologies.
 SELECT s.name, GREATEST(h.max_id - s.last_acked_offset, 0)
   FROM event_subscribers s,
        (SELECT COALESCE(MAX(id), 0) AS max_id
@@ -824,7 +824,7 @@ SELECT s.name, GREATEST(h.max_id - s.last_acked_offset, 0)
 - [ ] **Step 3: Implement `loop.go`**
 
 ```go
-// Outcome classifies one handled event for metrics (spec 027 §8).
+// Outcome classifies one handled event for metrics (spec 025 §15.7).
 type Outcome string
 
 const (
@@ -835,7 +835,7 @@ const (
 // Handler processes one event. Returning an error stops the batch: the
 // prefix already handled is acked, the failed event is redelivered on the
 // next poll, and in-order delivery means it blocks everything behind it —
-// deliberate (at-least-once, no DLQ; 027 §12 keeps retention/partitioning
+// deliberate (at-least-once, no DLQ; 025 §22 keeps retention/partitioning
 // out of scope). The error surfaces in the outcome="error" counter and in
 // the lag gauge.
 type Handler func(ctx context.Context, ev store.Event) (Outcome, error)
@@ -844,7 +844,7 @@ type Options struct {
 	Store     *store.Store
 	Name      string        // subscriber name; the row must exist (EnsureEventSubscriber)
 	Handler   Handler
-	Poll      time.Duration // default 1s (027 §2: polling, deliberately no LISTEN/NOTIFY)
+	Poll      time.Duration // default 1s (025 §15.1: polling, deliberately no LISTEN/NOTIFY)
 	LockRetry time.Duration // default 15s: how often a standby retries the lock
 	BatchSize int           // default 100
 	Metrics   *Metrics      // nil-safe
@@ -903,12 +903,12 @@ type EventFilter struct {
 	Limit int // default/cap 200
 }
 
-// ListEvents returns matching events in id order (newest last, 027 §6),
+// ListEvents returns matching events in id order (newest last, 025 §18),
 // horizon-bounded like every subscriber read so the tail never shows an
 // id that later reads would order before.
 func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error)
 
-// EventSubscriberStatus is the lode event subscribers row (027 §6).
+// EventSubscriberStatus is the lode event subscribers row (025 §18).
 type EventSubscriberStatus struct {
 	EventSubscriber
 	Lag       int64
@@ -918,7 +918,7 @@ type EventSubscriberStatus struct {
 func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberStatus, error)
 
 // SeekEventSubscriber moves both offsets to the given position — the only
-// path that moves an offset backwards (admin replay/skip, 027 §6). Safe
+// path that moves an offset backwards (admin replay/skip, 025 §18). Safe
 // precisely because handlers are idempotent.
 func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) error
 ```
@@ -1021,7 +1021,7 @@ Copy `e2e/smoke_test.go`'s boot (its `store.OpenTestStore` +
 
 1. Deliver one signed GitHub `push` webhook via `deliverGitHub`.
 2. As the admin client, `GET /api/v1/events` — assert the delivery
-   appears with its dotted vendor type and `source: "github"` (027 §3's
+   appears with its dotted vendor type and `source: "github"` (025 §15.2's
    two populations share one log; acceptance 7).
 3. `GET /api/v1/event-subscribers` — empty list, 200 (no subscriber is
    wired until part 2).
@@ -1047,11 +1047,11 @@ blockedBy: [ ]
 
 **Files:**
 - Modify: `docs/specs/004-execution-backbone.md`,
-  `docs/specs/027-event-watchers.md`, `CLAUDE.md`
+  `docs/specs/025-documents-in-the-backbone.md`, `CLAUDE.md`
 
 Read `docs/authoring-design-docs.md` §"Amending a section" first — three
 edits, all required. Note: 004's events table lives in **§1.5**
-(`{#sec-1.5}` "events + state_log"), not §2 as spec 027 cites — 004 §2 is
+(`{#sec-1.5}` "events + state_log"), not §2 as spec 027 cites — 004 §3 is
 the lease lifecycle. 027 is `draft`, so correcting its citations is a
 plain edit.
 
@@ -1082,10 +1082,10 @@ amends:
     - 004-execution-backbone.md#sec-1.5
 ```
 
-- [ ] **Step 2: Fix 027's `(004 §2)` citations**
+- [ ] **Step 2: Fix 027's `(004 §3)` citations**
 
-In `027-event-watchers.md` §0 and §2, change the two `(004 §2)` references
-for the events table to `(004 §1.5)`.
+In `027-event-watchers.md` §0 and §2, change the two `(004 §3)` references
+for the events table to `(004 §1.4)`.
 
 - [ ] **Step 3: CLAUDE.md**
 
@@ -1103,7 +1103,7 @@ git add -A && git commit -m "Record spec 027's amendment of 004 and the eventbus
 
 ---
 
-## Done when (maps to 027 §13)
+## Done when (maps to 025 §24)
 
 1. AC1: `TestReadEventBatchHonoursCommitHorizon` passes, and flipping the
    read predicate to a bare `id > last_seen` makes it fail — run that
