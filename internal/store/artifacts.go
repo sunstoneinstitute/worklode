@@ -136,6 +136,25 @@ func ArtifactIDBySourceSHA(tx *sql.Tx, sha string) (*int64, error) {
 	return &id, nil
 }
 
+// ArtifactByDigest looks up an artifact by its OCI digest inside the given
+// transaction, for callers (the Flux webhook) that must resolve it
+// atomically with the rest of their apply. Returns nil if no artifact
+// matches. Several artifacts can share a digest (the same image published
+// under two tags); the newest one (highest id) wins.
+func ArtifactByDigest(tx *sql.Tx, digest string) (*Artifact, error) {
+	row := tx.QueryRow(
+		`SELECT `+artifactColumns+` FROM artifacts WHERE digest = $1 ORDER BY id DESC LIMIT 1`,
+		digest)
+	a, err := scanArtifact(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("artifact by digest %s: %w", digest, err)
+	}
+	return a, nil
+}
+
 // splitImage splits an image reference "registry/name:tag" into
 // (name-without-tag, tag). ok is false if there is no ":" tag separator
 // after the last "/" (so a registry port, e.g. "host:5000/name", is not
