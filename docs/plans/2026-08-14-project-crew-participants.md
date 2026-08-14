@@ -15,6 +15,9 @@ covers:
     coverage: none
   - spec: docs/specs/032-project-cockpit.md#sec-11
     coverage: none
+isRequiredBy:
+  - docs/plans/2026-08-14-approvals-1-table-and-web-act.md
+  - docs/plans/2026-08-14-home-project-list.md
 ---
 
 # Project Crew: participants and lead
@@ -57,12 +60,15 @@ outside this whole series, so no `fullCoverageWith` sibling exists to name:
 - **032 §10 / §11** (`none`) — standing rules that govern the crew page and
   the e2e task without being implemented here.
 
-Two further declared gaps, recorded in `docs/follow-ups.md` by Task 9:
-removal is member-level only (dropping a single role label is remove +
-re-add), and 029 §6.1's "any Crew member may add or remove an ordinary Crew
-member" cannot be enforced until authz decisions are project-scoped — the new
-`crew.write` permission is granted to all users, which is wider than the spec
-wants and is stated as such.
+Removal is member-level only: dropping a single role label is remove +
+re-add. That is a design decision, recorded in Task 7 rather than as a gap.
+
+One thing the coverage claims above cannot express, so Task 9 records it in
+`docs/follow-ups.md`: 029 §6.1's "any Crew member may add or remove an
+ordinary Crew member" cannot be enforced until authz decisions are
+project-scoped, so the new `crew.write` permission is granted to all users —
+wider than the spec wants. A conflict between spec and system, not a
+planned partial.
 
 ## Global constraints
 
@@ -736,12 +742,20 @@ web pages, never a store write:
    member; the lead remains.
 6. `DELETE` of the lead — 422.
 
-Then record the declared gaps in `docs/follow-ups.md` (short entries, per
-its format): invited participants without a Keycloak actor; lead-handoff
-acceptance ceremony (until then: no second lead, lead not removable);
-derived contributors surface; member-level-only removal; `crew.write` not
-project-scoped, so "any Crew member may add/remove" is wider than 029 §6.1
-wants.
+Then record in `docs/follow-ups.md` (one short entry, per its format) the
+one gap coverage cannot express: `crew.write` is granted to every user
+because authz decisions are not project-scoped, so 029 §6.1's "any Crew
+member may add or remove an ordinary Crew member" is enforced more widely
+than the spec wants. That is a spec-versus-reality conflict, not a planned
+partial.
+
+Do **not** add entries for invited participants without a Keycloak actor,
+the lead-handoff acceptance ceremony, the derived contributors surface, or
+member-level-only removal. The first three are exactly what this plan's
+`coverage: partial` on 029 §6.1 already declares, in machine-readable form
+a coverage query can read; the fourth is a design decision recorded in
+Task 7. Copying them into `docs/follow-ups.md` duplicates the claim in a
+place nothing queries, and the two copies drift.
 
 - [ ] `go test -race -count=1 -tags e2e ./e2e/ -run TestCrew` — green
       (`ok  github.com/sunstoneinstitute/worklode/e2e`); full
