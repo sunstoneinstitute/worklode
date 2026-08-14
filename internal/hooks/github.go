@@ -472,27 +472,18 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse release payload: %w", err)
 	}
-	if _, err := store.CreateArtifact(tx, store.Artifact{
-		Kind:      "git_tag",
-		Name:      repo,
-		Version:   p.Release.TagName,
-		Repo:      repo,
-		SourceSHA: p.Release.TargetCommitish,
-		BuiltAt:   p.Release.PublishedAt,
-	}); err != nil {
-		return err
-	}
-
 	now := h.st.Now()
 	publishedAt := p.Release.PublishedAt
 	if publishedAt.IsZero() {
 		publishedAt = now
 	}
-	// Record the release frontier. Prefer the tagged commit itself, so a
-	// backport tag covers only what it actually contains. target_commitish
-	// is often a branch name (UI-created tags) rather than a sha, which
-	// resolves to nil; the release then covers main's head as of this
-	// webhook's arrival, which is right for release-on-merge.
+
+	// Resolve the release frontier first, so the artifact can be attributed
+	// to a real commit. Prefer the tagged commit itself, so a backport tag
+	// covers only what it actually contains. target_commitish is often a
+	// branch name (UI-created tags) rather than a sha, which does not
+	// resolve; the release then covers main's head as of this webhook's
+	// arrival, which is right for release-on-merge.
 	frontier, err := store.MainIDForSHA(tx, repo, p.Release.TargetCommitish)
 	if err != nil {
 		return err
@@ -502,6 +493,28 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 			return err
 		}
 	}
+
+	// The artifact's source_sha must be a commit, never a branch name: a
+	// branch name can never match a Flux revision, so the artifact would be
+	// permanently uncorrelatable. An unresolvable target_commitish leaves it
+	// empty rather than wrong.
+	sourceSHA := ""
+	if frontier != nil {
+		if sourceSHA, err = store.MainSHAForID(tx, *frontier); err != nil {
+			return err
+		}
+	}
+	if _, err := store.CreateArtifact(tx, store.Artifact{
+		Kind:      "git_tag",
+		Name:      repo,
+		Version:   p.Release.TagName,
+		Repo:      repo,
+		SourceSHA: sourceSHA,
+		BuiltAt:   p.Release.PublishedAt,
+	}); err != nil {
+		return err
+	}
+
 	if frontier == nil {
 		return nil
 	}
