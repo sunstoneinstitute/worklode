@@ -5,6 +5,7 @@
 package hooks
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -27,11 +29,12 @@ import (
 const maxGitHubBody = 5 << 20
 
 type githubHandler struct {
-	st          *store.Store
-	secret      string
-	log         *slog.Logger
-	onSkillPush func(repo, branch string) bool
-	metrics     *Metrics
+	st            *store.Store
+	secret        string
+	log           *slog.Logger
+	onSkillPush   func(repo, branch string) bool
+	resolveBranch func(ctx context.Context, repo, branch string) (string, error)
+	metrics       *Metrics
 }
 
 // NewGitHubHandler returns the POST /hooks/github handler. It verifies the
@@ -45,11 +48,26 @@ type githubHandler struct {
 // running the normal apply path (see ServeHTTP). onSkillPush may be nil
 // (tests); production always passes a closure that reports false when no
 // skill sources are configured.
-func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, m *Metrics) http.Handler {
+//
+// appAuth, if non-nil, resolves a release's branch-name target_commitish to a
+// commit sha (see resolveReleaseCommitish); nil disables resolution and the
+// release falls back to main's head, as it did before this App integration.
+func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, m *Metrics) http.Handler {
+	var resolveBranch func(ctx context.Context, repo, branch string) (string, error)
+	if appAuth != nil {
+		resolveBranch = appAuth.BranchSHA
+	}
+	return newGitHubHandler(st, secret, log, onSkillPush, resolveBranch, m)
+}
+
+// newGitHubHandler is the common constructor: NewGitHubHandler derives
+// resolveBranch from appAuth, and tests reach it directly (export_test.go) to
+// stub branch resolution without a fake GitHub App server.
+func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, resolveBranch func(ctx context.Context, repo, branch string) (string, error), m *Metrics) *githubHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush, metrics: m}
+	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush, resolveBranch: resolveBranch, metrics: m}
 }
 
 // envelope is the part of every GitHub webhook payload the router needs.
@@ -166,6 +184,16 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A release's target_commitish is often a branch name. Resolving it needs
+	// a GitHub API call, which must not happen inside the apply callback —
+	// that runs in an open transaction. Resolve here and pass the sha in; a
+	// failure degrades to the existing main-head fallback and never fails the
+	// delivery.
+	resolvedCommitish := ""
+	if event == "release" && env.Action == "published" && !ignored {
+		resolvedCommitish = h.resolveReleaseCommitish(r.Context(), env.Repository.FullName, body)
+	}
+
 	var apply func(tx *sql.Tx, eventID int64) error
 	switch {
 	case skillPush:
@@ -173,7 +201,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case ignored:
 		typ += ".ignored"
 	default:
-		apply = h.applyFunc(event, env, body)
+		apply = h.applyFunc(event, env, body, resolvedCommitish)
 	}
 
 	_, inserted, err := h.st.RecordEvent(r.Context(), "github", delivery, typ, body, apply)
@@ -226,7 +254,7 @@ func eventLabel(event string) string {
 // applyFunc routes a mapped-repo event to its per-event apply callback.
 // Unknown events (and unhandled actions) get a nil apply: the event is still
 // recorded, with no typed-table effect.
-func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(tx *sql.Tx, eventID int64) error {
+func (h *githubHandler) applyFunc(event string, env envelope, body []byte, resolvedCommitish string) func(tx *sql.Tx, eventID int64) error {
 	if !slices.Contains(handledEvents, event) {
 		return nil
 	}
@@ -264,7 +292,7 @@ func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(
 			return nil
 		}
 		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyRelease(tx, eventID, repo, body)
+			return h.applyRelease(tx, eventID, repo, body, resolvedCommitish)
 		}
 	case "registry_package":
 		if env.Action != "published" && env.Action != "updated" {
@@ -276,6 +304,57 @@ func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(
 	default:
 		return nil
 	}
+}
+
+// resolveReleaseCommitish turns a release's target_commitish into a commit
+// sha when it names a branch. Returns "" when there is nothing to resolve, no
+// App is configured, or the lookup fails — every one of which leaves
+// applyRelease on its existing fallback.
+func (h *githubHandler) resolveReleaseCommitish(ctx context.Context, repo string, body []byte) string {
+	var p struct {
+		Release struct {
+			TargetCommitish string `json:"target_commitish"`
+		} `json:"release"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return ""
+	}
+	commitish := p.Release.TargetCommitish
+	if commitish == "" || isCommitSHA(commitish) {
+		return ""
+	}
+	if h.resolveBranch == nil {
+		h.metrics.branchResolved("skipped")
+		return ""
+	}
+	sha, err := h.resolveBranch(ctx, repo, commitish)
+	switch {
+	case err != nil:
+		h.log.Warn("release target_commitish resolution failed",
+			"repo", repo, "branch", commitish, "err", err)
+		h.metrics.branchResolved("error")
+		return ""
+	case sha == "":
+		h.metrics.branchResolved("unknown")
+		return ""
+	default:
+		h.metrics.branchResolved("resolved")
+		return sha
+	}
+}
+
+// isCommitSHA reports whether s is a full 40-character hex commit sha, the
+// form target_commitish takes when a release was cut from an explicit commit.
+func isCommitSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func applyIssue(tx *sql.Tx, repo string, body []byte) error {
@@ -468,7 +547,7 @@ func (h *githubHandler) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) e
 	})
 }
 
-func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte) error {
+func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {
 	var p struct {
 		Release struct {
 			TagName         string    `json:"tag_name"`
@@ -487,11 +566,16 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 
 	// Resolve the release frontier first, so the artifact can be attributed
 	// to a real commit. Prefer the tagged commit itself, so a backport tag
-	// covers only what it actually contains. target_commitish is often a
-	// branch name (UI-created tags) rather than a sha, which does not
-	// resolve; the release then covers main's head as of this webhook's
-	// arrival, which is right for release-on-merge.
-	frontier, err := store.MainIDForSHA(tx, repo, p.Release.TargetCommitish)
+	// covers only what it actually contains. A pre-resolved sha (ServeHTTP
+	// turned a branch name into a commit) takes precedence; otherwise use the
+	// payload's own commitish, which may itself already be a sha. Neither may
+	// resolve, in which case the release covers main's head as of this
+	// webhook's arrival, which is right for release-on-merge.
+	commitish := resolvedCommitish
+	if commitish == "" {
+		commitish = p.Release.TargetCommitish
+	}
+	frontier, err := store.MainIDForSHA(tx, repo, commitish)
 	if err != nil {
 		return err
 	}
@@ -503,10 +587,13 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 
 	// The artifact's source_sha must be a commit, never a branch name: a
 	// branch name can never match a Flux revision, so the artifact would be
-	// permanently uncorrelatable. An unresolvable target_commitish leaves it
-	// empty rather than wrong.
-	sourceSHA := ""
-	if frontier != nil {
+	// permanently uncorrelatable. A pre-resolved sha is a commit GitHub
+	// itself vouched for, so it is used directly even when it has not landed
+	// on main yet — a release branch's tip commonly hasn't. Otherwise the sha
+	// comes from the frontier's main commit, or is left empty when neither
+	// resolved.
+	sourceSHA := resolvedCommitish
+	if sourceSHA == "" && frontier != nil {
 		if sourceSHA, err = store.MainSHAForID(tx, *frontier); err != nil {
 			return err
 		}

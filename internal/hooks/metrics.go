@@ -9,6 +9,7 @@ import (
 type Metrics struct {
 	events        *prometheus.CounterVec
 	truncatedPush prometheus.Counter
+	branchResolve *prometheus.CounterVec
 }
 
 // NewMetrics registers the webhook counters on reg.
@@ -24,8 +25,16 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_webhook_push_truncated_total",
 			Help: "Push deliveries whose commits array did not reach the pushed head.",
 		}),
+		// branchResolve counts GitHub API calls made to turn a release's
+		// target_commitish branch name into a commit sha. outcome is one of
+		// "resolved", "unknown" (branch does not exist), "error", or
+		// "skipped" (no App configured).
+		branchResolve: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_github_branch_resolve_total",
+			Help: "GitHub branch-to-commit resolutions attempted by the release webhook, by outcome.",
+		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.events, m.truncatedPush)
+	reg.MustRegister(m.events, m.truncatedPush, m.branchResolve)
 	return m
 }
 
@@ -37,6 +46,11 @@ func (m *Metrics) Events() *prometheus.CounterVec {
 // TruncatedPush exposes the counter for test assertions.
 func (m *Metrics) TruncatedPush() prometheus.Counter {
 	return m.truncatedPush
+}
+
+// BranchResolve exposes the counter for test assertions.
+func (m *Metrics) BranchResolve() *prometheus.CounterVec {
+	return m.branchResolve
 }
 
 func (m *Metrics) truncatedPushDelivery() {
@@ -51,4 +65,11 @@ func (m *Metrics) event(source, event, result string) {
 		return
 	}
 	m.events.WithLabelValues(source, event, result).Inc()
+}
+
+func (m *Metrics) branchResolved(outcome string) {
+	if m == nil {
+		return
+	}
+	m.branchResolve.WithLabelValues(outcome).Inc()
 }
