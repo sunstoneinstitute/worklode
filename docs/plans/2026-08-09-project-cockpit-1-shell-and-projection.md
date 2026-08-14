@@ -1,13 +1,22 @@
 ---
 status: draft
 covers:
-  - docs/specs/032-project-cockpit.md#sec-0
-  - docs/specs/032-project-cockpit.md#sec-1
-  - docs/specs/032-project-cockpit.md#sec-2
-  - docs/specs/032-project-cockpit.md#sec-3
-  - docs/specs/032-project-cockpit.md#sec-4
-  - docs/specs/032-project-cockpit.md#sec-10
-  - docs/specs/032-project-cockpit.md#sec-11
+  - spec: docs/specs/032-project-cockpit.md#sec-0
+    coverage: full
+  - spec: docs/specs/032-project-cockpit.md#sec-1
+    coverage: full
+  - spec: docs/specs/032-project-cockpit.md#sec-2
+    coverage: partial
+  - spec: docs/specs/032-project-cockpit.md#sec-3
+    coverage: full
+  - spec: docs/specs/032-project-cockpit.md#sec-4
+    coverage: full
+  - spec: docs/specs/032-project-cockpit.md#sec-10
+    coverage: partial
+  - spec: docs/specs/032-project-cockpit.md#sec-11
+    coverage: partial
+isRequiredBy:
+  - docs/plans/2026-08-14-cockpit-page-frame-unification.md
 ---
 # Project Cockpit 1/4: Shell and Projection Foundation Implementation Plan
 
