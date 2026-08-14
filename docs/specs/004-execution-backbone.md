@@ -584,6 +584,12 @@ All handlers use the existing HMAC/idempotency plumbing in `internal/hooks`.
   branch is deleted.
 - **`release`** (extended): still creates the artifact; also records the
   release frontier.
+- **`registry_package`** (new): a published container version mints a
+  `docker_image` artifact keyed by image name and tag, carrying the OCI
+  digest. Non-container package types and untagged (digest-only) versions are
+  recorded as events with no artifact. It resolves no frontier and calls no
+  resolver: an image is a build fact, and delivery still turns on the deploy
+  and release frontiers.
 
 **Resolver** — `ResolveDelivery(tx, taskID)`: reads the task's landed seq,
 env frontiers, and release frontier; computes the furthest supported
@@ -603,8 +609,10 @@ GitHub App requirements: repository permissions **Actions: read**
 (environment discovery, `GET /repos/{owner}/{repo}/environments`),
 **Deployments: read** (`deployment_status` webhook events), **Contents:
 read** (`push` and `release` webhook events, and `GET
-/repos/{owner}/{repo}/releases/latest` for discovery); webhook subscriptions
-for `push` and `deployment_status` added alongside the existing events.
+/repos/{owner}/{repo}/releases/latest` for discovery), **Packages: read**
+(`registry_package` webhook events); webhook subscriptions for `push`,
+`deployment_status`, and `registry_package` added alongside the existing
+events.
 Without Actions: read the environments call 403s, discovery fails, and every
 repo keeps the default `done_state = merged`, so tasks stop advancing at
 `merged`. The only trace is the server's `discover repo done_state` warn log

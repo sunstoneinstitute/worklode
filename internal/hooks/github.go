@@ -201,10 +201,10 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handledEvents are the GitHub event names applyFunc routes. It is the single
 // source of truth: applyFunc switches over these names, and the add-repo
 // subscription check compares an installation's subscriptions against them, so
-// adding an eighth event cannot leave the check behind.
+// adding a ninth event cannot leave the check behind.
 var handledEvents = []string{
 	"issues", "push", "pull_request", "deployment_status",
-	"pull_request_review", "workflow_run", "release",
+	"pull_request_review", "workflow_run", "release", "registry_package",
 }
 
 // HandledEvents returns the event names this handler routes.
@@ -265,6 +265,13 @@ func (h *githubHandler) applyFunc(event string, env envelope, body []byte) func(
 		}
 		return func(tx *sql.Tx, eventID int64) error {
 			return h.applyRelease(tx, eventID, repo, body)
+		}
+	case "registry_package":
+		if env.Action != "published" && env.Action != "updated" {
+			return nil
+		}
+		return func(tx *sql.Tx, _ int64) error {
+			return h.applyRegistryPackage(tx, repo, body)
 		}
 	default:
 		return nil
@@ -531,4 +538,75 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 		}
 	}
 	return nil
+}
+
+// applyRegistryPackage mints a docker_image artifact from a container push.
+// The artifact is keyed by (image name, tag) so FindArtifactByImage and the
+// Flux digest correlation can both reach it; a version with no container tag
+// has no key to store under and is recorded as an event only.
+func (h *githubHandler) applyRegistryPackage(tx *sql.Tx, repo string, body []byte) error {
+	var p struct {
+		RegistryPackage struct {
+			Name           string `json:"name"`
+			PackageType    string `json:"package_type"`
+			PackageVersion struct {
+				Version           string    `json:"version"`
+				TargetCommitish   string    `json:"target_commitish"`
+				CreatedAt         time.Time `json:"created_at"`
+				PackageURL        string    `json:"package_url"`
+				ContainerMetadata struct {
+					Tag struct {
+						Name   string `json:"name"`
+						Digest string `json:"digest"`
+					} `json:"tag"`
+				} `json:"container_metadata"`
+			} `json:"package_version"`
+		} `json:"registry_package"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return fmt.Errorf("parse registry_package payload: %w", err)
+	}
+	pkg := p.RegistryPackage
+	if !strings.EqualFold(pkg.PackageType, "CONTAINER") &&
+		!strings.EqualFold(pkg.PackageType, "docker") {
+		return nil
+	}
+	tag := pkg.PackageVersion.ContainerMetadata.Tag.Name
+	if tag == "" {
+		// An untagged push (digest-only) has no artifact key. Recording the
+		// event is the whole effect; a later tagged push carries the same
+		// digest.
+		return nil
+	}
+
+	// The image name must match what a Kubernetes image reference says, so
+	// splitImage's (name, tag) split lines up: prefer package_url, which is
+	// the registry-qualified name.
+	name := pkg.PackageVersion.PackageURL
+	if name == "" {
+		name = pkg.Name
+	}
+	digest := pkg.PackageVersion.ContainerMetadata.Tag.Digest
+	if digest == "" {
+		digest = pkg.PackageVersion.Version
+	}
+	var digestPtr *string
+	if strings.HasPrefix(digest, "sha256:") {
+		digestPtr = &digest
+	}
+	builtAt := pkg.PackageVersion.CreatedAt
+	if builtAt.IsZero() {
+		builtAt = h.st.Now()
+	}
+
+	_, err := store.CreateArtifact(tx, store.Artifact{
+		Kind:      "docker_image",
+		Name:      name,
+		Version:   tag,
+		Digest:    digestPtr,
+		Repo:      repo,
+		SourceSHA: pkg.PackageVersion.TargetCommitish,
+		BuiltAt:   builtAt,
+	})
+	return err
 }

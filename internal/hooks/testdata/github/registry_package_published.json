@@ -1,0 +1,20 @@
+{
+  "action": "published",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "registry_package": {
+    "name": "demo",
+    "package_type": "CONTAINER",
+    "package_version": {
+      "version": "sha256:feed0000000000000000000000000000000000000000000000000000000000ff",
+      "target_commitish": "abc1230000000000000000000000000000000000",
+      "created_at": "2026-07-19T11:00:00Z",
+      "package_url": "ghcr.io/sunstoneinstitute/demo",
+      "container_metadata": {
+        "tag": {
+          "name": "v1.2.3",
+          "digest": "sha256:feed0000000000000000000000000000000000000000000000000000000000ff"
+        }
+      }
+    }
+  }
+}

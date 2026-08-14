@@ -594,6 +594,84 @@ func TestReleaseDoesNotAdvanceNonReleaseRepo(t *testing.T) {
 	}
 }
 
+// TestRegistryPackagePublished: a container push mints a docker_image
+// artifact keyed by image name and tag, carrying the OCI digest and the
+// commit it was built from.
+func TestRegistryPackagePublished(t *testing.T) {
+	e := newEnv(t)
+	deliverOK(t, e, "registry_package", "d-1", "registry_package_published.json")
+
+	a, err := e.st.FindArtifactByImage(context.Background(),
+		"ghcr.io/sunstoneinstitute/demo:v1.2.3")
+	if err != nil {
+		t.Fatalf("find artifact by image: %v", err)
+	}
+	if a.Kind != "docker_image" {
+		t.Fatalf("kind = %q, want docker_image", a.Kind)
+	}
+	if a.Digest == nil || *a.Digest != "sha256:feed0000000000000000000000000000000000000000000000000000000000ff" {
+		t.Fatalf("digest = %v, want the sha256 digest", a.Digest)
+	}
+	if a.SourceSHA != "abc1230000000000000000000000000000000000" {
+		t.Fatalf("source_sha = %q, want the target commitish", a.SourceSHA)
+	}
+	if a.Repo != "sunstoneinstitute/demo" {
+		t.Fatalf("repo = %q", a.Repo)
+	}
+	if a.BuiltAt.IsZero() {
+		t.Fatal("built_at is zero")
+	}
+}
+
+// TestRegistryPackageUntaggedIsRecordedNotApplied: a package version with no
+// container tag has no (name, version) key to store under, so it is recorded
+// as an event with no artifact rather than failing the delivery.
+func TestRegistryPackageUntaggedIsRecordedNotApplied(t *testing.T) {
+	e := newEnv(t)
+	body := []byte(`{
+		"action": "published",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"registry_package": {
+			"name": "demo",
+			"package_type": "CONTAINER",
+			"package_version": {
+				"version": "sha256:beef",
+				"package_url": "ghcr.io/sunstoneinstitute/demo"
+			}
+		}
+	}`)
+	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM artifacts`); n != 0 {
+		t.Fatalf("artifacts = %d, want 0", n)
+	}
+}
+
+// TestRegistryPackageNonContainerIgnored: only container packages become
+// docker_image artifacts; a npm/nuget package version is recorded and
+// otherwise ignored.
+func TestRegistryPackageNonContainerIgnored(t *testing.T) {
+	e := newEnv(t)
+	body := []byte(`{
+		"action": "published",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"registry_package": {
+			"name": "demo",
+			"package_type": "NPM",
+			"package_version": {"version": "1.0.0"}
+		}
+	}`)
+	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM artifacts`); n != 0 {
+		t.Fatalf("artifacts = %d, want 0", n)
+	}
+}
+
 func TestUnmappedRepoIgnored(t *testing.T) {
 	e := newEnv(t)
 	body := []byte(`{
@@ -654,6 +732,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	want := map[string]bool{
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
 		"pull_request_review": true, "workflow_run": true, "release": true,
+		"registry_package": true,
 	}
 	got := hooks.HandledEvents()
 	if len(got) != len(want) {
