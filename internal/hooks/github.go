@@ -683,10 +683,13 @@ func (h *githubHandler) applyRegistryPackage(tx *sql.Tx, repo string, body []byt
 
 	// The image name must match what a Kubernetes image reference says, so
 	// splitImage's (name, tag) split lines up: prefer package_url, which is
-	// the registry-qualified name.
+	// the registry-qualified name. Without it, reconstruct the GHCR name —
+	// registry_package container deliveries come from GHCR — because the bare
+	// package name never matches a "ghcr.io/owner/name" image reference.
 	name := pkg.PackageVersion.PackageURL
 	if name == "" {
-		name = pkg.Name
+		owner, _, _ := strings.Cut(repo, "/")
+		name = "ghcr.io/" + owner + "/" + pkg.Name
 	}
 	digest := pkg.PackageVersion.ContainerMetadata.Tag.Digest
 	if digest == "" {
