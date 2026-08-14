@@ -225,7 +225,7 @@ func TestListProjectWorkFactsNewestStateWins(t *testing.T) {
 }
 
 // TestListProjectWorkFactsClosedBlockerDisappears asserts a blocker that
-// moves to a closed state (closedStates) no longer counts as an open
+// moves to a closed state (taskClosed) no longer counts as an open
 // blocker.
 func TestListProjectWorkFactsClosedBlockerDisappears(t *testing.T) {
 	s := openProjectWorkStore(t)

@@ -12,18 +12,6 @@ Each item carries a priority tag (assessed 2026-08-14):
 - `[P4]` low-risk chores and doc/spec hygiene — batch when convenient
 - `[gated]` waiting on another decision, spec, or condition — don't schedule
 
-- `[P0]` **`closedStates` must become per-repo (2026-08-13 ruling, behaviour change).**
-  `internal/store/tasks.go:677` is a constant SQL tuple — `('merged',
-  'deployed_dev', 'deployed_prod', 'released', 'abandoned')` — mirrored by
-  `closedStateSet` and pinned by `TestClosedStateSetMirrorsSQL`. The spec now
-  says a task stops blocking at or past **its repo mapping's `done_state`**
-  (folded 004 §1.2), so a `merged` task in a repo gating on `released` should
-  still block its dependents and today does not. The constant is interpolated
-  into four queries — `tasks.go` (`IsBlocked`), `hierarchy.go`,
-  `project_work.go`, `brief.go` — each of which needs a join through the repo
-  mapping. Keep the one state-fixed case: a task with children cannot advance
-  past `merged`, so it is closed there in every repo. Spec and code disagree
-  until this lands.
 - `[P4]` **The doc-sync config shape contradicts itself (surfaced by the spec fold,
   2026-08-14).** 025 §5/§10 make the git file mirror opt-in through a
   `[doc_sync]` **block** in `.worklode/config.toml`; 025 §16.1 states the config
@@ -44,6 +32,27 @@ Each item carries a priority tag (assessed 2026-08-14):
   names to commit SHAs; normalize OCI digests (`sha256:`) in flux
   `revisionSHA`. Today only `git_tag` artifacts are created, so the
   flux-revision → artifact → task chain rarely connects.
+- `[P2]` **One `tasks.state` cannot express per-repo delivery.** `taskClosed`
+  (004 §1.3) asks one scalar state to satisfy every repo the task landed in,
+  but `ResolveDelivery` is repo-scoped — it advances on the frontiers of the
+  one repo whose webhook fired. So a task that landed in two repos with the
+  same `done_state = deployed_prod` reads as delivered for both the moment
+  either one deploys, and with differing `done_state`s the demand can be
+  unsatisfiable in the order the facts arrive. The predicate under-blocks in
+  exactly the cases the peer-ranked terminals cover (see `deliveryRanks`),
+  which is where the old fixed tuple already sat, so nothing regressed — but
+  "delivered" is per (task, repo) and the schema stores it per task. Modelling
+  it properly is a delivery-state-per-repo table, not a predicate change.
+- `[P4]` **`deliveredStateSet` stayed state-only when the blocking predicate went
+  per-repo.** `internal/store/tasks.go`'s `taskClosed` now joins through the
+  repo mapping (004 §1.3), and the roll-up, progress counts and blocking
+  queries all read it. `AssignTask`/`UnassignTask`/`StartTask` (`assign.go`)
+  still ask the fixed `deliveredStateSet`, so a `merged` task in a repo gating
+  on `deployed_prod` — the shape discovery defaults any repo with a prod
+  environment to — blocks its dependents while refusing to be assigned or
+  started. Not a regression (those three read the same fixed set before), and
+  arguably right: they ask "is there work left to own", not "does this still
+  block". Revisit if the two readings visibly diverge in use.
 - `[P2]` **`assignee` filter does not see leases**: `GET /api/v1/tasks?assignee=` matches
   `tasks.assignee` only, so a task an agent claimed (lease holder, no assignee) is
   invisible to it. Joining active leases would make "everything X is working on"

@@ -332,7 +332,7 @@ func TestStartTaskUnknownActor(t *testing.T) {
 
 // TestStartTaskTerminalStateRejected pins StartTask's terminal-state guard
 // to ErrInvalidInput, matching AssignTask/UnassignTask: without the explicit
-// closedStateSet check, a merged task would instead fail Transition's
+// deliveredStateSet check, a merged task would instead fail Transition's
 // from-state check with ErrBadTransition.
 func TestStartTaskTerminalStateRejected(t *testing.T) {
 	s := openTaskStore(t)

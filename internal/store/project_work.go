@@ -130,8 +130,8 @@ SELECT `+prefixedTaskColumns("t")+`,
 // attachOpenBlockers fills in OpenBlockers on every fact in facts (keyed by
 // task id) from open 'blocks' edges whose dependent task is in scope for
 // projectID ("" meaning every project). "Open" uses the same predicate as
-// blockedCondition: the blocker's state is not one of closedStates. The
-// blocker itself need not be in the same project as its dependent — 'blocks'
+// blockedCondition: the blocker has not reached its repo's done_state
+// (taskClosed). The blocker itself need not be in the same project as its dependent — 'blocks'
 // edges, unlike child_of, are not project-scoped (see AddEdge).
 func (s *Store) attachOpenBlockers(ctx context.Context, projectID string, facts map[string]*ProjectWorkFact) error {
 	rows, err := s.db.QueryContext(ctx, `
@@ -140,7 +140,7 @@ SELECT e.to_task, b.id, b.title, b.state
   JOIN tasks b ON b.id = e.from_task
   JOIN tasks dep ON dep.id = e.to_task
  WHERE e.type = 'blocks'
-   AND b.state NOT IN `+closedStates+`
+   AND NOT `+taskClosed("b")+`
    AND ($1 = '' OR dep.project_id = $1)`, projectID)
 	if err != nil {
 		return fmt.Errorf("open blockers: %w", err)

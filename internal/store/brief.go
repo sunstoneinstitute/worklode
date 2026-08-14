@@ -131,8 +131,8 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 
 // openBlockers returns the tasks that are the from_task of an open 'blocks'
 // edge whose to_task is taskID — i.e. the blockers still blocking it. "Open"
-// uses the same predicate as blockedCondition: the blocker's state is not one
-// of closedStates. Only ID, Title, and State are populated (the brief surfaces no
+// uses the same predicate as blockedCondition: the blocker has not reached its
+// repo's done_state (taskClosed). Only ID, Title, and State are populated (the brief surfaces no
 // more than that). Ordered by numeric id for a stable payload.
 func (s *Store) openBlockers(ctx context.Context, taskID string) ([]Task, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -141,7 +141,7 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]Task, error)
 		   JOIN tasks t ON t.id = e.from_task
 		  WHERE e.to_task = $1
 		    AND e.type = 'blocks'
-		    AND t.state NOT IN `+closedStates+`
+		    AND NOT `+taskClosed("t")+`
 		  ORDER BY CAST(split_part(t.id, '-', 2) AS INTEGER)`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)

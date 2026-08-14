@@ -181,7 +181,7 @@ type HierarchyProgress struct {
 func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProgress, error) {
 	var p HierarchyProgress
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*), COUNT(*) FILTER (WHERE t.state IN `+closedStates+`)
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE `+taskClosed("t")+`)
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
 		  WHERE e.to_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.Total, &p.Closed)
 	if err != nil {
