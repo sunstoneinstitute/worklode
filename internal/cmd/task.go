@@ -42,6 +42,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskUnblockCmd(),
 		newTaskParentCmd(),
 		newTaskUnparentCmd(),
+		newTaskFollowUpCmd(),
+		newTaskUnfollowUpCmd(),
 		newTaskTreeCmd(),
 		newTaskDecomposeCmd(),
 		newTaskBriefCmd(),
@@ -77,7 +79,7 @@ func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
 
 func newTaskAddCmd() *cobra.Command {
 	var scope scopeFlags
-	var title, body, bodyFile, priority, kind, concern, parent string
+	var title, body, bodyFile, priority, kind, concern, parent, followUpTo string
 	var draft bool
 	var skills []string
 	cmd := &cobra.Command{
@@ -101,7 +103,7 @@ func newTaskAddCmd() *cobra.Command {
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
-				Concern: concern, Draft: draft, Skills: skills, Parent: parent,
+				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
 			})
 			if err != nil {
 				return err
@@ -125,6 +127,8 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
+	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
+		"record that this task was spun out of the work on that task")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -1049,6 +1053,87 @@ func newTaskUnparentCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a child of %s\n", id, parent)
+			return nil
+		},
+	}
+	return cmd
+}
+
+func newTaskFollowUpCmd() *cobra.Command {
+	var of string
+	cmd := &cobra.Command{
+		Use:   "follow-up <id>",
+		Short: "Record that a task was spun out of the work on another task",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			origin, err := resolveTaskID(cmd.Context(), of, c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.FollowUp(cmd.Context(), id, origin)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is now a follow-up to %s\n", id, origin)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&of, "of", "", "id of the task this one was spun out of (required)")
+	cmd.MarkFlagRequired("of")
+	return cmd
+}
+
+func newTaskUnfollowUpCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unfollow-up <id>",
+		Short: "Drop a task's follow-up edge to its origin",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			// The edge is identified by both endpoints and the caller knows
+			// only one, so read the origin back first.
+			t, _, err := c.GetTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			var origin string
+			for _, e := range t.Edges.Out {
+				if e.Type == "follow_up_to" {
+					origin = e.To
+					break
+				}
+			}
+			if origin == "" {
+				return fmt.Errorf("%s is not a follow-up to anything", id)
+			}
+			raw, err := c.UnfollowUp(cmd.Context(), id, origin)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a follow-up to %s\n", id, origin)
 			return nil
 		},
 	}

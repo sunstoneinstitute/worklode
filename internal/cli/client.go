@@ -572,6 +572,9 @@ type CreateTaskInput struct {
 	// Parent, when set, files the new task under this parent in the same
 	// request instead of a separate edge call.
 	Parent string `json:"parent,omitempty"`
+	// FollowUpTo, when set, records the task this one was spun out of in the
+	// same request instead of a separate edge call.
+	FollowUpTo string `json:"follow_up_to,omitempty"`
 }
 
 // CreateTask calls POST /api/v1/tasks.
@@ -1122,6 +1125,20 @@ func (c *Client) Parent(ctx context.Context, id, parent string) ([]byte, error) 
 func (c *Client) Unparent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
 		edgeBody{To: &parent, Type: "child_of"})
+}
+
+// FollowUp calls POST /api/v1/tasks/{id}/edges to record that id was spun out
+// of the work on origin.
+func (c *Client) FollowUp(ctx context.Context, id, origin string) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		edgeBody{To: &origin, Type: "follow_up_to"})
+}
+
+// UnfollowUp calls DELETE /api/v1/tasks/{id}/edges to drop the follow-up edge
+// from id to origin.
+func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, error) {
+	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		edgeBody{To: &origin, Type: "follow_up_to"})
 }
 
 // DecomposeResponse is the wire form of POST /api/v1/tasks/{id}/decompose:

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -663,5 +664,78 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	sort.Strings(want)
 	if !slices.Equal(inTTL, want) {
 		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with validKinds and the CHECK constraint)", inTTL, want)
+	}
+}
+
+// TestCreateTaskWithFollowUpTo checks the one-round-trip path: the edge lands in
+// the same transaction as the insert, so there is no window where the follow-up
+// exists without its origin.
+func TestCreateTaskWithFollowUpTo(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Origin", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Loose end", "priority": "medium", "kind": "chore",
+		"follow_up_to": "WL-1",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Edges struct {
+			Out []struct{ To, Type string } `json:"out"`
+		} `json:"edges"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode task: %v", err)
+	}
+	if len(got.Edges.Out) != 1 ||
+		got.Edges.Out[0].Type != "follow_up_to" || got.Edges.Out[0].To != "WL-1" {
+		t.Fatalf("out edges = %+v, want one follow_up_to WL-1", got.Edges.Out)
+	}
+}
+
+// TestCreateTaskUnknownFollowUpTo checks the named 404, so it cannot be
+// confused with the project lookup's.
+func TestCreateTaskUnknownFollowUpTo(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
+		"project": "proj", "title": "Loose end", "priority": "medium", "kind": "chore",
+		"follow_up_to": "WL-99",
+	})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "WL-99") {
+		t.Fatalf("body %s, want it to name the missing origin", rr.Body.String())
+	}
+}
+
+// TestEdgeEndpointAcceptsFollowUpTo checks the generic edge endpoint, both
+// directions of the request shape and the delete.
+func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Origin", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Loose end", "priority": "medium", "kind": "chore",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "follow_up_to"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "follow_up_to"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
 	}
 }

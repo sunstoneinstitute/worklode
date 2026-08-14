@@ -89,6 +89,18 @@ Each item carries a priority tag (assessed 2026-08-14):
   this only bites on old transcripts.
 - `[P0]` **The web UI is unauthenticated without an SSO provider.** Planned in
   `docs/plans/2026-08-14-web-ui-requires-a-login-provider.md`.
+- `[P3]` **Follow-up edges shipped without four adjacent pieces (spec 004 §1.3
+  follow-up, 2026-08-14).** The `lode` plugin (`plugins/lode/`, the
+  `lode-worker` agent and `/lode:*` commands) does not yet know to reach for
+  `--follow-up-to`, so an agent that spots a loose end mid-task still has to
+  file it by hand instead of the edge doing its job. `docs/follow-ups.md`
+  itself is not migrated into tasks carrying `follow_up_to` edges — a data
+  question, not a code one. No board or cockpit surface shows follow-ups
+  (a spec 032 question, not asked here). And the backbone→graph projection
+  (spec 006) does not emit `wl:followUpTo`, though `ns/ontology.ttl` now
+  declares it. Recorded in
+  `docs/plans/2026-08-14-follow-up-edges.md`'s "Follow-ups this plan
+  deliberately does not close".
 - `[gated]` **Authorization is a seam, not a model**: `internal/api/authz.go` puts every
   route behind one default-deny policy table, but what that table can say is
   still the two-level truth the server always had — every authenticated actor,

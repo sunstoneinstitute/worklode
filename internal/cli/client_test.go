@@ -420,6 +420,59 @@ func TestClientBlockUnblock(t *testing.T) {
 	}
 }
 
+// TestClientFollowUpUnfollow checks FollowUp issues POST
+// /api/v1/tasks/WL-2/edges with body {"to":"WL-1","type":"follow_up_to"},
+// landing the edge in origin's out-edges, and Unfollow issues the same body
+// with DELETE, removing it.
+func TestClientFollowUpUnfollow(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	origin, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Origin", Priority: "high", Kind: "feature"})
+	if err != nil {
+		t.Fatalf("CreateTask origin: %v", err)
+	}
+	followUp, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Follow-up", Priority: "high", Kind: "feature"})
+	if err != nil {
+		t.Fatalf("CreateTask followUp: %v", err)
+	}
+	if origin.ID != "WL-1" || followUp.ID != "WL-2" {
+		t.Fatalf("ids = %s, %s, want WL-1, WL-2", origin.ID, followUp.ID)
+	}
+
+	if _, err := c.FollowUp(ctx, followUp.ID, origin.ID); err != nil {
+		t.Fatalf("FollowUp: %v", err)
+	}
+	detail, _, err := c.GetTask(ctx, followUp.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	found := false
+	for _, e := range detail.Edges.Out {
+		if e.Type == "follow_up_to" && e.To == origin.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("out edges = %+v, want a follow_up_to edge to %s", detail.Edges.Out, origin.ID)
+	}
+
+	if _, err := c.UnfollowUp(ctx, followUp.ID, origin.ID); err != nil {
+		t.Fatalf("UnfollowUp: %v", err)
+	}
+	detail, _, err = c.GetTask(ctx, followUp.ID)
+	if err != nil {
+		t.Fatalf("GetTask after unfollow: %v", err)
+	}
+	for _, e := range detail.Edges.Out {
+		if e.Type == "follow_up_to" {
+			t.Fatalf("out edges = %+v, want no follow_up_to edge after UnfollowUp", detail.Edges.Out)
+		}
+	}
+}
+
 func TestClientBriefAndRebindWorktree(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
