@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,8 +78,9 @@ type Config struct {
 	PlanCorpus string
 }
 
-// tokenStore is the keychain the client reads/writes tokens through.
-var tokenStore TokenStore = NewKeychainTokenStore()
+// tokenStore is the store the client reads/writes tokens through: the OS
+// keychain, or a 0600 file on a machine that has none.
+var tokenStore TokenStore = NewFallbackTokenStore()
 
 // configPath returns ~/.config/worklode/config.toml.
 func configPath() (string, error) {
@@ -354,13 +356,24 @@ func (cfg *Config) merge(repo Config, path string) {
 	// through loadConfigFrom/merge.
 }
 
-// SaveConfig stores the token in the OS keychain and writes only the server URL
-// to ~/.config/worklode/config.toml. Any legacy cleartext token in the file is
-// dropped. Returns an error (without writing the file) if the keychain write
-// fails, so the token is never silently left only in cleartext.
+// SaveConfig stores the token through tokenStore — the OS keychain, or the 0600
+// token file on a machine with no keychain (spec 001 §8.5) — and writes only the
+// server URL to ~/.config/worklode/config.toml. Any legacy cleartext token in the
+// file is dropped. A failed store write is still returned as an error — the token
+// is never silently left only in config.toml — but the server is recorded anyway:
+// it is not a secret, and the `export LODE_TOKEN=…` guidance that error carries
+// only works on a machine that knows which server the token is for. The legacy
+// cleartext token survives that path, since nothing migrated it into the
+// keychain and stripping it would destroy the only copy.
+//
+// Since the file fallback landed, reaching that error means a keychain that
+// exists and refused; absence takes the file instead and succeeds.
 func SaveConfig(cfg Config) error {
 	if cfg.Token != "" {
 		if err := tokenStore.Set(cfg.ServerURL, cfg.Token); err != nil {
+			if serr := saveServer(cfg.ServerURL, true); serr != nil {
+				err = errors.Join(err, serr)
+			}
 			return fmt.Errorf("store token in keychain (set LODE_TOKEN to use a token without the keychain): %w", err)
 		}
 	}
@@ -370,7 +383,12 @@ func SaveConfig(cfg Config) error {
 // SaveServerOnly writes just the server key to config.toml (0600), creating the
 // directory (0700) as needed. It never writes the token, and preserves an
 // existing current_project and project_key.
-func SaveServerOnly(server string) error {
+func SaveServerOnly(server string) error { return saveServer(server, false) }
+
+// saveServer is SaveServerOnly with control over the legacy cleartext token:
+// keepLegacyToken carries an existing one through instead of stripping it, for
+// the one caller whose keychain write failed.
+func saveServer(server string, keepLegacyToken bool) error {
 	path, err := configPath()
 	if err != nil {
 		return err
@@ -386,6 +404,9 @@ func SaveServerOnly(server string) error {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "server = %q\n", server)
+	if keepLegacyToken && existing.Token != "" && existing.ServerURL == server {
+		fmt.Fprintf(&b, "token = %q\n", existing.Token)
+	}
 	if existing.CurrentProject != "" {
 		fmt.Fprintf(&b, "current_project = %q\n", existing.CurrentProject)
 	}

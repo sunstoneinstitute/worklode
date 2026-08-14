@@ -1023,7 +1023,7 @@ func (f failingTokenStore) Get(string) (string, error) { return "", f.err }
 func (f failingTokenStore) Set(string, string) error   { return f.err }
 func (f failingTokenStore) Delete(string) error        { return f.err }
 
-func TestSaveConfigKeychainWriteFailureLeavesNoFile(t *testing.T) {
+func TestSaveConfigKeychainWriteFailureStillSavesServer(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("LODE_TOKEN", "")
@@ -1037,9 +1037,45 @@ func TestSaveConfigKeychainWriteFailureLeavesNoFile(t *testing.T) {
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("SaveConfig err = %v; want the keychain error", err)
 	}
-	// No config file must have been written when the keychain write failed.
-	if _, err := cli.ReadRawConfigForTest(); !os.IsNotExist(err) {
-		t.Fatalf("config file exists after keychain failure (err = %v); want none", err)
+	// The server is not a secret, and the LODE_TOKEN guidance this failure
+	// carries is useless without it: the next command would die on "server URL
+	// not set" instead of using the exported token.
+	raw, err := cli.ReadRawConfigForTest()
+	if err != nil {
+		t.Fatalf("read config after keychain failure: %v", err)
+	}
+	if !strings.Contains(raw, `server = "https://wl.example.com"`) {
+		t.Fatalf("config.toml did not record the server:\n%s", raw)
+	}
+	if strings.Contains(raw, "wl_new") {
+		t.Fatalf("config.toml leaked the token:\n%s", raw)
+	}
+}
+
+func TestSaveConfigKeychainWriteFailureKeepsLegacyToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("LODE_TOKEN", "")
+	t.Setenv("LODE_SERVER", "")
+
+	sentinel := errors.New("keychain unavailable")
+	restore := cli.SwapTokenStoreForTest(failingTokenStore{err: sentinel})
+	t.Cleanup(restore)
+
+	if err := cli.WriteRawConfigForTest("server = \"https://wl.example.com\"\ntoken = \"wl_old\"\n"); err != nil {
+		t.Fatalf("seed legacy: %v", err)
+	}
+	if err := cli.SaveConfig(cli.Config{ServerURL: "https://wl.example.com", Token: "wl_new"}); !errors.Is(err, sentinel) {
+		t.Fatalf("SaveConfig err = %v; want the keychain error", err)
+	}
+	// Nothing migrated the legacy token into the keychain, so stripping it here
+	// would destroy the only copy the user has.
+	raw, err := cli.ReadRawConfigForTest()
+	if err != nil {
+		t.Fatalf("read config after keychain failure: %v", err)
+	}
+	if !strings.Contains(raw, `token = "wl_old"`) {
+		t.Fatalf("config.toml dropped the legacy token:\n%s", raw)
 	}
 }
 
