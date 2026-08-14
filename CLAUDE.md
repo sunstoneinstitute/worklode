@@ -223,6 +223,12 @@ ground without adding a Python stack to a Go repo.
   (025 §17); until the codegen step exists, amend the spec first, then mirror
   the term here (`riot --validate ns/*.ttl`) — and never edit `wlc:TaskKind`
   apart from the migration and `validKinds`, which a test holds together.
+- Term names in `ns/*.ttl` are camelCase: `wl:` properties lowerCamelCase
+  (`wl:coveringPlan`, `wl:runtimeEventKind`), classes and concept schemes
+  UpperCamelCase (`wl:DesignDoc`, `wlc:TaskKind`). Snake_case is reserved for
+  `wlc:` concepts that carry a stored enum value — `wlc:docker_image` spells the
+  `docker_image` in the CHECK constraint — so a term's spelling says whether it
+  names schema or data.
 
 ## Metrics
 
