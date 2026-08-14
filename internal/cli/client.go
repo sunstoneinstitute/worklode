@@ -1134,9 +1134,9 @@ func (c *Client) FollowUp(ctx context.Context, id, origin string) ([]byte, error
 		edgeBody{To: &origin, Type: "follow_up_to"})
 }
 
-// Unfollow calls DELETE /api/v1/tasks/{id}/edges to drop the follow-up edge
+// UnfollowUp calls DELETE /api/v1/tasks/{id}/edges to drop the follow-up edge
 // from id to origin.
-func (c *Client) Unfollow(ctx context.Context, id, origin string) ([]byte, error) {
+func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
 		edgeBody{To: &origin, Type: "follow_up_to"})
 }
