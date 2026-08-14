@@ -64,12 +64,6 @@ Each item carries a priority tag (assessed 2026-08-14):
 - `[P2]` **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which
   does not scale to `lode inbox import --state all` on a mature repo — spec 020
   keeps the import default narrow for this reason.
-- `[P1]` **Triage lost-update window**: `PromoteIssue`, `DismissIssue`, and `LinkIssue`
-  each `SELECT triage_state` and then `UPDATE` keyed only on `(repo, number)`,
-  under READ COMMITTED. Two concurrent triage calls can both read `new` and both
-  write, so one outcome is silently lost — and promote's loser orphans the task
-  it created. Add `AND triage_state = 'new'` plus a `RowsAffected` check to all
-  three. Low impact while triage is human-driven and one issue at a time.
 - `[P4]` **e2e coverage for the inbox verbs**: `lode inbox import` and `lode inbox link`
   are tested per layer but never through CLI → API → store. `link` is the cheap
   one to add (no fake GitHub needed) and covers the seam the unit tests split.
