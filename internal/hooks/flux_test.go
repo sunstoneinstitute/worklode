@@ -328,6 +328,33 @@ func TestFluxOCIRevisionCorrelatesThroughArtifact(t *testing.T) {
 	}
 }
 
+// TestFluxOCIRevisionNoArtifactDoesNotLatch: an OCI digest revision with no
+// matching artifact (e.g. the registry_package webhook hasn't landed yet)
+// must not latch flux_seen — the same rule as an unresolvable git revision,
+// now exercised on the digest path.
+func TestFluxOCIRevisionNoArtifactDoesNotLatch(t *testing.T) {
+	e := newFluxEnv(t)
+
+	rr := fluxDeliver(t, e.h, "kustomization_succeeded_oci.json")
+	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	status, aid, ok := e.deployment(t, "prod", "flux_kustomization", "flux-system/demo")
+	if !ok {
+		t.Fatalf("no deployment row for flux-system/demo")
+	}
+	if status != "deployed" {
+		t.Fatalf("status = %q, want deployed", status)
+	}
+	if aid != nil {
+		t.Fatalf("artifact_id = %v, want nil (no artifact matches the digest)", *aid)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM env_deploys`); n != 0 {
+		t.Fatalf("env_deploys rows = %d, want 0 (digest with no artifact must not latch)", n)
+	}
+}
+
 func TestFluxKustomizationFailedRecordsFailureAndRuntimeEvent(t *testing.T) {
 	e := newFluxEnv(t)
 	artifactID := e.seedArtifact(t, fluxSeededSHA)

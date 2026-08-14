@@ -194,10 +194,16 @@ func parseRevision(revision string) (gitSHA, ociDigest string) {
 
 // confirmFluxDelivery advances the Flux side of the deploy frontier for
 // environment when the reconciled revision maps to a repo we track, then
-// resolves the tasks the new frontier covers. An OCI digest reaches the
-// commit through the artifact built from it; a git revision names the commit
-// directly.
-func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment, gitSHA, ociDigest string, eventID int64) error {
+// resolves the tasks the new frontier covers. artifact is the docker_image
+// artifact apply already resolved for an OCI digest revision — reused rather
+// than re-queried, so a concurrent registry_package delivery landing between
+// apply's lookup and this one can't make the two disagree on which artifact
+// the digest names. gitSHA and artifact are never both meaningful: a git
+// revision sets only gitSHA (artifact is nil), an OCI revision sets only
+// artifact when the digest resolved (nil if it didn't — parseRevision leaves
+// gitSHA "" for an OCI revision either way, which is what tells this apart
+// from "git revision with no sha").
+func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment, gitSHA string, artifact *store.Artifact, eventID int64) error {
 	// clusterEnv is unvalidated operator config (LODE_CLUSTER_ENV_MAP), so
 	// environment can be anything; env_deploys only accepts dev|prod and a
 	// CHECK violation would abort the whole delivery.
@@ -205,20 +211,14 @@ func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment
 		return nil
 	}
 	sha := gitSHA
-	if ociDigest != "" {
-		a, err := store.ArtifactByDigest(tx, ociDigest)
-		if err != nil {
-			return err
-		}
-		if a == nil {
-			// The image was deployed before its registry_package webhook
-			// arrived, or from a registry we do not ingest. Latching on a
-			// signal we cannot confirm would gate the repo/env forever.
-			return nil
-		}
-		sha = a.SourceSHA
+	if artifact != nil {
+		sha = artifact.SourceSHA
 	}
 	if sha == "" {
+		// Either an unrecognised revision, or an OCI digest whose artifact
+		// is not yet known (deployed before its registry_package webhook
+		// arrived, or from a registry we do not ingest). Latching on a
+		// signal we cannot confirm would gate the repo/env forever.
 		return nil
 	}
 	repo, mainID, err := store.MainIDForSHAAnyRepo(tx, sha)
@@ -253,12 +253,14 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 
 	gitSHA, ociDigest := parseRevision(ev.Metadata["revision"])
 	var artifactID *int64
+	var artifact *store.Artifact
 	switch {
 	case ociDigest != "":
 		a, err := store.ArtifactByDigest(tx, ociDigest)
 		if err != nil {
 			return err
 		}
+		artifact = a
 		if a != nil {
 			artifactID = &a.ID
 		}
@@ -316,7 +318,7 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 		}); err != nil {
 			return err
 		}
-		if err := h.confirmFluxDelivery(tx, now, environment, gitSHA, ociDigest, eventID); err != nil {
+		if err := h.confirmFluxDelivery(tx, now, environment, gitSHA, artifact, eventID); err != nil {
 			return err
 		}
 		if priorStatus != "failed" {
