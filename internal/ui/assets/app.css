@@ -650,6 +650,34 @@ nav.local a .cnt {
   flex-direction: column;
   gap: 16px;
 }
+.canvas.narrow {
+  max-width: 560px;
+  margin: 56px auto;
+  padding: 0 20px;
+}
+.copyrow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin: 16px 0;
+}
+.copyrow .btn {
+  width: auto;
+  padding: 9px 18px;
+  flex: 0 0 auto;
+}
+.code-block {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  padding: 10px 12px;
+  user-select: all;
+}
 .mode-banner {
   display: flex;
   align-items: center;

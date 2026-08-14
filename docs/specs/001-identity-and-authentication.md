@@ -174,6 +174,10 @@ to the server's own callback, not to localhost), the loopback URI needs no pre-r
 with Keycloak. The CLI is therefore free to bind an **ephemeral port** and is immune
 to port conflicts.
 
+The loopback flow assumes the CLI can launch a browser on the machine it is running on.
+When it cannot — no opener binary, or no display — the same endpoints run in a second
+mode that puts the one-time code on a page instead of on a redirect (§8.7).
+
 ### 8.1 Discovery and CLI login endpoints {#sec-8.1}
 
 - **`GET /.well-known/lode-login`** — discovery. Returns
@@ -187,10 +191,14 @@ to port conflicts.
 
 - **`GET /auth/cli/login?redirect_uri=…&state=…`** — validates `redirect_uri` is
   **loopback-only** (host in `localhost` / `127.0.0.1` / `::1`, scheme `http`,
-  explicit non-zero port), stores the CLI intent (`redirect_uri` + `state`) in a
+  explicit non-zero port), stores the CLI intent (`redirect_uri` + `state` + `mode`) in a
   short-lived signed cookie (signed with `SessionSecret`), then redirects into the
   existing `loginTarget(next)` entrypoint, which resolves to the sole configured
   login provider. No new provider code.
+  With **`mode=manual`** (§8.7) there is no loopback listener to redirect to, so
+  `redirect_uri` is omitted and the loopback check does not apply; `state` is still
+  required. Any other combination — a missing or non-loopback `redirect_uri` without
+  `mode=manual`, or a missing `state` — is a `400`.
 
 - **`POST /auth/cli/token` `{code, state}`** — validates the one-time code (exists,
   unexpired, unused, `state` matches the value bound at mint time), mints a 30-day
@@ -222,8 +230,14 @@ The login handler gains CLI login from this one change and is not otherwise touc
 ### 8.3 One-time code store {#sec-8.3}
 
 In-memory `map[string]cliCode` (`{actorID, state, expiresAt, used}`) guarded by a mutex.
-60-second TTL, single-use, 32 bytes of entropy. In-memory is sufficient because the server is
-single-instance (one PVC + litestream); a restart drops pending 60-second codes and the user
+**5-minute TTL**, single-use, 32 bytes of entropy. The TTL is set by the slowest legitimate
+path, which is manual mode (§8.7): a human reading a code off one machine's screen and typing
+or pasting it into another's terminal cannot reliably beat the 60 seconds this store originally
+allowed, and the resulting failure ("invalid or expired code") reads like a bug rather than a
+timeout. Five minutes matches the CLI's own wait window and stays inside RFC 6749 §4.1.2's
+ten-minute ceiling for authorization codes; single-use and the `state` binding, not the TTL,
+are what make the code safe. In-memory is sufficient because the server is
+single-instance (one PVC + litestream); a restart drops pending codes and the user
 simply re-runs `lode login`. No DB migration. (If we ever go multi-replica, promote to a table
 — noted, not built.)
 
@@ -237,7 +251,11 @@ simply re-runs `lode login`. No DB migration. (If we ever go multi-replica, prom
   `internal/oidc` PKCE usage in `login.go` are deleted — the server-mediated flow
   replaces them fully. The server `/auth/oidc/*` endpoints stay (§7).
 - **`cmd/login.go`** is unchanged except its Keycloak-specific help text becomes
-  provider-neutral.
+  provider-neutral. It later gains `--no-browser` (§8.7).
+- **`LoginOptions`** carries `Stdin`/`Stdout` alongside `OpenBrowser`, defaulting to
+  the process's own. Manual mode (§8.7) prompts, so the prompt and the code the user
+  pastes are both injectable and the flow is testable without a terminal; the flow's
+  progress messages go to `Stdout` rather than straight to `os.Stdout`.
 
 ### 8.5 Token storage: OS keychain {#sec-8.5}
 
@@ -248,31 +266,116 @@ non-secret:
 - **`config.toml` keeps only `server`.** The token never touches disk.
 - **Token lives in the OS keychain**, keyed by server URL (service `worklode`,
   account = server URL) so one machine can hold tokens for several servers and
-  `WL_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
+  `LODE_SERVER` selects which. Backed by **`github.com/zalando/go-keyring`** (macOS
   Keychain · Linux Secret Service · Windows Credential Manager; no cgo).
 - **`tokenStore` abstraction** in the `cli` package — `Get/Set/Delete(server)` —
   with a keychain implementation and a mock (`keyring.MockInit()`) for tests, since
   CI has no Secret Service.
-- **Token resolution order** in `LoadConfig`: `WL_TOKEN` env → keychain(server) →
+- **Token resolution order** in `LoadConfig`: `LODE_TOKEN` env → keychain(server) →
   legacy cleartext `token` in config.toml (read-only fallback so existing installs
   keep working).
 - **`lode login`** writes the token to the keychain, writes only `server` to
   config.toml, and if it finds a legacy cleartext `token` there it strips it and
   prints a one-line note — migrating people off cleartext.
 - **`lode logout`** deletes the token from the keychain for the current server.
-- **Headless / no keychain:** `lode login` opens a browser, so it runs on a desktop
-  with a keychain. If the keychain write genuinely fails it errors with guidance to
-  use `WL_TOKEN` instead — it never silently falls back to cleartext. Automation
-  (`lode watch` in-cluster) already uses `WL_TOKEN` and is unaffected.
+- **Headless / no keychain:** if the keychain write genuinely fails, `lode login`
+  errors with guidance to use `LODE_TOKEN` instead — it never silently falls back to
+  cleartext. Automation (`lode watch` in-cluster) already uses `LODE_TOKEN` and is
+  unaffected.
+
+  This bullet used to justify the keychain-only rule with "`lode login` opens a
+  browser, so it runs on a desktop with a keychain." Manual mode (§8.7) retracts that
+  premise: its whole purpose is the machine with no browser, which on Linux is usually
+  also the machine with no Secret Service. The rule stands — a token still never
+  touches disk in cleartext — but the failure is now an expected outcome rather than a
+  corner case, so the error names the token it just obtained and the exact
+  `export LODE_TOKEN=…` line that puts it to use. Losing a token the user watched
+  arrive, and making them log in again to get another one, is the worse failure.
 
 ### 8.6 Security {#sec-8.6}
 
 - `redirect_uri` is loopback-only, blocking code exfiltration / open redirect.
 - `state` is round-tripped and checked by the CLI (CSRF).
-- One-time codes are single-use, 60-second, high-entropy, bound to actor + `state`.
+- One-time codes are single-use, 5-minute, high-entropy, bound to actor + `state`.
 - The CLI-intent cookie is signed with `SessionSecret` and short-lived.
 - The token-exchange endpoint is unauthenticated by design; only a valid one-time
   code (proof the browser flow completed) yields a token.
+
+### 8.7 Manual mode: login without a launchable browser {#sec-8.7}
+
+The loopback flow has two hard requirements that a headless machine does not meet: the
+CLI must be able to *launch* a browser, and that browser must be able to *reach*
+`http://localhost:PORT` on the CLI's own machine. Over SSH both fail. The CLI used to
+treat this as a fatal error (`open browser: exec: "xdg-open": executable file not
+found`), which named the missing binary and left the user with no way forward, even
+though they were perfectly capable of opening the URL on the laptop in front of them.
+
+**Manual mode** removes both requirements by moving the one-time code from a redirect
+onto a page:
+
+```
+lode login --no-browser        (or: any login where no browser can be launched)
+  1. GET  {server}/.well-known/lode-login       -> { authorize_url, token_url, providers }
+  2. print {authorize_url}?mode=manual&state=CLISTATE   (no listener is bound)
+        user opens it in a browser, anywhere, on any machine
+        server runs its normal Keycloak web login -> provisions the actor
+        -> mints a one-time code -> renders it on a page with a copy button
+  3. user pastes the code into the waiting prompt
+  4. POST {token_url} {code, state}            -> { token, actor_id, expires_at }
+  5. store token in the OS keychain; write only `server` to config.toml
+```
+
+Steps 1, 4 and 5 are byte-identical to §8; only how the code travels changes.
+
+**The page carries the code, not the token.** Displaying the 30-day `wl_` token
+directly would remove the exchange step, and it is what a "copy your token" page
+normally does — but it would put a long-lived credential into the screen, clipboard,
+and terminal scrollback of a machine that manual mode exists precisely because it is
+*not* the user's own. The code is single-use and dead in five minutes, the user
+experience is identical (click Copy, paste), and routing through `/auth/cli/token`
+keeps the token's only appearance inside the CLI process and the keychain, which is
+what §8.5 and §8.6 already promise. It also means the CLI learns `actor_id` and
+`expires_at` for free and rejects a truncated paste immediately, instead of failing on
+some unrelated command later.
+
+**No new route and no new guard.** `GET /auth/cli/login` already exists and is `open`;
+the page is rendered as the response to the existing `/auth/callback`. `cliIntent`
+gains a `Mode` field (`""`/`loopback` | `manual`, so an in-flight cookie from a
+previous binary still means loopback), and `finishLogin` — the §8.2 seam — gains a
+third branch: manual intent renders the page rather than `302`-ing to a
+`redirect_uri` that does not exist.
+
+**When the CLI chooses manual mode.** Explicitly with `--no-browser`, or
+automatically when it can tell a browser cannot be launched:
+
+- the platform opener (`xdg-open`, `open`, `rundll32`) is not on `PATH`; or
+- the platform is neither macOS nor Windows and both `DISPLAY` and `WAYLAND_DISPLAY`
+  are empty.
+
+The second test matters more than the first. `xdg-open` is usually *installed* on a
+Linux server; over SSH it launches, finds no display, and fails asynchronously —
+`Start()` has already returned success, so without this check `lode login` waits five
+minutes for a callback that can never arrive and then reports a timeout. Any other
+launch failure stays fatal, because it means a browser probably did open and silently
+falling back would leave two logins racing.
+
+Manual mode binds no listener at all. A browser opened by hand on the same machine
+therefore does not shortcut the paste — a deliberate simplification: it removes a
+select over two arrival paths and, more importantly, an inconsistency where the same
+printed URL sometimes needs a paste and sometimes does not.
+
+**Security.** The page is unauthenticated in the same sense `/auth/callback` is —
+it is reached only by completing the Keycloak login, and only that login's own
+session decides whose code is minted. Manual mode gives up the loopback flow's
+guarantee that the code lands in the process that requested it (§8.6's first bullet):
+the value crosses a human, so a user who can be talked into running `lode login` can
+be talked into pasting a code into an attacker's terminal instead of their own. This
+is the same residual risk every out-of-band and device-code flow carries, it is bounded
+by the code's single use and five-minute life, and no CSRF check can close it — the
+`state` binding still ensures the code only redeems against the `lode login` that
+minted it, which is what stops a code from being replayed into a *different* CLI
+session. Manual mode is therefore opt-in-by-necessity: the CLI uses it only when the
+loopback flow genuinely cannot run.
 
 ## 9. GitHub account linking {#sec-9}
 
@@ -456,6 +559,15 @@ the ~6-month refresh-token lifetime.
   `keyring.MockInit()`; `LoadConfig` resolution order incl. legacy fallback;
   `lode logout` deletes the keychain entry.
 - **e2e** (`e2e/`): happy-path CLI login against a server with GitHub auth stubbed.
+- **Manual mode** (§8.7), server: `mode=manual` accepted without a `redirect_uri` and
+  still rejected without a `state`; a missing/non-loopback `redirect_uri` without
+  `mode=manual` still `400`s; manual intent renders a page whose code redeems at
+  `/auth/cli/token`; the loopback branch is unaffected.
+- **Manual mode**, CLI: browser detection is a pure function of (GOOS, `PATH`,
+  `DISPLAY`, `WAYLAND_DISPLAY`) and is table-driven — the two automatic triggers, and
+  a launchable browser that stays on the loopback path; `--no-browser` forces manual
+  with an opener present; a pasted code is exchanged and the token stored; stdin at
+  EOF (CI, `< /dev/null`) fails with guidance instead of blocking on a read.
 
 ## 12. Non-goals {#sec-12}
 

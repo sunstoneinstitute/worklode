@@ -462,3 +462,19 @@ func pluralSuffix(n int) string {
 	}
 	return ""
 }
+
+// --- CLI login (spec 001 §8.7) ----------------------------------------------
+
+// CLICodeView is the manual-`lode login` page: the one-time code the user
+// carries back to their terminal. It holds no project data and no session —
+// the page is rendered mid-login, before either exists — and deliberately
+// never carries the wl_ token itself, only the short-lived code that redeems
+// for one.
+type CLICodeView struct {
+	Title   string
+	ActorID string
+	Code    string
+	// ExpiresIn is pre-formatted for prose ("5 minutes"), like every other
+	// human-facing duration ui renders.
+	ExpiresIn string
+}

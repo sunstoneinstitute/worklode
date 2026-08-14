@@ -261,6 +261,11 @@ admin or the bootstrap token). When enabled:
 Users then run `lode login` to obtain a 30-day `wl_` token from their SSO
 identity. Agent/service tokens are unchanged.
 
+`lode login` opens a browser and completes over a loopback port. Where it
+cannot — no opener installed, or no display, as over SSH — it prints a URL to
+open on any machine and waits for the one-time code that page shows you to be
+pasted back. `--no-browser` asks for that directly.
+
 The web session cookie is `Secure`, so web login requires the server to be
 reached over HTTPS (or `localhost`); the `lode login` CLI flow is unaffected.
 
