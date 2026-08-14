@@ -144,7 +144,7 @@ func TestAPIUnauthenticatedIs401(t *testing.T) {
 // submits the creation form, and the write is attributed to their actor —
 // which is the thing webGuard resolving the session to an actor buys.
 func TestWebGuardAllowsLoggedInUser(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 	createProject(t, st, "proj")
 
@@ -179,7 +179,7 @@ func TestWebGuardAllowsLoggedInUser(t *testing.T) {
 // an unauthenticated visitor to login rather than serving or 403ing — the
 // behaviour the former webAuth had, preserved through the policy path.
 func TestWebGuardRedirectsAnonymous(t *testing.T) {
-	st, h, _ := newOIDCServer(t)
+	st, h, _ := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
 
 	for _, path := range []string{"/", "/projects/proj", "/projects/proj/tasks/new"} {
@@ -198,7 +198,7 @@ func TestWebGuardRedirectsAnonymous(t *testing.T) {
 // longer exists is anonymous, not authorized. Without the actor lookup, a
 // revoked person kept a working session until the cookie expired.
 func TestWebGuardRejectsSessionForDeletedActor(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
 
 	iss.TokenClaims = map[string]any{
@@ -221,20 +221,53 @@ func TestWebGuardRejectsSessionForDeletedActor(t *testing.T) {
 	}
 }
 
-// TestOpenDeploymentStaysOpen checks the deliberate bypass is intact: with no
-// login provider configured the cockpit serves and accepts writes, and the
-// write is attributed to nobody rather than to a fabricated actor.
-func TestOpenDeploymentStaysOpen(t *testing.T) {
-	st, h, _ := newTestServer(t)
+// TestOpenDeploymentRequiresOptIn: with no login provider and no explicit
+// LODE_WEB_OPEN, the cockpit refuses to serve rather than serving the
+// anonymous subject. A 503 and not a 302: there is no login route to redirect
+// to when OIDC is unconfigured, so a redirect would be a lie.
+func TestOpenDeploymentRequiresOptIn(t *testing.T) {
+	st, h, _ := newTestServerWithConfig(t, api.Config{})
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj", "", nil)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("cockpit with no provider and no opt-in = %d, want 503", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "LODE_WEB_OPEN") {
+		t.Errorf("refusal page does not name the setting that would allow it:\n%s", rr.Body.String())
+	}
+}
+
+// TestOpenDeploymentRefusesWrites: the creation forms sit behind the same
+// guard, so a closed instance must not accept an unattributable task either.
+func TestOpenDeploymentRefusesWrites(t *testing.T) {
+	st, h, _ := newTestServerWithConfig(t, api.Config{})
+	createProject(t, st, "proj")
+
+	form := url.Values{"title": {"Anonymous"}, "priority": {"low"}, "kind": {"chore"}}
+	rr := withSession(t, h, "POST", "/projects/proj/tasks", "", form.Encode())
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("form submit with no provider and no opt-in = %d, want 503", rr.Code)
+	}
+	if _, err := st.GetTask(context.Background(), "WL-1"); err == nil {
+		t.Fatal("a task was created by an anonymous caller on a closed instance")
+	}
+}
+
+// TestOpenDeploymentOptedIn: LODE_WEB_OPEN restores the old behaviour
+// deliberately — the cockpit serves and accepts writes, attributed to nobody
+// rather than to a fabricated actor.
+func TestOpenDeploymentOptedIn(t *testing.T) {
+	st, h, _ := newTestServerWithConfig(t, api.Config{WebOpen: true})
 	createProject(t, st, "proj")
 
 	if rr := doReq(t, h, "GET", "/projects/proj", "", nil); rr.Code != http.StatusOK {
-		t.Fatalf("cockpit on an open deployment = %d, want 200", rr.Code)
+		t.Fatalf("cockpit on an opted-in open deployment = %d, want 200", rr.Code)
 	}
 	form := url.Values{"title": {"Anonymous"}, "priority": {"low"}, "kind": {"chore"}}
 	rr := withSession(t, h, "POST", "/projects/proj/tasks", "", form.Encode())
 	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("form submit on an open deployment = %d, want 303; body %s", rr.Code, rr.Body.String())
+		t.Fatalf("form submit = %d, want 303; body %s", rr.Code, rr.Body.String())
 	}
 	task, err := st.GetTask(context.Background(), "WL-1")
 	if err != nil {
@@ -242,6 +275,27 @@ func TestOpenDeploymentStaysOpen(t *testing.T) {
 	}
 	if task.CreatedBy != "" {
 		t.Errorf("created_by = %q, want empty — an open deployment has no actor to attribute to", task.CreatedBy)
+	}
+}
+
+// TestPublicRoutesServeOnAClosedInstance: the login flow and the stylesheet
+// must survive the refusal, or a closed instance cannot be logged into and
+// renders unstyled error pages.
+func TestPublicRoutesServeOnAClosedInstance(t *testing.T) {
+	_, h, _ := newTestServerWithConfig(t, api.Config{})
+	if rr := doReq(t, h, "GET", "/assets/app.css", "", nil); rr.Code != http.StatusOK {
+		t.Fatalf("GET /assets/app.css on a closed instance = %d, want 200", rr.Code)
+	}
+}
+
+// TestWebOpenIgnoredWhenProviderConfigured: the opt-in is about the *absence*
+// of a provider. With OIDC configured it must not weaken session enforcement.
+func TestWebOpenIgnoredWhenProviderConfigured(t *testing.T) {
+	st, h, _ := newOIDCServer(t, api.Config{WebOpen: true})
+	createProject(t, st, "proj")
+	rr := doReq(t, h, "GET", "/projects/proj", "", nil)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("anonymous read with OIDC configured and WebOpen set = %d, want 302 to login", rr.Code)
 	}
 }
 

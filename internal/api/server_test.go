@@ -36,7 +36,10 @@ func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	h, _, err := api.NewServer(st, api.Config{})
+	// Web tests drive pages anonymously; they are the deliberate open case.
+	// The refusal itself is tested through newTestServerWithConfig in
+	// authz_test.go, which does not go through this helper.
+	h, _, err := api.NewServer(st, api.Config{WebOpen: true})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -48,7 +51,7 @@ func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 func newTestServerAdmin(t *testing.T) (main, admin http.Handler) {
 	t.Helper()
 	st := newTestStore(t)
-	main, admin, err := api.NewServer(st, api.Config{})
+	main, admin, err := api.NewServer(st, api.Config{WebOpen: true})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

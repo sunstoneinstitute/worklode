@@ -16,7 +16,7 @@ import (
 // gated GETs must redirect to /auth/login when OIDC is enabled and no session
 // cookie is present.
 func TestWebRedirectsWhenNoSession(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	for _, path := range []string{"/", "/tasks/WL-1", "/projects/proj"} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusFound {
@@ -42,7 +42,7 @@ func TestHealthzOpenWithOIDC(t *testing.T) {
 // /auth/login sets an oauth-state cookie and redirects to the issuer's
 // authorize endpoint carrying the PKCE challenge.
 func TestAuthLoginRedirectsToIssuer(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	_, h, iss := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", rr.Code)
@@ -66,7 +66,7 @@ func TestAuthLoginRedirectsToIssuer(t *testing.T) {
 // Full round-trip: login -> (drive the issuer) -> callback sets a session
 // cookie and redirects to the originally requested page.
 func TestAuthCallbackRoundTrip(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 
 	// The issuer's /token endpoint will return this ID token.
 	iss.TokenClaims = map[string]any{
@@ -121,7 +121,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 
 // A tampered session cookie is treated as absent: redirect to login.
 func TestWebTamperedSessionRedirects(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	req := httptest.NewRequest("GET", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "wl_session", Value: "garbage.garbage"})
 	rr := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestWebTamperedSessionRedirects(t *testing.T) {
 
 // A callback without the oauth-state cookie is a 400 (no session state).
 func TestAuthCallbackMissingState(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "GET", "/auth/callback?code=x&state=y", "", nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)
@@ -143,7 +143,7 @@ func TestAuthCallbackMissingState(t *testing.T) {
 // A callback whose state query value differs from the state in the oauth-state
 // cookie is a CSRF signal: 400, no session set.
 func TestAuthCallbackStateMismatch(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 
 	login := doReq(t, h, "GET", "/auth/login?next=/tasks/WL-1", "", nil)
 	oauthCookie := cookieValue(login, "wl_oauth")
@@ -164,7 +164,7 @@ func TestAuthCallbackStateMismatch(t *testing.T) {
 // An oauth-state cookie older than oauthStateMaxAge is rejected: 400, no
 // session set. The clock is advanced via the store between login and callback.
 func TestAuthCallbackExpiredState(t *testing.T) {
-	st, h, _ := newOIDCServer(t)
+	st, h, _ := newOIDCServer(t, api.Config{})
 
 	base := time.Unix(1_700_000_000, 0)
 	st.SetNowFunc(func() time.Time { return base })
@@ -194,7 +194,7 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 // Keycloak (/auth/login) is worklode's only interactive login (spec 001
 // §3).
 func TestGitHubLoginRoutesRemoved(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	for _, path := range []string{"/auth/choose", "/auth/github/login", "/auth/github/callback"} {
 		rr := doReq(t, h, "GET", path, "", nil)
 		if rr.Code != http.StatusNotFound {
@@ -208,7 +208,7 @@ func TestGitHubLoginRoutesRemoved(t *testing.T) {
 // spec 001 §9.3) is configured.
 func TestLoginTarget(t *testing.T) {
 	// Without the GitHub App OAuth client configured (s.gh nil).
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", rr.Code)
