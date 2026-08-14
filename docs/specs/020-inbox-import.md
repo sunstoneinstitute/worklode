@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: draft
 issued: 2026-07-31
 requires:
 - docs/specs/001-identity-and-authentication.md

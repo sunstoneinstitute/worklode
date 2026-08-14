@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: draft
 issued: 2026-07-25
 ---
 # Spec 012 — Agent sessions
