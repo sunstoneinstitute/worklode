@@ -840,6 +840,23 @@ docs/plans/2026-08-13-spec-corpus-consolidation-4-graph-and-documents.md:
     task-3-fold-025-documents-in-the-backbonemd: "### Task 3 — Fold `025-documents-in-the-backbone.md`"
     task-4-fold-026-design-doc-queriesmd: "### Task 4 — Fold `026-design-doc-queries.md`"
     what-part-5-inherits: "## What part 5 inherits"
+docs/plans/2026-08-14-approvals-1-table-and-web-act.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    decisions-this-plan-executes-made-in-the-approved-design-do-not-reopen: "## Decisions this plan executes (made in the approved design; do not reopen)"
+    tasks: "## Tasks"
+    task-1-migration-the-approvals-table-and-pull-requestsauthor: "### Task 1 — Migration: the `approvals` table and `pull_requests.author`"
+    task-2-pure-decision-rules: "### Task 2 — Pure decision rules"
+    task-3-store-foundation-insert-resolve-reopen-get: "### Task 3 — Store foundation: insert, resolve, reopen, get"
+    task-4-session-gate-requiresession-and-subjectgroups: "### Task 4 — Session gate: `requireSession` and `Subject.Groups`"
+    task-5-pr-ingest-writes-and-resolves-approval-rows: "### Task 5 — PR ingest writes and resolves approval rows"
+    task-6-store-readers-the-queue-and-the-per-project-counts: "### Task 6 — Store readers: the queue and the per-project counts"
+    task-7-the-reviews-queue-page-replaces-its-placeholder: "### Task 7 — The `/reviews` queue page replaces its placeholder"
+    task-8-the-web-approve-act-post-approvalsiddecide: "### Task 8 — The web approve act: `POST /approvals/{id}/decide`"
+    task-9-narrow-width-and-keyboard-pass-on-the-approval-workflow-032-10: "### Task 9 — Narrow-width and keyboard pass on the approval workflow (032 §10)"
+    task-10-e2e-the-approval-lifecycle-through-public-surfaces: "### Task 10 — e2e: the approval lifecycle through public surfaces"
+    verification: "## Verification"
+    deferred-part-2-of-this-series-stated-so-the-gap-is-a-decision: "## Deferred — part 2 of this series, stated so the gap is a decision"
 docs/plans/2026-08-14-artifact-correlation-hardening.md:
   sections:
     global-constraints: "## Global Constraints"
@@ -861,6 +878,23 @@ docs/plans/2026-08-14-follow-up-edges.md:
     task-5-end-to-end-through-public-surfaces: "## Task 5: End-to-end through public surfaces"
     verification: "## Verification"
     follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
+docs/plans/2026-08-14-home-project-list.md:
+  sections:
+    dependencies: "## Dependencies"
+    coverage-why-each-level-is-what-it-is: "## Coverage: why each level is what it is"
+    decision-reuse-the-boards-facts-reader-no-new-counts-reader: "## Decision: reuse the board's facts reader — no new counts reader"
+    deferred-the-rest-of-032-9: "## Deferred — the rest of 032 §9"
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-extract-the-boards-bucketing-into-bucketworkfacts-and-refactor-assembleboard-onto-it: "### Task 1 — Extract the board's bucketing into `bucketWorkFacts` and refactor `assembleBoard` onto it"
+    task-2-home-view-types-and-activity-helper-in-internalui: "### Task 2 — Home view types and activity helper in `internal/ui`"
+    task-3-pure-projection-assemblehomefacts: "### Task 3 — Pure projection: `assembleHomeFacts`"
+    task-4-pure-derivation-tier-signal-and-sort: "### Task 4 — Pure derivation: tier, signal, and sort"
+    task-5-bulk-participants-read-for-home: "### Task 5 — Bulk participants read for Home"
+    task-6-home-templ-component-and-the-two-column-card-grid: "### Task 6 — Home templ component and the two-column card grid"
+    task-7-tracer-homepage-renders-the-project-list: "### Task 7 — Tracer: `homePage` renders the project list"
+    task-8-retire-the-boards-home-framing-work-keeps-the-board: "### Task 8 — Retire the board's Home framing; `/work` keeps the board"
+    task-9-e2e-journey-and-docs-alignment: "### Task 9 — e2e journey and docs alignment"
 docs/plans/2026-08-14-one-model-across-packages.md:
   sections:
     global-constraints: "## Global constraints"
@@ -872,6 +906,20 @@ docs/plans/2026-08-14-one-model-across-packages.md:
     task-4-move-the-board-cockpit-claim-and-import-projections: "### Task 4 — Move the board, cockpit, claim and import projections"
     task-5-move-the-request-bodies: "### Task 5 — Move the request bodies"
     task-6-enforce-the-rule-with-a-test: "### Task 6 — Enforce the rule with a test"
+docs/plans/2026-08-14-project-crew-participants.md:
+  sections:
+    coverage-notes: "## Coverage notes"
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-migrations-actor-identity-claims-and-project-participants: "### Task 1 — Migrations: actor identity claims and project_participants"
+    task-2-store-the-groups-claim-and-email-at-login: "### Task 2 — Store the groups claim and email at login"
+    task-3-store-readers-listparticipants-and-projectsforactor: "### Task 3 — Store readers: ListParticipants and ProjectsForActor"
+    task-4-store-reader-openworkownedby-the-removal-guards-fact-query: "### Task 4 — Store reader: OpenWorkOwnedBy, the removal guard's fact query"
+    task-5-crew-web-page-replaces-its-placeholder-the-tracer: "### Task 5 — Crew web page replaces its placeholder (the tracer)"
+    task-6-add-member-mutation-one-task-across-every-surface: "### Task 6 — Add-member mutation, one task across every surface"
+    task-7-remove-member-mutation-with-the-61-guard-every-surface: "### Task 7 — Remove-member mutation with the §6.1 guard, every surface"
+    task-8-participants-read-api-and-the-crew-cli-listing: "### Task 8 — Participants read API and the crew CLI listing"
+    task-9-e2e-crew-journey-and-follow-ups: "### Task 9 — e2e crew journey and follow-ups"
 docs/plans/2026-08-14-spec-corpus-consolidation-5-cutover.md:
   sections:
     the-gate-is-already-discharged: "## The gate is already discharged"
