@@ -34,8 +34,9 @@ to an open session's `cost_amount` — 012's transcript pricing overwrites it
 at session end and stays authoritative, with the spool as the live
 approximation in between. Token columns are deliberately not approximated:
 the payload's context numbers are window occupancy, not billed tokens.
-`lode install --statusline` sets `statusLine.command` only when the key is
-absent — a status line is a personal choice Worklode must not replace.
+`lode install` sets `statusLine.command` only when the key is absent or
+already ours, which is what makes it safe on by default; `--no-statusline`
+skips it.
 
 **Tech Stack:** Go 1.26, cobra, stdlib `testing`; Postgres (pgvector image)
 for the store/API tests; Prometheus client for the one new counter.
@@ -45,6 +46,22 @@ for the store/API tests; Prometheus client for the one new counter.
 ---
 
 ## What exists vs. what this builds
+
+> **`lode statusline` already exists (2026-08-14).** A port of
+> `stigsb/claude-context-monitor` shipped the command, the
+> `lode install` status-line binding, and `internal/statusline`, rendering
+> model, in-progress todo, project, a context meter, and — from
+> `worktree.StampedTaskID` — the workspace's `worklode.task-id` plus the
+> branch's slug, in place of branch and worktree indicators. So this plan's
+> tasks **extend a shipped command rather than create one**, and its
+> acceptance criteria should be read
+> against `internal/statusline/statusline.go` before task 1 starts. Nothing
+> conflicts: what shipped is the local-read half, and the two segment sets
+> compose. Still to build here — the task *title*, lease state and heartbeat
+> freshness from a lease marker (the shipped code reads only the bare id), and
+> the whole cost spool and its heartbeat flush. Note also that `renderContext`
+> already writes a `$TMPDIR/claude-ctx-<session>.json` bridge file for the
+> ported tool's own hook; the spool should absorb it rather than sit beside it.
 
 - Session-local state: `internal/hookrun/hookrun.go` — the session marker
   (`worklode-session.json`, helpers at `hookrun.go:842-965`) in the
@@ -741,7 +758,7 @@ git commit -m "Install the Worklode status line on demand"
    overwrites it at session end (acceptance 5; 012 authoritative).
 3. `worklode_harness_cost_reports_total` counts applied reports and is
    nil-safe without `WithMetrics`.
-4. `lode install --statusline` never replaces an existing `statusLine`
+4. `lode install` never replaces an existing `statusLine`
    key, and uninstall removes only ours.
 5. `go test ./...` green, `./scripts/check-migrations.sh --no-fix` clean
    (no migration in this part).

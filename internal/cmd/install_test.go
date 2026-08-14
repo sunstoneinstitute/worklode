@@ -212,13 +212,18 @@ func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
 	}
 }
 
-func TestInstallHooksNoVCSSkipsWorktreeConfigExtension(t *testing.T) {
+// The extension is enabled for whoever needs it — the VCS side's task-id
+// stamping, or the status line's read of that stamp — and for nobody else. At
+// the CLI this state needs --no-vcs --no-statusline, since the status line is
+// on by default and pulls the extension in with it.
+func TestInstallHooksSkipsWorktreeConfigExtensionWhenNothingNeedsIt(t *testing.T) {
 	root := initGitRepo(t)
 	if _, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, scopeLocal); err != nil {
-		t.Fatalf("installHooks --no-vcs: %v", err)
+		t.Fatalf("installHooks: %v", err)
 	}
 	if out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
-		t.Fatalf("extensions.worktreeConfig = %q, want unset when --no-vcs", strings.TrimSpace(string(out)))
+		t.Fatalf("extensions.worktreeConfig = %q, want unset when neither the VCS side nor the status line is targeted",
+			strings.TrimSpace(string(out)))
 	}
 }
 
