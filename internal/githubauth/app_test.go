@@ -367,6 +367,33 @@ func TestBranchSHA(t *testing.T) {
 	}
 }
 
+// The branch is escaped whole, so a slashed release branch reaches GitHub as
+// one %2F segment — which it resolves — and a ref like "../../x" stays inert
+// instead of emitting dot segments a server would normalize out of the path.
+// Same rule as TestTarballEscapesRefAsOneSegment.
+func TestBranchSHAEscapesBranchAsOneSegment(t *testing.T) {
+	for _, tc := range []struct{ branch, want string }{
+		{"release/1.2", "/repos/acme/app/git/ref/heads/release%2F1.2"},
+		{"../../x", "/repos/acme/app/git/ref/heads/..%2F..%2Fx"},
+	} {
+		t.Run(tc.branch, func(t *testing.T) {
+			f := &appFixture{branchSHAs: map[string]string{
+				tc.branch: "abc1230000000000000000000000000000000000",
+			}}
+			sha, err := f.start(t).BranchSHA(context.Background(), "acme/app", tc.branch)
+			if err != nil {
+				t.Fatalf("BranchSHA: %v", err)
+			}
+			if sha != "abc1230000000000000000000000000000000000" {
+				t.Fatalf("sha = %q, want the fixture's head", sha)
+			}
+			if got := f.lastEscapedPath(); got != tc.want {
+				t.Errorf("requested %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBranchSHAUnknownBranchIsEmpty(t *testing.T) {
 	f := &appFixture{} // no branches registered, so every ref 404s
 	a := f.start(t)
