@@ -34,14 +34,14 @@ grammar, the backbone→graph projection — which relational table feeds each n
 have no source yet — and the data-platform requirements the whole thing rests on.
 **Out of scope (referenced):** backbone tables/lease (004), ranking (005), observed-layer derivers
 & query implementation (007 — this spec defines the *model* it reads), the delivery resolver and
-its frontier arithmetic (`011-delivery-lifecycle.md` — this spec models the *facts* it reads, not
+its frontier arithmetic (004 §5 — this spec models the *facts* it reads, not
 the state machine), and the plugin (008).
 
 **Why the runtime layer is modelled here.** The Layer 3 nodes — Artifact, Deployment,
 Environment, Commit — are the observed half a Deliverable's declared `dct:relation` targets point
 at, so they need real classes: untyped instance IRIs leave a `wl:Deliverable` declaring its
 definition-of-done against nothing, and give 007's `observed/deploy` deriver no vocabulary to emit.
-The delivery lifecycle (`011-delivery-lifecycle.md`) also makes the layer load-bearing for task
+The delivery lifecycle (004 §5) also makes the layer load-bearing for task
 state — `deployed_dev`, `deployed_prod`, `released`, over `main_commits`, `env_deploys` and
 `release_frontiers` — which puts Commit on the critical path of the state machine. §1.1, §2.1,
 §3.1, §6, §10.1 and §11.1 supply it: the reuse survey behind each runtime mint, the six
@@ -74,14 +74,14 @@ where nothing does.
 | **Design document** | `wl:DesignDoc` + `wl:ADR` / `wl:Spec` | **MINT** — real subclasses |
 | **Document section** | `wl:Section` (+ `wl:lastRevisedIn`) | **MINT** — the addressable, individually linkable part of a DesignDoc that durable links and partial implementation both need; `wl:status` widens to it (025 §2, §3) |
 | **Plan** | `wl:Plan` | **MINT** — an executable document, sibling of `wl:DesignDoc` rather than a subclass: reviewable and accept-gated, but mutable and anchor-free (025 §9) |
-| **Task** | `wl:Task` | **MINT** — projected from the backbone (D11) |
-| **Deliverable** | `wl:Deliverable` | **MINT** — no standard for "declared definition-of-done" (D7); see open question 1 |
+| **Task** | `wl:Task` | **MINT** — projected from the backbone |
+| **Deliverable** | `wl:Deliverable` | **MINT** — no standard for "declared definition-of-done"; see open question 1 |
 | **Effect** (artifact-free deliverable) | `wl:Effect` ⊂ `wl:Deliverable` | **MINT** — IaC/GitOps work alters system state and ships nothing; edges differ from Deliverable, so a subclass not a kind attribute |
 | Design→component governance | `wl:governs` | **MINT** |
 | Deliverable→component delivery | `wl:deliveredBy` | **MINT** — no standard term; closes the implementation statement (§3) |
 | Component→section evidence | `wl:implements` | **MINT** — the manifest claim "that code meets this section" (025 §11); the remaining work edge is `wl:produces`, Task→Deliverable (026 §6.2) |
 | Execution→component impact | `wl:affects` | **MINT** |
-| DesignDoc lifecycle status | `wl:status` (+ `wlc:` SKOS scheme) | **MINT** (D4) |
+| DesignDoc lifecycle status | `wl:status` (+ `wlc:` SKOS scheme) | **MINT** |
 | **Accepted deviation** (drift suppression) | `wl:AcceptedDeviation` | **MINT** — sanctioned observed-but-unasserted edge; see §12 |
 | Deviation → sanctioning decision | `wl:sanctionedBy` | **MINT** — deviation → authorising ADR (alt: reuse `dct:source`; see open question 6) |
 | Edge a deviation names, un-asserted | `rdf:subject` / `rdf:predicate` / `rdf:object` | **reuse** — RDF reification names a triple without asserting it |
@@ -143,8 +143,8 @@ wl:Section a owl:Class ; rdfs:subClassOf foaf:Document ;
 # anchor-free, so the section lock never binds it. Its acceptance mints the execution subtree.
 wl:Plan a owl:Class ; rdfs:subClassOf foaf:Document , prov:Entity .
 
-wl:Task        a owl:Class .   # execution-owned, projected (D11)
-wl:Deliverable a owl:Class .   # declared definition-of-done (D7)
+wl:Task        a owl:Class .   # execution-owned, projected
+wl:Deliverable a owl:Class .   # declared definition-of-done
 
 # An Effect is a Deliverable that ships no artifact: IaC (provisioning) and GitOps
 # (admin-cluster) work alters the state of an existing system instead. A subclass rather
@@ -284,7 +284,7 @@ wl:affects a owl:ObjectProperty ;                 # execution → component (obs
     rdfs:range wl:Component ;
     rdfs:comment "A Task/Issue/PullRequest touches/changes that component." .
 
-wl:status a owl:ObjectProperty, owl:FunctionalProperty ;   # D4 — exactly one status
+wl:status a owl:ObjectProperty, owl:FunctionalProperty ;   # exactly one status
     rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan wl:Section ) ] ;
     rdfs:range skos:Concept ;
     rdfs:comment "Lifecycle status in wlc:DesignDocStatus; inherited by ADR and Spec. "
@@ -593,7 +593,7 @@ authored there (see §11). Layer 3 — Runtime · Deploy — is the six runtime 
 
 | Node | Class | v1/v2 | Origin |
 |---|---|---|---|
-| Component | `wl:Component` | v1 | authored (per-repo manifest declares boundaries, D5) |
+| Component | `wl:Component` | v1 | authored (per-repo manifest declares boundaries) |
 | DesignDoc | `wl:ADR` / `wl:Spec`, addressable by `wl:Section` | v1 | authored |
 | Deliverable | `wl:Deliverable` | v1 | authored (declared definition-of-done) |
 | Effect | `wl:Effect` ⊂ `wl:Deliverable` | v1 | authored; artifact-free definition-of-done for IaC/GitOps state change |
@@ -606,7 +606,7 @@ Intent edges: `wl:governs` (DesignDoc→Component), `wl:reviewer` (Component→A
 
 | Node | Class / term | v1/v2 | Notes |
 |---|---|---|---|
-| Task | `wl:Task` | v1 | **projected from backbone** (D11); carries `wl:taskKind` |
+| Task | `wl:Task` | v1 | **projected from backbone**; carries `wl:taskKind` |
 | Project | `wl:Project` | v1 | projected from backbone; **named-graph anchor**; every Task `wl:inProject` exactly one |
 | Plan | `wl:Plan` | v1 | **authored, not projected** — an executable document, sibling of `wl:DesignDoc` (§2) |
 | Issue | `wl:Issue` ⊂ `prov:Entity` | v1 | projected from VCS ingest; `wl:mirrors` its Task |
@@ -646,7 +646,7 @@ wlid:deliverable/worklode-graph-live
                      wlid:environment/prod .
 
 # A Spec scopes the deliverable; a Task realises it:
-wlid:doc/spec-worklode-009 dct:hasPart wlid:deliverable/worklode-graph-live .
+wlid:doc/spec-worklode-006 dct:hasPart wlid:deliverable/worklode-graph-live .
 wlid:task/01H8XZ...       wl:produces      wlid:deliverable/worklode-graph-live .
 
 # --- Effect: an artifact-free deliverable (IaC / GitOps) ---
@@ -719,9 +719,9 @@ carrying a git branch or version:
 A design document additionally carries an immutable **versioned sibling** IRI (`…/doc/<slug>/v3`),
 used only in pinned claims; the canonical IRI above stays version-free (025 §17, §4).
 
-The per-repo **component manifest** (D5) fixes each component's slug so the IRI is stable even
+The per-repo **component manifest** fixes each component's slug so the IRI is stable even
 when directory layout shifts. Component IRIs are **branch-free**: the work graph lives on one
-fixed graph-server branch (project is a *property*, not a branch — D1/§13.2 item 5).
+fixed graph-server branch (project is a *property*, not a branch — §13.2 item 5).
 
 Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
@@ -758,9 +758,9 @@ Slashes inside a local id remain permissible (slash namespace, opaque path), as 
 
 ## 11. Projection: backbone → graph {#sec-11}
 
-**Authority stays split** (D2/D3): the **backbone owns execution facts** (task state, leases,
+**Authority stays split**: the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,
-`requires`, `replaces`, Deliverable). Task is the **bridge** (D11): backbone-authoritative, mirrored
+`requires`, `replaces`, Deliverable). Task is the **bridge**: backbone-authoritative, mirrored
 read-only into the graph. Design nodes are authored graph-side and are **never** projected from
 the backbone.
 
@@ -848,7 +848,7 @@ the meantime and loses nothing.
 
 **Guarding the `wl:Commit` edge.** `applyRelease` populates `source_sha` from the release's
 `target_commitish`, which is frequently a *branch name* rather than a sha — the delivery lifecycle
-(`011-delivery-lifecycle.md`) already handles this by falling back to main's head. The projector
+(004 §5.2) already handles this by falling back to main's head. The projector
 must therefore emit `prov:wasDerivedFrom` only when `source_sha` resolves to a known `main_commits`
 row, and drop it otherwise. Minting `wlid:commit/…/main` from a branch name would produce a
 plausible, permanently wrong node. An artifact whose `repo` is set but whose `source_sha` is null or
@@ -964,7 +964,7 @@ is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL over
 ## 14. Dependencies {#sec-14}
 
 - **Spec 004 (backbone):** owns Task state, leases, `blocks`/`child_of`; emits the event/outbox
-  stream the projector consumes. Its delivery lifecycle (`011-delivery-lifecycle.md`) owns the
+  stream the projector consumes. Its delivery lifecycle (004 §5) owns the
   state machine and frontier arithmetic; this spec models the facts that machine reads.
 - **Spec 007 (drift/query):** consumes this model — reads the two-layer diff; owns the deriver
   contract, the `observed/deploy` named graph the runtime nodes land in, and Deliverable

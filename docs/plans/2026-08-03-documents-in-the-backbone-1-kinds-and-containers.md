@@ -438,7 +438,7 @@ compares the `.ttl` against the same list. Run it now: it fails on the CHECK
 `deploy/base/migrations/0011_document_task_kinds.up.sql`:
 
 ```sql
--- Task kinds (docs/specs/025-documents-in-the-backbone.md §6): 'spec' is
+-- Task kinds (docs/specs/025-documents-in-the-backbone.md §10): 'spec' is
 -- renamed 'design' (authoring any Worklode document) and 'epic' is removed —
 -- container-ness now derives from child_of edges, so no kind replaces it.
 

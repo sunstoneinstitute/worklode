@@ -99,7 +99,7 @@ func TestAuthCallbackRoundTrip(t *testing.T) {
 	}
 
 	// The callback's provisionActor call carries the github_username claim
-	// onto the actor (spec 023 §3.2).
+	// onto the actor (spec 001 §9.2).
 	a, err := st.GetActor(context.Background(), "grace")
 	if err != nil {
 		t.Fatalf("get actor: %v", err)
@@ -191,8 +191,8 @@ func TestAuthCallbackExpiredState(t *testing.T) {
 }
 
 // TestGitHubLoginRoutesRemoved asserts the GitHub web-login routes are gone:
-// Keycloak (/auth/login) is worklode's only interactive login (spec 023
-// §3.1).
+// Keycloak (/auth/login) is worklode's only interactive login (spec 001
+// §3).
 func TestGitHubLoginRoutesRemoved(t *testing.T) {
 	_, h, _ := newOIDCServer(t)
 	for _, path := range []string{"/auth/choose", "/auth/github/login", "/auth/github/callback"} {
@@ -205,7 +205,7 @@ func TestGitHubLoginRoutesRemoved(t *testing.T) {
 
 // TestLoginTarget asserts loginTarget always sends unauthenticated users to
 // Keycloak, regardless of whether the dormant GitHub App OAuth client (s.gh,
-// spec 023 §3.3) is configured.
+// spec 001 §9.3) is configured.
 func TestLoginTarget(t *testing.T) {
 	// Without the GitHub App OAuth client configured (s.gh nil).
 	_, h, _ := newOIDCServer(t)

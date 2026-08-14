@@ -104,7 +104,7 @@ identity, title, and ordering. This preserves 025 §1's rule: groupings are quer
   an ordinary task as parent instead of requiring `kind = 'epic'`. The depth cap of
   2 edges now spans task → subtask only and stops binding in practice.
 - **`epic` is removed from `TaskKind`** — convergent with 025 §10's kind list, which
-  already dropped it. What 018 built the epic *for* (a declared container above
+  already dropped it. What 004 built the epic *for* (a declared container above
   tasks) is carried by the project and the milestone, both real objects with facts
   of their own. The migration follows the standing rule: the kind CHECK,
   `validKinds`, and `wlc:TaskKind` change together, held by the existing test.
@@ -170,7 +170,7 @@ Probing as *verification* of reported state — reconciling a claim against prod
 
 ### 3.3 Lineage {#sec-3.3}
 
-`wl:Deliverable` is 006's declared definition-of-done (D7) made concrete, and a
+`wl:Deliverable` is 006's declared definition-of-done made concrete, and a
 deliverable with no artifact (a state change, an effect) is 006's `wl:Effect`. The
 ns/ mirrors follow at acceptance.
 
@@ -200,7 +200,7 @@ Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch nam
 (`[A-Z][A-Z0-9]*-[0-9]+`) are untouched by construction. The scheme generalizes
 025 §14.3's cross-corpus shorthand (`WL-SPEC-1`), which already reads as an
 instance of it. The type segment is also what `lode show <id>` dispatches on, with an
-equivalent `--kind`/per-kind flag spelling for each (019 §4.3a); kinds in this table
+equivalent `--kind`/per-kind flag spelling for each (019 §4.4); kinds in this table
 whose entities do not exist yet are recognized and reported, never treated as typos.
 
 Documents drawing identity from these sequences changes 025's assumptions; its
@@ -259,7 +259,7 @@ invitation and participation history rather than replacing it.
 
 ### 6.2 Identity and roles {#sec-6.2}
 
-Keycloak is the human identity (023). Two additions:
+Keycloak is the human identity (001). Two additions:
 
 - The `githubUsername` user attribute is mapped into the token and stored on the
   actor, so GitHub facts (PR authors, reviewers, commits) attach to the person, not
@@ -390,7 +390,7 @@ to the created project. Killed ideas cost one closed task and keep their trace.
 
 ### 8.2 Events out {#sec-8.2}
 
-027's offset-tracked subscribers are implemented **before** any outbound consequence
+025's offset-tracked subscribers are implemented **before** any outbound consequence
 — no producing handler gains a hardcoded notifier. The MVP sends no scheduled email,
 Google Chat message, or off-hours notification for work Worklode orchestrates. Its
 first human-facing consequence is the per-user Morning Brief in the web UI, derived

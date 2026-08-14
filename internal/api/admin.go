@@ -667,7 +667,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
-	// An epic's state follows its children (spec 018), and epicForbiddenStates
+	// An epic's state follows its children (spec 004), and epicForbiddenStates
 	// bars it from every delivery state — so an issue promoted as a childless
 	// epic could never leave in_progress.
 	if req.Kind == "epic" {
@@ -678,7 +678,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	req.Parent = strings.TrimSpace(req.Parent)
 	if req.Parent != "" {
 		// Named 404 ahead of the transaction: AddEdge's own lookup stays the
-		// authority for the rest of the spec-018 invariants, but its
+		// authority for the rest of the spec-004 invariants, but its
 		// ErrNotFound would otherwise be reported anonymously.
 		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)

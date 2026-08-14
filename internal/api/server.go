@@ -362,7 +362,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.web("GET /reviews", s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
 		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7.")))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
-		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 011.")))
+		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
 	r.web("GET /knowledge", s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
 		"Documents and graph-backed expert views arrive with specs 025, 026, and 006.")))
 	r.web("GET /tasks/{id}", s.taskPage)

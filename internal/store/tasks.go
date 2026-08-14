@@ -100,13 +100,13 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:            true,
 }
 
-// kindEpic is the tasks.kind value for a declared container task (spec 018):
+// kindEpic is the tasks.kind value for a declared container task (spec 004):
 // its own state and delivery are driven by its children, never entered
 // directly.
 const kindEpic = "epic"
 
 // epicForbiddenStates are the delivery states an epic can never occupy. They
-// are earned by observed deploy facts about a specific commit (spec 011) and
+// are earned by observed deploy facts about a specific commit (spec 004 §5.2) and
 // an epic has no commit. Checked on both ends of a transition so `lode task
 // done` on an epic reports the roll-up rule instead of a from-state mismatch.
 var epicForbiddenStates = map[string]bool{
@@ -521,7 +521,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
 // transaction. Self-edges are rejected for both types. A child_of edge must
-// also satisfy the spec-018 hierarchy invariants (see checkHierarchy): an epic
+// also satisfy the spec-004 hierarchy invariants (see checkHierarchy): an epic
 // parent, one project, one parent per task, no cycle, and at most
 // maxHierarchyDepth edges. A missing endpoint returns ErrNotFound.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {

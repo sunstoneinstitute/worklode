@@ -196,6 +196,8 @@ docs/specs/013-reconciliation.md:
     sec-3: "## 3. API"
     sec-4: "## 4. Dependencies"
     sec-5: "## 5. Open questions"
+    sec-6: "## 6. Testing"
+    sec-7: "## 7. Acceptance criteria"
 docs/specs/016-org-wide-skills.md:
   sections:
     sec-0: "## 0. Purpose & scope"

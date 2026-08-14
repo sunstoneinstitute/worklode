@@ -107,7 +107,7 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 }
 
 // checkHierarchy validates a proposed "child child_of parent" edge against the
-// spec-018 invariants. project and kind carry both endpoints' columns, already
+// spec-004 invariants. project and kind carry both endpoints' columns, already
 // read by AddEdge.
 func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]string) error {
 	if kind[parent] != kindEpic {
@@ -223,7 +223,7 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 // actionable — an oversized task becomes its own tracking task plus the
 // pieces, in place, keeping its id and every reference to it.
 //
-// Rejected when the parent is already an epic (spec 018's decompose is for
+// Rejected when the parent is already an epic (spec 004's decompose is for
 // splitting an oversized task, not for re-splitting a container — add
 // children to an existing epic with AddEdge instead), when it holds an
 // active lease (decomposing work someone is holding is a coordination bug),

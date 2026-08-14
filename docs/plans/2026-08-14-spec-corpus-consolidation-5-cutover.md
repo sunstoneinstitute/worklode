@@ -39,7 +39,7 @@ that attention explicitly.
 
 ## Rulings
 
-Continuing part 4's numbering; 17–24 are part 5's.
+Continuing part 4's numbering; 17–26 are part 5's.
 
 17. **The four consolidation plans are excluded from the reference rewrite.**
     `docs/plans/*spec-corpus-consolidation*` is the migration's own record and
@@ -127,8 +127,8 @@ Continuing part 4's numbering; 17–24 are part 5's.
 One commit's worth of scripted steps, in part 1's order. Nothing here is a
 judgment call; if a step surprises you, stop rather than improvise.
 
-- [ ] Confirm the gate: `./scripts/fold.py --check` clean, no `--partial`.
-- [ ] **Resolve the nine unmapped references first** — `-w` refuses to write
+- [x] Confirm the gate: `./scripts/fold.py --check` clean, no `--partial`.
+- [x] **Resolve the nine unmapped references first** — `-w` refuses to write
       while any remain, and each is a ruling-21 or ruling-22 case. All are
       written in old-corpus form (ruling 24) for `-w` to convert:
       - `ns/shapes.ttl:89,97` — `014 §7.2` never existed; §7 is the section
@@ -145,7 +145,7 @@ judgment call; if a step surprises you, stop rather than improvise.
         drop that entry.
       - `docs/specs2/026-design-doc-queries.md:960`'s `WL-SPEC-999` —
         ruling 25's neutralise/restore, not a repair.
-- [ ] `./scripts/refmap.py --dry-run --corpus-to docs/specs --allow-dropped
+- [x] `./scripts/refmap.py --dry-run --corpus-to docs/specs --allow-dropped
       --ignore-glob 'docs/specs/*'
       --ignore-glob 'docs/plans/*spec-corpus-consolidation*'
       --ignore-glob 'docs/plans/2026-08-03-design-doc-queries-*'
@@ -156,25 +156,25 @@ judgment call; if a step surprises you, stop rather than improvise.
       ruling 17 or 22; adding one for any other reason is a plan defect,
       because `--ignore-glob` hides a stale reference and says nothing when
       it does (part 1, hand-off).
-- [ ] Re-run with `-w` instead of `--dry-run`. If it must be re-run after an
+- [x] Re-run with `-w` instead of `--dry-run`. If it must be re-run after an
       amendment, `git checkout` the previous run first — `--force` re-applies
       the full rewrite over rewritten text, straight into id collisions.
-- [ ] `git rm -r docs/specs && git mv docs/specs2 docs/specs`.
-- [ ] `git rm docs/specs/.refmap-applied` — the marker `-w` dropped in
+- [x] `git rm -r docs/specs && git mv docs/specs2 docs/specs`.
+- [x] `git rm docs/specs/.refmap-applied` — the marker `-w` dropped in
       `docs/specs2/`, carried in by the move.
-- [ ] `git rm scripts/fold.py scripts/refmap.py` and their tests. Keep
+- [x] `git rm scripts/fold.py scripts/refmap.py` and their tests. Keep
       `docs/specs/mapping.yaml` and `docs/specs/fold.yaml`.
-- [ ] Deduplicate `requires:` where the rewrite collapsed two entries onto
+- [x] Deduplicate `requires:` where the rewrite collapsed two entries onto
       one target: folded 008 (011 and 004 → 004), folded 026 (014 and 025 →
       025), folded 025 (018 and 004 → 004).
-- [ ] Flip `status`/`issued` per part 1's rule — accepted where every source
+- [x] Flip `status`/`issued` per part 1's rule — accepted where every source
       was accepted, and `issued` set to the newest source's date. A document
       with any draft source stays `draft`.
-- [ ] `spec_corpus = "docs/specs"` in `.worklode/config.toml`, then
+- [x] `spec_corpus = "docs/specs"` in `.worklode/config.toml`, then
       `lode doc sync --dry-run`.
-- [ ] `./scripts/secindex.py docs/specs` and commit the regenerated
+- [x] `./scripts/secindex.py docs/specs` and commit the regenerated
       `index.yaml`.
-- [ ] `./scripts/secfmt.py -l docs/specs` and `./scripts/secmeta.py
+- [x] `./scripts/secfmt.py -l docs/specs` and `./scripts/secmeta.py
       docs/specs` — clean.
 
 ### Task 2 — The references `refmap.py` cannot see
@@ -184,26 +184,26 @@ the rewriter is structurally blind to, which is why it is hand work rather
 than a wider regex — part 1's rule 5 records that widening the prose regex
 has already caused two critical bugs.
 
-- [ ] **Bare document numbers.** Part 2's hand-off lists 25 across folded
+- [x] **Bare document numbers.** Part 2's hand-off lists 25 across folded
       016, 017, 019, 020, 021, 029 and 032, in shapes like `rides spec 014`,
       `since spec 018`, `027 mints`, `014's document IRI`. Part 4 adds folded
       026 §3.2 and §10's two bare `014`s. Repoint each against
       `mapping.yaml`; where the number names a document the fold retired and
       no successor claim exists, apply ruling 21.
-- [ ] **Letter-suffix references.** `\d+(?:\.\d+)*` cannot match `019 §4.3a`,
+- [x] **Letter-suffix references.** `\d+(?:\.\d+)*` cannot match `019 §4.3a`,
       so these are neither substituted nor reported. Known sites: folded 029's
       `(019 §4.3a)`, folded 026 §4.2a's, `internal/cmd/show_test.go:774`,
       `CLAUDE.md`, `AGENTS.md`, `docs/authoring-design-docs.md`, a 2026-08-03
       plan, and twice in `internal/designdoc/resolve.go`. Sweep for
       `§\d+(\.\d+)*[a-z]` repo-wide rather than trusting that list.
-- [ ] **Folded 026's four reference-form worked examples**, which `-w`
+- [x] **Folded 026's four reference-form worked examples**, which `-w`
       rewrote silently because they are *mapped*: §3's `014` / `WL-SPEC-14`
       pairing, §3's `--spec 15` / `WL-SPEC-15`, §10's `WL-SPEC-23` /
       `WL-SPEC-023` zero-padding pair, and §12 criterion 7's
       `WL-SPEC-14#sec-2.1` / `WL-SPEC-4`. Each example's whole point is the
       spelling being rewritten; restate all four against the new numbering so
       the claim each makes is true again.
-- [ ] **Self-citations.** Folded 008 cites `008` at three sites, folded 004
+- [x] **Self-citations.** Folded 008 cites `008` at three sites, folded 004
       cites `004` at one. All resolve correctly; strip the number so a
       document stops citing itself by name.
 
@@ -216,18 +216,18 @@ a `from:` — so the folded document lost material nothing else in the corpus
 states. Read the source from git: `git show
 e4e2920:docs/specs/013-reconciliation.md`.
 
-- [ ] Recover the `events.applied_at timestamptz` column declaration
+- [x] Recover the `events.applied_at timestamptz` column declaration
       (nullable, set when an event's apply completes by either path) and its
       down-migration sentence. Folded §0 refers to the marker and §2.1 relies
       on its behaviour, with nothing declaring it.
-- [ ] Recover the Testing section: the replay test, the poll test, "Both
+- [x] Recover the Testing section: the replay test, the poll test, "Both
       doctors: table-driven over broken-setup fixtures", the
       ephemeral-Postgres note.
-- [ ] Recover the Acceptance criteria section: the replay, poll,
+- [x] Recover the Acceptance criteria section: the replay, poll,
       `lode project doctor` and `lode doctor` criteria, and "Every command
       emits deterministic `--json`". 013 is otherwise the only document in
       the corpus with neither section.
-- [ ] Resolve the two scars whose referents left the corpus: folded §0's "the
+- [x] Resolve the two scars whose referents left the corpus: folded §0's "the
       `task_docs` link and the spec-drift engine it supported are superseded"
       and folded §5's "the (now-superseded) engine 3's third finding". Keep
       the claim, drop the pointer at material no longer there (ruling 21).
@@ -236,67 +236,67 @@ e4e2920:docs/specs/013-reconciliation.md`.
 
 Ruling 19. The surviving sites are few and known.
 
-- [ ] Folded 016: `ls:Skill` (§1, §3), `ls:recommendsSkill` (§1, §7), and
+- [x] Folded 016: `ls:Skill` (§1, §3), `ls:recommendsSkill` (§1, §7), and
       §0's note "Read every `ls:` below as `wl:`" — which the respell makes
       pointless, so it goes with them.
-- [ ] Folded 004: `ls:mirrors`.
-- [ ] Folded 025: `lsc:DesignDocStatus` (§9-ish) and `ls:Plan`/`ls:ADR`/
+- [x] Folded 004: `ls:mirrors`.
+- [x] Folded 025: `lsc:DesignDocStatus` (§9-ish) and `ls:Plan`/`ls:ADR`/
       `ls:Spec`/`ls:DesignDoc` (the §12 sentence about what 006 got wrong).
-- [ ] Leave §14's rename record alone — `ls:`/`lsc:`/`lsid:` are its subject,
+- [x] Leave §14's rename record alone — `ls:`/`lsc:`/`lsid:` are its subject,
       including the three-row prefix table and the sentence counting
       occurrences.
-- [ ] Amend criterion 19 to except that record, so the corpus can satisfy it.
+- [x] Amend criterion 19 to except that record, so the corpus can satisfy it.
 
 ### Task 5 — Strip the design-record labels
 
 Ruling 18. Roughly fifty sites across folded 004, 006, 007, 008 and 016.
 
-- [ ] Strip every `D<n>` and `Q<n>.<n>` (one- or two-digit `n`). A trailing
+- [x] Strip every `D<n>` and `Q<n>.<n>` (one- or two-digit `n`). A trailing
       parenthetical `(D2)`, `(D8/D11/D14)`, `(Q14.3)` simply goes. A label
       carrying a sentence's subject — "This is D14 applied to skills",
       "D5 says …" — is reworded to state the claim directly; the claim is
       what survives, and it is stated in the folded corpus already.
-- [ ] Keep `Q008.2`, `Q018.1`, `Q024.4` and their siblings: three-digit,
+- [x] Keep `Q008.2`, `Q018.1`, `Q024.4` and their siblings: three-digit,
       keyed by source document, a different scheme that still resolves.
-- [ ] Folded 006 §8 and §12 already shed theirs during part 4 — do not
+- [x] Folded 006 §8 and §12 already shed theirs during part 4 — do not
       double-count them looking for a label that is gone.
 
 ### Task 6 — The remaining part-4 residuals
 
-- [ ] **Transcribe from `ns/` where it is ahead** (ruling 20): folded 007
+- [x] **Transcribe from `ns/` where it is ahead** (ruling 20): folded 007
       §3.3's SPARQL spells concept IRIs path-style (`wl:status
       wl:status/accepted`) where `ns/concept.ttl` ships `wlc:accepted`.
-- [ ] **Stale document slugs**, all illustrative Turtle naming retired
+- [x] **Stale document slugs**, all illustrative Turtle naming retired
       documents: folded 006 §9's `wlid:doc/spec-worklode-009`, folded 025
       §4.1's `spec-worklode-014`, folded 025 §11.2's
       `wlid:section/spec-worklode-004/sec-4` and
       `wlid:section/spec-worklode-013/sec-3.1`.
-- [ ] **Folded 026's acceptance criteria 3, 9 and 11** — retire them
+- [x] **Folded 026's acceptance criteria 3, 9 and 11** — retire them
       (ruling 23), leaving §3/§3.1/§3.2's machinery documented and untested
       against a pre-fold amendment that no longer exists.
-- [ ] **Folded 025 §14.3's three falsified statements**: the "exactly one
+- [x] **Folded 025 §14.3's three falsified statements**: the "exactly one
       cross-project reference today — this document's own `amends:
       rdf-registry:ADR-0006`" claim, which no folded document can carry; the
       `023` / `WL-SPEC-23` normalisation arithmetic the rewrite mangled; and
       the `spec-worklode-014` doc slugs. Restate each against the new corpus.
-- [ ] **016 §1 says "Two mints" and adds a third** — the disjointness member
+- [x] **016 §1 says "Two mints" and adds a third** — the disjointness member
       is a third addition the Turtle block never declares, and §7's
       dependency bullet repeats the undercount. Correct both counts; do not
       fabricate Turtle.
 
 ### Task 7 — Close the books
 
-- [ ] `docs/follow-ups.md`: record what cutover deliberately did not fix —
+- [x] `docs/follow-ups.md`: record what cutover deliberately did not fix —
       031 §2.3's stale single-instance claim, 024 §3.1's missing
       worktree-exit event, 009's 2026-07 implementation-status report, and
       `ns/`'s three pre-025 mirrors (part 4's residual: not part 5's to fix).
       Check the file first; several may already be there.
-- [ ] Update `CLAUDE.md` and `AGENTS.md` where they describe the corpus or
+- [x] Update `CLAUDE.md` and `AGENTS.md` where they describe the corpus or
       the fold tooling. Both already point at `docs/specs/`; what changes is
       any mention of `docs/specs2/`, `fold.py` or `refmap.py`.
-- [ ] `go build ./... && go test ./internal/designdoc/ ./internal/cmd/` —
+- [x] `go build ./... && go test ./internal/designdoc/ ./internal/cmd/` —
       the reference rewrite touched Go source and testdata.
-- [ ] `./scripts/secfmt.py -l docs/specs`, `./scripts/secmeta.py docs/specs`,
+- [x] `./scripts/secfmt.py -l docs/specs`, `./scripts/secmeta.py docs/specs`,
       `./scripts/secindex.py docs/specs` — all clean, index regenerated after
       tasks 2–6 have moved text.
 
@@ -313,3 +313,34 @@ Recorded so a reviewer does not read them as omissions:
   owns it.
 - **No section is renumbered.** Anchors are frozen; tasks 2–6 change prose
   inside sections and never their numbering.
+
+## What execution found
+
+Four things the plan did not anticipate, recorded because each is a property
+of the tooling or the corpus rather than of this run.
+
+- **`refmap.py` has two blind spots beyond the letter suffix its rule 5
+  records.** `DEFAULT_IGNORE_GLOBS` excludes `*_test.go` outright, so every
+  citation in a Go test — including ones carrying a real `§` — was never
+  rewritten; and the shape `<filename>.md §N` is not one reference to the
+  tool but a filename it maps plus a `§N` it cannot see, so it silently
+  produced `025 §8` from `014 §8` where the correct target was `025 §10`.
+  Three sites carried that shape with a rewritten filename: migration 0009's
+  comment and two plans quoting it. The others (`029 §3`, `032 §2`, `032
+  §10`) survived only because those documents map to themselves identically.
+- **Ruling 22's `--ignore-glob` was too blunt.** Excluding a whole plan file
+  for one fixture identifier also excluded its real references — seven files,
+  237 substitutions, four of which `secmeta.py` then caught as `covers:`
+  resolving to no file. Recovered by replaying the pre-move dry run's own
+  substitution record. Part 1's hand-off warned exactly this ("prefer the
+  narrowest glob that clears them"); the warning was right and the plan
+  should have made the record-and-replay the primary method, not the repair.
+- **025's prefix-rename record is §17, not §14.** §14 is document frontmatter
+  and carries no `ls:` at all. Criterion 19 also had to except *itself*,
+  since it names all three retired spellings in its own text.
+- **The `Q<n>.<n>` labels split two ways, and the split is not cosmetic.**
+  `Q14.x` and `Q15.x` belong to 003's design record (they hang off D14 and
+  D15) and were stripped; `Q17.x` in folded 017 is that document's own
+  open-question numbering, keyed by document number without zero-padding,
+  and stays — as do the zero-padded `Q008.x`, `Q018.x`, `Q024.x`. The test
+  is whether a `D<n>` with the same number existed, not the digit count.

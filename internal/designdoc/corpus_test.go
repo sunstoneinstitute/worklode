@@ -118,7 +118,7 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 		t.Errorf("plan carries sections: %+v (025 §4: plans take none)", plan.Sections)
 	}
 	// The fixture uses the retired `implements:` spelling; the projected edge
-	// is still the canonical wl:covers (033 §4.2).
+	// is still the canonical wl:covers (026 §6.2).
 	if len(plan.Edges) != 1 || plan.Edges[0] != (designdoc.EdgeMeta{
 		Rel: "covers", Target: "docs/specs/034-design-doc-sync.md",
 	}) {
@@ -166,7 +166,7 @@ func TestLoadSyncCorpusEmptyDirsAreOptional(t *testing.T) {
 }
 
 // TestLoadSyncCorpusIgnoresNonMarkdown characterizes the corpus glob's
-// existing *.md-only filter: index.yaml sits alongside the spec docs (034 §5)
+// existing *.md-only filter: index.yaml sits alongside the spec docs (025 §16.3)
 // and must never be loaded as a corpus document.
 func TestLoadSyncCorpusIgnoresNonMarkdown(t *testing.T) {
 	specDir := t.TempDir()

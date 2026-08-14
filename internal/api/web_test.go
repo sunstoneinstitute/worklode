@@ -240,7 +240,7 @@ func TestProjectSections(t *testing.T) {
 	sections := map[string]string{
 		"crew":      "spec 029 §6.1",
 		"reviews":   "spec 029 §7",
-		"decisions": "specs 028 and 029",
+		"decisions": "specs 025 and 029",
 		"documents": "specs 025 and 026",
 		"activity":  "ordered event view",
 	}

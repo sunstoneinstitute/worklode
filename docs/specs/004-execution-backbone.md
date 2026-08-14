@@ -8,12 +8,12 @@ issued: 2026-07-29
 
 The execution backbone is the ACID core Worklode's pickup loop turns on: task state,
 worktree-bound leases, the append-only event log, and the two edge types
-(`blocks`, `child_of`) that gate what is claimable. It runs on **Postgres** (D2), with
-the lease bound to **git-worktree identity** (D8/D11/D14).
+(`blocks`, `child_of`) that gate what is claimable. It runs on **Postgres**, with
+the lease bound to **git-worktree identity**.
 
 **Concurrency.** Postgres lets N `claim --next` calls proceed concurrently, serializing
-only on the specific task row(s) they actually contend for — the write throughput D8
-requires for 24/7 parallel agents.
+only on the specific task row(s) they actually contend for — the write throughput
+24/7 parallel agents require.
 
 **In scope:** the Postgres schema baseline, row-lock transaction semantics, the task
 state machine (incl. reopen and delivery), worktree-bound lease lifecycle, the atomic
@@ -64,14 +64,14 @@ CREATE TABLE tasks (
 );
 ```
 
-The kind enum matches `wlc:TaskKind` (014 §8). `review` and `spike` arrived with
+The kind enum matches `wlc:TaskKind` (025 §10). `review` and `spike` arrived with
 `0009_task_kinds`; `spec` is renamed `design` (025 §10); and `epic`, added by
 migration `0006` (§6.2), is removed again (029 §2) — §6 states what carries the
 container role instead. The `state` CHECK covers the delivery states of §5.1.
 
 ### 1.2 leases, bound to the worktree {#sec-1.2}
 
-The lease is keyed by **git-worktree identity, not `session_id`** (D8/D11/D14). It
+The lease is keyed by **git-worktree identity, not `session_id`**. It
 outlives any single session and dies with the worktree.
 
 ```sql
@@ -95,14 +95,14 @@ CREATE UNIQUE INDEX leases_active_worktree ON leases (worktree) WHERE released_a
 
 `worktree` is an **opaque, stable identity string** the plugin supplies; the backbone
 never parses it. Recommended canonical form `<host>:<abs-worktree-root>`; a
-deterministic worktree path makes `/lode-resume`'s lookup trivial (D14). That path is
+deterministic worktree path makes `/lode-resume`'s lookup trivial. That path is
 `<worktree_dir>/<branch>` (default `.worktrees/<id>-<slug>`), retiring the
 `wt/<id>-<slug>` spelling. Exact composition is fixed in **spec 008**
 (`008-worklode-plugin.md`); the backbone only requires it be stable for a
 worktree's lifetime and unique per live worktree. *(Open Q2.)*
 
-`DefaultLeaseTTL = 2h` (unchanged). Renewal is a **commit-cadence heartbeat**
-(D8): the `PreToolUse`/git `pre-commit` hook calls `renew` before each commit-batch —
+`DefaultLeaseTTL = 2h` (unchanged). Renewal is a **commit-cadence heartbeat**:
+the `PreToolUse`/git `pre-commit` hook calls `renew` before each commit-batch —
 no wall-clock timer. Missing the heartbeat (session died, machine slept) lets the
 lease lapse; the sweeper reclaims it.
 
@@ -444,7 +444,7 @@ New legal transitions:
 
 All delivery transitions are forward-only; the resolver never walks a task
 backward, and none of them closes the lease. The lease is worktree-scoped
-(004 §3) and ends only on `release`, `abandon`, `reopen`, or the expiry sweep.
+(§3) and ends only on `release`, `abandon`, `reopen`, or the expiry sweep.
 Closing it on merge would serve neither purpose a lease has: mutual exclusion is
 already enforced by `Claim` requiring state `ready`, so a `merged` task is
 unclaimable regardless of its lease, and liveness recovery is already the 2h TTL
@@ -932,7 +932,7 @@ double-sweeps; if a single sweeper is wanted, gate it with a Postgres advisory l
 - `claim --next` endpoint/flags (`--project`, `--strict-focus`) are **defined in spec
   005**; this spec only guarantees the atomic `Claim` primitive it calls.
 
-No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in context.
+No MCP — agents drive `lode --json`; no per-tool schema tokens in context.
 
 ## 9. Testing {#sec-9}
 
@@ -1012,7 +1012,7 @@ No MCP (D14, Q14.1) — agents drive `lode --json`; no per-tool schema tokens in
    sweep with a Postgres advisory lock to elect a single sweeper?
 5. **Task ↔ GitHub Issue mirror** *(new; from 007 review).* A backbone Task mirrors bidirectionally
    to a GitHub Issue so PRs can join it the native way (`Closes #N`). The backbone owns the Task and
-   the mirror link (projected to the graph as `ls:mirrors`, spec 006); the plugin (008) creates and
+   the mirror link (projected to the graph as `wl:mirrors`, spec 006); the plugin (008) creates and
    syncs the Issue. Open: create-on-task-create vs. lazy; who wins on divergent edits
    (backbone-authoritative?); handling tasks with no mirror yet.
 6. **RESOLVED — Q018.1 — Does an epic need wrap-up work?** No. Closure is automatic, and a

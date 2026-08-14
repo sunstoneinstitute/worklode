@@ -435,7 +435,7 @@ func TestPreCommitWithoutLeaseIsSilent(t *testing.T) {
 // TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename covers the case
 // the explicit worklode.task-id field exists for: a worktree renamed to a
 // directory name that carries no task id. It still sits one level below the
-// base, so it clears spec 030 §3.2's guard; only the stamped git config can
+// base, so it clears spec 008 §5.2's guard; only the stamped git config can
 // then say which task it belongs to.
 func TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename(t *testing.T) {
 	_, c, rec := newRealServer(t)
@@ -605,7 +605,7 @@ func TestOfferScanOffersAbandonedWorktree(t *testing.T) {
 	}
 }
 
-// The layout is flat (spec 030 §3.1): offerScan reads one level below the base
+// The layout is flat (spec 008 §5.1): offerScan reads one level below the base
 // and nothing deeper, so a worktree re-homed into a subdirectory is not a
 // worktree root any more and is not offered. This pins the flat scan — the
 // pre-flat code walked to depth 3 and would have found it.
@@ -632,7 +632,7 @@ func TestOfferScanIgnoresNestedWorktree(t *testing.T) {
 // offerScan), so this proves that narrower property — the scan never reaches
 // outside its base — not that ParseDir has stopped accepting wt/: the scan
 // would skip anything under wt/ even if ParseDir still recognised it. The
-// genuine "legacy wt/ is gone" coverage (spec 030 §5) is
+// genuine "legacy wt/ is gone" coverage (spec 008 §7) is
 // TestLayoutParseDir's "legacy wt is gone" case in
 // internal/worktree/worktree_test.go.
 func TestOfferScanIgnoresLegacyWtDir(t *testing.T) {
@@ -685,7 +685,7 @@ func offerScanContext(t *testing.T, dir string) string {
 // --- worktree_dir resolution -------------------------------------------------
 
 // A non-default worktree_dir (here via LODE_WORKTREE_DIR, the env override
-// spec 030 §3.1 gives) must be honoured, not just tolerated: the guard has to
+// spec 008 §5.1 gives) must be honoured, not just tolerated: the guard has to
 // find a worktree that isn't under the default .worktrees at all.
 func TestLayoutCustomBaseHonored(t *testing.T) {
 	rec := newRecordingServer(t)

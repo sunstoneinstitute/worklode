@@ -6,7 +6,7 @@ issued: 2026-07-22
 
 ## 0. Purpose & scope {#sec-0}
 
-This is the payoff of the whole design (D5): **development work as ambition reconciliation.**
+This is the payoff of the whole design: **development work as ambition reconciliation.**
 Intent is *declared*; reality is *observed*; every gap between them is a query over the diff.
 With many people and many agents committing in parallel, that diff is the only view of the
 system that stays current while nobody maintains it by hand.
@@ -15,7 +15,7 @@ This spec covers, and only covers:
 - **The two-layer model** — how declared vs. observed edges are represented so that *drift = the diff*.
 - **Observed-layer derivers** — the concrete jobs that materialize the reality layer.
 - **Standing queries** — drift, doc gaps, drifted specs, unimplemented specs, the ready frontier.
-- **Critical path v1** — estimate-free criticality (D12).
+- **Critical path v1** — estimate-free criticality.
 - **The overview surface** — how all of the above is exposed (`lode` subcommands + read-only web).
 
 Out of scope (reference, do not duplicate): the vocabulary/entity model/projection (006); the
@@ -36,7 +36,7 @@ Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliv
   deploys. No human authors these; they are recomputed and overwritten on every run.
 
 **Drift = the set difference between the two layers, per predicate.** Every struggle-list item
-(D5) is a read over that diff — never a bespoke report, always a standing query.
+is a read over that diff — never a bespoke report, always a standing query.
 
 ### 1.1 Representation: named graphs per source {#sec-1.1}
 
@@ -85,10 +85,10 @@ Five derivers share a contract, including a fifth — `observed/repo-implements`
 ### 2.2 `component lives-in repo` — filesystem + component-boundary manifest {#sec-2.2}
 
 - **Input:** repo filesystem + a **per-repo component-boundary manifest** (new authoring burden
-  accepted in D5), e.g. `.worklode/components.yaml`, mapping path globs → Component IRIs. Needed
+  accepted), e.g. `.worklode/components.yaml`, mapping path globs → Component IRIs. Needed
   because one repo can hold many components (e.g. **research-stack**); a repo with a single
   component gets a trivial whole-repo manifest (or a default).
-- **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer, D4) to
+- **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer) to
   each Component *(006)*.
 - **Output graph:** `observed/repo-layout`.
 - The manifest is also the **path→component index** consumed by derivers 1 and 3; it is the single
@@ -111,7 +111,7 @@ components:
 ### 2.3 `task affects component` — PR paths {#sec-2.3}
 
 - **Input:** merged/open PR changed-file lists (already ingested by `internal/hooks/github.go`).
-- **Join PR → Task:** via the deterministic worktree/branch name `wt/<id>-<slug>` (D14) or an
+- **Join PR → Task:** via the deterministic worktree/branch name `wt/<id>-<slug>` or an
   explicit task ref in the PR body. *(Open question below — confirm the join is always present.)*
 - **Map** each changed path → Component via the manifest, then emit `<task> wl:affects <component>`
   *(006)*.
@@ -124,13 +124,13 @@ This deriver's output vocabulary, IRI grammar and per-node v1/v2 status — incl
 have no v1 source — are specified in 006 §2.1–§6.
 
 - **Input:** the already-ingested relational tables behind `internal/hooks/flux.go`
-  (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). D6: most of
+  (Deployments, Environments) and `internal/hooks/github.go` (releases → Artifacts). Most of
   layers 2–3 are already ingested → this is **projection, not new build**.
 - **Output:** observed `Artifact` / `Deployment` / `Environment` nodes and their edges to the
-  Deliverable reconciliation point (Deliverable model owned by 006/D7).
+  Deliverable reconciliation point (Deliverable model owned by 006).
 - **Output graph:** `observed/deploy`.
 - v1 stops at projecting what the hooks record; auto-*confirming* a Deliverable by probing prod is
-  v2 (D7).
+  v2.
 
 ---
 
@@ -143,8 +143,9 @@ spec previously ran here, an mtime heuristic that fired on typo fixes and missed
 to a section nobody claimed; the unimplemented-specs query below is likewise re-pointed at the
 Component→Section edge instead of the Task→DesignDoc join.
 
-Each is a SPARQL-shaped read over the graph. Sketches use `wl:` for vocabulary, `g:` for the graph
-names above, and elide the IRI prefix boilerplate 006 defines. Layer comparison is expressed with
+Each is a SPARQL-shaped read over the graph. Sketches use `wl:` for vocabulary, `wlc:` for concept-
+scheme members, `g:` for the graph names above, and elide the IRI prefix boilerplate 006 defines.
+Layer comparison is expressed with
 `GRAPH` clauses; `UNION` across sibling `observed/*` graphs is implied where written as one graph.
 
 ### 3.1 Architectural drift {#sec-3.1}
@@ -200,11 +201,11 @@ An unimplemented section is a per-section coverage query over the Component→Se
 unimplemented when it is accepted and no Component claims to implement it.
 ```sparql
 SELECT ?section WHERE {
-  ?section a wl:Section ; wl:status wl:status/accepted .
+  ?section a wl:Section ; wl:status wlc:accepted .
   FILTER NOT EXISTS { ?c wl:implements ?section . }
 }
 ```
-(`wl:status`'s SKOS scheme — ending at `superseded` — is defined in 006 §9, D4.)
+(`wl:status`'s SKOS scheme — ending at `superseded` — is defined in 006 §9.)
 
 ### 3.4 The ready frontier — ready + unblocked tasks {#sec-3.4}
 
@@ -223,7 +224,7 @@ SELECT ?t WHERE {
 ```
 
 > **Authority caveat (important).** The `blocks`/`child_of` edges that gate pickup live on the
-> **execution backbone** (Postgres, D2), and the *atomic* `claim --next` transaction must read them
+> **execution backbone** (Postgres), and the *atomic* `claim --next` transaction must read them
 > there — it cannot depend on the eventually-consistent KG projection. So the **authoritative**
 > ready frontier is computed on the backbone (004/005); the query above is the **read-only overview**
 > version for humans and dashboards. Both must agree; the KG copy is derived from the backbone
@@ -231,7 +232,7 @@ SELECT ?t WHERE {
 > below is only the read-only overview mirror.
 
 **Overview frontier (mirror of 005's ordering).** The overview frontier is presented pre-sorted by
-the same D9 key `(is_critical, concern_rank, priority, blocking_fan_out)` that **005 computes
+the same key `(is_critical, concern_rank, priority, blocking_fan_out)` that **005 computes
 authoritatively on the backbone**. For *human overview only*, 007 additionally offers an enriched
 cross-store **critical path** (below) over `blocks` + `dct:requires`; this enriched metric is
 **not** used by the atomic `claim --next`.
@@ -240,14 +241,14 @@ cross-store **critical path** (below) over `blocks` + `dct:requires`; this enric
 
 ## 4. Critical path v1 {#sec-4}
 
-**Estimate-free.** No effort weights in v1 (D12 — effort estimation judged unlikely to add
+**Estimate-free.** No effort weights in v1 (effort estimation judged unlikely to add
 signal). Criticality is proxied by two unit-weight graph measures over the combined dependency
 DAG whose edges are `dct:requires` (KG) **+** `blocks` (backbone):
 
 - **Chain depth** `depth(t)` = length of the longest unit-weight predecessor chain ending at `t`.
   Tasks on a longest chain form the **critical path**; `is_critical(t)` = `t` lies on such a chain.
 - **Blocking fan-out** `fanout(t)` = count of tasks **transitively** blocked by `t` (how much work
-  `t` unblocks when done). Drives the `blocking-fan-out` term of the D9 sort key.
+  `t` unblocks when done). Drives the `blocking-fan-out` term of the sort key.
 
 **Where it runs.** The DAG spans both stores (`blocks` on the backbone, `dct:requires` in the
 KG), so Worklode computes it by joining: pull both edge sets, topologically sort, then a single
@@ -260,13 +261,13 @@ a materialized `is_critical`/`fanout` attribute.
 detect it, exclude the cycle from depth/fan-out, and surface it as its own overview finding rather
 than looping or silently dropping edges.
 
-Weighted critical path stays **v2** (optional, low priority — D12).
+Weighted critical path stays **v2** (optional, low priority).
 
 ---
 
 ## 5. Overview / CLI surface {#sec-5}
 
-Everything is a read; nothing here mutates the graph. All commands honor D14 determinism:
+Everything is a read; nothing here mutates the graph. All commands honor determinism:
 `--json` gives greppable, stable output; the compiled `lode` binary is the only dependency.
 
 **CLI (`lode`):**

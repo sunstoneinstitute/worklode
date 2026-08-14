@@ -241,7 +241,7 @@ Bounded autopilot. The surface preserves these invariants:
 - automatic execution acts only on eligible ready tasks within the saved bounds.
 
 The policy preview exposes the three hand-offs separately. On spec acceptance,
-027 mints the planning-decision task; policy decides whether it waits for a
+025 mints the planning-decision task; policy decides whether it waits for a
 person or is delegated to a planning agent, and “no plan” remains an explicit
 human outcome. A planning agent may produce draft plans but never accept them.
 On plan acceptance, 025 mints the declared execution tasks; policy decides

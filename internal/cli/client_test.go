@@ -1301,7 +1301,7 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 }
 
 // WorktreeDirFrom, not LoadConfig/loadConfigFrom, is the sole reader of
-// worktree_dir (spec 030 §4 scopes it to the repo-local config only) — see
+// worktree_dir (spec 008 §6 scopes it to the repo-local config only) — see
 // Config.WorktreeDir's doc. These two tests exercise it directly.
 
 func TestWorktreeDirFromRepoConfig(t *testing.T) {
@@ -1335,7 +1335,7 @@ func TestWorktreeDirEnvOverride(t *testing.T) {
 // sees: loadConfigFrom (LoadConfig's implementation) must leave
 // Config.WorktreeDir empty even when BOTH a user-level and a repo-level
 // config set worktree_dir — WorktreeDirFrom, not this merged Config, is the
-// sole reader (spec 030 §4; see Config.WorktreeDir's doc). Today this is
+// sole reader (spec 008 §6; see Config.WorktreeDir's doc). Today this is
 // correct only by inspection (cfg.WorktreeDir = "" in loadConfigFrom, and
 // merge() never touching it); this test would fail if either of those broke.
 func TestLoadConfigFromNeverPopulatesWorktreeDir(t *testing.T) {
@@ -1831,7 +1831,7 @@ func TestClientAssignmentFlow(t *testing.T) {
 	}
 }
 
-// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 034 §2):
+// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 025 §16.1):
 // CorporaFrom, not LoadConfig, is the sole reader.
 
 func TestCorporaFromRepoConfig(t *testing.T) {

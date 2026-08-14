@@ -35,9 +35,9 @@
 # a `wlsh:` namespace is the drop-in alternative; nothing here depends on it.
 #
 # Concept membership is checked as `skos:inScheme <scheme>` rather than an
-# sh:in list of concepts, so growing a scheme (as 014 §8 grew wlc:TaskKind)
-# never means editing this file. wl:taskState and wl:Environment are the two
-# exceptions: neither has a scheme, and both mirror a closed set elsewhere.
+# sh:in list of concepts, so growing a scheme never means editing this file.
+# wl:taskState and wl:Environment are the two exceptions: neither has a
+# scheme, and both mirror a closed set elsewhere.
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ wl:DeploymentShape a sh:NodeShape ;
 
 wl:EnvironmentShape a sh:NodeShape ;
     sh:targetClass wl:Environment ;
-    # Closed to what the delivery handlers normalise to. 015 open question 3 asks
+    # Closed to what the delivery handlers normalise to. 006 §15 item 9 asks
     # whether this closure survives per-cluster preview environments.
     sh:in ( <https://worklode.io/ns/id/environment/dev>
             <https://worklode.io/ns/id/environment/prod> ) ;
@@ -368,6 +368,6 @@ wl:CommitShape a sh:NodeShape ;
         sh:message "A Commit carries exactly one dct:identifier, the sha (006 §7)." ;
     ] .
 
-# No shape for wl:Build, wl:RuntimeEvent or wl:Skill: 015 specifies none for the
+# No shape for wl:Build, wl:RuntimeEvent or wl:Skill: 006 specifies none for the
 # first two (neither has a v1 projection, and RuntimeEvent has no natural key —
-# 015 open question 1), and 016 specifies none for Skill.
+# 006 §15 item 7), and 016 specifies none for Skill.

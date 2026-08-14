@@ -167,7 +167,7 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 var projectSections = map[string]string{
 	"crew":      "Crew arrives with project participants in spec 029 §6.1.",
 	"reviews":   "Governed approval reviews arrive with spec 029 §7.",
-	"decisions": "Research decisions arrive with specs 028 and 029.",
+	"decisions": "Research decisions arrive with specs 025 and 029.",
 	"documents": "Backbone documents arrive with specs 025 and 026.",
 	"activity":  "Project activity arrives when the ordered event view is implemented.",
 }
