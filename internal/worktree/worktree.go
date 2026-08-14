@@ -225,6 +225,32 @@ func SetTaskID(dir, taskID string) error {
 	return nil
 }
 
+// UnsetTaskID removes dir's worklode.task-id stamp, so a worktree that
+// outlives the lease it was created for stops claiming that binding. Callers
+// invoke it where a binding ends but the directory survives (`done`, `block`,
+// a release naming this worktree's task, a rolled-back claim); a worktree that
+// is removed outright needs no call, because the stamp lives in the worktree's
+// own config file and goes with it.
+//
+// Clearing is safe to do eagerly: under the standard <base>/<branch> layout
+// TaskID falls back to the id in the directory name, so unsetting degrades
+// resolution to the path rule rather than unbinding the worktree entirely.
+//
+// A missing key is not an error — git exits 5 for "unset an option which does
+// not exist" — so this is idempotent. Like SetTaskID, callers should treat a
+// genuine failure as a warning rather than fatal.
+func UnsetTaskID(dir string) error {
+	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--unset", "worklode.task-id").CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 5 {
+		return nil
+	}
+	return fmt.Errorf("git config --worktree --unset worklode.task-id: %s: %w", strings.TrimSpace(string(out)), err)
+}
+
 // TaskID resolves the task id of a worktree root, preferring the explicit
 // worklode.task-id worktree config SetTaskID stamps over the id carried by the
 // directory name. Explicit wins, so a worktree renamed after creation — to

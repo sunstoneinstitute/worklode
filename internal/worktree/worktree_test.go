@@ -430,6 +430,51 @@ func TestTaskIDExplicitWinsOverMismatchedDirName(t *testing.T) {
 	}
 }
 
+// TestUnsetTaskIDDegradesToTheDirNameRule is the property that lets the
+// lifecycle commands clear the stamp eagerly when a lease ends: unsetting
+// drops the explicit binding without unbinding a worktree that still lives at
+// <base>/<branch>, because TaskID falls back to the id in the directory name.
+func TestUnsetTaskIDDegradesToTheDirNameRule(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	wt := addWorktreeUnderBase(t, dir, "WL-3-fix-thing")
+	if err := worktree.SetTaskID(wt, "WL-99"); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+	if err := worktree.UnsetTaskID(wt); err != nil {
+		t.Fatalf("UnsetTaskID: %v", err)
+	}
+	gotID, ok := mustLayout(t).TaskID(wt)
+	if !ok || gotID != "WL-3" {
+		t.Fatalf("TaskID after UnsetTaskID = (%q, %v), want (\"WL-3\", true) from the directory-name fallback", gotID, ok)
+	}
+}
+
+// TestUnsetTaskIDIsIdempotent pins the tolerance the lifecycle callers rely on:
+// they clear best-effort, without first checking whether a stamp exists, so a
+// missing key (git exit 5) must not read as a failure.
+func TestUnsetTaskIDIsIdempotent(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	wt := addWorktreeUnderBase(t, dir, "WL-9-fix-thing")
+	if err := worktree.UnsetTaskID(wt); err != nil {
+		t.Fatalf("UnsetTaskID on a never-stamped worktree: %v", err)
+	}
+	if err := worktree.SetTaskID(wt, "WL-9"); err != nil {
+		t.Fatalf("SetTaskID: %v", err)
+	}
+	if err := worktree.UnsetTaskID(wt); err != nil {
+		t.Fatalf("first UnsetTaskID: %v", err)
+	}
+	if err := worktree.UnsetTaskID(wt); err != nil {
+		t.Fatalf("second UnsetTaskID: %v", err)
+	}
+}
+
 func TestTaskIDNeitherPresent(t *testing.T) {
 	dir := initGitRepo(t)
 	wt := filepath.Join(dir, worktree.DefaultBase, "no-id-here")
