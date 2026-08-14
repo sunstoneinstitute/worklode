@@ -67,6 +67,18 @@ func (e *fluxEnv) seedArtifact(t *testing.T, sha string) int64 {
 	return id
 }
 
+// seedMainCommit inserts a main_commits row for repo/sha directly, for tests
+// that need a landed commit without driving a full push delivery.
+func (e *fluxEnv) seedMainCommit(t *testing.T, repo, sha string) {
+	t.Helper()
+	if err := e.st.Tx(t.Context(), func(tx *sql.Tx) error {
+		_, err := store.AppendMainCommit(tx, repo, sha, e.st.Now())
+		return err
+	}); err != nil {
+		t.Fatalf("seed main commit: %v", err)
+	}
+}
+
 func fluxSign(body []byte) string {
 	mac := hmac.New(sha256.New, []byte(fluxTestSecret))
 	mac.Write(body)
@@ -257,6 +269,62 @@ func TestFluxKustomizationSucceededNoArtifactMatch(t *testing.T) {
 	}
 	if aid != nil {
 		t.Fatalf("artifact_id = %v, want nil (no seeded artifact)", *aid)
+	}
+}
+
+func TestParseRevision(t *testing.T) {
+	for _, tc := range []struct {
+		name, revision, git, oci string
+	}{
+		{"git with branch", "main@sha1:abc123", "abc123", ""},
+		{"git bare sha1 prefix", "sha1:abc123", "abc123", ""},
+		{"git bare sha", "abc123", "abc123", ""},
+		{"oci tag and digest", "v1.2.3@sha256:feed00", "", "sha256:feed00"},
+		{"oci digest only", "sha256:feed00", "", "sha256:feed00"},
+		{"empty", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			git, oci := hooks.ParseRevisionForTest(tc.revision)
+			if git != tc.git || oci != tc.oci {
+				t.Fatalf("parseRevision(%q) = (%q, %q), want (%q, %q)",
+					tc.revision, git, oci, tc.git, tc.oci)
+			}
+		})
+	}
+}
+
+// TestFluxOCIRevisionCorrelatesThroughArtifact: an OCIRepository revision is
+// a digest, not a git sha. It resolves to the docker_image artifact carrying
+// that digest, and through the artifact's source_sha to the main commit the
+// deployment actually delivered.
+func TestFluxOCIRevisionCorrelatesThroughArtifact(t *testing.T) {
+	e := newFluxEnv(t)
+	sha := "abc1230000000000000000000000000000000000"
+	digest := "sha256:feed0000000000000000000000000000000000000000000000000000000000ff"
+	e.seedMainCommit(t, demoRepo, sha)
+	_, _, err := e.st.RecordEvent(t.Context(), "github", "seed-oci-artifact", "release.published", nil,
+		func(tx *sql.Tx, _ int64) error {
+			_, err := store.CreateArtifact(tx, store.Artifact{
+				Kind: "docker_image", Name: "ghcr.io/sunstoneinstitute/demo",
+				Version: "v1.2.3", Digest: &digest, Repo: demoRepo, SourceSHA: sha,
+			})
+			return err
+		})
+	if err != nil {
+		t.Fatalf("seed artifact: %v", err)
+	}
+
+	rr := fluxDeliver(t, e.h, "kustomization_succeeded_oci.json")
+	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	got := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM deployments d
+		   JOIN artifacts a ON a.id = d.artifact_id
+		  WHERE a.digest = $1`, digest)
+	if got != 1 {
+		t.Fatalf("deployments linked to the digest artifact = %d, want 1", got)
 	}
 }
 
