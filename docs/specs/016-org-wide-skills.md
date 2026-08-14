@@ -2,18 +2,10 @@
 status: accepted
 issued: 2026-07-27
 requires:
-  - 004-execution-backbone.md
-  - 008-worklode-plugin.md
-  - 006-knowledge-graph.md
-  - 014-design-documents-as-graph-objects.md
-amends:
-  "#sec-1":
-    - 006-knowledge-graph.md#sec-1.1
-    - 006-knowledge-graph.md#sec-1.2
-    - 006-knowledge-graph.md#sec-11
-amendedBy:
-  "#sec-1":
-    - 025-documents-in-the-backbone.md#sec-4.1
+- docs/specs/004-execution-backbone.md
+- docs/specs/006-knowledge-graph.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/025-documents-in-the-backbone.md
 ---
 # Spec 016 — Org-wide agent skills
 
@@ -34,14 +26,10 @@ agent that can read a file participates — activation is "read
 integration. **v2:** usage feedback loop (which sessions read which skills → ranking signal,
 joined via `agent_sessions`), federation beyond a simple repo list, non-skill plugin assets.
 
-> **Prefix renamed by 014 §1.** Read every `ls:` below as `wl:` under
+> **Prefix renamed by 025 §17.** Read every `ls:` below as `wl:` under
 > `https://worklode.io/ns/ontology#`.
 
 ## 1. Registry & git sync {#sec-1}
-
-> **Amended by 025 §4.1.** The mint set below gains `wl:requiresSkill` (Task → Skill,
-> execution layer): the §3 task pin, backbone-only here, becomes projectable — declared in a
-> plan's task metadata and minted onto the task at plan accept.
 
 **Source of truth stays git.** Server config lists skill source repos (e.g. `claude-plugins`)
 with a ref and path globs (`plugins/*/skills/*/SKILL.md`, `skills/*/SKILL.md`). Authoring and
@@ -108,14 +96,18 @@ wl:recommendsSkill a owl:ObjectProperty ;
     rdfs:domain wl:DesignDoc ; rdfs:range wl:Skill ;
     rdfs:comment "This design document pins that skill; see §3." .
 
-[] a owl:AllDisjointClasses ;      # 006 §1.2, extended
+[] a owl:AllDisjointClasses ;      # 006 §2, extended
    owl:members ( wl:Component wl:DesignDoc wl:Section wl:Task wl:Deliverable wl:Workstream wl:Skill ) .
 ```
 
 The layers split because the two facts have different owners: a Skill node mirrors git through
 the backbone, so it is observed; the pin is authored in a design document, so it is declared.
 `wl:Skill` carries no version, content or embedding term — those stay relational, and a skill's
-IRI is `wlid:skill/<name>` (the `skills.name` unique key, per the natural-key rule in 015 §5).
+IRI is `wlid:skill/<name>` (the `skills.name` unique key, per the natural-key rule in 006 §10.1).
+
+The §3 task pin — a backbone field — is projectable too: `wl:requiresSkill` (Task → Skill,
+execution layer) is declared in a plan's task metadata and minted onto the task at plan accept
+(025 §9.1).
 
 ## 2. Embeddings & recommendation {#sec-2}
 
@@ -132,9 +124,9 @@ IRI is `wlid:skill/<name>` (the `skills.name` unique key, per the natural-key ru
   negligible. Changing provider/model invalidates all embeddings (dimension/space mismatch)
   → full re-embed on config change.
 - **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri` joins
-  when spec 014 lands) → server
-  assembles query text (task: title + description + governing-spec excerpt — the brief's own
-  material), embeds it, cosine top-k above a server-side score floor. Returns
+  when spec 014 lands) → server assembles query text (task: title + description +
+  governing-spec excerpt — the brief's own material), embeds it, cosine top-k above a
+  server-side score floor. Returns
   `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
   duplicated into matches.
 - **CLI:** `lode skills recommend [--task <id> | --file <path> | --text <s>] --json` — the
@@ -193,8 +185,8 @@ identical behavior.
 - **008 (plugin)** — brief payload extension; hook-side lazy fetch before brief injection.
 - **006 (graph)** — owns the vocabulary; §1 above adds `ls:Skill` and `ls:recommendsSkill` to
   its mint set and disjointness axiom, and the projection lands under 007's deriver contract.
-- **014 (design docs as graph objects, draft)** — frontmatter-pin ingestion. Task pins work
-  without it; doc pins land when 014 does.
+- **014 (design docs as graph objects)** — frontmatter-pin ingestion. Task pins work without
+  it; doc pins land when 014 does.
 - **External** — an embedding API for the default provider; GitHub webhook/API access to the
   skill source repos (existing app auth).
 

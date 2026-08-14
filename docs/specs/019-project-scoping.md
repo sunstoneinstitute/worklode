@@ -2,12 +2,8 @@
 status: accepted
 issued: 2026-07-30
 requires:
-  - 004-execution-backbone.md
-  - 010-per-project-task-keys.md
-  - 008-worklode-plugin.md
-amendedBy:
-  "#sec-2":
-    - 026-design-doc-queries.md#sec-4.2
+- docs/specs/004-execution-backbone.md
+- docs/specs/008-worklode-plugin.md
 ---
 # Spec 019 — Repo-scoped CLI commands
 
@@ -69,11 +65,6 @@ means a normalization fix ships without a CLI upgrade.
 
 ## 2. Resolution chain {#sec-2}
 
-> **Amended by spec 026 §4.2.** `.worklode/config.toml` gains an optional `project_key`
-> alongside `current_project`. It is not part of this chain — the resolution below is
-> unchanged — but it lets a commit hook know the project's key without the server or the
-> §4.1 cache, which a fresh clone does not have.
-
 Every project-aware command resolves its scope the same way, first hit wins:
 
 1. `--project X` or `--repo owner/name` on the command line. An explicitly
@@ -91,6 +82,11 @@ repo not mapped — each falls through to step 5. A command that cannot proceed
 unscoped (`task add`) reports the missing project itself, as it does today.
 
 `--project` and `--repo` together is an error: they name the same thing.
+
+`.worklode/config.toml` also carries an optional `project_key` alongside
+`current_project`. It is not part of this chain — the resolution above is
+unchanged — but it lets a commit hook know the project's key without the
+server or the §4.1 cache, which a fresh clone does not have.
 
 ## 3. Server changes {#sec-3}
 
@@ -222,7 +218,7 @@ pass a full id like WL-12, or set current_project
 The alternative — teaching every `/api/v1/tasks/{id}` endpoint to accept
 `?project=` — touches all fifteen task routes for the same result.
 
-### 4.3a Typed ids and `lode show` {#sec-4.3a}
+### 4.4 Typed ids and `lode show` {#sec-4.4}
 
 `lode show` infers an id's kind from its shape, or takes the kind explicitly
 via a kind flag — both forms route to the same place, so holding an id never
@@ -233,7 +229,7 @@ the dispatch key for the inferred form; an id with no type segment is a task.
 | Argument shape | Routed to |
 |---|---|
 | `12`, `WL-12` | `task show` — bare numbers resolve per §4.3 |
-| `WL-SPEC-14`, `WL-ADR-7`, optional `#sec-…` | the document renderer (026 §3) |
+| `WL-SPEC-25`, `WL-ADR-7`, optional `#sec-…` | the document renderer (026 §3) |
 | `WL-PLAN-4-1`, `WL-MILE-2`, `WL-DEL-3` | recognized from 029 §4, reported as not showable until those entities exist |
 | any other `<KEY>-<TYPE>-<n>` | an error listing the known type codes |
 
@@ -244,19 +240,19 @@ their typed-id form above. `--kind <K> <ordinal>` is the generic spelling of
 the same thing, with `K` one of
 `task|spec|adr|plan|milestone|project|deliverable`. For the six
 ordinal-taking flags the value is a **bare ordinal**, never a typed id —
-`--spec 15`, not `--spec WL-SPEC-15` — since the flag already names the kind
+`--spec 15`, not `--spec WL-SPEC-6` — since the flag already names the kind
 the id's type segment would have; `--project`'s value is a project id or
 slug instead, and `--kind`'s value is the kind name itself, with the ordinal
 or slug supplied as its own positional. A per-kind flag and a positional id
 are mutually exclusive: the flag's value is the id; `--kind` takes its own
 positional instead, per the argument-shape table above.
 
-The typed grammar is checked before the task grammar, making 014 §11.3's rule
+The typed grammar is checked before the task grammar, making 025 §14.3's rule
 — a document reference must never parse as a task id — a checked property of
-the dispatcher. `show` joins §4.3's bare-number-taking commands: `lode show
-12` behaves exactly as `lode task show 12`.
+the dispatcher. `show` joins §4.3's bare-number-taking commands:
+`lode show 12` behaves exactly as `lode task show 12`.
 
-### 4.4 Command surface {#sec-4.4}
+### 4.5 Command surface {#sec-4.5}
 
 | Command | Change |
 |---|---|

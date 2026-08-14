@@ -143,7 +143,7 @@ func IssueTable(w io.Writer, issues []Issue) {
 }
 
 // DocTable prints one row per synced document: id, kind, status, version, a
-// dirty-provenance marker (034 §3), and title.
+// dirty-provenance marker (025 §16.2), and title.
 func DocTable(w io.Writer, docs []Doc) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tKIND\tSTATUS\tV\tDIRTY\tTITLE")

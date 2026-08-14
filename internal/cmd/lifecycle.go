@@ -32,7 +32,7 @@ func init() {
 
 // layoutFrom builds the worktree layout for dir's repo. It reads ONLY the
 // repo-local worktree_dir (cli.WorktreeDirFrom), never the user-level config
-// — spec 030 §4 scopes worktree_dir to the checkout, and internal/hookrun's
+// — spec 008 §6 scopes worktree_dir to the checkout, and internal/hookrun's
 // guard resolves it the same way. Resolving from cfg.WorktreeDir (the merged,
 // user-config-inclusive value) would let a user-level setting silently
 // diverge from what every hook guard sees, which fails closed and quiet: the

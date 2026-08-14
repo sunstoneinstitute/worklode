@@ -1,14 +1,9 @@
 ---
 status: draft
-issued: 2026-08-06
 requires:
-  - 003-platform-graph-design.md
-  - 004-execution-backbone.md
-  - 006-knowledge-graph.md
-  - 018-task-hierarchy.md
-  - 025-documents-in-the-backbone.md
-  - 027-event-watchers.md
-  - 028-escalation-and-document-lifecycle.md
+- docs/specs/006-knowledge-graph.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/025-documents-in-the-backbone.md
 ---
 # Spec 029 — Research work in the backbone: projects, milestones, deliverables, approvals
 
@@ -60,7 +55,7 @@ Projects gain three pieces of metadata:
 - **`horizon`** — `bounded` or `standing`. An investigation is bounded: it ends.
   A project holding an in-house infrastructure component is standing: it does not.
 
-`horizon` is an attribute, not a class. 025 §8 deleted `wl:OngoingMaintenance`, and
+`horizon` is an attribute, not a class. 025 §13 deleted `wl:OngoingMaintenance`, and
 that deletion stands — restoring it would make "unbounded" a *kind of thing* disjoint
 from Project, so a standing infrastructure project could not be a Project at all, and
 could not carry a project key, tasks or a focus. Being unbounded is something a
@@ -104,11 +99,11 @@ identity, title, and ordering. This preserves 025 §1's rule: groupings are quer
   milestone are **ongoing maintenance** — legal everywhere, and the norm for
   engineering projects. The sunstone-way skill requires milestone attachment for
   research-project tasks; the server does not.
-- Task → subtask survives exactly as 018 §8 left it, minus the epic: `decompose`
+- Task → subtask survives exactly as 004 §6.10 left it, minus the epic: `decompose`
   creates parent-hood and children in one transaction, and `checkHierarchy` accepts
   an ordinary task as parent instead of requiring `kind = 'epic'`. The depth cap of
   2 edges now spans task → subtask only and stops binding in practice.
-- **`epic` is removed from `TaskKind`** — convergent with 025 §6's kind list, which
+- **`epic` is removed from `TaskKind`** — convergent with 025 §10's kind list, which
   already dropped it. What 018 built the epic *for* (a declared container above
   tasks) is carried by the project and the milestone, both real objects with facts
   of their own. The migration follows the standing rule: the kind CHECK,
@@ -177,7 +172,7 @@ Probing as *verification* of reported state — reconciling a claim against prod
 
 `wl:Deliverable` is 006's declared definition-of-done (D7) made concrete, and a
 deliverable with no artifact (a state change, an effect) is 006's `wl:Effect`. The
-ns/ mirrors follow at acceptance (§9).
+ns/ mirrors follow at acceptance.
 
 ## 4. Identifiers {#sec-4}
 
@@ -203,13 +198,13 @@ direction. The spec+plan ceremony is deliberately skippable for simple work;
 Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch names,
 `WL-Task:` trailers, or merge-subject correlation — the existing patterns
 (`[A-Z][A-Z0-9]*-[0-9]+`) are untouched by construction. The scheme generalizes
-014 §11.3's cross-corpus shorthand (`WL-SPEC-23`), which already reads as an
+025 §14.3's cross-corpus shorthand (`WL-SPEC-1`), which already reads as an
 instance of it. The type segment is also what `lode show <id>` dispatches on, with an
 equivalent `--kind`/per-kind flag spelling for each (019 §4.3a); kinds in this table
 whose entities do not exist yet are recognized and reported, never treated as typos.
 
 Documents drawing identity from these sequences changes 025's assumptions; its
-implementation plans are re-planned before execution (§9).
+implementation plans are re-planned before execution.
 
 ## 5. References across projects {#sec-5}
 
@@ -356,8 +351,8 @@ the precise evidence chain an approval covered remains queryable.
 - **GitHub PRs**: the existing `pull_request_review` ingest writes into the same
   table — an `awaiting` row when a task-correlated PR opens, resolved when the
   review lands. GitHub remains the review surface (jump-out links); whether it is
-  ever replaced is explicitly undecided. 028 §6's per-document reviewer set becomes
-  rows in this table (§9).
+  ever replaced is explicitly undecided. 025 §7.3's per-document reviewer set becomes
+  rows in this table.
 
 Specs always pass an explicit review before acceptance. Plans and execution tasks are
 optional. When draft plans already exist, a spec review may present the spec and plans
@@ -413,24 +408,7 @@ registrations) follow the 004 pattern: a new `events.source` value per system
 additionally records *who* approved and published — the publish fact without the
 person would rebuild the invisible-sign-off problem this spec exists to remove.
 
-## 9. What this spec changes elsewhere {#sec-9}
-
-At acceptance, the amendment dance (inline notes, `amends`/`amendedBy` frontmatter)
-is performed against:
-
-| Target | Change |
-|---|---|
-| 018 | Epic-as-container retired; `checkHierarchy` parent rule; decompose no longer converts to epic |
-| 025 §6 | Convergent (epic already dropped) — note only |
-| 025 §8 | Replaced, not amended — Project is redefined and `milestone_id` is stored (§1, §2). 025's deletion of `wl:OngoingMaintenance` **stands**: see §1's `horizon` |
-| 025 plans 2–4 | Re-planned: document identity moves to §4's per-kind sequences |
-| 028 §2 | Assignee exists (human-assignment plan) — requirement satisfied, note only |
-| 028 §6 | Reviewer sets re-expressed as §7.1 approval rows |
-| `ns/` | `wl:Milestone`, `wl:Deliverable` (subsuming 006's reserved terms), `wlc:TaskKind` minus `epic` (migration + `validKinds` + test together), participants/approvals vocabulary |
-
-Until acceptance, none of the targets change.
-
-## 10. Out of scope {#sec-10}
+## 9. Out of scope {#sec-9}
 
 - The review-surface tool (galley vs crit) — deferred until use cases crystallize;
   whichever wins must sync bidirectionally with GitHub PRs.

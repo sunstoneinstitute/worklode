@@ -44,7 +44,7 @@ const maxWebForm = 256 << 10
 
 // webTaskKinds are the kinds the new-task form offers, in menu order. It
 // omits "epic": the API still accepts one (validKinds is the authority on
-// what the server takes), but specs 025 §6 and 029 §2 retire the kind, so a
+// what the server takes), but specs 025 §10 and 029 §2 retire the kind, so a
 // new surface must not hand people a way to mint more.
 var webTaskKinds = []string{"feature", "bug", "chore", "spec", "review", "spike"}
 

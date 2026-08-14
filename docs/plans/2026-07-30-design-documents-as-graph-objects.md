@@ -1,7 +1,7 @@
 ---
 status: accepted
 task: WL-4
-covers: docs/specs/014-design-documents-as-graph-objects.md
+covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design documents as graph objects (spec 014) — Implementation Plan
 
@@ -28,7 +28,7 @@ vocabulary PR, neither of which exists.
 **Tech Stack:** Go 1.x, cobra CLI, PostgreSQL via `database/sql` +
 golang-migrate, `gopkg.in/yaml.v3`, standard-library testing.
 
-**Spec:** `docs/specs/014-design-documents-as-graph-objects.md`
+**Spec:** `docs/specs/025-documents-in-the-backbone.md`
 
 ---
 
@@ -244,14 +244,14 @@ The mechanical pass corrupts prose whose subject is the old name. Reword each
 so the old prefix appears **without a colon** (AC1 greps for `ls:` — `` `ls`
 `` is fine, `` `ls:` `` is not):
 
-- `docs/specs/014-design-documents-as-graph-objects.md` §1 — the heading
+- `docs/specs/025-documents-in-the-backbone.md` §1 — the heading
   ("Prefix rename: `ls` → `wl`"), the opening paragraph ("`ls` predates the
   rename…"), and the Old column of the prefix table (`` `ls` ``, `` `lsc` ``,
   `` `lsid` ``). The mechanical pass will have turned these into `wl:`→`wl:`
   nonsense; restore them as historical mentions sans colon.
-- `docs/specs/015-runtime-layer.md:21` — "Spec 014 renamed the `ls` prefix to
+- `docs/specs/006-knowledge-graph.md:21` — "Spec 014 renamed the `ls` prefix to
   `wl:`. This spec is written in `wl:` throughout…".
-- `docs/specs/009-data-platform-kg-requirements.md:31` — after the mechanical
+- `docs/specs/006-knowledge-graph.md:31` — after the mechanical
   pass this reads "the `wl:` ontology stays in rdf-registry", which is correct;
   just confirm the sentence still parses.
 
@@ -260,14 +260,14 @@ so the old prefix appears **without a colon** (AC1 greps for `ls:` — `` `ls`
 These callouts exist only to map the old prefix to the new one; with the body
 renamed they say nothing:
 
-- `docs/specs/006-knowledge-graph.md:42` ("Superseded by 014 §1. The prefixes
+- `docs/specs/006-knowledge-graph.md:42` ("Superseded by 025 §17. The prefixes
   are `wl:`…")
 - `docs/specs/007-drift-and-overview.md:12` ("Read every … as `wl:`…")
 - `docs/specs/008-worklode-plugin.md:7` ("Read `ls:governs`… as
   `wl:governs`…")
 
 Keep every other 014/015 amendment callout — they amend content, not spelling.
-Where a surviving sentence names 014 §1 as the source of the now-inline
+Where a surviving sentence names 025 §17 as the source of the now-inline
 spelling (e.g. `006:188` "minted as `wl:deliveredBy`" after the pass), drop
 the parenthetical rather than leaving a self-referential note.
 
@@ -286,7 +286,7 @@ where a mechanical slip would hide.
 
 ```bash
 git add docs
-git commit -m "Rename the ls prefixes to wl across the docs (spec 014 §1)"
+git commit -m "Rename the ls prefixes to wl across the docs (spec 025 §17)"
 ```
 
 ---
@@ -305,10 +305,10 @@ Append to `internal/kg/iri/iri_test.go`, inside `TestInstanceIRIs`'s `cases`
 slice:
 
 ```go
-		{"section (014 §3)", func() (string, error) {
+		{"section (025 §3)", func() (string, error) {
 			return iri.Section("spec-worklode-014", "sec-3")
 		}, b + "section/spec-worklode-014/sec-3"},
-		{"versioned doc (014 §4)", func() (string, error) {
+		{"versioned doc (025 §4)", func() (string, error) {
 			return iri.DocVersion("spec-worklode-014", 3)
 		}, b + "doc/spec-worklode-014/v3"},
 ```
@@ -331,7 +331,7 @@ Add to `internal/kg/iri/iri.go`, after `Doc`:
 
 ```go
 // Section returns the IRI of an addressable design-document section
-// (014 §3): id/section/<doc-slug>/<anchor>. The anchor is assigned at first
+// (025 §3): id/section/<doc-slug>/<anchor>. The anchor is assigned at first
 // publication and never changes; the IRI is therefore as durable as the
 // document's.
 func Section(docSlug, anchor string) (string, error) {
@@ -339,7 +339,7 @@ func Section(docSlug, anchor string) (string, error) {
 }
 
 // DocVersion returns the immutable versioned sibling IRI of a design
-// document (014 §4): id/doc/<slug>/v<n>. Everything links to the canonical
+// document (025 §4): id/doc/<slug>/v<n>. Everything links to the canonical
 // Doc IRI by default; versioned IRIs appear only in pinned claims.
 func DocVersion(slug string, version int) (string, error) {
 	if version <= 0 {
@@ -447,7 +447,7 @@ func TestContentHash(t *testing.T) {
 	b := Parse([]byte("## 1. Reworded heading {#sec-1}\n\nsame body\n"))
 	c := Parse([]byte("## 1. T {#sec-1}\n\ndifferent body\n"))
 	if a.Sections[0].ContentHash() != b.Sections[0].ContentHash() {
-		t.Fatal("rewording a heading changed the content hash (014 §3: rewording is free)")
+		t.Fatal("rewording a heading changed the content hash (025 §3: rewording is free)")
 	}
 	if a.Sections[0].ContentHash() == c.Sections[0].ContentHash() {
 		t.Fatal("different bodies hashed equal")
@@ -463,7 +463,7 @@ Expected: FAIL — package does not exist.
 - [ ] **Step 3: Write the implementation**
 
 ```go
-// Package section models design-document sections per spec 014 §3: Markdown
+// Package section models design-document sections per spec 025 §3: Markdown
 // headings carrying Pandoc attribute anchors ({#sec-2.1}) become addressable
 // nodes, and the §7 constraints on accepted documents are set operations
 // over the parsed section lists (see lint.go, diff.go).
@@ -488,13 +488,13 @@ type Section struct {
 }
 
 // Addressable reports whether the section can carry claims: it has an anchor
-// and sits within the addressability depth limit (014 §7.1).
+// and sits within the addressability depth limit (025 §6.1).
 func (s *Section) Addressable(depthLimit int) bool {
 	return s.Anchor != "" && s.Depth <= depthLimit
 }
 
 // ContentHash digests the section body. The heading line is excluded:
-// rewording a heading is explicitly free (014 §3), so it must not feed
+// rewording a heading is explicitly free (025 §3), so it must not feed
 // wl:lastRevisedIn.
 func (s *Section) ContentHash() string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(s.body)))
@@ -718,7 +718,7 @@ type Problem struct {
 	Msg      string   `json:"msg"`
 }
 
-// anchorRE is the 014 §3 anchor grammar: the sec- prefix (an id like
+// anchorRE is the 025 §3 anchor grammar: the sec- prefix (an id like
 // {#2.1} is legal HTML but a hostile CSS selector and URL fragment), then a
 // section number (2.1a) or a lowercase slug (purpose).
 var anchorRE = regexp.MustCompile(`^sec-[a-z0-9][a-z0-9.-]*$`)
@@ -726,7 +726,7 @@ var anchorRE = regexp.MustCompile(`^sec-[a-z0-9][a-z0-9.-]*$`)
 // ValidAnchor reports whether a is a well-formed section anchor.
 func ValidAnchor(a string) bool { return anchorRE.MatchString(a) }
 
-// Lint checks a document against the 014 §3/§7 authoring rules. depthLimit
+// Lint checks a document against the 025 §3/§7 authoring rules. depthLimit
 // is the addressability limit (server-configurable, default 3): deeper
 // headings render normally but must not carry anchors, because an anchor
 // there would be a promise nobody can pin to.
@@ -881,7 +881,7 @@ func newDocCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocAnchorsCmd is the pre-publication lint of spec 014 §10: list a
+// newDocAnchorsCmd is the pre-publication lint of spec 025 §18: list a
 // document's anchors with depth and addressability, and fail on authoring-
 // rule violations. Local-only; the depth limit becomes a server setting once
 // the publication surface exists.
@@ -1078,7 +1078,7 @@ func TestCompareChangedIsExact(t *testing.T) {
 	}
 }
 
-// Rewording a heading is not a content change (014 §3).
+// Rewording a heading is not a content change (025 §3).
 func TestCompareHeadingRewordIsNotChange(t *testing.T) {
 	candidate := strings.Replace(acceptedV1, "## 2. Two {#sec-2}", "## 2. Two, better titled {#sec-2}", 1)
 	d := compareSrc(t, acceptedV1, candidate, 3)
@@ -1113,7 +1113,7 @@ package section
 import "fmt"
 
 // Diff compares the accepted version of a document with a candidate
-// revision (014 §7). Removed, Renumbered and TooDeep are violations;
+// revision (025 §6). Removed, Renumbered and TooDeep are violations;
 // Changed is the wl:lastRevisedIn input (exactly the sections whose content
 // changed — §7.5); Added is informational.
 type Diff struct {
@@ -1328,7 +1328,7 @@ Expected: FAIL — package does not exist.
 - [ ] **Step 3: Write the implementation**
 
 ```go
-// Package implements reads .worklode/implements.yaml (spec 014 §6): the
+// Package implements reads .worklode/implements.yaml (spec 025 §11): the
 // machine-readable claim that this repository's code satisfies specific
 // design-document sections, pinned to the document version validated
 // against. The manifest deliberately has no component field — the claiming
@@ -1423,7 +1423,7 @@ func Parse(data []byte) (*File, error) {
 	return &f, nil
 }
 
-// expand resolves the wlid: prefix (014 §1) to the full instance namespace.
+// expand resolves the wlid: prefix (025 §17) to the full instance namespace.
 func expand(v string) string {
 	if rest, ok := strings.CutPrefix(strings.TrimSpace(v), "wlid:"); ok {
 		return idPrefix + rest
@@ -1448,7 +1448,7 @@ func sectionDoc(iri string) (string, error) {
 	return slug, nil
 }
 
-// pinnedDoc validates a versioned doc IRI — id/doc/<slug>/v<n> (014 §4) —
+// pinnedDoc validates a versioned doc IRI — id/doc/<slug>/v<n> (025 §4) —
 // and returns its doc slug.
 func pinnedDoc(iri string) (string, error) {
 	rest, ok := strings.CutPrefix(iri, docPrefix)
@@ -1655,7 +1655,7 @@ import (
 )
 
 // Claim is one derived implementation claim: Component (derived from paths,
-// 014 §6 — never declared) satisfies Section, validated against Pinned.
+// 025 §11 — never declared) satisfies Section, validated against Pinned.
 type Claim struct {
 	Component string
 	Section   string
@@ -1665,7 +1665,7 @@ type Claim struct {
 // Resolve derives the claim set for a repository. m is the repo's
 // components.yaml; nil means the single-component default, an implicit
 // component whose IRI is the repo coordinates (unchanged when a whole-repo
-// components.yaml later declares it — 014 §6). An entry whose paths span
+// components.yaml later declares it — 025 §11). An entry whose paths span
 // several components splits into one claim per component; a path matching no
 // component is an error naming the path, because an unattributable claim is
 // an uncheckable claim.
@@ -1813,7 +1813,7 @@ import (
 // Triples renders the claim set as <component> wl:implements <section>
 // edges — the payload of 007's observed/repo-implements named graph.
 //
-// Only the edge is emitted. 014 §6 also wants the pinned version in the
+// Only the edge is emitted. 025 §11 also wants the pinned version in the
 // graph for the stale-claim query, but names no predicate or annotation
 // encoding for a per-edge value; that mint belongs to the 006 vocabulary PR
 // (see this plan's Overlaps section). Claims carry the pin in Go until then.
@@ -1914,7 +1914,7 @@ Deferred table below, so nobody mistakes it for a gap.
    projection role and imports `internal/kg/iri` instead of minting. This
    plan is unaffected — it takes doc/section IRIs from `internal/kg/iri` and
    only `Triple`/`Render` from `graphproj`.
-2. **The pin has no graph encoding.** 014 §6 requires the deriver to emit
+2. **The pin has no graph encoding.** 025 §11 requires the deriver to emit
    "the pinned version for staleness testing" but mints no predicate for it,
    and §Amendments forbids a coverage-flavored predicate. 006 publishes RDF
    1.2 (umbrella, resolved questions), so a triple-term annotation on the
@@ -1923,7 +1923,7 @@ Deferred table below, so nobody mistakes it for a gap.
    Go and `Triples` emits only the edge.
 3. **AC1 is literally unsatisfiable while prose describes the rename.**
    Resolved here by rewording historical mentions to the colon-free form
-   (`` `ls` ``), including 014 §1's own table. If reviewers prefer keeping
+   (`` `ls` ``), including 025 §17's own table. If reviewers prefer keeping
    `ls:` verbatim in the rename table, AC1's wording needs a carve-out in the
    spec instead — one or the other, not both.
 4. **Depth limit lives in a flag until the server setting exists.**

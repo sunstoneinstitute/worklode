@@ -1,5 +1,5 @@
 // oidcweb.go gates the read-only web UI behind Keycloak, worklode's sole
-// interactive login provider (spec 023 §3.1):
+// interactive login provider (spec 001 §3):
 //   - webAuth wraps each web page and, when unauthenticated, 302s to
 //     loginTarget (/auth/login). It is a passthrough only when OIDC is
 //     unconfigured (the UI stays open, as in v1).
@@ -52,8 +52,8 @@ func (s *server) callbackURL() string {
 }
 
 // loginTarget returns where webAuth sends unauthenticated users. Keycloak is
-// worklode's only interactive login provider (spec 023 §3.1); the dormant
-// GitHub App OAuth client (s.gh, spec 023 §3.3) never affects this.
+// worklode's only interactive login provider (spec 001 §3); the dormant
+// GitHub App OAuth client (s.gh, spec 001 §9.3) never affects this.
 func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }

@@ -25,7 +25,7 @@ Usage: currentspec.py [--with-drafts] [--show-dropped] [spec]
 
 `spec` narrows the output to one document; omit it for the whole corpus. It
 takes any of the forms a spec is referred to in practice -- `23`, `023`,
-`023-keycloak-primary-auth.md`, `docs/specs/023-keycloak-primary-auth.md`.
+`023-keycloak-primary-auth.md`, `docs/specs/001-identity-and-authentication.md`.
 Supersession is still resolved against the whole corpus, because what replaced
 a section usually lives in another document.
 """

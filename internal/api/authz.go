@@ -44,7 +44,7 @@ import (
 )
 
 // Role is a named grant a subject holds. Two exist, because two exist in
-// Keycloak (spec 023 §3.2 syncs the admin role onto the actor at login) and
+// Keycloak (spec 001 §9.2 syncs the admin role onto the actor at login) and
 // inventing more here would describe a system nobody can populate.
 type Role string
 
@@ -183,7 +183,7 @@ func (s Subject) HasRole(role Role) bool { return slices.Contains(s.Roles, role)
 
 // subjectFromActor builds the subject for an authenticated actor. Every actor
 // holds RoleUser; the admin flag — synced from Keycloak's admin role at login
-// (spec 023 §3.2) — adds RoleAdmin. This is the one place actor state becomes
+// (spec 001 §9.2) — adds RoleAdmin. This is the one place actor state becomes
 // policy input.
 func subjectFromActor(a *store.Actor, via authMethod) Subject {
 	if a == nil {

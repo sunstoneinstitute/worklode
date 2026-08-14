@@ -4,8 +4,8 @@ covers:
   - docs/specs/026-design-doc-queries.md#sec-3
   - docs/specs/026-design-doc-queries.md#sec-3.1
   - docs/specs/026-design-doc-queries.md#sec-3.2
-  - docs/specs/026-design-doc-queries.md#sec-7
-  - docs/specs/026-design-doc-queries.md#sec-8
+  - docs/specs/026-design-doc-queries.md#sec-9
+  - docs/specs/026-design-doc-queries.md#sec-10
 requires:
   - 2026-08-03-design-doc-queries-1-corpus-and-list.md
 ---
@@ -30,7 +30,7 @@ edge above, never a task number.
 supersessions folded inline under the sections they act on, transitively,
 with attribution, as a labelled read-only view.
 
-**Architecture:** One new unit, `internal/designdoc/resolved.go` (026 §7's
+**Architecture:** One new unit, `internal/designdoc/resolved.go` (026 §9's
 table is fixed — this plan owns that row only). It builds a normalized edge
 index from both directions of every `amends`/`amendedBy` /
 `replaces`/`isReplacedBy` map (§3.1's union), gates each edge on the
@@ -70,7 +70,7 @@ before starting any task.
 forms, `--docs`); everything part 3 owns (§4.1, `scripts/secfrozen.py`);
 §4.2 shorthand (`shorthand.go`, planned in
 `2026-08-03-spec-shorthand-references.md`); the web view of consolidations
-(026 §9); any write verb; any metric.
+(026 §11); any write verb; any metric.
 
 ---
 
@@ -81,7 +81,7 @@ plan's *assumptions* about its exports; the semantics are the spec's and are
 not negotiable, but the identifiers may land differently. Before each task,
 re-read `corpus.go`/`query.go`/`check.go` as they exist and substitute the
 real names. If a listed surface does not exist at all when a task starts,
-**stop and escalate to the coordinator** — 026 §7 places it in part 1's
+**stop and escalate to the coordinator** — 026 §9 places it in part 1's
 files, so the fix belongs there, not as a private copy in `resolved.go`.
 
 ```go
@@ -120,7 +120,7 @@ Numbered so review comments and deviations can cite them.
    reference and is **never inlined** — no section-shaped payload (§3,
    §3.2). A doc-scoped edge targeting a *section* renders one reference
    line above that section's body; an edge targeting a *whole document*
-   renders in the top banner block (026 §10 item 3: 025 §6's doc-wide
+   renders in the top banner block (026 §12 item 3: 025 §10's doc-wide
    amendment of 018 is a banner).
 3. **Effectiveness (§3.1)** comes from part 1's gate: pending only when the
    acting document is in the corpus with `status: draft` and `--with-drafts`
@@ -394,7 +394,7 @@ Gamma body two.
 ```
 
 `145-delta.md` — third link, so the chain of three section-scoped
-amendments in 026 §10 item 3 exists verbatim:
+amendments in 026 §12 item 3 exists verbatim:
 
 ```markdown
 ---
@@ -650,7 +650,7 @@ strings and on `Surfaced`:
    `**[amending 120#sec-1]:**<br>` + `Gamma body one.`,
    `**[amending 145#sec-1]:**<br>` + `Delta body one.`, then
    `**[amending 140#sec-1]:**<br>` + `Nostatus body one.` — three levels
-   expanded, nothing rendered as a bare reference (§3 transitivity; 026 §10
+   expanded, nothing rendered as a bare reference (§3 transitivity; 026 §12
    item 3's "no rendering is depth-truncated").
 2. **Diamond** — same rendering: `Beta body three.` appears exactly once
    (under `sec-3`); under `sec-6` the marker is
@@ -765,7 +765,7 @@ Tests — subtests of `TestSectionMode` over `base`:
    `SectionSlice(100, "sec-99")` errors.
 2. **Resolved slice** — `Resolved(100, {Section: "sec-1"})` contains the
    full chain of task 3's test 1 and none of `sec-2`…`sec-6`'s bodies (§3:
-   "an agent that needs 011 §4 should not pay for 011").
+   "an agent that needs 004 §5.4 should not pay for 011").
 3. **Forward-resolution** — `Resolved(100, {Section: "sec-2"})`: contains
    `**[forward-resolved: 100#sec-2 → 110#sec-2]**` + 110#sec-2's
    consolidation and `**[forward-resolved: 100#sec-2 → 120#sec-2]**` +
@@ -880,7 +880,7 @@ pointing the corpus at the fixture via part 1's `--docs` flag:
    `Draft body one.`; without the flag it contains the pending marker.
 4. `doc show 200 --resolved --docs …/cycle` → stdout contains the cycle
    marker, stderr names the cycle, exit code non-zero.
-5. Real-corpus smoke (026 §10 item 3): `doc show 018 --resolved` over the
+5. Real-corpus smoke (026 §12 item 3): `doc show 018 --resolved` over the
    repo's `docs/` → output starts with the consolidated-view banner and
    contains a banner line naming 025's doc-wide claim marked
    `(pending, draft)` (025 is `status: draft` today; if 025 has been

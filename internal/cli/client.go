@@ -33,7 +33,7 @@ import (
 // A repo-local config file overrides current_project and project_key (and
 // server) per checkout — see findRepoConfig — which is how both are normally
 // set: one project per repository. worktree_dir is the one key this merge
-// deliberately excludes: it is repo-scoped only (spec 030 §4), read via
+// deliberately excludes: it is repo-scoped only (spec 008 §6), read via
 // WorktreeDirFrom instead of through this struct — see WorktreeDir's doc.
 //
 // The token lives in the OS keychain, not the file. A legacy "token" key is
@@ -54,7 +54,7 @@ type Config struct {
 	CurrentProjectPath string
 
 	// ProjectKey is the current repo's design-doc project key ("WL"), used
-	// to resolve shorthand refs like "WL-SPEC-14" (spec 026 §4.2). Empty
+	// to resolve shorthand refs like "WL-SPEC-25" (spec 026 §4.2). Empty
 	// when unset, which degrades shorthand resolution to tier 3
 	// (internal/designdoc.ResolveRef) rather than failing.
 	ProjectKey string
@@ -62,7 +62,7 @@ type Config struct {
 	// WorktreeDir carries the worktree_dir key when Config is produced
 	// directly by parseConfig — which is how WorktreeDirFrom reads it. It is
 	// NOT populated by LoadConfig/loadConfigFrom: worktree_dir is scoped to
-	// the repo-local config only (spec 030 §4, "the checkout owns it"), so a
+	// the repo-local config only (spec 008 §6, "the checkout owns it"), so a
 	// user-level setting must never reach here — see WorktreeDirFrom, which
 	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
 	// instead of this field.
@@ -70,7 +70,7 @@ type Config struct {
 
 	// SpecCorpus / PlanCorpus carry the spec_corpus / plan_corpus keys when
 	// Config is produced directly by parseConfig — which is how CorporaFrom
-	// reads them. Like WorktreeDir they are repo-scoped only (spec 034 §2)
+	// reads them. Like WorktreeDir they are repo-scoped only (spec 025 §16.1)
 	// and are NOT populated by LoadConfig/loadConfigFrom; CorporaFrom is the
 	// sole reader.
 	SpecCorpus string
@@ -128,7 +128,7 @@ func findRepoConfig(startDir string) (string, bool) {
 }
 
 // WorktreeDirFrom returns the worktree base directory configured for
-// startDir's repo (spec 030 §3.1): a repo-local .worklode/config.toml's
+// startDir's repo (spec 008 §5.1): a repo-local .worklode/config.toml's
 // worktree_dir, with the LODE_WORKTREE_DIR env override applied on top, or ""
 // when neither is set. Deliberately keychain-free and independent of
 // LoadConfig/loadConfigFrom — it never touches the OS keychain or a token,
@@ -151,7 +151,7 @@ func WorktreeDirFrom(startDir string) string {
 	return dir
 }
 
-// Corpora is the repo-scoped corpus declaration (spec 034 §2): which
+// Corpora is the repo-scoped corpus declaration (spec 025 §16.1): which
 // directories `lode doc sync` reads, and as which document kind. A key's
 // presence enables its corpus; the zero value means nothing is configured.
 type Corpora struct {
@@ -161,9 +161,9 @@ type Corpora struct {
 }
 
 // CorporaFrom reads startDir's repo-local config for spec_corpus/plan_corpus
-// (spec 034 §2). Like WorktreeDirFrom it never consults the user-level config
+// (spec 025 §16.1). Like WorktreeDirFrom it never consults the user-level config
 // or the keychain, but unlike it a malformed repo config is an error here —
-// sync must not silently degrade to "nothing configured" (034 §3).
+// sync must not silently degrade to "nothing configured" (025 §16.2).
 func CorporaFrom(startDir string) (Corpora, error) {
 	repoPath, ok := findRepoConfig(startDir)
 	if !ok {
@@ -229,11 +229,11 @@ func loadConfigFrom(startDir string) (Config, error) {
 		if cfg.CurrentProject != "" {
 			cfg.CurrentProjectPath = path
 		}
-		// worktree_dir is repo-scoped only (spec 030 §4); a user-level file
+		// worktree_dir is repo-scoped only (spec 008 §6); a user-level file
 		// setting it must not leak into the merged Config — WorktreeDirFrom
 		// is the sole reader, and it never consults this path.
 		cfg.WorktreeDir = ""
-		// spec_corpus/plan_corpus are repo-scoped only (spec 034 §2);
+		// spec_corpus/plan_corpus are repo-scoped only (spec 025 §16.1);
 		// CorporaFrom is the sole reader.
 		cfg.SpecCorpus, cfg.PlanCorpus = "", ""
 	case os.IsNotExist(err):
@@ -349,7 +349,7 @@ func (cfg *Config) merge(repo Config, path string) {
 		cfg.ProjectKey = repo.ProjectKey
 	}
 	// worktree_dir, spec_corpus, and plan_corpus are deliberately NOT merged
-	// here: they are repo-scoped only (specs 030 §4, 034 §2) and read
+	// here: they are repo-scoped only (specs 008 §6, 025 §16.1) and read
 	// exclusively through WorktreeDirFrom / CorporaFrom, which never go
 	// through loadConfigFrom/merge.
 }
@@ -1336,7 +1336,7 @@ type DocListResponse struct {
 }
 
 // SyncDocs calls POST /api/v1/docs/sync — the git→backbone bulk upsert
-// (spec 034 §3).
+// (spec 025 §16.2).
 func (c *Client) SyncDocs(ctx context.Context, in DocSyncInput) (DocSyncReport, []byte, error) {
 	body := map[string]any{
 		"project":       in.Project,

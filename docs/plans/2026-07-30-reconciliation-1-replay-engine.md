@@ -27,7 +27,7 @@ replayer (`hooks.Replay`, engine 1).
 PostgreSQL via `database/sql`, standard-library testing.
 
 **Spec:** `docs/specs/013-reconciliation.md`, read with its amendments from
-`docs/specs/014-design-documents-as-graph-objects.md` §6: **engine 3
+`docs/specs/025-documents-in-the-backbone.md` §6: **engine 3
 (spec-doc drift) and the `task_docs` table are superseded and must not be
 built.** Only `events.applied_at` survives from the spec's data-model
 section. `docs/plans/2026-07-28-lode-install-reorg.md` edited this spec's
@@ -70,7 +70,7 @@ Design calls this plan makes (record here, not re-litigated in tasks):
 
 ## Not in this series (owned elsewhere)
 
-- Engine 3 / `task_docs` / spec-drift reporting — superseded by spec 014 §6
+- Engine 3 / `task_docs` / spec-drift reporting — superseded by spec 025 §11
   (stale-claim query over `.worklode/implements.yaml`); belongs to the 014
   plan.
 - Architectural drift (`lode drift`) — spec 007.
@@ -131,7 +131,7 @@ steps below use it and expect renumbering.
 `deploy/base/migrations/0008_reconciliation.up.sql`:
 
 ```sql
--- Reconciliation (docs/specs/013-reconciliation.md, amended by 014 §6):
+-- Reconciliation (docs/specs/013-reconciliation.md, amended by 025 §11):
 -- events.applied_at marks a completed apply; project_repos.mapped_at lets
 -- project doctor spot deliveries that predate the mapping.
 
@@ -845,4 +845,4 @@ git commit -m "Replay ignored webhook events once their repo is mapped"
 | Spec acceptance criterion | Covered by |
 |---|---|
 | Replay of a pre-mapping `*.ignored` event matches a live delivery; original event id in `state_log`; `applied_at` set; second replay a no-op | Task 4 tests |
-| Spec-drift criteria | Obsolete (014 §6) — deliberately not built |
+| Spec-drift criteria | Obsolete (025 §11) — deliberately not built |

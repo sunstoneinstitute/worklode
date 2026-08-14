@@ -54,7 +54,7 @@ func init() {
 	rootCmd.AddCommand(newTaskCmd())
 }
 
-// resolveBody returns the task body from --body / --body-file (spec 034 §9,
+// resolveBody returns the task body from --body / --body-file (spec 025 §18,
 // the gh convention): bodyFile wins when set, with "-" reading stdin. Flag
 // exclusivity is enforced by cobra (MarkFlagsMutuallyExclusive), not here.
 func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {

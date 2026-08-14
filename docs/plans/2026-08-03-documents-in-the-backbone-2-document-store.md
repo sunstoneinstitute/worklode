@@ -1,8 +1,8 @@
 ---
 status: accepted
 covers:
-  - docs/specs/025-documents-in-the-backbone.md#sec-2
-  - docs/specs/025-documents-in-the-backbone.md#sec-3
+  - docs/specs/025-documents-in-the-backbone.md#sec-5
+  - docs/specs/025-documents-in-the-backbone.md#sec-7
 requires:
   - 2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md
 ---
@@ -14,7 +14,7 @@ requires:
 part 1 for the series map. Part 1 must be merged first (the `docs.status`
 CHECK is generated from part 1's `ns.DesignDocStatuses`).
 
-**Goal:** Implement 025 §2 and §3: documents become Postgres rows wrapped in
+**Goal:** Implement 025 §5 and §3: documents become Postgres rows wrapped in
 the backbone's event-logged transaction machinery — `docs`, `doc_sections`,
 `doc_edges`, and a nullable `tasks.plan_doc` — with the
 draft → accepted → superseded lifecycle, assignee-gated acceptance, and 014
@@ -25,23 +25,23 @@ new` (part 3) submits body-with-frontmatter, and the server parses it with
 `internal/designdoc` — frontmatter becomes columns and `doc_edges` rows,
 headings become `doc_sections` rows, and the raw body is stored whole. One
 edge row carries both directions (`amends` read backward is `amendedBy`), so
-the mirror-agreement check of 014 §11 becomes an import-time concern rather
+the mirror-agreement check of 025 §14 becomes an import-time concern rather
 than a stored invariant that can drift. Revising an accepted spec is a
 candidate body in `doc_revisions`; accepting it runs
 `designdoc.CompareSections` — the §7 gate as a set diff — and the body swap,
 version bump and `last_revised_in` stamps in one transaction. Plans store no
-sections and skip the gate entirely (025 §4); accepting a plan is **rejected
+sections and skip the gate entirely (025 §9); accepting a plan is **rejected
 in this part** and lands with minting in part 3, so the §5 invariant is never
 half-true.
 
 **Tech Stack:** Go 1.25+, Postgres via golang-migrate + `database/sql`,
 `gopkg.in/yaml.v3` (already used by `designdoc`), Prometheus client.
 
-**Spec:** `docs/specs/025-documents-in-the-backbone.md` §2–§3 (and 014 §3,
+**Spec:** `docs/specs/025-documents-in-the-backbone.md` §2–§3 (and 025 §3,
 §5, §7 as amended, which §2 adopts wholesale)
 
 **Read first:**
-- 025 §2, §3; 014 §3, §5, §7 (the constraints the accept gate enforces)
+- 025 §5, §3; 025 §3, §5, §7 (the constraints the accept gate enforces)
 - `internal/designdoc/designdoc.go` (`Parse`, `Document`, `Section` — the
   parser this part builds on), `internal/designdoc/frontmatter.go`
 - `internal/store/events.go:34` (`RecordEvent` — every write goes through it)
@@ -53,11 +53,11 @@ half-true.
 **Conventions:** as part 1. Migration number `0012` is provisional.
 
 **Non-goals:** plan acceptance and task minting (part 3); the `lode doc` CLI
-(part 3); graph projection of docs (025 §12 — 006 §6's contract, no projector
-exists); crit integration internals (025 §12); corpus import (part 4);
+(part 3); graph projection of docs (025 §22 — 006 §11's contract, no projector
+exists); crit integration internals (025 §22); corpus import (part 4);
 `doc coverage` (needs `.worklode/implements.yaml` machinery that was never
 built — see the deferred table in
-`2026-07-30-design-documents-as-graph-objects.md`); the 014 §7.1
+`2026-07-30-design-documents-as-graph-objects.md`); the 025 §6.1
 server-configurable depth limit (a `const DepthLimit = 3` here; the admin
 setting is deferred with the 014 surfaces).
 
@@ -67,12 +67,12 @@ setting is deferred with the 014 surfaces).
 
 Flagged for the spec's owner rather than buried:
 
-- **Row identity.** 025 §2 gives documents no key. Specs/ADRs have a corpus
-  number (014 §11.3); plans deliberately have none. `docs.id` is therefore a
+- **Row identity.** 025 §5 gives documents no key. Specs/ADRs have a corpus
+  number (025 §14.3); plans deliberately have none. `docs.id` is therefore a
   surrogate identity column, with `(project_id, kind, number)` unique where
   number exists and `(project_id, slug)` unique always; the CLI resolves
   026-style refs to ids.
-- **Assignee gating.** 025 §3/AC5 say "assignee only" without defining a
+- **Assignee gating.** 025 §7/AC5 say "assignee only" without defining a
   document's assignee. Here: `docs.assignee` (an actor id), defaulting to the
   creator; `AcceptDoc` rejects any other actor.
 - **Supersession.** No verb exists in §10. Here: accepting a document whose
@@ -87,7 +87,7 @@ Flagged for the spec's owner rather than buried:
 | File | Responsibility |
 |---|---|
 | `deploy/base/migrations/0012_docs.{up,down}.sql` (new) | the three tables + `tasks.plan_doc` |
-| `internal/designdoc/diff.go` (+ test) (new) | `CompareSections` — 014 §7 as a set diff |
+| `internal/designdoc/diff.go` (+ test) (new) | `CompareSections` — 025 §6 as a set diff |
 | `internal/store/docs.go` (+ `docs_test.go`) (new) | rows, lifecycle, sections, edges, revisions |
 | `internal/store/metrics.go` | `worklode_doc_operations_total` |
 | `internal/api/docs.go` (+ test) (new) | `/api/v1/docs` handlers |
@@ -126,7 +126,7 @@ CREATE TABLE docs (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     project_id  text NOT NULL REFERENCES projects(id),
     kind        text NOT NULL CHECK (kind IN ('spec','adr','plan')),
-    number      integer,          -- corpus number; NULL for plans (014 §11.3)
+    number      integer,          -- corpus number; NULL for plans (025 §14.3)
     slug        text NOT NULL,
     title       text NOT NULL,
     body        text NOT NULL,    -- the full markdown, frontmatter included
@@ -144,7 +144,7 @@ CREATE UNIQUE INDEX docs_project_kind_number
     ON docs (project_id, kind, number) WHERE number IS NOT NULL;
 CREATE UNIQUE INDEX docs_project_slug ON docs (project_id, slug);
 
--- Specs and ADRs only (025 §4: plans carry no sections and no anchors).
+-- Specs and ADRs only (025 §9: plans carry no sections and no anchors).
 CREATE TABLE doc_sections (
     doc_id          bigint NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
     anchor          text NOT NULL,
@@ -152,14 +152,14 @@ CREATE TABLE doc_sections (
     heading         text NOT NULL,
     depth           integer NOT NULL,
     position        integer NOT NULL,
-    last_revised_in integer NOT NULL DEFAULT 1,   -- 014 §4.4
-    published       boolean NOT NULL DEFAULT false, -- frozen from first accept (014 §7)
+    last_revised_in integer NOT NULL DEFAULT 1,   -- 025 §4.4
+    published       boolean NOT NULL DEFAULT false, -- frozen from first accept (025 §6)
     PRIMARY KEY (doc_id, anchor)
 );
 
 -- One row carries both directions: amends read backward is amendedBy, so the
--- 014 §11 mirror cannot disagree by construction. to_external holds a
--- cross-corpus shorthand this backbone cannot resolve (014 §11.3).
+-- 025 §14 mirror cannot disagree by construction. to_external holds a
+-- cross-corpus shorthand this backbone cannot resolve (025 §14.3).
 CREATE TABLE doc_edges (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     from_doc    bigint NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
@@ -170,7 +170,7 @@ CREATE TABLE doc_edges (
     to_anchor   text,
     to_external text,
     CHECK ((to_doc IS NULL) <> (to_external IS NULL)),
-    -- blocks orders whole plan documents (025 §2): never section-scoped.
+    -- blocks orders whole plan documents (025 §5): never section-scoped.
     CHECK (type <> 'blocks' OR (from_anchor IS NULL AND to_anchor IS NULL))
 );
 CREATE UNIQUE INDEX doc_edges_unique ON doc_edges
@@ -178,7 +178,7 @@ CREATE UNIQUE INDEX doc_edges_unique ON doc_edges
      coalesce(to_doc, 0), coalesce(to_anchor,''), coalesce(to_external,''));
 CREATE INDEX doc_edges_to ON doc_edges (to_doc) WHERE to_doc IS NOT NULL;
 
--- One open candidate revision per doc (014 §5 as amended by 025 §3: the
+-- One open candidate revision per doc (025 §7 as amended by 025 §7: the
 -- candidate carries draft implicitly by being here).
 CREATE TABLE doc_revisions (
     doc_id     bigint PRIMARY KEY REFERENCES docs(id) ON DELETE CASCADE,
@@ -187,7 +187,7 @@ CREATE TABLE doc_revisions (
     created_at timestamptz NOT NULL
 );
 
--- 025 §5: nullable by design — a task no plan authored carries none. The
+-- 025 §9.2: nullable by design — a task no plan authored carries none. The
 -- plan task format's `skills` land in the existing tasks.skills jsonb
 -- column (migration 0007), so no new column is needed for them.
 ALTER TABLE tasks ADD COLUMN plan_doc bigint REFERENCES docs(id);
@@ -226,7 +226,7 @@ blockedBy: [ ]
 **Files:**
 - Create: `internal/designdoc/diff.go`, `internal/designdoc/diff_test.go`
 
-The accept gate needs exactly what 014 §7 forbids, computed between the
+The accept gate needs exactly what 025 §6 forbids, computed between the
 accepted body and a candidate body. `internal/kg/section` from the unexecuted
 014 plan was never built; this is that logic, homed in `designdoc` where the
 parser already lives.
@@ -242,21 +242,21 @@ Table-driven over accepted/candidate source pairs:
 | `## 2.` renumbered `## 3.` under the same anchor | `Renumbered`, violation (§7.3) |
 | `## 1a.` letter-suffix insert | `Added = [sec-1a]`, **no** violation |
 | body of §2 edited | `Changed = [sec-2]` only — §1 untouched (§7.5) |
-| heading reworded, body identical | nothing changed, no violation (014 §3) |
+| heading reworded, body identical | nothing changed, no violation (025 §3) |
 | depth-4 anchored heading with limit 3 | violation naming the anchor (§7.6) |
 
 - [ ] **Step 2: Implement**
 
 ```go
 // SectionDiff compares an accepted document with a candidate revision
-// (014 §7, enforced at accept time by the server per 025 §2). Removed,
+// (025 §6, enforced at accept time by the server per 025 §5). Removed,
 // Renumbered and TooDeep are violations; Changed is the last_revised_in
 // input; Added is informational.
 type SectionDiff struct {
 	Added, Removed, Renumbered, Changed, TooDeep []string
 }
 
-// DepthLimit is the 014 §7.1 addressability limit. Server-configurable is
+// DepthLimit is the 025 §6.1 addressability limit. Server-configurable is
 // deferred with the rest of the 014 admin surface; 3 is its default.
 const DepthLimit = 3
 
@@ -301,7 +301,7 @@ blockedBy: [1]
 - `CreateDoc` with a plan body: zero `doc_sections` rows.
 - `UpdateDocBody` on a draft spec: sections rebuilt; on an **accepted** spec:
   `ErrInvalidInput` ("revise instead"); on an accepted **plan**: allowed —
-  plans stay freely mutable (025 §4, AC6).
+  plans stay freely mutable (025 §9, AC6).
 - `GetDoc`, `ListDocs(DocFilter{Kind, Status, Project})`.
 - Metrics: `worklode_doc_operations_total{op="create",outcome="ok"}`
   increments (use a fresh registry as the store metrics tests do).
@@ -309,7 +309,7 @@ blockedBy: [1]
 - [ ] **Step 2: Implement**
 
 ```go
-// Doc is a backbone document row (025 §2): a spec, ADR, or plan.
+// Doc is a backbone document row (025 §5): a spec, ADR, or plan.
 type Doc struct {
 	ID        int64
 	ProjectID string
@@ -405,20 +405,20 @@ blockedBy: [2, 3]
 - [ ] **Step 2: Implement**
 
 ```go
-// AcceptDoc is the manual commit of 025 §3: draft -> accepted, gated on the
+// AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
 // assignee (default: the creator). On a spec or ADR it freezes the published
 // anchor set; doc-level replaces edges flip their targets to superseded.
 // Plans are rejected here until plan acceptance (part 3) supplies the
-// minting half — accepted-without-tasks must never exist (025 §5).
+// minting half — accepted-without-tasks must never exist (025 §9.2).
 func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*Doc, error)
 
 // ReviseDoc opens a candidate revision against an accepted spec/ADR: a copy
 // of the current body to edit. The accepted version stays authoritative
-// throughout (014 §5).
+// throughout (025 §7).
 func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string) error
 func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string) error
 
-// AcceptRevision runs the 014 §7 gate (designdoc.CompareSections) and, when
+// AcceptRevision runs the 025 §6 gate (designdoc.CompareSections) and, when
 // clean, swaps the body, bumps version, stamps last_revised_in on exactly
 // the changed anchors, marks new anchors published, and applies any new
 // doc-level replaces edges — one transaction, assignee-gated like AcceptDoc.
@@ -520,13 +520,13 @@ go test -race -count=1 -tags e2e ./e2e/ -run TestDocLifecycle
 
 ---
 
-## Done when (maps to 025 §13)
+## Done when (maps to 025 §24)
 
 1. AC5 (spec half): a document under review is a `draft` row plus whatever
    review task points at it — `proposed` exists nowhere; `lode doc accept`'s
    store half is manual and assignee-gated.
 2. AC6: plan rows take body edits at any status and hold zero sections; spec
-   rows enforce 014 §7 at accept time, proven by the rejected-renumber e2e
+   rows enforce 025 §6 at accept time, proven by the rejected-renumber e2e
    step.
 3. `worklode_doc_operations_total` visible on `/metrics` with tests, per
    spec 022's conventions.
