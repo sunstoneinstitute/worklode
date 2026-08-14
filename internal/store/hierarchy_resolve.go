@@ -13,33 +13,45 @@ import (
 	"time"
 )
 
+// childState is one direct child as the roll-up sees it: its state, and
+// whether it counts as closed. Closedness is per repo (taskClosed, 004 §1.3)
+// and so cannot be read off the state alone — a merged child in a repo that
+// gates on released has not finished delivering.
+type childState struct {
+	State  string
+	Closed bool
+}
+
 // containerTarget returns the state the spec-004 §6.5 roll-up table implies
-// for a task whose direct children are in the given states, or "" when no
-// roll-up applies. A task with no children never moves: it is an ordinary
-// task and stays where it is. All-abandoned rolls up to abandoned rather than
-// merged — treating abandonment as delivery would report cancelled work as
-// shipped.
-func containerTarget(states []string) string {
-	if len(states) == 0 {
+// for a task with the given direct children, or "" when no roll-up applies. A
+// task with no children never moves: it is an ordinary task and stays where it
+// is. All-abandoned rolls up to abandoned rather than merged — treating
+// abandonment as delivery would report cancelled work as shipped.
+//
+// "Started" is every child past ready, not only the two in-flight states: a
+// child that has landed but is still delivering has plainly started, and
+// counting it as un-started would send the parent back to ready.
+func containerTarget(children []childState) string {
+	if len(children) == 0 {
 		return ""
 	}
 	closed, abandoned, started := 0, 0, 0
-	for _, st := range states {
-		if closedStateSet[st] {
+	for _, c := range children {
+		if c.Closed {
 			closed++
-			if st == "abandoned" {
+			if c.State == "abandoned" {
 				abandoned++
 			}
 		}
-		if st == "in_progress" || st == "in_review" {
+		if c.State != "draft" && c.State != "ready" {
 			started++
 		}
 	}
 	switch {
 	// Must precede the closed==len arm — abandoned is itself a closed state.
-	case closed == len(states) && abandoned == len(states):
+	case closed == len(children) && abandoned == len(children):
 		return "abandoned"
-	case closed == len(states):
+	case closed == len(children):
 		return "merged"
 	case started > 0 || closed > 0:
 		return "in_progress"
@@ -72,11 +84,11 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 		return nil
 	}
 
-	states, err := childStates(tx, parentID)
+	children, err := childStates(tx, parentID)
 	if err != nil {
 		return err
 	}
-	target := containerTarget(states)
+	target := containerTarget(children)
 	if target == "" || target == state {
 		return nil
 	}
@@ -101,28 +113,35 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 	return Transition(tx, now, parentID, state, target, eventID)
 }
 
-// childStates returns the states of parentID's direct child_of children, in
-// no particular order — containerTarget only counts them.
-func childStates(tx *sql.Tx, parentID string) ([]string, error) {
+// childStates returns parentID's direct child_of children — state plus the
+// per-repo closed verdict — in no particular order, since containerTarget only
+// counts them. Closedness comes from the same taskClosed predicate the
+// blocking queries and ChildProgress use, so a roll-up and the progress counts
+// read at the same moment agree. They can still drift afterwards: the roll-up
+// stores a state and only Transition re-runs it, while taskClosed also depends
+// on project_repos.done_state and the landed commit set, either of which can
+// change with no task transition to trigger a re-resolve.
+func childStates(tx *sql.Tx, parentID string) ([]childState, error) {
 	rows, err := tx.Query(
-		`SELECT t.state FROM task_edges e JOIN tasks t ON t.id = e.from_task
+		`SELECT t.state, `+taskClosed("t")+`
+		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
 		  WHERE e.to_task = $1 AND e.type = 'child_of'`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("children of %s: %w", parentID, err)
 	}
 	defer rows.Close()
-	var states []string
+	var children []childState
 	for rows.Next() {
-		var st string
-		if err := rows.Scan(&st); err != nil {
+		var c childState
+		if err := rows.Scan(&c.State, &c.Closed); err != nil {
 			return nil, fmt.Errorf("scan child state of %s: %w", parentID, err)
 		}
-		states = append(states, st)
+		children = append(children, c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("children of %s: %w", parentID, err)
 	}
-	return states, nil
+	return children, nil
 }
 
 // resolveParent rolls the task's parent, if it has one, up to the state its
