@@ -47,8 +47,7 @@
 wl:Component a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:comment """A software component — the atomic unit of the platform graph. Repo/project
-        (doap:Project) is a coarser grouping via dct:hasPart. Minted rather than reusing
-        gtio-sc:Component, which is a supply-chain term (006 §1).""" .
+        (doap:Project) is a coarser grouping via dct:hasPart.""" .
 
 wl:DesignDoc a owl:Class ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
@@ -120,7 +119,7 @@ wl:AcceptedDeviation a owl:Class ;
 
 
 # ---------------------------------------------------------------------------
-# Layer 2 — execution · VCS (observed; Task and Workstream projected from the
+# Layer 2 — execution · VCS (observed; Task and Project projected from the
 # backbone, which stays authoritative for state, leases, blocks and child_of)
 # ---------------------------------------------------------------------------
 
@@ -136,20 +135,11 @@ wl:Task a owl:Class ;
         prov:Entity: PROV declares Activity and Entity disjoint, so the latter would make every
         authored Task inconsistent.""" .
 
-wl:Workstream a owl:Class ;
-    wl:layer wlc:execution ;
-    rdfs:comment """A grouping of work a Task belongs to. Projection named graphs are anchored per
-        Workstream; a Task in several Workstreams appears in several graphs (006 §2).""" .
-
 wl:Project a owl:Class ;
-    rdfs:subClassOf wl:Workstream ;
     wl:layer wlc:execution ;
-    rdfs:comment "A bounded, goal-oriented Workstream. Distinct from doap:Project, which is a repository." .
-
-wl:OngoingMaintenance a owl:Class ;
-    rdfs:subClassOf wl:Workstream ;
-    wl:layer wlc:execution ;
-    rdfs:comment "An unbounded, continuous Workstream." .
+    rdfs:comment """The umbrella for all work in a set of repositories — the backbone's projects
+        table, verbatim. Unbounded. NB: doap:Project is a single repository; a wl:Project owns
+        1..n of them (project_repos). Projection named graphs are anchored per Project.""" .
 
 wl:Issue a owl:Class ;
     rdfs:subClassOf prov:Entity ;
@@ -233,14 +223,11 @@ wl:RuntimeEvent a owl:Class ;
 # ---------------------------------------------------------------------------
 
 [] a owl:AllDisjointClasses ;
-   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Workstream
-                 wl:Skill wl:Issue wl:PullRequest ) .
+   owl:members ( wl:Component wl:DesignDoc wl:Plan wl:Section wl:Task wl:Deliverable wl:Project
+                 wl:Skill ) .
 
 [] a owl:AllDisjointClasses ;
    owl:members ( wl:ADR wl:Spec ) .
-
-[] a owl:AllDisjointClasses ;
-   owl:members ( wl:Project wl:OngoingMaintenance ) .
 
 [] a owl:AllDisjointClasses ;
    owl:members ( wl:Artifact wl:Build wl:Deployment wl:Environment wl:Commit wl:RuntimeEvent ) .
@@ -420,12 +407,13 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:range wl:Task ;
     rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
 
-wl:inWorkstream a owl:ObjectProperty ;
+wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
-    rdfs:range wl:Workstream ;
-    rdfs:comment """Membership of a Task in a Workstream. Split from dct:isPartOf so the Task→Task
-        decomposition stays type-homogeneous and cleanly transitive.""" .
+    rdfs:range wl:Project ;
+    rdfs:comment """Derived from tasks.project_id: every Task is in exactly one Project. Stays
+        split from dct:isPartOf so the Task→Task decomposition remains type-homogeneous and
+        cleanly transitive. Projection named graphs are anchored per Project.""" .
 
 wl:requiresSkill a owl:ObjectProperty ;
     wl:layer wlc:execution ;

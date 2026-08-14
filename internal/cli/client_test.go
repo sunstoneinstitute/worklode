@@ -1560,7 +1560,7 @@ func TestClientHierarchyCalls(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"epic":{"id":"WL-1","kind":"epic"},"children":[{"id":"WL-2"}]}`))
+		w.Write([]byte(`{"parent":{"id":"WL-1","kind":"feature"},"children":[{"id":"WL-2"}]}`))
 	}))
 	defer srv.Close()
 	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
@@ -1595,7 +1595,7 @@ func TestClientHierarchyCalls(t *testing.T) {
 	if !strings.Contains(gotBody, `"into":["A"]`) {
 		t.Fatalf("Decompose body = %s, want into:[A]", gotBody)
 	}
-	if resp.Epic.Kind != "epic" || len(resp.Children) != 1 {
+	if resp.Parent.Kind != "feature" || len(resp.Children) != 1 {
 		t.Fatalf("Decompose response = %+v", resp)
 	}
 }

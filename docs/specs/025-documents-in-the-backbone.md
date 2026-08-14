@@ -14,20 +14,19 @@ requires:
 
 ## 0. Why {#sec-0}
 
-Spec 004 minted `kind = 'epic'` to stand in for a plan inside the task graph: a row that is
-never claimable, holds no commit, and whose state is computed from its children. That is a
-grouping wearing the `tasks` table's schema, and it exists because plans had no representation
-of their own — their content lived in git files, their execution arrived as a flat list of
-unrelated tasks, and something had to hold the set together.
+A plan has no representation of its own: its content lives in a git file, its execution arrives
+as a flat list of unrelated tasks, and nothing holds the set together. The standing temptation
+is a proxy row in `tasks` — never claimable, holding no commit, its state computed from its
+children — which is a grouping wearing the `tasks` table's schema.
 
-This spec removes the epic by removing its reason to exist. Documents — specs, ADRs, plans —
+This spec removes the temptation by removing its cause. Documents — specs, ADRs, plans —
 become first-class objects in the backbone, authored and reviewed there, with git files as a
 transitional mirror only. A plan's acceptance mints its tasks directly, each referencing the
-document, so the container is the plan itself rather than a proxy row. The remaining jobs the
-epic might have done are either already owned (cross-plan "ships together" is `wl:Milestone`,
-reserved since 006) or were never legitimate rows at all (§1).
+document, so the container is the plan itself rather than a proxy row. What such a row might
+otherwise have carried is either already owned (cross-plan "ships together" is `wl:Milestone`,
+reserved since 006) or was never a legitimate row at all (§1).
 
-Alongside the epic, this resolves three collisions found on the way:
+This also resolves three collisions found on the way:
 
 - `wl:Project` (006: "bounded, goal-oriented") contradicts the backbone's `projects`, which are
   unbounded umbrellas. The backbone wins (§13).
@@ -82,8 +81,7 @@ The rule decides concrete cases:
 
 | Candidate row | Verdict |
 |---|---|
-| Epic grouping one plan's tasks | Query over the tasks' document reference — row deleted |
-| Plan root task | Query — same grouping, same verdict; the plan document is the only identity the set needs (§9.2) |
+| Plan root task grouping one plan's tasks | Query over the tasks' document reference; the plan document is the only identity the set needs (§9.2) — never minted |
 | Spec-level container over its plans | Query over `covers` + the plans' task-set states — never minted |
 | Spec-umbrella task, open while unimplemented | Coverage query — never minted |
 | Sprint / iteration container | Never minted; time-boxing is ranking and deadlines |
@@ -115,7 +113,7 @@ wl:Section a owl:Class ;               # §3
 ```
 
 `wl:Section` joins the top-level disjointness axiom in 006 alongside `wl:Component`, `wl:DesignDoc`,
-`wl:Task`, `wl:Deliverable` and — since §13 retires `wl:Workstream` — `wl:Project`.
+`wl:Task`, `wl:Deliverable` and `wl:Project`.
 
 `prov:Entity` is not decoration: §4 and §12 assert `prov:wasGeneratedBy`, `prov:wasRevisionOf` and
 `prov:wasAttributedTo` on documents, and each has `prov:Entity` as its domain. Without the parent,
@@ -530,7 +528,7 @@ The fixer ends in exactly one of three outcomes:
 |---|---|---|
 | Resolved, non-substantive | Continues immediately | Amended in place, note attached (§8.5) |
 | Resolved, substantive | Stops | Amended in place, affected sections marked `patched`, review requested (§8.2, §7.3) |
-| Not resolved, or needs human judgment | Stops | Unchanged; `lode task escalate` mints a `design` task (§8.1) |
+| Not resolved, or needs human judgment | Stops | Unchanged; `lode task escalate` mints a `spec` task (§8.1) |
 
 The rule generalises past this flow: **a synchronous subagent when the work is bounded and tier
 is the only thing missing; a minted task when the work needs human judgment or another
@@ -541,12 +539,12 @@ operator.**
 `lode task escalate --to plan|spec --reason "..."` runs one transaction:
 
 1. releases the executor's lease and moves the task to `blocked`;
-2. mints a `design` task against the referenced document, carrying the reason and the failing
+2. mints a `spec` task against the referenced document, carrying the reason and the failing
    context;
 3. adds a `blocks` edge from the minted task to the blocked one, so execution resumes when the
    amendment lands;
 4. assigns the minted task to the human who authored the plan;
-5. deduplicates — a second task escalating the same document section joins the open `design`
+5. deduplicates — a second task escalating the same document section joins the open `spec`
    task rather than minting a rival.
 
 Everything but the assignment reuses machinery 004 and this spec already define. `blocked` now
@@ -663,7 +661,7 @@ The lease sweeper of 004 supplies the clock:
 
 - when an accepted document crosses the staleness threshold with no execution against it, the
   sweeper emits `doc.stale` into `events`, once, marked so it does not re-fire each sweep;
-- the subscriber machinery of §15.4 mints a `design` grooming task — re-evaluate, adjust, or
+- the subscriber machinery of §15.4 mints a `spec` grooming task — re-evaluate, adjust, or
   close;
 - any revision re-arms the clock, so a document groomed but still not built returns.
 
@@ -687,7 +685,7 @@ worth watching is the age of the unresolved set, not its size:
 `claim --next --kind <list>` filters the ready set by task kind. Mechanical loops run
 `--kind feature,bug,chore`; high-tier loops run `--kind design,spike,review`.
 
-Without it the ladder is a circle: an escalated `design` task is claimed by the same cheap loop
+Without it the ladder is a circle: an escalated `spec` task is claimed by the same cheap loop
 that could not resolve it. The `lode:next` skill defaults the flag from the session's model
 tier.
 
@@ -771,7 +769,7 @@ optional `- [ ]` step list. Canonical shape:
 ### Task 1 — Short imperative title
 
 ```yaml
-kind: feature            # feature | bug | chore | design
+kind: feature            # feature | bug | chore | spec
 priority: medium         # critical | high | medium | low
 skills:                  # skills the executing agent loads before starting
   - superpowers:test-driven-development
@@ -789,7 +787,7 @@ receives them; an unknown key is an accept error, never silently dropped:
 
 | Key | Required | Default | Value → destination |
 |---|---|---|---|
-| `kind` | yes | — | one of `feature`, `bug`, `chore`, `design` → `tasks.kind`, projected as `wl:taskKind` |
+| `kind` | yes | — | one of `feature`, `bug`, `chore`, `spec` → `tasks.kind`, projected as `wl:taskKind` |
 | `priority` | no | `medium` | one of `critical`, `high`, `medium`, `low` → `tasks.priority` (ranking input, spec 005; backbone-only, not projected) |
 | `skills` | no | none | list of skill identifiers → the task pin of 016 §3, projected as `wl:requiresSkill` (below) |
 | `blockedBy` | no | none | list of task numbers in this file → `blocks` edges between the minted tasks |
@@ -865,13 +863,13 @@ its children (004 §6.5), its body restated the document's, it was never claimab
 held a commit. With the plan itself a real object in the same store, everything a root carried
 is either **on the document** (identity, title, body, editorial status, ordering) or **derived
 from the task set** (progress, completion). Minting it would store a grouping as a row, which
-is what §0 removes the epic for.
+is what §0 rules out.
 
 Two acts, three things, each owning one fact:
 
 | Entity | Owns | Created by |
 |---|---|---|
-| Authoring task (`kind = 'design'`) | The work of writing the plan | whoever picks up the planning |
+| Authoring task (`kind = 'spec'`) | The work of writing the plan | whoever picks up the planning |
 | Plan document | Content, editorial status, and the identity of the set | the authoring work |
 | Tasks + their `plan_doc` reference | Execution state | the accept transaction |
 
@@ -883,13 +881,11 @@ special case.
 decomposing an oversized task into subtasks (004 §6.10), which stays the only way a task acquires
 children. Its guards — never claimable, excluded from the ready set, delivery states forbidden,
 closure by roll-up in both directions, progress derived on read, single parent, cross-project
-children rejected, brief showing one hop up — all still apply, but now to *a task that has
-children* rather than to a declared kind. 004 §6.1 chose declared over inferred because an epic
-had to exist before its children did (`task add --kind epic` created an empty one); with that
-path gone and `decompose` creating parent-hood and children in the same transaction, there is
-no window in which the two disagree, and the predicate "has children" is exactly as sharp as a
-column. The depth cap of 2 (004 §6.4) is unchanged and no longer half-spent on a container:
-task → subtask is the whole of it.
+children rejected, brief showing one hop up — all apply to *a task that has children* rather
+than to a declared kind. With `decompose` creating parent-hood and children in the same
+transaction, there is no window in which the two disagree, so the predicate "has children" is
+exactly as sharp as a column (004 §6.1). The depth cap of 2 (004 §6.4) is spent entirely on
+task → subtask, with no container level above it.
 
 The plan-doc `- [ ]` checkbox convention retires with the files: the tasks' state is the only
 execution state.
@@ -921,28 +917,28 @@ decomposed subtask alone; a plan- or spec-level parent would spend it again for 
 
 ```sql
 -- target CHECK; ships with the concept.ttl edit and regenerated code, atomically
-CHECK (kind IN ('feature','bug','chore','design','review','spike'))
+CHECK (kind IN ('feature','bug','chore','spec','review','spike'))
 ```
 
-- **`epic` is removed.** No jobs remain: one-plan grouping is the document reference (§9.2),
-  cross-plan grouping is `wl:Milestone` (§13), everything else is a query (§1).
-- **`spec` is renamed `design`** and widened to every document kind: *author or revise a
-  Worklode document (spec, ADR, or plan); the document produced is reachable via
-  `prov:wasGeneratedBy`* (§12's mechanism, unchanged). A design task is claimable, real
-  work, and closes when its document is accepted — it is never an umbrella held open against
-  coverage. "Is the spec implemented?" is `lode doc coverage`, not a task state.
-- **No structural kind replaces `epic`.** With no container row minted for a plan (§9.2), the
-  only remaining container is a decomposed parent, and its container-ness follows from having
-  children. So the ruling that task kinds describe the nature of work, and that no kind is added
-  for plans, planning, speccing or reconciliation, stands: which document came out is carried by
+- **`spec` is widened to every document kind:** *author or revise a Worklode document (spec,
+  ADR, or plan); the document produced is reachable via `prov:wasGeneratedBy`* (§12's
+  mechanism, unchanged). It keeps the name `spec` rather than becoming `design`, which reads
+  as both technical and visual work to the people using this tracker. A spec-kind task is
+  claimable, real work, and closes when its document is accepted — it is never an umbrella
+  held open against coverage. "Is the spec implemented?" is `lode doc coverage`, not a task
+  state.
+- **No kind is structural.** With no container row minted for a plan (§9.2), the only
+  container is a decomposed parent, and its container-ness follows from having children rather
+  than from a column. Task kinds therefore describe the nature of work throughout, and none is
+  added for plans, planning, speccing or reconciliation: which document came out is carried by
   the document, which has its own class; a *speccing* task versus an *implementing* task is
-  distinguished by the predicate, not the kind (§12); and `reconcile` is an activity, not a kind
-  of work, so such tasks are `chore`. The scheme is left with six kinds that all mean the same
+  distinguished by the predicate, not the kind (§12); and `reconcile` is an activity, not a
+  kind of work, so such tasks are `chore`. The scheme holds six kinds that all mean the same
   sort of thing.
 
-Migration: `UPDATE tasks SET kind = 'design' WHERE kind = 'spec'`; forbid `epic` (no rows
-exist); swap the CHECK; regenerate `validKinds` and `wlc:TaskKind` from `ns/` (§17) in the same
-commit so `TestTaskKindsAgreeAcrossSources` never sees the sources disagree.
+Migration: narrow the CHECK to the six kinds, and regenerate `validKinds` and `wlc:TaskKind`
+from `ns/` (§17) in the same commit so `TestTaskKindsAgreeAcrossSources` never sees the sources
+disagree.
 
 ## 11. Implementation coverage {#sec-11}
 
@@ -1073,7 +1069,7 @@ edge rather than asking whether any Task ever pointed at the document.
 ## 12. Authorship {#sec-12}
 
 `wl:implements` covers Component → Section ("that code realises this intent"). Nothing expresses "this task
-*wrote* that document," which is what a `design`-kind task actually does. Reuse rather than mint:
+*wrote* that document," which is what a `spec`-kind task actually does. Reuse rather than mint:
 
 ```turtle
 wl:Task rdfs:subClassOf prov:Activity .
@@ -1088,12 +1084,12 @@ author is `prov:wasAssociatedWith` (Activity→Agent), not `prov:wasAttributedTo
 `prov:Entity`. 006 §Layer 2 listed the latter for every execution node; it stays correct for Issue
 and PullRequest and is wrong for Task, which this section is what makes an Activity.
 
-## 13. Project, Workstream, Milestone {#sec-13}
+## 13. Project and Milestone {#sec-13}
 
 The backbone's `projects` are unbounded umbrellas over sets of repos (`project_repos` already
-models the set), and that is what `wl:Project` now means; 006's "bounded, goal-oriented"
-definition loses. With the bounded variant gone, `wl:Workstream` has a single subclass and
-collapses; `wl:OngoingMaintenance` is redundant once the umbrella is inherently ongoing.
+models the set), and that is what `wl:Project` means; 006's "bounded, goal-oriented" definition
+loses. One unbounded umbrella is the whole of it — no bounded sibling, and no separate class
+for ongoing work, since an umbrella is inherently ongoing.
 
 Target `ns/` state (applied at implementation, §17):
 
@@ -1108,12 +1104,10 @@ wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ; rdfs:range wl:Project ;
     rdfs:comment "Derived from tasks.project_id: every Task is in exactly one Project.
-        Replaces wl:inWorkstream. Projection named graphs are anchored per Project." .
+        Projection named graphs are anchored per Project." .
 
-# deleted: wl:Workstream, wl:OngoingMaintenance, wl:inWorkstream,
-#          the (Project OngoingMaintenance) disjointness axiom.
-# shapes: the Task shape's inWorkstream minCount-1 becomes inProject exactly-1.
-# disjointness: Workstream's slot in the top-level axiom is taken by wl:Project.
+# shapes: the Task shape constrains wl:inProject to exactly one.
+# disjointness: wl:Project sits in the top-level axiom (006 §2).
 ```
 
 `wl:Milestone` stays reserved for v2 exactly as 006 §1 leaves it, and its shape is
@@ -1413,11 +1407,11 @@ Two rules, hardcoded in Go behind `Evaluate(event) → []Action`:
 | Event | Action | Guard |
 |---|---|---|
 | `wl:DocumentSubmitted` | mint `kind = 'review'`, state `ready`, referencing the document | no open review task references it |
-| `wl:DocumentAccepted` where the document is a spec | mint `kind = 'design'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open design task references it |
+| `wl:DocumentAccepted` where the document is a spec | mint `kind = 'spec'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open spec task references it |
 
 "Referencing the document" needs a column, and `plan_doc` (§9.2) is not it — that one says
-*this task was minted by that plan*, whereas a review or design task is *about* a document it
-has not executed. So tasks gain a nullable **`about_doc`**, and both guards are queries over
+*this task was minted by that plan*, whereas a review or authoring task is *about* a document
+it has not executed. So tasks gain a nullable **`about_doc`**, and both guards are queries over
 open tasks carrying it — a query, not stored state (§1). Minted tasks take the document's
 project and carry `prov:wasInformedBy` back to the event that caused them, so "why does this
 task exist" is answerable from the task.
@@ -1466,7 +1460,7 @@ already exists. What is missing is that planning is done in the main checkout, w
 lease, and those tokens are dropped.
 
 So a planning session claims its task like any other work: the lode plugin's planning skill
-runs `lode task claim` on the minted `design` task into `wt/<task-id>-<slug>` before it writes
+runs `lode task claim` on the minted `spec` task into `wt/<task-id>-<slug>` before it writes
 anything, and `lode task cost` then answers for planning exactly as it does for a feature. This
 also gives planning the brief, the secrets and the hook wiring every other kind of work gets,
 which is the stronger reason.
@@ -1853,11 +1847,9 @@ Two further pieces of work follow from this spec without belonging to it:
 
 ## 24. Acceptance criteria {#sec-24}
 
-1. `tasks.kind`, `validKinds` and `wlc:TaskKind` agree on exactly the six kinds of §10: `epic`
-   is absent and no structural kind replaces it, `design` is present in all three, and the
-   earlier seven-kind reconciliation `feature, bug, chore, spec, review, spike, epic` is gone.
-   The sources are generated from `ns/`, CI fails on drift, and the migration round-trips up and
-   down.
+1. `tasks.kind`, `validKinds` and `wlc:TaskKind` agree on exactly the six kinds of §10 —
+   `feature, bug, chore, spec, review, spike` — and none of them is structural. The sources are
+   generated from `ns/`, CI fails on drift, and the migration round-trips up and down.
 2. `wl:Plan` is present as a sibling of `wl:DesignDoc`, never its subclass; plan documents carry
    no section anchors and accept mid-execution edits; no acceptance criterion anywhere still
    refers to `Spec ⊃ Plan ⊃ Task`.
@@ -1905,13 +1897,13 @@ Two further pieces of work follow from this spec without belonging to it:
 17. A claim pinned at v3 against a section subsequently revised in v4 reports **stale**; a claim
     pinned at v3 against a section untouched by v4 does **not**, even though the document version
     advanced.
-18. A `design`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
+18. A `spec`-kind task that produced a document is reachable by `prov:wasGeneratedBy`, and is
     distinguishable from the components that `wl:implements` that document's sections.
 19. No `ls:`, `lsc:` or `lsid:` occurrence remains in `docs/` except where the old spelling is
     the subject rather than a use — §0's scope bullet, §17's prefix table, and this criterion;
     the rdf-registry sources sit at `rdf/wl/` and publish under `https://worklode.io/ns/`.
-20. `wl:Workstream` and `wl:OngoingMaintenance` are absent from `ns/`; every projected Task
-    carries exactly one `wl:inProject`; no `wl:` term for sprints exists.
+20. `wl:Project` is the only work-grouping class in `ns/`; every projected Task carries exactly
+    one `wl:inProject`; no `wl:` term for sprints exists.
 21. No stored task→milestone edge exists when Milestone ships; its task set derives via
     Deliverables.
 22. `ns/*.ttl` defines `wl:Plan` and passes `riot --validate`.
@@ -1924,7 +1916,7 @@ Two further pieces of work follow from this spec without belonging to it:
     operator step.
 26. `lode doc submit` mints one `ready` review task and changes no document column; a second
     submit while that task is open mints nothing.
-27. Accepting a spec mints one `ready` design task in the document's project, carrying
+27. Accepting a spec mints one `ready` spec task in the document's project, carrying
     `prov:wasInformedBy` to the event; re-accepting while it is open mints nothing; re-accepting
     after it closes mints one more.
 28. Every domain event's `type` and payload properties come from the generated `ns/` set, and CI
@@ -1934,8 +1926,8 @@ Two further pieces of work follow from this spec without belonging to it:
 30. `worklode_event_subscriber_lag` rises when a subscriber is stopped and returns to zero when
     it resumes; the metrics of §15.7 are registered and tested, the sync endpoint's and the
     store operations' among them.
-31. A planning session that claims its design task has its tokens reported by
-    `lode task cost <design-task>`.
+31. A planning session that claims its spec task has its tokens reported by
+    `lode task cost <spec-task>`.
 32. `.worklode/config.toml` accepts `spec_corpus` and `plan_corpus`; the loader
     exposes them repo-scoped, and an unknown key still errors.
 33. `lode doc sync` on the default branch with a clean tree upserts every

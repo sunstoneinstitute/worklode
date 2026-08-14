@@ -81,18 +81,22 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // reopened task has no landed commit here and is left alone until new work
 // lands.
 func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
-	// An epic has no commit, and an unknown task id is a correlation miss
-	// that must not fail the delivery (InsertTaskCommit's contract); both
-	// return nil here rather than an error. state is read alongside kind so
-	// this same lookup also serves the switch below, at no extra query cost.
-	var state, kind string
-	if err := tx.QueryRow(`SELECT state, kind FROM tasks WHERE id = $1`, taskID).Scan(&state, &kind); err != nil {
+	// A task with children has no commit of its own (004 §6.4), and an
+	// unknown task id is a correlation miss that must not fail the delivery
+	// (InsertTaskCommit's contract); both return nil here rather than an
+	// error.
+	var state string
+	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		return fmt.Errorf("get task %s state: %w", taskID, err)
 	}
-	if kind == kindEpic {
+	container, err := hasChildren(tx, taskID)
+	if err != nil {
+		return err
+	}
+	if container {
 		return nil
 	}
 

@@ -41,7 +41,7 @@ func recordingServer(t *testing.T, status int, respBody string) (*httptest.Serve
 	return srv, rec
 }
 
-const graphIRI = "https://worklode.io/ns/graph/workstream/acme"
+const graphIRI = "https://worklode.io/ns/graph/project/acme"
 
 func authed(srvURL string) *graphserver.Client {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "tok"})
@@ -60,7 +60,7 @@ func TestPutGraphCreated(t *testing.T) {
 	if rec.method != http.MethodPut || rec.path != "/branches/main/graphs" {
 		t.Fatalf("request = %s %s; want PUT /branches/main/graphs", rec.method, rec.path)
 	}
-	if rec.rawQuery != "graph=https%3A%2F%2Fworklode.io%2Fns%2Fgraph%2Fworkstream%2Facme" {
+	if rec.rawQuery != "graph=https%3A%2F%2Fworklode.io%2Fns%2Fgraph%2Fproject%2Facme" {
 		t.Fatalf("query = %q; want the url-encoded graph IRI", rec.rawQuery)
 	}
 	if rec.contentType != "text/turtle" {

@@ -197,7 +197,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 			for _, pr := range pulls {
 				// Inventory only: no Transition, CloseActiveLease,
 				// InsertTaskCommit, or ResolveDelivery. Those encode "this just
-				// happened" and would rewrite lifecycle and epic state from
+				// happened" and would rewrite lifecycle and roll-up state from
 				// history. UpsertPR still correlates by head_ref/body.
 				state := "open"
 				if pr.State == "closed" {

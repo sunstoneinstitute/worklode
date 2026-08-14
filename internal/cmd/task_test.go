@@ -384,17 +384,17 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	setupProject(t, c)
 	setupRepoConfig(t, "proj") // so a bare task number resolves
 
-	epic, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
-		Project: "proj", Title: "Container", Priority: "high", Kind: "epic",
+	container, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+		Project: "proj", Title: "Container", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
-		t.Fatalf("create epic: %v", err)
+		t.Fatalf("create container: %v", err)
 	}
-	loose := createTestTask(t, c, "Not an epic")
+	loose := createTestTask(t, c, "Childless")
 
-	// add --parent files the new task under the epic in one round trip.
+	// add --parent files the new task under the parent in one round trip.
 	out, err := runLode(t, "task", "add", "--json", "--project", "proj",
-		"--title", "Piece", "--parent", epic.ID)
+		"--title", "Piece", "--parent", container.ID)
 	if err != nil {
 		t.Fatalf("task add --parent: %v\noutput: %s", err, out)
 	}
@@ -403,7 +403,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 		t.Fatalf("decode add output %q: %v", out, err)
 	}
 
-	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 1 || got[0] != child.ID {
+	if got := taskListIDs(t, "--parent", container.ID); len(got) != 1 || got[0] != child.ID {
 		t.Fatalf("list --parent = %v, want [%s]", got, child.ID)
 	}
 
@@ -411,46 +411,46 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task show: %v", err)
 	}
-	if !strings.Contains(show, "parent:   "+epic.ID) {
-		t.Fatalf("show has no parent line naming %s:\n%s", epic.ID, show)
+	if !strings.Contains(show, "parent:   "+container.ID) {
+		t.Fatalf("show has no parent line naming %s:\n%s", container.ID, show)
 	}
 
 	tree, err := runLode(t, "task", "tree", "--project", "proj")
 	if err != nil {
 		t.Fatalf("task tree: %v", err)
 	}
-	if !strings.Contains(tree, epic.ID) || !strings.Contains(tree, child.ID) {
-		t.Fatalf("tree missing epic or child:\n%s", tree)
+	if !strings.Contains(tree, container.ID) || !strings.Contains(tree, child.ID) {
+		t.Fatalf("tree missing parent or child:\n%s", tree)
 	}
-	// Only epics are roots: a loose task is neither an epic nor a child of
-	// one, so it must not appear at all.
+	// Only tasks with children are roots (029 §2 left no kind to select on):
+	// a childless task is neither a parent nor a child, so it must not appear.
 	if strings.Contains(tree, loose.ID) {
-		t.Fatalf("tree lists the non-epic %s:\n%s", loose.ID, tree)
+		t.Fatalf("tree lists the childless %s:\n%s", loose.ID, tree)
 	}
 
 	if _, err := runLode(t, "task", "unparent", child.ID); err != nil {
 		t.Fatalf("task unparent: %v", err)
 	}
-	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 0 {
+	if got := taskListIDs(t, "--parent", container.ID); len(got) != 0 {
 		t.Fatalf("list --parent after unparent = %v, want []", got)
 	}
 
-	// parent --under re-files it, expanding a bare number for the epic.
-	epicNumber := epic.ID[strings.LastIndex(epic.ID, "-")+1:]
-	if out, err := runLode(t, "task", "parent", child.ID, "--under", epicNumber); err != nil {
-		t.Fatalf("task parent --under %s: %v\noutput: %s", epicNumber, err, out)
+	// parent --under re-files it, expanding a bare number for the parent.
+	parentNumber := container.ID[strings.LastIndex(container.ID, "-")+1:]
+	if out, err := runLode(t, "task", "parent", child.ID, "--under", parentNumber); err != nil {
+		t.Fatalf("task parent --under %s: %v\noutput: %s", parentNumber, err, out)
 	}
-	if got := taskListIDs(t, "--parent", epic.ID); len(got) != 1 || got[0] != child.ID {
+	if got := taskListIDs(t, "--parent", container.ID); len(got) != 1 || got[0] != child.ID {
 		t.Fatalf("list --parent after parent --under = %v, want [%s]", got, child.ID)
 	}
 
-	// decompose converts a task in place and creates its children as drafts.
+	// decompose splits a task in place and creates its children as drafts.
 	big := createTestTask(t, c, "Too big")
 	out, err = runLode(t, "task", "decompose", big.ID, "--into", "A", "--into", "B")
 	if err != nil {
 		t.Fatalf("task decompose: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "is now an epic") {
+	if !strings.Contains(out, "now has 2 children") {
 		t.Fatalf("decompose output:\n%s", out)
 	}
 	if got := taskListIDs(t, "--parent", big.ID); len(got) != 2 {

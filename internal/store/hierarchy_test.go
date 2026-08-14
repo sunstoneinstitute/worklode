@@ -13,24 +13,22 @@ import (
 	"time"
 )
 
-// TestMigrationAllowsEpicKind checks the 0006 CHECK change: 'epic' is a legal
-// task kind and an unknown kind is still rejected.
-func TestMigrationAllowsEpicKind(t *testing.T) {
+// TestKindCheckRejectsUnknownKinds pins the tasks_kind_check constraint: it is
+// exhaustive, so anything outside the six kinds of 025 §10 — including a
+// plausible-sounding container kind — fails at the database.
+func TestKindCheckRejectsUnknownKinds(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	if epic.Kind != "epic" {
-		t.Fatalf("kind = %q, want epic", epic.Kind)
-	}
-
-	bad := defaultTaskInput()
-	bad.Kind = "saga"
-	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
-		func(tx *sql.Tx, _ int64) error {
-			_, err := CreateTask(tx, taskTestNow, bad)
-			return err
-		})
-	if !isCheckViolationOn(err, "tasks_kind_check") {
-		t.Fatalf("error = %v, want a tasks_kind_check violation", err)
+	for _, kind := range []string{"container", "saga"} {
+		bad := defaultTaskInput()
+		bad.Kind = kind
+		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+			func(tx *sql.Tx, _ int64) error {
+				_, err := CreateTask(tx, taskTestNow, bad)
+				return err
+			})
+		if !isCheckViolationOn(err, "tasks_kind_check") {
+			t.Fatalf("kind %q error = %v, want a tasks_kind_check violation", kind, err)
+		}
 	}
 }
 
@@ -39,17 +37,17 @@ func TestMigrationAllowsEpicKind(t *testing.T) {
 func TestSingleParentIndex(t *testing.T) {
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	epicA := createTask(t, s, taskTestNow, epicInput())
-	epicB := createTask(t, s, taskTestNow, epicInput())
+	parentA := createTask(t, s, taskTestNow, containerInput())
+	parentB := createTask(t, s, taskTestNow, containerInput())
 
 	if _, err := s.DBForTests().Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
-		child.ID, epicA.ID, taskTestNow); err != nil {
+		child.ID, parentA.ID, taskTestNow); err != nil {
 		t.Fatalf("first parent edge: %v", err)
 	}
 	_, err := s.DBForTests().Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'child_of', $3)`,
-		child.ID, epicB.ID, taskTestNow)
+		child.ID, parentB.ID, taskTestNow)
 	if err == nil {
 		t.Fatal("second parent edge succeeded, want a unique violation")
 	}
@@ -158,40 +156,50 @@ func migrationsThrough(t *testing.T, n int) string {
 	return dir
 }
 
-// epicInput is the shared fixture for a container task.
-func epicInput() TaskInput {
+// containerInput is the shared fixture for a task that will take children.
+// Since 029 §2 there is no kind to declare — an ordinary task becomes a
+// container by acquiring child_of edges — so this differs from
+// defaultTaskInput only in its title.
+func containerInput() TaskInput {
 	in := defaultTaskInput()
-	in.Title = "an epic"
-	in.Kind = "epic"
+	in.Title = "a container"
 	return in
 }
 
-func TestAddEdgeRejectsNonEpicParent(t *testing.T) {
+// TestAddEdgeAcceptsOrdinaryParent pins 029 §2's change to checkHierarchy:
+// any ordinary task may be a parent, and the edge is what makes it one.
+func TestAddEdgeAcceptsOrdinaryParent(t *testing.T) {
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	err := addEdge(t, s, child.ID, parent.ID, "child_of")
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	if err := addEdge(t, s, child.ID, parent.ID, "child_of"); err != nil {
+		t.Fatalf("ordinary task as parent: %v", err)
+	}
+	got, err := s.GetTask(t.Context(), parent.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Kind != defaultTaskInput().Kind {
+		t.Fatalf("parent kind = %q, want it untouched at %q", got.Kind, defaultTaskInput().Kind)
 	}
 }
 
 func TestAddEdgeRejectsSecondParent(t *testing.T) {
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	epicA := createTask(t, s, taskTestNow, epicInput())
-	epicB := createTask(t, s, taskTestNow, epicInput())
+	parentA := createTask(t, s, taskTestNow, containerInput())
+	parentB := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, child.ID, epicA.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, parentA.ID, "child_of"); err != nil {
 		t.Fatalf("first parent: %v", err)
 	}
-	err := addEdge(t, s, child.ID, epicB.ID, "child_of")
+	err := addEdge(t, s, child.ID, parentB.ID, "child_of")
 	if !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("error = %v, want ErrEdgeExists", err)
 	}
 	// The baseline duplicate-edge rule still applies to the same pair.
-	if err := addEdge(t, s, child.ID, epicA.ID, "child_of"); !errors.Is(err, ErrEdgeExists) {
+	if err := addEdge(t, s, child.ID, parentA.ID, "child_of"); !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("duplicate edge error = %v, want ErrEdgeExists", err)
 	}
 }
@@ -201,12 +209,12 @@ func TestAddEdgeRejectsCrossProject(t *testing.T) {
 	if err := s.CreateProject(t.Context(), "other", "Other", "OTH"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	otherIn := defaultTaskInput()
 	otherIn.ProjectID = "other"
 	child := createTask(t, s, taskTestNow, otherIn)
 
-	err := addEdge(t, s, child.ID, epic.ID, "child_of")
+	err := addEdge(t, s, child.ID, container.ID, "child_of")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
@@ -214,12 +222,12 @@ func TestAddEdgeRejectsCrossProject(t *testing.T) {
 
 func TestAddEdgeEnforcesDepthCap(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	mid := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
+	mid := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
 	deep := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("depth 1: %v", err)
 	}
 	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
@@ -236,9 +244,9 @@ func TestAddEdgeEnforcesDepthCap(t *testing.T) {
 // has children counts the whole resulting chain, not just the new edge.
 func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
 	s := openTaskStore(t)
-	top := createTask(t, s, taskTestNow, epicInput())
-	mid := createTask(t, s, taskTestNow, epicInput())
-	sub := createTask(t, s, taskTestNow, epicInput())
+	top := createTask(t, s, taskTestNow, containerInput())
+	mid := createTask(t, s, taskTestNow, containerInput())
+	sub := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	if err := addEdge(t, s, leaf.ID, sub.ID, "child_of"); err != nil {
@@ -258,13 +266,13 @@ func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
 // the rewrite: a parent cannot become a child of its own descendant.
 func TestAddEdgeStillRejectsCycles(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	child := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
+	child := createTask(t, s, taskTestNow, containerInput())
 
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
-		t.Fatalf("child under epic: %v", err)
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("child under container: %v", err)
 	}
-	err := addEdge(t, s, epic.ID, child.ID, "child_of")
+	err := addEdge(t, s, container.ID, child.ID, "child_of")
 	if !errors.Is(err, ErrCycle) {
 		t.Fatalf("error = %v, want ErrCycle", err)
 	}
@@ -276,7 +284,7 @@ func TestAddEdgeStillRejectsCycles(t *testing.T) {
 // depth.
 func TestDescendantDepthWideFanOut(t *testing.T) {
 	s := openTaskStore(t)
-	parent := createTask(t, s, taskTestNow, epicInput())
+	parent := createTask(t, s, taskTestNow, containerInput())
 	for i := 0; i < 25; i++ {
 		leaf := createTask(t, s, taskTestNow, defaultTaskInput())
 		if err := addEdge(t, s, leaf.ID, parent.ID, "child_of"); err != nil {
@@ -304,10 +312,10 @@ func TestDescendantDepthWideFanOut(t *testing.T) {
 // so the walk has a level to stop short of.
 func TestDescendantDepthStopsAtCap(t *testing.T) {
 	s := openTaskStore(t)
-	top := createTask(t, s, taskTestNow, epicInput())
-	n1 := createTask(t, s, taskTestNow, epicInput())
-	n2 := createTask(t, s, taskTestNow, epicInput())
-	n3 := createTask(t, s, taskTestNow, epicInput())
+	top := createTask(t, s, taskTestNow, containerInput())
+	n1 := createTask(t, s, taskTestNow, containerInput())
+	n2 := createTask(t, s, taskTestNow, containerInput())
+	n3 := createTask(t, s, taskTestNow, containerInput())
 	n4 := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	// top <- n1 <- n2 <- n3 <- n4: 4 levels below top, two past the cap.
@@ -337,23 +345,23 @@ func TestDescendantDepthStopsAtCap(t *testing.T) {
 
 func TestChildProgress(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	var kids []*Task
 	for i := 0; i < 3; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, k.ID, epic.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
 			t.Fatalf("child %d: %v", i, err)
 		}
 		kids = append(kids, k)
 	}
-	// A blocks edge into the epic shares child_of's direction (to_task =
-	// epic). It must not be counted: pins the e.type = 'child_of' predicate.
+	// A blocks edge into the container shares child_of's direction (to_task =
+	// container). It must not be counted: pins the e.type = 'child_of' predicate.
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, blocker.ID, epic.ID, "blocks"); err != nil {
+	if err := addEdge(t, s, blocker.ID, container.ID, "blocks"); err != nil {
 		t.Fatalf("blocks: %v", err)
 	}
 
-	got, err := s.ChildProgress(t.Context(), epic.ID)
+	got, err := s.ChildProgress(t.Context(), container.ID)
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
@@ -363,7 +371,7 @@ func TestChildProgress(t *testing.T) {
 
 	walkTo(t, s, kids[0].ID, "merged")
 	walkTo(t, s, kids[1].ID, "abandoned")
-	got, err = s.ChildProgress(t.Context(), epic.ID)
+	got, err = s.ChildProgress(t.Context(), container.ID)
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
@@ -374,8 +382,8 @@ func TestChildProgress(t *testing.T) {
 
 func TestChildProgressNoChildren(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	got, err := s.ChildProgress(t.Context(), epic.ID)
+	container := createTask(t, s, taskTestNow, containerInput())
+	got, err := s.ChildProgress(t.Context(), container.ID)
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
@@ -386,9 +394,9 @@ func TestChildProgressNoChildren(t *testing.T) {
 
 func TestParentOf(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("child_of: %v", err)
 	}
 
@@ -396,11 +404,11 @@ func TestParentOf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParentOf: %v", err)
 	}
-	if got == nil || got.ID != epic.ID || got.Title != epic.Title || got.State != epic.State {
-		t.Fatalf("parent = %+v, want id/title/state of %s", got, epic.ID)
+	if got == nil || got.ID != container.ID || got.Title != container.Title || got.State != container.State {
+		t.Fatalf("parent = %+v, want id/title/state of %s", got, container.ID)
 	}
 
-	root, err := s.ParentOf(t.Context(), epic.ID)
+	root, err := s.ParentOf(t.Context(), container.ID)
 	if err != nil {
 		t.Fatalf("ParentOf root: %v", err)
 	}
@@ -417,19 +425,19 @@ func TestParentMap(t *testing.T) {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("child_of: %v", err)
 	}
 
-	otherEpicIn := epicInput()
-	otherEpicIn.ProjectID = "other"
-	otherEpic := createTask(t, s, taskTestNow, otherEpicIn)
+	otherParentIn := containerInput()
+	otherParentIn.ProjectID = "other"
+	otherParent := createTask(t, s, taskTestNow, otherParentIn)
 	otherChildIn := defaultTaskInput()
 	otherChildIn.ProjectID = "other"
 	otherChild := createTask(t, s, taskTestNow, otherChildIn)
-	if err := addEdge(t, s, otherChild.ID, otherEpic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, otherChild.ID, otherParent.ID, "child_of"); err != nil {
 		t.Fatalf("other child_of: %v", err)
 	}
 
@@ -437,7 +445,7 @@ func TestParentMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParentMap horndb: %v", err)
 	}
-	if want := map[string]string{child.ID: epic.ID}; !reflect.DeepEqual(scoped, want) {
+	if want := map[string]string{child.ID: container.ID}; !reflect.DeepEqual(scoped, want) {
 		t.Fatalf("ParentMap(horndb) = %v, want %v", scoped, want)
 	}
 
@@ -445,21 +453,21 @@ func TestParentMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParentMap all: %v", err)
 	}
-	if want := (map[string]string{child.ID: epic.ID, otherChild.ID: otherEpic.ID}); !reflect.DeepEqual(all, want) {
+	if want := (map[string]string{child.ID: container.ID, otherChild.ID: otherParent.ID}); !reflect.DeepEqual(all, want) {
 		t.Fatalf("ParentMap(\"\") = %v, want %v", all, want)
 	}
 }
 
-func TestListTasksFilterParentAndKind(t *testing.T) {
+func TestListTasksFilterParentAndHasChildren(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	loose := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, child.ID, epic.ID, "child_of"); err != nil {
+	if err := addEdge(t, s, child.ID, container.ID, "child_of"); err != nil {
 		t.Fatalf("child_of: %v", err)
 	}
 
-	kids, err := s.ListTasks(t.Context(), TaskFilter{Parent: epic.ID})
+	kids, err := s.ListTasks(t.Context(), TaskFilter{Parent: container.ID})
 	if err != nil {
 		t.Fatalf("ListTasks parent: %v", err)
 	}
@@ -470,15 +478,16 @@ func TestListTasksFilterParentAndKind(t *testing.T) {
 		t.Fatalf("children = %v, must not include the parentless task %s", taskIDs(kids), loose.ID)
 	}
 
-	epics, err := s.ListTasks(t.Context(), TaskFilter{Kind: "epic"})
+	// HasChildren is what selects containers now that no kind declares one.
+	parents, err := s.ListTasks(t.Context(), TaskFilter{HasChildren: true})
 	if err != nil {
-		t.Fatalf("ListTasks kind: %v", err)
+		t.Fatalf("ListTasks has_children: %v", err)
 	}
-	if len(epics) != 1 || epics[0].ID != epic.ID {
-		t.Fatalf("epics = %v, want [%s]", taskIDs(epics), epic.ID)
+	if len(parents) != 1 || parents[0].ID != container.ID {
+		t.Fatalf("parents = %v, want [%s]", taskIDs(parents), container.ID)
 	}
-	if slices.Contains(taskIDs(epics), loose.ID) {
-		t.Fatalf("epics = %v, must not include the non-epic task %s", taskIDs(epics), loose.ID)
+	if slices.Contains(taskIDs(parents), loose.ID) {
+		t.Fatalf("parents = %v, must not include the childless task %s", taskIDs(parents), loose.ID)
 	}
 }
 
@@ -490,13 +499,20 @@ func taskIDs(tasks []Task) []string {
 	return out
 }
 
-// TestEpicNeverInReadySet checks that an epic stays out of the ranked pickup
-// set even when it is ready, unblocked, and top-ranked by every other factor.
-func TestEpicNeverInReadySet(t *testing.T) {
+// TestParentNeverInReadySet checks that a task with children stays out of the
+// ranked pickup set even when it is ready, unblocked, and top-ranked by every
+// other factor. Its child is draft, so only the plain task is a candidate.
+func TestParentNeverInReadySet(t *testing.T) {
 	s := openTaskStore(t)
-	in := epicInput()
+	in := containerInput()
 	in.Priority = "critical"
-	epic := createTask(t, s, taskTestNow, in)
+	parent := createTask(t, s, taskTestNow, in)
+	kidIn := defaultTaskInput()
+	kidIn.Draft = true
+	kid := createTask(t, s, taskTestNow, kidIn)
+	if err := addEdge(t, s, kid.ID, parent.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
 	plain := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	got, err := s.readyCandidates(t.Context(), "")
@@ -504,78 +520,104 @@ func TestEpicNeverInReadySet(t *testing.T) {
 		t.Fatalf("readyCandidates: %v", err)
 	}
 	if len(got) != 1 || got[0].ID != plain.ID {
-		t.Fatalf("candidates = %v, want [%s] (epic %s excluded)", taskIDs(got), plain.ID, epic.ID)
+		t.Fatalf("candidates = %v, want [%s] (parent %s excluded)", taskIDs(got), plain.ID, parent.ID)
 	}
 }
 
-// TestClaimRejectsEpic checks the direct-claim hole: ready -> in_progress is a
-// legal epic transition (it is the roll-up trigger), so Claim needs its own
-// guard.
-func TestClaimRejectsEpic(t *testing.T) {
+// TestClaimRejectsParent checks the direct-claim hole: ready -> in_progress is
+// a legal transition for a task with children (it is the roll-up trigger), so
+// Claim needs its own guard beyond the ready-set exclusion (004 §6.1).
+func TestClaimRejectsParent(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	_, err := s.Claim(t.Context(), epic.ID, "stig", "wt-1", time.Hour)
+	parent, _ := parentWithChildren(t, s, 1)
+	_, err := s.Claim(t.Context(), parent.ID, "stig", "wt-1", time.Hour)
 	if !errors.Is(err, ErrBadTransition) {
 		t.Fatalf("error = %v, want ErrBadTransition", err)
 	}
 }
 
-// TestEpicForbiddenStates checks the kind guard on both ends of a transition:
-// an epic can never enter a delivery state, and `lode task done` (in_review ->
-// merged) reports the roll-up rule rather than a from-state mismatch.
-func TestEpicForbiddenStates(t *testing.T) {
+// TestClaimAllowsChildlessTask is the other half of the inferred-container
+// rule: without children the same task is an ordinary, claimable one.
+func TestClaimAllowsChildlessTask(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	if err := transition(t, s, taskTestNow, epic.ID, "ready", "in_progress"); err != nil {
+	task := createTask(t, s, taskTestNow, containerInput())
+	if _, err := s.Claim(t.Context(), task.ID, "stig", "wt-1", time.Hour); err != nil {
+		t.Fatalf("Claim on a childless task: %v", err)
+	}
+}
+
+// TestContainerForbiddenStates checks the guard on both ends of a transition:
+// a task with children can never enter a delivery state, and `lode task done`
+// (in_review -> merged) reports the roll-up rule rather than a from-state
+// mismatch. The guard keys off the children, not a kind (029 §2).
+func TestContainerForbiddenStates(t *testing.T) {
+	s := openTaskStore(t)
+	parent, _ := parentWithChildren(t, s, 1)
+	if got := stateOf(t, s, parent.ID); got != "ready" {
+		t.Fatalf("parent = %s, want ready before the walk", got)
+	}
+	if err := transition(t, s, taskTestNow, parent.ID, "ready", "in_progress"); err != nil {
 		t.Fatalf("ready -> in_progress: %v", err)
 	}
-	err := transition(t, s, taskTestNow, epic.ID, "in_progress", "in_review")
+	err := transition(t, s, taskTestNow, parent.ID, "in_progress", "in_review")
 	if !errors.Is(err, ErrBadTransition) {
 		t.Fatalf("in_review error = %v, want ErrBadTransition", err)
 	}
-	if !strings.Contains(err.Error(), "epic") {
-		t.Fatalf("error %q does not name the epic rule", err)
+	if !strings.Contains(err.Error(), "has children") {
+		t.Fatalf("error %q does not name the container rule", err)
 	}
-	err = transition(t, s, taskTestNow, epic.ID, "in_review", "merged")
-	if !errors.Is(err, ErrBadTransition) || !strings.Contains(err.Error(), "epic") {
-		t.Fatalf("done error = %v, want an epic ErrBadTransition", err)
+	err = transition(t, s, taskTestNow, parent.ID, "in_review", "merged")
+	if !errors.Is(err, ErrBadTransition) || !strings.Contains(err.Error(), "has children") {
+		t.Fatalf("done error = %v, want a container ErrBadTransition", err)
 	}
 	// The roll-up terminal is still reachable.
-	if err := transition(t, s, taskTestNow, epic.ID, "in_progress", "merged"); err != nil {
+	if err := transition(t, s, taskTestNow, parent.ID, "in_progress", "merged"); err != nil {
 		t.Fatalf("in_progress -> merged: %v", err)
 	}
 }
 
-// TestResolveDeliveryIgnoresEpics checks that an epic with commit and deploy
-// facts attributed to it is left alone.
-func TestResolveDeliveryIgnoresEpics(t *testing.T) {
+// TestChildlessTaskReachesDeliveryStates is the other half: the same states
+// are legal for a task with no children, so the guard is not a blanket ban.
+func TestChildlessTaskReachesDeliveryStates(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	task := createTask(t, s, taskTestNow, containerInput())
+	walkTo(t, s, task.ID, "in_review")
+	if got := stateOf(t, s, task.ID); got != "in_review" {
+		t.Fatalf("state = %s, want in_review", got)
+	}
+}
+
+// TestResolveDeliveryIgnoresParents checks that a task with children carrying
+// commit and deploy facts attributed to it is left alone: a container has no
+// commit of its own (004 §6.4).
+func TestResolveDeliveryIgnoresParents(t *testing.T) {
+	s := openTaskStore(t)
+	container, _ := parentWithChildren(t, s, 1)
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "delivery", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			if err := InsertTaskCommit(tx, TaskCommit{
-				TaskID: epic.ID, Repo: "o/r", SHA: "abc", Source: "branch_push", SeenAt: taskTestNow,
+				TaskID: container.ID, Repo: "o/r", SHA: "abc", Source: "branch_push", SeenAt: taskTestNow,
 			}); err != nil {
 				return err
 			}
 			if _, err := AppendMainCommit(tx, "o/r", "abc", taskTestNow); err != nil {
 				return err
 			}
-			return ResolveDelivery(tx, taskTestNow, epic.ID, "o/r", eventID)
+			return ResolveDelivery(tx, taskTestNow, container.ID, "o/r", eventID)
 		})
 	if err != nil {
 		t.Fatalf("ResolveDelivery: %v", err)
 	}
-	got, err := s.GetTask(t.Context(), epic.ID)
+	got, err := s.GetTask(t.Context(), container.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
 	if got.State != "ready" {
-		t.Fatalf("state = %s, want ready (an epic has no commit)", got.State)
+		t.Fatalf("state = %s, want ready (a container has no commit)", got.State)
 	}
 }
 
-func TestEpicTarget(t *testing.T) {
+func TestContainerTarget(t *testing.T) {
 	cases := []struct {
 		name   string
 		states []string
@@ -593,26 +635,26 @@ func TestEpicTarget(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := epicTarget(tc.states); got != tc.want {
-				t.Fatalf("epicTarget(%v) = %q, want %q", tc.states, got, tc.want)
+			if got := containerTarget(tc.states); got != tc.want {
+				t.Fatalf("containerTarget(%v) = %q, want %q", tc.states, got, tc.want)
 			}
 		})
 	}
 }
 
-// epicWithChildren builds an epic with n ready children and returns both.
-func epicWithChildren(t *testing.T, s *Store, n int) (*Task, []*Task) {
+// parentWithChildren builds a task with n ready children and returns both.
+func parentWithChildren(t *testing.T, s *Store, n int) (*Task, []*Task) {
 	t.Helper()
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	var kids []*Task
 	for i := 0; i < n; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
-		if err := addEdge(t, s, k.ID, epic.ID, "child_of"); err != nil {
+		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
 			t.Fatalf("child %d: %v", i, err)
 		}
 		kids = append(kids, k)
 	}
-	return epic, kids
+	return container, kids
 }
 
 func stateOf(t *testing.T, s *Store, id string) string {
@@ -624,17 +666,17 @@ func stateOf(t *testing.T, s *Store, id string) string {
 	return task.State
 }
 
-// TestRollUpForward: the first child to start moves the epic off ready, and
+// TestRollUpForward: the first child to start moves the container off ready, and
 // the last child to close moves it to merged.
 func TestRollUpForward(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 2)
+	container, kids := parentWithChildren(t, s, 2)
 
 	if err := transition(t, s, taskTestNow, kids[0].ID, "ready", "in_progress"); err != nil {
 		t.Fatalf("start child 0: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "in_progress" {
-		t.Fatalf("epic = %s, want in_progress", got)
+	if got := stateOf(t, s, container.ID); got != "in_progress" {
+		t.Fatalf("container = %s, want in_progress", got)
 	}
 
 	// child 0 is already in in_progress and walkTo always restarts from ready,
@@ -645,71 +687,71 @@ func TestRollUpForward(t *testing.T) {
 	if err := transition(t, s, taskTestNow, kids[0].ID, "in_review", "merged"); err != nil {
 		t.Fatalf("merge child 0: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "in_progress" {
-		t.Fatalf("epic = %s, want in_progress with one child still open", got)
+	if got := stateOf(t, s, container.ID); got != "in_progress" {
+		t.Fatalf("container = %s, want in_progress with one child still open", got)
 	}
 	walkTo(t, s, kids[1].ID, "merged")
-	if got := stateOf(t, s, epic.ID); got != "merged" {
-		t.Fatalf("epic = %s, want merged", got)
+	if got := stateOf(t, s, container.ID); got != "merged" {
+		t.Fatalf("container = %s, want merged", got)
 	}
 }
 
-// TestRollUpZeroChildren: an epic with no children never moves. It is a
-// modelling mistake, not a completed epic.
+// TestRollUpZeroChildren: a task with no children never moves. It is an
+// ordinary task and stays where it is (004 §6.5).
 func TestRollUpZeroChildren(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "rollup", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return ResolveHierarchy(tx, taskTestNow, epic.ID, eventID)
+			return ResolveHierarchy(tx, taskTestNow, container.ID, eventID)
 		})
 	if err != nil {
 		t.Fatalf("ResolveHierarchy: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "ready" {
-		t.Fatalf("epic = %s, want ready", got)
+	if got := stateOf(t, s, container.ID); got != "ready" {
+		t.Fatalf("container = %s, want ready", got)
 	}
 }
 
 func TestRollUpAllAbandoned(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 2)
+	container, kids := parentWithChildren(t, s, 2)
 	for _, k := range kids {
 		if err := transition(t, s, taskTestNow, k.ID, "ready", "abandoned"); err != nil {
 			t.Fatalf("abandon %s: %v", k.ID, err)
 		}
 	}
-	if got := stateOf(t, s, epic.ID); got != "abandoned" {
-		t.Fatalf("epic = %s, want abandoned", got)
+	if got := stateOf(t, s, container.ID); got != "abandoned" {
+		t.Fatalf("container = %s, want abandoned", got)
 	}
 }
 
 func TestRollUpMixedAbandonedAndDelivered(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 2)
+	container, kids := parentWithChildren(t, s, 2)
 	walkTo(t, s, kids[0].ID, "merged")
 	if err := transition(t, s, taskTestNow, kids[1].ID, "ready", "abandoned"); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "merged" {
-		t.Fatalf("epic = %s, want merged (some of the epic landed)", got)
+	if got := stateOf(t, s, container.ID); got != "merged" {
+		t.Fatalf("container = %s, want merged (some of the parent's work landed)", got)
 	}
 }
 
-// TestRollUpReopen: a child returning to ready puts a closed epic back to
+// TestRollUpReopen: a child returning to ready puts a closed container back to
 // ready. Asymmetric roll-up produces boards that lie.
 func TestRollUpReopen(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 1)
+	container, kids := parentWithChildren(t, s, 1)
 	walkTo(t, s, kids[0].ID, "merged")
-	if got := stateOf(t, s, epic.ID); got != "merged" {
-		t.Fatalf("epic = %s, want merged", got)
+	if got := stateOf(t, s, container.ID); got != "merged" {
+		t.Fatalf("container = %s, want merged", got)
 	}
 	if err := transition(t, s, taskTestNow, kids[0].ID, "merged", "ready"); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "ready" {
-		t.Fatalf("epic = %s, want ready", got)
+	if got := stateOf(t, s, container.ID); got != "ready" {
+		t.Fatalf("container = %s, want ready", got)
 	}
 }
 
@@ -717,7 +759,7 @@ func TestRollUpReopen(t *testing.T) {
 // id, so the timeline explains itself with no synthetic event.
 func TestRollUpAttribution(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 1)
+	container, kids := parentWithChildren(t, s, 1)
 
 	var eventID int64
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.transition", nil,
@@ -732,23 +774,23 @@ func TestRollUpAttribution(t *testing.T) {
 	var got int64
 	if err := s.DBForTests().QueryRow(
 		`SELECT event_id FROM state_log WHERE entity_id = $1 ORDER BY id DESC LIMIT 1`,
-		epic.ID).Scan(&got); err != nil {
-		t.Fatalf("read epic state_log: %v", err)
+		container.ID).Scan(&got); err != nil {
+		t.Fatalf("read container state_log: %v", err)
 	}
 	if got != eventID {
-		t.Fatalf("epic state_log event_id = %d, want the child's %d", got, eventID)
+		t.Fatalf("container state_log event_id = %d, want the child's %d", got, eventID)
 	}
 }
 
 // TestRollUpDepth2Recursion: a subtask closing resolves its task, which
-// resolves the epic, in one transaction.
+// resolves the container, in one transaction.
 func TestRollUpDepth2Recursion(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	mid := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
+	mid := createTask(t, s, taskTestNow, containerInput())
 	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
-		t.Fatalf("mid under epic: %v", err)
+	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("mid under container: %v", err)
 	}
 	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
 		t.Fatalf("leaf under mid: %v", err)
@@ -758,28 +800,28 @@ func TestRollUpDepth2Recursion(t *testing.T) {
 	if got := stateOf(t, s, mid.ID); got != "merged" {
 		t.Fatalf("mid = %s, want merged", got)
 	}
-	if got := stateOf(t, s, epic.ID); got != "merged" {
-		t.Fatalf("epic = %s, want merged", got)
+	if got := stateOf(t, s, container.ID); got != "merged" {
+		t.Fatalf("container = %s, want merged", got)
 	}
 }
 
 // TestRollUpReopenRoutesThroughReady: merged -> in_progress is not a legal
-// edge, so a merged epic whose child reopens while another stays closed
+// edge, so a merged container whose child reopens while another stays closed
 // routes through ready, the only edge out of a closed state.
 func TestRollUpReopenRoutesThroughReady(t *testing.T) {
 	s := openTaskStore(t)
-	epic, kids := epicWithChildren(t, s, 2)
+	container, kids := parentWithChildren(t, s, 2)
 	walkTo(t, s, kids[0].ID, "merged")
 	walkTo(t, s, kids[1].ID, "abandoned")
-	if got := stateOf(t, s, epic.ID); got != "merged" {
-		t.Fatalf("epic = %s, want merged", got)
+	if got := stateOf(t, s, container.ID); got != "merged" {
+		t.Fatalf("container = %s, want merged", got)
 	}
 
 	if err := transition(t, s, taskTestNow, kids[0].ID, "merged", "ready"); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if got := stateOf(t, s, epic.ID); got != "in_progress" {
-		t.Fatalf("epic = %s, want in_progress (one child reopened, one still closed)", got)
+	if got := stateOf(t, s, container.ID); got != "in_progress" {
+		t.Fatalf("container = %s, want in_progress (one child reopened, one still closed)", got)
 	}
 }
 
@@ -813,8 +855,8 @@ func TestDecompose(t *testing.T) {
 	}
 
 	// A blocks edge into the parent is a reference that must survive the
-	// conversion: the task on the other end of it must still resolve to the
-	// same id, in place, once it becomes an epic.
+	// split: the task on the other end of it must still resolve to the same
+	// id, in place, once the parent takes children.
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := addEdge(t, s, blocker.ID, parent.ID, "blocks"); err != nil {
 		t.Fatalf("blocks edge into parent: %v", err)
@@ -838,7 +880,7 @@ func TestDecompose(t *testing.T) {
 			t.Fatalf("child %s did not inherit project/priority/concern: %+v", k.ID, k)
 		}
 		if k.Kind != "bug" {
-			t.Fatalf("child %s kind = %s, want the parent's pre-conversion bug", k.ID, k.Kind)
+			t.Fatalf("child %s kind = %s, want the parent's bug", k.ID, k.Kind)
 		}
 	}
 
@@ -846,18 +888,31 @@ func TestDecompose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.Kind != "epic" {
-		t.Fatalf("parent kind = %s, want epic", got.Kind)
+	// 029 §2 / 004 §6.10: decompose does not touch the parent's kind — the
+	// child_of edges are what make it a container.
+	if got.Kind != "bug" {
+		t.Fatalf("parent kind = %s, want it untouched at bug", got.Kind)
 	}
 	if got.NeedsDecomposition {
 		t.Fatal("parent still flagged needs_decomposition")
+	}
+	// The flag was set, so clearing it is a real change and is logged.
+	var n int
+	if err := s.DBForTests().QueryRow(
+		`SELECT COUNT(*) FROM state_log
+		  WHERE entity_id = $1 AND change->>'field' = 'needs_decomposition'`,
+		parent.ID).Scan(&n); err != nil {
+		t.Fatalf("count state_log: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("needs_decomposition change rows = %d, want 1", n)
 	}
 	if got.ID != parent.ID {
 		t.Fatalf("parent id changed to %s, want %s", got.ID, parent.ID)
 	}
 
 	// The reference-survival check: the pre-existing blocks edge into the
-	// parent must still resolve to the same task, now converted in place.
+	// parent must still resolve to the same task, split in place.
 	_, inEdges, err := s.ListEdges(t.Context(), parent.ID)
 	if err != nil {
 		t.Fatalf("ListEdges: %v", err)
@@ -873,6 +928,29 @@ func TestDecompose(t *testing.T) {
 	}
 	if len(children) != 2 {
 		t.Fatalf("wired children = %d, want 2", len(children))
+	}
+}
+
+// TestDecomposeLogsTheFlagOnlyWhenSet pins the provenance row: decompose is
+// legal on a task that was never flagged needs_decomposition, and a change
+// row claiming true -> false there would be a lie. The child_of edges are the
+// record that the split happened.
+func TestDecomposeLogsTheFlagOnlyWhenSet(t *testing.T) {
+	s := openTaskStore(t)
+	parent := createTask(t, s, taskTestNow, defaultTaskInput())
+	if _, err := decompose(t, s, parent.ID, []string{"A"}); err != nil {
+		t.Fatalf("Decompose: %v", err)
+	}
+
+	var n int
+	if err := s.DBForTests().QueryRow(
+		`SELECT COUNT(*) FROM state_log
+		  WHERE entity_id = $1 AND change->>'field' = 'needs_decomposition'`,
+		parent.ID).Scan(&n); err != nil {
+		t.Fatalf("count state_log: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("needs_decomposition change rows = %d, want 0 (the flag was never set)", n)
 	}
 }
 
@@ -906,10 +984,10 @@ func TestDecomposeRejectsEmptyAndBlankTitles(t *testing.T) {
 // checkHierarchy, which would produce a different ErrInvalidInput message.
 func TestDecomposeRespectsDepthCap(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
+	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, defaultTaskInput())
-	if err := addEdge(t, s, mid.ID, epic.ID, "child_of"); err != nil {
-		t.Fatalf("mid under epic: %v", err)
+	if err := addEdge(t, s, mid.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("mid under container: %v", err)
 	}
 	if _, err := decompose(t, s, mid.ID, []string{"A"}); err != nil {
 		t.Fatalf("decompose at depth 1 should be allowed: %v", err)
@@ -925,20 +1003,20 @@ func TestDecomposeRespectsDepthCap(t *testing.T) {
 	}
 }
 
-// TestDecomposeRejectsEpic: decompose is for splitting an oversized task, not
-// for re-splitting a container. An already-epic parent must be rejected
-// rather than guessing a child kind for it.
-func TestDecomposeRejectsEpic(t *testing.T) {
+// TestDecomposeRejectsTaskWithChildren: decompose is for splitting an
+// oversized task, not for re-splitting a container. A parent that already has
+// children must be rejected — add more with AddEdge instead.
+func TestDecomposeRejectsTaskWithChildren(t *testing.T) {
 	s := openTaskStore(t)
-	epic := createTask(t, s, taskTestNow, epicInput())
-	_, err := decompose(t, s, epic.ID, []string{"A"})
+	parent, _ := parentWithChildren(t, s, 1)
+	_, err := decompose(t, s, parent.ID, []string{"A"})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v, want ErrInvalidInput", err)
 	}
 }
 
 // TestDecomposeRejectsDeliveredTask pins the doc comment's claim that
-// Decompose rejects from the delivery states an epic can never occupy.
+// Decompose rejects from the delivery states a container can never occupy.
 func TestDecomposeRejectsDeliveredTask(t *testing.T) {
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -961,7 +1039,7 @@ func TestDecomposeRollsMergedParentToReady(t *testing.T) {
 		t.Fatalf("Decompose: %v", err)
 	}
 	if got := stateOf(t, s, parent.ID); got != "ready" {
-		t.Fatalf("epic = %s, want ready (fresh draft children roll a merged parent back)", got)
+		t.Fatalf("parent = %s, want ready (fresh draft children roll a merged parent back)", got)
 	}
 }
 

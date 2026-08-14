@@ -1,4 +1,4 @@
-// Hierarchy resolver: the single place the spec-004 §6.5 epic roll-up table lives.
+// Hierarchy resolver: the single place the spec-004 §6.5 roll-up table lives.
 // Progress (closed/total) is derived on read in hierarchy.go; closure is
 // stored as real transitions, attributed to the triggering event, by
 // ResolveHierarchy. Transition itself calls the resolver, so every state
@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// epicTarget returns the state the spec-004 §6.5 roll-up table implies for an epic
-// whose direct children are in the given states, or "" when no roll-up
-// applies. An epic with no children never moves: that is a modelling mistake,
-// not a completed epic. All-abandoned rolls up to abandoned rather than
+// containerTarget returns the state the spec-004 §6.5 roll-up table implies
+// for a task whose direct children are in the given states, or "" when no
+// roll-up applies. A task with no children never moves: it is an ordinary
+// task and stays where it is. All-abandoned rolls up to abandoned rather than
 // merged — treating abandonment as delivery would report cancelled work as
 // shipped.
-func epicTarget(states []string) string {
+func containerTarget(states []string) string {
 	if len(states) == 0 {
 		return ""
 	}
@@ -49,23 +49,26 @@ func epicTarget(states []string) string {
 }
 
 // ResolveHierarchy moves parentID to the state its children imply, per the
-// spec-004 §6.5 roll-up table, inside the given transaction. Non-epics and draft
-// epics are left alone: draft -> ready is a manual publish, not a roll-up.
+// spec-004 §6.5 roll-up table, inside the given transaction. A draft parent is
+// left alone: draft -> ready is a manual publish, not a roll-up. A task with
+// no children is left alone by containerTarget, which is what keeps this a
+// no-op for an ordinary task now that container-ness is inferred (029 §2)
+// rather than declared.
 //
-// A closed epic whose children reopened routes through ready, the only edge
+// A closed parent whose children reopened routes through ready, the only edge
 // out of a closed state, so the reopen shows in the timeline as a reopen.
 // Both transitions carry the triggering child's eventID, which is the correct
 // attribution for a derived move.
 func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64) error {
-	var state, kind string
-	err := tx.QueryRow(`SELECT state, kind FROM tasks WHERE id = $1`, parentID).Scan(&state, &kind)
+	var state string
+	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, parentID).Scan(&state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", parentID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("get parent %s: %w", parentID, err)
 	}
-	if kind != kindEpic || state == "draft" {
+	if state == "draft" {
 		return nil
 	}
 
@@ -73,13 +76,13 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 	if err != nil {
 		return err
 	}
-	target := epicTarget(states)
+	target := containerTarget(states)
 	if target == "" || target == state {
 		return nil
 	}
 
-	// No legal path to target: leave the epic where it is rather than fail the
-	// child's transition that triggered this.
+	// No legal path to target: leave the parent where it is rather than fail
+	// the child's transition that triggered this.
 	if !legalTransitions[[2]string{state, target}] {
 		if !legalTransitions[[2]string{state, "ready"}] {
 			return nil
@@ -88,7 +91,7 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 			return err
 		}
 		state = "ready"
-		// Unreachable today (ready reaches every target epicTarget produces);
+		// Unreachable today (ready reaches every target containerTarget produces);
 		// kept so a new target state fails closed rather than driving an
 		// illegal transition.
 		if !legalTransitions[[2]string{state, target}] {
@@ -99,7 +102,7 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 }
 
 // childStates returns the states of parentID's direct child_of children, in
-// no particular order — epicTarget only counts them.
+// no particular order — containerTarget only counts them.
 func childStates(tx *sql.Tx, parentID string) ([]string, error) {
 	rows, err := tx.Query(
 		`SELECT t.state FROM task_edges e JOIN tasks t ON t.id = e.from_task
@@ -126,8 +129,8 @@ func childStates(tx *sql.Tx, parentID string) ([]string, error) {
 // children imply. Transition calls this rather than its call sites doing so:
 // hooking each caller would leave the invariant one forgotten call site away
 // from breaking. Recursion terminates because checkHierarchy caps a child_of
-// chain at maxHierarchyDepth edges — a subtask resolves its task, the task
-// resolves the epic, the epic has no parent.
+// chain at maxHierarchyDepth edges — a subtask resolves its task, and that
+// task has no parent.
 func resolveParent(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
 	parent, ok, err := parentOf(tx, taskID)
 	if err != nil || !ok {

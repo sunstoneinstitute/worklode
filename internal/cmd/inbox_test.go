@@ -20,19 +20,19 @@ func TestInboxPromoteResolvesBareParentNumber(t *testing.T) {
 	mapProjectRepo(t, c, "proj", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1)
 
-	epic, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
-		Project: "proj", Title: "Container", Priority: "high", Kind: "epic",
+	container, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+		Project: "proj", Title: "Container", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
-		t.Fatalf("create epic: %v", err)
+		t.Fatalf("create container: %v", err)
 	}
 	setupRepoConfig(t, "proj")
 
-	epicNumber := epic.ID[strings.LastIndex(epic.ID, "-")+1:]
+	parentNumber := container.ID[strings.LastIndex(container.ID, "-")+1:]
 	out, err := runLode(t, "inbox", "promote", "acme/widgets", "1", "--json",
-		"--priority", "low", "--parent", epicNumber)
+		"--priority", "low", "--parent", parentNumber)
 	if err != nil {
-		t.Fatalf("inbox promote --parent %s: %v\noutput: %s", epicNumber, err, out)
+		t.Fatalf("inbox promote --parent %s: %v\noutput: %s", parentNumber, err, out)
 	}
 	var task cli.Task
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
@@ -43,7 +43,7 @@ func TestInboxPromoteResolvesBareParentNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parent of %s: %v", task.ID, err)
 	}
-	if parent == nil || parent.ID != epic.ID {
-		t.Fatalf("parent = %v, want %s", parent, epic.ID)
+	if parent == nil || parent.ID != container.ID {
+		t.Fatalf("parent = %v, want %s", parent, container.ID)
 	}
 }

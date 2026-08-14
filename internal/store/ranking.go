@@ -55,16 +55,18 @@ func prefixedTaskColumns(alias string) string {
 	return strings.Join(cols, ", ")
 }
 
-// readyCandidates returns every task eligible for pickup: state ready, not an
-// epic, not needs_decomposition, unleased, and not blocked by an open 'blocks'
-// edge from a task that is not in a closed state. An empty projectID matches
-// every project. Epics are excluded because the worktree is the unit of
-// Worklode work and a container has nothing to check out (spec 004).
+// readyCandidates returns every task eligible for pickup: state ready, no
+// child_of children, not needs_decomposition, unleased, and not blocked by an
+// open 'blocks' edge from a task that is not in a closed state. An empty
+// projectID matches every project. A task with children is excluded because
+// the worktree is the unit of Worklode work and a container has nothing to
+// check out (spec 004 §6.3).
 func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+prefixedTaskColumns("t")+` FROM tasks t
 		WHERE t.state = 'ready'
-		  AND t.kind <> 'epic'
+		  AND NOT EXISTS (SELECT 1 FROM task_edges c
+		                  WHERE c.to_task = t.id AND c.type = 'child_of')
 		  AND NOT t.needs_decomposition
 		  AND ($1 = '' OR t.project_id = $1)
 		  AND NOT EXISTS (SELECT 1 FROM leases l

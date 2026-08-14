@@ -177,10 +177,11 @@ wl:TaskShape a sh:NodeShape ;
         sh:message "A Task mirrors exactly one backbone state literal from the tasks.state CHECK set." ;
     ] ;
     sh:property [
-        sh:path wl:inWorkstream ;
-        sh:class wl:Workstream ;
+        sh:path wl:inProject ;
+        sh:class wl:Project ;
         sh:minCount 1 ;
-        sh:message "A Task belongs to at least one Workstream — its quads live in each Workstream's named graph (006 §7)." ;
+        sh:maxCount 1 ;
+        sh:message "A Task belongs to exactly one Project — its quads live in that Project's named graph (006 §7, 025 §13)." ;
     ] ;
     # wl:mirrors is symmetric, so OWL can only give it a Task-or-Issue union for
     # both domain and range (see its rdfs:comment). The intended pairing is

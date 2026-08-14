@@ -120,11 +120,11 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read the task body from a file (\"-\" for stdin)")
 	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
-	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, review, spike, epic")
+	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, review, spike")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
-	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this epic")
+	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -162,7 +162,7 @@ func newTaskListCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
-	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this epic")
+	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
@@ -981,7 +981,7 @@ func newTaskParentCmd() *cobra.Command {
 	var under string
 	cmd := &cobra.Command{
 		Use:   "parent <id>",
-		Short: "File a task under an epic",
+		Short: "File a task under a parent task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -1008,7 +1008,7 @@ func newTaskParentCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&under, "under", "", "id of the epic to file it under (required)")
+	cmd.Flags().StringVar(&under, "under", "", "id of the parent to file it under (required)")
 	cmd.MarkFlagRequired("under")
 	return cmd
 }
@@ -1016,7 +1016,7 @@ func newTaskParentCmd() *cobra.Command {
 func newTaskUnparentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unparent <id>",
-		Short: "Detach a task from its epic",
+		Short: "Detach a task from its parent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -1036,8 +1036,8 @@ func newTaskUnparentCmd() *cobra.Command {
 			if t.Hierarchy.Parent == nil {
 				return fmt.Errorf("%s has no parent", id)
 			}
-			epic := t.Hierarchy.Parent.ID
-			raw, err := c.Unparent(cmd.Context(), id, epic)
+			parent := t.Hierarchy.Parent.ID
+			raw, err := c.Unparent(cmd.Context(), id, parent)
 			if err != nil {
 				return err
 			}
@@ -1045,7 +1045,7 @@ func newTaskUnparentCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a child of %s\n", id, epic)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a child of %s\n", id, parent)
 			return nil
 		},
 	}
@@ -1056,7 +1056,7 @@ func newTaskTreeCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "tree [id]",
-		Short: "Show epics and their children, with per-epic progress",
+		Short: "Show tasks with children, and their children, with per-parent progress",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -1069,12 +1069,12 @@ func newTaskTreeCmd() *cobra.Command {
 				return err
 			}
 
-			// Each epic and its progress, before its children are fetched.
-			type epicNode struct {
+			// Each parent and its progress, before its children are fetched.
+			type parentNode struct {
 				task     cli.Task
 				progress cli.TaskProgress
 			}
-			var epics []epicNode
+			var parents []parentNode
 			if len(args) == 1 {
 				id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
 				if err != nil {
@@ -1084,33 +1084,39 @@ func newTaskTreeCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				epics = []epicNode{{task: t.Task, progress: t.Hierarchy.Progress}}
+				parents = []parentNode{{task: t.Task, progress: t.Hierarchy.Progress}}
 			} else {
+				// has_children selects containers — no kind declares one. The
+				// roots are the ones with no parent of their own, so a
+				// subtask's parent is not listed a second time.
 				resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-					Project: sc.Project, Kind: "epic", States: resolveStatusFilter(nil),
+					Project: sc.Project, HasChildren: true, States: resolveStatusFilter(nil),
 				})
 				if err != nil {
 					return err
 				}
-				// One GetTask per epic, for the progress the list omits.
+				// One GetTask per parent, for the progress the list omits.
 				for _, e := range resp.Tasks {
 					detail, _, err := c.GetTask(cmd.Context(), e.ID)
 					if err != nil {
 						return err
 					}
-					epics = append(epics, epicNode{task: e, progress: detail.Hierarchy.Progress})
+					if detail.Hierarchy.Parent != nil {
+						continue
+					}
+					parents = append(parents, parentNode{task: e, progress: detail.Hierarchy.Progress})
 				}
 			}
 
-			// One more round trip per epic, for its children.
-			nodes := make([]cli.TreeNode, 0, len(epics))
-			for _, e := range epics {
+			// One more round trip per parent, for its children.
+			nodes := make([]cli.TreeNode, 0, len(parents))
+			for _, e := range parents {
 				kids, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Parent: e.task.ID})
 				if err != nil {
 					return err
 				}
 				nodes = append(nodes, cli.TreeNode{
-					Epic: e.task, Progress: e.progress, Children: kids.Tasks,
+					Parent: e.task, Progress: e.progress, Children: kids.Tasks,
 				})
 			}
 			cli.TreeRender(cmd.OutOrStdout(), nodes)
@@ -1125,7 +1131,7 @@ func newTaskDecomposeCmd() *cobra.Command {
 	var into []string
 	cmd := &cobra.Command{
 		Use:   "decompose <id>",
-		Short: "Turn an oversized task into an epic plus its children, in place",
+		Short: "Split an oversized task into children, in place",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -1144,8 +1150,8 @@ func newTaskDecomposeCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now an epic with %d children\n",
-				resp.Epic.ID, len(resp.Children))
+			fmt.Fprintf(cmd.OutOrStdout(), "%s now has %d children\n",
+				resp.Parent.ID, len(resp.Children))
 			cli.TaskTable(cmd.OutOrStdout(), resp.Children)
 			return nil
 		},
