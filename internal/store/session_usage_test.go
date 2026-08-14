@@ -26,7 +26,7 @@ var (
 func usageSession(t *testing.T, s *Store, worktree, sessionID string) *Lease {
 	t.Helper()
 	lease := leaseForTest(t, s, worktree)
-	if _, err := s.TouchAgentSession(t.Context(), lease.TaskID, "stig", "claude-code", "", sessionID); err != nil {
+	if _, err := s.TouchAgentSession(t.Context(), lease.TaskID, "stig", "claude-code", "", sessionID, nil); err != nil {
 		t.Fatalf("touch %s: %v", sessionID, err)
 	}
 	return lease
@@ -46,7 +46,7 @@ func reportUsage(t *testing.T, s *Store, lease *Lease, sessionID string, buckets
 func reopen(t *testing.T, s *Store, lease *Lease, sessionID string, now *time.Time) {
 	t.Helper()
 	*now = now.Add(time.Minute)
-	if _, err := s.TouchAgentSession(t.Context(), lease.TaskID, "stig", "claude-code", "", sessionID); err != nil {
+	if _, err := s.TouchAgentSession(t.Context(), lease.TaskID, "stig", "claude-code", "", sessionID, nil); err != nil {
 		t.Fatalf("reopen %s: %v", sessionID, err)
 	}
 }
@@ -228,6 +228,58 @@ func TestEndAgentSessionReplacesUsage(t *testing.T) {
 		Day: "2026-07-19", Currency: "USD",
 		Tokens: TokenCounts{Input: 3000, Output: 2000}, Cost: "0.026000",
 	}})
+}
+
+// TestTouchAgentSessionRecordsUsage covers the crash path: a session that
+// never ends cleanly reports its spend on the heartbeat or nowhere. The
+// heartbeat carries a running total, so a later one must replace the earlier
+// one exactly as a clean end does — and the project rollup must follow.
+func TestTouchAgentSessionRecordsUsage(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	touchUsage := func(buckets []SessionUsageBucket) *AgentSession {
+		t.Helper()
+		*now = now.Add(time.Minute)
+		sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", buckets)
+		if err != nil {
+			t.Fatalf("touch with usage: %v", err)
+		}
+		return sess
+	}
+
+	sess := touchUsage([]SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1000, Output: 1000}},
+	})
+	// 1000*2.00 + 1000*10.00 per MTok = 12,000 micro-USD.
+	if sess.CostAmount == nil || *sess.CostAmount != "0.012000" {
+		t.Fatalf("session cost after first heartbeat: got %s, want 0.012000", nullable(sess.CostAmount))
+	}
+
+	sess = touchUsage([]SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 3000, Output: 2000}},
+	})
+	// 3000*2.00 + 2000*10.00 = 26,000 micro-USD; accumulating would give 38,000.
+	if sess.CostAmount == nil || *sess.CostAmount != "0.026000" {
+		t.Fatalf("session cost after second heartbeat: got %s, want 0.026000", nullable(sess.CostAmount))
+	}
+
+	assertUsageRows(t, sessionUsageRows(t, s, lease, "sess-1"), []usageRow{{
+		Day: "2026-07-19", Model: "claude-sonnet-5", Speed: "standard",
+		Tokens: TokenCounts{Input: 3000, Output: 2000}, Cost: "0.026000", Currency: "USD",
+	}})
+	assertRollupRows(t, projectRollupRows(t, s, "horndb"), []rollupRow{{
+		Day: "2026-07-19", Currency: "USD",
+		Tokens: TokenCounts{Input: 3000, Output: 2000}, Cost: "0.026000",
+	}})
+
+	// A heartbeat that reports nothing (no transcript, or none of its turns
+	// billed here) leaves the recorded usage alone rather than clearing it.
+	sess = touchUsage(nil)
+	if sess.CostAmount == nil || *sess.CostAmount != "0.026000" {
+		t.Fatalf("session cost after a usage-less heartbeat: got %s, want 0.026000", nullable(sess.CostAmount))
+	}
 }
 
 // A caller may report the same (day, model, speed) twice. The row must be

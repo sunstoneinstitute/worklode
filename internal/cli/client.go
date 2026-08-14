@@ -841,14 +841,22 @@ type AgentSession struct {
 
 // TouchAgentSession calls POST /api/v1/tasks/{id}/agent-session: report that
 // this agent session is working id, or heartbeat an already-reported one.
-func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string) (AgentSession, []byte, error) {
+//
+// Usage is the session's spend so far; nil leaves whatever the server has
+// recorded alone. Reporting it on a heartbeat is what gets a crashed or
+// swept session's tokens onto the books at all, since only a clean end
+// reports them otherwise.
+func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string, usage []SessionUsageBucket) (AgentSession, []byte, error) {
+	body := map[string]any{
+		"agent":         agent,
+		"agent_version": agentVersion,
+		"session_id":    sessionID,
+	}
+	if usage != nil {
+		body["usage"] = usage
+	}
 	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session",
-		map[string]string{
-			"agent":         agent,
-			"agent_version": agentVersion,
-			"session_id":    sessionID,
-		})
+		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", body)
 	if err != nil {
 		return AgentSession{}, nil, err
 	}

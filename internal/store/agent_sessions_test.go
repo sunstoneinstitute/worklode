@@ -112,7 +112,7 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
 
-	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "2.0.1", "sess-1")
+	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "2.0.1", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("first touch: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 	// A second touch is a heartbeat: same row, later last_seen_at, unchanged
 	// started_at.
 	*now = now.Add(5 * time.Minute)
-	again, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "2.0.1", "sess-1")
+	again, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "2.0.1", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("second touch: %v", err)
 	}
@@ -173,17 +173,17 @@ func TestTouchAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 	if err := s.CreateActor(ctx, "mallory", "agent", "Mallory", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
-	_, err := s.TouchAgentSession(ctx, lease.TaskID, "mallory", "claude-code", "", "sess-x")
+	_, err := s.TouchAgentSession(ctx, lease.TaskID, "mallory", "claude-code", "", "sess-x", nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("non-holder: got %v, want ErrNotFound", err)
 	}
 
-	_, err = s.TouchAgentSession(ctx, lease.TaskID, "stig", "not-a-tool", "", "sess-1")
+	_, err = s.TouchAgentSession(ctx, lease.TaskID, "stig", "not-a-tool", "", "sess-1", nil)
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("bad agent: got %v, want ErrInvalidInput", err)
 	}
 
-	_, err = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "")
+	_, err = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "", nil)
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("empty session id: got %v, want ErrInvalidInput", err)
 	}
@@ -194,7 +194,7 @@ func TestTouchAgentSessionEmptyVersionIsNull(t *testing.T) {
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
 
-	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("touch: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
 
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -298,7 +298,7 @@ func TestEndAgentSessionRejectsMalformedCostAmount(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -319,7 +319,7 @@ func TestEndAgentSessionRepeatCloseWithoutReopenIsNotFound(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -337,7 +337,7 @@ func TestEndAgentSessionCurrencyOnlyLeavesCostAmountNil(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -359,7 +359,7 @@ func TestEndAgentSessionAfterReopenStoresSecondClose(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
@@ -371,7 +371,7 @@ func TestEndAgentSessionAfterReopenStoresSecondClose(t *testing.T) {
 	}
 
 	*now = now.Add(time.Hour)
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("reopen touch: %v", err)
 	}
 
@@ -413,7 +413,7 @@ func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
 
-	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("first touch: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
 	}
 
 	*now = now.Add(time.Hour)
-	reopened, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	reopened, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
 	if err != nil {
 		t.Fatalf("touch after end: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestReleaseClosesOpenAgentSessions(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	if got := openSessions(t, s, lease.ID); got != 1 {
@@ -487,7 +487,7 @@ func TestExpiryClosesOpenAgentSessions(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	if got := openSessions(t, s, lease.ID); got != 1 {
@@ -511,7 +511,7 @@ func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	if got := openSessions(t, s, lease.ID); got != 1 {
@@ -537,7 +537,7 @@ func TestLeaseCloseKeepsOriginalEndedAt(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
-	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
@@ -571,10 +571,10 @@ func TestLeaseCloseLeavesOtherLeaseSessionsOpen(t *testing.T) {
 	ctx := t.Context()
 	leaseA := leaseForTest(t, s, "host:/.worktrees/one")
 	leaseB := leaseForTest(t, s, "host:/.worktrees/two")
-	if _, err := s.TouchAgentSession(ctx, leaseA.TaskID, "stig", "claude-code", "", "sess-a"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, leaseA.TaskID, "stig", "claude-code", "", "sess-a", nil); err != nil {
 		t.Fatalf("touch A: %v", err)
 	}
-	if _, err := s.TouchAgentSession(ctx, leaseB.TaskID, "stig", "claude-code", "", "sess-b"); err != nil {
+	if _, err := s.TouchAgentSession(ctx, leaseB.TaskID, "stig", "claude-code", "", "sess-b", nil); err != nil {
 		t.Fatalf("touch B: %v", err)
 	}
 
@@ -603,7 +603,7 @@ func TestTouchAgentSessionAfterReleaseIsNotFoundAndCreatesNoRow(t *testing.T) {
 		t.Fatalf("release: %v", err)
 	}
 
-	_, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+	_, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("touch after release: got %v, want ErrNotFound", err)
 	}
@@ -635,7 +635,7 @@ func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			_, _ = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1")
+			_, _ = s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
 		}()
 		go func() {
 			defer wg.Done()

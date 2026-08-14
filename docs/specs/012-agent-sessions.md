@@ -132,7 +132,7 @@ caller to be its holder, returning `ErrNotFound` for a non-holder — the same
 probe-resistant policy as `Renew`, so the two failure cases stay
 indistinguishable.
 
-**`TouchAgentSession(ctx, taskID, actorID, agent, version, sessionID)`** —
+**`TouchAgentSession(ctx, taskID, actorID, agent, version, sessionID, usage)`** —
 start-or-heartbeat. Wrapped in `RecordEvent("cli", "agent-session-<leaseID>-<agent>-<sessionID>", "agent_session.started", …)`
 whose apply does `INSERT … ON CONFLICT DO NOTHING`. The deterministic external
 id makes first-seen idempotent through the events table's `(source,
@@ -167,6 +167,14 @@ All four paths that touch both tables — session insert, heartbeat,
 `closeLease`, `CloseActiveLease` — lock `leases` before `agent_sessions`, so
 they cannot deadlock against each other.
 
+The optional `usage` is the same breakdown `EndAgentSession` takes, written the
+same replace-not-accumulate way, and it exists because usage reported only at
+a clean end is usage lost whenever there isn't one — a crashed agent, or a
+lease the sweeper expires, closes the session with `ended_at` and no spend. It
+is written after the touch rather than inside its event apply: a heartbeat
+takes `RecordEvent`'s already-recorded path, so usage riding that apply would
+land once per session and never again.
+
 **`EndAgentSession(ctx, taskID, actorID, agent, sessionID, usage)`** — records
 an `agent_session.ended` event, sets `ended_at`, and writes any token/cost
 values supplied by the caller. Its event id is random, not derived from the
@@ -178,8 +186,8 @@ close.
 
 HTTP surface, in the existing lifecycle group:
 
-- `POST /api/v1/tasks/{id}/agent-session` — body `{agent, agent_version, session_id}`
-- `POST /api/v1/tasks/{id}/agent-session/end` — body `{agent, session_id, input_tokens?, output_tokens?, cost_amount?, cost_currency?}`
+- `POST /api/v1/tasks/{id}/agent-session` — body `{agent, agent_version, session_id, usage?}`
+- `POST /api/v1/tasks/{id}/agent-session/end` — body `{agent, session_id, input_tokens?, output_tokens?, cost_amount?, cost_currency?, usage?}`
 
 `cost_amount` crosses the wire as a decimal **string**, so `numeric(12,6)`
 round-trips exactly. It is validated in Go against the column's shape, like
@@ -198,7 +206,7 @@ a backbone call it does not make today:
 | `lode hook` event | Call | Session id from | Claude Code binding |
 |---|---|---|---|
 | `session-start` | `TouchAgentSession` after `ensureLease` | payload | `SessionStart` |
-| `heartbeat` | `TouchAgentSession` | payload | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
+| `heartbeat` | `TouchAgentSession`, reporting the transcript's usage | payload | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
 | `worktree-enter` | `TouchAgentSession` on the entered worktree's lease | payload | `PostToolUse` matcher `EnterWorktree` |
 | `worktree-exit` | `EndAgentSession` for the exited lease's row | payload | *(none — see below)* |
 | `pre-commit` | `TouchAgentSession` alongside the existing `RenewLease` | marker file | git `pre-commit` |
@@ -332,7 +340,8 @@ the 2s `backboneTimeout`, and no hook ever fails its triggering event.
   `internal/transcript`, and `lode project show`. It landed where this spec
   predicted: `session-end` and `worktree-exit` parse the `transcript_path` the
   payload already carries, and report per-model, per-day token classes that the
-  server prices. The transcript needs deduplicating on message id — one
+  server prices. `heartbeat` reports the same running total, because a session
+  that dies or is swept never reaches a clean end at all. The transcript needs deduplicating on message id — one
   assistant message is written once per content block, each line repeating the
   whole usage block — and filtering by the working directory each turn ran in,
   so a session that moves between worktrees does not bill the same tokens to

@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -214,6 +215,51 @@ func TestAgentSessionEndRejectsMalformedUsage(t *testing.T) {
 	if cost := projectCost(t, h, token, "/api/v1/projects/proj"); len(cost.Days) != 1 ||
 		cost.Days[0].CostAmount != "9.000000" {
 		t.Fatalf("cost = %+v, want only the accepted bucket", cost)
+	}
+}
+
+// TestAgentSessionTouchReportsUsage covers the crash path: usage reported on
+// a heartbeat is priced into the project's cost without the session ever
+// ending, and a bad bucket is rejected there the same way it is on end.
+func TestAgentSessionTouchReportsUsage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	id := claimedTask(t, st, h, token)
+
+	touch := func(body map[string]any) *httptest.ResponseRecorder {
+		t.Helper()
+		body["agent"], body["session_id"] = "claude-code", "sess-1"
+		return doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token, body)
+	}
+
+	rr := touch(map[string]any{"usage": []map[string]any{sonnetUsage}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("touch with usage: got %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		LeaseID    int64  `json:"lease_id"`
+		CostAmount string `json:"cost_amount"`
+		EndedAt    string `json:"ended_at"`
+	}
+	decodeInto(t, rr, &got)
+	// The response already prices it, and the session is still running: this
+	// is the whole point — the tokens are on the books before anything closes
+	// it.
+	if got.CostAmount != "9.000000" || got.EndedAt != "" {
+		t.Fatalf("touch body = %+v, want cost 9.000000 on an open session", got)
+	}
+	cost := projectCost(t, h, token, "/api/v1/projects/proj")
+	if len(cost.Days) != 1 || cost.Days[0].CostAmount != "9.000000" {
+		t.Fatalf("cost after a heartbeat = %+v, want one day at 9.000000", cost)
+	}
+
+	if code := touch(map[string]any{
+		"usage": []map[string]any{{"day": "31-07-2026", "model": "claude-sonnet-5"}},
+	}).Code; code != http.StatusBadRequest {
+		t.Fatalf("touch with a malformed day: got %d, want 400", code)
+	}
+	if again := projectCost(t, h, token, "/api/v1/projects/proj"); len(again.Days) != 1 ||
+		again.Days[0].CostAmount != "9.000000" {
+		t.Fatalf("cost after a rejected heartbeat = %+v, want unchanged", again)
 	}
 }
 
