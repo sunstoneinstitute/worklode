@@ -850,6 +850,17 @@ docs/plans/2026-08-14-artifact-correlation-hardening.md:
     task-4-resolve-a-branch-target-commitish-through-the-github-app: "## Task 4: Resolve a branch `target_commitish` through the GitHub App"
     verification: "## Verification"
     follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
+docs/plans/2026-08-14-follow-up-edges.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    concurrency-warning: "## Concurrency warning"
+    task-1-the-edge-type-exists-in-the-database-and-in-the-vocabulary: "## Task 1: The edge type exists, in the database and in the vocabulary"
+    task-2-the-api-accepts-the-type-and-creates-a-follow-up-in-one-round-trip: "## Task 2: The API accepts the type, and creates a follow-up in one round trip"
+    task-3-the-cli-files-and-unfiles-a-follow-up: "## Task 3: The CLI files and unfiles a follow-up"
+    task-4-the-task-page-shows-both-directions: "## Task 4: The task page shows both directions"
+    task-5-end-to-end-through-public-surfaces: "## Task 5: End-to-end through public surfaces"
+    verification: "## Verification"
+    follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
 docs/plans/2026-08-14-spec-corpus-consolidation-5-cutover.md:
   sections:
     the-gate-is-already-discharged: "## The gate is already discharged"
