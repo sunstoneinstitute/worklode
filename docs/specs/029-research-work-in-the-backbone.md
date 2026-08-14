@@ -259,7 +259,7 @@ invitation and participation history rather than replacing it.
 
 ### 6.2 Identity and roles {#sec-6.2}
 
-Keycloak is the human identity (001). Two additions:
+Keycloak is the human identity (001). Three additions:
 
 - The `githubUsername` user attribute is mapped into the token and stored on the
   actor, so GitHub facts (PR authors, reviewers, commits) attach to the person, not
@@ -269,6 +269,9 @@ Keycloak is the human identity (001). Two additions:
   authority, and hiring a Science Lead is a Keycloak change and nothing else.
   Stored groups go stale between logins — which is why approval is a web-session
   act (§7.3), never a CLI-token act.
+- The `email` claim is stored on the actor at login, alongside `githubUsername`.
+  Nothing reads it yet except Crew space provisioning (§8.4), which needs an
+  invitable address for every Crew member it can resolve.
 
 ## 7. Approvals {#sec-7}
 
@@ -391,8 +394,11 @@ to the created project. Killed ideas cost one closed task and keep their trace.
 ### 8.2 Events out {#sec-8.2}
 
 025's offset-tracked subscribers are implemented **before** any outbound consequence
-— no producing handler gains a hardcoded notifier. The MVP sends no scheduled email,
-Google Chat message, or off-hours notification for work Worklode orchestrates. Its
+— no producing handler gains a hardcoded notifier. Crew space provisioning (§8.4) is
+the one exception, and it proves the rule rather than breaking it: it is itself an
+offset-tracked subscriber reacting to Crew events, not a notifier wired into the Crew
+mutation handler. Beyond that, the MVP sends no scheduled email, ad-hoc Google Chat
+message, or off-hours notification for work Worklode orchestrates. Its
 first human-facing consequence is the per-user Morning Brief in the web UI, derived
 from lifecycle events when the user returns. Decisions and exceptions persist;
 routine successful activity collapses. Opening Home does not advance the per-user
@@ -407,6 +413,58 @@ registrations) follow the 004 pattern: a new `events.source` value per system
 (migration), signed or bearer-authenticated, idempotency key per fact. The CMS
 additionally records *who* approved and published — the publish fact without the
 person would rebuild the invisible-sign-off problem this spec exists to remove.
+
+### 8.4 Google Chat crew spaces {#sec-8.4}
+
+Every research-work project gets a Google Chat space, kept in sync with its Crew,
+without a human ever creating one by hand.
+
+**Trigger.** Not project creation — **Crew membership**, so it works the same
+whether a project got its Crew from `lode project add` (none yet), the intake-
+promotion transaction (§8.1, which seeds project and Crew in one step), or the
+cockpit UI: a project with no Crew has no space yet. The `gchat-crew-space`
+subscriber (025 §15's pattern: offset-tracked, one active consumer via advisory
+lock, ack only once its Chat API calls succeed) reacts to two event types:
+
+- `crew.member_added` — create the space if `projects.chat_space_name` is still
+  null, then add the member.
+- `crew.member_removed` — remove the member from the space, if one exists.
+
+Emitting these two event types is Crew's job, not this subscriber's: whatever
+lands spec 029 §6.1's participant storage must write them through the same
+`events` path as everything else in 004, from every call site that mutates Crew
+(CLI, cockpit UI, the intake-promotion transaction). The subscriber does not care
+which one fired.
+
+**Identity.** A Crew member is invited by `actors.email` (§6.2). One with no
+stored email, or an email outside the instance's configured Workspace domain
+(instance configuration, alongside `approval_flow` — §7.2), is skipped — logged
+as a `gchat.crew_space.member_skipped` system event so the gap is visible — rather
+than blocking space creation for everyone else. An invited participant with no
+Keycloak actor at all (§6.1's external expert) is skipped the same way until
+linked to one.
+
+**Naming.** Space display name is `"{project.Key} {project.Name} Crew"`, e.g.
+`"COW Coastal Offshore Wind Crew"`.
+
+**Storage.** `projects.chat_space_name` (nullable) holds the created space's
+resource name (`spaces/AAA...`). It is both the space's address for later
+membership calls and the idempotency guard `crew.member_added` checks before
+creating — at-least-once event delivery must not create a second space for the
+same project.
+
+**Auth.** A dedicated Chat App identity (a GCP service account on Workload
+Identity, following the existing `flux-notification-proxy` Chat App pattern) —
+new rather than reused, because unlike the Flux alert bot this one creates spaces
+and manages membership, not just posts messages. Those scopes
+(`chat.app.spaces.create` and the membership-management equivalent) need a
+one-time Workspace-admin approval beyond what the Flux bot's `chat.bot` role
+required. worklode's server has no GCP/Workload Identity wiring today; this is
+the first.
+
+**Out of scope for this increment**: archiving or deleting the space when a
+project closes; giving the project lead elevated (manager) status in the space;
+reflecting Crew role labels in the space description or topic.
 
 ## 9. Out of scope {#sec-9}
 

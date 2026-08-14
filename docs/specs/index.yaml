@@ -414,6 +414,7 @@ docs/specs/029-research-work-in-the-backbone.md:
     sec-8.1: "### 8.1 Intake"
     sec-8.2: "### 8.2 Events out"
     sec-8.3: "### 8.3 Events in"
+    sec-8.4: "### 8.4 Google Chat crew spaces"
     sec-9: "## 9. Out of scope"
 docs/specs/032-project-cockpit.md:
   sections:
