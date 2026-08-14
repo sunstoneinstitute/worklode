@@ -519,7 +519,11 @@ func releaseBody(tag, targetCommitish string) []byte {
 
 // TestReleaseResolvesBranchCommitish: a release cut from a release branch
 // resolves that branch to its head commit through the GitHub App, so the
-// frontier and the artifact name the branch tip rather than main's head.
+// artifact names the branch tip — a real, GitHub-verified commit — even
+// though that commit has never landed on main. The frontier stays main-based
+// (task delivery tracks through main): it falls back to main's head, the
+// same as an unresolved commitish would, since the resolved sha is not a
+// known main commit either.
 func TestReleaseResolvesBranchCommitish(t *testing.T) {
 	e := newEnvWithBranchResolver(t, func(repo, branch string) (string, error) {
 		if repo == demoRepo && branch == "release-1.2" {
@@ -538,6 +542,15 @@ func TestReleaseResolvesBranchCommitish(t *testing.T) {
 		"9999999999999999999999999999999999999999")
 	if err != nil || len(arts) != 1 {
 		t.Fatalf("artifacts = %v, err = %v, want 1", arts, err)
+	}
+
+	// The resolved branch tip never landed on main, so it cannot become the
+	// frontier: over-marking delivery from an unlanded commit would be worse
+	// than the pre-Task-4 main-head approximation this replaces.
+	got := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v1.2.4'`, demoRepo)
+	if want := e.mainCommitID(t, "3333333333333333333333333333333333333333"); got != want {
+		t.Fatalf("frontier main_id = %d, want %d (main head, not the resolved branch sha)", got, want)
 	}
 }
 

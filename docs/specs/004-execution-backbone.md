@@ -560,11 +560,16 @@ stuck at `merged`; the fix is a `flux_seen` reset in the database.
 `release.published` event records the seq the tag covers; tasks at or below it
 count as released. The frontier is the release's `target_commitish` when that
 resolves to a known main commit, so a backport tag covers only what it
-contains; `target_commitish` is often a branch name (UI-created tags); the
-handler resolves it to that branch's head commit through the GitHub App
-before opening the delivery transaction, and falls back to main's head as of
-the webhook's arrival when no App is configured or the branch cannot be
-resolved — right for release-on-merge. Forward-only per tag.
+contains; `target_commitish` is often a branch name (UI-created tags), which
+the handler resolves to that branch's head commit through the GitHub App
+before opening the delivery transaction. The frontier still falls back to
+main's head as of the webhook's arrival whenever that resolved commit is not
+itself a known main commit — no App configured, the branch could not be
+resolved, or (the common release-branch case) the branch tip has simply never
+landed on main — right for release-on-merge. The release artifact is not
+bound by that fallback: it records the App-resolved commit directly, since
+that commit is real regardless of whether it has landed on main. Forward-only
+per tag.
 
 ### 5.3 Handlers and resolver {#sec-5.3}
 
