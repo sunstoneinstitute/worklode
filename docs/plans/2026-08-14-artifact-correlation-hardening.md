@@ -1,5 +1,5 @@
 ---
-status: draft
+status: superseded
 covers:
   - docs/specs/004-execution-backbone.md#sec-5.2
   - docs/specs/004-execution-backbone.md#sec-5.3
