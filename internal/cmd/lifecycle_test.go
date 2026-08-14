@@ -196,8 +196,36 @@ func TestResolveWorktreeTaskRejectsNonWorktree(t *testing.T) {
 	// ParseDir rejection (a plain repo root is not a Worklode worktree), not
 	// the earlier worktree.Root failure a non-repo tempdir would hit instead.
 	root := initGitRepo(t)
-	if _, _, err := resolveWorktreeTask(l, root); err == nil {
+	_, _, err = resolveWorktreeTask(l, root, "lode task done <id>")
+	if err == nil {
 		t.Fatal("resolveWorktreeTask accepted a non-worktree directory")
+	}
+	// The failure is about the checkout holding no task, and its way out is
+	// naming one — not a lecture on the two resolution rules that just missed.
+	for _, want := range []string{"not bound to a Worklode task", "lode task done <id>", "lode next [id]"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// TestResolveWorktreeTaskOmitsTheByNameFormWhenAbsent covers the callers that
+// have no explicit-id sibling: they pass "", and the failure must not offer a
+// blank command line.
+func TestResolveWorktreeTaskOmitsTheByNameFormWhenAbsent(t *testing.T) {
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = resolveWorktreeTask(l, initGitRepo(t), "")
+	if err == nil {
+		t.Fatal("resolveWorktreeTask accepted a non-worktree directory")
+	}
+	if strings.Contains(err.Error(), "say which task to act on") {
+		t.Errorf("error %q offers a by-name form the caller does not have", err)
+	}
+	if !strings.Contains(err.Error(), "lode next [id]") {
+		t.Errorf("error %q drops the claim-a-task suggestion", err)
 	}
 }
 

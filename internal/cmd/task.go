@@ -623,6 +623,7 @@ func newTaskReleaseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			clearTaskBindingIfCurrent(cmd, id)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -799,6 +800,7 @@ func newTaskDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			clearTaskBindingIfCurrent(cmd, id)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
@@ -828,6 +830,7 @@ func newTaskAbandonCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			clearTaskBindingIfCurrent(cmd, id)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
 				return nil
