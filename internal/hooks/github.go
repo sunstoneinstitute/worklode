@@ -28,6 +28,14 @@ import (
 // payload limit is well under this); larger bodies get 413.
 const maxGitHubBody = 5 << 20
 
+// branchResolveTimeout bounds the GitHub App round trips (installation
+// lookup, token mint, ref lookup) resolveReleaseCommitish makes before
+// RecordEvent opens its transaction. GitHub's own webhook delivery budget is
+// about 10s; this leaves room for the rest of the handler and still turns a
+// hung upstream into an ordinary "error" outcome and fallback rather than a
+// stalled delivery.
+const branchResolveTimeout = 4 * time.Second
+
 type githubHandler struct {
 	st            *store.Store
 	secret        string
@@ -187,11 +195,14 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// A release's target_commitish is often a branch name. Resolving it needs
 	// a GitHub API call, which must not happen inside the apply callback —
 	// that runs in an open transaction. Resolve here and pass the sha in; a
-	// failure degrades to the existing main-head fallback and never fails the
-	// delivery.
+	// failure (including a timeout, bounded well under GitHub's own webhook
+	// delivery budget) degrades to the existing main-head fallback and never
+	// fails the delivery.
 	resolvedCommitish := ""
 	if event == "release" && env.Action == "published" && !ignored {
-		resolvedCommitish = h.resolveReleaseCommitish(r.Context(), env.Repository.FullName, body)
+		ctx, cancel := context.WithTimeout(r.Context(), branchResolveTimeout)
+		resolvedCommitish = h.resolveReleaseCommitish(ctx, env.Repository.FullName, body)
+		cancel()
 	}
 
 	var apply func(tx *sql.Tx, eventID int64) error
