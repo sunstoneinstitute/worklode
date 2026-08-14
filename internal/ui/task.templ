@@ -77,6 +77,22 @@ templ Task(v TaskView) {
 									<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
 								}
 							</li>
+							<li>Follow-up to:
+								if v.FollowUpTo == "" {
+									<span class="muted">none</span>
+								} else {
+									<a href={ "/tasks/" + v.FollowUpTo }>{ v.FollowUpTo }</a>
+								}
+							</li>
+							<li>Follow-ups:
+								if len(v.FollowUps) == 0 {
+									<span class="muted">none</span>
+								} else {
+									for _, id := range v.FollowUps {
+										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+									}
+								}
+							</li>
 						</ul>
 					</div>
 				</section>

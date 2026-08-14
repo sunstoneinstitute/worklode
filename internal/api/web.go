@@ -244,6 +244,8 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 			view.Blocks = append(view.Blocks, e.ToTask)
 		case "child_of":
 			view.Parent = e.ToTask
+		case "follow_up_to":
+			view.FollowUpTo = e.ToTask
 		}
 	}
 	for _, e := range in {
@@ -252,6 +254,8 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 			view.BlockedBy = append(view.BlockedBy, e.FromTask)
 		case "child_of":
 			view.Children = append(view.Children, e.FromTask)
+		case "follow_up_to":
+			view.FollowUps = append(view.FollowUps, e.FromTask)
 		}
 	}
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
