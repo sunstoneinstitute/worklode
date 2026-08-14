@@ -68,9 +68,21 @@ CSS v4 build (`internal/ui/styles/app.tailwind.css` →
 `internal/ui` owns the page components and the design-system assets
 (stylesheet, fonts, htmx) served at `/assets/` via `internal/api`'s
 `assetHandler`; the components take `internal/ui` view types that
-`internal/api`'s `render.go` maps its read-model DTOs into. `internal/ui`
-depends on nothing beyond stdlib, `internal/store` (if needed), and the templ
-runtime — `internal/api` imports `internal/ui`, never the reverse.
+`internal/api`'s `render.go` builds. `internal/ui` depends on nothing beyond
+stdlib, `internal/model`, and the templ runtime — `internal/api` imports
+`internal/ui`, never the reverse.
+
+**One model, not one per package (ADR 036).** Every shape that crosses the
+HTTP boundary — entities, response projections, request bodies — is declared
+once in `internal/model` (stdlib imports only). `internal/store` scans into
+it, `internal/api` serializes it, `internal/cli` decodes it, `internal/ui`
+embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
+kinds of type stay package-local: `internal/ui` view types (page-shell state
+and pre-formatted strings, composing model types), `internal/store` scan
+plumbing, and `internal/api` transport internals (`Subject`, sessions, route
+guards). Anything else needs an amendment to 036, not a new struct. Migration
+is staged and unfinished — the `store.Task`/`taskJSON`/`cli.Task` triplicate
+and its siblings are the work, not the pattern to copy.
 
 Every route is guarded through one table. `internal/api/router.go`'s
 `routeGuards` names the permission each route requires — or `open("why")` when
