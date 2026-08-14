@@ -177,6 +177,12 @@ wl:TaskShape a sh:NodeShape ;
         sh:message "A Task mirrors exactly one backbone state literal from the tasks.state CHECK set." ;
     ] ;
     sh:property [
+        sh:path wl:followUpTo ;
+        sh:class wl:Task ;
+        sh:maxCount 1 ;
+        sh:message "A Task is a follow-up to at most one origin Task (004 §1.3)." ;
+    ] ;
+    sh:property [
         sh:path wl:inProject ;
         sh:class wl:Project ;
         sh:minCount 1 ;
