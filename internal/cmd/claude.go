@@ -23,6 +23,18 @@ const (
 // than duplicate.
 const lodeHookPrefix = "lode hook "
 
+// lodeStatusLineCommand is what the status-line install binds, and — by the
+// same command-as-marker trick — how uninstall recognizes its own entry.
+const lodeStatusLineCommand = "lode statusline"
+
+// What an install or uninstall did to the status line. A status line is a
+// personal choice, so both directions refuse to touch one that is not ours;
+// hookActionKept is that refusal, reported rather than swallowed.
+const (
+	hookActionInstalled = "installed" // we wrote our status line
+	hookActionKept      = "kept"      // someone else's status line was left alone
+)
+
 // claudeBinding is one Claude Code hook binding. An empty Matcher means the
 // binding applies to every occurrence of the event.
 type claudeBinding struct {
@@ -161,6 +173,77 @@ func uninstallClaudeHooks(path string) (action string, err error) {
 		return "", err
 	}
 	return hookActionRemoved, nil
+}
+
+// installStatusLine points the settings file at `lode statusline`, but only
+// when no status line is configured. A status line is a personal choice and a
+// slot that holds exactly one command, so replacing one the user chose would
+// be a silent theft rather than an install; that case reports hookActionKept
+// and leaves the file untouched. A re-run over our own entry rewrites it in
+// place, so install converges.
+func installStatusLine(path string) (action string, err error) {
+	settings, err := readSettingsFile(path)
+	if err != nil {
+		return "", err
+	}
+	if existing, ok := settings["statusLine"]; ok && !isLodeStatusLine(existing) {
+		return hookActionKept, nil
+	}
+	settings["statusLine"] = map[string]any{
+		"type":    "command",
+		"command": lodeStatusLineCommand,
+	}
+	if err := writeSettingsFile(path, settings); err != nil {
+		return "", err
+	}
+	return hookActionInstalled, nil
+}
+
+// uninstallStatusLine removes our status line from the settings file at path.
+// A missing file, no status line at all, or someone else's is left exactly as
+// found — hookActionNone and hookActionKept respectively — because a no-op
+// must not reformat someone's settings JSON or bump its mtime.
+func uninstallStatusLine(path string) (action string, err error) {
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return hookActionNone, nil
+	}
+	settings, err := readSettingsFile(path)
+	if err != nil {
+		return "", err
+	}
+	existing, ok := settings["statusLine"]
+	if !ok {
+		return hookActionNone, nil
+	}
+	if !isLodeStatusLine(existing) {
+		return hookActionKept, nil
+	}
+	delete(settings, "statusLine")
+	if err := writeSettingsFile(path, settings); err != nil {
+		return "", err
+	}
+	return hookActionRemoved, nil
+}
+
+// isLodeStatusLine reports whether a statusLine setting runs `lode statusline`.
+// The command may carry flags or an absolute path to the binary, so the match
+// is on the command word rather than on equality.
+func isLodeStatusLine(v any) bool {
+	entry, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	command, ok := entry["command"].(string)
+	if !ok {
+		return false
+	}
+	fields := strings.Fields(command)
+	for i, f := range fields {
+		if filepath.Base(f) == "lode" {
+			return i+1 < len(fields) && fields[i+1] == "statusline"
+		}
+	}
+	return false
 }
 
 // settingsHooks returns the settings' "hooks" object, or an empty one when it

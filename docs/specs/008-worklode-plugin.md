@@ -558,10 +558,12 @@ degrades to the next reconciliation path rather than binding a fictional `Sessio
 | | Status line | OpenTelemetry | Session id reachable from a hook | Transcript on disk |
 |---|---|---|---|---|
 | **Claude Code** | **Yes** — `statusLine.command` gets a rich JSON payload on stdin: `session_id`, `prompt_id`, `cost.total_cost_usd`, `cost.total_lines_added/removed`, `context_window.*`, `rate_limits.five_hour/seven_day`, `model.id`, `workspace.git_worktree`, `pr.number`, `worktree.*`. `refreshInterval` and `padding` supported | **Yes** — metrics (`claude_code.session.count`, `cost.usage`, `token.usage`, `lines_of_code.count`, `commit.count`, `pull_request.count`, `active_time.total`), events (incl. **`claude_code.skill_activated`**), traces (beta). Configured entirely by env vars | Yes (`session_id` on every payload) | Yes (`transcript_path` on every payload) |
-| **Codex CLI** | *(not found)* | **Yes** — `otlp-grpc` / `otlp-http` exporters for traces and metrics, with headers and mTLS | Yes | Yes (rollout files under `$CODEX_HOME`) |
+| **Cursor CLI** | **Yes, and on Claude Code's contract** — a `statusLine` key pointing at a command, which receives the same JSON on stdin and renders its stdout in the prompt footer. Shipped April 2026; throttling during streaming fixed August 2026 | *(not found)* | Yes | *(unverified)* |
+| **Codex CLI** | **Built-in items only** — `tui.status_line` takes an ordered array of predefined ids (`model`, `context_usage`, `cwd`, …) and `/statusline` toggles them. No command slot: the request for one (openai/codex#20140) was closed as a duplicate of the still-open #17827 | **Yes** — `otlp-grpc` / `otlp-http` exporters for traces and metrics, with headers and mTLS | Yes | Yes (rollout files under `$CODEX_HOME`) |
+| **Gemini CLI** | **Built-in items only** — `/footer` (alias `/statusline`) since v0.34.0 picks from a fixed set; custom items announced as future work | *(not found)* | *(unverified)* | *(unverified)* |
 | **Copilot CLI** | *(not found)* | *(not found)* | Yes (hook payload) | *(unverified)* |
 | **pi** | **Yes** — `ctx.ui.setStatus(id, text)` / `setFooter` from an extension | *(not found)* | Yes | Yes (session tree files) |
-| **opencode** | *(unverified)* | *(not found)* | Yes | Yes |
+| **opencode** | **No** — no built-in status line and no command slot; the shell-command form is an open request (anomalyco/opencode#30295). Third-party tools run a status line as a separate pane instead | *(not found)* | Yes | Yes |
 | **Amp** | *(not found)* | *(not found)* | Yes (thread id) | Threads sync to ampcode.com |
 
 ### 16.5 What this buys Worklode {#sec-16.5}
@@ -628,7 +630,7 @@ verbatim; the file's settings-merge machinery (`stripLodeHooks`, `appendBinding`
 
 ```
 lode install   [--vcs git] [--no-vcs] [--agent <id>|auto|all]... [--no-agent]
-               [--scope local|project] [--skills] [--telemetry] [--statusline] [--json]
+               [--scope local|project] [--skills] [--telemetry] [--no-statusline] [--json]
 lode uninstall  (same flags)
 ```
 
@@ -638,9 +640,13 @@ lode uninstall  (same flags)
   provisioning where no harness is configured yet at install time.
 - An explicit `--agent <id>` naming an undetected harness still installs — asking for it *is* the
   detection signal.
-- `--skills`, `--telemetry` and `--statusline` opt into the surfaces below. They are flags rather
-  than defaults because each writes outside the hook config, and `lode install` has always been
-  conservative about files it did not create.
+- `--skills` and `--telemetry` opt into the surfaces below. They are flags rather than defaults
+  because each writes outside the hook config, and `lode install` has always been conservative
+  about files it did not create.
+- The **status line is on by default**, and `--no-statusline` skips it. It is the exception to that
+  conservatism because it is the one surface whose write is already conditional: it claims
+  `statusLine` only when the slot is empty or already Worklode's (§17.5), so the caution an opt-in
+  flag would buy is already bought inside the operation.
 
 The existing contradiction rules (`--agent` with `--no-agent`, both integrations skipped) and
 the existing report shape carry over; the report grows from one agent stanza to a list.
@@ -718,12 +724,43 @@ The event map, per harness, for the events §9 defines:
 including the ones with no session hooks at all. **A harness with no usable event mapping still
 gets the git heartbeat**, which is the coverage floor §9 already accepts.
 
-### 17.5 Status line (Claude Code first) {#sec-17.5}
+### 17.5 Status line {#sec-17.5}
 
-`lode statusline` reads Claude Code's JSON on stdin and prints one line: the current task key and
+`lode statusline` reads the status-line JSON on stdin and prints one line: the current task key and
 title, lease state, heartbeat freshness, and context/cost from the payload itself. Installed by
-`lode install --statusline`, which sets `statusLine.command` only when the key is absent —
-a status line is a personal choice and Worklode must not silently replace one.
+`lode install` along with the hooks, and skippable with `--no-statusline`.
+
+**Default-on is safe because the write is conditional, not because the slot is unimportant.**
+`statusLine` holds exactly one command, so claiming it unconditionally would silently replace a
+status line the user chose. Install therefore sets the key only when it is absent or already ours,
+and reports `kept` when it declines; uninstall removes only its own. Given that, gating the
+non-destructive act behind an opt-in flag bought nothing — a user who already has a status line is
+protected by the check, and one who does not is the case the feature exists for.
+
+**The command is un-namespaced and takes no harness argument, and that is a finding rather than a
+default.** Claude Code defined the contract — a command, the payload on stdin, one line on stdout —
+and Cursor CLI adopted it verbatim, so one binary already serves both and neither needs to be
+named. The harnesses that differ (§16.4) do not differ in *dialect*: Codex CLI and Gemini CLI
+render a fixed set of built-in items and accept no command at all, and opencode accepts none
+either. There is consequently nothing a `--harness` flag could dispatch on — the split is
+"takes a command" versus "takes nothing", not "two payload shapes" — and a `lode claude
+statusline` spelling would misname the contract the day someone points Cursor at it. If a
+genuinely incompatible payload ever appears, the escape hatch is `--format <dialect>`, which is
+honest about what actually varies. The harness is named once, at install time, where the adapter
+registry (§17.1) already knows it.
+
+The workspace's own binding takes precedence over its git state: a worktree stamped with
+`worklode.task-id` (§5.2) renders that id and the branch's slug as separate words
+(`worklode WL-7 fix-the-thing`) in place of the branch and worktree indicators. A task branch is
+rendered *from* the id and slug, so splitting the joining dash back out recovers the two facts the
+branch name packs into one token, and the worktree symbol then adds nothing an id does not already
+say. A branch that does not carry the id contributes no slug and the id stands alone, rather than
+having a guess appended to it. An unstamped workspace shows branch and worktree state as before.
+The read
+is `git config --worktree`, so it answers for the workspace the session is actually in; a repo
+without `extensions.worktreeConfig` fails it into the branch rendering rather than reporting a
+repo-wide value as though it were this workspace's, which is why `lode install`
+enables the extension alongside the binding.
 
 **The hot-path constraint is the whole design.** The status line re-runs on every assistant
 message, so it may not make a server call. `lode statusline` reads the worktree's local lease

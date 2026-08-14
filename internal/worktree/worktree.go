@@ -251,6 +251,24 @@ func UnsetTaskID(dir string) error {
 	return fmt.Errorf("git config --worktree --unset worklode.task-id: %s: %w", strings.TrimSpace(string(out)), err)
 }
 
+// StampedTaskID reads the worklode.task-id SetTaskID stamped on dir's own
+// worktree, with none of TaskID's layout guard: it answers "is this workspace
+// bound to a task", which is a different question from "is this one of our
+// worktrees" and has callers — the status line — that want the first without
+// the second.
+//
+// A repo where extensions.worktreeConfig was never enabled fails the read
+// rather than answering wrongly, which is the right degradation: the stamp
+// cannot be worktree-scoped there, so there is nothing trustworthy to report.
+func StampedTaskID(dir string) (taskID string, ok bool) {
+	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--get", "worklode.task-id").Output()
+	if err != nil {
+		return "", false
+	}
+	id := strings.TrimSpace(string(out))
+	return id, id != ""
+}
+
 // TaskID resolves the task id of a worktree root, preferring the explicit
 // worklode.task-id worktree config SetTaskID stamps over the id carried by the
 // directory name. Explicit wins, so a worktree renamed after creation — to
@@ -267,11 +285,8 @@ func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 	if !ok {
 		return "", false
 	}
-	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--get", "worklode.task-id").Output()
-	if err == nil {
-		if id := strings.TrimSpace(string(out)); id != "" {
-			return id, true
-		}
+	if id, ok := StampedTaskID(dir); ok {
+		return id, true
 	}
 	id := idRe.FindString(seg)
 	if id == "" {
