@@ -1,11 +1,11 @@
 ---
 status: draft
 covers:
-  - docs/specs/014-design-documents-as-graph-objects.md#sec-11.3
+  - docs/specs/025-documents-in-the-backbone.md#sec-14.3
   - docs/specs/026-design-doc-queries.md#sec-4.2
-  - docs/specs/010-per-project-task-keys.md#sec-2
+  - docs/specs/004-execution-backbone.md#sec-2.2
 ---
-# Spec shorthand references — `WL-SPEC-23`
+# Spec shorthand references — `WL-SPEC-1`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,9 +16,9 @@ covers:
 **Tech Stack:** Go 1.25+, Python 3 stdlib only (`secfmt.py` has no third-party imports and must keep none — it runs in a fresh checkout before anything is installed), golang-migrate, pgx.
 
 **Read first:**
-- `docs/specs/014-design-documents-as-graph-objects.md` §11.1, §11.3 — the grammar and why `<TYPE>` exists
+- `docs/specs/025-documents-in-the-backbone.md` §11.1, §11.3 — the grammar and why `<TYPE>` exists
 - `docs/specs/026-design-doc-queries.md` §4, §4.2 — resolution tiers, the degradation rule, `project_key`, kind inference
-- `docs/specs/010-per-project-task-keys.md` §2 — the key CHECK being amended
+- `docs/specs/004-execution-backbone.md` §2 — the key CHECK being amended
 - `internal/designdoc/frontmatter.go` — `Frontmatter`, `RefList`, `AnchorMap`: every field a reference can appear in
 - `scripts/secfmt.py:221-278` — `anchor_alternation`, `retarget_own_keys`, `update_refs`: how it already rewrites frontmatter textually, which is the pattern task 3 follows
 - `internal/api/admin.go:26-28` — `projectKeyRe`, the mirror of the CHECK constraint
@@ -28,7 +28,7 @@ covers:
 - `./scripts/secfmt.py -l` must stay clean; `./scripts/check-migrations.sh --no-fix` after task 5.
 - Commit after every task, imperative mood, no trailers.
 
-**Non-goals:** `lode doc` commands (026 §7, not yet implemented — task 2 leaves an API for them and no caller). Tier 2 backbone resolution. Full frontmatter reference-integrity checking (026 §4) — task 4 touches only shorthand-shaped values and leaves path references exactly as it finds them.
+**Non-goals:** `lode doc` commands (026 §9, not yet implemented — task 2 leaves an API for them and no caller). Tier 2 backbone resolution. Full frontmatter reference-integrity checking (026 §4) — task 4 touches only shorthand-shaped values and leaves path references exactly as it finds them.
 
 ---
 
@@ -64,15 +64,15 @@ Create `internal/designdoc/testdata/shorthand.yaml`. Each case is `input`, plus 
 
 | Input | Expectation |
 |---|---|
-| `WL-SPEC-23` | parses: key `WL`, type `SPEC`, number 23, no fragment; canonical `WL-SPEC-23` |
-| `WL-SPEC-023` | same parse; canonical `WL-SPEC-23` — padding is normalised away |
-| `WL-SPEC-14#sec-2.1` | parses with fragment `sec-2.1`; canonical round-trips the fragment |
+| `WL-SPEC-1` | parses: key `WL`, type `SPEC`, number 23, no fragment; canonical `WL-SPEC-1` |
+| `WL-SPEC-1` | same parse; canonical `WL-SPEC-1` — padding is normalised away |
+| `WL-SPEC-25#sec-9` | parses with fragment `sec-2.1`; canonical round-trips the fragment |
 | `WL-ADR-7` | parses, type `ADR` |
 | `CMS-SPEC-4` | parses — a foreign key is well-formed, resolution is a separate concern |
 | `A1B2C3D4E5-SPEC-1` | parses — 10 chars is the `^[A-Z][A-Z0-9]{1,9}$` maximum |
 | `WL-23` | error: no type token — this is a task id |
 | `wl-spec-23` | error: lowercase |
-| `WL-PLAN-3` | error: unknown type; the message must say plans have no shorthand (014 §11.3) |
+| `WL-PLAN-3` | error: unknown type; the message must say plans have no shorthand (025 §14.3) |
 | `WL-SPEC-` | error: no number |
 | `WL-SPEC-2a` | error: non-numeric |
 | `A1B2C3D4E5F-SPEC-1` | error: key exceeds 10 chars |
@@ -102,14 +102,14 @@ Add one test that is not in the fixture, because it guards a collision rather th
 
 ```go
 func TestShorthandIsNotATaskID(t *testing.T) {
-	// WL-SPEC-23 must not parse as a task id anywhere, or a document
-	// reference could be routed to the task API (014 §11.3).
+	// WL-SPEC-1 must not parse as a task id anywhere, or a document
+	// reference could be routed to the task API (025 §14.3).
 	for _, re := range []*regexp.Regexp{
 		regexp.MustCompile(`^([A-Z][A-Z0-9]*-\d+)(?:-[a-z0-9-]+)?$`), // worktree.dirRe
 		regexp.MustCompile(`^[A-Z][A-Z0-9]*-[0-9]+$`),                // task-id shape
 	} {
-		if re.MatchString("WL-SPEC-23") {
-			t.Fatalf("%v matched WL-SPEC-23", re)
+		if re.MatchString("WL-SPEC-1") {
+			t.Fatalf("%v matched WL-SPEC-1", re)
 		}
 	}
 }
@@ -122,7 +122,7 @@ Run it — it fails to compile. That is the red state.
 `shorthand.go` holds:
 
 ```go
-// Shorthand is a cross-corpus document reference, 014 §11.3:
+// Shorthand is a cross-corpus document reference, 025 §14.3:
 //
 //	<PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
 type Shorthand struct {
@@ -163,14 +163,14 @@ Build a fixture corpus under `t.TempDir()`: `docs/specs/004-execution-backbone.m
 
 | Case | Expected |
 |---|---|
-| `WL-SPEC-23`, key `WL` | resolves to `docs/specs/023-keycloak-primary-auth.md` |
-| `WL-SPEC-023`, key `WL` | resolves to the same file |
+| `WL-SPEC-1`, key `WL` | resolves to `docs/specs/001-identity-and-authentication.md` |
+| `WL-SPEC-1`, key `WL` | resolves to the same file |
 | `WL-ADR-30`, key `WL` | resolves — the target declares `kind: adr` |
-| `WL-SPEC-30`, key `WL` | defect: kind mismatch, message names both kinds |
+| `WL-SPEC-8`, key `WL` | defect: kind mismatch, message names both kinds |
 | `WL-ADR-23`, key `WL` | defect: kind mismatch |
 | `WL-SPEC-999`, key `WL` | defect: no such document |
 | `CMS-SPEC-4`, key `WL` | **unresolved**, not a defect |
-| `WL-SPEC-23`, key `""` | unresolved — no `project_key` configured, so tier 1 cannot apply |
+| `WL-SPEC-1`, key `""` | unresolved — no `project_key` configured, so tier 1 cannot apply |
 
 The distinction the test must pin down is that unresolved and defect are different return values, not two messages on one error. 026 §4.2 makes only one of them affect an exit code.
 
@@ -191,7 +191,7 @@ func ResolveShorthand(corpusRoot, projectKey string, s Shorthand) (path string, 
 ```
 
 - Lookup globs `docs/specs/` for `%03d-*.md`. Exactly one match resolves; zero is a `Defect`; more than one is a `Defect` naming the candidates, since the corpus is supposed to make that impossible.
-- **Three-digit padding is worklode's filename convention, not the grammar's** (014 §11.3). rdf-registry pads ADRs to four. Keep the `%03d` local to this lookup — it must not reach `Shorthand`, whose `Number` is an integer and whose `String()` emits no padding. Tier 2 is where a foreign corpus's layout gets handled, and it is out of scope here.
+- **Three-digit padding is worklode's filename convention, not the grammar's** (025 §14.3). rdf-registry pads ADRs to four. Keep the `%03d` local to this lookup — it must not reach `Shorthand`, whose `Number` is an integer and whose `String()` emits no padding. Tier 2 is where a foreign corpus's layout gets handled, and it is out of scope here.
 - Kind comes from `Frontmatter`. There is no `Kind` field yet — add `Kind string \`yaml:"kind,omitempty"\`` to `internal/designdoc/frontmatter.go`. Absent means `spec` for anything under `docs/specs/` (026 §4.2). Placing it in the struct means `Bytes()` round-tripping stays byte-exact, which `designdoc_test.go` already asserts across the real corpus — run that suite, not just the new test.
 - `projectKey == ""` yields `Unresolved` for every shorthand. No error: an un-migrated repo degrades.
 
@@ -309,7 +309,7 @@ Then confirm the feature works end to end on the real corpus: add `requires: WL-
 ## Done when
 
 1. `internal/designdoc/testdata/shorthand.yaml` drives both a Go and a Python test suite, and neither implementation has a case the other lacks.
-2. `WL-SPEC-23` does not match any task-id regexp in the repo.
+2. `WL-SPEC-1` does not match any task-id regexp in the repo.
 3. `secfmt.py -w` rewrites a within-project shorthand to its filename, leaves a foreign one untouched, and is idempotent.
 4. An unresolvable foreign shorthand prints to stderr and exits 0; `--strict-refs` makes it exit non-zero.
 5. `secfmt.py` still imports nothing outside the standard library.

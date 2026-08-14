@@ -19,13 +19,13 @@ import (
 type Frontmatter struct {
 	Status         string       `yaml:"status,omitempty"`         // wl:status
 	Issued         string       `yaml:"issued,omitempty"`         // dct:issued
-	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, 033 §1
-	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 033 §3
+	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, 026 §5
+	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 026 §5.1
 	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
 	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
 	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
-	Amends         AnchorMap    `yaml:"amends,omitempty"`         // 014 §11
-	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 014 §11
+	Amends         AnchorMap    `yaml:"amends,omitempty"`         // 025 §14
+	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 025 §14
 	Replaces       AnchorMap    `yaml:"replaces,omitempty"`       // dct:replaces
 	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
 	Task           string       `yaml:"task,omitempty"`           // transitional, no term
@@ -39,7 +39,7 @@ type Frontmatter struct {
 }
 
 // CoveredSections is the sections a plan undertakes to realise, reading the
-// retired `implements` spelling when `covers` is absent (033 §3). Callers use
+// retired `implements` spelling when `covers` is absent (026 §5.1). Callers use
 // this rather than either field: a document carrying both is an error
 // scripts/secmeta.py reports, so the precedence here never silently picks.
 func (f Frontmatter) CoveredSections() RefList {

@@ -1,15 +1,15 @@
 ---
 status: draft
 covers:
-  - docs/specs/033-plan-section-coverage.md#sec-0
-  - docs/specs/033-plan-section-coverage.md#sec-1
-  - docs/specs/033-plan-section-coverage.md#sec-2
-  - docs/specs/033-plan-section-coverage.md#sec-3
-  - docs/specs/033-plan-section-coverage.md#sec-4
-  - docs/specs/033-plan-section-coverage.md#sec-4.1
-  - docs/specs/033-plan-section-coverage.md#sec-4.2
-  - docs/specs/033-plan-section-coverage.md#sec-4.3
-  - docs/specs/033-plan-section-coverage.md#sec-5
+  - docs/specs/026-design-doc-queries.md#sec-0
+  - docs/specs/026-design-doc-queries.md#sec-5
+  - docs/specs/026-design-doc-queries.md#sec-2.1
+  - docs/specs/026-design-doc-queries.md#sec-5.1
+  - docs/specs/026-design-doc-queries.md#sec-6
+  - docs/specs/026-design-doc-queries.md#sec-6.1
+  - docs/specs/026-design-doc-queries.md#sec-6.2
+  - docs/specs/026-design-doc-queries.md#sec-6.3
+  - docs/specs/026-design-doc-queries.md#sec-7
 ---
 # Plan section coverage implementation plan
 
@@ -27,7 +27,7 @@ covers:
 - A bare reference is complete coverage. partial/none require object form, and fullCoverageWith is only valid with partial.
 - Completion targets must be repo-relative plan paths and must themselves cover the same spec section.
 - Preserve secmeta.py’s report-only, corpus-wide pre-commit behaviour; introduce no Python dependency.
-- Do not build lode doc coverage, rewrite existing plans, change component implementation coverage, or add graph projection work (033 §6).
+- Do not build lode doc coverage, rewrite existing plans, change component implementation coverage, or add graph projection work (026 §11).
 - Use the installed SHACL CLI for conform/nonconform behavior; introduce no new runtime dependency.
 
 ## File Structure
@@ -35,7 +35,7 @@ covers:
 - Modify: internal/designdoc/frontmatter.go — typed coverage parsing, serialization, and legacy reference projection.
 - Modify: internal/designdoc/frontmatter_test.go — red/green parse, malformed YAML, compatibility, and round-trip cases.
 - Modify: scripts/secmeta.py — qualified-entry policy and cross-plan closure checks.
-- Create: scripts/secmeta_test.py — hermetic unittest corpus tests for 033 §5 and the coverage shape.
+- Create: scripts/secmeta_test.py — hermetic unittest corpus tests for 026 §7 and the coverage shape.
 - Modify: ns/shapes.ttl — wl:CoverageShape cardinality and consistency constraints.
 
 ## Tasks
@@ -57,7 +57,7 @@ blockedBy: [ ]
 - [ ] **Step 1: Write failing coverage tests.** Add table-driven tests for a scalar covers value, mixed scalar/object list, retired implements object list, and both keys. Assert a scalar becomes Coverage{Spec: ref, Coverage: "full"} and an object preserves completion plans. Add malformed yaml.v3-supported inputs (spec: [], coverage: {bad: value}, and fullCoverageWith: {plan: x}) expecting decode errors, then mutate parsed coverage and reparse doc.Source() to prove the mapping round-trips.
 
 ~~~go
-want := CoverageList{{Spec: "docs/specs/033-plan-section-coverage.md#sec-3", Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}}}
+want := CoverageList{{Spec: "docs/specs/026-design-doc-queries.md#sec-5.1", Coverage: "partial", FullCoverageWith: RefList{"docs/plans/sibling.md"}}}
 if got := doc.Frontmatter.CoverageEntries(); !reflect.DeepEqual(got, want) {
     t.Fatalf("CoverageEntries() = %#v, want %#v", got, want)
 }
@@ -97,7 +97,7 @@ blockedBy: [1]
 
 **Files:** Modify scripts/secmeta.py; create scripts/secmeta_test.py.
 
-**Interfaces:** Consume spec, coverage, and optional fullCoverageWith mappings. Produce diagnostics for every 033 §5 rule without changing secmeta.py’s exit semantics. The test helper creates a temporary repository, copies secmeta.py and secfmt.py, writes anchored specs/plans, and runs sys.executable scripts/secmeta.py docs/specs docs/plans with captured output.
+**Interfaces:** Consume spec, coverage, and optional fullCoverageWith mappings. Produce diagnostics for every 026 §7 rule without changing secmeta.py’s exit semantics. The test helper creates a temporary repository, copies secmeta.py and secfmt.py, writes anchored specs/plans, and runs sys.executable scripts/secmeta.py docs/specs docs/plans with captured output.
 
 - [ ] **Step 1: Write every §5 test before code changes.** Add unittest methods covering missing spec, missing coverage, unknown entry keys, invalid level, fullCoverageWith beside full and none, absent #sec-N, nonexistent completion, retired implements, and both keys. Add multi-document cases proving bare form is rejected only when another accepted plan covers the same section (not a draft sibling); completion references must be docs/plans/... repo-relative paths; and an existing target that covers a different section reports failed closure.
 
@@ -192,7 +192,7 @@ python3 -m unittest scripts/secmeta_test.py -v
 riot --validate ns/*.ttl
 ~~~
 
-Expected: every command exits 0. Repair only the responsible implementation or generated index; do not expand into 033 §6.
+Expected: every command exits 0. Repair only the responsible implementation or generated index; do not expand into 026 §11.
 
 - [ ] **Step 3: Self-review exact coverage and consistency.** Confirm §§1–3 map to the typed compatibility API, §4’s unfinished SHACL rules are all in CoverageShape, §5 has one hermetic assertion per bullet, and §6 has no execution work. Scan this plan and changed code for unfinished-marker language; remove any result. Verify all task interfaces name the same Go/Python/Turtle symbols.
 

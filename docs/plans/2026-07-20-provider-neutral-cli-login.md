@@ -1,8 +1,8 @@
 ---
 status: superseded
 covers:
-  - docs/specs/001-keycloak-sso.md
-  - docs/specs/002-github-app-auth.md
+  - docs/specs/001-identity-and-authentication.md
+  - docs/specs/001-identity-and-authentication.md
 ---
 # Provider-Neutral `wl login` Implementation Plan
 
@@ -14,7 +14,7 @@ covers:
 
 **Tech Stack:** Go 1.25 stdlib (`net/http`, `net`, `crypto/*`), `github.com/spf13/cobra`, `github.com/zalando/go-keyring` (new), existing `internal/store`, `internal/oidc`, `internal/api` cookie/HMAC helpers.
 
-**Design doc:** `docs/specs/031-provider-neutral-cli-login.md`
+**Design doc:** `docs/specs/001-identity-and-authentication.md`
 
 ---
 
@@ -116,7 +116,7 @@ Create `internal/api/cliauth.go`:
 // a signed cookie, and a token endpoint that redeems a one-time code for a wl_
 // token. The one-time code is minted in finishLogin (shared by both web
 // callbacks) once the actor is provisioned. See
-// docs/specs/031-provider-neutral-cli-login.md.
+// docs/specs/001-identity-and-authentication.md.
 package api
 
 import (

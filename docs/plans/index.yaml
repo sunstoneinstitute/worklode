@@ -573,7 +573,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md:
     task-5-swap-the-task-kinds-in-one-commit: "### Task 5 — Swap the task kinds in one commit"
     task-6-apply-the-ontology-edits-project-workstream-plan-proposed: "### Task 6 — Apply the ontology edits: Project, Workstream, Plan, `proposed`"
     task-7-rework-the-e2e-hierarchy-loop-without-epics: "### Task 7 — Rework the e2e hierarchy loop without epics"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-2-document-store.md:
   sections:
     decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
@@ -585,7 +585,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-2-document-store.md:
     task-4-implement-the-editorial-lifecycle-accept-revise-supersede: "### Task 4 — Implement the editorial lifecycle: accept, revise, supersede"
     task-5-serve-the-api-and-web-read-surface: "### Task 5 — Serve the API and web read surface"
     task-6-prove-the-spec-lifecycle-end-to-end: "### Task 6 — Prove the spec lifecycle end to end"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
   sections:
     decisions-the-spec-leaves-open-taken-here: "## Decisions the spec leaves open, taken here"
@@ -598,7 +598,7 @@ docs/plans/2026-08-03-documents-in-the-backbone-3-plan-acceptance.md:
     task-5-ship-the-lode-doc-verbs: "### Task 5 — Ship the `lode doc` verbs"
     task-6-prove-plan-acceptance-end-to-end: "### Task 6 — Prove plan acceptance end to end"
     task-7-resolve-qualified-skill-pins-with-the-after-colon-fallback: "### Task 7 — Resolve qualified skill pins with the after-colon fallback"
-    done-when-maps-to-025-13: "## Done when (maps to 025 §13)"
+    done-when-maps-to-025-13: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-documents-in-the-backbone-4-corpus-cutover.md:
   sections:
     tasks: "## Tasks"
@@ -620,7 +620,7 @@ docs/plans/2026-08-03-event-watchers-1-ordered-log.md:
     task-7-read-surfaces-store-queries-api-cli: "### Task 7 — Read surfaces: store queries, API, CLI"
     task-8-e2e-the-log-is-readable-through-public-surfaces: "### Task 8 — e2e: the log is readable through public surfaces"
     task-9-docs-amend-004-fix-027s-citation-claudemd: "### Task 9 — Docs: amend 004, fix 027's citation, CLAUDE.md"
-    done-when-maps-to-027-13: "## Done when (maps to 027 §13)"
+    done-when-maps-to-027-13: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
   sections:
     file-structure: "## File structure"
@@ -633,7 +633,7 @@ docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
     task-6-e2e-the-lifecycle-through-public-surfaces-only: "### Task 6 — e2e: the lifecycle through public surfaces only"
     task-7-7-the-planning-skill-claims-its-task-claude-plugins-repo: "### Task 7 — §7: the planning skill claims its task (claude-plugins repo)"
     task-8-docs-claudemd-and-the-indexes: "### Task 8 — Docs: CLAUDE.md and the indexes"
-    done-when-maps-to-027-13: "## Done when (maps to 027 §13)"
+    done-when-maps-to-027-13: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-multi-harness-1-adapter-core.md:
   sections:
     what-exists-vs-what-this-builds: "## What exists vs. what this builds"

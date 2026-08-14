@@ -1,6 +1,6 @@
 ---
 status: draft
-covers: docs/specs/034-design-doc-sync.md
+covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design-doc sync, part 1 — client foundations
 
@@ -11,8 +11,8 @@ covers: docs/specs/034-design-doc-sync.md
 
 **Goal:** The client-side groundwork for spec 034: the `spec_corpus`/`plan_corpus`
 config keys, the generalized corpus resolution in `internal/designdoc`, corpus
-loading with file-derived document identity (034 §5), `lode task add
---body-file` (034 §9), and the `wl:Plan` ontology mirror (034 §8).
+loading with file-derived document identity (025 §16.3), `lode task add
+--body-file` (025 §18), and the `wl:Plan` ontology mirror (025 §17).
 
 **Architecture:** Everything here is client/library-side Go plus the `ns/`
 Turtle files — no server, no schema, no HTTP. Part 2
@@ -30,16 +30,16 @@ Turtle/SHACL under `ns/` validated with `riot`.
 
 - Spec 034 is the source of truth; §12 is the acceptance list. This part lands
   §12 items 1, 6, 7 and the client half of 5.
-- Identity grammar (034 §5): `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>` from the
+- Identity grammar (025 §16.3): `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>` from the
   filename's leading number; `<KEY>-PLAN-<spec-ordinal>-<plan-ordinal>` where
   spec-ordinal is the implemented spec's number (`NO-SPEC` or absent
   `implements` → `0`) and plan-ordinal counts plans implementing that spec in
   ascending filename order (date prefix, then slug). The 029 cutover
   reconciliation is out of scope.
 - Within `spec_corpus`, a file is an ADR iff its frontmatter carries
-  `kind: adr`; otherwise a spec. Every file in `plan_corpus` is a plan (034 §2).
+  `kind: adr`; otherwise a spec. Every file in `plan_corpus` is a plan (025 §16.1).
 - A document whose frontmatter fails to parse is a sync error, never a
-  silently skipped row (034 §3).
+  silently skipped row (025 §16.2).
 - The config parser stays a flat `key = "value"` reader; unknown keys must
   keep erroring (034 §12.1).
 - Run `go build ./...` and the named package tests before every commit. Never
@@ -57,7 +57,7 @@ skills:
 ```
 
 Add the two repo-scoped corpus keys to the client config
-(`internal/cli/client.go`), mirroring `worktree_dir` (spec 030 §4): parsed into
+(`internal/cli/client.go`), mirroring `worktree_dir` (spec 008 §6): parsed into
 dedicated `Config` fields, zeroed on the user-level load path, excluded from
 `merge()`, and read through a new `CorporaFrom` function that only consults the
 repo-local config.
@@ -72,7 +72,7 @@ repo-local config.
 **Interfaces produced (used by tasks 2-3 and part 3):**
 
 ```go
-// Corpora is the repo-scoped corpus declaration (spec 034 §2). Zero value:
+// Corpora is the repo-scoped corpus declaration (spec 025 §16.1). Zero value:
 // nothing configured to sync.
 type Corpora struct {
 	Root    string // absolute repo root — the directory holding .worklode/
@@ -87,7 +87,7 @@ func CorporaFrom(startDir string) (Corpora, error)
   `internal/cli/client_test.go`:
 
 ```go
-// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 034 §2):
+// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 025 §16.1):
 // CorporaFrom, not LoadConfig, is the sole reader.
 
 func TestCorporaFromRepoConfig(t *testing.T) {
@@ -185,7 +185,7 @@ Add to the `Config` struct, right after `WorktreeDir`:
 ```go
 	// SpecCorpus / PlanCorpus carry the spec_corpus / plan_corpus keys when
 	// Config is produced directly by parseConfig — which is how CorporaFrom
-	// reads them. Like WorktreeDir they are repo-scoped only (spec 034 §2)
+	// reads them. Like WorktreeDir they are repo-scoped only (spec 025 §16.1)
 	// and are NOT populated by LoadConfig/loadConfigFrom; CorporaFrom is the
 	// sole reader.
 	SpecCorpus string
@@ -205,7 +205,7 @@ In `loadConfigFrom`, next to the existing `cfg.WorktreeDir = ""` line for the
 user-level file, also zero the new fields:
 
 ```go
-			// spec_corpus/plan_corpus are repo-scoped only (spec 034 §2);
+			// spec_corpus/plan_corpus are repo-scoped only (spec 025 §16.1);
 			// CorporaFrom is the sole reader.
 			cfg.SpecCorpus, cfg.PlanCorpus = "", ""
 ```
@@ -214,7 +214,7 @@ Extend `merge`'s trailing comment to name them (no code — like `worktree_dir`
 they are deliberately not merged), and add after `WorktreeDirFrom`:
 
 ```go
-// Corpora is the repo-scoped corpus declaration (spec 034 §2): which
+// Corpora is the repo-scoped corpus declaration (spec 025 §16.1): which
 // directories `lode doc sync` reads, and as which document kind. A key's
 // presence enables its corpus; the zero value means nothing is configured.
 type Corpora struct {
@@ -224,9 +224,9 @@ type Corpora struct {
 }
 
 // CorporaFrom reads startDir's repo-local config for spec_corpus/plan_corpus
-// (spec 034 §2). Like WorktreeDirFrom it never consults the user-level config
+// (spec 025 §16.1). Like WorktreeDirFrom it never consults the user-level config
 // or the keychain, but unlike it a malformed repo config is an error here —
-// sync must not silently degrade to "nothing configured" (034 §3).
+// sync must not silently degrade to "nothing configured" (025 §16.2).
 func CorporaFrom(startDir string) (Corpora, error) {
 	repoPath, ok := findRepoConfig(startDir)
 	if !ok {
@@ -275,7 +275,7 @@ Expected: all PASS, including the pre-existing unknown-key test
 
 ```bash
 git add internal/cli/client.go internal/cli/client_test.go
-git commit -m "cli config: repo-scoped spec_corpus/plan_corpus keys (spec 034 §2)"
+git commit -m "cli config: repo-scoped spec_corpus/plan_corpus keys (spec 025 §16.1)"
 ```
 
 ### Task 2 — Generalize designdoc.FindCorpus and honor spec_corpus in lode show
@@ -346,7 +346,7 @@ Expected: compile error — `designdoc.FindRepoRoot` undefined.
 ```go
 // FindRepoRoot walks up from dir to the nearest directory containing a
 // ".worklode" directory — the repo root the corpus config is relative to
-// (spec 034 §2). Returns "" when no repo root is found.
+// (spec 025 §16.1). Returns "" when no repo root is found.
 func FindRepoRoot(dir string) string {
 	d, err := filepath.Abs(dir)
 	if err != nil {
@@ -365,7 +365,7 @@ func FindRepoRoot(dir string) string {
 }
 
 // FindCorpus returns the conventional spec corpus, docs/specs under the repo
-// root — the default a repo without a spec_corpus key gets (034 §2). Returns
+// root — the default a repo without a spec_corpus key gets (025 §16.1). Returns
 // "" when no repo root is found.
 func FindCorpus(dir string) string {
 	root := FindRepoRoot(dir)
@@ -415,7 +415,7 @@ skills:
 blockedBy: [2]
 ```
 
-The sync's read side (034 §2, §3, §5): load every document from the configured
+The sync's read side (025 §16.1, §3, §5): load every document from the configured
 corpora through `designdoc.Parse`, derive kind, ordinal, status, title,
 anchored sections, and frontmatter edges, and derive plan ordinals corpus-wide.
 Pure library code — no git, no HTTP.
@@ -444,11 +444,11 @@ type EdgeMeta struct {
 type CorpusDoc struct {
 	Path, Filename  string
 	Kind            string // "spec" | "adr" | "plan"
-	Ordinal         string // "14" for spec/adr; "34-1" for plan (034 §5)
+	Ordinal         string // "14" for spec/adr; "34-1" for plan (025 §16.3)
 	Status, Title   string
 	Source          []byte          // the full file, frontmatter included
 	FrontmatterJSON json.RawMessage // the YAML header re-encoded as JSON
-	Sections        []SectionMeta   // empty for plans (025 §4)
+	Sections        []SectionMeta   // empty for plans (025 §9)
 	Edges           []EdgeMeta
 }
 
@@ -463,14 +463,14 @@ Rules the implementation must enforce (each one is a test):
 - glob `*.md` per directory (matching `corpusFilenames`), so `index.yaml`
   never syncs;
 - missing frontmatter, unparseable frontmatter, or empty `status` → error
-  naming the file (034 §3: a sync error, not a skipped row);
+  naming the file (025 §16.2: a sync error, not a skipped row);
 - spec/adr ordinal from `leadingNumber(filename)` (resolve.go:233); a
   spec-corpus file without a leading number → error;
 - title = the first `# ` heading line of the preamble, hash and whitespace
   stripped; no H1 → error naming the file;
 - sections: only `Section.Anchor != ""` entries, as `SectionMeta`; a
   duplicate anchor within one document → error;
-- edges from frontmatter, exactly spec 034 §4's relation list: plans'
+- edges from frontmatter, exactly spec 025 §5.1's relation list: plans'
   `implements` (one edge per ref, document-level), and both kinds'
   `amends`/`amendedBy`/`replaces`/`isReplacedBy` AnchorMaps (map key `"."` →
   `SrcAnchor: ""`, `"#sec-3"` → `"sec-3"`); `requires`/`isRequiredBy`/`task`
@@ -542,9 +542,9 @@ func specPlanDirs(t *testing.T) (string, string) {
 	writeDoc(t, specDir, "034-design-doc-sync.md", specSrc)
 	writeDoc(t, specDir, "007-a-decision.md", adrSrc)
 	writeDoc(t, planDir, "2026-08-09-sync-1-foundations.md",
-		"---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n---\n# Part 1\n\nProse.\n")
+		"---\nstatus: draft\nimplements: docs/specs/025-documents-in-the-backbone.md\n---\n# Part 1\n\nProse.\n")
 	writeDoc(t, planDir, "2026-08-10-sync-2-store.md",
-		"---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n---\n# Part 2\n\nProse.\n")
+		"---\nstatus: draft\nimplements: docs/specs/025-documents-in-the-backbone.md\n---\n# Part 2\n\nProse.\n")
 	writeDoc(t, planDir, "2026-07-01-standalone.md",
 		"---\nstatus: draft\nimplements: NO-SPEC\n---\n# Standalone\n\nProse.\n")
 	return specDir, planDir
@@ -606,10 +606,10 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 
 	plan := byFile["2026-08-09-sync-1-foundations.md"]
 	if len(plan.Sections) != 0 {
-		t.Errorf("plan carries sections: %+v (025 §4: plans take none)", plan.Sections)
+		t.Errorf("plan carries sections: %+v (025 §9: plans take none)", plan.Sections)
 	}
 	if len(plan.Edges) != 1 || plan.Edges[0] != (designdoc.EdgeMeta{
-		Rel: "implements", Target: "docs/specs/034-design-doc-sync.md",
+		Rel: "implements", Target: "docs/specs/025-documents-in-the-backbone.md",
 	}) {
 		t.Errorf("plan edges = %+v", plan.Edges)
 	}
@@ -680,7 +680,7 @@ import (
 
 // (SectionMeta, EdgeMeta, CorpusDoc — exactly as in the interface block above.)
 
-// LoadSyncCorpus loads the configured corpora for `lode doc sync` (034 §2/§5).
+// LoadSyncCorpus loads the configured corpora for `lode doc sync` (025 §16.1/§5).
 func LoadSyncCorpus(specDir, planDir string) ([]CorpusDoc, error) {
 	var out []CorpusDoc
 	if specDir != "" {
@@ -708,7 +708,7 @@ func LoadSyncCorpus(specDir, planDir string) ([]CorpusDoc, error) {
 
 // loadDoc parses one file and derives the kind-independent fields: status,
 // title, FrontmatterJSON. Frontmatter absence, a parse failure, an empty
-// status, or a missing H1 are sync errors naming the file (034 §3).
+// status, or a missing H1 are sync errors naming the file (025 §16.2).
 func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	p := filepath.Join(dir, name)
 	src, err := os.ReadFile(p)
@@ -765,7 +765,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 	}
 	var plans []pending
 	for _, f := range files {
-		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (025 §4)
+		doc, cd, err := loadDoc(planDir, f) // doc.Sections deliberately unused: plans carry none (025 §9)
 		if err != nil {
 			return nil, err
 		}
@@ -782,7 +782,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 		plans = append(plans, pending{doc: cd, specOrd: specOrd})
 	}
 	// Second pass: number within each spec-ordinal group, ascending filename
-	// (files is sorted, so arrival order is corpus order — 034 §5).
+	// (files is sorted, so arrival order is corpus order — 025 §16.3).
 	counts := map[int]int{}
 	var out []CorpusDoc
 	for _, p := range plans {
@@ -794,7 +794,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 }
 
 // planSpecOrdinal derives the plan id's spec ordinal from the first
-// implements entry (034 §5): NO-SPEC or an absent key → 0.
+// implements entry (025 §16.3): NO-SPEC or an absent key → 0.
 func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	if len(fm.Implements) == 0 {
 		return 0, nil
@@ -805,7 +805,7 @@ func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	}
 	n, ok := leadingNumber(path.Base(base))
 	if !ok {
-		return 0, fmt.Errorf("%s: implements %q has no leading spec number to derive the plan id from (034 §5)", name, base)
+		return 0, fmt.Errorf("%s: implements %q has no leading spec number to derive the plan id from (025 §16.3)", name, base)
 	}
 	return n, nil
 }
@@ -857,7 +857,7 @@ human) before committing.
 
 ```bash
 git add internal/designdoc/corpus.go internal/designdoc/corpus_test.go
-git commit -m "designdoc: corpus loader with file-derived doc identity (spec 034 §5)"
+git commit -m "designdoc: corpus loader with file-derived doc identity (spec 025 §16.3)"
 ```
 
 ### Task 4 — lode task add --body-file
@@ -869,7 +869,7 @@ skills:
   - superpowers:test-driven-development
 ```
 
-Spec 034 §9: `--body-file <file>` beside `--body <string>`, matching `gh` —
+Spec 025 §18: `--body-file <file>` beside `--body <string>`, matching `gh` —
 `-` reads stdin, and the two flags are mutually exclusive.
 
 **Files:**
@@ -940,7 +940,7 @@ Expected: compile error — `resolveBody` undefined.
   the top of the file, after the imports — it already imports `io` and `os`):
 
 ```go
-// resolveBody returns the task body from --body / --body-file (spec 034 §9,
+// resolveBody returns the task body from --body / --body-file (spec 025 §18,
 // the gh convention): bodyFile wins when set, with "-" reading stdin. Flag
 // exclusivity is enforced by cobra (MarkFlagsMutuallyExclusive), not here.
 func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
@@ -991,7 +991,7 @@ Expected: all PASS.
 
 ```bash
 git add internal/cmd/task.go internal/cmd/task_test.go
-git commit -m "task add: --body-file, mutually exclusive with --body (spec 034 §9)"
+git commit -m "task add: --body-file, mutually exclusive with --body (spec 025 §18)"
 ```
 
 ### Task 5 — wl:Plan in ns/
@@ -1001,7 +1001,7 @@ kind: chore
 priority: medium
 ```
 
-Spec 034 §8: mirror 025 §4's accepted reintroduction of plans-as-documents
+Spec 025 §17: mirror 025 §9's accepted reintroduction of plans-as-documents
 into `ns/` — `wl:Plan` as a **sibling** of `wl:DesignDoc` (not a subclass),
 taking no sections or anchors, plus the shape its synced `status` needs. The
 governing spec already exists; this is the mirror catching up, so no spec edit
@@ -1021,9 +1021,9 @@ wl:Plan a owl:Class ;
     wl:layer wlc:intent ;
     rdfs:comment """An executable document: accepting it mints its tasks (025 §4-§5). A sibling of
         wl:DesignDoc, not a subclass — a plan is spent by execution rather than superseded, and
-        takes no wl:Section parts and no anchors. 014 §2 dropped the class when plan-shaped work
-        was a task subtree; 025 §4 (accepted) reintroduced plans as documents, mirrored here by
-        spec 034 §8.""" .
+        takes no wl:Section parts and no anchors. 025 §2 dropped the class when plan-shaped work
+        was a task subtree; 025 §9 (accepted) reintroduced plans as documents, mirrored here by
+        spec 025 §17.""" .
 ```
 
 - [ ] **Step 2: Extend the disjointness axiom** — in the first
@@ -1048,7 +1048,7 @@ wl:PlanShape a sh:NodeShape ;
         sh:path wl:status ;
         sh:minCount 1 ;
         sh:node [ sh:property [ sh:path skos:inScheme ; sh:hasValue wlc:DesignDocStatus ] ] ;
-        sh:message "A Plan carries exactly one wl:status, drawn from wlc:DesignDocStatus (034 §8; plans reuse the editorial lifecycle enum)." ;
+        sh:message "A Plan carries exactly one wl:status, drawn from wlc:DesignDocStatus (025 §17; plans reuse the editorial lifecycle enum)." ;
     ] .
 ```
 
@@ -1065,5 +1065,5 @@ Expected: no output, exit 0.
 
 ```bash
 git add ns/ontology.ttl ns/shapes.ttl
-git commit -m "ns: mirror 025 §4's wl:Plan — sibling of wl:DesignDoc, no sections (spec 034 §8)"
+git commit -m "ns: mirror 025 §9's wl:Plan — sibling of wl:DesignDoc, no sections (spec 025 §17)"
 ```

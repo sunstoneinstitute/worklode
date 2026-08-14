@@ -1,7 +1,7 @@
 # Authoring specs and plans
 
 Mechanics for creating and editing anything under `docs/specs/` or `docs/plans/`
-so it passes `scripts/secfmt.py`. Spec 014 §3 and §11 own the *why*; this file
+so it passes `scripts/secfmt.py`. Spec 025 §3 and §11 own the *why*; this file
 is the operational checklist. Read it before adding a spec, adding a plan, or
 amending an existing section.
 
@@ -15,7 +15,7 @@ amending an existing section.
 |---|---|---|
 | Holds | Specs and ADRs — statements that stay true after implementation | Implementation plans — spent once executed |
 | Filename | `NNN-kebab-slug.md`, next free number, flat (no subdirectories) | `YYYY-MM-DD-kebab-slug.md`; a series adds `-N-part`, e.g. `2026-07-30-task-secrets-1-server-core.md` |
-| Numbered sections + anchors | Yes | No — plans are not DesignDocs (014 §2), so their sections are not addressable |
+| Numbered sections + anchors | Yes | No — plans are not DesignDocs (025 §2), so their sections are not addressable |
 | Checked by `secfmt.py` | Yes | No (pass the path explicitly if a design record kept here needs anchors) |
 
 A plan carrying durable rationale means the spec was incomplete: promote the
@@ -28,7 +28,7 @@ A plan body carries exactly one `## Tasks` section, holding nothing but one
 task's title). `N` runs 1, 2, 3… in document order **within this file** — every
 part of a plan series restarts at 1. Each subsection is a YAML metadata block,
 then prose (what to do, which files, the test that proves it), then optional
-`- [ ]` steps. Spec 025 §4.1 owns the semantics; accepting the plan mints one
+`- [ ]` steps. Spec 025 §9.1 owns the semantics; accepting the plan mints one
 task per subsection.
 
 ````markdown
@@ -71,12 +71,12 @@ three specs.
 
 | Key | Term | Shape | On |
 |---|---|---|---|
-| `status` | `wl:status` | one of `draft`, `accepted`, `superseded` (`proposed` retired by 025 §3 — a doc under review stays `draft`) | specs, design records |
+| `status` | `wl:status` | one of `draft`, `accepted`, `superseded` (`proposed` retired by 025 §7 — a doc under review stays `draft`) | specs, design records |
 | `issued` | `dct:issued` | `YYYY-MM-DD` of first publication | specs, design records |
-| `covers` | `wl:covers` | scalar or list of spec references, or the qualified form (033 §3) | **plans** |
+| `covers` | `wl:covers` | scalar or list of spec references, or the qualified form (026 §5.1) | **plans** |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | list of references | both |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | scalar reference | specs |
-| `amends` / `amendedBy` | — (see 014 §11) | **map**, see below | both |
+| `amends` / `amendedBy` | — (see 025 §14) | **map**, see below | both |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | **map**, see below | both |
 | `task` | — | `WL-<n>` | transitional only |
 | `kind` | — | `adr` on ADRs, absent on specs (026 §4.2) | specs, ADRs |
@@ -89,7 +89,7 @@ a name and nothing else.
 
 `task` records the lode task that implements a spec while plans still live in
 git. It is not an ontology term and goes away when plan acceptance mints the
-tasks (spec 025 §5 — the binding becomes the minted tasks' doc reference).
+tasks (spec 025 §9.2 — the binding becomes the minted tasks' doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
@@ -104,7 +104,7 @@ section:
 
 ```yaml
 # in docs/plans/…  ->  crosses into docs/specs/
-covers: docs/specs/011-delivery-lifecycle.md#sec-2
+covers: docs/specs/004-execution-backbone.md#sec-5.2
 # in docs/specs/…  ->  same directory
 requires:
   - 004-execution-backbone.md
@@ -113,20 +113,20 @@ requires:
 Every reference must resolve, and every fragment must name an anchor that exists
 in the target's source. A dangling fragment is a broken reference.
 
-### The `WL-SPEC-23` shorthand
+### The `WL-SPEC-1` shorthand
 
 No path crosses a repository, so a reference into another project's corpus uses
-the shorthand spec 014 §11.3 defines:
+the shorthand spec 025 §14.3 defines:
 
 ```
 <PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
 ```
 
-`WL-SPEC-23` · `WL-SPEC-14#sec-2.1` · `WL-ADR-7` · `CMS-SPEC-4`
+`WL-SPEC-1` · `WL-SPEC-25#sec-9` · `WL-ADR-7` · `CMS-SPEC-4`
 
 `<PROJECTKEY>` is the project's key (the `WL` in `WL-42`), and `<n>` is the
 document's own number, unpadded — `023-keycloak-primary-auth.md` is
-`WL-SPEC-23`. The `SPEC`/`ADR` token is what keeps `WL-SPEC-23` from reading as
+`WL-SPEC-1`. The `SPEC`/`ADR` token is what keeps `WL-SPEC-1` from reading as
 task `WL-23`; it is checked against the document's kind, so it has to be right.
 
 **Distance decides which form is canonical.** Within one corpus, write the
@@ -136,7 +136,7 @@ rewrites each to its canonical form, so getting it wrong costs a re-stage rather
 than a review comment.
 
 Plans have no shorthand: they have no number, and no root task exists to stand
-in for one (025 §5 mints nothing above a plan's tasks). Reference a plan by
+in for one (025 §9.2 mints nothing above a plan's tasks). Reference a plan by
 path.
 
 **`NO-SPEC` is reserved for "no governing spec".** A plan that answers to no
@@ -170,7 +170,7 @@ orientation section is **`0.`**, so the body still starts at 1:
 - Top level is `N.` **with** a trailing dot; deeper levels are `N.M` **without**.
 - Every numbered heading carries `{#sec-<number>}`.
 - **Depth 3 max** (`H2`/`H3`/`H4`). Deeper headings are legal and render fine,
-  they are simply content inside their nearest anchored ancestor (014 §7), so
+  they are simply content inside their nearest anchored ancestor (025 §6), so
   they take no number and no anchor.
 - A numbered subsection under an unnumbered parent is an error — the prefix
   cannot be derived. Number the parent or unnumber the child.

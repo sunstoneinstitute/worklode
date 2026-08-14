@@ -3,7 +3,7 @@
 // a signed cookie, and a token endpoint that redeems a one-time code for a wl_
 // token. The one-time code is minted in finishLogin (shared by both web
 // callbacks) once the actor is provisioned. See
-// docs/specs/031-provider-neutral-cli-login.md.
+// docs/specs/001-identity-and-authentication.md.
 package api
 
 import (
@@ -212,7 +212,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 
 // wellKnownLogin handles GET /.well-known/lode-login: tells the CLI where to
 // start the login and which providers are available — always ["keycloak"],
-// worklode's sole interactive login provider (spec 023 §3.1). 404 when OIDC
+// worklode's sole interactive login provider (spec 001 §3). 404 when OIDC
 // is unconfigured (s.oidc == nil).
 func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
 	if s.oidc == nil {

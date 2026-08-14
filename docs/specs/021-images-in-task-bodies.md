@@ -2,9 +2,9 @@
 status: accepted
 issued: 2026-07-31
 requires:
-  - 004-execution-backbone.md
-  - 008-worklode-plugin.md
-  - 020-inbox-import.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/020-inbox-import.md
 ---
 # Spec 021 — Images and attachments on tasks
 
@@ -82,8 +82,6 @@ second source of truth that can disagree.
 Dedup is free — the same screenshot on five tasks is one object and one `blobs` row.
 `blobs` is deliberately not task-scoped, so spec 014 document sections can reference the same
 bytes through a `section_blobs` table without a migration or a copy.
-
-### 1.1 Why two booleans instead of a kind enum {#sec-1.1}
 
 `embedded` is **derived**: on every task create and update, the body is parsed, its
 `/blob/<hash>` references are extracted, and `embedded` is reconciled to match in the same
@@ -230,8 +228,6 @@ are frequently motion, and a still frame of a one-frame flash proves nothing.
 which §11 sweeps. The reverse order would leave a `blobs` row pointing at nothing, which
 renders as a permanently broken image. Both failure modes are possible; only one is recoverable
 without a human, so the design fails toward that one.
-
-### 5.1 Media types {#sec-5.1}
 
 The server sniffs with `http.DetectContentType` over the first 512 bytes and stores the result.
 A client's `Content-Type` header is advisory and never persisted — a payload labelled

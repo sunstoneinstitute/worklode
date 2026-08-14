@@ -23,7 +23,7 @@ in quality, because nothing recorded the split.
 A plan's `covers:` is a list of objects, one per spec section the plan touches.
 The key is `covers`, not `implements`: a plan writes no code, so it claims
 nothing. `wl:implements` is a component's claim that its code meets a section
-(014 §6); a plan undertakes, and its minted tasks discharge that (033 §1).
+(025 §11); a plan undertakes, and its minted tasks discharge that (026 §5).
 
 ```yaml
 ---
@@ -85,7 +85,7 @@ to accepted plans contributing `full` or `partial` to the same section.
 spelling and is reported; new output always writes `covers`.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
-014 §6's `<component> wl:implements <section>` is **implementation** coverage,
+025 §11's `<component> wl:implements <section>` is **implementation** coverage,
 observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split

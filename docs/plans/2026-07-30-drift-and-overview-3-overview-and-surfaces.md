@@ -31,9 +31,9 @@ standard-library testing, SPARQL 1.1 Protocol over `net/http`, Oxigraph
 (docker) as the test endpoint, `html/template` for the web view.
 
 **Spec:** `docs/specs/007-drift-and-overview.md`, read with its amendments:
-`docs/specs/014-design-documents-as-graph-objects.md` §5–§6, §10 and
-`docs/specs/015-runtime-layer.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
-the spec read as `wl:`/`wlc:`/`wlid:` (014 §1). See part 1's header for the
+`docs/specs/025-documents-in-the-backbone.md` §5–§6, §10 and
+`docs/specs/006-knowledge-graph.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
+the spec read as `wl:`/`wlc:`/`wlid:` (025 §17). See part 1's header for the
 full series scope, sibling-plan prerequisites, prior-art map, design calls,
 and what is owned elsewhere.
 
@@ -49,7 +49,7 @@ shape Tasks 11–13):
 - **The clock is bound from `lode`:** the deviation-expiry comparison
   (`dct:valid < today`) injects today's date into the query text rather than
   relying on `NOW()`, keeping query output deterministic under test.
-- **Queries 4.3/4.4 are not built here** — superseded/re-pointed by 014 §6
+- **Queries 4.3/4.4 are not built here** — superseded/re-pointed by 025 §11
   and owned by the 014 plan; when its section-scoped queries land they slot
   into `internal/overview` beside 4.1/4.2.
 
@@ -443,7 +443,7 @@ type Gap struct {
 	Path      string `json:"path,omitempty"`
 }
 
-// violationsQuery is spec 007 §4.1 (violation direction):
+// violationsQuery is spec 007 §3.1 (violation direction):
 // observed − declared − un-expired acknowledged. The layer partition is the
 // graph-name family; today's date is injected from Go (design call 8).
 func violationsQuery(today string) string {
@@ -682,7 +682,7 @@ func taskIDFromIRI(s string) string {
 	return ""
 }
 
-// Frontier returns the ranked ready set (backbone order, spec 007 §4.5)
+// Frontier returns the ranked ready set (backbone order, spec 007 §3.4)
 // annotated with depth/fan-out/is_critical from the combined DAG.
 func (s *Service) Frontier(ctx context.Context, projectID string) ([]FrontierTask, error) {
 	tasks, fanOut, err := s.Store.Frontier(ctx, projectID)
@@ -1412,7 +1412,7 @@ func newDriftCmd() *cobra.Command {
 	var component string
 	cmd := &cobra.Command{
 		Use:   "drift",
-		Short: "Architectural drift: violations and stale intent (spec 007 §4.1)",
+		Short: "Architectural drift: violations and stale intent (spec 007 §3.1)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1472,7 +1472,7 @@ func newDriftCmd() *cobra.Command {
 	return cmd
 }
 
-// newGapsCmd wires `lode gaps` (spec 007 §4.2).
+// newGapsCmd wires `lode gaps` (spec 007 §3.2).
 func newGapsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "gaps",
@@ -1510,7 +1510,7 @@ func newGapsCmd() *cobra.Command {
 }
 
 // newFrontierCmd wires `lode frontier` (alias `ready`): the ranked ready
-// set, pre-sorted by the D9 ordering the backbone computes (spec 007 §4.5).
+// set, pre-sorted by the D9 ordering the backbone computes (spec 007 §3.4).
 func newFrontierCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
@@ -1767,7 +1767,7 @@ The full-series map is split across the three parts; this part covers:
 | Two-layer round-trip on a seeded graph | Task 11 (Oxigraph tests) |
 | 4.1 both directions on a seeded graph | Task 11 (`TestDriftBothDirections`) |
 | Drift suppression, `--acknowledged`, expiry re-surfacing | Task 11 (`TestDeviationSuppressesUntilExpiry`), Task 13 |
-| 4.3 / 4.4 | **deferred to the 014 plan** (superseded/re-pointed by 014 §6) |
+| 4.3 / 4.4 | **deferred to the 014 plan** (superseded/re-pointed by 025 §11) |
 | Critical path correct; cycle detected, excluded, surfaced | Task 10 |
 | Ordering contract: frontier matches the backbone | Task 12 (the store-level check landed in part 2, Task 7) |
 | Deterministic `--json` everywhere; read-only web view, no mutation affordance | Tasks 13–14 |

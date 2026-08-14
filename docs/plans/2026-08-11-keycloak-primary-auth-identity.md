@@ -1,8 +1,8 @@
 ---
 status: accepted
 covers:
-  - docs/specs/023-keycloak-primary-auth.md#sec-3.1
-  - docs/specs/023-keycloak-primary-auth.md#sec-3.2
+  - docs/specs/001-identity-and-authentication.md#sec-3
+  - docs/specs/001-identity-and-authentication.md#sec-9.2
 replaces:
   ".":
     - 2026-08-02-keycloak-primary-auth-1-keycloak-only.md
@@ -11,7 +11,7 @@ replaces:
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement spec 023 §3.1 and §3.2: Keycloak becomes the only login
+**Goal:** Implement spec 001 §3 and §3.2: Keycloak becomes the only login
 (GitHub web login, the provider chooser, and org/team role derivation are
 removed), every login records the Keycloak-asserted `github_username` on the
 actor as `expected_github_login`, and the pre-existing `github:169939` actor is
@@ -23,7 +23,7 @@ executed. This plan carries part 1's scope forward against production reality
 (actor merge instead of orphaning, migration number 0014); parts 2–3 (§3.3–3.6)
 remain deferred — see Non-goals.
 
-**Read first:** `docs/specs/023-keycloak-primary-auth.md` §3.1–§3.2,
+**Read first:** `docs/specs/001-identity-and-authentication.md` §3.1–§3.2,
 `internal/api/githubweb.go` (deleted here), `internal/api/oidcweb.go`,
 `internal/api/oidcauth.go` (`provisionActor`), `internal/api/cliauth.go`,
 `internal/store/actors.go`.
@@ -53,12 +53,12 @@ remain deferred — see Non-goals.
 - The production actor merge (Task 3's script) is out-of-band and human-gated:
   no task in this plan executes anything against the production database.
 - The Keycloak protocol mapper exposing `github_username` (admin-cluster repo,
-  spec 023 §3.2) is a deployment prerequisite for the claim to arrive; login
+  spec 001 §9.2) is a deployment prerequisite for the claim to arrive; login
   tolerates its absence, so it does not block any task here.
 
 ## Non-goals / follow-up
 
-Spec 023 §3.3–§3.6 — the GitHub *link* flow, the `github_user_tokens` rework,
+Spec 001 §9.3–§3.6 — the GitHub *link* flow, the `github_user_tokens` rework,
 the `lode auth` command group, and token refresh — are already drafted as the
 accepted-but-deferred plans `2026-08-02-keycloak-primary-auth-2-link-and-tokens.md`
 and `2026-08-02-keycloak-primary-auth-3-cli-and-e2e.md` (part 2 now requires this
@@ -67,7 +67,7 @@ to GitHub as a user" feature needs them (023 itself says that plumbing has no
 consumer yet). Until then the
 `github_user_tokens` table and its store methods
 (`internal/store/github_tokens.go`) stay in place, dormant. The hzprod GitHub
-App rollout stays out of scope per 023 §4.
+App rollout stays out of scope per 001 §12.
 
 ## Tasks
 
@@ -81,7 +81,7 @@ skills:
 blockedBy: [ ]
 ```
 
-Delete GitHub as a login provider (spec 023 §3.1). Keycloak (`/auth/login`)
+Delete GitHub as a login provider (spec 001 §3). Keycloak (`/auth/login`)
 becomes the only interactive login, web and CLI.
 
 **`internal/api/githubweb.go` — delete the file.** It holds only login-flow
@@ -104,7 +104,7 @@ or delete them.
   `s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret)`.
 - Reword the `gh`/`tokenCipher` field comment: nil unless the GitHub App
   OAuth client is configured; reserved for the future account-link flow
-  (spec 023 §3.3); login never touches them.
+  (spec 001 §9.3); login never touches them.
 
 **`internal/api/oidcweb.go`:**
 
@@ -183,7 +183,7 @@ skills:
 blockedBy: [1]
 ```
 
-Spec 023 §3.2: carry the ID token's `github_username` claim onto the actor as
+Spec 001 §9.2: carry the ID token's `github_username` claim onto the actor as
 `expected_github_login`, re-synced on every login exactly like the admin flag.
 Login never fails when the attribute is absent. Blocked by Task 1 so the
 `UpsertHumanActor` signature change touches only the OIDC path (the GitHub
@@ -192,7 +192,7 @@ provisioner's call site is already gone).
 **Migration** `deploy/base/migrations/0014_actor_github_expectation.up.sql`:
 
 ```sql
--- The GitHub login Keycloak asserts for this actor (spec 023 §3.2), recorded
+-- The GitHub login Keycloak asserts for this actor (spec 001 §9.2), recorded
 -- at login so the future link flow can strict-match long after login. NULL
 -- means the Keycloak account carries no github_username attribute.
 ALTER TABLE actors ADD COLUMN expected_github_login text;
@@ -268,7 +268,7 @@ blockedBy: [2]
 
 Produce and dry-run-verify — **never execute against production** — the one-off
 SQL script that merges the GitHub login actor into the Keycloak actor
-(spec 023 §3.1). Blocked by Task 2: the script sets `expected_github_login`,
+(spec 001 §3). Blocked by Task 2: the script sets `expected_github_login`,
 so migration 0014 must exist wherever it runs.
 
 Create `scripts/merge-github-actor-169939.sql` with exactly this content

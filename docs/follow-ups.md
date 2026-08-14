@@ -8,7 +8,7 @@ once an instance is running (dogfooding); until then this file is the list.
   'deployed_dev', 'deployed_prod', 'released', 'abandoned')` — mirrored by
   `closedStateSet` and pinned by `TestClosedStateSetMirrorsSQL`. The spec now
   says a task stops blocking at or past **its repo mapping's `done_state`**
-  (folded 004 §1.3), so a `merged` task in a repo gating on `released` should
+  (folded 004 §1.2), so a `merged` task in a repo gating on `released` should
   still block its dependents and today does not. The constant is interpolated
   into four queries — `tasks.go` (`IsBlocked`), `hierarchy.go`,
   `project_work.go`, `brief.go` — each of which needs a join through the repo
@@ -16,8 +16,8 @@ once an instance is running (dogfooding); until then this file is the list.
   past `merged`, so it is closed there in every repo. Spec and code disagree
   until this lands.
 - **The doc-sync config shape contradicts itself (surfaced by the spec fold,
-  2026-08-14).** 025 §2/§10 make the git file mirror opt-in through a
-  `[doc_sync]` **block** in `.worklode/config.toml`; 034 §2 states the config
+  2026-08-14).** 025 §5/§10 make the git file mirror opt-in through a
+  `[doc_sync]` **block** in `.worklode/config.toml`; 025 §16.1 states the config
   reader is a flat `key = "value"` parser with no TOML-table support and
   declares the scalar `spec_corpus` / `plan_corpus` keys instead. Both are
   accepted-or-draft spec text, no document reconciles them, and folding 034
@@ -163,7 +163,7 @@ once an instance is running (dogfooding); until then this file is the list.
   plan), so this entry is the only record of the `ns/` row.
 - **`rdf-registry:ADR-0006` is unresolvable** (spec 014's frontmatter, the corpus's
   only cross-project reference). It predates the `<KEY>-<TYPE>-<n>` shorthand
-  (014 §11.3) and no reference form parses the colon syntax. The target is
+  (025 §14.3) and no reference form parses the colon syntax. The target is
   `rdf-registry/docs/adr/0006-iri-namespace-scheme.md`. Rewrite it to `<KEY>-ADR-6`
   once rdf-registry is registered as a worklode project and has a key; until then
   026 §4.2 reports it.
@@ -208,8 +208,8 @@ once an instance is running (dogfooding); until then this file is the list.
   deploy must include the ttl files and add `ns/**` to its path trigger. The
   namespace is hash-style (`…/ns/ontology#`), so dereferencing any term
   fetches the extensionless `…/ns/ontology`, which GitHub Pages cannot
-  content-negotiate — pick a serving strategy deliberately. Specs 006 §9,
-  009 item 3, 014 §1 and the `ns/ontology.ttl` header still record the
+  content-negotiate — pick a serving strategy deliberately. Specs 006 §14,
+  009 item 3, 025 §17 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
 - **Design-doc sync normalizes frontmatter YAML timestamps to RFC3339**
   (spec 034): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
@@ -247,7 +247,7 @@ Design items landed in spec 028. These are the mechanical leftovers.
   change everyone's ranking.
 - **Compose gets its own graph-server**, sharing the Postgres instance on a
   separate database. Requires vendoring graph-server's migrations. Severs the
-  dependency on the data-platform prod deployment (009 §1's only v1 blocker), so
+  dependency on the data-platform prod deployment (006 §13.2's only v1 blocker), so
   006/007/014/015 become testable in `docker compose up` and in e2e.
 - **Review API before review UI.** Embedding crit in the worklode web UI is the
   plan; agents review too (Claude reviews Codex's work and vice versa), so
@@ -291,7 +291,7 @@ Design items landed in spec 028. These are the mechanical leftovers.
   exist (spec 034); `lode doc sections`, `--strict-refs`, and the 026 §2
   planning-status flags (`--needs-planning` / `--needs-execution`) remain
   unimplemented.
-- **025 §10 (accepted, frozen) and 028 (draft) still spell the command
+- **025 §18 (accepted, frozen) and 028 (draft) still spell the command
   `lode doc show`; 026 §3 implements the same command spelled `lode show`
   (2026-08-07).** `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`
   (draft, implements 026 §3) is titled "consolidated `lode doc show`" too.

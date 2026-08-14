@@ -21,7 +21,7 @@ all task mutations.
 **No governing spec.** This plan anticipates the research-work core-model
 spec (milestones, deliverables, approvals — being written next); assignment
 is needed for the 2026-08-11 data-scientist workshop and is mechanical
-enough to plan directly. Spec 028 §2 independently requires an assignee for
+enough to plan directly. Spec 025 §8.1 independently requires an assignee for
 escalation, so the column is convergent with the accepted corpus, not a
 detour. When the core-model spec lands it adopts this plan's semantics.
 
@@ -38,7 +38,7 @@ Prometheus client, cobra CLI, html/template web pages.
   RecordEvent-then-GetTask handler shape to copy)
 - `internal/api/metrics.go` + `docs/specs/022-prometheus-metrics.md`
   (nil-safe metrics struct convention)
-- `docs/specs/018-task-hierarchy.md` §3 (states an epic may not take —
+- `docs/specs/004-execution-backbone.md` §3 (states an epic may not take —
   assignment must respect the same terminal set)
 
 ## Global constraints

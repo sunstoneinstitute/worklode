@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renumber design-document sections and keep their {#sec-N} anchors in sync.
 
-Sections are identity (spec 014 §3): the anchor carries the section number, and
+Sections are identity (spec 025 §3): the anchor carries the section number, and
 an inbound claim pins `<file>.md#sec-4.3`. This formatter derives both from
 position so they cannot drift apart by hand.
 
@@ -18,12 +18,12 @@ Usage: secfmt.py [-l] [-w] [-d] [--assign|--assign-all] [--start N] [--force]
   --start N       first top-level number (0 or 1); defaults to 1 for --assign
                   and to the document's existing first number for --assign-all
   --update-refs   with -w, repoint inbound `file.md#sec-old` references
-  --depth N       deepest addressable level (default 3, per 014 §7)
+  --depth N       deepest addressable level (default 3, per 025 §6)
 
 With no flag the formatted document goes to stdout. Paths default to
 docs/specs and docs/plans; a directory is walked for *.md.
 
-Two rules the numbering obeys, both from 014 §3:
+Two rules the numbering obeys, both from 025 §3:
 
   * A letter-suffixed section (`2.1a`) is a deliberate insert. It keeps its
     number and consumes no counter slot.
@@ -58,7 +58,7 @@ def err(message):
         message = f"\033[31m{message}\033[0m"
     print(message, file=sys.stderr)
 
-# Plans are not DesignDocs (014 §2), so their sections are not addressable
+# Plans are not DesignDocs (025 §2), so their sections are not addressable
 # nodes. Pass docs/plans explicitly if a design record kept there needs anchors.
 DEFAULT_ROOTS = ("docs/specs",)
 # Anchors are searched wider than they are written, so a moved anchor can be
@@ -166,7 +166,7 @@ def renumber(text, depth, force=False, assign=False, start=None, assign_all=Fals
     for i, m in hs:
         level = len(m["hashes"]) - 1  # H2 is level 1
         if level > depth:
-            continue  # legal, but not addressable (014 §7)
+            continue  # legal, but not addressable (025 §6)
 
         if not m["num"] and not numbering:
             # Opens an unnumbered section; any deeper sequence restarts under it.
@@ -183,7 +183,7 @@ def renumber(text, depth, force=False, assign=False, start=None, assign_all=Fals
         prefix = counters[: level - 1]
 
         if m["num"] and re.search(r"[a-z]$", m["num"]):
-            # A letter-suffixed insert (014 §3) keeps its number and consumes no slot.
+            # A letter-suffixed insert (025 §3) keeps its number and consumes no slot.
             number = m["num"]
             seen[level - 1] = True
             parent = number.rsplit(".", 1)[0] if "." in number else ""
@@ -236,7 +236,7 @@ def anchor_alternation(moves):
 def retarget_own_keys(front, moves):
     """Follow a moved anchor in this document's own frontmatter subject keys.
 
-    A bare `"#sec-4.3":` key is scoped to this document (014 §11); a qualified
+    A bare `"#sec-4.3":` key is scoped to this document (025 §14); a qualified
     `other.md#sec-4.3` value belongs to another one and is left for update_refs.
     """
     if not moves:
@@ -360,7 +360,7 @@ def main():
         err(f"secfmt: {f} is accepted; renumbering would move published anchors:\n{why}")
     if refused:
         err(
-            "\nSections are frozen once accepted (014 §3). Insert with a letter suffix\n"
+            "\nSections are frozen once accepted (025 §3). Insert with a letter suffix\n"
             "(2.1a) instead, or re-run with --force --update-refs if the anchors have\n"
             "never been published."
         )

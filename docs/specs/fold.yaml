@@ -533,7 +533,7 @@ documents:
   # of those with the runtime layer; 009 states what the data-platform must
   # host for any of it to run. 003 is the superseded design record: its
   # preamble and all six anchors drop, and it is listed as a source so every
-  # whole-document and WL-SPEC-3 reference to it repoints here -- 003 has six
+  # whole-document and WL-SPEC-6 reference to it repoints here -- 003 has six
   # heirs, of which this is the one that owns its vocabulary decisions (D4,
   # D6, D7), and a source belongs to exactly one target (part-3 ruling 2).
   # 015's sections interleave with 006's own structure rather than trailing

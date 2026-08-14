@@ -1,10 +1,10 @@
 ---
 status: draft
 covers:
-  - docs/specs/027-event-watchers.md#sec-5
-  - docs/specs/027-event-watchers.md#sec-6
-  - docs/specs/027-event-watchers.md#sec-7
-  - docs/specs/027-event-watchers.md#sec-8
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.4
+  - docs/specs/025-documents-in-the-backbone.md#sec-18
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.6
+  - docs/specs/025-documents-in-the-backbone.md#sec-15.7
 requires:
   - 2026-08-03-event-watchers-1-ordered-log.md
   - 2026-08-03-documents-in-the-backbone-3-plan-acceptance.md
@@ -20,7 +20,7 @@ numbers restart at 1. **Both `requires` edges must be merged first**: part
 part 3 (transitively parts 1–2) supplies the `docs` rows, the editorial
 lifecycle with its API, the `design` task kind, and the `lode doc` command
 group this part's `submit` verb joins. Until those exist there is no
-`wl:DocumentAccepted` to emit (spec 027 §10).
+`wl:DocumentAccepted` to emit (spec 025 §19).
 
 **Goal:** The first subscriber: `doc-lifecycle` mints a `review` task when
 a document is submitted and a `design` (planning) task when a spec is
@@ -48,7 +48,7 @@ new table.
 prometheus/client_golang.
 
 **Read first:**
-- `docs/specs/027-event-watchers.md` §5, §7, §9, §11 — rules, guards,
+- `docs/specs/025-documents-in-the-backbone.md` §5, §7, §9, §11 — rules, guards,
   billing, tests
 - `docs/specs/025-documents-in-the-backbone.md` §3 — why submission is an
   event and not a status
@@ -107,10 +107,10 @@ skills:
 blockedBy: [ ]
 ```
 
-Spec 027 §5 mints tasks "referencing the document" and both guards are
+Spec 025 §15.4 mints tasks "referencing the document" and both guards are
 "queries over open tasks referencing the document", but no such reference
 exists: `tasks.plan_doc` means "minted by this plan's acceptance"
-(025 §5), which is a different edge. This column is the resolution — the
+(025 §9.2), which is a different edge. This column is the resolution — the
 document a `review`/`design` task is *about*. (§7's "no schema change"
 covers only §7; the spec's migration list simply missed this edge.)
 
@@ -123,9 +123,9 @@ covers only §7; the spec's migration list simply missed this edge.)
 `0014_task_doc_ref.up.sql`:
 
 ```sql
--- The document this task is about (spec 027 §5): set on review tasks
+-- The document this task is about (spec 025 §15.4): set on review tasks
 -- minted at submission and design tasks minted at acceptance. Distinct
--- from plan_doc (the plan whose acceptance minted the task, 025 §5).
+-- from plan_doc (the plan whose acceptance minted the task, 025 §9.2).
 -- The §5 suppression guards are partial-index-backed queries over open
 -- tasks carrying this reference — queries, not stored state (025 §1).
 ALTER TABLE tasks ADD COLUMN about_doc bigint REFERENCES docs(id);
@@ -202,7 +202,7 @@ SELECT id FROM tasks
 `docs.go`:
 
 ```go
-// DocIRI is the document's subject IRI in event payloads (027 §3's
+// DocIRI is the document's subject IRI in event payloads (025 §15.2's
 // wlid:doc/spec-025 form): wlid:doc/<kind>-<number> for numbered kinds,
 // wlid:doc/plan/<slug> for plans.
 func DocIRI(d Doc) string
@@ -277,7 +277,7 @@ In `internal/api/docs.go`:
 - **Submit**: new handler + route
   `mux.Handle("POST /api/v1/docs/{id}/submit", s.auth(s.submitDoc))` —
   any authenticated actor; it emits `eventbus.DocumentSubmitted{...}` with
-  a nil apply (the event *is* the whole change; 025 §3's "submission is an
+  a nil apply (the event *is* the whole change; 025 §7's "submission is an
   event, not a status") and returns the doc JSON.
 
 CLI: `SubmitDoc(ctx, id)` client method; `lode doc submit <id>` subcommand
@@ -309,7 +309,7 @@ blockedBy: [ ]
   `internal/watcher/doclifecycle_test.go`, `internal/watcher/metrics.go`,
   `internal/watcher/metrics_test.go`
 
-027 §10: the package takes an event and returns actions, **no store handle
+025 §19: the package takes an event and returns actions, **no store handle
 and no HTTP** — the executor (Task 5) fetches the facts and performs the
 actions. Everything here is table-testable without Postgres.
 
@@ -326,7 +326,7 @@ func TestEvaluate(t *testing.T) {
 		{"submit with open review task suppressed", ...},
 		{"accept of spec mints design", ...},
 		{"accept of spec with open design task suppressed with note", ...},
-		{"accept of plan mints nothing", ...},   // 025 §5 owns plan acceptance; 027 §12
+		{"accept of plan mints nothing", ...},   // 025 §9.2 owns plan acceptance; 025 §22
 		{"accept of adr mints nothing", ...},    // §5: "where the document is a spec"
 		{"vendor event ignored", ...},           // dotted type → nil actions
 		{"unknown wl: type ignored", ...},
@@ -338,9 +338,9 @@ func TestEvaluate(t *testing.T) {
 - [ ] **Step 2: Implement `doclifecycle.go`**
 
 ```go
-// Input is everything the two rules of spec 027 §5 may consult. The
+// Input is everything the two rules of spec 025 §15.4 may consult. The
 // executor fills it; Evaluate never touches the store, so the rules are a
-// pure function (027 §10).
+// pure function (025 §19).
 type Input struct {
 	EventID   int64
 	EventType string // events.type: a wl: curie or a vendor dotted type
@@ -365,7 +365,7 @@ type Action struct {
 	Body      string
 }
 
-// Evaluate applies the two hardcoded rules of 027 §5. Rules must never
+// Evaluate applies the two hardcoded rules of 025 §15.4. Rules must never
 // emit an event this subscriber consumes (no cascades — a rule, reviewed
 // here, not a mechanism; §5).
 func Evaluate(in Input) []Action
@@ -394,7 +394,7 @@ Behaviour, exactly:
   nil-safe shape:
 
 ```go
-// worklode_watcher_actions_total{rule, outcome}, outcome ∈ applied|suppressed|error (spec 027 §8).
+// worklode_watcher_actions_total{rule, outcome}, outcome ∈ applied|suppressed|error (spec 025 §15.7).
 ```
 
 with a `testutil` assertion in `metrics_test.go`.
@@ -446,7 +446,7 @@ blockedBy: [2, 3, 4]
 - [ ] **Step 2: Implement `docwatch.go`**
 
 ```go
-// docLifecycleHandler is the doc-lifecycle subscriber (spec 027 §5): it
+// docLifecycleHandler is the doc-lifecycle subscriber (spec 025 §15.4): it
 // parses the event, fetches the guard facts, lets the pure rules decide
 // (internal/watcher), and performs the actions. Every mint goes through
 // RecordEvent with external id "doc-lifecycle:<rule>:<event-id>" — the
@@ -571,7 +571,7 @@ blockedBy: [ ]
 - Modify or create: the lode plugin's planning/decomposition skill
 
 **Reality check first:** no `plugins/lode/` exists in claude-plugins today,
-and 025 §10's guided-flow skills (authoring, review, decomposition) are
+and 025 §18's guided-flow skills (authoring, review, decomposition) are
 future work of 025's orbit. Do not build them here. The §7 deliverable is
 one rule wherever the planning ceremony lives at execution time:
 
@@ -592,7 +592,7 @@ Either way, verify AC9 manually once: run a planning session under the
 claim, then `lode task cost <design-task>` reports its tokens.
 
 - [ ] **Step 1: Implement in claude-plugins, PR titled
-  "Planning skill claims its design task (worklode spec 027 §7)"**
+  "Planning skill claims its design task (worklode spec 025 §15.6)"**
 - [ ] **Step 2: In worklode, nothing — this task's artifact is the PR.**
 
 ---
@@ -610,13 +610,13 @@ blockedBy: [5]
 
 - [ ] **Step 1: CLAUDE.md** — in "Specs, plans, tasks", one sentence:
   submitting a document (`lode doc submit`) and accepting a spec mint the
-  review/planning tasks via the doc-lifecycle watcher (spec 027 §5);
-  minting the prompt is not performing the act (025 §3).
+  review/planning tasks via the doc-lifecycle watcher (spec 025 §15.4);
+  minting the prompt is not performing the act (025 §7).
 - [ ] **Step 2: `docs/follow-ups.md`** — record the two known
   non-blocking gaps this series leaves: (a) `internal/eventbus/vocab.go`
-  is hand-mirrored until 025 §9's codegen owns it (drift test in place);
+  is hand-mirrored until 025 §17's codegen owns it (drift test in place);
   (b) a poison event head-of-line-blocks its subscriber by design — no
-  DLQ until a real case appears (027 §12).
+  DLQ until a real case appears (025 §22).
 - [ ] **Step 3: Verify and commit**
 
 ```bash
@@ -626,7 +626,7 @@ git add -A && git commit -m "Document the doc-lifecycle watcher and its follow-u
 
 ---
 
-## Done when (maps to 027 §13)
+## Done when (maps to 025 §24)
 
 - AC4: submit mints one `ready` review task and changes no document
   column; a second submit while it is open mints nothing (Task 3 + 5 + 6).

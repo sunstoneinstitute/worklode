@@ -2,9 +2,9 @@
 #
 # Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
 # fixed enum; the runtime four each mirror a CHECK constraint that already
-# exists in the schema (015 §3). Sources: spec 006 §1.4/§1.5, spec 014 §5/§8
-# (status enum and task kinds), spec 015 §3 (runtime enums), spec 025 §3
-# (document lifecycle), and spec 033 §1 (plan coverage levels).
+# exists in the schema (006 §6). Sources: spec 006 §4/§1.5, spec 025 §7/§8
+# (status enum and task kinds), spec 006 §6 (runtime enums), spec 025 §7
+# (document lifecycle), and spec 026 §5 (plan coverage levels).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -21,9 +21,9 @@
 
 
 # ---------------------------------------------------------------------------
-# DesignDoc lifecycle — purely editorial. `implemented` was removed by 014 §5:
+# DesignDoc lifecycle — purely editorial. `implemented` was removed by 025 §7:
 # implementation is per-section and derived, so a document-level status would be
-# a hand-maintained, lossy summary of something computable. 025 §3 removed
+# a hand-maintained, lossy summary of something computable. 025 §7 removed
 # `proposed`: a document under review stays `draft` with an open review task.
 # ---------------------------------------------------------------------------
 
@@ -42,7 +42,7 @@ wlc:DesignDocStatusOrder a skos:OrderedCollection ;
     skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
 
 
-# How completely one plan covers one spec section (033 §1). Only wlc:full — or a
+# How completely one plan covers one spec section (026 §5). Only wlc:full — or a
 # wlc:partial whose wl:completedWith set closes — discharges the section.
 wlc:CoverageLevel a skos:ConceptScheme ; skos:prefLabel "Plan coverage level" .
 
@@ -96,8 +96,8 @@ wlc:runtime a skos:Concept ; skos:inScheme wlc:ModelLayer ; skos:prefLabel "runt
 
 
 # ---------------------------------------------------------------------------
-# Artifact kind (015 §3). In v1 only git_tag rows are ever created; the other
-# three are grammar, not data (015 §6).
+# Artifact kind (006 §6). In v1 only git_tag rows are ever created; the other
+# three are grammar, not data (006 §11.1).
 # ---------------------------------------------------------------------------
 
 wlc:ArtifactKind a skos:ConceptScheme ; skos:prefLabel "Artifact kind" .
@@ -113,7 +113,7 @@ wlc:binary a skos:Concept ; skos:inScheme wlc:ArtifactKind ; skos:prefLabel "bin
 
 
 # ---------------------------------------------------------------------------
-# Deployment status (015 §3).
+# Deployment status (006 §6).
 # ---------------------------------------------------------------------------
 
 wlc:DeploymentStatus a skos:ConceptScheme ; skos:prefLabel "Deployment status" .
@@ -130,7 +130,7 @@ wlc:failed a skos:Concept ; skos:inScheme wlc:DeploymentStatus ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Deployment target kind (015 §3). wlc:pypi_target is spelled apart from
+# Deployment target kind (006 §6). wlc:pypi_target is spelled apart from
 # wlc:pypi deliberately: the artifact kind and the target kind are different
 # concepts that happen to share a name in the relational schema.
 # ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ wlc:manual a skos:Concept ; skos:inScheme wlc:DeployTargetKind ; skos:prefLabel 
 
 
 # ---------------------------------------------------------------------------
-# Runtime event kind (015 §3).
+# Runtime event kind (006 §6).
 # ---------------------------------------------------------------------------
 
 wlc:RuntimeEventKind a skos:ConceptScheme ; skos:prefLabel "Runtime event kind" .

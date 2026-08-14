@@ -1,7 +1,7 @@
 ---
 status: accepted
 covers:
-  - docs/specs/024-multi-harness-integration.md#sec-3.3
+  - docs/specs/008-worklode-plugin.md#sec-17.3
 requires:
   - 2026-08-03-multi-harness-1-adapter-core.md
 ---
@@ -39,7 +39,7 @@ integration are untouched.
 no new endpoints, loops, or store operations, so no new `worklode_*`
 metrics are due.
 
-**Spec:** `docs/specs/024-multi-harness-integration.md` §3.3, §4.
+**Spec:** `docs/specs/008-worklode-plugin.md` §3.3, §4.
 
 ---
 
@@ -310,7 +310,7 @@ func TestPublishDirLinkCreatesSymlink(t *testing.T) {
 
 func TestPublishDirLinkDegradesToPerSkillInsideRealDir(t *testing.T) {
 	// agents dir exists as a REAL directory with a foreign skill in it:
-	// spec 024 §4 row 4 — link per-skill inside it, delete nothing.
+	// spec 008 §18 row 4 — link per-skill inside it, delete nothing.
 	dirs := testDirs(t)
 	agents := filepath.Join(t.TempDir(), "skills")
 	os.MkdirAll(filepath.Join(agents, "their-skill"), 0o755)
@@ -333,7 +333,7 @@ func TestPublishPerSkill(t *testing.T) {
 func TestPublishCopyFallback(t *testing.T) {
 	// Inject symlink failure (see below) and assert the version dir is
 	// copied file-for-file instead, with res naming the copy so a stale
-	// copy is diagnosable (spec 024 §4 row 5).
+	// copy is diagnosable (spec 008 §18 row 5).
 }
 ```
 
@@ -354,7 +354,7 @@ type PublishResult struct {
 }
 
 // PublishDirLink makes target a symlink to the whole links dir — one link
-// serving every harness that reads target (spec 024 §3.3). An existing
+// serving every harness that reads target (spec 008 §17.3). An existing
 // real directory degrades to per-skill links inside it; an existing
 // foreign symlink is skipped untouched.
 func PublishDirLink(dirs Dirs, target string) (PublishResult, error)
@@ -512,7 +512,7 @@ skill-fetch test (the one driving `ensureSkills` through a fake client and
 fixture worktree whose brief pins one skill:
 
 ```go
-	// Project-scope delivery (spec 024 §3.3): the worktree now carries
+	// Project-scope delivery (spec 008 §17.3): the worktree now carries
 	// .agents/skills/<name> resolving to the store version dir…
 	link := filepath.Join(wt, ".agents", "skills", "tdd")
 	resolved, err := filepath.EvalSymlinks(link)
@@ -597,7 +597,7 @@ func linkWorktreeSkill(opts Options, root, name, versionDir string) {
 }
 
 // ensureExcluded appends ".agents/" to the repo's info/exclude once —
-// never .gitignore: the links are machine-local (spec 024 §3.3).
+// never .gitignore: the links are machine-local (spec 008 §17.3).
 func ensureExcluded(opts Options, root string) {
 	p, err := worktree.ExcludeFile(root)
 	if err != nil {

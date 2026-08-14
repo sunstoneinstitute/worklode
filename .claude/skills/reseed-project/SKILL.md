@@ -91,7 +91,7 @@ lode task add --kind spec --title "Write implementation plan(s) for spec NNN —
 
 # per unexecuted plan:
 lode task add --kind feature --title "Execute plan: <short title>" \
-  --body "Execute docs/plans/<file> (implements spec NNN). Transitional stand-in for the plan's execution root (spec 025 §5). Audit basis: no owning package, CLI verb, or migration at <server commit>."
+  --body "Execute docs/plans/<file> (implements spec NNN). Transitional stand-in for the plan's execution root (spec 025 §9.2). Audit basis: no owning package, CLI verb, or migration at <server commit>."
 ```
 
 Order multi-part series (`…-1-…`, `…-2-…`) with blocks edges, part N on N−1:
@@ -108,10 +108,10 @@ here that touches `lode doc` — the capability gate above, this section, and
 §4's verify commands — against the implemented CLI, and update this skill in
 the same change.**
 
-1. Import specs/ADRs as accepted documents (corpus import, 025 §12).
+1. Import specs/ADRs as accepted documents (corpus import, 025 §22).
 2. Import **unexecuted** plans (§1 audit) and `lode doc accept` each —
    acceptance mints the `kind='plan'` root plus children in one transaction
-   (025 §5). Do not hand-create execute-tasks; the mint is the seeding.
+   (025 §9.2). Do not hand-create execute-tasks; the mint is the seeding.
 3. Skip executed plans, or import them closed if history matters.
 4. Wire series ordering as `lode task block` edges between the minted roots
    (roots are tasks; blocking stays a task-level verb).

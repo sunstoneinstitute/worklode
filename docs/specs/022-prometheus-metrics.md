@@ -2,9 +2,8 @@
 status: accepted
 issued: 2026-07-31
 requires:
-  - 004-execution-backbone.md
-  - 011-delivery-lifecycle.md
-  - 016-org-wide-skills.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/016-org-wide-skills.md
 ---
 # Spec 022 — Prometheus domain metrics
 

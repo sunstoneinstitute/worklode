@@ -19,7 +19,7 @@ type ResolvedRef struct {
 
 // FindRepoRoot walks up from dir to the nearest directory containing a
 // ".worklode" directory — the repo root the corpus config is relative to
-// (spec 034 §2). Returns "" when no repo root is found.
+// (spec 025 §16.1). Returns "" when no repo root is found.
 func FindRepoRoot(dir string) string {
 	d, err := filepath.Abs(dir)
 	if err != nil {
@@ -38,7 +38,7 @@ func FindRepoRoot(dir string) string {
 }
 
 // FindCorpus returns the conventional spec corpus, docs/specs under the repo
-// root — the default a repo without a spec_corpus key gets (034 §2). Returns
+// root — the default a repo without a spec_corpus key gets (025 §16.1). Returns
 // "" when no repo root is found.
 func FindCorpus(dir string) string {
 	root := FindRepoRoot(dir)
@@ -121,7 +121,7 @@ var numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
 // ("014-design-documents...md" -> "014").
 var leadingNumberPattern = regexp.MustCompile(`^(\d+)-`)
 
-// shorthandPattern is 014 §11.3's <KEY>-<TYPE>-<n> grammar, fragment already
+// shorthandPattern is 025 §14.3's <KEY>-<TYPE>-<n> grammar, fragment already
 // split off by splitFragment.
 var shorthandPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
 
@@ -129,7 +129,7 @@ var shorthandPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+
 // the current repo's key ("WL"), or "" when unknown.
 //
 // Ref forms are tried in the order spec 026 §3 documents: a path, then a spec
-// number or filename prefix, then 014 §11.3's <KEY>-<TYPE>-<n> shorthand. A
+// number or filename prefix, then 025 §14.3's <KEY>-<TYPE>-<n> shorthand. A
 // path that names no existing file falls through to the later forms rather
 // than failing outright, which is how a bare filename like
 // "014-foo.md" is matched inside the corpus.
@@ -309,7 +309,7 @@ func uniqueSorted(in []string) []string {
 	return out
 }
 
-// CheckKind enforces 014 §11.3's <TYPE> token ("SPEC" or "ADR") against the
+// CheckKind enforces 025 §14.3's <TYPE> token ("SPEC" or "ADR") against the
 // target document's frontmatter: a document is an ADR iff its frontmatter
 // carries kind: adr (026 §4.2), no other file needing the key. ResolveRef's
 // own shorthand form (below) calls this; it is also exported so a caller

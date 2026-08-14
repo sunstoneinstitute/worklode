@@ -368,7 +368,7 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		}
 	case action == "closed" && gh.Merged:
 		// The lease is deliberately left alone: it says a worktree is
-		// occupied, which a merge does not change (spec 004 §2).
+		// occupied, which a merge does not change (spec 004 §3).
 		// Record the PR's shas as task commits; the resolver advances the
 		// task once (and if) they appear on main via a push event.
 		if gh.Head.SHA != "" {

@@ -1,7 +1,7 @@
 ---
 status: accepted
 covers:
-  - docs/specs/025-documents-in-the-backbone.md#sec-2
+  - docs/specs/025-documents-in-the-backbone.md#sec-5
   - docs/specs/025-documents-in-the-backbone.md#sec-11
 requires:
   - 2026-08-03-documents-in-the-backbone-3-plan-acceptance.md
@@ -13,7 +13,7 @@ requires:
 **Series:** Part 4 of 4 (4 tasks; numbering restarts at 1 per part). See
 part 1 for the series map. Parts 1–3 must be merged and deployed first.
 
-**Goal:** End the transitional mirror (025 §2): import the git corpus into
+**Goal:** End the transitional mirror (025 §5): import the git corpus into
 the backbone, delete `docs/specs/` and `docs/plans/`, and retire the `sec*`
 scripts and hooks — the backbone is then the only authoring surface.
 
@@ -32,7 +32,7 @@ files and the hooks that guarded them.
 **Spec:** `docs/specs/025-documents-in-the-backbone.md` §2 (transitional
 block), §11, §12
 
-**On 025 §12:** corpus import is out of the spec's *design* scope, and §12
+**On 025 §22:** corpus import is out of the spec's *design* scope, and §12
 itself assigns it to "the implementation plan's final phase" — this part is
 that phase. Because the spec deliberately designs none of it, every rule
 below is a stated assumption, flagged in the preamble. The other §12
@@ -52,7 +52,7 @@ truth *is* and run only when Stig has confirmed, in order:
    consciously — the import snapshot is the cutover moment.
 
 **Read first:**
-- 025 §2 (the transitional paragraph — what this part ends), §11 (the
+- 025 §5 (the transitional paragraph — what this part ends), §11 (the
   CLAUDE.md / authoring-docs row)
 - `internal/api/inbox_import.go` and `lode inbox import` — the re-runnable
   backfill precedent this command copies
@@ -76,7 +76,7 @@ truth *is* and run only when Stig has confirmed, in order:
   as draft would list shipped work as pending review. Their task sets stay
   empty, and `--needs-execution` deliberately does not report empty sets
   (part 3 Task 5) — a spent plan is not pending work.
-- **What stays in git:** `.worklode/implements.yaml` claims (025 §2 says so
+- **What stays in git:** `.worklode/implements.yaml` claims (025 §5 says so
   explicitly), `docs/follow-ups.md` (execution notes, not a design doc),
   `CLAUDE.md`, and a slimmed authoring guide. `docs/plans/index.yaml` and
   `docs/specs/index.yaml` are generated from the files and die with them.
@@ -85,7 +85,7 @@ truth *is* and run only when Stig has confirmed, in order:
 resolution comes alive (`docs/follow-ups.md` tracks it; it *needs* these
 rows, but it is its own decision per repo); rewriting `WL-SPEC-nn` shorthand
 handling (owned by `2026-08-03-spec-shorthand-references.md`); a web
-consolidation view (026 §9).
+consolidation view (026 §11).
 
 ---
 
@@ -281,7 +281,7 @@ hook rewrites.
 
 ## Done when
 
-1. 025 §2's transitional paragraph is history: no `docs/specs/` or
+1. 025 §5's transitional paragraph is history: no `docs/specs/` or
    `docs/plans/` in the tree, and the corpus answers from `lode doc`.
 2. Every remaining reference to the `sec*` scripts is gone; pre-commit and
    CI are green without them.

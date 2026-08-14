@@ -1,6 +1,6 @@
 ---
 status: superseded
-covers: docs/specs/002-github-app-auth.md
+covers: docs/specs/001-identity-and-authentication.md
 ---
 # GitHub App Auth — Web Login Core Implementation Plan
 
@@ -18,7 +18,7 @@ covers: docs/specs/002-github-app-auth.md
 
 ## Source spec
 
-`docs/specs/002-github-app-auth.md` — Sections A, B, D, E.
+`docs/specs/001-identity-and-authentication.md` — Sections A, B, D, E.
 
 ## File Structure
 

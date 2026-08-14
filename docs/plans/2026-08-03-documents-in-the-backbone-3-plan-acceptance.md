@@ -1,11 +1,11 @@
 ---
 status: accepted
 covers:
-  - docs/specs/025-documents-in-the-backbone.md#sec-4
-  - docs/specs/025-documents-in-the-backbone.md#sec-4.1
-  - docs/specs/025-documents-in-the-backbone.md#sec-5
-  - docs/specs/025-documents-in-the-backbone.md#sec-7
-  - docs/specs/025-documents-in-the-backbone.md#sec-10
+  - docs/specs/025-documents-in-the-backbone.md#sec-9
+  - docs/specs/025-documents-in-the-backbone.md#sec-9.1
+  - docs/specs/025-documents-in-the-backbone.md#sec-9.2
+  - docs/specs/025-documents-in-the-backbone.md#sec-9.3
+  - docs/specs/025-documents-in-the-backbone.md#sec-18
 requires:
   - 2026-08-03-documents-in-the-backbone-2-document-store.md
 ---
@@ -16,7 +16,7 @@ requires:
 **Series:** Part 3 of 4 (7 tasks; numbering restarts at 1 per part). See
 part 1 for the series map. Part 2 must be merged first.
 
-**Goal:** Implement 025 §4, §4.1, §5, §7 and §10: accepting a plan document
+**Goal:** Implement 025 §9, §4.1, §5, §7 and §10: accepting a plan document
 mints its execution tasks from the §4.1 `## Tasks` declarations — draft rows
 carrying `plan_doc`, kind/priority/skills/blocking read from each task's
 metadata block, nothing minted above them — plan-to-plan `blocks` edges gate
@@ -32,14 +32,14 @@ its tasks exist` holds by construction because part 2 rejected plan
 acceptance until this transaction existed, and no other path writes
 `plan_doc`. The ready set treats a task as blocked while any task in a plan
 that `blocks` its plan is open — the same predicate spec 005 already runs,
-evaluated over a set (025 §7) — expressed as one SQL condition shared by
+evaluated over a set (025 §9.3) — expressed as one SQL condition shared by
 `readyCandidates` and `IsBlocked`.
 
 **Tech Stack:** Go 1.25+, Postgres, cobra CLI.
 
 **Spec:** `docs/specs/025-documents-in-the-backbone.md` §4, §4.1, §5, §7, §10
 
-**The plan task format** (canonical definition: 025 §4.1, mirrored in
+**The plan task format** (canonical definition: 025 §9.1, mirrored in
 `docs/authoring-design-docs.md`; this is what Task 1 parses):
 
 ````markdown
@@ -68,7 +68,7 @@ ids that land in the existing `tasks.skills` pinned-skills column and
 resolve with §4.1's after-colon fallback (Task 7).
 
 **Read first:**
-- 025 §4.1 (the format's normative definition — the metadata-key table,
+- 025 §9.1 (the format's normative definition — the metadata-key table,
   numbering, heading and cycle rules, the skill-identifier fallback), §5
   (the two-acts table and the nullable `plan_doc`), §7 (the query table),
   §10 (the verb set), §13 AC2/AC4
@@ -89,14 +89,14 @@ against the *git mirror*; no plan for that read surface has been executed. If
 its commands exist when this part runs, Tasks 4–5 swap their data source to
 the store (026 AC9) rather than adding parallel verbs; if they do not, Tasks
 4–5 create the commands store-backed and 026's mirror-backed variant is
-moot. Either way the verb names, flags and semantics are 025 §10's.
+moot. Either way the verb names, flags and semantics are 025 §18's.
 
 **Non-goals:** `lode doc coverage` (needs the `.worklode/implements.yaml`
 deriver, never built — stays with the 014 plan's deferred table);
 `doc sections`/`--resolved` consolidation (026's rendering work, orthogonal
-to the store); review-task ceremony and crit wiring (025 §12); the lode
+to the store); review-task ceremony and crit wiring (025 §22); the lode
 plugin skills for guided flows (live in the claude-plugins repo, not here);
-Milestone (v2, 025 §12); tier-2 shorthand resolution for foreign corpora
+Milestone (v2, 025 §22); tier-2 shorthand resolution for foreign corpora
 (reads these `docs` rows, but belongs to 026 §4.2's owner).
 
 ---
@@ -173,7 +173,7 @@ Table-driven over plan bodies in the format above:
 
 ```go
 // PlanTask is one task definition in a plan document's ## Tasks section —
-// the plan task format 025 §5 mints from (docs/authoring-design-docs.md
+// the plan task format 025 §9.2 mints from (docs/authoring-design-docs.md
 // carries the canonical definition).
 type PlanTask struct {
 	Number    int
@@ -187,7 +187,7 @@ type PlanTask struct {
 
 var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
-// planMintableKinds is the subset of task kinds a plan may mint (025 §4.1):
+// planMintableKinds is the subset of task kinds a plan may mint (025 §9.1):
 // review tasks are created by the review lifecycle and spikes are inputs to
 // planning, so neither is plan-declarable.
 var planMintableKinds = []string{"feature", "bug", "chore", "design"}
@@ -197,7 +197,7 @@ var planMintableKinds = []string{"feature", "bug", "chore", "design"}
 // each opening with a yaml metadata fence (kind required; priority, skills,
 // blockedBy optional). Validation errors name the task; the numbers run
 // 1, 2, 3… in document order without gaps, and blockedBy must be acyclic
-// (025 §4.1).
+// (025 §9.1).
 func PlanTasks(d *Document) ([]PlanTask, error)
 ```
 
@@ -272,7 +272,7 @@ blockedBy: [1]
   recording number → id; second pass wires `AddEdge(tx, now, id[m], id[n],
   "blocks")` for each task n with m ∈ BlockedBy — then the status flip. All
   on the caller's `tx`, so the API's single `RecordEvent` (`doc.accepted`)
-  is the one transaction 025 §5 requires.
+  is the one transaction 025 §9.2 requires.
 - Metrics: `docTasksMinted prometheus.Counter`
   (`worklode_doc_plan_tasks_minted_total`), nil-safe, added in
   `newStoreMetrics`.
@@ -305,7 +305,7 @@ blockedBy: [2]
 - [ ] **Step 1: Write the failing tests**
 
 - `GET /tasks/{id}` on a minted task shows `"plan_doc": <id>`; a task no plan
-  authored shows none (omitempty — its absence is the correct answer, 025 §5).
+  authored shows none (omitempty — its absence is the correct answer, 025 §9.2).
 - `GET /tasks?plan_doc=<id>` returns exactly the plan's set — the query that
   *is* the plan's task set (§1).
 - `POST /docs/{id}/accept` on a plan returns the doc **and** the minted tasks
@@ -358,7 +358,7 @@ In `tasks.go`, beside `blockedCondition`:
 
 ```go
 // planBlockedCondition holds a task while its plan is ordered after another
-// plan whose work is not done (025 §7): a blocks edge between the two plan
+// plan whose work is not done (025 §9.3): a blocks edge between the two plan
 // documents, evaluated over the blocking plan's task set — open tasks, or a
 // set not yet minted (the blocking doc still draft).
 const planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
@@ -409,7 +409,7 @@ Selector semantics are 026 §2's, store-backed:
   covers every section the doc has, present and future; overlap between
   plans is legal and unremarked. Output: doc + unplanned anchors.
 - `NeedsExecution`: accepted plans whose task set has any non-closed task.
-  This deviates from 025 §10's "unminted or unfinished" deliberately:
+  This deviates from 025 §18's "unminted or unfinished" deliberately:
   through the accept path an accepted-but-unminted plan cannot exist, and
   the only unminted accepted plans are part 4's imported *spent* plans,
   which must not be reported as pending work. The `blocks` predicate
@@ -423,7 +423,7 @@ Selector semantics are 026 §2's, store-backed:
   `lode doc accept <ref>` (prints the doc and, for a plan, the minted task
   ids), `lode doc revise <ref>` / `lode doc revise <ref> --file <md>` /
   `lode doc revise <ref> --accept`, and `lode doc anchors <file>` — the
-  author's local pre-accept lint (§10, from 014 §10): parse the file and
+  author's local pre-accept lint (§10, from 025 §18): parse the file and
   report duplicate anchors, anchor/number disagreement, depth over
   `designdoc.DepthLimit`, and (for a plan) `designdoc.PlanTasks` errors, no
   server involved.
@@ -435,7 +435,7 @@ set arithmetic — the sets live in the database now). API: `GET
 /api/v1/docs?needs_planning=true|needs_execution=true`. CLI follows the
 `internal/cmd/task.go` conventions: project scoping via `scope.go`, `--json`
 via the root flag, acceptance is **never** implied by any other verb — one
-verb, one deliberate act (025 §3).
+verb, one deliberate act (025 §7).
 
 - [ ] **Step 3: Verify and commit**
 
@@ -525,7 +525,7 @@ still-unresolved pins containing a colon, `strings.Cut` each after its first
 colon, query `SkillsByNames` once with the deduped suffixes, and accept a
 hit only for the pin's own suffix. Returned `Skill` entries carry the
 registry name; warnings keep naming the pin as written. Extend the function
-comment with the 025 §4.1 citation. No new metrics: no new store operation,
+comment with the 025 §9.1 citation. No new metrics: no new store operation,
 and the warning surface is unchanged.
 
 - [ ] **Step 3: Verify and commit**
@@ -536,7 +536,7 @@ go test ./internal/store/ -run TestResolvePins -count=1 -v
 
 ---
 
-## Done when (maps to 025 §13)
+## Done when (maps to 025 §24)
 
 1. AC2: accept mints the tasks and their `plan_doc` references in one
    transaction — with the declared kind, priority and skills, and the
@@ -554,4 +554,4 @@ go test ./internal/store/ -run TestResolvePins -count=1 -v
    resolve through the after-colon fallback everywhere `ResolvePins` is
    consulted. `wl:requiresSkill` itself is already minted in
    `ns/ontology.ttl` with 016 §1's amendment note; its graph projection is
-   out of scope (025 §12).
+   out of scope (025 §22).

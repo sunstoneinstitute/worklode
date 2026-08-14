@@ -1,6 +1,6 @@
 ---
 status: superseded
-covers: docs/specs/023-keycloak-primary-auth.md
+covers: docs/specs/001-identity-and-authentication.md
 isReplacedBy:
   ".":
     - 2026-08-11-keycloak-primary-auth-identity.md
@@ -15,7 +15,7 @@ isReplacedBy:
 
 **Tech Stack:** Go 1.25+, Postgres (golang-migrate `*.up.sql`/`*.down.sql`), net/http `ServeMux`, `internal/oidc/oidctest` fake issuer.
 
-**Read first:** `docs/specs/023-keycloak-primary-auth.md` §3.1–§3.2 and §3.6, `internal/api/githubweb.go` (everything deleted here), `internal/api/oidcweb.go:57-71` (`webAuth`, `loginTarget`'s caller), `internal/api/oidcauth.go:37-55` (`provisionActor`), `internal/store/actors.go:49-80`.
+**Read first:** `docs/specs/001-identity-and-authentication.md` §3.1–§3.2 and §3.6, `internal/api/githubweb.go` (everything deleted here), `internal/api/oidcweb.go:57-71` (`webAuth`, `loginTarget`'s caller), `internal/api/oidcauth.go:37-55` (`provisionActor`), `internal/store/actors.go:49-80`.
 
 **Conventions:**
 - Run `go test ./internal/...`. **Store and API tests need Postgres with pgvector**; default DSN `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`, override with `TEST_POSTGRES_DSN`.
@@ -54,7 +54,7 @@ isReplacedBy:
 `deploy/base/migrations/0010_actor_github_expectation.up.sql`:
 
 ```sql
--- The GitHub login Keycloak asserts for this actor (spec 023 §3.2). Recorded at
+-- The GitHub login Keycloak asserts for this actor (spec 001 §9.2). Recorded at
 -- login so the link flow can strict-match later, when no Keycloak token is in
 -- hand. NULL means the Keycloak account carries no github_username attribute.
 ALTER TABLE actors ADD COLUMN expected_github_login text;
@@ -265,7 +265,7 @@ type Claims struct {
 	Groups            []string `json:"groups"`
 	// GitHubUsername is the realm's github_username user attribute, exposed by
 	// a protocol mapper on the worklode client. Empty when unset; login never
-	// depends on it (spec 023 §3.2).
+	// depends on it (spec 001 §9.2).
 	GitHubUsername string `json:"github_username"`
 }
 ```
@@ -298,7 +298,7 @@ git commit -m "Sync the github_username claim onto the actor at login"
 - Modify: `internal/api/cliauth.go`
 - Test: `internal/api/cliauth_test.go`
 
-**Decision (spec 023 §3.1):** interactive login — web and CLI — exists iff
+**Decision (spec 001 §3):** interactive login — web and CLI — exists iff
 OIDC is configured. A server with only the GitHub App configured has a link
 flow but **no** login: `/auth/cli/login` and `/.well-known/lode-login` 404,
 and the discovery document always advertises exactly `["keycloak"]`.
@@ -361,7 +361,7 @@ func TestWellKnownLoginReportsProviders(t *testing.T) {
 }
 
 // A GitHub App configured for account linking is not a login provider: with
-// no OIDC there is no interactive login at all (spec 023 §3.1).
+// no OIDC there is no interactive login at all (spec 001 §3).
 func TestCLILoginRequiresOIDC(t *testing.T) {
 	s := &server{gh: &githubauth.Client{}, cfg: Config{PublicURL: "https://wl.example.com", SessionSecret: "sek"}}
 	for path, h := range map[string]http.HandlerFunc{
@@ -454,7 +454,7 @@ Move `loginTarget` into `internal/api/oidcweb.go`, simplified — Keycloak is th
 
 ```go
 // loginTarget returns where webAuth sends unauthenticated users. Keycloak is
-// the only login provider (spec 023 §3.1).
+// the only login provider (spec 001 §3).
 func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }
@@ -489,7 +489,7 @@ Update the `githubweb.go` reference in this file's package comment to name plan 
 
 **Deliberate behavior change:** a server configured with only the GitHub App
 (link-only, no OIDC) now serves the web UI **open**, where it used to gate.
-That is intended: the App no longer implies a login provider (spec 023 §3.1),
+That is intended: the App no longer implies a login provider (spec 001 §3),
 so OIDC alone decides gating, exactly as in v1.
 
 In `internal/api/server.go`, delete these three route registrations (around `:331-333`):
@@ -615,10 +615,10 @@ In `deploy/overlays/hzdev/kustomization.yaml`, delete the two `op: add` entries 
 Append to `docs/follow-ups.md`:
 
 ```markdown
-- **Orphaned `github:<id>` actors.** Spec 023 §3.1 leaves the actor rows the
+- **Orphaned `github:<id>` actors.** Spec 001 §3 leaves the actor rows the
   removed GitHub login provisioned in place. Nothing references them; a cleanup
   migration can drop them whenever convenient.
-- **GitHub App permission ceiling (spec 023 §3.6).** Ops-side, no code: the App
+- **GitHub App permission ceiling (spec 001 §9.1).** Ops-side, no code: the App
   must stay Contents/Actions/Deployments/Pull requests **read** (Issues: write
   only when the spec 008 mirror lands), installed on selected repos excluding
   the provisioning and admin-cluster repos, with no-bypass rulesets on those
@@ -626,7 +626,7 @@ Append to `docs/follow-ups.md`:
   read permission, which only the deleted role derivation used.
 - **Keycloak `github_username` mapper.** The realm's worklode client needs a
   user-attribute protocol mapper exposing `github_username` in ID tokens
-  (spec 023 §3.2) before anyone can link.
+  (spec 001 §9.2) before anyone can link.
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**

@@ -1,4 +1,4 @@
-// Task hierarchy (docs/specs/018-task-hierarchy.md): epics are declared
+// Task hierarchy (docs/specs/004-execution-backbone.md): epics are declared
 // containers, a task has at most one parent, and a chain is at most
 // maxHierarchyDepth edges deep. Progress is derived on read; closure is
 // stored as real transitions, attributed to the triggering event, by

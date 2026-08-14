@@ -11,10 +11,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
-// typedID matches 014 §11.3's <KEY>-<TYPE>-<n> grammar (generalized by 029
+// typedID matches 025 §14.3's <KEY>-<TYPE>-<n> grammar (generalized by 029
 // §4 to plans, milestones and deliverables), with an optional #sec- fragment
 // for the SPEC/ADR case. It is checked before taskID: a document reference
-// must never parse as a task id (014 §11.3).
+// must never parse as a task id (025 §14.3).
 var typedID = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-([A-Z][A-Z0-9]*)-(\d+(?:-\d+)?)(#sec-[\w.\-]+)?$`)
 
 // taskID matches a full task id ("WL-12"); bareTaskNumber (scope.go) covers
@@ -198,8 +198,8 @@ func validShowKind(kind string) bool {
 // ordinalShapeError reports a kind flag's value failing its ordinal shape
 // (showOrdinalShape / the project any-non-empty-string rule): flag values are
 // bare ordinals, never shorthands, so the fix is either a bare ordinal on the
-// flag or the full id positionally — e.g. "--spec WL-SPEC-15" is told to pass
-// either "--spec 15" or the id "WL-SPEC-15" positionally. When value carries
+// flag or the full id positionally — e.g. "--spec WL-SPEC-6" is told to pass
+// either "--spec 15" or the id "WL-SPEC-6" positionally. When value carries
 // no recoverable ordinal (exampleOrdinal falls back to "<n>" — an empty
 // string, or a non-numeric value with no typed-id shape), the positional
 // suggestion would be either dangling ("--spec  or the id  positionally") or
@@ -270,7 +270,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 // no shorthand to build, so the ref falls back to the bare number form
 // (ResolveRef form 2) — a flag always means the local corpus, key or no key,
 // so this fallback is legitimate for --spec/--adr where the typed-id
-// positional shorthand (WL-SPEC-15) would instead get 026 §4.2's tier-3
+// positional shorthand (WL-SPEC-6) would instead get 026 §4.2's tier-3
 // "unresolved" treatment for an unknown foreign key. Either way, expectedKind
 // is passed through to runDocShow, which independently verifies it against
 // the resolved document's frontmatter — so a keyless --adr on a spec (or vice
@@ -311,6 +311,6 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet 
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
-		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document id (WL-SPEC-14, WL-ADR-7)", arg)
+		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document id (WL-SPEC-25, WL-ADR-7)", arg)
 	}
 }
