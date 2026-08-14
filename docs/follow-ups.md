@@ -245,11 +245,6 @@ Each item carries a priority tag (assessed 2026-08-14):
   the stable `/assets/app.css` path with a bounded cache lifetime instead of
   an immutable, hash-named file. Add content hashing when cache-busting on
   every deploy starts to matter.
-- `[P1]` **`check-generated.sh` misses a brand-new untracked generated file**: it
-  uses `git diff --exit-code`, which is silent on a `foo_templ.go` whose
-  `foo.templ` was added but whose generated Go was never committed. Harden
-  with `git status --porcelain` on the generated paths, or `git add -N`
-  before diffing.
 - `[P4]` **`scripts/fetch-tailwind.sh` writes the download directly to
   `bin/tailwindcss`** (non-atomic) rather than temp-file + rename; it
   self-heals via the checksum/`-x` gate on the next run, but an atomic write
