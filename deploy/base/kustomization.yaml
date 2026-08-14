@@ -48,3 +48,5 @@ configMapGenerator:
       - migrations/0016_lease_worktree_per_actor.down.sql
       - migrations/0017_narrow_task_kinds.up.sql
       - migrations/0017_narrow_task_kinds.down.sql
+      - migrations/0018_follow_up_edges.up.sql
+      - migrations/0018_follow_up_edges.down.sql

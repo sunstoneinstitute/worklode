@@ -56,6 +56,60 @@ func TestSingleParentIndex(t *testing.T) {
 	}
 }
 
+// TestAddEdgeFollowUpTo checks the third edge type: it is accepted, it is not
+// project-scoped the way child_of is, and it confers no parent-hood — the
+// origin gains no children and no roll-up.
+func TestAddEdgeFollowUpTo(t *testing.T) {
+	s := openTaskStore(t)
+	origin := createTask(t, s, taskTestNow, defaultTaskInput())
+	followUp := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, origin.ID, "follow_up_to")
+		}); err != nil {
+		t.Fatalf("AddEdge follow_up_to: %v", err)
+	}
+
+	progress, err := s.ChildProgress(t.Context(), origin.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if progress.Total != 0 {
+		t.Fatalf("origin progress = %+v, want zero total: a follow-up is not a child", progress)
+	}
+	parent, err := s.ParentOf(t.Context(), followUp.ID)
+	if err != nil {
+		t.Fatalf("ParentOf: %v", err)
+	}
+	if parent != nil {
+		t.Fatalf("follow-up parent = %+v, want nil", parent)
+	}
+}
+
+// TestSingleOriginIndex pins the partial unique index: a task has at most one
+// origin, whichever task the second edge points at.
+func TestSingleOriginIndex(t *testing.T) {
+	s := openTaskStore(t)
+	followUp := createTask(t, s, taskTestNow, defaultTaskInput())
+	originA := createTask(t, s, taskTestNow, defaultTaskInput())
+	originB := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, originA.ID, "follow_up_to")
+		}); err != nil {
+		t.Fatalf("first origin: %v", err)
+	}
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, originB.ID, "follow_up_to")
+		})
+	if !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("second origin error = %v, want ErrEdgeExists", err)
+	}
+}
+
 // TestUpMigrationDedupsDuplicateParentEdges checks that 0006's DELETE step
 // drops all but the latest child_of edge out of a task before the
 // single-parent index is created, so a database carrying pre-existing

@@ -407,6 +407,17 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:range wl:Task ;
     rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
 
+wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Task ;
+    rdfs:comment """This task was spun out of the work on that task (backbone follow_up_to,
+        spec 004 §1.3). Provenance, not scheduling: deliberately NOT a subproperty of
+        dct:requires and deliberately not transitive, because it implies no ordering and
+        nothing walks it. Functional -- a task has at most one origin, mirroring the
+        task_edges_single_origin index. No named inverse: the origin's follow-ups are a
+        backwards traversal, not a second stored edge.""" .
+
 wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;

@@ -381,6 +381,39 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	}
 }
 
+// TestClaimNextIgnoresFollowUpTo pins 004 §1.3: follow_up_to is provenance, not
+// scheduling. A follow-up is claimable while its origin is wide open, which is
+// exactly what separates it from blocks.
+func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+	origin := createTask(t, s, claimNextTestNow, defaultTaskInput())
+	followUp := createTask(t, s, claimNextTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return AddEdge(tx, claimNextTestNow, followUp.ID, origin.ID, "follow_up_to")
+		}); err != nil {
+		t.Fatalf("AddEdge follow_up_to: %v", err)
+	}
+
+	blocked, err := s.BlockedTaskIDs(ctx)
+	if err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	}
+	if blocked[followUp.ID] {
+		t.Fatal("follow-up reports blocked, want claimable: follow_up_to gates nothing")
+	}
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !res.Claimed {
+		t.Fatalf("ClaimNext claimed nothing, want one of %s/%s", origin.ID, followUp.ID)
+	}
+}
+
 // TestClaimNextDryRun pins spec acceptance: --dry-run returns the top
 // candidate without leasing it or touching task state.
 func TestClaimNextDryRun(t *testing.T) {
