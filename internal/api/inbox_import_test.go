@@ -490,15 +490,15 @@ func countTaskCommits(t *testing.T, st *store.Store, taskID string) int {
 // ResolveDelivery. Each of those is observable here — the fixture puts the
 // correlated task in the state where a replay would be visible: claimed (so an
 // active lease exists to be wrongly closed, and the task sits in in_progress
-// rather than a state a replay would leave untouched) and under an epic (so a
-// child transition would roll up and move the epic).
+// rather than a state a replay would leave untouched) and under a container (so a
+// child transition would roll up and move the container).
 //
-// The epic is attached after the claim, which is why it sits at ready rather
+// The container is attached after the claim, which is why it sits at ready rather
 // than the in_progress its child implies: AddEdge does not roll up, only
 // Transition does (see store.resolveParent), and the edges endpoint attaches
-// existing tasks exactly this way. Starting the epic at ready is also the
+// existing tasks exactly this way. Starting the container at ready is also the
 // sharper fence — from there any child transition at all, not just one to a
-// closed state, changes the epic's target state.
+// closed state, changes the container's target state.
 func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 	// The pulls fixture below must embed a real task id in head.ref for the
 	// PR to correlate (see store.UpsertPR / store.TaskIDFromRef), and that id
@@ -518,15 +518,15 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 	if err := st0.CreateActor(ctx, "someone", "human", "Someone", false); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
-	var taskID, epicID string
+	var taskID, containerID string
 	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
-		epic, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
-			ProjectID: "proj", Title: "container", Priority: "low", Kind: "epic", CreatedBy: "someone",
+		container, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
+			ProjectID: "proj", Title: "container", Priority: "low", Kind: "feature", CreatedBy: "someone",
 		})
 		if err != nil {
 			return err
 		}
-		epicID = epic.ID
+		containerID = container.ID
 		task, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
 			ProjectID: "proj", Title: "unrelated", Priority: "low", Kind: "bug", CreatedBy: "someone",
 		})
@@ -540,12 +540,12 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 	}
 	// Claim first, edge second: the claim's own ready -> in_progress is a real
 	// lifecycle move (not the import path), and doing it before the edge exists
-	// keeps it from rolling the epic up.
+	// keeps it from rolling the container up.
 	if _, err := st0.Claim(ctx, taskID, "someone", "some/worktree", 0); err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
 	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
-		return store.AddEdge(tx, st0.Now(), taskID, epicID, "child_of")
+		return store.AddEdge(tx, st0.Now(), taskID, containerID, "child_of")
 	}); err != nil {
 		t.Fatalf("add child_of edge: %v", err)
 	}
@@ -603,14 +603,14 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		t.Errorf("active lease on %s: %v — import must not close a lease held by an active claim", taskID, err)
 	}
 
-	// Spec 004's roll-up runs off Transition, so an epic that moved is proof a
+	// Spec 004's roll-up runs off Transition, so a container that moved is proof a
 	// child transition happened even where the child's own state looks benign.
-	epic, err := st0.GetTask(ctx, epicID)
+	container, err := st0.GetTask(ctx, containerID)
 	if err != nil {
-		t.Fatalf("get epic: %v", err)
+		t.Fatalf("get container: %v", err)
 	}
-	if epic.State != "ready" {
-		t.Errorf("epic state = %q, want ready — import must not drive the epic roll-up", epic.State)
+	if container.State != "ready" {
+		t.Errorf("container state = %q, want ready — import must not drive the container roll-up", container.State)
 	}
 }
 

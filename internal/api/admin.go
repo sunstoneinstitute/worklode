@@ -667,14 +667,6 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
-	// An epic's state follows its children (spec 004), and epicForbiddenStates
-	// bars it from every delivery state — so an issue promoted as a childless
-	// epic could never leave in_progress.
-	if req.Kind == "epic" {
-		writeErr(w, http.StatusUnprocessableEntity,
-			"cannot promote an issue to kind epic: an epic's state follows its children; promote as a normal kind and use lode task decompose")
-		return
-	}
 	req.Parent = strings.TrimSpace(req.Parent)
 	if req.Parent != "" {
 		// Named 404 ahead of the transaction: AddEdge's own lookup stays the
@@ -839,8 +831,8 @@ type holderJSON struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// boardTaskJSON is a board row. Parent is the task's epic when it has one, so
-// a board can group an epic's children under it without a lookup per task.
+// boardTaskJSON is a board row. Parent is the task's parent when it has one,
+// so a board can group a parent's children under it without a lookup per task.
 type boardTaskJSON struct {
 	taskJSON
 	Parent string      `json:"parent,omitempty"`

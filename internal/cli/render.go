@@ -211,7 +211,7 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 		pos[t.ID] = i
 	}
 	// A child sorts at its parent's position in the incoming slice (rank 1),
-	// anything else at its own (rank 0), so grouping keeps an epic and its
+	// anything else at its own (rank 0), so grouping keeps a parent and its
 	// children adjacent without disturbing the server's priority ordering. A
 	// child whose parent is in another bucket keeps its own position.
 	anchor := func(t BoardTask) (int, int) {
@@ -304,20 +304,20 @@ func timelineSummary(typ string, e map[string]any) string {
 	}
 }
 
-// TreeNode is one epic and its direct children, with the epic's derived
+// TreeNode is one parent and its direct children, with the parent's derived
 // progress — the unit `lode task tree` renders.
 type TreeNode struct {
-	Epic     Task
+	Parent   Task
 	Progress TaskProgress
 	Children []Task
 }
 
-// TreeRender prints each epic with its progress, then its children indented
+// TreeRender prints each parent with its progress, then its children indented
 // one level. Subtasks — the third tier the depth cap allows — are not
 // expanded.
 func TreeRender(w io.Writer, nodes []TreeNode) {
 	if len(nodes) == 0 {
-		fmt.Fprintln(w, "no epics")
+		fmt.Fprintln(w, "no tasks with children")
 		return
 	}
 	for i, n := range nodes {
@@ -325,7 +325,7 @@ func TreeRender(w io.Writer, nodes []TreeNode) {
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintf(w, "%s  %s  [%s]  %d/%d closed\n",
-			n.Epic.ID, n.Epic.Title, n.Epic.State, n.Progress.Closed, n.Progress.Total)
+			n.Parent.ID, n.Parent.Title, n.Parent.State, n.Progress.Closed, n.Progress.Total)
 		for _, c := range n.Children {
 			fmt.Fprintf(w, "  %s  %s  (%s)\n", c.ID, c.Title, c.State)
 		}

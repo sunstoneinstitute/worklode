@@ -42,7 +42,7 @@ Three gaps compound it, all reachable from the same command:
   not survivable when 41 arrive together, and there is no un-ready command.
 - **Promote cannot reach the hierarchy.** `lode task add` gained `--parent`
   (`internal/api/tasks.go:111`), promote did not — so an imported backlog
-  lands as loose tasks, never as an epic's children.
+  lands as loose tasks, never as a parent task's children.
 - **No way to link an issue to an existing task.** `issues.task_id` is written
   in exactly one place (`internal/store/inbox.go:77`), inside `PromoteIssue`,
   which unconditionally creates a new task. The 35 horndb tasks already seeded
@@ -87,7 +87,7 @@ second.
 Those transitions encode *this just happened*. Replaying two years of merged
 PRs through them would resolve delivery for tasks that were never in flight,
 and — since spec 004 — `store.Transition` now ends in `resolveParent`
-(`internal/store/tasks.go:220`), so it would roll that fiction up into epic
+(`internal/store/tasks.go:220`), so it would roll that fiction up into parent
 state as well. Import therefore calls the two `Upsert*` functions directly and
 nothing else. Correlation still happens, because it lives inside `UpsertPR`
 (head_ref, then body) and no-ops when the task does not exist.
@@ -197,13 +197,6 @@ Three changes to `promoteRequest` (`internal/api/admin.go:411`),
   (`internal/api/tasks.go:154-159`) including its named-404 pre-check
   (`:104-114`), which exists so `AddEdge`'s `ErrNotFound` is not reported
   anonymously. `AddEdge` remains the authority on the spec-004 invariants.
-- **`kind = "epic"` is rejected with 422.** `validKinds` admits `epic`
-  (`internal/api/tasks.go:18`), but `epicForbiddenStates`
-  (`internal/store/tasks.go:108`) bars an epic from `in_review`,
-  `deployed_dev`, `deployed_prod`, and `released`. An issue promoted as a
-  childless epic can therefore never leave `in_progress`. This is reachable on
-  `main` today; import makes it reachable 41 times in a row.
-
 `needs_decomposition` and `lode task decompose` are the other staging lever
 for a bulk-promoted backlog. They need no change here; noted so the two are
 not reinvented separately.
@@ -249,10 +242,9 @@ fixtures.
 | Import over a promoted row | `triage_state`, `task_id`, `applies_to_versions` unchanged |
 | `--dry-run` | No `issues` rows, no `events` row |
 | Unmapped repo | 404, nothing written |
-| `include_prs` over a merged PR | PR row exists; task state and epic roll-up unchanged |
+| `include_prs` over a merged PR | PR row exists; task state and parent roll-up unchanged |
 | `promote --draft` | Task state `draft` |
 | `promote --parent` | `child_of` edge in the same event; bad parent → 404 |
-| `promote --kind epic` | 422 |
 | `LinkIssue` | Happy path; already-promoted → `ErrBadTransition`; missing task → `ErrNotFound` |
 | `SubscribedEvents` missing `issues` | `add-repo` warns, mapping still created |
 
@@ -261,7 +253,8 @@ fixtures.
 Spec 025 §22's *Corpus adoption* bullet forward-declares a spec 020 that onboards
 an existing project wholesale: issues → Tasks, `docs/specs/**` and
 `docs/adr/**` → published documents, repos → Components, GitHub projects →
-Workstreams. **This spec delivers the first of those four and defers the rest.**
+`wl:Project`. **This spec delivers the first of those four and defers the
+rest.**
 
 The reason is dependency order, not preference. The three deferred halves all
 land in spec 025's document and component model, which has no implementation:
@@ -287,5 +280,5 @@ fetching is solved and only the mapping is new.
 - **Bulk dismiss.** `--state all` on a mature repo makes one-at-a-time
   dismissal untenable. Not in scope; the narrow default is the mitigation,
   and it is recorded in `docs/follow-ups.md`.
-- **Documents, components, and workstreams.** The other three quarters of
+- **Documents, components, and projects.** The other three quarters of
   025's adoption story, blocked as above.

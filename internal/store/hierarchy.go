@@ -1,8 +1,8 @@
-// Task hierarchy (docs/specs/004-execution-backbone.md): epics are declared
-// containers, a task has at most one parent, and a chain is at most
-// maxHierarchyDepth edges deep. Progress is derived on read; closure is
-// stored as real transitions, attributed to the triggering event, by
-// ResolveHierarchy.
+// Task hierarchy (docs/specs/004-execution-backbone.md): a container is
+// inferred — a task that has child_of children — a task has at most one
+// parent, and a chain is at most maxHierarchyDepth edges deep. Progress is
+// derived on read; closure is stored as real transitions, attributed to the
+// triggering event, by ResolveHierarchy.
 
 package store
 
@@ -15,10 +15,30 @@ import (
 	"time"
 )
 
-// maxHierarchyDepth caps a child_of chain at two edges (epic -> task ->
-// subtask). The brief is a bounded payload and the walks that feed roll-up and
-// breadcrumbs are unbounded without a cap.
+// maxHierarchyDepth caps a child_of chain at two edges, now spanning task ->
+// subtask only (spec 004 §6.1). The brief is a bounded payload and the walks
+// that feed roll-up and breadcrumbs are unbounded without a cap.
 const maxHierarchyDepth = 2
+
+// hasChildren reports whether id has any child_of children. It is the
+// container predicate every guard keys off, container-ness being inferred
+// rather than declared: with decompose creating parent-hood and its children
+// in one transaction, "has children" is exactly as sharp as a column
+// (004 §6.1).
+// Served by the task_edges_children partial index.
+func hasChildren(tx *sql.Tx, id string) (bool, error) {
+	var one int
+	err := tx.QueryRow(
+		`SELECT 1 FROM task_edges WHERE to_task = $1 AND type = 'child_of' LIMIT 1`,
+		id).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("children of %s: %w", id, err)
+	}
+	return true, nil
+}
 
 // parentOf returns id's parent via its child_of edge. The single-parent index
 // makes that at most one row, so ok reports whether id has a parent at all —
@@ -107,12 +127,10 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 }
 
 // checkHierarchy validates a proposed "child child_of parent" edge against the
-// spec-004 invariants. project and kind carry both endpoints' columns, already
-// read by AddEdge.
-func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]string) error {
-	if kind[parent] != kindEpic {
-		return fmt.Errorf("parent %s is a %s, not an epic: %w", parent, kind[parent], ErrInvalidInput)
-	}
+// spec-004 invariants. project carries both endpoints' project_id, already
+// read by AddEdge. Any ordinary task may be a parent — 029 §2 left no kind to
+// declare, and the edge itself is what makes the parent a container.
+func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string) error {
 	if project[child] != project[parent] {
 		return fmt.Errorf("cross-project edge %s (%s) child_of %s (%s): %w",
 			child, project[child], parent, project[parent], ErrInvalidInput)
@@ -149,7 +167,7 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project, kind map[string]s
 	return nil
 }
 
-// HierarchyProgress is an epic's derived roll-up: how many of its direct
+// HierarchyProgress is a parent's derived roll-up: how many of its direct
 // children are closed, out of how many. It is computed on read and never
 // stored — there is no resolver, no migration, and no event-log noise behind
 // it.
@@ -191,8 +209,8 @@ func (s *Store) ParentOf(ctx context.Context, taskID string) (*Task, error) {
 }
 
 // ParentMap returns child id -> parent id for every child_of edge in a project
-// (every project when projectID is ""). One query, so a board can group an
-// epic's children under it without a lookup per task.
+// (every project when projectID is ""). One query, so a board can group a
+// parent's children under it without a lookup per task.
 func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.from_task, e.to_task
@@ -216,19 +234,20 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 	return out, nil
 }
 
-// Decompose converts parentID into an epic and creates its children in one
-// transaction: kind becomes 'epic', needs_decomposition clears, and each title
-// becomes a draft child inheriting the parent's project, priority, concern,
-// and kind. This is what makes the spec-005 needs_decomposition gate
-// actionable — an oversized task becomes its own tracking task plus the
-// pieces, in place, keeping its id and every reference to it.
+// Decompose creates parentID's children in one transaction: needs_decomposition
+// clears and each title becomes a draft child inheriting the parent's project,
+// priority, concern, and kind. The parent's kind is not touched (004 §6.10) —
+// it is the child_of edges that make it a container. This is what makes the
+// spec-005 needs_decomposition gate actionable — an oversized task becomes its
+// own tracking task plus the pieces, in place, keeping its id and every
+// reference to it.
 //
-// Rejected when the parent is already an epic (spec 004's decompose is for
-// splitting an oversized task, not for re-splitting a container — add
-// children to an existing epic with AddEdge instead), when it holds an
-// active lease (decomposing work someone is holding is a coordination bug),
-// when it sits deep enough that its children would exceed maxHierarchyDepth,
-// and from the delivery states an epic can never occupy.
+// Rejected when the parent already has children (spec 004's decompose is for
+// splitting an oversized task, not for re-splitting a container — add further
+// children with AddEdge instead), when it holds an active lease (decomposing
+// work someone is holding is a coordination bug), when it sits deep enough
+// that its children would exceed maxHierarchyDepth, and from the delivery
+// states a task with children can never occupy.
 func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]Task, error) {
 	if len(titles) == 0 {
 		return nil, fmt.Errorf("decompose %s: at least one child title is required: %w",
@@ -246,21 +265,27 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 
 	var projectID, priority, state, kind string
 	var concern sql.NullString
+	var wasFlagged bool
 	err := tx.QueryRow(
-		`SELECT project_id, priority, state, kind, concern FROM tasks WHERE id = $1 FOR UPDATE`,
-		parentID).Scan(&projectID, &priority, &state, &kind, &concern)
+		`SELECT project_id, priority, state, kind, concern, needs_decomposition
+		   FROM tasks WHERE id = $1 FOR UPDATE`,
+		parentID).Scan(&projectID, &priority, &state, &kind, &concern, &wasFlagged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("task %s: %w", parentID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("lock task %s: %w", parentID, err)
 	}
-	if epicForbiddenStates[state] {
-		return nil, fmt.Errorf("task %s is in state %s and cannot become an epic: %w",
+	if containerForbiddenStates[state] {
+		return nil, fmt.Errorf("task %s is in state %s and cannot take children: %w",
 			parentID, state, ErrBadTransition)
 	}
-	if kind == kindEpic {
-		return nil, fmt.Errorf("task %s is already an epic; add children to it instead: %w",
+	already, err := hasChildren(tx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	if already {
+		return nil, fmt.Errorf("task %s already has children; add more to it instead: %w",
 			parentID, ErrInvalidInput)
 	}
 
@@ -286,15 +311,19 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 			parentID, maxHierarchyDepth, ErrInvalidInput)
 	}
 
-	// Flip kind first: AddEdge's checkHierarchy requires an epic parent.
 	if _, err := tx.Exec(
-		`UPDATE tasks SET kind = $1, needs_decomposition = false, updated_at = $2 WHERE id = $3`,
-		kindEpic, now.UTC(), parentID); err != nil {
-		return nil, fmt.Errorf("convert task %s to epic: %w", parentID, err)
+		`UPDATE tasks SET needs_decomposition = false, updated_at = $1 WHERE id = $2`,
+		now.UTC(), parentID); err != nil {
+		return nil, fmt.Errorf("clear needs_decomposition on %s: %w", parentID, err)
 	}
-	if err := LogChange(tx, "task", parentID, eventID,
-		map[string]string{"field": "kind", "old": kind, "new": kindEpic}); err != nil {
-		return nil, err
+	// Only when the flag was actually set: decompose is legal on an unflagged
+	// task, and a change row claiming true -> false there would be a lie. The
+	// child_of edges are the record that the split happened.
+	if wasFlagged {
+		if err := LogChange(tx, "task", parentID, eventID,
+			map[string]string{"field": "needs_decomposition", "old": "true", "new": "false"}); err != nil {
+			return nil, err
+		}
 	}
 
 	children := make([]Task, 0, len(trimmed))
@@ -317,7 +346,7 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 		children = append(children, *child)
 	}
 
-	// The fresh children are all draft, so this only pulls an epic that was
+	// The fresh children are all draft, so this only pulls a parent that was
 	// mid-flight back to where its children put it.
 	if err := ResolveHierarchy(tx, now, parentID, eventID); err != nil {
 		return nil, err

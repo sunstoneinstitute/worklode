@@ -126,7 +126,7 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     leases_active and leases_active_worktree unique indexes are the
 //     backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task.
-//   - ErrBadTransition: the task is an epic, or is not in state ready
+//   - ErrBadTransition: the task has children, or is not in state ready
 //     (draft, merged, ...).
 //   - ErrNotFound: the task or actor does not exist.
 //
@@ -146,19 +146,26 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			now := s.nowFn().UTC().Truncate(time.Second)
 
 			// Lock the task row first so concurrent claims serialize here.
-			var state, kind string
+			var state string
 			if err := tx.QueryRow(
-				`SELECT state, kind FROM tasks WHERE id = $1 FOR UPDATE`, taskID,
-			).Scan(&state, &kind); err != nil {
+				`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID,
+			).Scan(&state); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 				}
 				return fmt.Errorf("lock task %s: %w", taskID, err)
 			}
-			// An epic has nothing to check out; decomposition work that needs a
-			// worktree is a child task (spec 004).
-			if kind == kindEpic {
-				return fmt.Errorf("task %s is an epic and cannot be claimed: %w", taskID, ErrBadTransition)
+			// A container has nothing to check out; decomposition work that
+			// needs a worktree is a child task (spec 004 §6.3). ready ->
+			// in_progress is legal for a parent — it is the roll-up trigger —
+			// so the ready-set exclusion alone would still let a direct claim
+			// through (004 §6.1).
+			container, err := hasChildren(tx, taskID)
+			if err != nil {
+				return err
+			}
+			if container {
+				return fmt.Errorf("task %s has children and cannot be claimed: %w", taskID, ErrBadTransition)
 			}
 
 			var one int

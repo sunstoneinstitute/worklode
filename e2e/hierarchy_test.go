@@ -14,9 +14,10 @@ import (
 
 // TestHierarchyLoop exercises spec 018 end-to-end through public surfaces only
 // (the cli.Client HTTP client — no direct store writes): decompose an
-// oversized task into an epic plus children, confirm the epic never reaches
-// the ready set, then close the children and watch the epic roll up on its
-// own.
+// oversized task into a parent plus children, confirm the parent never
+// reaches the ready set, then close the children and watch it roll up on its
+// own. Since 029 §2 the container is inferred from the child_of edges, so the
+// parent keeps its kind throughout.
 func TestHierarchyLoop(t *testing.T) {
 	ctx := context.Background()
 
@@ -52,13 +53,13 @@ func TestHierarchyLoop(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 
-	// 1. Decompose: the id survives, the kind flips, children appear as drafts.
+	// 1. Decompose: the id and the kind survive, children appear as drafts.
 	split, _, err := agent.Decompose(ctx, big.ID, []string{"Phase one", "Phase two"})
 	if err != nil {
 		t.Fatalf("decompose: %v", err)
 	}
-	if split.Epic.ID != big.ID || split.Epic.Kind != "epic" {
-		t.Fatalf("epic = %+v, want %s converted in place", split.Epic, big.ID)
+	if split.Parent.ID != big.ID || split.Parent.Kind != big.Kind {
+		t.Fatalf("parent = %+v, want %s split in place keeping kind %s", split.Parent, big.ID, big.Kind)
 	}
 	if len(split.Children) != 2 {
 		t.Fatalf("children = %d, want 2", len(split.Children))
@@ -68,12 +69,12 @@ func TestHierarchyLoop(t *testing.T) {
 			t.Fatalf("child %s state = %s, want draft", c.ID, c.State)
 		}
 		if c.Priority != "critical" {
-			t.Fatalf("child %s priority = %s, want critical inherited from the epic", c.ID, c.Priority)
+			t.Fatalf("child %s priority = %s, want critical inherited from the parent", c.ID, c.Priority)
 		}
 	}
 
-	// 2. The epic is never handed out, even ranked critical and created first
-	//    (priority, then created_at, then id — the epic wins every tiebreak it
+	// 2. The parent is never handed out, even ranked critical and created first
+	//    (priority, then created_at, then id — it wins every tiebreak it
 	//    is allowed to enter).
 	for _, c := range split.Children {
 		if _, _, err := agent.ReadyTask(ctx, c.ID); err != nil {
@@ -88,19 +89,19 @@ func TestHierarchyLoop(t *testing.T) {
 		t.Fatalf("claim-next found no candidate, want one of the two ready children")
 	}
 	if pick.Task.ID == big.ID {
-		t.Fatalf("claim-next picked the epic %s, want a child", big.ID)
+		t.Fatalf("claim-next picked the parent %s, want a child", big.ID)
 	}
 	if pick.Task.ID != split.Children[0].ID && pick.Task.ID != split.Children[1].ID {
 		t.Fatalf("claim-next picked %s, want one of the children", pick.Task.ID)
 	}
 
-	// A direct claim of the epic is refused too: excluding it from the ready
-	// set alone would still leave `lode task claim <epic-id>` open.
-	if _, _, err := agent.ClaimTask(ctx, big.ID, "wt-e2e-epic", 0); err == nil {
-		t.Fatalf("claim of epic %s succeeded, want rejection", big.ID)
+	// A direct claim of the parent is refused too: excluding it from the ready
+	// set alone would still leave `lode task claim <parent-id>` open.
+	if _, _, err := agent.ClaimTask(ctx, big.ID, "wt-e2e-parent", 0); err == nil {
+		t.Fatalf("claim of parent %s succeeded, want rejection", big.ID)
 	}
 
-	// 3. Closing every child rolls the epic up on its own. Abandon is the only
+	// 3. Closing every child rolls the parent up on its own. Abandon is the only
 	//    close the HTTP API can drive unaided — in_progress -> in_review is the
 	//    GitHub PR hook's move — and all-abandoned is the roll-up case most
 	//    worth proving end to end: it must not report cancelled work as
@@ -113,28 +114,28 @@ func TestHierarchyLoop(t *testing.T) {
 		if _, _, err := agent.ClaimTask(ctx, c.ID, "wt-e2e-"+c.ID, 0); err != nil {
 			t.Fatalf("claim %s: %v", c.ID, err)
 		}
-		// The first child moving out of ready is enough to start the epic.
+		// The first child moving out of ready is enough to start the parent.
 		mid, _, err := agent.GetTask(ctx, big.ID)
 		if err != nil {
-			t.Fatalf("get epic after claim %d: %v", i, err)
+			t.Fatalf("get parent after claim %d: %v", i, err)
 		}
 		if mid.State != "in_progress" {
-			t.Fatalf("epic state after claiming child %d = %s, want in_progress", i, mid.State)
+			t.Fatalf("parent state after claiming child %d = %s, want in_progress", i, mid.State)
 		}
 		if _, _, err := agent.AbandonTask(ctx, c.ID); err != nil {
 			t.Fatalf("abandon %s: %v", c.ID, err)
 		}
 	}
 
-	epic, _, err := agent.GetTask(ctx, big.ID)
+	parent, _, err := agent.GetTask(ctx, big.ID)
 	if err != nil {
-		t.Fatalf("get epic: %v", err)
+		t.Fatalf("get parent: %v", err)
 	}
-	if epic.State != "abandoned" {
-		t.Fatalf("epic state = %s, want abandoned", epic.State)
+	if parent.State != "abandoned" {
+		t.Fatalf("parent state = %s, want abandoned", parent.State)
 	}
-	if epic.Hierarchy.Progress.Closed != 2 || epic.Hierarchy.Progress.Total != 2 {
-		t.Fatalf("progress = %+v, want 2/2", epic.Hierarchy.Progress)
+	if parent.Hierarchy.Progress.Closed != 2 || parent.Hierarchy.Progress.Total != 2 {
+		t.Fatalf("progress = %+v, want 2/2", parent.Hierarchy.Progress)
 	}
 
 	// The children carry the breadcrumb back up.

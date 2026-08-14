@@ -7,8 +7,8 @@ disable-model-invocation: true
 # Reseed a worklode project
 
 Seed **genuine pending work only**. Spec 025 §1: rows are things someone made;
-groupings are queries. Never seed epics, per-spec umbrella tasks, sprint
-containers, or anything whose state duplicates a coverage query.
+groupings are queries. Never seed plan-root tasks, per-spec umbrella tasks,
+sprint containers, or anything whose state duplicates a coverage query.
 
 **Prerequisites:** `lode` authenticated against the target server (`lode
 login` or a minted token); for a reset, direct Postgres access to that
@@ -122,7 +122,7 @@ the same change.**
 ## 4. Verify
 
 ```bash
-lode task list            # expected count; no epic/plan-root in the ready set
+lode task list            # expected count; no plan-root in the ready set
 lode task tree            # post-025: roots with children, progress derived
 lode doc list --needs-planning --needs-execution   # post-025: agrees with §1 audit
 ```

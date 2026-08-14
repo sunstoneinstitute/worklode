@@ -5,35 +5,39 @@ import (
 	"testing"
 )
 
-// createEpic creates a container task through the API and returns its id.
-func createEpic(t *testing.T, h http.Handler, token, project, title string) string {
+// createContainer creates a task that will take children, through the API,
+// and returns its id. Since 029 §2 there is no container kind to declare.
+func createContainer(t *testing.T, h http.Handler, token, project, title string) string {
 	t.Helper()
 	got := createTaskViaAPI(t, h, token, map[string]any{
-		"project": project, "title": title, "priority": "medium", "kind": "epic",
+		"project": project, "title": title, "priority": "medium", "kind": "feature",
 	})
 	return got["id"].(string)
 }
 
-func TestCreateTaskWithEpicKind(t *testing.T) {
+// TestCreateTaskRejectsContainerKind pins that no kind declares container-ness
+// at the HTTP edge (025 §10): container-ness is inferred from child_of edges, so
+// validKinds admits nothing structural and the create is a 422.
+func TestCreateTaskRejectsContainerKind(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	got := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Container", "priority": "medium", "kind": "epic",
+	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
+		"project": "proj", "title": "Container", "priority": "medium", "kind": "container",
 	})
-	if got["kind"] != "epic" {
-		t.Fatalf("kind = %v, want epic", got["kind"])
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 (no kind declares a container)", rr.Code)
 	}
 }
 
 func TestCreateTaskWithParent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epic := createEpic(t, h, token, "proj", "Container")
+	container := createContainer(t, h, token, "proj", "Container")
 
 	child := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": epic,
+		"parent": container,
 	})
 
 	rr := doReq(t, h, "GET", "/api/v1/tasks/"+child["id"].(string), token, nil)
@@ -43,8 +47,8 @@ func TestCreateTaskWithParent(t *testing.T) {
 	detail := decodeMap(t, rr)
 	hier := detail["hierarchy"].(map[string]any)
 	parent := hier["parent"].(map[string]any)
-	if parent["id"] != epic {
-		t.Fatalf("parent = %v, want %s", parent["id"], epic)
+	if parent["id"] != container {
+		t.Fatalf("parent = %v, want %s", parent["id"], container)
 	}
 	if parent["title"] != "Container" {
 		t.Fatalf("parent title = %v, want Container", parent["title"])
@@ -74,49 +78,48 @@ func TestCreateTaskWithUnknownParentCreatesNothing(t *testing.T) {
 func TestTaskDetailProgress(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epic := createEpic(t, h, token, "proj", "Container")
+	container := createContainer(t, h, token, "proj", "Container")
 	for _, title := range []string{"A", "B"} {
 		createTaskViaAPI(t, h, token, map[string]any{
 			"project": "proj", "title": title, "priority": "medium", "kind": "feature",
-			"parent": epic,
+			"parent": container,
 		})
 	}
 
-	rr := doReq(t, h, "GET", "/api/v1/tasks/"+epic, token, nil)
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+container, token, nil)
 	hier := decodeMap(t, rr)["hierarchy"].(map[string]any)
 	progress := hier["progress"].(map[string]any)
 	if progress["total"].(float64) != 2 || progress["closed"].(float64) != 0 {
 		t.Fatalf("progress = %v, want 0/2", progress)
 	}
 	if hier["parent"] != nil {
-		t.Fatalf("parent = %v, want null for a root epic", hier["parent"])
+		t.Fatalf("parent = %v, want null for a root task", hier["parent"])
 	}
 }
 
-// TestCreateTaskWithNonEpicParentIsUnprocessable checks a rule only
-// reachable through create's "parent" field: a fresh task can never already
-// have a parent, so the edges-endpoint conflict case this replaced was pure
-// duplication of internal/store/hierarchy_test.go and tasks_test.go's
-// TestEdges/TestEdgeValidation. "parent must be an epic" has no such
-// coverage on the create path.
-func TestCreateTaskWithNonEpicParentIsUnprocessable(t *testing.T) {
+// TestCreateTaskUnderOrdinaryParent pins 029 §2 on the create path: any
+// ordinary task may be a parent, so what used to be a 422 ("parent must be an
+// container") is now the supported way to file a child.
+func TestCreateTaskUnderOrdinaryParent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	notEpic := createTaskViaAPI(t, h, token, map[string]any{
+	plain := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Plain", "priority": "medium", "kind": "feature",
 	})
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
 		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": notEpic["id"],
+		"parent": plain["id"],
 	})
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422", rr.Code)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body %s", rr.Code, rr.Body.String())
 	}
-	list := doReq(t, h, "GET", "/api/v1/tasks?project=proj", token, nil)
-	tasks := decodeMap(t, list)["tasks"].([]any)
-	if len(tasks) != 1 {
-		t.Fatalf("tasks = %d, want 1 (only Plain; the rejected create must have rolled back)", len(tasks))
+	child := decodeMap(t, rr)
+	detail := doReq(t, h, "GET", "/api/v1/tasks/"+child["id"].(string), token, nil)
+	hier := decodeMap(t, detail)["hierarchy"].(map[string]any)
+	parent := hier["parent"].(map[string]any)
+	if parent["id"] != plain["id"] {
+		t.Fatalf("parent = %v, want %v", parent["id"], plain["id"])
 	}
 }
 
@@ -130,11 +133,11 @@ func TestCrossProjectParentIsUnprocessable(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
-	epic := createEpic(t, h, token, "proj", "Container")
+	container := createContainer(t, h, token, "proj", "Container")
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
 		"project": "other", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": epic,
+		"parent": container,
 	})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rr.Code)
@@ -146,27 +149,27 @@ func TestCrossProjectParentIsUnprocessable(t *testing.T) {
 	}
 }
 
-func TestListTasksByParentAndKind(t *testing.T) {
+func TestListTasksByParentAndHasChildren(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epic := createEpic(t, h, token, "proj", "Container")
+	container := createContainer(t, h, token, "proj", "Container")
 	child := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": epic,
+		"parent": container,
 	})
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Loose", "priority": "medium", "kind": "feature",
 	})
 
-	rr := doReq(t, h, "GET", "/api/v1/tasks?parent="+epic, token, nil)
+	rr := doReq(t, h, "GET", "/api/v1/tasks?parent="+container, token, nil)
 	tasks := decodeMap(t, rr)["tasks"].([]any)
 	if len(tasks) != 1 || tasks[0].(map[string]any)["id"] != child["id"] {
 		t.Fatalf("children = %v, want [%v]", tasks, child["id"])
 	}
 
-	rr = doReq(t, h, "GET", "/api/v1/tasks?kind=epic", token, nil)
+	rr = doReq(t, h, "GET", "/api/v1/tasks?has_children=true", token, nil)
 	tasks = decodeMap(t, rr)["tasks"].([]any)
-	if len(tasks) != 1 || tasks[0].(map[string]any)["id"] != epic {
-		t.Fatalf("epics = %v, want [%s]", tasks, epic)
+	if len(tasks) != 1 || tasks[0].(map[string]any)["id"] != container {
+		t.Fatalf("parents = %v, want [%s]", tasks, container)
 	}
 }

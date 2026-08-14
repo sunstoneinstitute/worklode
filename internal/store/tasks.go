@@ -57,11 +57,15 @@ type TaskFilter struct {
 	Kind     string
 	Parent   string
 	Assignee string
+	// HasChildren narrows to containers — tasks with at least one child_of
+	// child. Container-ness is inferred from the edges, so this is the only
+	// selector for it; no kind declares one (004 §6.1).
+	HasChildren bool
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
 // blocked until A reaches a closed state (see closedStates); "A child_of B"
-// makes B an epic.
+// makes B a container.
 type Edge struct {
 	FromTask string
 	ToTask   string
@@ -100,16 +104,12 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:            true,
 }
 
-// kindEpic is the tasks.kind value for a declared container task (spec 004):
-// its own state and delivery are driven by its children, never entered
-// directly.
-const kindEpic = "epic"
-
-// epicForbiddenStates are the delivery states an epic can never occupy. They
-// are earned by observed deploy facts about a specific commit (spec 004 §5.2) and
-// an epic has no commit. Checked on both ends of a transition so `lode task
-// done` on an epic reports the roll-up rule instead of a from-state mismatch.
-var epicForbiddenStates = map[string]bool{
+// containerForbiddenStates are the delivery states a task with children can
+// never occupy. They are earned by observed deploy facts about a specific
+// commit (spec 004 §5.2) and a container has no commit of its own. Checked on
+// both ends of a transition so `lode task done` on a parent reports the
+// roll-up rule instead of a from-state mismatch.
+var containerForbiddenStates = map[string]bool{
 	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
 }
 
@@ -184,9 +184,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 // Transition moves a task from one state to another inside the given
 // transaction. The move must be in legalTransitions and the task's current
 // state must equal from (otherwise ErrBadTransition; unknown task is
-// ErrNotFound). An epic is additionally barred from every delivery state
-// (see epicForbiddenStates), since its state is driven entirely by its
-// children. It bumps updated_at and appends a state_log row attributed to
+// ErrNotFound). A task with children is additionally barred from every
+// delivery state (see containerForbiddenStates), since its state is driven
+// entirely by its children. It bumps updated_at and appends a state_log row attributed to
 // eventID. A task with a parent rolls that parent up in the same transaction
 // (see resolveParent).
 func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int64) error {
@@ -194,17 +194,24 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 		return fmt.Errorf("task %s: %s -> %s: %w", taskID, from, to, ErrBadTransition)
 	}
 
-	var current, kind string
-	err := tx.QueryRow(`SELECT state, kind FROM tasks WHERE id = $1`, taskID).Scan(&current, &kind)
+	var current string
+	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
 	}
-	if kind == kindEpic && (epicForbiddenStates[from] || epicForbiddenStates[to]) {
-		return fmt.Errorf("task %s is an epic: its state follows its children, so it cannot move %s -> %s (close its children instead): %w",
-			taskID, from, to, ErrBadTransition)
+	// Only a move touching a forbidden state pays for the children lookup.
+	if containerForbiddenStates[from] || containerForbiddenStates[to] {
+		container, err := hasChildren(tx, taskID)
+		if err != nil {
+			return err
+		}
+		if container {
+			return fmt.Errorf("task %s has children: its state follows them, so it cannot move %s -> %s (close its children instead): %w",
+				taskID, from, to, ErrBadTransition)
+		}
 	}
 	if current != from {
 		return fmt.Errorf("task %s is in state %s, not %s: %w", taskID, current, from, ErrBadTransition)
@@ -487,6 +494,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 			          WHERE e.from_task = tasks.id AND e.to_task = $%d AND e.type = 'child_of')`,
 			len(args)))
 	}
+	if f.HasChildren {
+		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
+		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
+	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
 	}
@@ -521,9 +532,9 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
 // transaction. Self-edges are rejected for both types. A child_of edge must
-// also satisfy the spec-004 hierarchy invariants (see checkHierarchy): an epic
-// parent, one project, one parent per task, no cycle, and at most
-// maxHierarchyDepth edges. A missing endpoint returns ErrNotFound.
+// also satisfy the spec-004 hierarchy invariants (see checkHierarchy): one
+// project, one parent per task, no cycle, and at most maxHierarchyDepth
+// edges. A missing endpoint returns ErrNotFound.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 	if typ != "child_of" && typ != "blocks" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
@@ -532,20 +543,19 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 		return fmt.Errorf("self-edge %s %s %s not allowed: %w", fromTask, typ, toTask, ErrInvalidInput)
 	}
 	project := map[string]string{}
-	kind := map[string]string{}
 	for _, id := range []string{fromTask, toTask} {
-		var p, k string
-		err := tx.QueryRow(`SELECT project_id, kind FROM tasks WHERE id = $1`, id).Scan(&p, &k)
+		var p string
+		err := tx.QueryRow(`SELECT project_id FROM tasks WHERE id = $1`, id).Scan(&p)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
 		if err != nil {
 			return fmt.Errorf("check task %s: %w", id, err)
 		}
-		project[id], kind[id] = p, k
+		project[id] = p
 	}
 	if typ == "child_of" {
-		if err := checkHierarchy(tx, fromTask, toTask, project, kind); err != nil {
+		if err := checkHierarchy(tx, fromTask, toTask, project); err != nil {
 			return err
 		}
 	}

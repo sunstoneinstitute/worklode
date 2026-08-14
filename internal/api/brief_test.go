@@ -93,10 +93,10 @@ func TestTaskBriefNoLease(t *testing.T) {
 func TestTaskBriefParent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	epic := createEpic(t, h, token, "proj", "Delivery lifecycle")
+	container := createContainer(t, h, token, "proj", "Delivery lifecycle")
 	child := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
-		"parent": epic,
+		"parent": container,
 	})
 
 	rr := doReq(t, h, "GET", "/api/v1/tasks/"+child["id"].(string)+"/brief", token, nil)
@@ -108,8 +108,8 @@ func TestTaskBriefParent(t *testing.T) {
 	if !ok {
 		t.Fatalf("parent = %v, want an object", got["parent"])
 	}
-	if parent["id"] != epic || parent["title"] != "Delivery lifecycle" || parent["state"] != "ready" {
-		t.Fatalf("parent = %v, want id %s title Delivery lifecycle state ready", parent, epic)
+	if parent["id"] != container || parent["title"] != "Delivery lifecycle" || parent["state"] != "ready" {
+		t.Fatalf("parent = %v, want id %s title Delivery lifecycle state ready", parent, container)
 	}
 }
 

@@ -106,16 +106,19 @@ func TestPromoteDraft(t *testing.T) {
 	}
 }
 
-func TestPromoteRejectsEpicKind(t *testing.T) {
+// TestPromoteRejectsInvalidKind pins the validKinds gate on promote and, with
+// it, that a rejected promote writes nothing. There is no kind-specific rule
+// beyond that gate.
+func TestPromoteRejectsInvalidKind(t *testing.T) {
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
 
 	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
-		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "epic",
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "saga",
 	})
 	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422 — a childless epic can never leave in_progress", rr.Code)
+		t.Fatalf("status = %d, want 422", rr.Code)
 	}
 
 	issues, err := st.ListIssues(context.Background(), "", "")
@@ -127,17 +130,17 @@ func TestPromoteRejectsEpicKind(t *testing.T) {
 	}
 }
 
-func TestPromoteUnderEpic(t *testing.T) {
+func TestPromoteUnderParent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
 
-	epic := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "backlog", "priority": "low", "kind": "epic",
+	container := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "backlog", "priority": "low", "kind": "feature",
 	})["id"].(string)
 
 	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
-		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": epic,
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": container,
 	})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
@@ -151,8 +154,8 @@ func TestPromoteUnderEpic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parent of promoted task: %v", err)
 	}
-	if parent == nil || parent.ID != epic {
-		t.Fatalf("parent = %v, want %s", parent, epic)
+	if parent == nil || parent.ID != container {
+		t.Fatalf("parent = %v, want %s", parent, container)
 	}
 }
 
@@ -183,34 +186,39 @@ func TestPromoteUnknownParentIs404(t *testing.T) {
 	}
 }
 
-// TestPromoteRejectsNonEpicParent covers the invariant --parent's help text
-// promises ("make the new task a child of this epic"): promoting under a
-// task that exists but isn't an epic must be rejected, not silently filed.
-// store.AddEdge -> checkHierarchy (internal/store/hierarchy.go) returns
-// ErrInvalidInput for a non-epic parent, and mapStoreErr
-// (internal/api/server.go) maps ErrInvalidInput to 422 — the same status
-// TestPromoteRejectsEpicKind above expects for the mirror-image mistake.
-func TestPromoteRejectsNonEpicParent(t *testing.T) {
+// TestPromoteUnderOrdinaryParent pins 004 §6.1 on the promote path: any
+// ordinary task may be a parent, since checkHierarchy requires no particular
+// kind, so promoting under one is filed rather than rejected. The remaining
+// spec-004 invariants (one project, one parent, no cycle, depth cap) still
+// reject through the ErrInvalidInput -> 422 mapping.
+func TestPromoteUnderOrdinaryParent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
 
-	notEpic := createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "not an epic", "priority": "low", "kind": "bug",
+	plain := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "an ordinary task", "priority": "low", "kind": "bug",
 	})["id"].(string)
 
 	rr := doReq(t, h, http.MethodPost, "/api/v1/inbox/promote", token, map[string]any{
-		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": notEpic,
+		"repo": "acme/widgets", "number": 1, "priority": "low", "kind": "bug", "parent": plain,
 	})
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422 — %s is not an epic", rr.Code, notEpic)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 under ordinary parent %s; body %s", rr.Code, plain, rr.Body.String())
 	}
 
 	issues, err := st.ListIssues(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
-	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
-		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
+	if issues[0].TriageState == "new" || issues[0].TaskID == nil {
+		t.Fatalf("issue = %+v, want promoted and linked to the new task", issues[0])
+	}
+
+	detail := doReq(t, h, http.MethodGet, "/api/v1/tasks/"+*issues[0].TaskID, token, nil)
+	hier := decodeMap(t, detail)["hierarchy"].(map[string]any)
+	parent := hier["parent"].(map[string]any)
+	if parent["id"] != plain {
+		t.Fatalf("parent = %v, want %s", parent["id"], plain)
 	}
 }
