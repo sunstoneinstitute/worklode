@@ -169,33 +169,55 @@ func resolveEnvironment(cluster string, clusterEnv map[string]string) string {
 	return fluxDefaultEnvironment
 }
 
-// revisionSHA extracts the commit SHA from a Flux metadata.revision value.
-// Recognized formats: "main@sha1:<sha>", "sha1:<sha>", and a bare "<sha>".
-// An empty revision returns "".
-func revisionSHA(revision string) string {
+// parseRevision classifies a Flux metadata.revision. A GitRepository
+// revision names a commit ("main@sha1:<sha>", "sha1:<sha>", bare "<sha>");
+// an OCIRepository revision names an image digest ("<tag>@sha256:<hex>",
+// bare "sha256:<hex>"). Exactly one return value is non-empty; both are
+// empty for an empty or unrecognised revision.
+func parseRevision(revision string) (gitSHA, ociDigest string) {
 	if revision == "" {
-		return ""
+		return "", ""
+	}
+	// sha256: is checked first: an OCI revision has no sha1: marker, and
+	// checking "@" first would return the digest as if it were a git sha.
+	if i := strings.LastIndex(revision, "sha256:"); i >= 0 {
+		return "", revision[i:]
 	}
 	if i := strings.LastIndex(revision, "sha1:"); i >= 0 {
-		return revision[i+len("sha1:"):]
+		return revision[i+len("sha1:"):], ""
 	}
 	if i := strings.LastIndex(revision, "@"); i >= 0 {
-		return revision[i+1:]
+		return revision[i+1:], ""
 	}
-	return revision
+	return revision, ""
 }
 
 // confirmFluxDelivery advances the Flux side of the deploy frontier for
 // environment when the reconciled revision maps to a repo we track, then
-// resolves the tasks the new frontier covers.
-func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment, revision string, eventID int64) error {
+// resolves the tasks the new frontier covers. An OCI digest reaches the
+// commit through the artifact built from it; a git revision names the commit
+// directly.
+func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment, gitSHA, ociDigest string, eventID int64) error {
 	// clusterEnv is unvalidated operator config (LODE_CLUSTER_ENV_MAP), so
 	// environment can be anything; env_deploys only accepts dev|prod and a
 	// CHECK violation would abort the whole delivery.
 	if environment != "dev" && environment != "prod" {
 		return nil
 	}
-	sha := revisionSHA(revision)
+	sha := gitSHA
+	if ociDigest != "" {
+		a, err := store.ArtifactByDigest(tx, ociDigest)
+		if err != nil {
+			return err
+		}
+		if a == nil {
+			// The image was deployed before its registry_package webhook
+			// arrived, or from a registry we do not ingest. Latching on a
+			// signal we cannot confirm would gate the repo/env forever.
+			return nil
+		}
+		sha = a.SourceSHA
+	}
 	if sha == "" {
 		return nil
 	}
@@ -215,7 +237,7 @@ func (h *fluxHandler) confirmFluxDelivery(tx *sql.Tx, now time.Time, environment
 	if latched {
 		// Permanent switch to dual-signal gating; if the correlation is wrong
 		// (shared history between tracked repos) this line is the only trace.
-		h.log.Info("flux delivery gating latched", "repo", repo, "environment", environment, "revision", revision)
+		h.log.Info("flux delivery gating latched", "repo", repo, "environment", environment, "sha", sha)
 	}
 	return resolveFrontier(tx, now, repo, environment, eventID)
 }
@@ -229,9 +251,19 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 	environment := resolveEnvironment(cluster, h.clusterEnv)
 	targetName := ev.InvolvedObject.Namespace + "/" + ev.InvolvedObject.Name
 
+	gitSHA, ociDigest := parseRevision(ev.Metadata["revision"])
 	var artifactID *int64
-	if sha := revisionSHA(ev.Metadata["revision"]); sha != "" {
-		id, err := store.ArtifactIDBySourceSHA(tx, sha)
+	switch {
+	case ociDigest != "":
+		a, err := store.ArtifactByDigest(tx, ociDigest)
+		if err != nil {
+			return err
+		}
+		if a != nil {
+			artifactID = &a.ID
+		}
+	case gitSHA != "":
+		id, err := store.ArtifactIDBySourceSHA(tx, gitSHA)
 		if err != nil {
 			return err
 		}
@@ -284,7 +316,7 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 		}); err != nil {
 			return err
 		}
-		if err := h.confirmFluxDelivery(tx, now, environment, ev.Metadata["revision"], eventID); err != nil {
+		if err := h.confirmFluxDelivery(tx, now, environment, gitSHA, ociDigest, eventID); err != nil {
 			return err
 		}
 		if priorStatus != "failed" {

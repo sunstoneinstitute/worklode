@@ -50,3 +50,5 @@ configMapGenerator:
       - migrations/0017_narrow_task_kinds.down.sql
       - migrations/0018_follow_up_edges.up.sql
       - migrations/0018_follow_up_edges.down.sql
+      - migrations/0019_artifact_digest_index.up.sql
+      - migrations/0019_artifact_digest_index.down.sql

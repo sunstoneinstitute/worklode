@@ -344,6 +344,46 @@ func TestArtifactIDBySourceSHANewestWins(t *testing.T) {
 	}
 }
 
+// artifactByDigest drives ArtifactByDigest inside its own RecordEvent
+// transaction, since it is tx-scoped.
+func artifactByDigest(t *testing.T, s *Store, digest string) *Artifact {
+	t.Helper()
+	var got *Artifact
+	_, _, err := s.RecordEvent(t.Context(), "flux", nextExt(t), "lookup", nil,
+		func(tx *sql.Tx, _ int64) error {
+			var err error
+			got, err = ArtifactByDigest(tx, digest)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("ArtifactByDigest: %v", err)
+	}
+	return got
+}
+
+func TestArtifactByDigest(t *testing.T) {
+	s := openArtifactsStore(t)
+	digest := "sha256:feed00"
+	a := defaultArtifact()
+	a.Digest = &digest
+	if _, err := createArtifact(t, s, a); err != nil {
+		t.Fatalf("createArtifact: %v", err)
+	}
+
+	got := artifactByDigest(t, s, digest)
+	if got == nil || got.SourceSHA != a.SourceSHA {
+		t.Fatalf("ArtifactByDigest = %+v, want the seeded artifact", got)
+	}
+}
+
+func TestArtifactByDigestNoneFound(t *testing.T) {
+	s := openArtifactsStore(t)
+	got := artifactByDigest(t, s, "sha256:absent")
+	if got != nil {
+		t.Fatalf("ArtifactByDigest = %+v, want nil", got)
+	}
+}
+
 // deploymentStatus drives DeploymentStatus inside its own RecordEvent
 // transaction, since it is tx-scoped.
 func deploymentStatus(t *testing.T, s *Store, environment, targetKind, targetName string) string {
