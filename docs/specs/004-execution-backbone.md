@@ -7,9 +7,10 @@ issued: 2026-07-29
 ## 0. Purpose & scope {#sec-0}
 
 The execution backbone is the ACID core Worklode's pickup loop turns on: task state,
-worktree-bound leases, the append-only event log, and the two edge types
-(`blocks`, `child_of`) that gate what is claimable. It runs on **Postgres**, with
-the lease bound to **git-worktree identity**.
+worktree-bound leases, the append-only event log, and the edge types (`blocks`,
+`child_of`, `follow_up_to`) that decide what is claimable, what a task is made of,
+and where it came from. It runs on **Postgres**, with the lease bound to
+**git-worktree identity**.
 
 **Concurrency.** Postgres lets N `claim --next` calls proceed concurrently, serializing
 only on the specific task row(s) they actually contend for — the write throughput
@@ -18,8 +19,8 @@ only on the specific task row(s) they actually contend for — the write through
 **In scope:** the Postgres schema baseline, row-lock transaction semantics, the task
 state machine (incl. reopen and delivery), worktree-bound lease lifecycle, the atomic
 `claim` transaction (the transaction only — not the ranking), the event log +
-provenance, per-project task keys, task hierarchy, and the two gating edges with cycle
-detection.
+provenance, per-project task keys, task hierarchy, and the three edge types with cycle
+detection on the two that need it.
 
 **Out of scope (reference by title, do not duplicate):**
 `claim --next` **ranking**, `concern`, `focus`, `--strict-focus`, `needs-decomposition`
@@ -112,7 +113,7 @@ lease lapse; the sweeper reclaims it.
 CREATE TABLE task_edges (
     from_task  text NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
     to_task    text NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
-    type       text NOT NULL CHECK (type IN ('child_of','blocks')),
+    type       text NOT NULL CHECK (type IN ('child_of','blocks','follow_up_to')),
     created_at timestamptz NOT NULL,
     UNIQUE (from_task, to_task, type)
 );
@@ -143,6 +144,32 @@ CREATE TABLE task_edges (
   rejected → `ErrInvalidInput`. Duplicate → `ErrEdgeExists`. (BFS is retained; a
   Postgres `WITH RECURSIVE` variant is an optional later optimization, not required
   for v1.)
+- **`follow_up_to`**: "A follow_up_to B" records that A was spun out of the work on B
+  — the loose end an agent finds mid-task and files rather than fixes. It is
+  **provenance, not scheduling**: it gates nothing, so A is claimable while B is still
+  open, and it confers none of `child_of`'s parent-hood, so B gains no children, no
+  progress roll-up and no §6.4 ceiling. A task has **at most one origin**, enforced by
+  a partial unique index on `from_task` the way `child_of`'s single-parent index is
+  (§6.2); an origin carries any number of follow-ups. No cycle detection: nothing walks
+  the edge transitively, so a cycle costs nothing to hold. Cross-project like `blocks`
+  and unlike `child_of`, because a loose end is routinely found in one project and
+  belongs to another. Self-edges rejected → `ErrInvalidInput`. Duplicate, or a second
+  origin → `ErrEdgeExists`.
+
+The three types split cleanly by what they decide: `blocks` decides *when* a task may
+be claimed, `child_of` decides *what a task is made of*, `follow_up_to` decides
+*nothing* and only records where the task came from. Modelling a follow-up as a child
+would be the tempting shortcut and is wrong on both counts — it would make the origin a
+container that cannot advance past `merged`, and its roll-up would report the origin
+unfinished for work discovered after it was done.
+
+**Surface.** `POST`/`DELETE /api/v1/tasks/{id}/edges` carry `follow_up_to` like any
+other type, and `POST /api/v1/tasks` accepts a `follow_up_to` field beside `parent` so
+filing a follow-up costs one round trip — the case that matters, since an agent files
+these mid-task and a second call is a second chance to skip it. On the CLI that is
+`lode task add --follow-up-to <id>`, with `lode task follow-up <id> --of <id>` and
+`lode task unfollow-up <id>` for an existing task. The task page lists both directions
+("Follow-up to", "Follow-ups") beside Parent and Children.
 
 ### 1.4 events + state_log — append-only log, provenance {#sec-1.4}
 
