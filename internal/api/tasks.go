@@ -27,7 +27,7 @@ var validKinds = map[string]bool{
 const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, review, or spike"
 
 var validEdgeTypes = map[string]bool{
-	"blocks": true, "child_of": true,
+	"blocks": true, "child_of": true, "follow_up_to": true,
 }
 
 // taskJSON is the wire form of a task: every store.Task field, so a client
@@ -74,15 +74,16 @@ func toTaskJSON(t *store.Task) taskJSON {
 }
 
 type createTaskRequest struct {
-	Project  string   `json:"project"`
-	Title    string   `json:"title"`
-	Body     string   `json:"body"`
-	Priority string   `json:"priority"`
-	Kind     string   `json:"kind"`
-	Concern  string   `json:"concern"`
-	Draft    bool     `json:"draft"`
-	Parent   string   `json:"parent"`
-	Skills   []string `json:"skills"`
+	Project    string   `json:"project"`
+	Title      string   `json:"title"`
+	Body       string   `json:"body"`
+	Priority   string   `json:"priority"`
+	Kind       string   `json:"kind"`
+	Concern    string   `json:"concern"`
+	Draft      bool     `json:"draft"`
+	Parent     string   `json:"parent"`
+	FollowUpTo string   `json:"follow_up_to"`
+	Skills     []string `json:"skills"`
 }
 
 // createTask handles POST /api/v1/tasks.
@@ -93,6 +94,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Parent = strings.TrimSpace(req.Parent)
+	req.FollowUpTo = strings.TrimSpace(req.FollowUpTo)
 	if strings.TrimSpace(req.Title) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title is required")
 		return
@@ -121,6 +123,15 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		// reported as an anonymous 404.
 		if _, err := s.st.GetTask(r.Context(), req.Parent); errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "parent not found: "+req.Parent)
+			return
+		}
+	}
+	if req.FollowUpTo != "" {
+		// Named 404 for the same reason as Parent's: AddEdge's ErrNotFound
+		// would otherwise be reported as an anonymous 404 indistinguishable
+		// from the project lookup's.
+		if _, err := s.st.GetTask(r.Context(), req.FollowUpTo); errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "follow_up_to not found: "+req.FollowUpTo)
 			return
 		}
 	}
@@ -160,6 +171,11 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
 				if err := store.AddEdge(tx, now, t.ID, req.Parent, "child_of"); err != nil {
+					return err
+				}
+			}
+			if req.FollowUpTo != "" {
+				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "follow_up_to"); err != nil {
 					return err
 				}
 			}
@@ -431,7 +447,8 @@ func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to st
 		return "", "", false
 	}
 	if !validEdgeTypes[req.Type] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid edge type: must be blocks or child_of")
+		writeErr(w, http.StatusUnprocessableEntity,
+			"invalid edge type: must be blocks, child_of, or follow_up_to")
 		return "", "", false
 	}
 	if req.To != nil {
