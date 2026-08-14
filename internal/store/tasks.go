@@ -533,12 +533,14 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
-// transaction. Self-edges are rejected for both types. A child_of edge must
-// also satisfy the spec-004 hierarchy invariants (see checkHierarchy): one
-// project, one parent per task, no cycle, and at most maxHierarchyDepth
-// edges. A missing endpoint returns ErrNotFound.
+// transaction. Self-edges are rejected for all three types. A child_of edge
+// must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
+// one project, one parent per task, no cycle, and at most maxHierarchyDepth
+// edges. follow_up_to is unchecked beyond the single-origin index: it is
+// cross-project by design and nothing walks it transitively. A missing
+// endpoint returns ErrNotFound.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
-	if typ != "child_of" && typ != "blocks" {
+	if typ != "child_of" && typ != "blocks" && typ != "follow_up_to" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
 	}
 	if fromTask == toTask {
@@ -570,6 +572,10 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 		// checkHierarchy's read; both report the same shape.
 		if isUniqueViolationOn(err, "task_edges_single_parent") {
 			return fmt.Errorf("task %s already has a parent: %w", fromTask, ErrEdgeExists)
+		}
+		if isUniqueViolationOn(err, "task_edges_single_origin") {
+			return fmt.Errorf("task %s is already a follow-up to another task: %w",
+				fromTask, ErrEdgeExists)
 		}
 		if isUniqueViolation(err) {
 			return fmt.Errorf("edge %s %s %s: %w", fromTask, typ, toTask, ErrEdgeExists)
