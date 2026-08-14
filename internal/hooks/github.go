@@ -598,12 +598,16 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 
 	// The artifact's source_sha must be a commit, never a branch name: a
 	// branch name can never match a Flux revision, so the artifact would be
-	// permanently uncorrelatable. A pre-resolved sha is a commit GitHub
-	// itself vouched for, so it is used directly even when it has not landed
-	// on main yet — a release branch's tip commonly hasn't. Otherwise the sha
-	// comes from the frontier's main commit, or is left empty when neither
-	// resolved.
+	// permanently uncorrelatable. A resolved commit is used directly even when
+	// it has not landed on main — a release branch's tip commonly hasn't, and a
+	// backport tag's commit may predate the repo's onboarding. That commit is
+	// either the one ServeHTTP resolved from a branch name, or the payload's
+	// own commitish when it already was a sha. Otherwise the sha comes from the
+	// frontier's main commit, or is left empty when neither resolved.
 	sourceSHA := resolvedCommitish
+	if sourceSHA == "" && isCommitSHA(p.Release.TargetCommitish) {
+		sourceSHA = p.Release.TargetCommitish
+	}
 	if sourceSHA == "" && frontier != nil {
 		if sourceSHA, err = store.MainSHAForID(tx, *frontier); err != nil {
 			return err

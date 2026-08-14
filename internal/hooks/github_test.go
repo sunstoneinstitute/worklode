@@ -8,12 +8,14 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
@@ -169,6 +171,19 @@ func (e *env) rawQueryInt(t *testing.T, query string, args ...any) int {
 		t.Fatalf("raw query %q: %v", query, err)
 	}
 	return n
+}
+
+// rawQueryRow scans one multi-column row, reporting whether it existed.
+func (e *env) rawQueryRow(t *testing.T, dest []any, query string, args ...any) bool {
+	t.Helper()
+	err := e.st.DBForTests().QueryRow(query, args...).Scan(dest...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false
+	}
+	if err != nil {
+		t.Fatalf("raw query %q: %v", query, err)
+	}
+	return true
 }
 
 // rawQueryString runs a single-value SQL query against the store's database.
@@ -461,19 +476,58 @@ func TestReleasePublished(t *testing.T) {
 	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	// No main commit has ever been seen for the repo: target_commitish
-	// (a sha here) does not resolve and there is no head to fall back to, so
-	// the frontier is unresolvable and the artifact is stored with no
-	// source_sha rather than the uncorrelatable literal. Look it up by
-	// kind/name/version since ArtifactsBySourceSHA("") would not find it.
-	sha := e.rawQueryString(t,
-		`SELECT source_sha FROM artifacts WHERE kind = 'git_tag' AND name = $1 AND version = 'v1.2.3'`,
-		"sunstoneinstitute/demo")
-	if sha != "" {
-		t.Fatalf("artifact source_sha = %q, want empty (unresolvable frontier)", sha)
+	// No main commit has ever been seen for the repo, so the frontier is
+	// unresolvable — but target_commitish is already a sha, which the artifact
+	// records regardless. Look the artifact up by kind/name/version, so the
+	// query names the row rather than depending on the sha it carries.
+	var sha, repo string
+	var builtAt time.Time
+	if !e.rawQueryRow(t, []any{&sha, &repo, &builtAt},
+		`SELECT source_sha, repo, built_at FROM artifacts
+		  WHERE kind = 'git_tag' AND name = $1 AND version = 'v1.2.3'`,
+		demoRepo) {
+		t.Fatal("no git_tag artifact for v1.2.3")
+	}
+	if sha != "abc1230000000000000000000000000000000000" {
+		t.Fatalf("artifact source_sha = %q, want the target_commitish", sha)
+	}
+	if repo != demoRepo {
+		t.Fatalf("artifact repo = %q, want %q", repo, demoRepo)
+	}
+	if builtAt.IsZero() {
+		t.Fatal("artifact built_at is zero")
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM release_frontiers`); n != 0 {
 		t.Fatalf("release_frontiers rows = %d, want 0", n)
+	}
+}
+
+// TestReleaseArtifactKeepsAnUnlandedCommitish: a target_commitish that is an
+// explicit sha absent from main_commits (a backport tag, a release cut before
+// the repo was onboarded) is what the artifact records. Falling back to the
+// frontier's sha here would attribute the tag to a commit it does not contain
+// and make main's head correlate to the wrong artifact.
+func TestReleaseArtifactKeepsAnUnlandedCommitish(t *testing.T) {
+	e := newEnv(t)
+	deliverPushOK(t, e, "d-1", "push_main_merge.json")
+	const backportSHA = "7777777777777777777777777777777777777777"
+	const headSHA = "3333333333333333333333333333333333333333"
+
+	rr := deliverBody(t, e.h, "release", "d-2", releaseBody("v0.9.1", backportSHA))
+	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	sha := e.rawQueryString(t,
+		`SELECT source_sha FROM artifacts WHERE kind = 'git_tag' AND version = 'v0.9.1'`)
+	if sha != backportSHA {
+		t.Fatalf("artifact source_sha = %q, want the unlanded target_commitish %q", sha, backportSHA)
+	}
+	// The frontier is a main-commit id, so it still falls back to main's head.
+	if got, want := e.rawQueryInt(t,
+		`SELECT main_id FROM release_frontiers WHERE repo = $1 AND tag = 'v0.9.1'`, demoRepo),
+		e.mainCommitID(t, headSHA); got != want {
+		t.Fatalf("frontier main_id = %d, want %d (main head)", got, want)
 	}
 }
 

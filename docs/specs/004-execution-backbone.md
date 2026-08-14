@@ -556,7 +556,7 @@ handler logs `flux delivery gating latched` (repo, environment, revision) on
 the transition — that line is the operator's only trace when diagnosing tasks
 stuck at `merged`; the fix is a `flux_seen` reset in the database.
 
-**`release_frontiers`** — `(repo, tag, main_seq, published_at)`. A
+**`release_frontiers`** — `(repo, tag, main_id, published_at)`. A
 `release.published` event records the seq the tag covers; tasks at or below it
 count as released. The frontier is the release's `target_commitish` when that
 resolves to a known main commit, so a backport tag covers only what it
@@ -567,9 +567,10 @@ main's head as of the webhook's arrival whenever that resolved commit is not
 itself a known main commit — no App configured, the branch could not be
 resolved, or (the common release-branch case) the branch tip has simply never
 landed on main — right for release-on-merge. The release artifact is not
-bound by that fallback: it records the App-resolved commit directly, since
-that commit is real regardless of whether it has landed on main. Forward-only
-per tag.
+bound by that fallback: it records the resolved commit directly — whether the
+App resolved it from a branch name or the payload already carried a sha —
+since that commit is real regardless of whether it has landed on main.
+Forward-only per tag.
 
 ### 5.3 Handlers and resolver {#sec-5.3}
 
