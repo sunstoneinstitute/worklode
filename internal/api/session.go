@@ -128,6 +128,9 @@ type cliIntent struct {
 	Redirect string `json:"r"`
 	State    string `json:"s"`
 	Exp      int64  `json:"e"`
+	// Mode is cliModeLoopback or cliModeManual. Empty means loopback, so a
+	// cookie signed before manual mode existed still completes.
+	Mode string `json:"m,omitempty"`
 }
 
 func signCLIIntent(secret string, ci cliIntent) string {

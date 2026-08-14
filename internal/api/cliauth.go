@@ -9,16 +9,31 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // cliCodeTTL bounds how long a one-time code is valid between the browser
-// redirect and the CLI's token exchange.
-const cliCodeTTL = 60 * time.Second
+// redirect and the CLI's token exchange. It is set by the slowest legitimate
+// path, manual mode: a human reading a code off one machine's screen and
+// pasting it into another's terminal cannot reliably beat the 60 seconds the
+// loopback flow alone needed. Five minutes matches the CLI's own wait window
+// and stays inside RFC 6749 §4.1.2's ceiling; single use and the state binding,
+// not the TTL, are what make the code safe (spec 001 §8.3).
+const cliCodeTTL = 5 * time.Minute
+
+// The two shapes a `lode login` can take: the default loopback redirect (§8) and
+// manual mode, where the code is rendered for the user to copy (§8.7).
+const (
+	cliModeLoopback = "loopback"
+	cliModeManual   = "manual"
+)
 
 type cliCode struct {
 	actorID string
@@ -101,6 +116,12 @@ func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, ne
 			// Clear both transient cookies.
 			http.SetCookie(w, &http.Cookie{Name: cliCookieName, Path: "/auth/", MaxAge: -1})
 			http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
+			// Manual mode (§8.7) has no loopback to redirect to: show the code
+			// so the user can carry it to the terminal themselves.
+			if ci.Mode == cliModeManual {
+				s.renderCLICode(w, r, actorID, code)
+				return
+			}
 			// Build the loopback URL with net/url so an eventual path or query in
 			// redirect_uri is preserved rather than corrupted by concatenation.
 			u, err := url.Parse(ci.Redirect)
@@ -133,6 +154,43 @@ func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID,
 	http.Redirect(w, r, safeNext(next), http.StatusFound)
 }
 
+// renderCLICode shows the one-time code for the user to copy back into their
+// terminal, ending a manual-mode login (§8.7). Only the code reaches the page:
+// the 30-day token it redeems for is minted later, at /auth/cli/token, and
+// never leaves the CLI process.
+func (s *server) renderCLICode(w http.ResponseWriter, r *http.Request, actorID, code string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// A page holding a live credential must not be cached, and least of all on
+	// the shared or borrowed machine manual mode exists to serve.
+	w.Header().Set("Cache-Control", "no-store")
+	view := ui.CLICodeView{
+		Title:     "worklode: finish signing in",
+		ActorID:   actorID,
+		Code:      code,
+		ExpiresIn: humanizeDuration(cliCodeTTL),
+	}
+	if err := ui.CLICode(view).Render(r.Context(), w); err != nil {
+		s.log.Error("render cli code page", "err", err)
+	}
+}
+
+// humanizeDuration renders a whole-minute or whole-second duration for prose.
+// Only ever called with cliCodeTTL, so it handles no other shape.
+func humanizeDuration(d time.Duration) string {
+	if m := int(d.Minutes()); m >= 1 {
+		return fmt.Sprintf("%d minute%s", m, plural(m))
+	}
+	sec := int(d.Seconds())
+	return fmt.Sprintf("%d second%s", sec, plural(sec))
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 // isLoopbackRedirect reports whether raw is a syntactically valid http URL whose
 // host is a loopback address with an explicit non-zero port. This blocks code
 // exfiltration to a remote redirect target.
@@ -162,13 +220,27 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	redirect := q.Get("redirect_uri")
 	state := q.Get("state")
-	if state == "" || !isLoopbackRedirect(redirect) {
+	mode := q.Get("mode")
+	if mode == "" {
+		mode = cliModeLoopback
+	}
+	// Manual mode binds no listener, so it carries no redirect_uri and the
+	// loopback check has nothing to check. Loopback — the default, and anything
+	// claiming to be it — must present one.
+	switch {
+	case state == "":
+		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
+		return
+	case mode == cliModeManual:
+		redirect = ""
+	case mode == cliModeLoopback && isLoopbackRedirect(redirect):
+	default:
 		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     cliCookieName,
-		Value:    signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
+		Value:    signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
 		Path:     "/auth/",
 		MaxAge:   int(oauthStateMaxAge.Seconds()),
 		HttpOnly: true,
