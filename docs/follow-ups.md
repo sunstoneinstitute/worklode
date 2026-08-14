@@ -12,6 +12,15 @@ Each item carries a priority tag (assessed 2026-08-14):
 - `[P4]` low-risk chores and doc/spec hygiene — batch when convenient
 - `[gated]` waiting on another decision, spec, or condition — don't schedule
 
+**A gap a plan's `covers:` already declares does not belong here.** A
+`coverage: partial` claim (026 §5, `splitting-specs-into-plans`) states the
+gap in a form a coverage query reads; restating it here creates a second copy
+in a file nothing queries, and the two drift. This file is for what coverage
+cannot express: a conflict between spec and system, a fact that has gone
+stale, a defect nobody has planned against. Before adding an entry, check
+whether some plan's `partial` already says it — and prefer removing an entry
+outright once it is fixed over annotating it as resolved.
+
 - `[P4]` **The doc-sync config shape contradicts itself (surfaced by the spec fold,
   2026-08-14).** 025 §5/§10 make the git file mirror opt-in through a
   `[doc_sync]` **block** in `.worklode/config.toml`; 025 §16.1 states the config
