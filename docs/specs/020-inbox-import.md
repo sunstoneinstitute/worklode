@@ -2,10 +2,9 @@
 status: accepted
 issued: 2026-07-31
 requires:
-  - 002-github-app-auth.md
-  - 011-delivery-lifecycle.md
-  - 018-task-hierarchy.md
-  - 019-project-scoping.md
+- docs/specs/001-identity-and-authentication.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/019-project-scoping.md
 ---
 # Spec 020 — Inbox import (onboarding a repo with history)
 
@@ -265,15 +264,15 @@ an existing project wholesale: issues → Tasks, `docs/specs/**` and
 Workstreams. **This spec delivers the first of those four and defers the rest.**
 
 The reason is dependency order, not preference. The three deferred halves all
-land in spec 014's document and component model, which is Status `draft` with
-no implementation: there is no document or section table, and no RDF layer at
-all. Spec 014 in turn depends on 006 (the vocabulary it amends, its SHACL gate
-and closure tests) and 007 (the deriver contract and named-graph
-partitioning), both unimplemented, plus a `wl:` ontology PR against
-rdf-registry. Importing documents therefore has no destination, and inventing
-one here would prejudge exactly the questions 014 reserves: what anchors a
-corpus that never had them receives, and whether a first publication of legacy
-prose is `accepted` or `draft`.
+land in spec 014's document and component model, which has no implementation:
+there is no document or section table, and no RDF layer at all. Spec 014 in
+turn depends on 006 (the vocabulary it amends, its SHACL gate and closure
+tests) and 007 (the deriver contract and named-graph partitioning), both
+unimplemented, plus a `wl:` ontology PR against rdf-registry. Importing
+documents therefore has no destination, and inventing one here would prejudge
+exactly the questions 014 reserves: what anchors a corpus that never had them
+receives, and whether a first publication of legacy prose is `accepted` or
+`draft`.
 
 The issues half has no such dependency — `issues`, `prs`, and `tasks` all
 exist — so it ships on its own. The two were never coupled in code.

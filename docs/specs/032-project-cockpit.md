@@ -1,14 +1,13 @@
 ---
 status: draft
 requires:
-  - 005-prioritization-and-pickup.md
-  - 011-delivery-lifecycle.md
-  - 017-task-secrets.md
-  - 023-keycloak-primary-auth.md
-  - 024-multi-harness-integration.md
-  - 025-documents-in-the-backbone.md
-  - 028-escalation-and-document-lifecycle.md
-  - 029-research-work-in-the-backbone.md
+- docs/specs/005-prioritization-and-pickup.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/017-task-secrets.md
+- docs/specs/001-identity-and-authentication.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/025-documents-in-the-backbone.md
+- docs/specs/029-research-work-in-the-backbone.md
 ---
 # Spec 032 — Project cockpit
 

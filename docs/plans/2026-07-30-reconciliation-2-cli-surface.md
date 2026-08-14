@@ -27,7 +27,7 @@ also carry engine 2's result, which part 3 wires into the same handler.
 PostgreSQL via `database/sql`, standard-library testing.
 
 **Spec:** `docs/specs/013-reconciliation.md`, read with its amendments from
-`docs/specs/014-design-documents-as-graph-objects.md` §6: **engine 3
+`docs/specs/025-documents-in-the-backbone.md` §6: **engine 3
 (spec-doc drift) and the `task_docs` table are superseded and must not be
 built.** See part 1's header for the full series scope, prior-art map, and
 what is owned elsewhere.

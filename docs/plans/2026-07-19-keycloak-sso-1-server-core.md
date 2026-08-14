@@ -1,6 +1,6 @@
 ---
 status: superseded
-covers: docs/specs/001-keycloak-sso.md
+covers: docs/specs/001-identity-and-authentication.md
 ---
 # Keycloak SSO — Plan 1: Server Core Implementation Plan
 

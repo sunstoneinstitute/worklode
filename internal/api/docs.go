@@ -119,7 +119,7 @@ func toSyncResponse(dryRun bool, results []store.DocSyncResult) docSyncResponse 
 	return resp
 }
 
-// syncDocs handles POST /api/v1/docs/sync — spec 034 §3/§4's bulk upsert.
+// syncDocs handles POST /api/v1/docs/sync — spec 025 §16.2/§4's bulk upsert.
 func (s *server) syncDocs(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var req docSyncRequest

@@ -1,7 +1,7 @@
 ---
 status: accepted
 covers:
-  - docs/specs/024-multi-harness-integration.md#sec-3.5
+  - docs/specs/008-worklode-plugin.md#sec-17.5
 requires:
   - 2026-08-03-multi-harness-1-adapter-core.md
 ---
@@ -40,7 +40,7 @@ absent — a status line is a personal choice Worklode must not replace.
 **Tech Stack:** Go 1.26, cobra, stdlib `testing`; Postgres (pgvector image)
 for the store/API tests; Prometheus client for the one new counter.
 
-**Spec:** `docs/specs/024-multi-harness-integration.md` §3.5, §4, Q024.5.
+**Spec:** `docs/specs/008-worklode-plugin.md` §3.5, §4, Q024.5.
 
 ---
 
@@ -156,7 +156,7 @@ session-start fixture (fake client returning a brief with a lease):
 ```go
 	// Session-start leaves a lease marker next to the session marker: the
 	// status line's only source of task title and lease expiry, because it
-	// may not call the server (spec 024 §3.5).
+	// may not call the server (spec 008 §17.5).
 	lm, ok := readLeaseMarker(root)
 	if !ok || lm.TaskID != taskID || lm.Title != "the fixture title" {
 		t.Fatalf("lease marker = %+v, %v", lm, ok)
@@ -256,7 +256,7 @@ blockedBy: [1]
 
 - [ ] **Step 1: Re-verify the payload field names**
 
-Check the Claude Code status-line docs (spec 024 §8): the stdin JSON's
+Check the Claude Code status-line docs (spec 008 §22): the stdin JSON's
 `session_id`, `model.id`/`model.display_name`, `workspace.current_dir`,
 `cwd`, `cost.total_cost_usd`, and the `context_window` block's field names.
 Correct the struct below to the documented names before writing tests.
@@ -299,7 +299,7 @@ func TestStatuslineDegradations(t *testing.T) {
 	// - no lease marker       -> task id from ParseDir only, no title
 	// - outside any worktree  -> model/cost/context only, no task segment
 	// - unwritable git dir    -> line still prints, spool silently absent
-	//   (spec 024 §4 row 8: never fail the harness's render)
+	//   (spec 008 §18 row 8: never fail the harness's render)
 	// - empty stdin           -> prints an empty-but-newline-terminated
 	//   line, exit nil
 }
@@ -320,7 +320,7 @@ Run — FAIL (`Statusline`, `readCostSpool` undefined).
 ```go
 // costSpoolFile carries the harness's own cumulative accounting per
 // session, appended by `lode statusline` on every render and read by the
-// heartbeat flush (spec 024 §3.5). Cumulative, so re-reporting is
+// heartbeat flush (spec 008 §17.5). Cumulative, so re-reporting is
 // idempotent; removed with the session marker.
 const costSpoolFile = "worklode-cost.json"
 
@@ -333,7 +333,7 @@ func readCostSpool(root string) (map[string]costSpoolEntry, bool)
 func writeCostSpool(root string, m map[string]costSpoolEntry) error
 
 // statusPayload is the subset of Claude Code's status-line stdin JSON the
-// renderer reads (spec 024 §2.4). Missing fields are blank segments.
+// renderer reads (spec 008 §16.4). Missing fields are blank segments.
 type statusPayload struct {
 	SessionID string `json:"session_id"`
 	Model     struct {
@@ -355,7 +355,7 @@ type statusPayload struct {
 
 // Statusline renders one line from the payload on r plus the local
 // markers. Pure local reads — the hot-path constraint IS the design
-// (spec 024 §3.5): it re-runs per assistant message and must never call
+// (spec 008 §17.5): it re-runs per assistant message and must never call
 // the server or fail the render.
 func Statusline(r io.Reader, w io.Writer, now func() time.Time) error {
 	raw, _ := io.ReadAll(r)
@@ -504,7 +504,7 @@ Run: `go test ./internal/store/ -run TestTouchAgentSession` — FAIL
    figure is never touched (the doc comment on the touch/closed-session
    interaction at `agent_sessions.go:240-248` gains one sentence: the
    harness cost is a live approximation that end's transcript pricing
-   overwrites; spec 024 §3.5).
+   overwrites; spec 008 §17.5).
 3. Update the doc comment on the session-level columns' meaning where
    `EndAgentSession` writes them (`agent_sessions.go:326-345`): between
    flush and end, `cost_amount` may hold the harness's client-side figure.
@@ -585,7 +585,7 @@ struct (mirroring `EndAgentSessionInput`):
 
 ```go
 // TouchAgentSessionInput identifies the session; HarnessCostUSD optionally
-// carries the harness's own cumulative cost figure (spec 024 §3.5), a
+// carries the harness's own cumulative cost figure (spec 008 §17.5), a
 // decimal string for the same numeric(12,6) round-trip reason as
 // EndAgentSessionInput.CostAmount.
 type TouchAgentSessionInput struct {
@@ -653,7 +653,7 @@ func TestInstallStatuslineOnlyWhenAbsent(t *testing.T) {
 	// settings["statusLine"] = {"type":"command","command":"lode statusline"}
 	// and reports "installed". A file whose statusLine is someone else's
 	// command is left byte-identical and reports "skipped" — a status line
-	// is a personal choice (spec 024 §3.5). Re-run on ours: "unchanged".
+	// is a personal choice (spec 008 §17.5). Re-run on ours: "unchanged".
 }
 
 func TestUninstallStatuslineRemovesOnlyOurs(t *testing.T) {

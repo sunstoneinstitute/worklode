@@ -132,9 +132,9 @@ type server struct {
 	oidc *oidc.Verifier
 
 	// gh and tokenCipher are nil unless the GitHub App OAuth client is
-	// configured; reserved for the future account-link flow (spec 023 §3.3).
+	// configured; reserved for the future account-link flow (spec 001 §9.3).
 	// Login never touches them — Keycloak is worklode's sole interactive
-	// login provider (spec 023 §3.1).
+	// login provider (spec 001 §3).
 	gh          *githubauth.Client
 	tokenCipher *tokencrypt.Cipher
 
@@ -192,7 +192,7 @@ type server struct {
 	// authz.go and observeAuthz.
 	authzDecisions *prometheus.CounterVec
 
-	// doc sync (spec 034 §10): runs by result, request duration, docs synced
+	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 	docSyncRuns     *prometheus.CounterVec
 	docSyncDuration prometheus.Histogram

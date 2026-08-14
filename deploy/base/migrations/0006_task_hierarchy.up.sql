@@ -1,4 +1,4 @@
--- Task hierarchy (docs/specs/018-task-hierarchy.md): epics as declared
+-- Task hierarchy (docs/specs/004-execution-backbone.md): epics as declared
 -- containers, at most one parent per task, indexed child lookups.
 
 ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;

@@ -1,6 +1,6 @@
 ---
 status: accepted
-covers: docs/specs/023-keycloak-primary-auth.md
+covers: docs/specs/001-identity-and-authentication.md
 requires:
   - 2026-08-11-keycloak-primary-auth-identity.md
 ---
@@ -14,7 +14,7 @@ requires:
 
 **Tech Stack:** Go 1.25+, Postgres (golang-migrate), `golang.org/x/oauth2` (refresh-token grant via `TokenSource`), AES-GCM (`internal/tokencrypt`), net/http `ServeMux`.
 
-**Read first:** `docs/specs/023-keycloak-primary-auth.md` §3.3, §3.5, §5, `internal/store/github_tokens.go` (replaced here), `internal/api/oidcweb.go` (the state cookie and callback shape the link flow copies), `internal/store/store.go:142` (`Tx`), `internal/tokencrypt/` (`Seal`/`Open`).
+**Read first:** `docs/specs/001-identity-and-authentication.md` §3.3, §3.5, §5, `internal/store/github_tokens.go` (replaced here), `internal/api/oidcweb.go` (the state cookie and callback shape the link flow copies), `internal/store/store.go:142` (`Tx`), `internal/tokencrypt/` (`Seal`/`Open`).
 
 **Prerequisite:** plan 1 is merged — `actors.expected_github_login` exists and `githubauth.Client` has no `Org`/`Roles`.
 
@@ -54,7 +54,7 @@ requires:
 `deploy/base/migrations/0011_github_links.up.sql`:
 
 ```sql
--- Spec 023 §3.5: the token row IS the GitHub account link. A link exists iff a
+-- Spec 001 §9.5: the token row IS the GitHub account link. A link exists iff a
 -- row exists; unlink is a delete. The old table held only an opaque blob
 -- written by the removed GitHub login and never read, so there is nothing to
 -- preserve.
@@ -188,7 +188,7 @@ Expected: FAIL — `undefined: GitHubLink`, `UpsertGitHubLink`, `GetGitHubLink`,
 Replace `internal/store/github_tokens.go` with:
 
 ```go
-// GitHub account links (spec 023 §3.5): the row IS the link. A link exists iff
+// GitHub account links (spec 001 §9.5): the row IS the link. A link exists iff
 // a row exists, so unlink is a delete. The store never inspects the
 // ciphertext — sealing is the caller's job.
 
@@ -879,7 +879,7 @@ Expected: FAIL — `s.githubLinkStart undefined`.
 Create `internal/api/githublink.go`:
 
 ```go
-// githublink.go serves the GitHub account-link flow (spec 023 §3.3). GitHub is
+// githublink.go serves the GitHub account-link flow (spec 001 §9.3). GitHub is
 // not an identity provider here: the actor is already authenticated, and the
 // link is refused unless the GitHub login matches the github_username Keycloak
 // asserts for that actor. Routes 404 when the App is unconfigured.
@@ -1093,7 +1093,7 @@ git commit -m "Add the GitHub account link flow"
 - Modify: `internal/api/web.go`, `internal/api/server.go`, `internal/api/templates/layout.html`
 - Test: `internal/api/githublink_test.go`
 
-Spec 023 §3.3 makes linking lazy, with a settings entry for doing it proactively. This is that entry: one page, no form, no unlink button (§4 keeps unlink to the CLI/admin).
+Spec 001 §9.3 makes linking lazy, with a settings entry for doing it proactively. This is that entry: one page, no form, no unlink button (§4 keeps unlink to the CLI/admin).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1198,7 +1198,7 @@ type profileView struct {
 }
 
 // profilePage handles GET /profile: the signed-in actor and its GitHub link
-// state, with the link flow's entry point (spec 023 §3.3).
+// state, with the link flow's entry point (spec 001 §9.3).
 func (s *server) profilePage(w http.ResponseWriter, r *http.Request) {
 	actorID, ok := s.sessionActor(r)
 	if !ok {

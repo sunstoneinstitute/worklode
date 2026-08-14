@@ -12,18 +12,18 @@ import (
 )
 
 // DocSection is one anchored heading within a document, as the sync client
-// ships it (034 §4).
+// ships it (025 §5.1).
 type DocSection struct {
 	Anchor, Heading string
 	Depth, Position int
 }
 
-// DocEdge is one frontmatter-derived relation between documents (034 §4).
+// DocEdge is one frontmatter-derived relation between documents (025 §5.1).
 type DocEdge struct {
 	SrcAnchor, Rel, Target, TargetAnchor string
 }
 
-// DocUpsert is one document as the sync client ships it (034 §4).
+// DocUpsert is one document as the sync client ships it (025 §5.1).
 type DocUpsert struct {
 	Kind, Ordinal, Status, Title, Body string
 	Frontmatter                        json.RawMessage
@@ -31,7 +31,7 @@ type DocUpsert struct {
 	Edges                              []DocEdge
 }
 
-// DocSyncProvenance records where a sync came from (034 §3).
+// DocSyncProvenance records where a sync came from (025 §16.2).
 type DocSyncProvenance struct {
 	SourceBranch string
 	Dirty        bool
@@ -71,7 +71,7 @@ var validDocEdgeRels = map[string]bool{
 	"replaces": true, "isReplacedBy": true, "blocks": true,
 }
 
-// validateDocUpsert checks one upsert's shape (034 §4/§5).
+// validateDocUpsert checks one upsert's shape (025 §5.1/§5).
 func validateDocUpsert(d DocUpsert) error {
 	token, ok := docKindTokens[d.Kind]
 	if !ok {
@@ -108,7 +108,7 @@ func validateDocUpsert(d DocUpsert) error {
 //
 // Every doc is validated before any write happens, so a bad doc later in
 // the slice never leaves earlier docs half-applied. status is carried as
-// data throughout — no editorial transition logic lives here (034 §4).
+// data throughout — no editorial transition logic lives here (025 §5.1).
 func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 	projectID string, prov DocSyncProvenance, docs []DocUpsert) ([]DocSyncResult, error) {
 	for _, d := range docs {
@@ -166,7 +166,7 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 				 WHERE project = $1 AND kind = $2 AND ordinal = $3`,
 				projectID, d.Kind, d.Ordinal, d.Status, d.Title, d.Body,
 				string(d.Frontmatter), prov.SourceBranch, prov.Dirty, ts)
-		case "unchanged": // provenance still overwritten (034 §3)
+		case "unchanged": // provenance still overwritten (025 §16.2)
 			_, err = tx.Exec(`
 				UPDATE docs SET source_branch = $4, source_dirty = $5,
 				       synced_at = $6, updated_at = $6
@@ -216,7 +216,7 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 }
 
 // DocSyncOutcomes is ApplyDocSync's read-only twin: the per-doc outcomes a
-// sync WOULD produce, writing nothing (--dry-run, 034 §3).
+// sync WOULD produce, writing nothing (--dry-run, 025 §16.2).
 func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string, docs []DocUpsert) ([]DocSyncResult, error) {
 	// Validate before the project lookup, matching ApplyDocSync's order, so
 	// the two return the same error class (ErrInvalidInput vs ErrNotFound)
@@ -255,7 +255,7 @@ func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string, docs []Do
 	return out, nil
 }
 
-// GetDoc returns one document by its rendered id ("WL-SPEC-34"), with its
+// GetDoc returns one document by its rendered id ("WL-SPEC-25"), with its
 // sections (ordered by position) and edges (ordered by src_anchor, rel,
 // target, target_anchor). ErrNotFound when no such doc.
 func (s *Store) GetDoc(ctx context.Context, docID string) (*Doc, []DocSection, []DocEdge, error) {

@@ -1,12 +1,6 @@
 ---
 status: accepted
 issued: 2026-07-25
-amends:
-  ".":
-    - 004-execution-backbone.md#sec-2
-amendedBy:
-  "#sec-1":
-    - 024-multi-harness-integration.md#sec-5
 ---
 # Spec 012 — Agent sessions
 
@@ -29,10 +23,6 @@ agents.
 
 ## 1. Schema {#sec-1}
 
-> **Amended by spec 024 §5.** The `agent` CHECK gains `copilot` — the one-line migration this
-> section reserves for a new tool — becoming
-> `('claude-code','codex','copilot','cursor','aider','opencode','pi','amp','other')`.
-
 One new table; `leases` is unchanged.
 
 ```sql
@@ -40,8 +30,7 @@ CREATE TABLE agent_sessions (
     id                  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     lease_id            bigint NOT NULL REFERENCES leases(id) ON DELETE RESTRICT,
     agent               text NOT NULL CHECK (agent IN
-                          ('claude-code','codex','cursor','aider',
-                           'opencode','pi','amp','other')),
+                          ('claude-code','codex','copilot','cursor','aider','opencode','pi','amp','other')),
     agent_version       text,
     external_session_id text NOT NULL,
     started_at          timestamptz NOT NULL,
@@ -70,7 +59,8 @@ Columns on `leases` would record only the newest session and leave per-session
 cost with nowhere to live.
 
 `agent`'s CHECK constraint mirrors the existing style of `events.source` and
-`actors.kind`; adding a tool is a one-line migration. `external_session_id` is
+`actors.kind`, and admits the harnesses spec 008 §19 names; adding a tool is a
+one-line migration. `external_session_id` is
 the tool's own identifier (a UUID for Claude Code), namespaced by `agent`
 because nothing guarantees two tools won't collide.
 
@@ -277,7 +267,8 @@ debounced — they carry a lease change, not just liveness.
   `git worktree add`, and `EnterWorktree` fails unless the hook prints the path
   it created. Worklode observes rather than creates. Nothing is lost: Claude
   Code's worktrees live under `.claude/worktrees/`, which `worktree.ParseDir`
-  rejects, and Worklode's own `wt/<task-id>` worktrees are covered by
+  rejects, and Worklode's own worktrees (then under `wt/<task-id>`, now under the
+`worktree_dir` layout spec 008 defines) are covered by
   `session-start` (auto-resume) and the matched `EnterWorktree` binding above.
 - `PreCompact` / `PostCompact` — `SessionStart` already re-fires with
   `source: compact`.

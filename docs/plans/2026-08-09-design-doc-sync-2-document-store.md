@@ -1,6 +1,6 @@
 ---
 status: draft
-covers: docs/specs/034-design-doc-sync.md
+covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design-doc sync, part 2 — the backbone document store
 
@@ -9,7 +9,7 @@ covers: docs/specs/034-design-doc-sync.md
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The minimal document store spec 034 §4 defines: the
+**Goal:** The minimal document store spec 025 §5.1 defines: the
 `docs`/`doc_sections`/`doc_edges` schema, an idempotent upsert on
 `(project, kind, ordinal)` with sync provenance and event-log attribution, the
 read methods behind `/api/v1/docs`, and the store-level upsert metric.
@@ -24,7 +24,7 @@ with `LogChange` rows per changed document and nil-safe metrics on the
 body, so change detection compares only `body` + `frontmatter` (+
 status/title), and a changed document replaces its sections/edges via
 delete-and-insert. The store carries `status` as data — no editorial
-transitions, no accept-mints-tasks (034 §4).
+transitions, no accept-mints-tasks (025 §5.1).
 
 **Tech Stack:** Go 1.26, pgx via database/sql, golang-migrate file migrations
 (NOT embedded — compose/K8s apply them), Postgres 17 + pgvector for tests,
@@ -40,15 +40,15 @@ prometheus/client_golang.
   `0011_docs.*`, but run `./scripts/check-migrations.sh --no-fix` and take the
   next number if another branch claimed 0011); every new pair must be listed
   in `deploy/base/kustomization.yaml`. Never edit a shipped migration.
-- Doc id grammar (034 §5): `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>` /
+- Doc id grammar (025 §16.3): `<KEY>-SPEC-<n>` / `<KEY>-ADR-<n>` /
   `<KEY>-PLAN-<spec>-<plan>`. The ordinal arrives file-derived from the
   client; the server composes the id from the project's key so a client can
   never write an id inconsistent with its project.
-- `kind ∈ {spec, adr, plan}` (034 §4); plans take no sections (025 §4).
+- `kind ∈ {spec, adr, plan}` (025 §5.1); plans take no sections (025 §9).
 - Upsert idempotence: re-syncing unchanged content is reported `unchanged`
   and bumps no version; provenance (`source_branch`, `source_dirty`,
   `synced_at`) is stamped on every sync regardless, so a default-branch sync
-  overwrites a forced one (034 §3).
+  overwrites a forced one (025 §16.2).
 - Metrics per spec 022: `worklode_` prefix, nil-safe struct in the owning
   package's `metrics.go`, bounded label values, tests.
 - Run `go build ./...` and the named tests before every commit. Never put
@@ -92,11 +92,11 @@ such lines). If it *skips*, Postgres is not reachable: start it
   `deploy/base/migrations/0011_docs.up.sql`:
 
 ```sql
--- Spec 034 §4: the minimal document store the git→backbone sync populates.
--- Identity is (project, kind, ordinal), file-derived per 034 §5; doc_id is the
+-- Spec 025 §5.1: the minimal document store the git→backbone sync populates.
+-- Identity is (project, kind, ordinal), file-derived per 025 §16.3; doc_id is the
 -- rendered <KEY>-SPEC-<n> / <KEY>-ADR-<n> / <KEY>-PLAN-<s>-<p> form, composed
 -- server-side from the project's key. status is carried as data — the store
--- runs no editorial transitions (034 §4).
+-- runs no editorial transitions (025 §5.1).
 
 CREATE TABLE docs (
     project       text NOT NULL REFERENCES projects (id),
@@ -108,7 +108,7 @@ CREATE TABLE docs (
     body          text NOT NULL,
     frontmatter   jsonb NOT NULL,
     version       integer NOT NULL DEFAULT 1,
-    -- Sync provenance (034 §3): which branch the projection came from, and
+    -- Sync provenance (025 §16.2): which branch the projection came from, and
     -- whether the tree was dirty — how a consumer tells a forced projection
     -- from a reviewed one.
     source_branch text NOT NULL,
@@ -121,7 +121,7 @@ CREATE TABLE docs (
 
 CREATE UNIQUE INDEX docs_doc_id ON docs (doc_id);
 
--- Anchored sections; specs and ADRs only — plans take none (025 §4).
+-- Anchored sections; specs and ADRs only — plans take none (025 §9).
 CREATE TABLE doc_sections (
     project  text NOT NULL,
     kind     text NOT NULL,
@@ -135,7 +135,7 @@ CREATE TABLE doc_sections (
         REFERENCES docs (project, kind, ordinal) ON DELETE CASCADE
 );
 
--- Frontmatter relations (034 §4), section-scoped where an end is a section.
+-- Frontmatter relations (025 §5.1), section-scoped where an end is a section.
 -- target is the raw corpus reference (a filename, repo-relative path, or the
 -- NO-SPEC sentinel) — resolution stays a read-time concern. rel 'blocks' is
 -- admitted for plans' document-level ordering edges even though no
@@ -188,7 +188,7 @@ plus, if in doubt, the `golang-migrate:test-roundtrip` skill).
 ```bash
 git add deploy/base/migrations/0011_docs.up.sql deploy/base/migrations/0011_docs.down.sql \
         deploy/base/kustomization.yaml internal/store/store_test.go
-git commit -m "store: docs/doc_sections/doc_edges schema (spec 034 §4)"
+git commit -m "store: docs/doc_sections/doc_edges schema (spec 025 §5.1)"
 ```
 
 ### Task 2 — ApplyDocSync: the idempotent upsert
@@ -217,7 +217,7 @@ type DocEdge struct {
 	SrcAnchor, Rel, Target, TargetAnchor string
 }
 
-// DocUpsert is one document as the sync client ships it (034 §4).
+// DocUpsert is one document as the sync client ships it (025 §5.1).
 type DocUpsert struct {
 	Kind, Ordinal, Status, Title, Body string
 	Frontmatter                        json.RawMessage
@@ -225,7 +225,7 @@ type DocUpsert struct {
 	Edges                              []DocEdge
 }
 
-// DocSyncProvenance records where a sync came from (034 §3).
+// DocSyncProvenance records where a sync came from (025 §16.2).
 type DocSyncProvenance struct {
 	SourceBranch string
 	Dirty        bool
@@ -244,7 +244,7 @@ func (s *Store) ApplyDocSync(tx *sql.Tx, now time.Time, eventID int64,
 	projectID string, prov DocSyncProvenance, docs []DocUpsert) ([]DocSyncResult, error)
 
 // DocSyncOutcomes is ApplyDocSync's read-only twin: the per-doc outcomes a
-// sync WOULD produce, writing nothing (--dry-run, 034 §3).
+// sync WOULD produce, writing nothing (--dry-run, 025 §16.2).
 func (s *Store) DocSyncOutcomes(ctx context.Context, projectID string,
 	docs []DocUpsert) ([]DocSyncResult, error)
 ```
@@ -264,7 +264,7 @@ Semantics (each is a test):
   replaced; identical content → `unchanged`, version and sections untouched;
 - provenance + `synced_at`/`updated_at` stamped on **every** outcome
   including `unchanged` (a reviewed sync must overwrite a forced one's
-  provenance, 034 §3);
+  provenance, 025 §16.2);
 - one `LogChange` row (`entity_kind: "doc"`, entity_id = doc_id) per `added`
   or `updated` doc, none for `unchanged`;
 - a doc in the store but absent from the payload is left alone (034 defines
@@ -325,8 +325,8 @@ func planUpsert() DocUpsert {
 	return DocUpsert{
 		Kind: "plan", Ordinal: "34-1", Status: "draft", Title: "Part 1",
 		Body:        "---\nstatus: draft\n---\n# Part 1\n",
-		Frontmatter: json.RawMessage(`{"status":"draft","implements":"docs/specs/034-design-doc-sync.md"}`),
-		Edges:       []DocEdge{{Rel: "implements", Target: "docs/specs/034-design-doc-sync.md"}},
+		Frontmatter: json.RawMessage(`{"status":"draft","implements":"docs/specs/025-documents-in-the-backbone.md"}`),
+		Edges:       []DocEdge{{Rel: "implements", Target: "docs/specs/025-documents-in-the-backbone.md"}},
 	}
 }
 
@@ -342,7 +342,7 @@ func TestApplyDocSyncAddUpdateUnchanged(t *testing.T) {
 	if len(res) != 2 || res[0].Outcome != "added" || res[1].Outcome != "added" {
 		t.Fatalf("first sync = %+v, want two added", res)
 	}
-	if res[0].DocID != "WL-SPEC-34" || res[1].DocID != "WL-PLAN-34-1" {
+	if res[0].DocID != "WL-SPEC-25" || res[1].DocID != "WL-PLAN-34-1" {
 		t.Fatalf("doc ids = %q, %q", res[0].DocID, res[1].DocID)
 	}
 
@@ -355,7 +355,7 @@ func TestApplyDocSyncAddUpdateUnchanged(t *testing.T) {
 			t.Errorf("%s outcome = %q, want unchanged", r.DocID, r.Outcome)
 		}
 	}
-	d, _, _, err := s.GetDoc(ctx, "WL-SPEC-34")
+	d, _, _, err := s.GetDoc(ctx, "WL-SPEC-25")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ func TestApplyDocSyncAddUpdateUnchanged(t *testing.T) {
 	if res[0].Outcome != "updated" {
 		t.Fatalf("outcome = %q, want updated", res[0].Outcome)
 	}
-	d, secs, _, err := s.GetDoc(ctx, "WL-SPEC-34")
+	d, secs, _, err := s.GetDoc(ctx, "WL-SPEC-25")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func TestApplyDocSyncWritesStateLog(t *testing.T) {
 	syncDocs(t, s, "wl", prov, []DocUpsert{specUpsert()})
 	syncDocs(t, s, "wl", prov, []DocUpsert{specUpsert()}) // unchanged: no new row
 
-	entries, err := s.StateLogForEntity(ctx, "doc", "WL-SPEC-34")
+	entries, err := s.StateLogForEntity(ctx, "doc", "WL-SPEC-25")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestDocSyncOutcomesWritesNothing(t *testing.T) {
 	if len(res) != 1 || res[0].Outcome != "added" {
 		t.Fatalf("dry-run = %+v, want one added", res)
 	}
-	if _, _, _, err := s.GetDoc(ctx, "WL-SPEC-34"); !errors.Is(err, ErrNotFound) {
+	if _, _, _, err := s.GetDoc(ctx, "WL-SPEC-25"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dry run wrote a doc: GetDoc err = %v, want ErrNotFound", err)
 	}
 }
@@ -482,7 +482,7 @@ var validDocEdgeRels = map[string]bool{
 	"replaces": true, "isReplacedBy": true, "blocks": true,
 }
 
-// validateDocUpsert checks one upsert's shape (034 §4/§5).
+// validateDocUpsert checks one upsert's shape (025 §5.1/§5).
 func validateDocUpsert(d DocUpsert) error {
 	token, ok := docKindTokens[d.Kind]
 	if !ok {
@@ -556,7 +556,7 @@ func validateDocUpsert(d DocUpsert) error {
 			 WHERE project = $1 AND kind = $2 AND ordinal = $3`,
 			projectID, d.Kind, d.Ordinal, d.Status, d.Title, d.Body,
 			string(d.Frontmatter), prov.SourceBranch, prov.Dirty, ts)
-	case "unchanged": // provenance still overwritten (034 §3)
+	case "unchanged": // provenance still overwritten (025 §16.2)
 		_, err = tx.Exec(`
 			UPDATE docs SET source_branch = $4, source_dirty = $5,
 			       synced_at = $6, updated_at = $6
@@ -658,7 +658,7 @@ Expected: PASS. Then the full package: `go test ./internal/store`.
 
 ```bash
 git add internal/store/docs.go internal/store/docs_test.go
-git commit -m "store: ApplyDocSync — idempotent doc upsert with provenance (spec 034 §4)"
+git commit -m "store: ApplyDocSync — idempotent doc upsert with provenance (spec 025 §5.1)"
 ```
 
 ### Task 3 — Store reads: GetDoc and ListDocs
@@ -690,7 +690,7 @@ type Doc struct {
 	SyncedAt, CreatedAt, UpdatedAt  time.Time
 }
 
-// GetDoc returns one document by its rendered id ("WL-SPEC-34"), with its
+// GetDoc returns one document by its rendered id ("WL-SPEC-25"), with its
 // sections (by position) and edges. ErrNotFound when no such doc.
 func (s *Store) GetDoc(ctx context.Context, docID string) (*Doc, []DocSection, []DocEdge, error)
 
@@ -717,11 +717,11 @@ func TestGetDocDetail(t *testing.T) {
 	syncDocs(t, s, "wl", DocSyncProvenance{SourceBranch: "main"},
 		[]DocUpsert{specUpsert(), planUpsert()})
 
-	d, secs, edges, err := s.GetDoc(ctx, "WL-SPEC-34")
+	d, secs, edges, err := s.GetDoc(ctx, "WL-SPEC-25")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.DocID != "WL-SPEC-34" || d.Kind != "spec" || d.Ordinal != "34" ||
+	if d.DocID != "WL-SPEC-25" || d.Kind != "spec" || d.Ordinal != "34" ||
 		d.Status != "accepted" || d.Body == "" || d.Version != 1 {
 		t.Errorf("doc = %+v", d)
 	}
@@ -763,7 +763,7 @@ func TestListDocsFiltersAndOrder(t *testing.T) {
 			t.Errorf("%s: list row carries a body", d.DocID)
 		}
 	}
-	want := []string{"WL-PLAN-34-1", "WL-PLAN-34-2", "WL-SPEC-9", "WL-SPEC-10", "WL-SPEC-34"}
+	want := []string{"WL-PLAN-34-1", "WL-PLAN-34-2", "WL-SPEC-6", "WL-SPEC-4", "WL-SPEC-25"}
 	if !reflect.DeepEqual(ids, want) {
 		t.Errorf("order = %v, want %v (numeric ordinal order, 9 before 10)", ids, want)
 	}
@@ -772,8 +772,8 @@ func TestListDocsFiltersAndOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(drafts) != 1 || drafts[0].DocID != "WL-SPEC-9" {
-		t.Errorf("filtered = %+v, want just WL-SPEC-9", drafts)
+	if len(drafts) != 1 || drafts[0].DocID != "WL-SPEC-6" {
+		t.Errorf("filtered = %+v, want just WL-SPEC-6", drafts)
 	}
 }
 ```
@@ -812,7 +812,7 @@ Expected: PASS.
 
 ```bash
 git add internal/store/docs.go internal/store/docs_test.go
-git commit -m "store: GetDoc/ListDocs reads for the doc store (spec 034 §4, §6)"
+git commit -m "store: GetDoc/ListDocs reads for the doc store (spec 025 §5.1, §6)"
 ```
 
 ### Task 4 — Store metric: worklode_doc_upserts_total
@@ -825,7 +825,7 @@ skills:
 blockedBy: [2]
 ```
 
-Spec 034 §10's "store upsert outcomes" instrument, per spec 022: nil-safe on
+Spec 025 §15.7's "store upsert outcomes" instrument, per spec 022: nil-safe on
 `storeMetrics`, bounded labels (outcome ∈ added/updated/unchanged).
 
 **Files:**
@@ -926,5 +926,5 @@ Expected: PASS.
 
 ```bash
 git add internal/store/metrics.go internal/store/metrics_test.go internal/store/docs.go
-git commit -m "store: worklode_doc_upserts_total metric (spec 034 §10)"
+git commit -m "store: worklode_doc_upserts_total metric (spec 025 §15.7)"
 ```

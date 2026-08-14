@@ -31,9 +31,9 @@ tokens). The new store reads also export the ranked frontier
 testing, `httptest` fakes for the GitHub API and the graph endpoint.
 
 **Spec:** `docs/specs/007-drift-and-overview.md`, read with its amendments:
-`docs/specs/014-design-documents-as-graph-objects.md` §5–§6, §10 and
-`docs/specs/015-runtime-layer.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
-the spec read as `wl:`/`wlc:`/`wlid:` (014 §1). See part 1's header for the
+`docs/specs/025-documents-in-the-backbone.md` §5–§6, §10 and
+`docs/specs/006-knowledge-graph.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
+the spec read as `wl:`/`wlc:`/`wlid:` (025 §17). See part 1's header for the
 full series scope, sibling-plan prerequisites, prior-art map, design calls,
 and what is owned elsewhere.
 
@@ -269,7 +269,7 @@ func (s *Store) AllBlockEdges(ctx context.Context) ([]Edge, error) {
 ```go
 // Frontier returns the ready, unblocked, unleased tasks in the exact rank
 // order ClaimNext consumes, plus the blocking fan-out map — the read-only
-// overview mirror of the authoritative frontier (spec 007 §4.5). It claims
+// overview mirror of the authoritative frontier (spec 007 §3.4). It claims
 // nothing.
 func (s *Store) Frontier(ctx context.Context, projectID string) ([]Task, map[string]int, error) {
 	candidates, err := s.readyCandidates(ctx, projectID)
@@ -338,7 +338,7 @@ func (s *Store) AllReleaseFrontiers(ctx context.Context) ([]ReleaseFrontierRow, 
 }
 
 // HasMainCommit reports whether sha is a recorded main_commits row for
-// repo — the CommitKnown guard graphproj.ArtifactTriples requires (015 §6).
+// repo — the CommitKnown guard graphproj.ArtifactTriples requires (006 §11.1).
 func (s *Store) HasMainCommit(ctx context.Context, repo, sha string) (bool, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
@@ -447,7 +447,7 @@ import (
 )
 
 // DeployTriples derives the observed/deploy document (spec 007 deriver 4,
-// vocabulary and guards per spec 015 §2–§6): projection of the already-
+// vocabulary and guards per spec 006 §2.1–§6): projection of the already-
 // ingested artifacts, deployments, environments, commit links and release
 // frontiers. Projection, not new build (D6) — every triple comes from a row.
 func DeployTriples(ctx context.Context, s *store.Store) ([]byte, error) {

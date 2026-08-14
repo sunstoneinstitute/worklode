@@ -1,6 +1,6 @@
 ---
 status: superseded
-covers: docs/specs/003-platform-graph-design.md
+covers: docs/specs/006-knowledge-graph.md
 ---
 # Platform graph design record (spec 003) — Implementation Plan
 
@@ -17,19 +17,19 @@ its knowledge-graph half lives in specs 006/007/014/015 plus the cross-repo
 009 hand-off, each an independent spec → plan cycle. This plan implements only
 the two pure, dependency-free pieces every one of those cycles needs and none
 yet owns: a new `internal/kg/iri` package minting canonical instance IRIs
-(006 §Canonical IRI scheme, base per 014 §1, runtime grammar per 015 §5), and
+(006 §Canonical IRI scheme, base per 025 §17, runtime grammar per 006 §10.1), and
 a new `internal/kg/manifest` package parsing `.worklode/components.yaml`
-(007 §2, the authoring burden accepted in D5), plus Worklode's own trivial
+(007 §1, the authoring burden accepted in D5), plus Worklode's own trivial
 whole-repo manifest. No server, store, or CLI change; nothing here talks to
 graph-server.
 
 **Tech Stack:** Go 1.26, standard-library testing, `gopkg.in/yaml.v3`
 (already in `go.sum` as an indirect dependency; becomes direct).
 
-**Spec:** `docs/specs/003-platform-graph-design.md` — read with its
-amendments: `docs/specs/014-design-documents-as-graph-objects.md` §1 (prefix
+**Spec:** `docs/specs/006-knowledge-graph.md` — read with its
+amendments: `docs/specs/025-documents-in-the-backbone.md` §1 (prefix
 `wl:`/`wlc:`/`wlid:` under `https://worklode.io/ns/`) and
-`docs/specs/015-runtime-layer.md` §5 (kind-first runtime IRI grammar).
+`docs/specs/006-knowledge-graph.md` §5 (kind-first runtime IRI grammar).
 
 ---
 
@@ -42,7 +42,7 @@ decision, with code anchors. "Backbone half" = this repo's Postgres side;
 | Decision | Status | Evidence / owner of the remainder |
 |---|---|---|
 | D1–D3 two stores, authority split | Backbone **shipped**; graph store **not started** | `deploy/base/migrations/0001_baseline.up.sql`, `internal/store/`; graph side → specs 006 + 009 |
-| D4 vocabulary (`wl:` mint set) | **Not started** | rdf-registry PR, owned by spec 006 (mint set in 006 §Acceptance 2, renamed by 014 §1) |
+| D4 vocabulary (`wl:` mint set) | **Not started** | rdf-registry PR, owned by spec 006 (mint set in 006 §Acceptance 2, renamed by 025 §17) |
 | D5 two-layer graph, drift, per-repo manifest | **Not started** except the manifest groundwork in this plan | derivers + diff → spec 007 |
 | D6 three layers, v1/v2 | Relational ingestion **shipped** (`internal/hooks/github.go`, `flux.go`, `push.go`, `deployment.go`); graph projection **not started** | projection → spec 006 |
 | D7 Deliverable = declared definition-of-done | **Reserved, not built** — `internal/store/brief.go:26` keeps `DefinitionOfDone` nil for v1 | model → spec 006 |
@@ -85,7 +85,7 @@ this plan's build scope.
 | `internal/kg/iri/iri_test.go` | Table test: every instance pattern against the spec's own examples; rejections. |
 | `internal/kg/manifest/manifest.go` | Parse + validate `.worklode/components.yaml`; first-match-wins path→component matching with `**` globs. |
 | `internal/kg/manifest/manifest_test.go` | Parse, validation failures, glob semantics, first-match-wins, repo self-manifest. |
-| `.worklode/components.yaml` | Worklode's own manifest — the trivial whole-repo form (007 §2). |
+| `.worklode/components.yaml` | Worklode's own manifest — the trivial whole-repo form (007 §1). |
 
 **Modified files**
 
@@ -107,7 +107,7 @@ this plan's build scope.
 - Test: `internal/kg/iri/iri_test.go`
 
 The grammar is fixed by spec 006 §Canonical IRI scheme, with the base from
-014 §1 (`https://worklode.io/ns/`) and the runtime patterns from 015 §5
+025 §17 (`https://worklode.io/ns/`) and the runtime patterns from 006 §10.1
 (kind-first Artifact; Deployment/Environment/Commit mirror their tables'
 natural keys). Instance IRIs are branch-free and version-free; slashes inside
 a local id are permissible (slash namespace, opaque path).
@@ -126,7 +126,7 @@ import (
 
 func TestNamespaces(t *testing.T) {
 	if iri.Base != "https://worklode.io/ns/" {
-		t.Fatalf("Base = %q; want the 014 §1 wl base", iri.Base)
+		t.Fatalf("Base = %q; want the 025 §17 wl base", iri.Base)
 	}
 	if iri.Ontology != iri.Base+"ontology#" || iri.Concept != iri.Base+"concept/" {
 		t.Fatalf("Ontology/Concept = %q / %q; want hash + slash namespaces", iri.Ontology, iri.Concept)
@@ -161,7 +161,7 @@ func TestInstanceIRIs(t *testing.T) {
 		{"pr", func() (string, error) {
 			return iri.PR("github.com", "sunstoneinstitute", "worklode", 42)
 		}, b + "pr/github.com/sunstoneinstitute/worklode/42"},
-		{"artifact kind-first (015 §5)", func() (string, error) {
+		{"artifact kind-first (006 §10.1)", func() (string, error) {
 			return iri.Artifact("docker_image", "ghcr.io/sunstoneinstitute/graph-server", "v1")
 		}, b + "artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1"},
 		{"artifact pypi", func() (string, error) {
@@ -227,10 +227,10 @@ Expected: FAIL — `no required module provides package .../internal/kg/iri`
 ```go
 // Package iri mints Worklode knowledge-graph IRIs: the wl namespaces and the
 // canonical instance grammar of spec 006 §Canonical IRI scheme, with the base
-// of spec 014 §1 and the runtime patterns of spec 015 §5.
+// of spec 025 §17 and the runtime patterns of spec 006 §10.1.
 //
 // An instance IRI mirrors the relational natural key, so projection stays a
-// pure function of the row (015 §5). IRIs are branch-free and version-free;
+// pure function of the row (006 §10.1). IRIs are branch-free and version-free;
 // slashes inside a local id are permissible (slash namespace, opaque path).
 // Parts are validated, not escaped: every natural key today is IRI-safe, and
 // escaping would silently change the published identifier.
@@ -242,7 +242,7 @@ import (
 	"strings"
 )
 
-// The wl namespaces (014 §1): schema is a hash namespace, concepts and
+// The wl namespaces (025 §17): schema is a hash namespace, concepts and
 // instances are slash namespaces.
 const (
 	Base     = "https://worklode.io/ns/"
@@ -283,7 +283,7 @@ func PR(host, org, repo string, number int64) (string, error) {
 	return mint("pr", host, org, repo, n)
 }
 
-// Artifact returns the kind-first artifact IRI of 015 §5, mirroring the
+// Artifact returns the kind-first artifact IRI of 006 §10.1, mirroring the
 // artifacts table's UNIQUE (kind, name, version).
 func Artifact(kind, name, version string) (string, error) {
 	return mint("artifact", kind, name, version)
@@ -299,7 +299,7 @@ func Deployment(environment, targetKind, targetName string) (string, error) {
 // Environment returns the IRI for an environment name (e.g. "prod").
 func Environment(name string) (string, error) { return mint("environment", name) }
 
-// Commit returns the commit IRI of 015 §5.
+// Commit returns the commit IRI of 006 §10.1.
 func Commit(host, org, repo, sha string) (string, error) {
 	return mint("commit", host, org, repo, sha)
 }
@@ -346,7 +346,7 @@ git commit -m "Mint canonical wl instance IRIs"
 - Create: `internal/kg/manifest/manifest.go`
 - Test: `internal/kg/manifest/manifest_test.go`
 
-Format per spec 007 §2: `repo` plus a list of components, each `iri` + `name`
+Format per spec 007 §1: `repo` plus a list of components, each `iri` + `name`
 + `paths` globs; **first-match-wins; unmatched paths belong to no component**
 (the gap is the caller's to report). `**` matches zero or more whole path
 segments; `*` matches within a segment.
@@ -485,7 +485,7 @@ Expected: FAIL — `no required module provides package .../internal/kg/manifest
 
 ```go
 // Package manifest reads the per-repo component-boundary manifest
-// .worklode/components.yaml (spec 007 §2; the authoring burden accepted in
+// .worklode/components.yaml (spec 007 §1; the authoring burden accepted in
 // D5). The manifest is the single place component boundaries are declared: it
 // fixes each component's IRI-bearing slug, and its path globs are the
 // path→component index the observed-layer derivers consume.
@@ -515,7 +515,7 @@ type Manifest struct {
 
 // Load reads and parses the manifest at p. A missing file surfaces as
 // os.IsNotExist so callers can treat "no manifest" distinctly (a
-// single-component repo may get a default instead — 007 §2).
+// single-component repo may get a default instead — 007 §1).
 func Load(p string) (*Manifest, error) {
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -564,7 +564,7 @@ func Parse(data []byte) (*Manifest, error) {
 }
 
 // Match maps a repo-relative, slash-separated path to its owning component.
-// First match wins (007 §2); ok=false means the path belongs to no component
+// First match wins (007 §1); ok=false means the path belongs to no component
 // — a gap the caller reports, never an error.
 func (m *Manifest) Match(p string) (*Component, bool) {
 	p = strings.TrimPrefix(p, "./")
@@ -648,7 +648,7 @@ git commit -m "Parse the component-boundary manifest with first-match-wins globs
 - Test: `internal/kg/manifest/manifest_test.go` (append)
 
 Worklode is a single-component repo, so it gets the trivial whole-repo
-manifest (007 §2). The test pins the file to the parser and to the IRI
+manifest (007 §1). The test pins the file to the parser and to the IRI
 scheme, so the two packages and the checked-in manifest cannot drift apart.
 
 - [ ] **Step 1: Write the failing test**
@@ -691,7 +691,7 @@ Expected: FAIL — `os.IsNotExist` on `.worklode/components.yaml`
 Create `.worklode/components.yaml`:
 
 ```yaml
-# Component-boundary manifest (spec 007 §2; authoring burden accepted in
+# Component-boundary manifest (spec 007 §1; authoring burden accepted in
 # spec 003 D5). Worklode is a single-component repo: the whole-repo form.
 repo: github.com/sunstoneinstitute/worklode
 components:

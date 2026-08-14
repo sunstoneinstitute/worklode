@@ -19,7 +19,7 @@ import (
 // carrying a Quarto anchor: "## 4.1a Title {#sec-4.1a}". Ported from
 // scripts/secfmt.py, which is what the pre-commit hook enforces — the two
 // must agree on what a section is. H1 is excluded deliberately: it is the
-// document title, not an addressable section (014 §3).
+// document title, not an addressable section (025 §3).
 //
 // The trailing dot after the number is optional because the house style is
 // "1." at the top level and "1.1" below it; it is not captured either way.

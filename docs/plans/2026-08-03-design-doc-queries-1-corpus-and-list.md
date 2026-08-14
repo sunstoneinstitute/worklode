@@ -7,10 +7,10 @@ covers:
   - docs/specs/026-design-doc-queries.md#sec-2.2
   - docs/specs/026-design-doc-queries.md#sec-2.3
   - docs/specs/026-design-doc-queries.md#sec-4
-  - docs/specs/026-design-doc-queries.md#sec-5
-  - docs/specs/026-design-doc-queries.md#sec-6
-  - docs/specs/026-design-doc-queries.md#sec-7
+  - docs/specs/026-design-doc-queries.md#sec-5.2
   - docs/specs/026-design-doc-queries.md#sec-8
+  - docs/specs/026-design-doc-queries.md#sec-9
+  - docs/specs/026-design-doc-queries.md#sec-10
 requires:
   - 2026-08-03-spec-shorthand-references.md
 ---
@@ -107,7 +107,7 @@ func LoadCorpus(root string) (*Corpus, error)
 type Corpus struct {
 	Root       string          // absolute corpus root
 	ProjectKey string          // project_key from root's .worklode/config.toml; "" when absent
-	Docs       map[string]*Doc // keyed by root-relative slash path, e.g. "docs/specs/014-design-documents-as-graph-objects.md"
+	Docs       map[string]*Doc // keyed by root-relative slash path, e.g. "docs/specs/025-documents-in-the-backbone.md"
 	Defects    []Defect        // parse failures found during load
 }
 
@@ -1062,7 +1062,7 @@ also edits `ns/ontology.ttl` — it adds `wl:Plan` and widens `wl:status`'s
 domain as part of a larger 025 edit. Re-read the file first; whichever plan
 executes second skips what is already done.
 
-- [ ] **Step 1: `ns/ontology.ttl`** (spec 026 §5 is the governing amendment;
+- [ ] **Step 1: `ns/ontology.ttl`** (spec 026 §5.2 is the governing amendment;
   per CLAUDE.md the `ns/` mirror follows it):
 
   - If `wl:status`'s domain (currently
@@ -1070,11 +1070,11 @@ executes second skips what is already done.
     includes `wl:Plan`: nothing to do.
   - Else if `wl:Plan` is already declared (backbone plan 1 landed): add
     `wl:Plan` to the union and extend the `rdfs:comment` with one clause —
-    plans carry the same value set, no per-section status (026 §5).
-  - Else (neither landed): add the `wl:Plan` class with spec 025 §4's Turtle
+    plans carry the same value set, no per-section status (026 §5.2).
+  - Else (neither landed): add the `wl:Plan` class with spec 025 §9's Turtle
     verbatim (sibling of `wl:DesignDoc`, `wl:layer wlc:execution`), update
-    the "Deliberately absent — wl:Plan dropped (014 §2)" trailer comment to
-    record the 025 §4 return, and widen the domain as above.
+    the "Deliberately absent — wl:Plan dropped (025 §2)" trailer comment to
+    record the 025 §9 return, and widen the domain as above.
   - Validate: `riot --validate ns/ontology.ttl ns/concept.ttl ns/shapes.ttl`.
 
 - [ ] **Step 2: `docs/authoring-design-docs.md`** (§6's list; re-read the
@@ -1085,8 +1085,8 @@ executes second skips what is already done.
     `draft` while written and reviewed, `accepted` from the moment its
     execution is authorised; plans take no per-section status. `task` row's
     "On" becomes "plans (transitional)" and its note says: on a plan it
-    names the task the plan's execution hangs off, the stand-in for 025 §5's
-    `plan_doc` reference; neither key is backfilled (026 §5).
+    names the task the plan's execution hangs off, the stand-in for 025 §9.2's
+    `plan_doc` reference; neither key is backfilled (026 §5.2).
   - References section: replace the two-sentence bare-filename/repo-relative
     rule with §4's table — no `/` → the referring document's directory;
     leading `./`/`../` → the same; any other `/`-containing path →
@@ -1122,7 +1122,7 @@ executes second skips what is already done.
 
 ## Done when
 
-Maps to spec 026 §10 (this plan's share):
+Maps to spec 026 §12 (this plan's share):
 
 1. `lode doc list --needs-planning` exits 0 and lists every accepted spec with a
    section no plan's `implements` union names, with the unplanned anchors and

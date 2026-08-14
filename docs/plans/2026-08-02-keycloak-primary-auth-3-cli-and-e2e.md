@@ -1,6 +1,6 @@
 ---
 status: accepted
-covers: docs/specs/023-keycloak-primary-auth.md
+covers: docs/specs/001-identity-and-authentication.md
 requires:
   - 2026-08-02-keycloak-primary-auth-2-link-and-tokens.md
 ---
@@ -14,7 +14,7 @@ requires:
 
 **Tech Stack:** Go 1.25+, cobra, net/http, in-memory nonce store (single-instance server, same as `cliCodeStore`), `e2e/` build tag.
 
-**Read first:** `docs/specs/023-keycloak-primary-auth.md` §3.4, §5, §6, `internal/api/cliauth.go` (`cliCodeStore` — the pattern the nonce store copies), `internal/api/githublink.go` (plan 2), `internal/api/session.go:94-105` (`oauthState`), `internal/cli/login.go` (the loopback flow, unchanged), `e2e/smoke_test.go:120-165`.
+**Read first:** `docs/specs/001-identity-and-authentication.md` §3.4, §5, §6, `internal/api/cliauth.go` (`cliCodeStore` — the pattern the nonce store copies), `internal/api/githublink.go` (plan 2), `internal/api/session.go:94-105` (`oauthState`), `internal/cli/login.go` (the loopback flow, unchanged), `e2e/smoke_test.go:120-165`.
 
 **Prerequisite:** plans 1 and 2 are merged.
 
@@ -129,7 +129,7 @@ Create `internal/api/linknonce.go`:
 
 ```go
 // linknonce.go binds a CLI-initiated GitHub link to the calling actor without
-// a browser session (spec 023 §3.4). It mirrors cliCodeStore: in-memory,
+// a browser session (spec 001 §9.4). It mirrors cliCodeStore: in-memory,
 // single-use, short-lived — the server is single-instance, so a restart simply
 // drops pending nonces and the user re-runs the command.
 package api
@@ -535,7 +535,7 @@ func (s *server) cliLinkStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // unlinkGitHub handles DELETE /api/v1/auth/github/link: forget the calling
-// actor's link and its stored token. Unlink is a row delete (spec 023 §3.5)
+// actor's link and its stored token. Unlink is a row delete (spec 001 §9.5)
 // and is idempotent, so an already-unlinked actor still gets 204.
 func (s *server) unlinkGitHub(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteGitHubLink(r.Context(), actorFrom(r).ID); err != nil {
@@ -546,7 +546,7 @@ func (s *server) unlinkGitHub(w http.ResponseWriter, r *http.Request) {
 }
 
 // authStatus handles GET /api/v1/auth/status: who the caller is, when the
-// token expires, and the GitHub link state (spec 023 §3.4).
+// token expires, and the GitHub link state (spec 001 §9.4).
 func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 	actor := actorFrom(r)
 	out := map[string]any{
@@ -952,7 +952,7 @@ func TestLoginAliasIsHidden(t *testing.T) {
 	}
 }
 
-// Spec 023 §6: `auth status` renders all three link states. The fake server
+// Spec 001 §11: `auth status` renders all three link states. The fake server
 // stands in for the API; runLode (lifecycle_test.go) drives the real command.
 func TestAuthStatusRendersLinkStates(t *testing.T) {
 	for _, tc := range []struct {
@@ -1035,7 +1035,7 @@ Keep the existing `RunE` body verbatim.
 Create `internal/cmd/auth.go`:
 
 ```go
-// auth.go is the `lode auth` command group (spec 023 §3.4): sign in, link a
+// auth.go is the `lode auth` command group (spec 001 §9.4): sign in, link a
 // GitHub account, and report both states.
 package cmd
 
@@ -1374,22 +1374,22 @@ git commit -m "Cover Keycloak login through GitHub linking end to end"
 ## Task 6: Close out the docs
 
 **Files:**
-- Modify: `docs/specs/001-keycloak-sso.md` (one stale note), `docs/follow-ups.md`, `README.md` (if it documents `lode login` or the removed env vars)
+- Modify: `docs/specs/001-identity-and-authentication.md` (one stale note), `docs/follow-ups.md`, `README.md` (if it documents `lode login` or the removed env vars)
 
 - [ ] **Step 1: Update user-facing docs**
 
 `grep -rn "lode login\|LODE_GITHUB_ORG\|LODE_GITHUB_ADMIN_TEAM\|Sign in with GitHub" README.md docs/ --include=*.md | grep -v docs/specs/ | grep -v docs/plans/` and fix each hit: `lode login` → `lode auth login`, and delete the two removed env vars from any config table.
 
-- [ ] **Step 2: Bring 001 §3.2's amendment note up to date**
+- [ ] **Step 2: Bring 001 §6's amendment note up to date**
 
-The inline note on `docs/specs/001-keycloak-sso.md` §3.2 still describes the
+The inline note on `docs/specs/001-identity-and-authentication.md` §3.2 still describes the
 `/auth/choose` chooser that 002 added and this work removed. Append one
 sentence to that existing blockquote (a clarifying note edit — 023's
 frontmatter already supersedes 002 §3.2, so no new `amends`/`amendedBy` edge
 and no frontmatter change):
 
 ```markdown
-> **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path. Spec 023 §3.1 has since removed the chooser and the GitHub provider: `/auth/login` is once more the sole entry.
+> **Amended by 002 §B.** When both providers are configured the session flow starts at `/auth/choose`; `/auth/login` and `/auth/callback` remain the Keycloak path. Spec 001 §3 has since removed the chooser and the GitHub provider: `/auth/login` is once more the sole entry.
 ```
 
 - [ ] **Step 3: Record the deferred spec-§6 item**
@@ -1398,7 +1398,7 @@ Append to `docs/follow-ups.md` — no admin diagnostics surface exists yet, so
 implementing one here would be a feature of its own:
 
 ```markdown
-- **Admin diagnostics for GitHub links (spec 023 §6).** The testing section's
+- **Admin diagnostics for GitHub links (spec 001 §11).** The testing section's
   "admin diagnostics report link and token validity" e2e item is deferred: no
   admin diagnostics surface exists. When one appears, it should report each
   actor's link state and whether the stored pair still refreshes
@@ -1413,13 +1413,13 @@ Expected: no numbering complaints, tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/specs/001-keycloak-sso.md docs/follow-ups.md README.md docs/
+git add docs/specs/001-identity-and-authentication.md docs/follow-ups.md README.md docs/
 git commit -m "Update docs for Keycloak-primary auth"
 ```
 
 - [ ] **Step 6: Stop — spec acceptance is the human's call**
 
-Do **not** flip `docs/specs/023-keycloak-primary-auth.md` to
+Do **not** flip `docs/specs/001-identity-and-authentication.md` to
 `status: accepted` yourself. Acceptance is an explicit human act (and
 "implemented?" is a coverage query, not a doc status). Report that spec 023's
 code obligations are complete — §3.6 remains ops-side, recorded in

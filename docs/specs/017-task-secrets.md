@@ -2,9 +2,9 @@
 status: accepted
 issued: 2026-07-28
 requires:
-  - 004-execution-backbone.md
-  - 008-worklode-plugin.md
-  - 016-org-wide-skills.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/016-org-wide-skills.md
 ---
 # Spec 017 — Task-declared secrets
 

@@ -1,6 +1,6 @@
 ---
 status: draft
-covers: docs/specs/034-design-doc-sync.md
+covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design-doc sync, part 3 — API surface and lode doc
 
@@ -22,7 +22,7 @@ gate, and the `lode doc sync` / `lode doc list` commands — completing spec 034
 current branch, the remote's default branch, and porcelain cleanliness through
 new `internal/worktree` helpers, refuses off-default or dirty without
 `--force`, and always ships provenance (source branch + dirty flag) so the
-server records it (034 §3). `--dry-run` is served by the store's read-only
+server records it (025 §16.2). `--dry-run` is served by the store's read-only
 `DocSyncOutcomes`. The event payload is a slim summary (project, provenance,
 counts), not the document bodies — the docs table already holds the content,
 and events must stay bounded.
@@ -33,14 +33,14 @@ and events must stay bounded.
 ## Global constraints
 
 - `lode doc sync [--force] [-n|--dry-run] [--json]`; `lode doc list
-  [--kind spec|adr|plan] [--status <s>] [--project <id>] [--json]` (034 §3,
+  [--kind spec|adr|plan] [--status <s>] [--project <id>] [--json]` (025 §16.2,
   §6; `--needs-planning`/`--needs-execution` are spec 026's read surface and
   are NOT built here).
 - Default branch from the remote's HEAD; cleanliness from
-  `git status --porcelain` (034 §3).
+  `git status --porcelain` (025 §16.2).
 - Sync is one-way, git → backbone; the API performs no editorial transitions.
 - Wire outcomes are exactly `added` / `updated` / `unchanged`; a document with
-  unparseable frontmatter fails the whole sync client-side (034 §3, via part
+  unparseable frontmatter fails the whole sync client-side (025 §16.2, via part
   1's loader).
 - Metrics per spec 022: `worklode_` prefix, owning package's `metrics.go`
   pattern (here: `internal/api/metrics.go`), nil-safe, bounded labels, tests.
@@ -81,7 +81,7 @@ request  {"project": "wl", "source_branch": "main", "dirty": false,
                     "edges": [{"src_anchor": "sec-1", "rel": "amends",
                                "target": "025-x.md", "target_anchor": "sec-2"}]}]}
 response {"dry_run": false, "added": 1, "updated": 0, "unchanged": 0,
-          "results": [{"id": "WL-SPEC-34", "kind": "spec", "outcome": "added"}]}
+          "results": [{"id": "WL-SPEC-25", "kind": "spec", "outcome": "added"}]}
 ```
 
 Errors: 422 for store validation (`ErrInvalidInput`), 404 for an unknown
@@ -150,7 +150,7 @@ func TestDocsSync(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Added != 1 || len(resp.Results) != 1 || resp.Results[0].ID != "WL-SPEC-34" ||
+	if resp.Added != 1 || len(resp.Results) != 1 || resp.Results[0].ID != "WL-SPEC-25" ||
 		resp.Results[0].Outcome != "added" {
 		t.Fatalf("resp = %+v", resp)
 	}
@@ -183,7 +183,7 @@ func TestDocsSyncDryRunWritesNothing(t *testing.T) {
 	if !resp.DryRun || resp.Added != 1 {
 		t.Fatalf("dry-run resp = %+v", resp)
 	}
-	if rr := doReq(t, h, http.MethodGet, "/api/v1/docs/WL-SPEC-34", token, nil); rr.Code != http.StatusNotFound {
+	if rr := doReq(t, h, http.MethodGet, "/api/v1/docs/WL-SPEC-25", token, nil); rr.Code != http.StatusNotFound {
 		t.Fatalf("dry run wrote: GET = %d", rr.Code) // relies on Task 2's GET; until it lands, assert via a real sync + unchanged=0 instead
 	}
 }
@@ -222,7 +222,7 @@ func TestObserveDocSync(t *testing.T) {
 	s.initMetrics(reg)
 
 	s.observeDocSync([]store.DocSyncResult{
-		{DocID: "WL-SPEC-34", Kind: "spec", Outcome: "added"},
+		{DocID: "WL-SPEC-25", Kind: "spec", Outcome: "added"},
 		{DocID: "WL-PLAN-34-1", Kind: "plan", Outcome: "unchanged"},
 	}, true, nil, 40*time.Millisecond)
 
@@ -342,7 +342,7 @@ func toSyncResponse(dryRun bool, results []store.DocSyncResult) docSyncResponse 
 	return resp
 }
 
-// syncDocs handles POST /api/v1/docs/sync — spec 034 §3/§4's bulk upsert.
+// syncDocs handles POST /api/v1/docs/sync — spec 025 §16.2/§4's bulk upsert.
 func (s *server) syncDocs(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var req docSyncRequest
@@ -472,7 +472,7 @@ Expected: PASS.
 ```bash
 git add internal/api/docs.go internal/api/docs_test.go internal/api/server.go \
         internal/api/metrics.go internal/api/metrics_internal_test.go
-git commit -m "api: POST /api/v1/docs/sync with spec-022 metrics (spec 034 §4, §10)"
+git commit -m "api: POST /api/v1/docs/sync with spec-022 metrics (spec 025 §5.1, §10)"
 ```
 
 ### Task 2 — GET /api/v1/docs and GET /api/v1/docs/{id}
@@ -514,7 +514,7 @@ func TestDocsListAndGet(t *testing.T) {
 		"body": "---\nstatus: draft\n---\n# Part 1\n",
 		"frontmatter": map[string]any{"status": "draft"},
 		"edges": []map[string]any{
-			{"rel": "implements", "target": "docs/specs/034-design-doc-sync.md"},
+			{"rel": "implements", "target": "docs/specs/025-documents-in-the-backbone.md"},
 		},
 	}
 	doReq(t, h, http.MethodPost, "/api/v1/docs/sync", token, syncBody(false, specDocPayload(), plan))
@@ -548,7 +548,7 @@ func TestDocsListAndGet(t *testing.T) {
 		t.Fatalf("kind filter = %+v", list.Docs)
 	}
 
-	rr = doReq(t, h, http.MethodGet, "/api/v1/docs/WL-SPEC-34", token, nil)
+	rr = doReq(t, h, http.MethodGet, "/api/v1/docs/WL-SPEC-25", token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get: %d %s", rr.Code, rr.Body)
 	}
@@ -561,7 +561,7 @@ func TestDocsListAndGet(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != "WL-SPEC-34" || got.Body == "" || len(got.Sections) != 1 || len(got.Edges) != 1 {
+	if got.ID != "WL-SPEC-25" || got.Body == "" || len(got.Sections) != 1 || len(got.Edges) != 1 {
 		t.Fatalf("get = %+v", got)
 	}
 
@@ -669,7 +669,7 @@ Expected: PASS.
 
 ```bash
 git add internal/api/docs.go internal/api/docs_test.go internal/api/server.go
-git commit -m "api: GET /api/v1/docs list and get (spec 034 §4, §6)"
+git commit -m "api: GET /api/v1/docs list and get (spec 025 §5.1, §6)"
 ```
 
 ### Task 3 — Client methods: SyncDocs, ListDocs, GetDoc, DocTable
@@ -782,7 +782,7 @@ func TestSyncDocsWire(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"dry_run":false,"added":1,"updated":0,"unchanged":0,
-			"results":[{"id":"WL-SPEC-34","kind":"spec","outcome":"added"}]}`)
+			"results":[{"id":"WL-SPEC-25","kind":"spec","outcome":"added"}]}`)
 	}))
 	defer srv.Close()
 
@@ -801,7 +801,7 @@ func TestSyncDocsWire(t *testing.T) {
 	if gotBody["project"] != "wl" || gotBody["force"] != true || gotBody["source_branch"] != "main" {
 		t.Errorf("body = %v", gotBody)
 	}
-	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-34" {
+	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-25" {
 		t.Errorf("report = %+v", rep)
 	}
 }
@@ -814,12 +814,12 @@ file, `package cli`, so no qualifier):
 func TestDocTable(t *testing.T) {
 	var buf bytes.Buffer
 	DocTable(&buf, []Doc{
-		{ID: "WL-SPEC-34", Kind: "spec", Status: "accepted", Version: 2,
+		{ID: "WL-SPEC-25", Kind: "spec", Status: "accepted", Version: 2,
 			SourceDirty: true, Title: "Design-doc sync"},
 	})
 	out := buf.String()
 	for _, want := range []string{"ID", "KIND", "STATUS", "V", "DIRTY", "TITLE",
-		"WL-SPEC-34", "accepted", "yes", "Design-doc sync"} {
+		"WL-SPEC-25", "accepted", "yes", "Design-doc sync"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("DocTable output missing %q:\n%s", want, out)
 		}
@@ -837,7 +837,7 @@ Expected: compile error — the doc types are undefined.
 
 ```go
 // SyncDocs calls POST /api/v1/docs/sync — the git→backbone bulk upsert
-// (spec 034 §3).
+// (spec 025 §16.2).
 func (c *Client) SyncDocs(ctx context.Context, in DocSyncInput) (DocSyncReport, []byte, error) {
 	body := map[string]any{
 		"project":       in.Project,
@@ -899,7 +899,7 @@ In `render.go`:
 
 ```go
 // DocTable prints one row per synced document: id, kind, status, version, a
-// dirty-provenance marker (034 §3), and title.
+// dirty-provenance marker (025 §16.2), and title.
 func DocTable(w io.Writer, docs []Doc) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tKIND\tSTATUS\tV\tDIRTY\tTITLE")
@@ -923,7 +923,7 @@ Expected: PASS.
 
 ```bash
 git add internal/cli/client.go internal/cli/client_test.go internal/cli/render.go internal/cli/render_test.go
-git commit -m "cli: doc sync/list/get client methods and table (spec 034 §4)"
+git commit -m "cli: doc sync/list/get client methods and table (spec 025 §5.1)"
 ```
 
 ### Task 4 — Git helpers: CurrentBranch, DefaultBranch, IsClean
@@ -935,7 +935,7 @@ skills:
   - superpowers:test-driven-development
 ```
 
-The gate's three facts (034 §3): current branch, the default branch from the
+The gate's three facts (025 §16.2): current branch, the default branch from the
 remote's HEAD, and porcelain cleanliness. They live beside the existing git
 helpers (`Root`, `Identity`, `GitDir`) in `internal/worktree`.
 
@@ -1020,7 +1020,7 @@ Expected: compile error — the three functions are undefined.
 
 ```go
 // CurrentBranch returns the branch checked out at root. A detached HEAD is
-// an error: the doc-sync gate (spec 034 §3) needs a branch to compare and to
+// an error: the doc-sync gate (spec 025 §16.2) needs a branch to compare and to
 // record as provenance.
 func CurrentBranch(root string) (string, error) {
 	out, err := exec.Command("git", "-C", root, "symbolic-ref", "--short", "HEAD").Output()
@@ -1031,7 +1031,7 @@ func CurrentBranch(root string) (string, error) {
 }
 
 // DefaultBranch returns the repository's default branch as recorded by the
-// remote's HEAD (spec 034 §3), read from refs/remotes/origin/HEAD — local
+// remote's HEAD (spec 025 §16.2), read from refs/remotes/origin/HEAD — local
 // state git clone writes, so no network round trip. A repo without it (an
 // old clone, or `git init` with a remote added by hand) gets an error naming
 // the fix.
@@ -1044,7 +1044,7 @@ func DefaultBranch(root string) (string, error) {
 }
 
 // IsClean reports whether root's working tree has no uncommitted changes,
-// untracked files included — `git status --porcelain` prints nothing (034 §3).
+// untracked files included — `git status --porcelain` prints nothing (025 §16.2).
 func IsClean(root string) (bool, error) {
 	out, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
 	if err != nil {
@@ -1069,7 +1069,7 @@ Expected: PASS.
 
 ```bash
 git add internal/worktree/worktree.go internal/worktree/worktree_test.go
-git commit -m "worktree: CurrentBranch/DefaultBranch/IsClean for the sync gate (spec 034 §3)"
+git commit -m "worktree: CurrentBranch/DefaultBranch/IsClean for the sync gate (spec 025 §16.2)"
 ```
 
 ### Task 5 — lode doc sync and lode doc list
@@ -1092,7 +1092,7 @@ own tests; the cobra `RunE`s stay thin glue.
 **Interfaces produced:**
 
 ```go
-// syncGate is the observed git state the default-branch gate judges (034 §3).
+// syncGate is the observed git state the default-branch gate judges (025 §16.2).
 type syncGate struct {
 	Branch        string
 	DefaultBranch string // "" when origin/HEAD is unrecorded
@@ -1210,7 +1210,7 @@ func init() {
 	rootCmd.AddCommand(newDocCmd())
 }
 
-// syncGate is the observed git state the default-branch gate judges (034 §3).
+// syncGate is the observed git state the default-branch gate judges (025 §16.2).
 type syncGate struct {
 	Branch        string
 	DefaultBranch string
@@ -1218,7 +1218,7 @@ type syncGate struct {
 	Clean         bool
 }
 
-// checkSyncGate enforces spec 034 §3: without --force, sync only from the
+// checkSyncGate enforces spec 025 §16.2: without --force, sync only from the
 // default branch with a clean tree. Every refusal names --force as the
 // escape hatch.
 func checkSyncGate(g syncGate, force bool) error {
@@ -1275,7 +1275,7 @@ func newDocSyncCmd() *cobra.Command {
 				return err
 			}
 			if corpora.SpecDir == "" && corpora.PlanDir == "" {
-				return errors.New(`nothing configured to sync: set spec_corpus and/or plan_corpus in .worklode/config.toml (spec 034 §2)`)
+				return errors.New(`nothing configured to sync: set spec_corpus and/or plan_corpus in .worklode/config.toml (spec 025 §16.1)`)
 			}
 
 			root, ok := worktree.Root(cwd)
@@ -1401,7 +1401,7 @@ adds them; `doc list` shows `WL-SPEC-*`/`WL-ADR-*`/`WL-PLAN-*` rows.
 
 ```bash
 git add internal/cmd/doc.go internal/cmd/doc_test.go
-git commit -m "cmd: lode doc sync / lode doc list with the default-branch gate (spec 034 §3, §6)"
+git commit -m "cmd: lode doc sync / lode doc list with the default-branch gate (spec 025 §16.2, §6)"
 ```
 
 ### Task 6 — e2e: the sync round trip over public surfaces
@@ -1466,9 +1466,9 @@ func TestDocSyncRoundTrip(t *testing.T) {
 	}
 	plan := cli.DocUpsert{
 		Kind: "plan", Ordinal: "34-1", Status: "draft", Title: "Part 1",
-		Body:        "---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n---\n# Part 1\n",
+		Body:        "---\nstatus: draft\nimplements: docs/specs/025-documents-in-the-backbone.md\n---\n# Part 1\n",
 		Frontmatter: json.RawMessage(`{"status":"draft"}`),
-		Edges:       []cli.DocEdge{{Rel: "implements", Target: "docs/specs/034-design-doc-sync.md"}},
+		Edges:       []cli.DocEdge{{Rel: "implements", Target: "docs/specs/025-documents-in-the-backbone.md"}},
 	}
 	input := cli.DocSyncInput{Project: "docsync", SourceBranch: "main", Docs: []cli.DocUpsert{spec, plan}}
 
@@ -1539,7 +1539,7 @@ go test ./...
 go test -race -count=1 -tags e2e ./e2e/
 ```
 
-Expected: green everywhere. Walk spec 034 §12 once more and check each of the
+Expected: green everywhere. Walk spec 025 §24 once more and check each of the
 eight criteria against the landed code (1, 6, 7 from part 1; 2-5, 8 from
 parts 2-3).
 
@@ -1547,5 +1547,5 @@ parts 2-3).
 
 ```bash
 git add e2e/docsync_test.go
-git commit -m "e2e: doc sync round trip over the public API (spec 034 §12)"
+git commit -m "e2e: doc sync round trip over the public API (spec 025 §24)"
 ```

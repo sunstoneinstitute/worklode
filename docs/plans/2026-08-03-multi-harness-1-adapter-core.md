@@ -1,10 +1,10 @@
 ---
 status: accepted
 covers:
-  - docs/specs/024-multi-harness-integration.md#sec-3.1
-  - docs/specs/024-multi-harness-integration.md#sec-3.2
-  - docs/specs/024-multi-harness-integration.md#sec-3.4
-  - docs/specs/024-multi-harness-integration.md#sec-3.7
+  - docs/specs/008-worklode-plugin.md#sec-17.1
+  - docs/specs/008-worklode-plugin.md#sec-17.2
+  - docs/specs/008-worklode-plugin.md#sec-17.4
+  - docs/specs/008-worklode-plugin.md#sec-17.7
 ---
 # Multi-harness 1/3: adapter core and installer — Implementation Plan
 
@@ -53,7 +53,7 @@ CHECK, which is missing `copilot`.
 **Tech Stack:** Go 1.26, cobra, stdlib `testing` (table-driven, `t.Fatalf`),
 golang-migrate. No new dependencies.
 
-**Spec:** `docs/specs/024-multi-harness-integration.md`
+**Spec:** `docs/specs/008-worklode-plugin.md`
 
 ---
 
@@ -72,11 +72,11 @@ golang-migrate. No new dependencies.
   disabled) → `internal/hookrun/hookrun.go` (`Payload` at `hookrun.go:84`,
   `agentName` at `hookrun.go:228` — `LODE_AGENT` env, default `claude-code`).
 - Git pre-commit hook: `internal/cmd/githooks.go` — untouched; it is already
-  every harness's coverage floor (spec 024 §3.4).
+  every harness's coverage floor (spec 008 §17.4).
 - `agent_sessions.agent` CHECK:
   `deploy/base/migrations/0004_agent_sessions.up.sql` lists
   `claude-code, codex, cursor, aider, opencode, pi, amp, other` — **no
-  `copilot`** (contradicting spec 024 §5's claim that 012 already accepts
+  `copilot`** (contradicting spec 008 §19's claim that 012 already accepts
   the harness ids). Task 3 fixes the schema; the spec-012 amendment is
   handled separately, not here.
 - `ns/` carries no harness enum (checked: no `wlc:` concept lists agents), so
@@ -103,7 +103,7 @@ deliberate):**
    needed. `--scope` keeps selecting the Claude Code settings file only.
 3. **The codex/copilot/amp config shapes below are the spec's §2.3 findings,
    verified 2026-08-01.** Each adapter task starts with a re-verification
-   step against the primary source named in spec 024 §8; a drifted format is
+   step against the primary source named in spec 008 §22; a drifted format is
    adjusted in the adapter table, and a format that cannot express a command
    handler downgrades that adapter to skills + git heartbeat (spec §4 row 2),
    reported as unbound events — never a broken write.
@@ -197,7 +197,7 @@ func TestRegistryKnowsClaudeCode(t *testing.T) {
 
 func TestEventsCoverHeartbeat(t *testing.T) {
 	// Every v1 adapter must map Heartbeat or report it unbound — it is the
-	// portability payoff (spec 024 §2.5). claude-code maps it to four events.
+	// portability payoff (spec 008 §16.5). claude-code maps it to four events.
 	h, _ := Get("claude-code")
 	if got := h.Events()[Heartbeat]; len(got) != 4 {
 		t.Fatalf("claude-code Heartbeat events = %v; want 4", got)
@@ -222,7 +222,7 @@ Run: `go test ./internal/harness/` — FAIL (package does not exist).
 
 ```go
 // Package harness holds one adapter per coding-agent harness plus a registry
-// (spec 024 §3.1). An adapter is a table of locations and event names; the
+// (spec 008 §17.1). An adapter is a table of locations and event names; the
 // behaviour behind them is always `lode hook <event>`, so no adapter ever
 // introduces a second coordination model.
 package harness
@@ -238,7 +238,7 @@ const (
 )
 
 // Event is Worklode's lifecycle vocabulary. PreCommit is deliberately not an
-// adapter concern: the git hook covers it for every harness (spec 024 §3.4).
+// adapter concern: the git hook covers it for every harness (spec 008 §17.4).
 type Event string
 
 const (
@@ -262,7 +262,7 @@ type SkillTarget struct {
 
 // HookInstall reports what one adapter's InstallHooks wrote. Unbound names
 // the Worklode events this harness cannot express — degraded coverage,
-// never an install failure (spec 024 §3.1).
+// never an install failure (spec 008 §17.1).
 type HookInstall struct {
 	Path    string
 	Bound   []string // harness-native event names actually bound
@@ -280,7 +280,7 @@ const (
 	ActionNone    = "none"
 )
 
-// Harness is one coding agent's integration surface (spec 024 §3.1).
+// Harness is one coding agent's integration surface (spec 008 §17.1).
 type Harness interface {
 	ID() string
 	// Detect reports whether this harness is configured for repoDir or the
@@ -361,7 +361,7 @@ func (ClaudeCode) Detect(repoDir string) (bool, error) {
 }
 
 // SkillTargets: ~/.claude/skills, per-skill — the directory is user-owned
-// (spec 024 §3.3). Claude Code reads no project-scope shared dir.
+// (spec 008 §17.3). Claude Code reads no project-scope shared dir.
 func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -715,14 +715,14 @@ func TestNormalizePayload(t *testing.T) {
 			`{"cwd":"/w","session_id":"s1","transcript_path":"/t.jsonl"}`,
 			Payload{Cwd: "/w", SessionID: "s1", TranscriptPath: "/t.jsonl"}},
 		// The default (empty harness) is claude-code, for every binding
-		// already installed (spec 024 §3.4).
+		// already installed (spec 008 §17.4).
 		{"", `{"cwd":"/w","session_id":"s1"}`, Payload{Cwd: "/w", SessionID: "s1"}},
 		// codex: camelCase keys.
 		{"codex", `{"cwd":"/w","sessionId":"s2"}`, Payload{Cwd: "/w", SessionID: "s2"}},
 		// copilot: camelCase with workingDirectory.
 		{"copilot", `{"workingDirectory":"/w","sessionId":"s3"}`, Payload{Cwd: "/w", SessionID: "s3"}},
 		// A field Worklode needs but the payload omits ⇒ zero value ⇒ the
-		// guard NOPs. Never an error (spec 024 §3.4).
+		// guard NOPs. Never an error (spec 008 §17.4).
 		{"amp", `{"unrelated":true}`, Payload{}},
 		{"codex", `not json`, Payload{}},
 	}
@@ -754,7 +754,7 @@ wrong signature).
 
 ```go
 // normalizePayload maps one harness's hook payload onto hookrun's internal
-// Payload before the guard runs (spec 024 §3.4). Unknown harnesses and
+// Payload before the guard runs (spec 008 §17.4). Unknown harnesses and
 // missing fields degrade to zero values — the guard then NOPs; a payload
 // never produces a user-visible error.
 func normalizePayload(harnessID string, raw []byte) Payload {
@@ -835,7 +835,7 @@ blockedBy: [1]
 - [ ] **Step 1: Re-verify the format**
 
 Check `codex-rs/hooks` and `docs/config.md` in
-[openai/codex](https://github.com/openai/codex) (spec 024 §8): the
+[openai/codex](https://github.com/openai/codex) (spec 008 §22): the
 `hooks.json` location (`~/.codex/hooks.json`, `$CODEX_HOME` honored), the
 per-event entry-list shape, and the event names
 (`SessionStart`, `SessionEnd`, `Stop`, `SubagentStop` — spec §2.3). If the
@@ -1001,7 +1001,7 @@ blockedBy: [1, 3]
 
 - [ ] **Step 1: Re-verify the format**
 
-Check the GitHub Docs hooks page (spec 024 §8: "hooks" under Copilot
+Check the GitHub Docs hooks page (spec 008 §22: "hooks" under Copilot
 concepts/agents): personal hooks dir `~/.copilot/hooks/*.json`, repo hooks
 dir `.github/hooks/*.json`, event names (`sessionStart`, `sessionEnd`,
 `agentStop`, `subagentStop`, `preToolUse`, `postToolUse`,
@@ -1241,7 +1241,7 @@ func TestEnsureClaudeMD(t *testing.T) {
 	if strings.TrimSpace(string(got)) != "@AGENTS.md" {
 		t.Fatalf("CLAUDE.md = %q", got)
 	}
-	// Existing CLAUDE.md: authored prose, never edited (spec 024 §3.7).
+	// Existing CLAUDE.md: authored prose, never edited (spec 008 §17.7).
 	os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("# Mine\n"), 0o644)
 	action, _ = ensureClaudeMD(root)
 	if action != "suggested" {
@@ -1266,7 +1266,7 @@ const (
 )
 
 // agentsBlock is the two facts an agent needs before a brief exists
-// (spec 024 §3.7). Deliberately short: the brief, not this file, carries
+// (spec 008 §17.7). Deliberately short: the brief, not this file, carries
 // task context.
 const agentsBlock = agentsBlockBegin + `
 This repository is tracked by Worklode (` + "`lode`" + `). Work is entered by

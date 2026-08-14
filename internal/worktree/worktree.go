@@ -15,11 +15,11 @@ import (
 )
 
 // DefaultBase is the worktree base directory used when worktree_dir /
-// LODE_WORKTREE_DIR is unset (spec 030 §3.1).
+// LODE_WORKTREE_DIR is unset (spec 008 §5.1).
 const DefaultBase = ".worktrees"
 
 // idRe matches a task id anywhere in the worktree's directory name. The base
-// directory is the guard; this only extracts (spec 030 §3.2).
+// directory is the guard; this only extracts (spec 008 §5.2).
 var idRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-[0-9]+`)
 
 // Layout is the resolved worktree directory layout for a checkout. Construct
@@ -63,7 +63,7 @@ func (l Layout) Base() string { return l.base }
 // is flat, so a "/" from a namespaced template ("team/{{ .id }}-{{ .slug }}")
 // is flattened to "-": every worktree is one directory below the base, and
 // under the default template the directory name is the branch name verbatim
-// (spec 030 §3.1).
+// (spec 008 §5.1).
 func DirName(branch string) string { return strings.ReplaceAll(branch, "/", "-") }
 
 // Dir returns the worktree directory for a branch: <root>/<base>/<dirname>.
@@ -97,7 +97,7 @@ func (l Layout) ParseDir(path string) (taskID string, ok bool) {
 // segmentBelowBase is the guard half of ParseDir: the single directory name
 // one level below the base directory, or ok=false. It is a pure string
 // operation — no config, no subprocess — which is what lets it run on every
-// hook event (spec 030 §3.2).
+// hook event (spec 008 §5.2).
 func (l Layout) segmentBelowBase(path string) (string, bool) {
 	if len(l.parts) == 0 {
 		return "", false
@@ -128,7 +128,7 @@ func lastIndexOf(segs, sub []string) int {
 
 // BranchName is the client-side fallback branch for a task, used only when a
 // server response carries no branch. The server is the authority: it renders
-// LODE_BRANCH_TEMPLATE and every response carries the result (spec 030 §1).
+// LODE_BRANCH_TEMPLATE and every response carries the result (spec 008 §3).
 func BranchName(taskID, slug string) string { return taskID + "-" + slug }
 
 // Root walks up from dir to the enclosing git worktree root
@@ -235,7 +235,7 @@ func SetTaskID(dir, taskID string) error {
 // The guard is unchanged and still runs first: dir must be exactly one
 // directory below the base, on strings alone. Only once it has cleared that
 // does TaskID spend a git subprocess, so the reject-fast path every hook
-// event takes stays free of one (spec 030 §3.2).
+// event takes stays free of one (spec 008 §5.2).
 func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 	seg, ok := l.segmentBelowBase(dir)
 	if !ok {
@@ -255,7 +255,7 @@ func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 }
 
 // CurrentBranch returns the branch checked out at root. A detached HEAD is
-// an error: the doc-sync gate (spec 034 §3) needs a branch to compare and to
+// an error: the doc-sync gate (spec 025 §16.2) needs a branch to compare and to
 // record as provenance.
 func CurrentBranch(root string) (string, error) {
 	out, err := exec.Command("git", "-C", root, "symbolic-ref", "--short", "HEAD").Output()
@@ -266,7 +266,7 @@ func CurrentBranch(root string) (string, error) {
 }
 
 // DefaultBranch returns the repository's default branch as recorded by the
-// remote's HEAD (spec 034 §3), read from refs/remotes/origin/HEAD — local
+// remote's HEAD (spec 025 §16.2), read from refs/remotes/origin/HEAD — local
 // state git clone writes, so no network round trip. A repo without it (an
 // old clone, or `git init` with a remote added by hand) gets an error naming
 // the fix.
@@ -279,7 +279,7 @@ func DefaultBranch(root string) (string, error) {
 }
 
 // IsClean reports whether root's working tree has no uncommitted changes,
-// untracked files included — `git status --porcelain` prints nothing (034 §3).
+// untracked files included — `git status --porcelain` prints nothing (025 §16.2).
 func IsClean(root string) (bool, error) {
 	out, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
 	if err != nil {

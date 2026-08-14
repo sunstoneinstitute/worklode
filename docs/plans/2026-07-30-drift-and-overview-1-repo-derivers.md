@@ -36,9 +36,9 @@ Protocol + Graph Store Protocol over `net/http`, Oxigraph (docker) as the
 test endpoint.
 
 **Spec:** `docs/specs/007-drift-and-overview.md`, read with its amendments:
-`docs/specs/014-design-documents-as-graph-objects.md` §5–§6, §10 and
-`docs/specs/015-runtime-layer.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
-the spec read as `wl:`/`wlc:`/`wlid:` (014 §1).
+`docs/specs/025-documents-in-the-backbone.md` §5–§6, §10 and
+`docs/specs/006-knowledge-graph.md` §2–§6. All `ls:`/`lsc:`/`lsid:` prefixes in
+the spec read as `wl:`/`wlc:`/`wlid:` (025 §17).
 
 ---
 
@@ -50,7 +50,7 @@ none of their packages; it only calls them.
 | Plan | Provides (consumed here) |
 |---|---|
 | `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` | part 1: `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`; part 2: projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
-| `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/iri` (IRI grammar, `GraphNS`), `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2), Worklode's own manifest |
+| `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/iri` (IRI grammar, `GraphNS`), `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §1), Worklode's own manifest |
 | `docs/plans/2026-07-30-runtime-layer.md` | `internal/graphproj` (`Triple`, `Render`, `ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCoversTriples`, `CommitKnown`) — exactly the row→triple functions 015 says "007's observed/deploy deriver will emit" |
 | `docs/plans/2026-07-30-reconciliation-{1-replay-engine,2-cli-surface,3-poll-engine}.md` | nothing consumed directly; noted because the series owns `lode doctor` and `internal/reconcile`, which this series must not touch |
 | `docs/plans/2026-07-30-design-documents-as-graph-objects.md` | nothing consumed; owns everything this series defers to "the 014 plan" — `internal/kg/implements`, the `observed/repo-implements` deriver, sections, `lode doc` |
@@ -107,7 +107,7 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 
 **Out (owned elsewhere — do not build):**
 
-- Queries 4.3 and 4.4 and `lode specs --drifted/--unimplemented`: 014 §6
+- Queries 4.3 and 4.4 and `lode specs --drifted/--unimplemented`: 025 §11
   supersedes 4.3 with the section-scoped stale-claim query and re-points 4.4
   at per-section coverage; both need `wl:Section`, `wl:lastRevisedIn` and
   `.worklode/implements.yaml` — all owned by the (unwritten) 014 plan, along
@@ -227,7 +227,7 @@ func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSl
 
 // ObservedGraph returns the named graph one deriver owns (spec 007: a
 // deriver must confine its writes to its own observed/* graph). Sources:
-// go-imports, repo-layout, pr-affects, deploy, repo-implements (014 §6).
+// go-imports, repo-layout, pr-affects, deploy, repo-implements (025 §11).
 func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
 
 // Repo returns a repository's instance IRI (the doap:Project node, D4).
@@ -749,7 +749,7 @@ Append to `rdf/wl/ontology.ttl`:
 ```turtle
 wl:unmatchedPath a owl:DatatypeProperty ; wl:layer wlc:execution ;
     rdfs:range xsd:string ;
-    rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (spec 007 §2, §4.2). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
+    rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (spec 007 §1, §4.2). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
 ```
 
 Add `"wl:unmatchedPath a owl:DatatypeProperty"` to `mintedDeclarations` in
@@ -1031,7 +1031,7 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	manPath := filepath.Join(root, ".worklode", "components.yaml")
 	data, err := os.ReadFile(manPath)
 	if err != nil {
-		return "", fmt.Errorf("read %s: %w (spec 007 §2: every derived repo needs a component-boundary manifest)", manPath, err)
+		return "", fmt.Errorf("read %s: %w (spec 007 §1: every derived repo needs a component-boundary manifest)", manPath, err)
 	}
 	m, err := manifest.Parse(data)
 	if err != nil {
@@ -1192,7 +1192,7 @@ The full-series map is split across the three parts; this part covers:
    queries): deriver 5 (`observed/repo-implements`), the stale-claim query
    replacing 4.3, per-section 4.4 coverage,
    `lode specs --drifted/--unimplemented`, `lode drift --docs`, per-section
-   web badges (014 §10). When those queries land, they slot into
+   web badges (025 §18). When those queries land, they slot into
    `internal/overview` beside 4.1/4.2.
 7. **Migration numbers:** this series needs none. Migration ids are
    provisional and assigned sequentially at execution time by the
