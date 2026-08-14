@@ -94,6 +94,47 @@ func TestMainCommitsAndLanding(t *testing.T) {
 	}
 }
 
+func TestMainSHAForID(t *testing.T) {
+	s := OpenTestStore(t)
+	now := time.Now()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	id, err := AppendMainCommit(tx, "acme/app", "abc1230000000000000000000000000000000000", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha, err := MainSHAForID(tx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha != "abc1230000000000000000000000000000000000" {
+		t.Fatalf("MainSHAForID = %q, want the appended sha", sha)
+	}
+}
+
+func TestMainSHAForIDUnknownIsEmpty(t *testing.T) {
+	s := OpenTestStore(t)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	sha, err := MainSHAForID(tx, 999999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha != "" {
+		t.Fatalf("MainSHAForID(unknown) = %q, want empty", sha)
+	}
+}
+
 func TestLandedMainIDNoCommits(t *testing.T) {
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
