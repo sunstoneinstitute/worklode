@@ -381,7 +381,7 @@ func TestListRepos(t *testing.T) {
 		t.Fatalf("ListRepos: %v", err)
 	}
 	sort.Slice(got, func(i, j int) bool { return got[i].Repo < got[j].Repo })
-	want := []RepoMapping{
+	want := []model.RepoMapping{
 		{Repo: "sunstoneinstitute/horndb", DoneState: "released"},
 		{Repo: "sunstoneinstitute/horndb-docs", DoneState: "merged"},
 	}

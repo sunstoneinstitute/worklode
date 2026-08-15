@@ -19,6 +19,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -107,7 +108,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
-	want := cli.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
+	want := model.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
 	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != want {
 		t.Fatalf("ListProjects result = %+v", list.Projects)
 	}
@@ -542,7 +543,7 @@ func TestClientInboxFlow(t *testing.T) {
 		t.Helper()
 		_, _, err := st.RecordEvent(ctx, "github", "issue-open-"+title, "issues.opened", nil,
 			func(tx *sql.Tx, _ int64) error {
-				return store.UpsertIssue(tx, store.Issue{
+				return store.UpsertIssue(tx, model.Issue{
 					Repo: "acme/widgets", Number: number, Title: title, State: "open",
 					URL: "https://github.com/acme/widgets/issues/1",
 				})
@@ -1554,7 +1555,7 @@ func TestClientSkillsList(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("Skills: raw body empty")
 	}
-	names := map[string]cli.Skill{}
+	names := map[string]model.Skill{}
 	for _, sk := range skills {
 		names[sk.Name] = sk
 	}

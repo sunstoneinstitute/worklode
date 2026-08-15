@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -184,7 +185,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			for _, is := range issues {
-				if err := store.UpsertIssue(tx, store.Issue{
+				if err := store.UpsertIssue(tx, model.Issue{
 					Repo:   req.Repo,
 					Number: is.Number,
 					Title:  is.Title,

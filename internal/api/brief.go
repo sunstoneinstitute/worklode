@@ -25,16 +25,16 @@ type briefBlockerJSON struct {
 // pinned skills (content inline) plus embedding-matched suggestions, in the
 // same shape as POST /api/v1/skills/recommend.
 type briefJSON struct {
-	Task               model.Task         `json:"task"`
-	Body               string             `json:"body"`
-	Branch             string             `json:"branch"`
-	OpenBlockers       []briefBlockerJSON `json:"open_blockers"`
-	Parent             *parentRefJSON     `json:"parent"`
-	Lease              *model.Lease       `json:"lease"`
-	GoverningDesign    *string            `json:"governing_design"`
-	AffectedComponents []string           `json:"affected_components"`
-	DefinitionOfDone   *string            `json:"definition_of_done"`
-	Skills             recommendationJSON `json:"skills"`
+	Task               model.Task                `json:"task"`
+	Body               string                    `json:"body"`
+	Branch             string                    `json:"branch"`
+	OpenBlockers       []briefBlockerJSON        `json:"open_blockers"`
+	Parent             *parentRefJSON            `json:"parent"`
+	Lease              *model.Lease              `json:"lease"`
+	GoverningDesign    *string                   `json:"governing_design"`
+	AffectedComponents []string                  `json:"affected_components"`
+	DefinitionOfDone   *string                   `json:"definition_of_done"`
+	Skills             model.SkillRecommendation `json:"skills"`
 }
 
 // toBriefJSON fills every field except Skills.Matches: those come from
@@ -49,9 +49,9 @@ func toBriefJSON(b *store.Brief) briefJSON {
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,
-		Skills: recommendationJSON{
-			Pinned:   make([]pinnedSkillJSON, 0, len(b.PinnedSkills)),
-			Matches:  []skillMatchJSON{},
+		Skills: model.SkillRecommendation{
+			Pinned:   make([]model.PinnedSkill, 0, len(b.PinnedSkills)),
+			Matches:  []model.SkillMatch{},
 			Warnings: append([]string{}, b.SkillWarnings...),
 			Provider: "none",
 		},

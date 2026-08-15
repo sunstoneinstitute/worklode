@@ -12,9 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 	"unicode/utf8"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -26,34 +26,6 @@ const (
 	maxDeliverableDescription = 4000
 	maxDeliverableURL         = 2000
 )
-
-// deliverableJSON is the wire form of a deliverable: every store.Deliverable
-// field. There is no state field, and its absence is the point — spec 029
-// §3.2 makes deliverable state a reported fact, so nothing here may look like
-// a stored status.
-type deliverableJSON struct {
-	ID          string    `json:"id"`
-	Project     string    `json:"project"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	URL         string    `json:"url"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-func toDeliverableJSON(d *store.Deliverable) deliverableJSON {
-	return deliverableJSON{
-		ID:          d.ID,
-		Project:     d.ProjectID,
-		Name:        d.Name,
-		Description: d.Description,
-		URL:         d.URL,
-		CreatedBy:   d.CreatedBy,
-		CreatedAt:   d.CreatedAt,
-		UpdatedAt:   d.UpdatedAt,
-	}
-}
 
 type createDeliverableRequest struct {
 	Name        string `json:"name"`
@@ -101,7 +73,7 @@ func validateDeliverable(projectID, name, description, rawURL, createdBy string)
 // recordDeliverable writes one declared deliverable through RecordEvent, so
 // the event log carries the fact and the source names the surface it came
 // from ("cli" for the JSON API, "web" for a cockpit form).
-func (s *server) recordDeliverable(ctx context.Context, source string, in store.DeliverableInput) (*store.Deliverable, error) {
+func (s *server) recordDeliverable(ctx context.Context, source string, in store.DeliverableInput) (*model.Deliverable, error) {
 	extID, err := randomExternalID()
 	if err != nil {
 		return nil, err
@@ -118,7 +90,7 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 	}
 	now := s.st.Now()
 
-	var created *store.Deliverable
+	var created *model.Deliverable
 	if _, _, err := s.st.RecordEvent(ctx, source, extID, "deliverable.created", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			d, err := store.CreateDeliverable(tx, now, in)
@@ -145,11 +117,7 @@ func (s *server) listProjectDeliverables(w http.ResponseWriter, r *http.Request)
 		s.mapStoreErr(w, err)
 		return
 	}
-	out := make([]deliverableJSON, 0, len(items))
-	for i := range items {
-		out = append(out, toDeliverableJSON(&items[i]))
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"deliverables": out})
+	writeJSON(w, http.StatusOK, map[string]any{"deliverables": items})
 }
 
 // createDeliverable handles POST /api/v1/projects/{id}/deliverables.
@@ -180,5 +148,5 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toDeliverableJSON(created))
+	writeJSON(w, http.StatusCreated, created)
 }

@@ -11,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // projectRepos runs `lode project list --json` and returns the repo mappings
 // of the project with the given id.
-func projectRepos(t *testing.T, id string) []cli.RepoMapping {
+func projectRepos(t *testing.T, id string) []model.RepoMapping {
 	t.Helper()
 	out, err := runLode(t, "project", "list", "--json")
 	if err != nil {

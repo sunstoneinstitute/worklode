@@ -9,6 +9,7 @@ package api
 import (
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -65,12 +66,17 @@ func boardItems(items []boardTaskJSON) []ui.BoardItem {
 	return out
 }
 
-// projectsView maps the cross-project portfolio. store.Project rows pass
-// through unchanged (ui may import store).
+// projectsView maps the cross-project portfolio, dropping store.Project's
+// curated cockpit-only fields (ADR 036 §3) down to the model.Project shape
+// the page actually renders (id, name, key).
 func projectsView(projects []store.Project, title, active string) ui.ProjectsView {
+	out := make([]model.Project, 0, len(projects))
+	for _, p := range projects {
+		out = append(out, model.Project{ID: p.ID, Name: p.Name, Key: p.Key, Focus: p.Focus})
+	}
 	return ui.ProjectsView{
 		Page:     ui.PageProps{Title: title, ActiveGlobal: active},
-		Projects: projects,
+		Projects: out,
 	}
 }
 
@@ -136,7 +142,7 @@ func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
 // deliverablesView maps a project's declared deliverables into the project's
 // Deliverables page. No row carries a state, because none is stored (spec 029
 // §3.2) — the page says so once rather than per row.
-func deliverablesView(project ui.CockpitProject, items []store.Deliverable) ui.DeliverablesView {
+func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.DeliverablesView {
 	v := ui.DeliverablesView{
 		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Deliverables"},
 		CanonicalURL: "/projects/" + project.ID + "/deliverables",

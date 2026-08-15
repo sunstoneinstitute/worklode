@@ -53,7 +53,7 @@ func TestLinkInbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
-	if issues[0].TriageState != "promoted" || issues[0].TaskID == nil || *issues[0].TaskID != taskID {
+	if issues[0].TriageState != "promoted" || issues[0].TaskID != taskID {
 		t.Fatalf("issue = %+v, want promoted and linked to %s", issues[0], taskID)
 	}
 
@@ -125,7 +125,7 @@ func TestPromoteRejectsInvalidKind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
-	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
+	if issues[0].TriageState != "new" || issues[0].TaskID != "" {
 		t.Fatalf("issue = %+v, want unchanged — a rejected promote must not write anything", issues[0])
 	}
 }
@@ -181,7 +181,7 @@ func TestPromoteUnknownParentIs404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
-	if issues[0].TriageState != "new" || issues[0].TaskID != nil {
+	if issues[0].TriageState != "new" || issues[0].TaskID != "" {
 		t.Fatalf("issue = %+v, want unchanged — a 404'd promote must not write anything", issues[0])
 	}
 }
@@ -211,11 +211,11 @@ func TestPromoteUnderOrdinaryParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list issues: %v", err)
 	}
-	if issues[0].TriageState == "new" || issues[0].TaskID == nil {
+	if issues[0].TriageState == "new" || issues[0].TaskID == "" {
 		t.Fatalf("issue = %+v, want promoted and linked to the new task", issues[0])
 	}
 
-	detail := doReq(t, h, http.MethodGet, "/api/v1/tasks/"+*issues[0].TaskID, token, nil)
+	detail := doReq(t, h, http.MethodGet, "/api/v1/tasks/"+issues[0].TaskID, token, nil)
 	hier := decodeMap(t, detail)["hierarchy"].(map[string]any)
 	parent := hier["parent"].(map[string]any)
 	if parent["id"] != plain {

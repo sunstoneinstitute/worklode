@@ -11,8 +11,8 @@ import (
 
 func TestProjectTableShowsKey(t *testing.T) {
 	var b strings.Builder
-	ProjectTable(&b, []Project{{ID: "worklode", Name: "Worklode", Key: "WL",
-		Repos: []RepoMapping{{Repo: "a/b", DoneState: "released"}}}})
+	ProjectTable(&b, []model.Project{{ID: "worklode", Name: "Worklode", Key: "WL",
+		Repos: []model.RepoMapping{{Repo: "a/b", DoneState: "released"}}}})
 	out := b.String()
 	if !strings.Contains(out, "KEY") || !strings.Contains(out, "WL") {
 		t.Fatalf("ProjectTable output missing KEY/WL:\n%s", out)
@@ -69,7 +69,7 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 // the first one rather than under the name.
 func TestSkillTableWraps(t *testing.T) {
 	var buf bytes.Buffer
-	skillTable(&buf, []Skill{
+	skillTable(&buf, []model.Skill{
 		{Name: "tdd", Description: "Red-green-refactor discipline for every feature and bugfix, applied before implementation code exists"},
 		{Name: "systematic-debugging", Description: "Short one"},
 	}, 60)
@@ -103,7 +103,7 @@ func TestSkillTableWraps(t *testing.T) {
 func TestSkillTableWrapsLongWord(t *testing.T) {
 	var buf bytes.Buffer
 	long := strings.Repeat("x", 50)
-	skillTable(&buf, []Skill{{Name: "a", Description: "see " + long + " end"}}, 20)
+	skillTable(&buf, []model.Skill{{Name: "a", Description: "see " + long + " end"}}, 20)
 	got := buf.String()
 	if !strings.Contains(got, long) {
 		t.Fatalf("unbreakable word was lost:\n%s", got)
@@ -118,7 +118,7 @@ func TestSkillTableWrapsLongWord(t *testing.T) {
 func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 	var buf bytes.Buffer
 	long := strings.Repeat("n", maxSkillNameWidth+8)
-	skillTable(&buf, []Skill{
+	skillTable(&buf, []model.Skill{
 		{Name: "short", Description: "first"},
 		{Name: long, Description: "second"},
 	}, 80)

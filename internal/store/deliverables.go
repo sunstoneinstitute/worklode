@@ -14,23 +14,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
-)
 
-// Deliverable is one declared output of a project, identified by a
-// <KEY>-DEL-<n> id drawn from the project's own DEL counter (spec 029 §4).
-// Description and URL are optional ("" when unset); CreatedBy is "" when the
-// creator is unknown (an unauthenticated web write in a deployment with no
-// login provider configured).
-type Deliverable struct {
-	ID          string
-	ProjectID   string
-	Name        string
-	Description string
-	URL         string
-	CreatedBy   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
 
 // DeliverableInput carries the fields for declaring a new deliverable.
 type DeliverableInput struct {
@@ -54,7 +40,7 @@ const deliverableColumns = `id, project_id, name, description, url, created_by, 
 // the store's clock as now. An unknown project is ErrNotFound and a blank
 // name is ErrInvalidInput — both checked before the id is allocated, so a
 // rejected input never burns an ordinal.
-func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*Deliverable, error) {
+func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.Deliverable, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, fmt.Errorf("deliverable name is empty: %w", ErrInvalidInput)
@@ -88,9 +74,9 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*Deliver
 	if in.CreatedBy != "" {
 		createdBy = sql.NullString{String: in.CreatedBy, Valid: true}
 	}
-	d := &Deliverable{
+	d := &model.Deliverable{
 		ID:          id,
-		ProjectID:   in.ProjectID,
+		Project:     in.ProjectID,
 		Name:        name,
 		Description: strings.TrimSpace(in.Description),
 		URL:         strings.TrimSpace(in.URL),
@@ -101,7 +87,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*Deliver
 	if _, err := tx.Exec(
 		`INSERT INTO deliverables (`+deliverableColumns+`)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		d.ID, d.ProjectID, d.Name, d.Description, d.URL, createdBy, d.CreatedAt, d.UpdatedAt,
+		d.ID, d.Project, d.Name, d.Description, d.URL, createdBy, d.CreatedAt, d.UpdatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("insert deliverable %s: %w", id, err)
 	}
@@ -109,10 +95,10 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*Deliver
 }
 
 // scanDeliverable reads one row selected with deliverableColumns.
-func scanDeliverable(row interface{ Scan(...any) error }) (*Deliverable, error) {
-	var d Deliverable
+func scanDeliverable(row interface{ Scan(...any) error }) (*model.Deliverable, error) {
+	var d model.Deliverable
 	var createdBy sql.NullString
-	if err := row.Scan(&d.ID, &d.ProjectID, &d.Name, &d.Description, &d.URL,
+	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
 		&createdBy, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return nil, err
 	}
@@ -123,7 +109,7 @@ func scanDeliverable(row interface{ Scan(...any) error }) (*Deliverable, error) 
 // ListDeliverables returns a project's declared deliverables in declaration
 // order. An unknown project yields an empty slice, not an error — callers
 // that need the project to exist (every current one) load it first.
-func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]Deliverable, error) {
+func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]model.Deliverable, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+deliverableColumns+` FROM deliverables
 		 WHERE project_id = $1 ORDER BY created_at, id`, projectID)
@@ -132,7 +118,7 @@ func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]Deliv
 	}
 	defer rows.Close()
 
-	out := []Deliverable{}
+	out := []model.Deliverable{}
 	for rows.Next() {
 		d, err := scanDeliverable(rows)
 		if err != nil {
@@ -148,7 +134,7 @@ func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]Deliv
 
 // GetDeliverable looks up one deliverable by id. Returns ErrNotFound if it
 // does not exist.
-func (s *Store) GetDeliverable(ctx context.Context, id string) (*Deliverable, error) {
+func (s *Store) GetDeliverable(ctx context.Context, id string) (*model.Deliverable, error) {
 	d, err := scanDeliverable(s.db.QueryRowContext(ctx,
 		`SELECT `+deliverableColumns+` FROM deliverables WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {

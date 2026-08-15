@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -380,7 +381,7 @@ func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse issues payload: %w", err)
 	}
-	return store.UpsertIssue(tx, store.Issue{
+	return store.UpsertIssue(tx, model.Issue{
 		Repo:   repo,
 		Number: p.Issue.Number,
 		Title:  p.Issue.Title,

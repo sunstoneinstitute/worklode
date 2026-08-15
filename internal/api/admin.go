@@ -30,21 +30,6 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // --- projects ---------------------------------------------------------
 
-// repoJSON is the wire form of a repo mapping: the repo and the terminal
-// delivery state that counts as fully delivered for it.
-type repoJSON struct {
-	Repo      string `json:"repo"`
-	DoneState string `json:"done_state"`
-}
-
-type projectJSON struct {
-	ID    string     `json:"id"`
-	Name  string     `json:"name"`
-	Key   string     `json:"key"`
-	Repos []repoJSON `json:"repos"`
-	Focus []string   `json:"focus"`
-}
-
 type createProjectRequest struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -53,16 +38,14 @@ type createProjectRequest struct {
 
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
 // focus slices to empty arrays so they serialize as [] rather than null.
-func toProjectJSON(p *store.Project, repos []store.RepoMapping) projectJSON {
-	rs := make([]repoJSON, 0, len(repos))
-	for _, m := range repos {
-		rs = append(rs, repoJSON{Repo: m.Repo, DoneState: m.DoneState})
-	}
+func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
+	rs := make([]model.RepoMapping, 0, len(repos))
+	rs = append(rs, repos...)
 	focus := p.Focus
 	if focus == nil {
 		focus = []string{}
 	}
-	return projectJSON{
+	return model.Project{
 		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 	}
 }
@@ -103,8 +86,8 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := struct {
-		Projects []projectJSON `json:"projects"`
-	}{Projects: make([]projectJSON, 0, len(ps))}
+		Projects []model.Project `json:"projects"`
+	}{Projects: make([]model.Project, 0, len(ps))}
 	for _, p := range ps {
 		repos, err := s.st.ListRepos(r.Context(), p.ID)
 		if err != nil {
@@ -167,7 +150,7 @@ type projectCostJSON struct {
 // projectDetailJSON is a project plus its cost. The list-shape fields are
 // embedded so the two endpoints cannot drift apart.
 type projectDetailJSON struct {
-	projectJSON
+	model.Project
 	Cost projectCostJSON `json:"cost"`
 }
 
@@ -245,8 +228,8 @@ func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, projectDetailJSON{
-		projectJSON: toProjectJSON(p, repos),
-		Cost:        toProjectCostJSON(cost),
+		Project: toProjectJSON(p, repos),
+		Cost:    toProjectCostJSON(cost),
 	})
 }
 
@@ -496,13 +479,6 @@ func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 
 // --- actors and tokens --------------------------------------------------
 
-type actorJSON struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
 type createActorRequest struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
@@ -529,7 +505,7 @@ func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, actorJSON{
+	writeJSON(w, http.StatusCreated, model.Actor{
 		ID: req.ID, Kind: req.Kind, DisplayName: req.DisplayName, Admin: req.Admin,
 	})
 }
@@ -595,28 +571,6 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // --- inbox ---------------------------------------------------------------
 
-type issueJSON struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title"`
-	State             string   `json:"state"`
-	TriageState       string   `json:"triage_state"`
-	TaskID            string   `json:"task_id,omitempty"`
-	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
-	URL               string   `json:"url"`
-}
-
-func toIssueJSON(is *store.Issue) issueJSON {
-	out := issueJSON{
-		Repo: is.Repo, Number: is.Number, Title: is.Title, State: is.State,
-		TriageState: is.TriageState, AppliesToVersions: is.AppliesToVersions, URL: is.URL,
-	}
-	if is.TaskID != nil {
-		out.TaskID = *is.TaskID
-	}
-	return out
-}
-
 // listInbox handles GET /api/v1/inbox?state=new&project=worklode.
 func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 	issues, err := s.st.ListIssues(r.Context(),
@@ -626,10 +580,10 @@ func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := struct {
-		Issues []issueJSON `json:"issues"`
-	}{Issues: make([]issueJSON, 0, len(issues))}
-	for i := range issues {
-		resp.Issues = append(resp.Issues, toIssueJSON(&issues[i]))
+		Issues []model.Issue `json:"issues"`
+	}{Issues: issues}
+	if resp.Issues == nil {
+		resp.Issues = []model.Issue{}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -849,18 +803,8 @@ type boardProjectJSON struct {
 	Blocked    []boardTaskJSON `json:"blocked"`
 }
 
-type runtimeEventJSON struct {
-	ID         int64     `json:"id"`
-	Cluster    string    `json:"cluster"`
-	Kind       string    `json:"kind"`
-	Workload   string    `json:"workload"`
-	Image      string    `json:"image"`
-	Message    string    `json:"message"`
-	OccurredAt time.Time `json:"occurred_at"`
-}
-
-func toRuntimeEventJSON(re *store.RuntimeEvent) runtimeEventJSON {
-	return runtimeEventJSON{
+func toRuntimeEventJSON(re *store.RuntimeEvent) model.RuntimeEvent {
+	return model.RuntimeEvent{
 		ID: re.ID, Cluster: re.Cluster, Kind: re.Kind, Workload: re.Workload,
 		Image: re.Image, Message: re.Message, OccurredAt: re.OccurredAt,
 	}
@@ -869,8 +813,8 @@ func toRuntimeEventJSON(re *store.RuntimeEvent) runtimeEventJSON {
 // boardResponse is the JSON shape of GET /api/v1/board, and the data the web
 // board pages (GET / and GET /projects/{id}) render.
 type boardResponse struct {
-	Projects       []boardProjectJSON `json:"projects"`
-	RecentFailures []runtimeEventJSON `json:"recent_failures"`
+	Projects       []boardProjectJSON   `json:"projects"`
+	RecentFailures []model.RuntimeEvent `json:"recent_failures"`
 }
 
 // board handles GET /api/v1/board?project=: a read-only summary of each
@@ -968,7 +912,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		if err != nil {
 			return nil, err
 		}
-		resp.RecentFailures = make([]runtimeEventJSON, 0, len(events))
+		resp.RecentFailures = make([]model.RuntimeEvent, 0, len(events))
 		for i := range events {
 			resp.RecentFailures = append(resp.RecentFailures, toRuntimeEventJSON(&events[i]))
 		}

@@ -5,32 +5,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// agentSessionJSON is the wire form of an agent session.
-type agentSessionJSON struct {
-	// LeaseID identifies the lease this session is recorded against, not a
-	// leaked surrogate key: (lease_id, agent, session_id) is the session's
-	// natural key, so callers need it to address the session unambiguously.
-	LeaseID      int64      `json:"lease_id"`
-	Agent        string     `json:"agent"`
-	AgentVersion string     `json:"agent_version,omitempty"`
-	SessionID    string     `json:"session_id"`
-	StartedAt    time.Time  `json:"started_at"`
-	LastSeenAt   time.Time  `json:"last_seen_at"`
-	EndedAt      *time.Time `json:"ended_at,omitempty"`
-	// Usage is whatever a previous touch or end reported; null until one
-	// does. Cost is a decimal string for the same reason the requests take
-	// one.
-	InputTokens  *int64  `json:"input_tokens"`
-	OutputTokens *int64  `json:"output_tokens"`
-	CostAmount   *string `json:"cost_amount"`
-	CostCurrency string  `json:"cost_currency"`
-}
-
-func toAgentSessionJSON(a *store.AgentSession) agentSessionJSON {
-	return agentSessionJSON{
+func toAgentSessionJSON(a *store.AgentSession) model.AgentSession {
+	return model.AgentSession{
 		LeaseID:      a.LeaseID,
 		Agent:        a.Agent,
 		AgentVersion: a.AgentVersion,
@@ -52,7 +32,7 @@ type agentSessionRequest struct {
 	// Usage is the session's spend so far, in the same form and with the same
 	// nil-vs-empty meaning as the end request's. A session that never ends
 	// cleanly reports here or nowhere.
-	Usage []usageBucketJSON `json:"usage"`
+	Usage []model.SessionUsageBucket `json:"usage"`
 }
 
 // touchAgentSession handles POST /api/v1/tasks/{id}/agent-session: record
@@ -95,21 +75,7 @@ type agentSessionEndRequest struct {
 	// present it supersedes the scalars above. No omitempty on the way in:
 	// absent means "leave the recorded usage alone" and [] means "clear it",
 	// and only a nil-vs-empty slice keeps those apart.
-	Usage []usageBucketJSON `json:"usage"`
-}
-
-// usageBucketJSON is one day's tokens on one model at one billing speed. The
-// classes travel separately because they are priced up to 20x apart and a
-// total cannot be repriced back into them (see store.TokenCounts).
-type usageBucketJSON struct {
-	Day                string `json:"day"` // YYYY-MM-DD, UTC
-	Model              string `json:"model"`
-	Speed              string `json:"speed"` // "standard" (default) or "fast"
-	InputTokens        int64  `json:"input_tokens"`
-	CacheWrite5mTokens int64  `json:"cache_write_5m_tokens"`
-	CacheWrite1hTokens int64  `json:"cache_write_1h_tokens"`
-	CacheReadTokens    int64  `json:"cache_read_tokens"`
-	OutputTokens       int64  `json:"output_tokens"`
+	Usage []model.SessionUsageBucket `json:"usage"`
 }
 
 // toUsageBuckets converts reported buckets to their store form, preserving
@@ -118,7 +84,7 @@ type usageBucketJSON struct {
 // The day and the model are checked here so a client that garbles either gets
 // a 400 naming the field, rather than the 422 the store's own validation
 // would report from inside the write.
-func toUsageBuckets(in []usageBucketJSON) ([]store.SessionUsageBucket, error) {
+func toUsageBuckets(in []model.SessionUsageBucket) ([]store.SessionUsageBucket, error) {
 	if in == nil {
 		return nil, nil
 	}

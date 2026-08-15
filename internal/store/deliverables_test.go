@@ -8,6 +8,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // randomID returns a random hex string, for driving RecordEvent's
@@ -21,8 +23,8 @@ func randomID() string {
 
 // createDeliverable drives CreateDeliverable through RecordEvent, the way
 // every caller does, and returns its error.
-func createDeliverable(s *Store, in DeliverableInput) (*Deliverable, error) {
-	var d *Deliverable
+func createDeliverable(s *Store, in DeliverableInput) (*model.Deliverable, error) {
+	var d *model.Deliverable
 	_, _, err := s.RecordEvent(context.Background(), "web", randomID(), "deliverable.created", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error

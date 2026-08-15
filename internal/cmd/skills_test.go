@@ -16,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -186,7 +187,7 @@ func TestSkillsListTableAndJSON(t *testing.T) {
 		t.Fatalf("skills list --json: %v\noutput: %s", err, out)
 	}
 	var resp struct {
-		Skills []cli.Skill `json:"skills"`
+		Skills []model.Skill `json:"skills"`
 	}
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		t.Fatalf("decode skills list --json output %q: %v", out, err)

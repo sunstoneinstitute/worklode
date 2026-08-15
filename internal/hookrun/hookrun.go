@@ -374,7 +374,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 // No failure here is fatal — a missing path, an unreadable file, or an empty
 // result all yield nil, which leaves the backbone's stored usage untouched and
 // still lets the session end.
-func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageBucket {
+func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsageBucket {
 	if transcriptPath == "" {
 		return nil
 	}
@@ -383,17 +383,17 @@ func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageB
 		warn(opts, "parse transcript %s: %v", transcriptPath, err)
 		return nil
 	}
-	out := make([]cli.SessionUsageBucket, 0, len(buckets))
+	out := make([]model.SessionUsageBucket, 0, len(buckets))
 	for _, b := range buckets {
-		out = append(out, cli.SessionUsageBucket{
-			Day:          b.Day.Format(time.DateOnly),
-			Model:        b.Model,
-			Speed:        b.Speed,
-			InputTokens:  b.Usage.Input,
-			CacheWrite5m: b.Usage.CacheWrite5m,
-			CacheWrite1h: b.Usage.CacheWrite1h,
-			CacheRead:    b.Usage.CacheRead,
-			OutputTokens: b.Usage.Output,
+		out = append(out, model.SessionUsageBucket{
+			Day:                b.Day.Format(time.DateOnly),
+			Model:              b.Model,
+			Speed:              b.Speed,
+			InputTokens:        b.Usage.Input,
+			CacheWrite5mTokens: b.Usage.CacheWrite5m,
+			CacheWrite1hTokens: b.Usage.CacheWrite1h,
+			CacheReadTokens:    b.Usage.CacheRead,
+			OutputTokens:       b.Usage.Output,
 		})
 	}
 	if len(out) == 0 {
