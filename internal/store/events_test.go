@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -109,5 +110,205 @@ func TestLogChange(t *testing.T) {
 	}
 	if gotChange["field"] != "state" || gotChange["old"] != "ready" || gotChange["new"] != "in_progress" {
 		t.Fatalf("state_log change: got %v", gotChange)
+	}
+}
+
+// The §9 ordering trap, directly. A last_seen_id cursor sees B (id 2),
+// advances, and never delivers A (id 1). The horizon delivers neither
+// until A's transaction is finished, then both, in id order.
+func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	insert := func(tx *sql.Tx, ext string) {
+		t.Helper()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO events (source, external_id, type, payload, received_at)
+			 VALUES ('system', $1, 'test.event', '{}', now())`, ext); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	txA, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer txA.Rollback()
+	insert(txA, "slow") // id 1, uncommitted
+
+	txB, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert(txB, "fast") // id 2
+	if err := txB.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ReadEventBatch(ctx, "sub", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("delivered %d events while txA in flight, want 0", len(got))
+	}
+
+	if err := txA.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.ReadEventBatch(ctx, "sub", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ExternalID != "slow" || got[1].ExternalID != "fast" {
+		t.Fatalf("got %+v, want slow then fast", got)
+	}
+}
+
+// An aborted transaction leaves a permanent hole in the id sequence (the
+// IDENTITY column does not roll back). ReadEventBatch must step past it
+// rather than stalling forever waiting for an id that will never commit.
+func TestReadEventBatchSkipsAbortedHole(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	txA, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txA.ExecContext(ctx,
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('system', 'aborted', 'test.event', '{}', now())`); err != nil {
+		t.Fatal(err)
+	}
+	if err := txA.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	id, _, err := s.RecordEvent(ctx, "system", "committed", "test.event", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ReadEventBatch(ctx, "sub", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != id || got[0].ExternalID != "committed" {
+		t.Fatalf("got %+v, want just the committed event", got)
+	}
+
+	got, err = s.ReadEventBatch(ctx, "sub", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("second read delivered %d events, want 0 (offset already past the hole)", len(got))
+	}
+}
+
+func TestAckEventsMonotonic(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 3; i++ {
+		if _, _, err := s.RecordEvent(ctx, "system", "e"+string(rune('1'+i)), "test.event", nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := s.ReadEventBatch(ctx, "sub", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want 3", len(got))
+	}
+
+	if err := s.AckEvents(ctx, "sub", 3); err != nil {
+		t.Fatalf("ack 3: %v", err)
+	}
+	if err := s.AckEvents(ctx, "sub", 2); err != nil {
+		t.Fatalf("ack 2 (lower, replayed): want nil error, got %v", err)
+	}
+
+	subs, err := s.EventSubscribers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sub EventSubscriber
+	for _, es := range subs {
+		if es.Name == "sub" {
+			sub = es
+		}
+	}
+	if sub.LastAcked != 3 {
+		t.Fatalf("last_acked_offset: want 3 (replayed lower ack must not regress it), got %d", sub.LastAcked)
+	}
+
+	if err := s.AckEvents(ctx, "sub", 99); err == nil {
+		t.Fatalf("ack 99 (beyond last_read_offset): want error, got nil")
+	}
+
+	subs, err = s.EventSubscribers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, es := range subs {
+		if es.Name == "sub" {
+			sub = es
+		}
+	}
+	if sub.LastAcked != 3 || sub.LastRead != 3 {
+		t.Fatalf("offsets after rejected ack: want (read=3, acked=3), got (read=%d, acked=%d)", sub.LastRead, sub.LastAcked)
+	}
+}
+
+func TestResetEventReadRedeliversUnacked(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, _, err := s.RecordEvent(ctx, "system", "e"+string(rune('1'+i)), "test.event", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	got, err := s.ReadEventBatch(ctx, "sub", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want 3", len(got))
+	}
+
+	if err := s.AckEvents(ctx, "sub", ids[0]); err != nil {
+		t.Fatalf("ack first id: %v", err)
+	}
+	if err := s.ResetEventRead(ctx, "sub"); err != nil {
+		t.Fatalf("reset event read: %v", err)
+	}
+
+	got, err = s.ReadEventBatch(ctx, "sub", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != ids[1] || got[1].ID != ids[2] {
+		t.Fatalf("got %+v, want events 2 and 3 in order", got)
 	}
 }
