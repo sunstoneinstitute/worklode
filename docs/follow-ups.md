@@ -414,3 +414,46 @@ one pass.
   between polls, and `worklode_event_streams_active` makes the count visible —
   so a ceiling picked today would be a guess. Set one when that gauge shows
   what normal looks like.
+- `[gated]` **Residual ordering window in the commit horizon (spec 025 §15).**
+  `events.id` (identity) and `events.txid` (`DEFAULT pg_current_xact_id()`)
+  are separate default expressions evaluated during the same `INSERT`, and
+  `nextval` runs before the transaction's XID is assigned. So a transaction
+  can hold a lower id with a higher txid than one that started after it: P
+  draws id 10 and is descheduled; Q draws id 11, takes xid 500 and commits; P
+  then takes xid 501. A read while P is in flight sees `xmin` 501, delivers
+  row (id 11, txid 500), advances the offset past it, and row (id 10, txid
+  501) is never delivered. The horizon still narrows the loss window from "an
+  arbitrarily long transaction" to "the sub-statement gap between `nextval`
+  and XID assignment", but it is not zero. Closing it needs XID assignment
+  forced before the id is drawn, which changes 025 §15's schema — a spec
+  decision, not a code fix.
+- `[P4]` **Nothing validates `ns/*.ttl`.** There is no `riot`, rdflib, or
+  Turtle-parsing step in `.github/workflows/` or `.pre-commit-config.yaml`,
+  and `riot` is not installed in the dev environment. The Go↔Turtle drift
+  test (`internal/eventbus/vocab_test.go`) guards the mirror, but nothing
+  guards the Turtle itself from a syntax error. For the record, the current
+  files do parse: rdflib 7.6.0 reads `ns/concept.ttl` at 144 triples,
+  `ns/ontology.ttl` at 343, `ns/shapes.ttl` at 308.
+- `[P3]` **`eventbus.Run`'s return contract needs care from part 2's
+  supervisor.** It returns `context.Canceled` on shutdown and a wrapped
+  `ErrNotFound` for an unknown subscriber name. A supervisor that restarts on
+  any non-nil error will hot-loop on the `ErrNotFound` case.
+- `[P2]` **Residual split-brain window in the subscriber loop, bounded to one
+  batch.** The loop pings the pinned lock connection once per iteration, but
+  a session killed strictly between that ping and the same iteration's ack
+  can still let a stale consumer's ack land while a standby has taken over.
+  The stale consumer self-terminates at its next ping, so the overlap is at
+  most one further batch. Closing it fully means running the reads and acks
+  on the lock session itself — a store-layer change.
+- `[gated]` **ADR 036 debt: `Event` now crosses the HTTP boundary without an
+  `internal/model` declaration.** CLAUDE.md states every shape crossing that
+  boundary is declared once in `internal/model`, but the package does not
+  exist on this branch and spec 036 is still `status: draft`, so this plan
+  projected `store.Event` in `internal/api` instead. `Event` joins the list
+  of types 036 must migrate.
+- `[gated]` **`wl:Event` is absent from the `owl:AllDisjointClasses` list**
+  at `ns/ontology.ttl` (the one containing `wl:Task`, `wl:Skill`,
+  `wl:Project` and friends). That block is not an exhaustive membership list
+  — it already omits `wl:Issue` and `wl:PullRequest` — so leaving it alone
+  was deliberate restraint, but a `wl:DocumentAccepted` is clearly not a
+  `wl:Task`, and the spec author should decide.

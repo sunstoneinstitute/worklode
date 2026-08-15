@@ -1,6 +1,9 @@
 ---
 status: draft
 issued: 2026-07-29
+amendedBy:
+  "#sec-1.4":
+    - 025-documents-in-the-backbone.md#sec-15
 ---
 # Spec 004 — Execution backbone
 
@@ -172,6 +175,12 @@ these mid-task and a second call is a second chance to skip it. On the CLI that 
 ("Follow-up to", "Follow-ups") beside Parent and Children.
 
 ### 1.4 events + state_log — append-only log, provenance {#sec-1.4}
+
+> **Amended by spec 025 §15.** The events table gains `txid xid8` and a
+> commit horizon so the log is totally ordered; `event_subscribers` rows
+> give it offset-tracked, at-least-once subscribers, and
+> `GET /api/v1/events/stream` serves it live. The log stops being
+> write-only.
 
 ```sql
 CREATE TABLE events (

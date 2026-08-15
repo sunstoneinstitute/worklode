@@ -70,7 +70,7 @@ golang-migrate, cobra, prometheus/client_golang.
   `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,
   override with `TEST_POSTGRES_DSN`. Tests skip silently without Postgres —
   run against a real one.
-- Migration number `0013` is provisional: `0010`–`0012` are claimed by the
+- Migration number `0020` is provisional: `0010`–`0012` are claimed by the
   keycloak-primary-auth and documents-in-the-backbone plans. Run
   `./scripts/check-migrations.sh --no-fix` and use whatever number it
   settles on; list both files in `deploy/base/kustomization.yaml`.
@@ -83,7 +83,7 @@ golang-migrate, cobra, prometheus/client_golang.
 
 | File | Responsibility |
 |---|---|
-| `deploy/base/migrations/0013_event_log.{up,down}.sql` (new) | `events.txid`, `events_txid_id` index, `event_subscribers` |
+| `deploy/base/migrations/0020_event_log.{up,down}.sql` (new) | `events.txid`, `events_txid_id` index, `event_subscribers` |
 | `deploy/base/kustomization.yaml` | list the new pair |
 | `internal/store/events.go` (+`events_test.go`) | horizon read, offsets, monotonic ack, subscriber lock, tail/status/seek queries, lag query, `RecordEventWithID` |
 | `internal/eventbus/vocab.go` (+`vocab_test.go`) (new) | event-type constants + per-type payload property sets, hand-mirrored from `ns/` |
@@ -114,12 +114,12 @@ blockedBy: [ ]
 ```
 
 **Files:**
-- Create: `deploy/base/migrations/0013_event_log.up.sql`, `.down.sql`
+- Create: `deploy/base/migrations/0020_event_log.up.sql`, `.down.sql`
 - Modify: `deploy/base/kustomization.yaml`
 
 - [ ] **Step 1: Write the up migration**
 
-`deploy/base/migrations/0013_event_log.up.sql`:
+`deploy/base/migrations/0020_event_log.up.sql`:
 
 ```sql
 -- Spec 025 §15: total order for the event log. txid records the writing
@@ -153,7 +153,7 @@ CREATE TABLE event_subscribers (
 );
 ```
 
-`deploy/base/migrations/0013_event_log.down.sql`:
+`deploy/base/migrations/0020_event_log.down.sql`:
 
 ```sql
 DROP TABLE event_subscribers;
@@ -179,7 +179,7 @@ the migration applies. Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add deploy/base/migrations/0013_event_log.* deploy/base/kustomization.yaml
+git add deploy/base/migrations/0020_event_log.* deploy/base/kustomization.yaml
 git commit -m "Add events.txid and event_subscribers for the ordered log"
 ```
 
@@ -563,8 +563,8 @@ false.
 - [ ] **Step 3: Implement `internal/eventbus/vocab.go`**
 
 ```go
-// Package eventbus implements spec 027: typed domain-event emission and the
-// offset-tracked subscriber loop over the store's events table.
+// Package eventbus implements spec 025 §15: typed domain-event emission and
+// the offset-tracked subscriber loop over the store's events table.
 package eventbus
 
 // Hand-mirrored from ns/ontology.ttl (spec 025 §15.2).
