@@ -94,36 +94,16 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"lease":  toLeaseJSON(lease),
-		"branch": store.BranchFor(t),
+	writeJSON(w, http.StatusOK, model.ClaimResponse{
+		Lease:  toLeaseJSON(lease),
+		Branch: store.BranchFor(t),
 	})
-}
-
-// leasePickJSON is the lease shard of a claim-next task pick.
-type leasePickJSON struct {
-	Worktree  string    `json:"worktree"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// taskPickJSON is the wire form of a claim-next candidate/claimed task: a
-// slimmer projection than model.Task, matching the ranking-relevant fields
-// (spec 005) rather than the full task record.
-type taskPickJSON struct {
-	ID       string         `json:"id"`
-	Slug     string         `json:"slug"`
-	Branch   string         `json:"branch"`
-	Concern  string         `json:"concern"`
-	Priority string         `json:"priority"`
-	FanOut   int            `json:"fan_out"`
-	Project  string         `json:"project"`
-	Lease    *leasePickJSON `json:"lease,omitempty"`
 }
 
 // toTaskPickJSON builds a claim-next response task, including a lease shard
 // only when lease is non-nil (dry-run and no-ready-task responses have none).
-func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) taskPickJSON {
-	pick := taskPickJSON{
+func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) model.ClaimNextPick {
+	pick := model.ClaimNextPick{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
 		Branch:   store.BranchFor(t),
@@ -133,7 +113,7 @@ func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) t
 		Project:  t.Project,
 	}
 	if lease != nil {
-		pick.Lease = &leasePickJSON{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
+		pick.Lease = &model.ClaimNextPickLease{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
 	}
 	return pick
 }
@@ -178,21 +158,16 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !res.Claimed && res.Task == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"claimed": false, "reason": "no-ready-task"})
+		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, Reason: "no-ready-task"})
 		return
 	}
 	if req.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"claimed": false,
-			"dry_run": true,
-			"task":    s.toTaskPickJSON(res.Task, res.FanOut, nil),
-		})
+		pick := s.toTaskPickJSON(res.Task, res.FanOut, nil)
+		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, DryRun: true, Task: &pick})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"claimed": true,
-		"task":    s.toTaskPickJSON(res.Task, res.FanOut, res.Lease),
-	})
+	pick := s.toTaskPickJSON(res.Task, res.FanOut, res.Lease)
+	writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: true, Task: &pick})
 }
 
 type renewRequest struct {

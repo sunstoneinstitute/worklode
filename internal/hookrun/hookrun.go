@@ -452,7 +452,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 // warnings: the pinned content is already inline in the brief, and
 // recommended skills degrade to an install hint. Returns name -> local path
 // for the ones that are present.
-func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief) map[string]string {
+func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brief) map[string]string {
 	root, err := skillstore.Root()
 	if err != nil {
 		warn(opts, "skill store: %v", err)
@@ -889,7 +889,7 @@ func emitAdditionalContext(w io.Writer, text string) {
 // injecting as session context. skillPaths is name -> local dir for skills
 // ensureSkills managed to fetch; a skill missing from it either had no hash
 // (pinned) or failed to fetch (falls back to an install hint).
-func compactBrief(b cli.Brief, skillPaths map[string]string) string {
+func compactBrief(b model.Brief, skillPaths map[string]string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s: %s [%s, %s]", b.Task.ID, b.Task.Title, b.Task.State, b.Task.Priority)
 	if b.Branch != "" {

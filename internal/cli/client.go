@@ -513,49 +513,6 @@ func withQuery(path string, q url.Values) string {
 
 // --- tasks ----------------------------------------------------------------
 
-// TaskEdgeOut and TaskEdgeIn are the two halves of a TaskDetail's edge list.
-type TaskEdgeOut struct {
-	To   string `json:"to"`
-	Type string `json:"type"`
-}
-type TaskEdgeIn struct {
-	From string `json:"from"`
-	Type string `json:"type"`
-}
-
-// TaskParent is the one-hop-up projection of a task's parent.
-type TaskParent struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	State string `json:"state"`
-}
-
-// TaskProgress is a parent's derived roll-up: closed of total direct children.
-type TaskProgress struct {
-	Closed int `json:"closed"`
-	Total  int `json:"total"`
-}
-
-// TaskHierarchy is the hierarchy block on a task detail: the parent (nil for a
-// root task) and the derived child progress.
-type TaskHierarchy struct {
-	Parent   *TaskParent  `json:"parent"`
-	Progress TaskProgress `json:"progress"`
-}
-
-// TaskDetail is the wire form of GET /api/v1/tasks/{id}: a model.Task plus its
-// blocked status, edges, hierarchy, and (when active) lease.
-type TaskDetail struct {
-	model.Task
-	Blocked bool `json:"blocked"`
-	Edges   struct {
-		Out []TaskEdgeOut `json:"out"`
-		In  []TaskEdgeIn  `json:"in"`
-	} `json:"edges"`
-	Lease     *model.Lease  `json:"lease,omitempty"`
-	Hierarchy TaskHierarchy `json:"hierarchy"`
-}
-
 // CreateTaskInput is the request body for CreateTask.
 type CreateTaskInput struct {
 	Project  string   `json:"project"`
@@ -604,13 +561,8 @@ type TaskListFilter struct {
 	Repo string
 }
 
-// TaskListResponse is the response body of ListTasks.
-type TaskListResponse struct {
-	Tasks []model.Task `json:"tasks"`
-}
-
 // ListTasks calls GET /api/v1/tasks.
-func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListResponse, []byte, error) {
+func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskListResponse, []byte, error) {
 	q := url.Values{}
 	if f.Project != "" {
 		q.Set("project", f.Project)
@@ -638,24 +590,24 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListRespo
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
-		return TaskListResponse{}, nil, err
+		return model.TaskListResponse{}, nil, err
 	}
-	var resp TaskListResponse
+	var resp model.TaskListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return TaskListResponse{}, nil, fmt.Errorf("decode task list: %w", err)
+		return model.TaskListResponse{}, nil, fmt.Errorf("decode task list: %w", err)
 	}
 	return resp, raw, nil
 }
 
 // GetTask calls GET /api/v1/tasks/{id}.
-func (c *Client) GetTask(ctx context.Context, id string) (TaskDetail, []byte, error) {
+func (c *Client) GetTask(ctx context.Context, id string) (model.TaskDetail, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id), nil)
 	if err != nil {
-		return TaskDetail{}, nil, err
+		return model.TaskDetail{}, nil, err
 	}
-	var t TaskDetail
+	var t model.TaskDetail
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return TaskDetail{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.TaskDetail{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
@@ -667,62 +619,23 @@ func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) 
 		map[string]any{"skills": skills})
 }
 
-// ClaimResponse is the response body of ClaimTask.
-type ClaimResponse struct {
-	Lease  model.Lease `json:"lease"`
-	Branch string      `json:"branch"`
-}
-
 // ClaimTask calls POST /api/v1/tasks/{id}/claim. worktree is the caller's
 // worktree identity (required by the server); ttl <= 0 means the server
 // default (2h).
-func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Duration) (ClaimResponse, []byte, error) {
+func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Duration) (model.ClaimResponse, []byte, error) {
 	body := map[string]any{"worktree": worktree}
 	if ttl > 0 {
 		body["ttl_seconds"] = int(ttl.Seconds())
 	}
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/claim", body)
 	if err != nil {
-		return ClaimResponse{}, nil, err
+		return model.ClaimResponse{}, nil, err
 	}
-	var resp ClaimResponse
+	var resp model.ClaimResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return ClaimResponse{}, nil, fmt.Errorf("decode claim response: %w", err)
+		return model.ClaimResponse{}, nil, fmt.Errorf("decode claim response: %w", err)
 	}
 	return resp, raw, nil
-}
-
-// ClaimNextPickLease is the lease shard of a ClaimNextPick, present only when
-// the pick was actually claimed (not a dry run or a no-ready-task response).
-type ClaimNextPickLease struct {
-	Worktree  string    `json:"worktree"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// ClaimNextPick is the wire form of a claim-next candidate/claimed task: a
-// slimmer projection than model.Task, matching the ranking-relevant fields (spec
-// 02) rather than the full task record.
-type ClaimNextPick struct {
-	ID   string `json:"id"`
-	Slug string `json:"slug"`
-	// Branch is the server-authoritative task branch (<prefix><id>-<slug>).
-	Branch   string              `json:"branch"`
-	Concern  string              `json:"concern"`
-	Priority string              `json:"priority"`
-	FanOut   int                 `json:"fan_out"`
-	Project  string              `json:"project"`
-	Lease    *ClaimNextPickLease `json:"lease,omitempty"`
-}
-
-// ClaimNextResponse is the response body of ClaimNext. Task is nil only when
-// no ready task exists (Claimed is false and Reason is "no-ready-task"). A
-// dry-run hit sets DryRun and Task but leaves Claimed false and Task.Lease
-// nil.
-type ClaimNextResponse struct {
-	Claimed bool           `json:"claimed"`
-	Reason  string         `json:"reason,omitempty"`
-	DryRun  bool           `json:"dry_run,omitempty"`
-	Task    *ClaimNextPick `json:"task,omitempty"`
 }
 
 // ClaimNextInput is the request body for ClaimNext.
@@ -737,8 +650,8 @@ type ClaimNextInput struct {
 // ClaimNext calls POST /api/v1/tasks/claim-next: rank the ready set
 // server-side and atomically claim the top candidate. worktree is required
 // unless DryRun is set. A "no ready task" or dry-run result is a normal
-// (non-error) response — see ClaimNextResponse.
-func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (ClaimNextResponse, []byte, error) {
+// (non-error) response — see model.ClaimNextResponse.
+func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (model.ClaimNextResponse, []byte, error) {
 	body := map[string]any{
 		"strict_focus": in.StrictFocus,
 		"dry_run":      in.DryRun,
@@ -754,43 +667,17 @@ func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (ClaimNextRes
 	}
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/claim-next", body)
 	if err != nil {
-		return ClaimNextResponse{}, nil, err
+		return model.ClaimNextResponse{}, nil, err
 	}
-	var resp ClaimNextResponse
+	var resp model.ClaimNextResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return ClaimNextResponse{}, nil, fmt.Errorf("decode claim-next response: %w", err)
+		return model.ClaimNextResponse{}, nil, fmt.Errorf("decode claim-next response: %w", err)
 	}
 	return resp, raw, nil
 }
 
-// BriefBlocker is the slim projection of an open blocker in a Brief.
-type BriefBlocker struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	State string `json:"state"`
-}
-
-// Brief is the wire form of GET /api/v1/tasks/{id}/brief: the bounded
-// start-of-work payload for a task. model.Lease is nil when the task has no active
-// lease. GoverningDesign, AffectedComponents, and DefinitionOfDone are
-// reserved fields that serialize as JSON null in v1. Skills carries the
-// task's pinned skills (content inline) plus embedding-matched suggestions.
-type Brief struct {
-	Task               model.Task                `json:"task"`
-	Body               string                    `json:"body"`
-	Branch             string                    `json:"branch"`
-	OpenBlockers       []BriefBlocker            `json:"open_blockers"`
-	Lease              *model.Lease              `json:"lease"`
-	GoverningDesign    *string                   `json:"governing_design"`
-	AffectedComponents []string                  `json:"affected_components"`
-	DefinitionOfDone   *string                   `json:"definition_of_done"`
-	Skills             model.SkillRecommendation `json:"skills"`
-	// Parent is the task's parent, one hop up; nil for a root task.
-	Parent *TaskParent `json:"parent"`
-}
-
 // Brief calls GET /api/v1/tasks/{id}/brief.
-func (c *Client) Brief(ctx context.Context, id string) (Brief, []byte, error) {
+func (c *Client) Brief(ctx context.Context, id string) (model.Brief, []byte, error) {
 	return c.brief(ctx, id, "")
 }
 
@@ -798,18 +685,18 @@ func (c *Client) Brief(ctx context.Context, id string) (Brief, []byte, error) {
 // resolution, the inlined pin bodies, and the embedding call. For callers
 // that only read the task row or the lease, where a pinned brief is hundreds
 // of kilobytes and up to a 2s round trip nobody reads.
-func (c *Client) BriefWithoutSkills(ctx context.Context, id string) (Brief, []byte, error) {
+func (c *Client) BriefWithoutSkills(ctx context.Context, id string) (model.Brief, []byte, error) {
 	return c.brief(ctx, id, "?skills=false")
 }
 
-func (c *Client) brief(ctx context.Context, id, query string) (Brief, []byte, error) {
+func (c *Client) brief(ctx context.Context, id, query string) (model.Brief, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id)+"/brief"+query, nil)
 	if err != nil {
-		return Brief{}, nil, err
+		return model.Brief{}, nil, err
 	}
-	var b Brief
+	var b model.Brief
 	if err := json.Unmarshal(raw, &b); err != nil {
-		return Brief{}, nil, fmt.Errorf("decode brief: %w", err)
+		return model.Brief{}, nil, fmt.Errorf("decode brief: %w", err)
 	}
 	return b, raw, nil
 }
@@ -1146,24 +1033,17 @@ func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, err
 		edgeBody{To: &origin, Type: "follow_up_to"})
 }
 
-// DecomposeResponse is the wire form of POST /api/v1/tasks/{id}/decompose:
-// the parent, keeping its id and kind, and the children it now tracks.
-type DecomposeResponse struct {
-	Parent   model.Task   `json:"parent"`
-	Children []model.Task `json:"children"`
-}
-
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
 // parent and files titles as new children under it.
-func (c *Client) Decompose(ctx context.Context, id string, titles []string) (DecomposeResponse, []byte, error) {
+func (c *Client) Decompose(ctx context.Context, id string, titles []string) (model.DecomposeResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose",
 		map[string]any{"into": titles})
 	if err != nil {
-		return DecomposeResponse{}, nil, err
+		return model.DecomposeResponse{}, nil, err
 	}
-	var resp DecomposeResponse
+	var resp model.DecomposeResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return DecomposeResponse{}, nil, fmt.Errorf("decode decompose response: %w", err)
+		return model.DecomposeResponse{}, nil, fmt.Errorf("decode decompose response: %w", err)
 	}
 	return resp, raw, nil
 }

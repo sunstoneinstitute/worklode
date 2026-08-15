@@ -1170,13 +1170,13 @@ type skillsBackbone struct {
 	archive map[string][]byte
 	fail    map[string]bool
 	hang    map[string]bool
-	brief   cli.Brief
+	brief   model.Brief
 
 	inFlight    int32 // atomic
 	maxInFlight int32 // atomic; high-water mark, so a test can assert the concurrency bound held
 }
 
-func newSkillsBackbone(t *testing.T, brief cli.Brief) *skillsBackbone {
+func newSkillsBackbone(t *testing.T, brief model.Brief) *skillsBackbone {
 	t.Helper()
 	b := &skillsBackbone{archive: map[string][]byte{}, fail: map[string]bool{}, hang: map[string]bool{}, brief: brief}
 
@@ -1392,7 +1392,7 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	diagContent := "# Diagnose\nSystematic debugging.\n"
 	diagArchive, diagHash := buildSkillArchive(t, diagContent)
 
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
 		Skills: model.SkillRecommendation{
 			Pinned: []model.PinnedSkill{
@@ -1451,7 +1451,7 @@ func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
 	tddArchive, tddHash := buildSkillArchive(t, tddContent)
 	_, diagHash := buildSkillArchive(t, "# Diagnose\n") // archive itself is never served: forced 500
 
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
 		Skills: model.SkillRecommendation{
 			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
@@ -1494,7 +1494,7 @@ func TestSessionStartSkillsEmptySection(t *testing.T) {
 	root := initGitRepo(t)
 	wtDir := setupFakeWorktree(t, root, "PROJ-3", "empty")
 
-	brief := cli.Brief{Task: model.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
+	brief := model.Brief{Task: model.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
 	newSkillsBackbone(t, brief)
 
 	stdout, _ := runSessionStart(t, wtDir, "s-empty")
@@ -1512,7 +1512,7 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 	wtDir := setupFakeWorktree(t, root, "PROJ-4", "nohash")
 
 	draftContent := "# Draft\n"
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
 		Skills: model.SkillRecommendation{
 			Pinned: []model.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
@@ -1567,7 +1567,7 @@ func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
 		matches = append(matches, model.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
 	}
 
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
 		Skills: model.SkillRecommendation{
 			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
@@ -1628,7 +1628,7 @@ func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
 	smallArchive, smallHash := buildSkillArchive(t, small)
 	bigArchive, bigHash := buildSkillArchive(t, big)
 
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
 		Skills: model.SkillRecommendation{
 			Pinned: []model.PinnedSkill{
@@ -1671,7 +1671,7 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 	big := "# Big\n" + strings.Repeat("y", maxInlinedSkillBytes)
 	_, bigHash := buildSkillArchive(t, big)
 
-	brief := cli.Brief{
+	brief := model.Brief{
 		Task: model.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
 		Skills: model.SkillRecommendation{
 			Pinned: []model.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},

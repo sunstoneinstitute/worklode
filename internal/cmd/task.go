@@ -914,7 +914,7 @@ func newTaskBriefCmd() *cobra.Command {
 
 // printBrief renders a Brief as a readable summary, shared by `lode task
 // brief` and `lode next`.
-func printBrief(cmd *cobra.Command, b cli.Brief) {
+func printBrief(cmd *cobra.Command, b model.Brief) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s: %s\n", b.Task.ID, b.Task.Title)
 	fmt.Fprintf(out, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
@@ -1161,7 +1161,7 @@ func newTaskTreeCmd() *cobra.Command {
 			// Each parent and its progress, before its children are fetched.
 			type parentNode struct {
 				task     model.Task
-				progress cli.TaskProgress
+				progress model.TaskProgress
 			}
 			var parents []parentNode
 			if len(args) == 1 {

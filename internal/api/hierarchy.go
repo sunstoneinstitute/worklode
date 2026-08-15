@@ -13,13 +13,6 @@ type decomposeRequest struct {
 	Into []string `json:"into"`
 }
 
-// decomposeResponse returns both halves of the split: the parent, keeping its
-// id and its kind, and the children it now tracks.
-type decomposeResponse struct {
-	Parent   model.Task   `json:"parent"`
-	Children []model.Task `json:"children"`
-}
-
 // decomposeTask handles POST /api/v1/tasks/{id}/decompose: create one draft
 // child per title under the task, in one transaction. This is the supported
 // way out of the spec-005 needs_decomposition gate. The parent's kind is not
@@ -65,7 +58,7 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := decomposeResponse{Parent: *parent, Children: make([]model.Task, 0, len(children))}
+	resp := model.DecomposeResponse{Parent: *parent, Children: make([]model.Task, 0, len(children))}
 	for i := range children {
 		resp.Children = append(resp.Children, children[i])
 	}

@@ -133,20 +133,20 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 
 func TestTaskDetailRenderHierarchy(t *testing.T) {
 	var buf bytes.Buffer
-	TaskDetailRender(&buf, TaskDetail{
+	TaskDetailRender(&buf, model.TaskDetail{
 		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "ready"},
-		Hierarchy: TaskHierarchy{Parent: &TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
+		Hierarchy: model.TaskHierarchy{Parent: &model.TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
 	})
 	if got := buf.String(); !strings.Contains(got, "parent:   WL-1") {
 		t.Fatalf("output has no parent line:\n%s", got)
 	}
 
 	buf.Reset()
-	TaskDetailRender(&buf, TaskDetail{
+	TaskDetailRender(&buf, model.TaskDetail{
 		Task: model.Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "in_progress"},
-		Hierarchy: TaskHierarchy{Progress: TaskProgress{Closed: 3, Total: 7}},
+		Hierarchy: model.TaskHierarchy{Progress: model.TaskProgress{Closed: 3, Total: 7}},
 	})
 	if got := buf.String(); !strings.Contains(got, "progress: 3/7") {
 		t.Fatalf("output has no progress line:\n%s", got)
@@ -157,7 +157,7 @@ func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
 	TreeRender(&buf, []TreeNode{{
 		Parent:   model.Task{ID: "WL-1", Title: "Container", State: "in_progress"},
-		Progress: TaskProgress{Closed: 1, Total: 2},
+		Progress: model.TaskProgress{Closed: 1, Total: 2},
 		Children: []model.Task{
 			{ID: "WL-2", Title: "Done piece", State: "merged"},
 			{ID: "WL-3", Title: "Open piece", State: "ready"},

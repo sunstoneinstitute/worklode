@@ -97,7 +97,7 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
 // holder (if any) — the `lode task show` view.
-func TaskDetailRender(w io.Writer, t TaskDetail) {
+func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
@@ -485,7 +485,7 @@ func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
 // progress — the unit `lode task tree` renders.
 type TreeNode struct {
 	Parent   model.Task
-	Progress TaskProgress
+	Progress model.TaskProgress
 	Children []model.Task
 }
 

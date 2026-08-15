@@ -5,9 +5,7 @@ package ui
 // they call. These types are ui's own vocabulary: internal/api maps its DTOs
 // (boardResponse, cockpitProjection, ...) into them in render.go, so the
 // dependency only ever points api -> ui. View types may embed internal/model
-// types (ui may import model) but never reference api's DTOs; TaskView.Progress
-// still embeds store.HierarchyProgress directly, a shape Task 3 of the
-// internal/model migration has not reached yet (ADR 036 §3).
+// types (ui may import model) but never reference api's DTOs (ADR 036 §3).
 
 import (
 	"strings"
@@ -15,7 +13,6 @@ import (
 	"unicode"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // PageProps carries the fields the Page shell needs on every page: the
@@ -89,9 +86,8 @@ type ProjectsView struct {
 
 // --- task -------------------------------------------------------------------
 
-// TaskView is one task's detail page. Task/Holder embed internal/model types
-// directly; Progress still embeds store.HierarchyProgress (Task 3 has not
-// moved it yet); the edge lists are task ids.
+// TaskView is one task's detail page. Task/Holder/Progress embed
+// internal/model types directly; the edge lists are task ids.
 type TaskView struct {
 	Page       PageProps
 	Task       model.Task
@@ -103,7 +99,7 @@ type TaskView struct {
 	Children   []string
 	FollowUpTo string
 	FollowUps  []string
-	Progress   store.HierarchyProgress
+	Progress   model.TaskProgress
 	Timeline   []TimelineRow
 }
 
