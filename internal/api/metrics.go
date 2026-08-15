@@ -72,9 +72,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_doc_sync_forced_total",
 		Help: "Forced (--force) doc syncs accepted.",
 	})
+	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_local_merge_reports_total",
+		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
+	}, []string{"result"})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced)
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -82,6 +86,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.syncRuns.WithLabelValues("error")
 	for _, action := range []string{"assign", "unassign", "start", "stop"} {
 		s.assignments.WithLabelValues(action)
+	}
+	for _, result := range []string{
+		store.LocalMergeAdvanced, store.LocalMergeDuplicate, store.LocalMergeUnknownTask,
+	} {
+		s.localMerges.WithLabelValues(result)
 	}
 	for _, surface := range []string{"api", "web"} {
 		for _, outcome := range []string{"ok", "not_found", "error"} {
@@ -146,6 +155,15 @@ func (s *server) observeAssignment(action string) {
 		return
 	}
 	s.assignments.WithLabelValues(action).Inc()
+}
+
+// recordLocalMerge records the result of one task named in a local merge
+// report. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) recordLocalMerge(result string) {
+	if s.localMerges == nil {
+		return
+	}
+	s.localMerges.WithLabelValues(result).Inc()
 }
 
 // cockpitOutcome classifies an assembleProjectCockpit error for the

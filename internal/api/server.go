@@ -206,6 +206,13 @@ type server struct {
 	docSyncDuration prometheus.Histogram
 	docSyncDocs     *prometheus.CounterVec
 	docSyncForced   prometheus.Counter
+
+	// localMerges counts tasks named in a local merge report, by result
+	// (advanced, duplicate, unknown_task); see merges.go. In a repo where
+	// both a webhook and a developer's clone report merges, plenty of
+	// "duplicate" is the healthy signal — its disappearance means one of the
+	// two reporters has stopped.
+	localMerges *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -443,6 +450,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+	r.api("POST /api/v1/merges", s.reportMerge)
 
 	// Project, actor, and token management is admin-only (permProjectAdmin /
 	// permActorAdmin in routeGuards): any bearer token may otherwise mint

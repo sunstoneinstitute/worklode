@@ -327,16 +327,29 @@ recommendations both still work, just without similarity matches.
 Installing the `lode` CLI is covered in Quickstart above; this section covers
 the agent-facing pickup workflow built on top of it.
 
-Run `lode install` inside a repo to install both integrations at once: a
-pre-commit heartbeat hook (it renews the current task's lease on every commit,
-chaining any pre-commit hook already installed) and the Claude Code hook
-bindings described below. It is idempotent — safe to re-run.
+Run `lode install` inside a repo to install both integrations at once: three
+git hooks and the Claude Code hook bindings described below. It is idempotent —
+safe to re-run.
+
+| git hook | What it does |
+|---|---|
+| `pre-commit` | Heartbeat: renews the current task's lease on every commit. |
+| `post-merge` | Reports a merge that lands on the default branch here, so the task advances without waiting for a GitHub webhook. |
+| `post-commit` | The same reporter, for the squash merges and conflict-resolving commits `post-merge` never sees. |
+
+Each chains whatever hook was already installed on the same event; `pre-commit`
+additionally chains the `pre-commit` framework when the repo has a
+`.pre-commit-config.yaml`.
 
 ```bash
-lode install                     # git pre-commit hook + Claude Code bindings
-lode install --no-agent          # git pre-commit hook only
+lode install                     # git hooks + Claude Code bindings
+lode install --no-agent          # git hooks only
 lode install --no-vcs            # Claude Code bindings only
 ```
+
+The merge reporters are a NOP unless HEAD is the repo's default branch, which
+is never true inside a worktree — so an ordinary commit on a task branch costs
+one local `git` call and no network.
 
 `--vcs` defaults to `git` and `--agent` to `claude-code`; those are the only
 supported values today, and the flags exist so another VCS or agent can be added
@@ -382,9 +395,9 @@ lode install --scope project           # .claude/settings.json
 ```
 
 `lode uninstall` (same flags) removes both integrations again: it restores
-whatever pre-commit hook Worklode preserved and strips every `lode hook` entry
+whatever git hooks Worklode preserved and strips every `lode hook` entry
 from the settings file. Both commands are idempotent, the VCS side never touches
-a pre-commit hook it does not recognize as its own, and the agent side only
+a hook it does not recognize as its own, and the agent side only
 touches entries whose command starts with `lode hook`, so third-party hooks on
 the same events are left alone.
 

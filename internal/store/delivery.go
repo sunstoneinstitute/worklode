@@ -20,7 +20,7 @@ type TaskCommit struct {
 	TaskID string
 	Repo   string
 	SHA    string
-	Source string // branch_push | pr | merge_message | marker
+	Source string // branch_push | pr | merge_message | marker | local_merge
 	SeenAt time.Time
 }
 
@@ -49,8 +49,8 @@ func InsertTaskCommit(tx *sql.Tx, tc TaskCommit) error {
 }
 
 // TaskIDsForSHA returns the ids of tasks already attributed to sha in repo,
-// from any source (branch push, PR correlation, merge message, marker),
-// ordered for deterministic iteration.
+// from any source (branch push, PR correlation, merge message, marker, local
+// merge), ordered for deterministic iteration.
 func TaskIDsForSHA(tx *sql.Tx, repo, sha string) ([]string, error) {
 	rows, err := tx.Query(
 		`SELECT DISTINCT task_id FROM task_commits WHERE repo = $1 AND sha = $2

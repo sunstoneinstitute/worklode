@@ -173,6 +173,8 @@ var events = []Event{
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
 	{"session-end", "Close the agent session and bill its tokens to the lease."},
 	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
+	{"post-merge", "Report a merge that landed on the default branch in this clone."},
+	{"post-commit", "Same, for the squash and conflict-resolution merges post-merge never sees."},
 	{"worktree-create", "Auto-resume the task's lease when its worktree is created."},
 	{"worktree-remove", "Release the task's lease when its worktree is removed."},
 	{"worktree-enter", "Open an agent session against the worktree just entered."},
@@ -234,6 +236,11 @@ func dispatch(ctx context.Context, opts Options, p Payload, dir string, l worktr
 		handleSessionEnd(ctx, opts, p, dir, l)
 	case "pre-commit":
 		handlePreCommit(ctx, opts, dir, l)
+	case "post-merge", "post-commit":
+		// No worktree lookup: these run in the main clone, where there is no
+		// lease to find. The guard is per-handler (HEAD must be the default
+		// branch), so nothing global relaxes.
+		handleLocalMerge(ctx, opts, dir)
 	case "worktree-create":
 		handleWorktreeCreate(ctx, opts, p, dir, l)
 	case "worktree-remove":

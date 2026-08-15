@@ -271,12 +271,26 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 	writeJSON(w, http.StatusOK, toTaskJSON(t))
 }
 
-// doneTask handles POST /api/v1/tasks/{id}/done: in_review -> merged, closing
-// any active lease in the same transaction.
+// doneTask handles POST /api/v1/tasks/{id}/done: current state -> merged,
+// closing any active lease in the same transaction. The from-state is read
+// inside the transaction so a concurrent change cannot be raced, exactly as
+// abandonTask does.
+//
+// It does not hardcode in_review as the from-state. legalTransitions already
+// allows the direct-to-main jumps ready|in_progress -> merged, and pinning
+// the endpoint to in_review made it stricter than the domain model: not every
+// task earns a review, and some carry no code at all — an admin UI change or
+// a CMS edit has no webhook to report anything, so a manual done is the right
+// and only close for those. legalTransitions is the gate that remains: draft
+// and the terminal states still 422.
 func (s *server) doneTask(w http.ResponseWriter, r *http.Request) {
 	s.finishTask(w, r, "task.done",
 		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
-			return store.Transition(tx, now, taskID, "in_review", "merged", eventID)
+			cur, err := store.TaskState(tx, taskID)
+			if err != nil {
+				return err
+			}
+			return store.Transition(tx, now, taskID, cur, "merged", eventID)
 		})
 }
 

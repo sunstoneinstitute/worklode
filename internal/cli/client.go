@@ -525,6 +525,10 @@ type Task struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 	Skills             []string  `json:"skills"`
 	Assignee           string    `json:"assignee"`
+	// Branch is the server-authoritative task branch. It is derived from
+	// LODE_BRANCH_TEMPLATE, which only the server knows, so a client matching
+	// local refs to tasks reads it rather than rendering one.
+	Branch string `json:"branch"`
 }
 
 // Lease is the wire form of a lease.
@@ -623,6 +627,9 @@ type TaskListFilter struct {
 	Assignee string
 	// HasChildren narrows to containers — tasks with at least one child.
 	HasChildren bool
+	// Repo narrows to the project owning this repo. Any git remote URL form
+	// works as well as owner/name; the server normalizes it.
+	Repo string
 }
 
 // TaskListResponse is the response body of ListTasks.
@@ -653,6 +660,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (TaskListRespo
 	}
 	if f.HasChildren {
 		q.Set("has_children", "true")
+	}
+	if f.Repo != "" {
+		q.Set("repo", f.Repo)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
@@ -1030,6 +1040,37 @@ func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, l
 // DoneTask calls POST /api/v1/tasks/{id}/done.
 func (c *Client) DoneTask(ctx context.Context, id string) (Task, []byte, error) {
 	return c.taskAction(ctx, id, "done")
+}
+
+// MergeResult is what recording one task named in a merge report did:
+// "advanced", "duplicate", or "unknown_task".
+type MergeResult struct {
+	Task   string `json:"task"`
+	Result string `json:"result"`
+}
+
+// MergeReport is the response body of ReportMerge.
+type MergeReport struct {
+	Repo    string        `json:"repo"`
+	SHA     string        `json:"sha"`
+	Results []MergeResult `json:"results"`
+}
+
+// ReportMerge calls POST /api/v1/merges: tell the backbone that sha landed on
+// repo's default branch carrying the work of these tasks. repo may be any git
+// remote URL form; the server normalizes it.
+func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []string) (MergeReport, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/merges", map[string]any{
+		"repo": repo, "sha": sha, "tasks": tasks,
+	})
+	if err != nil {
+		return MergeReport{}, nil, err
+	}
+	var out MergeReport
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return MergeReport{}, nil, fmt.Errorf("decode merge report: %w", err)
+	}
+	return out, raw, nil
 }
 
 // AbandonTask calls POST /api/v1/tasks/{id}/abandon.
