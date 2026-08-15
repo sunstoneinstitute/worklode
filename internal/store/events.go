@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// eventHorizon is the commit-horizon predicate every cursor read of events
+// carries (spec 025 §15): a row is only readable once no transaction older
+// than its writer can still commit, so an id can never appear behind a
+// position a subscriber has already passed. One const, not one literal per
+// query — the whole ordered-log guarantee is this line.
+const eventHorizon = "txid < pg_snapshot_xmin(pg_current_snapshot())"
+
 // Event is one ingested fact: a webhook delivery, a watcher observation, a
 // CLI action, or an internal system event. Events are the append-only log
 // that everything else in the store is derived from.
@@ -158,9 +165,12 @@ func (s *Store) RecordEventWithID(
 }
 
 // GetEvent looks up one event by id. Returns ErrNotFound if it does not
-// exist. Unlike ReadEventBatch, this is not horizon-bounded — callers that
-// already have an id (e.g. from RecordEvent/RecordEventWithID/Emit) don't
-// need to wait out the commit horizon to read their own write back.
+// exist.
+//
+// It reads by primary key and is deliberately not eventHorizon-bounded — it
+// is not a cursor read, and a caller that already has an id (from
+// RecordEvent/RecordEventWithID/Emit) would otherwise have to wait out the
+// commit horizon to read its own write back. Do not add the predicate here.
 func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
 	var e Event
 	row := s.db.QueryRowContext(ctx,
@@ -237,7 +247,7 @@ func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]E
 			`SELECT id, source, external_id, type, payload, received_at
 			   FROM events
 			  WHERE id > $1
-			    AND txid < pg_snapshot_xmin(pg_current_snapshot())
+			    AND `+eventHorizon+`
 			  ORDER BY id
 			  LIMIT $2`,
 			lastRead, limit,
@@ -280,18 +290,33 @@ func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]E
 
 // AckEvents advances last_acked_offset to upTo, forward only: a late or
 // replayed lower ack is a silent no-op. Acking past last_read_offset is an
-// error (the CHECK backstops it).
+// error (the CHECK backstops it), and an unknown subscriber is ErrNotFound —
+// like ResetEventRead and SeekEventSubscriber, because a consumer whose row
+// was deleted underneath it must not believe its acks are landing.
+//
+// The existence check rides in the same statement as the update precisely
+// because both a missing row and a non-advancing ack update zero rows, so
+// RowsAffected alone cannot tell them apart. The data-modifying CTE runs
+// whether or not the outer SELECT reads it.
 func (s *Store) AckEvents(ctx context.Context, name string, upTo int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE event_subscribers SET last_acked_offset = $2, updated_at = $3
-		 WHERE name = $1 AND $2 > last_acked_offset`,
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`WITH acked AS (
+		   UPDATE event_subscribers SET last_acked_offset = $2, updated_at = $3
+		    WHERE name = $1 AND $2 > last_acked_offset
+		   RETURNING 1
+		 )
+		 SELECT EXISTS (SELECT 1 FROM event_subscribers WHERE name = $1)`,
 		name, upTo, s.nowFn().UTC(),
-	)
+	).Scan(&exists)
 	if err != nil {
 		if isCheckViolationOn(err, "event_subscribers_acked_le_read") {
 			return fmt.Errorf("ack %s past last_read_offset: %w", name, err)
 		}
 		return fmt.Errorf("ack events for %s: %w", name, err)
+	}
+	if !exists {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
 	}
 	return nil
 }
@@ -345,7 +370,7 @@ const MaxEventListLimit = 200
 // horizon-bounded like every subscriber read so the tail never shows an id
 // that later reads would order before.
 func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
-	where := "txid < pg_snapshot_xmin(pg_current_snapshot())"
+	where := eventHorizon
 	var args []any
 	if f.Type != "" {
 		args = append(args, f.Type)
@@ -417,7 +442,7 @@ func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberS
 		  FROM event_subscribers s
 		 CROSS JOIN (SELECT COALESCE(MAX(id), 0) AS max_id
 		               FROM events
-		              WHERE txid < pg_snapshot_xmin(pg_current_snapshot())) h
+		              WHERE `+eventHorizon+`) h
 		  LEFT JOIN LATERAL (
 		       SELECT pid FROM pg_locks
 		        WHERE locktype = 'advisory' AND granted AND objsubid = 1
@@ -595,7 +620,7 @@ func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error
 		   FROM event_subscribers s,
 		        (SELECT COALESCE(MAX(id), 0) AS max_id
 		           FROM events
-		          WHERE txid < pg_snapshot_xmin(pg_current_snapshot())) h
+		          WHERE `+eventHorizon+`) h
 		  ORDER BY s.name`)
 	if err != nil {
 		return nil, fmt.Errorf("event subscriber lags: %w", err)

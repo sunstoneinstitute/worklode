@@ -317,6 +317,31 @@ func TestReadEventBatchSkipsAbortedHole(t *testing.T) {
 	}
 }
 
+// An ack against a subscriber that does not exist is ErrNotFound, not a
+// silent success: a consumer whose row was deleted underneath it would
+// otherwise keep believing its acks were landing. The no-op lower ack in
+// TestAckEventsMonotonic affects zero rows too, and must stay a nil error —
+// the two cases are only distinguishable inside the statement.
+func TestAckEventsUnknownSubscriber(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if err := s.AckEvents(ctx, "no-such-subscriber", 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AckEvents on an unknown subscriber = %v, want ErrNotFound", err)
+	}
+
+	// Deleted mid-flight: the same case a running consumer would hit.
+	if err := s.EnsureEventSubscriber(ctx, "gone"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM event_subscribers WHERE name = $1`, "gone"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AckEvents(ctx, "gone", 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AckEvents after the row was deleted = %v, want ErrNotFound", err)
+	}
+}
+
 func TestAckEventsMonotonic(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
