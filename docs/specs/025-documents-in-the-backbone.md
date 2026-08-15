@@ -9,6 +9,9 @@ requires:
 - docs/specs/022-prometheus-metrics.md
 - docs/specs/026-design-doc-queries.md
 - docs/specs/029-research-work-in-the-backbone.md
+amends:
+  "#sec-15":
+    - 004-execution-backbone.md#sec-1.4
 ---
 # Spec 025 — Documents in the backbone
 

@@ -107,8 +107,10 @@ Cross-cutting pieces: worktree-bound leases (a claim binds a task to a
 worktree under `.worktrees/`; `internal/worktree`, `internal/hookrun` for
 the Claude Code hook bindings), agent-session tracking priced from the
 agent's own transcript (`internal/transcript`, `store/pricing` — rates are
-effective-dated rows in `model_prices`, never hardcoded), and the org skill
-registry with pgvector embeddings (`internal/skillsync`, `skillstore`).
+effective-dated rows in `model_prices`, never hardcoded), the org skill
+registry with pgvector embeddings (`internal/skillsync`, `skillstore`), and
+`internal/eventbus` (offset-tracked subscribers over the events log, spec
+025 §15, read via `lode event tail --follow`).
 
 The backbone (this repo, Postgres) owns execution facts and — once spec 025
 is implemented — design-document artifacts (specs, ADRs, plans); derived
