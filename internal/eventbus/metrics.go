@@ -60,9 +60,13 @@ func (m *Metrics) batch(subscriber string, seconds float64) {
 	m.batchDur.WithLabelValues(subscriber).Observe(seconds)
 }
 
+// The gauge differences offsets, and offsets are monotonic log positions,
+// not counts: ON CONFLICT DO NOTHING and rolled-back inserts burn sequence
+// values, so the gap is an upper bound on pending events, never an exact
+// count. Alert on it rising, not on its absolute value.
 var subscriberLagDesc = prometheus.NewDesc(
 	"worklode_event_subscriber_lag",
-	"Events below the commit horizon not yet acked, per subscriber, counted at scrape time.",
+	"Log positions between the commit horizon and a subscriber's acked offset, at scrape time (positions, not an event count).",
 	[]string{"subscriber"}, nil)
 
 // lagCollector reads per-subscriber lag at scrape time. On query failure it
