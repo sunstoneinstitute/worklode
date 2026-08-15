@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -1987,6 +1988,105 @@ func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (EventListRe
 		return EventListResponse{}, nil, fmt.Errorf("decode event list: %w", err)
 	}
 	return resp, raw, nil
+}
+
+// EventStreamFilter narrows StreamEvents. After is where the stream resumes
+// (exclusive); zero means the server picks the current head, so a bare follow
+// shows only what happens next.
+type EventStreamFilter struct {
+	Type  string
+	After int64
+}
+
+// maxSSELine caps one line of the stream. An event's payload is a webhook
+// body, which can legitimately be large, so this is generous — but it is a
+// bound, because a server that never sends a newline must not grow the
+// client's buffer without limit.
+const maxSSELine = 4 << 20
+
+// maxAPIErrBody caps how much of a refused stream's body is read for its
+// error message. do reads whole bodies because they are bounded responses;
+// this one is a stream, and a refusal is a small JSON object.
+const maxAPIErrBody = 64 << 10
+
+// StreamEvents follows GET /api/v1/events/stream, calling fn once per event
+// until the context is cancelled, the server closes the stream, or fn returns
+// an error (which is returned unchanged, so a caller can stop cleanly).
+//
+// A dropped connection is returned, not retried: reconnecting means deciding
+// what to do about the gap, and the server already has the mechanism for that
+// (Last-Event-ID). docs/follow-ups.md records it.
+func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(Event) error) error {
+	q := url.Values{}
+	if f.Type != "" {
+		q.Set("type", f.Type)
+	}
+	if f.After != 0 {
+		q.Set("after", strconv.FormatInt(f.After, 10))
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+withQuery("/api/v1/events/stream", q), nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	// c.http caps every request at 30s, which is a correct default for a
+	// request/response call and fatal for one meant to stay open. The context
+	// is what ends this one.
+	resp, err := (&http.Client{Transport: c.http.Transport}).Do(req)
+	if err != nil {
+		return fmt.Errorf("GET /api/v1/events/stream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxAPIErrBody))
+		msg := strings.TrimSpace(string(body))
+		var errBody map[string]string
+		if json.Unmarshal(body, &errBody) == nil && errBody["error"] != "" {
+			msg = errBody["error"]
+		}
+		return &ClientError{Status: resp.StatusCode, Msg: msg}
+	}
+
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 0, 64*1024), maxSSELine)
+	var data []byte
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case line == "":
+			// End of one message. id: and event: are deliberately not kept:
+			// both are also fields of the JSON, and one parse is better than
+			// two that can disagree.
+			if len(data) == 0 {
+				continue
+			}
+			var e Event
+			if err := json.Unmarshal(data, &e); err != nil {
+				return fmt.Errorf("decode streamed event %q: %w", data, err)
+			}
+			data = data[:0]
+			if err := fn(e); err != nil {
+				return err
+			}
+		case strings.HasPrefix(line, ":"):
+			// Comment line: the server's heartbeat.
+		case strings.HasPrefix(line, "data:"):
+			data = append(data, strings.TrimSpace(strings.TrimPrefix(line, "data:"))...)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("read event stream: %w", err)
+	}
+	return nil
 }
 
 // EventSubscriberStatus is the wire form of one event_subscribers row plus

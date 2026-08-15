@@ -2154,3 +2154,68 @@ func TestClientEvents(t *testing.T) {
 		t.Fatal("SeekEventSubscriber(unknown name): want error, got nil")
 	}
 }
+
+// TestClientStreamEvents covers StreamEvents against a real server: the
+// resume cursor is exclusive, the JSON body of each message decodes into the
+// same Event the bounded list returns, a callback error stops the stream and
+// is returned unchanged, and a non-admin token is refused as a ClientError
+// rather than as an empty stream.
+func TestClientStreamEvents(t *testing.T) {
+	st, c, serverURL := newTestServer(t)
+	ctx := context.Background()
+
+	var ids []int64
+	for i := 1; i <= 3; i++ {
+		id, _, err := st.RecordEvent(ctx, "system", fmt.Sprintf("cs-%d", i), "cli.stream",
+			[]byte(`{"n":`+fmt.Sprint(i)+`}`), nil)
+		if err != nil {
+			t.Fatalf("RecordEvent cs-%d: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+	// The commit horizon is cluster-wide; wait until all three are readable
+	// before asserting on which of them a resume replays.
+	pollClientEvents(t, ctx, c, cli.EventListFilter{Type: "cli.stream"}, 3)
+
+	streamCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	errEnough := errors.New("enough")
+	var got []cli.Event
+	err := c.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream", After: ids[0]},
+		func(e cli.Event) error {
+			got = append(got, e)
+			if len(got) == 2 {
+				return errEnough
+			}
+			return nil
+		})
+	if !errors.Is(err, errEnough) {
+		t.Fatalf("StreamEvents = %v, want the callback's own error back", err)
+	}
+	if len(got) != 2 || got[0].ID != ids[1] || got[1].ID != ids[2] {
+		t.Fatalf("streamed events = %+v, want ids %d then %d (resume is exclusive)", got, ids[1], ids[2])
+	}
+	if got[0].ExternalID != "cs-2" || got[0].Type != "cli.stream" {
+		t.Fatalf("first streamed event = %+v, want cs-2 of type cli.stream", got[0])
+	}
+	if string(got[1].Payload) != `{"n":3}` {
+		t.Fatalf("streamed payload = %s, want {\"n\":3}", got[1].Payload)
+	}
+
+	// The stream is admin-only even though the bounded list beside it is not.
+	if err := st.CreateActor(ctx, "streamworker", "agent", "Worker", false); err != nil {
+		t.Fatalf("create worker: %v", err)
+	}
+	workerToken, err := st.CreateToken(ctx, "streamworker", "worker token", nil)
+	if err != nil {
+		t.Fatalf("create worker token: %v", err)
+	}
+	wc := cli.NewClient(cli.Config{ServerURL: serverURL, Token: workerToken})
+	err = wc.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream"},
+		func(cli.Event) error { return errors.New("callback must not run") })
+	var ce *cli.ClientError
+	if !errors.As(err, &ce) || ce.Status != http.StatusForbidden {
+		t.Fatalf("non-admin StreamEvents = %v, want a 403 ClientError", err)
+	}
+}
