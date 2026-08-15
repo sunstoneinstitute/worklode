@@ -373,10 +373,17 @@ operation. Template validation failure surfaces as a startup error.
 
 ## 9. Hooks {#sec-9}
 
-Every hook is a **NOP outside a Worklode worktree** (uniform guard, §5.2: does cwd lie exactly one
-segment below the configured worktree base directory, with a backbone-bound lease? absent ⇒
-`exit 0` immediately). Worklode is invisible to ordinary sessions. The event names in the table
-below are Claude Code's; §17.4 maps the same lifecycle moments onto each other harness's names.
+Every **lease-bearing** hook is a NOP outside a Worklode worktree (uniform guard, §5.2: does cwd lie
+exactly one segment below the configured worktree base directory, with a backbone-bound lease?
+absent ⇒ `exit 0` immediately). Worklode is invisible to ordinary sessions. The event names in the
+table below are Claude Code's; §17.4 maps the same lifecycle moments onto each other harness's names.
+
+The guard is **per handler, not global**. The merge-reporting hooks below are the one thing that
+necessarily happens *outside* a worktree — a merge lands in the main clone, where there is no lease
+to find — so they carry their own guard instead: HEAD must be the repo's default branch. Widening
+the surface does not weaken the invisibility rule, because that guard is stricter in practice. Off
+the default branch the hook exits before touching the network, and inside a worktree HEAD is a task
+branch, never the default one.
 
 | Event | Action | Guard / condition |
 |---|---|---|
@@ -385,6 +392,13 @@ below are Claude Code's; §17.4 maps the same lifecycle moments onto each other 
 | `SessionStart` (outside worktree) | **Offer** to resume an abandoned worktree | Cheap compiled scan finds a worktree with a bound, **expired** lease and no running session. Prompt, if any, is Haiku/script-level — never an expensive call. Offer only; never auto-claims. |
 | `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat) | NOP when the session isn't on a Worklode task. |
 | `ExitWorktree` / `SessionEnd` | **Release** the worktree's lease **if idle** | In a Worklode worktree with a held lease. |
+
+The git-side merge reporters, which run in the main clone and take no lease:
+
+| Event | Action | Guard / condition |
+|---|---|---|
+| `post-merge` | **Report the merge** — name the tasks whose branches this commit brought in | HEAD is the repo's default branch. NOP otherwise, before any network call. |
+| `post-commit` | Same handler | Same guard. Both are bound because git splits the cases: `git merge` fires `post-merge`, while a squash merge and a commit that resolves a merge fire only `post-commit`. |
 
 Notes:
 
@@ -396,6 +410,18 @@ Notes:
   ages out to the sweeper.
 - **`SessionStart` outside-worktree scan must stay fast** — a compiled `lode` scan of existing worktrees
   plus lease state; no graph reads, no model call beyond a script-level Haiku prompt.
+- **Merge reporting is a probe, not a parse.** The client cannot turn `WL-24-slug` back into `WL-24`
+  — reverse parsing (§4) is the server's job, and the server is the authority on branch names (§3) —
+  so candidates come from the backbone (the open tasks of this repo's project, each with its
+  rendered branch) and the client only answers "is this branch's work in HEAD now, and was it not in
+  the commit before?". Ancestry answers a true merge or fast-forward; a patch-id walk answers a
+  squash. Rebase is out of scope, preserving neither SHAs nor, reliably, patch ids.
+  The "not in the previous commit" half is load-bearing rather than an optimization: `lode next`
+  creates a branch at the default branch's tip, so an idle worktree's branch is already an ancestor
+  of HEAD, and without it every merge would report every idle task as delivered.
+- **A merge whose branch is already gone falls back to the webhook.** The probe needs the branch to
+  exist locally. Merging and deleting in one breath is fine — `post-merge` runs first — but a report
+  is never guessed at from a branch that is not there.
 
 ## 10. Hook implementation & coexistence {#sec-10}
 
@@ -404,13 +430,15 @@ Notes:
 - **Daisy-chain, don't terminate.** Each hook takes `--next <cmd> [argv…]`; instead of `exit(0)` it
   `execve`s the next command, passing the hook payload through. This lets Worklode's hook compose with
   whatever hooks a repo already has rather than owning the event.
-- **`lode install`** wires the commit-cadence heartbeat for **editor-agnostic** use (plain
-  `git`, not just Claude Code). It **must coexist — chain existing hooks, never clobber them**:
-  an existing `.git/hooks/pre-commit` is preserved and invoked via the `--next`/`execve` chain.
+- **`lode install`** wires the commit-cadence heartbeat and the merge reporters for
+  **editor-agnostic** use (plain `git`, not just Claude Code): `pre-commit`, `post-merge` and
+  `post-commit`. It **must coexist — chain existing hooks, never clobber them**: an existing hook on
+  any of those events is preserved as `<name>.pre-lode` and invoked via the `--next`/`execve` chain.
 - **Sensible default:** if `.pre-commit-config.yaml` exists in the repo root, **always chain
   `pre-commit`** — Worklode's heartbeat runs, then `execve`s the `pre-commit` framework so its checks
-  still run. Installer is idempotent (detect an already-installed Worklode link; re-point, don't
-  duplicate).
+  still run. That chain is for the `pre-commit` hook alone: the framework binary run bare executes
+  its pre-commit stage, which is the wrong thing to fire from a merge. Installer is idempotent
+  (detect an already-installed Worklode link; re-point, don't duplicate).
 
 ## 11. `lode task brief <id> --json` {#sec-11}
 

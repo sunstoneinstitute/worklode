@@ -458,6 +458,16 @@ The base transitions and their triggers:
 | `in_review` | `in_progress` | rework |
 | `draft`·`ready`·`in_progress`·`in_review` | `abandoned` | abandon |
 
+`lode task done` reads the task's current state inside the transition and moves
+it to `merged` from wherever it is, exactly as `abandon` does. It does not
+require `in_review`: the transition set below already allows the direct-to-main
+jumps, and pinning the *endpoint* to `in_review` would make it stricter than
+the state machine it enforces. Not every task earns a review, and some carry no
+code at all — an admin UI change or a CMS edit has no webhook that could ever
+report a delivery, so a manual `done` is the right and only close for those.
+The transition set stays the whole gate: `draft` and the terminal states still
+refuse.
+
 `Transition(tx, now, taskID, from, to, eventID)` stays the guard: it verifies the
 membership in the transition set **and** that the task's current state equals
 `from`, atomically inside the caller's tx, then bumps `updated_at` and appends a
@@ -514,6 +524,11 @@ commits to tasks. Sources:
   SHAs join this table).
 - task-key references in commit messages on default-branch pushes (fallback
   for commits made directly on main).
+- `local_merge` — a merge observed in a developer's own clone and reported by
+  the git-side hooks (`008-worklode-plugin.md` §9). It is a distinct source
+  rather than a reuse of the merge-message one because a delivery asserted by
+  a laptop, from a branch-ancestry probe, is weaker evidence than a signed
+  webhook, and the log should record which reporter made the claim.
 
 **`main_commits`** — `(repo, sha, seq, pushed_at)`. Every default-branch push
 appends its commits in order. Main history is linear in push order, so
@@ -598,6 +613,25 @@ All handlers use the existing HMAC/idempotency plumbing in `internal/hooks`.
   recorded as events with no artifact. It resolves no frontier and calls no
   resolver: an image is a build fact, and delivery still turns on the deploy
   and release frontiers.
+
+- **`POST /api/v1/merges`** (new, not a webhook): the local reporter's half of
+  delivery, for a merge that never reaches a GitHub App — a repo that has none
+  wired up, or one where nobody has pushed yet. It takes `{repo, sha, tasks[]}`
+  from `lode hook post-merge`/`post-commit` and makes exactly the three calls
+  the default-branch push handler makes: append the main commit, attribute it
+  to each named task with source `local_merge`, resolve. Two reporters, one
+  rule, one fact — the dedup is the fact tables' own `ON CONFLICT DO NOTHING`,
+  so whichever arrives second changes nothing and is reported as a duplicate.
+  A steady stream of duplicates is what a healthy webhook-plus-clone pair looks
+  like; its disappearance means a reporter has stopped, which is why
+  `worklode_local_merge_reports_total{result}` counts
+  `advanced|duplicate|unknown_task`.
+
+  Unlike the webhook routes it carries an actor rather than an HMAC signature,
+  and requires the same permission the `done`/`abandon` endpoints do. Its
+  accepted risk: a local merge advances the task immediately, so a later
+  `git reset --hard` leaves a delivery fact for work that then exists nowhere.
+  Reconciliation (spec 013) is the eventual answer.
 
 **Resolver** — `ResolveDelivery(tx, taskID)`: reads the task's landed seq,
 env frontiers, and release frontier; computes the furthest supported
@@ -701,6 +735,15 @@ One schema version: create `task_commits`, `main_commits`, `env_deploys`,
 - **Discovery runs only at `add-repo`.** A repo that later gains a prod
   environment or starts cutting releases keeps its old `done_state` until
   `lode project set-repo --done-state`.
+- **The local merge reporter can be undone.** It asserts a delivery the moment
+  a merge lands in someone's clone, before anything is pushed, so a subsequent
+  `git reset --hard` or a force-push over the merge leaves a `local_merge`
+  attribution for work that exists nowhere. Reconciliation (spec 013) is the
+  answer; nothing here retracts a fact.
+- **The local merge reporter needs the branch.** Its probe compares a task's
+  branch against HEAD, so a merge whose branch was deleted before the hook ran
+  reports nothing and falls back to the webhook. It also does not see a rebase,
+  which preserves neither SHAs nor, reliably, patch ids.
 
 ## 6. Task hierarchy & decomposition {#sec-6}
 
