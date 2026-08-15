@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Brief is the bounded payload an agent needs to start work on a task: the
@@ -21,15 +23,15 @@ import (
 // "Delivery lifecycle" without spelunking, while the full ancestry and the
 // sibling list are both unbounded and stay out.
 type Brief struct {
-	Task               Task     // the task row
-	Body               string   // task body (mirrors Task.Body for the wire contract)
-	Branch             string   // <prefix><id>-<slug>
-	OpenBlockers       []Task   // open 'blocks' edges pointing at this task; only ID/Title/State are populated
-	Parent             *Task    // the task's parent, or nil; only ID/Title/State are populated
-	Lease              *Lease   // active lease, or nil
-	GoverningDesign    *string  // reserved: spec 006 (nil in v1)
-	AffectedComponents []string // reserved: spec 006 (nil in v1)
-	DefinitionOfDone   *string  // reserved: spec 006 Deliverable (nil in v1)
+	Task               model.Task   // the task row
+	Body               string       // task body (mirrors Task.Body for the wire contract)
+	Branch             string       // <prefix><id>-<slug>
+	OpenBlockers       []model.Task // open 'blocks' edges pointing at this task; only ID/Title/State are populated
+	Parent             *model.Task  // the task's parent, or nil; only ID/Title/State are populated
+	Lease              *Lease       // active lease, or nil
+	GoverningDesign    *string      // reserved: spec 006 (nil in v1)
+	AffectedComponents []string     // reserved: spec 006 (nil in v1)
+	DefinitionOfDone   *string      // reserved: spec 006 Deliverable (nil in v1)
 	// PinnedSkills are the task's pinned skills, content included; deleted
 	// pins still resolve (with a warning) so briefs never break.
 	PinnedSkills []Skill
@@ -134,7 +136,7 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 // uses the same predicate as blockedCondition: the blocker has not reached its
 // repo's done_state (taskClosed). Only ID, Title, and State are populated (the brief surfaces no
 // more than that). Ordered by numeric id for a stable payload.
-func (s *Store) openBlockers(ctx context.Context, taskID string) ([]Task, error) {
+func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT t.id, t.title, t.state
 		   FROM task_edges e
@@ -148,9 +150,9 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]Task, error)
 	}
 	defer rows.Close()
 
-	var out []Task
+	var out []model.Task
 	for rows.Next() {
-		var t Task
+		var t model.Task
 		if err := rows.Scan(&t.ID, &t.Title, &t.State); err != nil {
 			return nil, fmt.Errorf("scan open blocker: %w", err)
 		}

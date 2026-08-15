@@ -18,6 +18,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -140,7 +141,7 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 	}
 }
 
-func createTestTask(t *testing.T, c *cli.Client, title string) cli.Task {
+func createTestTask(t *testing.T, c *cli.Client, title string) model.Task {
 	t.Helper()
 	ctx := context.Background()
 	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
@@ -1045,7 +1046,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 
 func TestPrintBriefRendersSkillsSection(t *testing.T) {
 	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{
 			Pinned:   []cli.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
@@ -1080,7 +1081,7 @@ func TestPrintBriefRendersSkillsSection(t *testing.T) {
 // warnings exist for.
 func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{
 			Warnings: []string{"pinned skill not found: ghost"},
@@ -1100,7 +1101,7 @@ func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 
 func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
 	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: cli.SkillRecommendation{Provider: "none"},
 	}

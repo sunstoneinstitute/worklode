@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Config holds the client's server URL, bearer token, and the project the user
@@ -511,38 +513,6 @@ func withQuery(path string, q url.Values) string {
 
 // --- tasks ----------------------------------------------------------------
 
-// Task is the wire form of a task, matching internal/api's taskJSON.
-type Task struct {
-	ID                 string    `json:"id"`
-	Project            string    `json:"project"`
-	Title              string    `json:"title"`
-	Body               string    `json:"body"`
-	Priority           string    `json:"priority"`
-	Kind               string    `json:"kind"`
-	State              string    `json:"state"`
-	Concern            string    `json:"concern"`
-	NeedsDecomposition bool      `json:"needs_decomposition"`
-	CreatedBy          string    `json:"created_by"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	Skills             []string  `json:"skills"`
-	Assignee           string    `json:"assignee"`
-	// Branch is the server-authoritative task branch. It is derived from
-	// LODE_BRANCH_TEMPLATE, which only the server knows, so a client matching
-	// local refs to tasks reads it rather than rendering one.
-	Branch string `json:"branch"`
-}
-
-// Lease is the wire form of a lease.
-type Lease struct {
-	TaskID     string    `json:"task_id"`
-	ActorID    string    `json:"actor_id"`
-	Worktree   string    `json:"worktree"`
-	AcquiredAt time.Time `json:"acquired_at"`
-	RenewedAt  time.Time `json:"renewed_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
-}
-
 // TaskEdgeOut and TaskEdgeIn are the two halves of a TaskDetail's edge list.
 type TaskEdgeOut struct {
 	To   string `json:"to"`
@@ -573,16 +543,16 @@ type TaskHierarchy struct {
 	Progress TaskProgress `json:"progress"`
 }
 
-// TaskDetail is the wire form of GET /api/v1/tasks/{id}: a Task plus its
+// TaskDetail is the wire form of GET /api/v1/tasks/{id}: a model.Task plus its
 // blocked status, edges, hierarchy, and (when active) lease.
 type TaskDetail struct {
-	Task
+	model.Task
 	Blocked bool `json:"blocked"`
 	Edges   struct {
 		Out []TaskEdgeOut `json:"out"`
 		In  []TaskEdgeIn  `json:"in"`
 	} `json:"edges"`
-	Lease     *Lease        `json:"lease,omitempty"`
+	Lease     *model.Lease  `json:"lease,omitempty"`
 	Hierarchy TaskHierarchy `json:"hierarchy"`
 }
 
@@ -605,14 +575,14 @@ type CreateTaskInput struct {
 }
 
 // CreateTask calls POST /api/v1/tasks.
-func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (Task, []byte, error) {
+func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks", in)
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
@@ -636,7 +606,7 @@ type TaskListFilter struct {
 
 // TaskListResponse is the response body of ListTasks.
 type TaskListResponse struct {
-	Tasks []Task `json:"tasks"`
+	Tasks []model.Task `json:"tasks"`
 }
 
 // ListTasks calls GET /api/v1/tasks.
@@ -699,8 +669,8 @@ func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) 
 
 // ClaimResponse is the response body of ClaimTask.
 type ClaimResponse struct {
-	Lease  Lease  `json:"lease"`
-	Branch string `json:"branch"`
+	Lease  model.Lease `json:"lease"`
+	Branch string      `json:"branch"`
 }
 
 // ClaimTask calls POST /api/v1/tasks/{id}/claim. worktree is the caller's
@@ -730,7 +700,7 @@ type ClaimNextPickLease struct {
 }
 
 // ClaimNextPick is the wire form of a claim-next candidate/claimed task: a
-// slimmer projection than Task, matching the ranking-relevant fields (spec
+// slimmer projection than model.Task, matching the ranking-relevant fields (spec
 // 02) rather than the full task record.
 type ClaimNextPick struct {
 	ID   string `json:"id"`
@@ -801,16 +771,16 @@ type BriefBlocker struct {
 }
 
 // Brief is the wire form of GET /api/v1/tasks/{id}/brief: the bounded
-// start-of-work payload for a task. Lease is nil when the task has no active
+// start-of-work payload for a task. model.Lease is nil when the task has no active
 // lease. GoverningDesign, AffectedComponents, and DefinitionOfDone are
 // reserved fields that serialize as JSON null in v1. Skills carries the
 // task's pinned skills (content inline) plus embedding-matched suggestions.
 type Brief struct {
-	Task               Task                `json:"task"`
+	Task               model.Task          `json:"task"`
 	Body               string              `json:"body"`
 	Branch             string              `json:"branch"`
 	OpenBlockers       []BriefBlocker      `json:"open_blockers"`
-	Lease              *Lease              `json:"lease"`
+	Lease              *model.Lease        `json:"lease"`
 	GoverningDesign    *string             `json:"governing_design"`
 	AffectedComponents []string            `json:"affected_components"`
 	DefinitionOfDone   *string             `json:"definition_of_done"`
@@ -847,15 +817,15 @@ func (c *Client) brief(ctx context.Context, id, query string) (Brief, []byte, er
 // RebindWorktree calls POST /api/v1/tasks/{id}/lease/worktree: move the
 // caller's active lease on id to a new worktree identity. Returns the
 // updated lease.
-func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (Lease, []byte, error) {
+func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model.Lease, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/lease/worktree",
 		map[string]string{"worktree": worktree})
 	if err != nil {
-		return Lease{}, nil, err
+		return model.Lease{}, nil, err
 	}
-	var l Lease
+	var l model.Lease
 	if err := json.Unmarshal(raw, &l); err != nil {
-		return Lease{}, nil, fmt.Errorf("decode lease: %w", err)
+		return model.Lease{}, nil, fmt.Errorf("decode lease: %w", err)
 	}
 	return l, raw, nil
 }
@@ -967,7 +937,7 @@ type EditTaskInput struct {
 }
 
 // EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
-func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (Task, []byte, error) {
+func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (model.Task, []byte, error) {
 	body := map[string]any{}
 	if in.Title != nil {
 		body["title"] = *in.Title
@@ -986,28 +956,28 @@ func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (Tas
 	}
 	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), body)
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
 
 // RenewLease calls POST /api/v1/tasks/{id}/renew.
-func (c *Client) RenewLease(ctx context.Context, id string, ttl time.Duration) (Lease, []byte, error) {
+func (c *Client) RenewLease(ctx context.Context, id string, ttl time.Duration) (model.Lease, []byte, error) {
 	body := map[string]any{}
 	if ttl > 0 {
 		body["ttl_seconds"] = int(ttl.Seconds())
 	}
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/renew", body)
 	if err != nil {
-		return Lease{}, nil, err
+		return model.Lease{}, nil, err
 	}
-	var l Lease
+	var l model.Lease
 	if err := json.Unmarshal(raw, &l); err != nil {
-		return Lease{}, nil, fmt.Errorf("decode lease: %w", err)
+		return model.Lease{}, nil, fmt.Errorf("decode lease: %w", err)
 	}
 	return l, raw, nil
 }
@@ -1023,7 +993,7 @@ func (c *Client) ReleaseLease(ctx context.Context, id string) ([]byte, error) {
 // and error when it is actively leased to a different worktree. lease is the
 // current lease from a freshly-fetched brief (nil ⇒ none). This is the shared
 // resume/auto-resume core used by both `lode resume` and the hook handlers.
-func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, lease *Lease) error {
+func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, lease *model.Lease) error {
 	switch {
 	case lease == nil:
 		if _, _, err := c.ClaimTask(ctx, taskID, identity, 0); err != nil {
@@ -1040,7 +1010,7 @@ func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, l
 }
 
 // DoneTask calls POST /api/v1/tasks/{id}/done.
-func (c *Client) DoneTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) DoneTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "done")
 }
 
@@ -1076,89 +1046,89 @@ func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []stri
 }
 
 // AbandonTask calls POST /api/v1/tasks/{id}/abandon.
-func (c *Client) AbandonTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) AbandonTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "abandon")
 }
 
 // ReopenTask calls POST /api/v1/tasks/{id}/reopen: move a delivered or
 // abandoned task back to ready (a fresh claim is then required).
-func (c *Client) ReopenTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) ReopenTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "reopen")
 }
 
 // ReadyTask calls PATCH /api/v1/tasks/{id} with state "ready": publish a
 // draft task so it becomes claimable.
-func (c *Client) ReadyTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) ReadyTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "ready")
 }
 
 // ReworkTask calls PATCH /api/v1/tasks/{id} with state "in_progress": move a
 // task under review back to in_progress after a review requested changes.
-func (c *Client) ReworkTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) ReworkTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "in_progress")
 }
 
 // SubmitTask calls PATCH /api/v1/tasks/{id} with state "in_review": move the
 // caller's in_progress task to review.
-func (c *Client) SubmitTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) SubmitTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.patchTaskState(ctx, id, "in_review")
 }
 
 // AssignTask calls POST /api/v1/tasks/{id}/assign: sets the task's assignee.
 // An empty assignee assigns the task to the calling actor.
-func (c *Client) AssignTask(ctx context.Context, id, assignee string) (Task, []byte, error) {
+func (c *Client) AssignTask(ctx context.Context, id, assignee string) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/assign",
 		map[string]string{"assignee": assignee})
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
 
 // UnassignTask calls POST /api/v1/tasks/{id}/unassign: clears the task's
 // assignee.
-func (c *Client) UnassignTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) UnassignTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "unassign")
 }
 
 // StartTask calls POST /api/v1/tasks/{id}/start: moves the task to
 // in_progress on behalf of the caller without taking a lease, assigning the
 // caller when the task is unassigned.
-func (c *Client) StartTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) StartTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "start")
 }
 
 // StopTask calls POST /api/v1/tasks/{id}/stop: moves the caller's
 // in_progress task back to ready, keeping the assignment.
-func (c *Client) StopTask(ctx context.Context, id string) (Task, []byte, error) {
+func (c *Client) StopTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "stop")
 }
 
-func (c *Client) patchTaskState(ctx context.Context, id, state string) (Task, []byte, error) {
+func (c *Client) patchTaskState(ctx context.Context, id, state string) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id),
 		map[string]string{"state": state})
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
 
-func (c *Client) taskAction(ctx context.Context, id, action string) (Task, []byte, error) {
+func (c *Client) taskAction(ctx context.Context, id, action string) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/"+action, nil)
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
@@ -1208,8 +1178,8 @@ func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, err
 // DecomposeResponse is the wire form of POST /api/v1/tasks/{id}/decompose:
 // the parent, keeping its id and kind, and the children it now tracks.
 type DecomposeResponse struct {
-	Parent   Task   `json:"parent"`
-	Children []Task `json:"children"`
+	Parent   model.Task   `json:"parent"`
+	Children []model.Task `json:"children"`
 }
 
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
@@ -1282,14 +1252,14 @@ type PromoteInput struct {
 }
 
 // PromoteIssue calls POST /api/v1/inbox/promote.
-func (c *Client) PromoteIssue(ctx context.Context, in PromoteInput) (Task, []byte, error) {
+func (c *Client) PromoteIssue(ctx context.Context, in PromoteInput) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/promote", in)
 	if err != nil {
-		return Task{}, nil, err
+		return model.Task{}, nil, err
 	}
-	var t Task
+	var t model.Task
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return Task{}, nil, fmt.Errorf("decode task: %w", err)
+		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
 	}
 	return t, raw, nil
 }
@@ -1670,11 +1640,11 @@ type Holder struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// BoardTask is a Task as it appears on the board, with its lease holder when
+// BoardTask is a model.Task as it appears on the board, with its lease holder when
 // in progress. Parent is its parent's id when it has one, so the board can
 // group children under it.
 type BoardTask struct {
-	Task
+	model.Task
 	Parent string  `json:"parent,omitempty"`
 	Holder *Holder `json:"holder,omitempty"`
 }
@@ -1827,7 +1797,7 @@ func (c *Client) Board(ctx context.Context, project string) (BoardResponse, []by
 // "at" (RFC3339 string) and "type" fields; the remaining fields vary by
 // type — see internal/api/timeline.go for the full set per type.
 type TimelineResponse struct {
-	Task     Task             `json:"task"`
+	Task     model.Task       `json:"task"`
 	Timeline []map[string]any `json:"timeline"`
 }
 

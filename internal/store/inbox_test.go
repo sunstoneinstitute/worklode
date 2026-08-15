@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 var inboxTestNow = time.Date(2026, 7, 19, 11, 0, 0, 0, time.UTC)
@@ -30,9 +32,9 @@ func upsertIssue(t *testing.T, s *Store, is Issue) error {
 }
 
 // promoteIssue drives PromoteIssue through RecordEvent, source "cli".
-func promoteIssue(t *testing.T, s *Store, now time.Time, repo string, number int64, in TaskInput, versions []string) (*Task, error) {
+func promoteIssue(t *testing.T, s *Store, now time.Time, repo string, number int64, in TaskInput, versions []string) (*model.Task, error) {
 	t.Helper()
-	var task *Task
+	var task *model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "issue.promote", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error

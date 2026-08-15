@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -29,56 +30,6 @@ const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, review,
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,
-}
-
-// taskJSON is the wire form of a task: every store.Task field, so a client
-// reading JSON sees the same record the server holds. Concern is "" when the
-// task has none. Assignee is "" when the task is unassigned.
-//
-// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and is
-// the authority on branch names (008 §3.1), so a client that needs to match
-// local refs against tasks reads the name from here rather than rendering
-// one.
-type taskJSON struct {
-	ID                 string    `json:"id"`
-	Project            string    `json:"project"`
-	Title              string    `json:"title"`
-	Body               string    `json:"body"`
-	Priority           string    `json:"priority"`
-	Kind               string    `json:"kind"`
-	State              string    `json:"state"`
-	Concern            string    `json:"concern"`
-	NeedsDecomposition bool      `json:"needs_decomposition"`
-	CreatedBy          string    `json:"created_by"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	Skills             []string  `json:"skills"`
-	Assignee           string    `json:"assignee"`
-	Branch             string    `json:"branch"`
-}
-
-func toTaskJSON(t *store.Task) taskJSON {
-	skills := t.Skills
-	if skills == nil {
-		skills = []string{}
-	}
-	return taskJSON{
-		ID:                 t.ID,
-		Project:            t.ProjectID,
-		Title:              t.Title,
-		Body:               t.Body,
-		Priority:           t.Priority,
-		Kind:               t.Kind,
-		State:              t.State,
-		Concern:            t.Concern,
-		NeedsDecomposition: t.NeedsDecomposition,
-		CreatedBy:          t.CreatedBy,
-		CreatedAt:          t.CreatedAt,
-		UpdatedAt:          t.UpdatedAt,
-		Skills:             skills,
-		Assignee:           t.Assignee,
-		Branch:             store.BranchFor(t),
-	}
 }
 
 type createTaskRequest struct {
@@ -157,7 +108,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	actor := actorFrom(r)
 	now := s.st.Now()
 
-	var created *store.Task
+	var created *model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.created", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			t, err := store.CreateTask(tx, now, store.TaskInput{
@@ -193,7 +144,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toTaskJSON(created))
+	writeJSON(w, http.StatusCreated, created)
 }
 
 type edgeOut struct {
@@ -245,13 +196,13 @@ type hierarchyJSON struct {
 }
 
 type taskDetailJSON struct {
-	taskJSON
+	model.Task
 	Blocked bool `json:"blocked"`
 	Edges   struct {
 		Out []edgeOut `json:"out"`
 		In  []edgeIn  `json:"in"`
 	} `json:"edges"`
-	Lease     *leaseJSON    `json:"lease,omitempty"`
+	Lease     *model.Lease  `json:"lease,omitempty"`
 	Hierarchy hierarchyJSON `json:"hierarchy"`
 }
 
@@ -276,7 +227,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := taskDetailJSON{taskJSON: toTaskJSON(t), Blocked: blocked[id]}
+	resp := taskDetailJSON{Task: *t, Blocked: blocked[id]}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
@@ -309,7 +260,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 // below, and lease is per-task ephemeral state that a cached list would
 // misreport. Both stay on GET /api/v1/tasks/{id}.
 type taskListDetailJSON struct {
-	taskJSON
+	model.Task
 	Blocked bool `json:"blocked"`
 	Edges   struct {
 		Out []edgeOut `json:"out"`
@@ -374,11 +325,9 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	if q.Get("detail") != "true" {
 		resp := struct {
-			Tasks []taskJSON `json:"tasks"`
-		}{Tasks: make([]taskJSON, 0, len(tasks))}
-		for i := range tasks {
-			resp.Tasks = append(resp.Tasks, toTaskJSON(&tasks[i]))
-		}
+			Tasks []model.Task `json:"tasks"`
+		}{Tasks: make([]model.Task, 0, len(tasks))}
+		resp.Tasks = append(resp.Tasks, tasks...)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -402,7 +351,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Tasks []taskListDetailJSON `json:"tasks"`
 	}{Tasks: make([]taskListDetailJSON, 0, len(tasks))}
 	for i := range tasks {
-		row := taskListDetailJSON{taskJSON: toTaskJSON(&tasks[i]), Blocked: blocked[tasks[i].ID]}
+		row := taskListDetailJSON{Task: tasks[i], Blocked: blocked[tasks[i].ID]}
 		te := edges[tasks[i].ID]
 		row.Edges.Out, row.Edges.In = edgesToJSON(te.Out, te.In)
 		resp.Tasks = append(resp.Tasks, row)
@@ -517,7 +466,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 type edgeRequest struct {

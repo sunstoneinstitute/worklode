@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -695,7 +696,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := actorFrom(r)
 
-	var created *store.Task
+	var created *model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.promoted", payload,
 		func(tx *sql.Tx, _ int64) error {
 			title := req.Title
@@ -732,7 +733,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toTaskJSON(created))
+	writeJSON(w, http.StatusCreated, created)
 }
 
 type dismissRequest struct {
@@ -834,7 +835,7 @@ type holderJSON struct {
 // boardTaskJSON is a board row. Parent is the task's parent when it has one,
 // so a board can group a parent's children under it without a lookup per task.
 type boardTaskJSON struct {
-	taskJSON
+	model.Task
 	Parent string      `json:"parent,omitempty"`
 	Holder *holderJSON `json:"holder,omitempty"`
 }
@@ -928,7 +929,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 	// same order a per-project query would have produced.
 	byProject := make(map[string][]store.ProjectWorkFact, len(projects))
 	for _, f := range facts {
-		byProject[f.Task.ProjectID] = append(byProject[f.Task.ProjectID], f)
+		byProject[f.Task.Project] = append(byProject[f.Task.Project], f)
 	}
 
 	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
@@ -941,7 +942,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		}
 		for _, f := range byProject[p.ID] {
 			t := f.Task
-			bt := boardTaskJSON{taskJSON: toTaskJSON(&t)}
+			bt := boardTaskJSON{Task: t}
 			if f.Parent != nil {
 				bt.Parent = f.Parent.ID
 			}

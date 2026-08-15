@@ -31,6 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/transcript"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -503,7 +504,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief)
 // still-held lease that is within the renew window, and otherwise re-acquire
 // (renew if still nominally ours, re-claim if the sweeper took it). A lease
 // held elsewhere, or any backbone error, is a warning only.
-func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, identity string, lease *cli.Lease) {
+func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, identity string, lease *model.Lease) {
 	now := opts.now()
 	if lease != nil && lease.Worktree == identity && lease.ExpiresAt.After(now) {
 		if lease.ExpiresAt.Sub(now) >= leaseRenewWindow {

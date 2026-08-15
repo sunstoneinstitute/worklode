@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestProjectTableShowsKey(t *testing.T) {
@@ -31,11 +33,11 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
 		ID: "proj", Name: "Proj",
 		Ready: []BoardTask{
-			{Task: Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
-			{Task: Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
-			{Task: Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
-			{Task: Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
-			{Task: Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
+			{Task: model.Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
+			{Task: model.Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
+			{Task: model.Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
+			{Task: model.Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
+			{Task: model.Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
 		},
 	}}})
 	got := buf.String()
@@ -132,7 +134,7 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 func TestTaskDetailRenderHierarchy(t *testing.T) {
 	var buf bytes.Buffer
 	TaskDetailRender(&buf, TaskDetail{
-		Task: Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
+		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "ready"},
 		Hierarchy: TaskHierarchy{Parent: &TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
 	})
@@ -142,7 +144,7 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 
 	buf.Reset()
 	TaskDetailRender(&buf, TaskDetail{
-		Task: Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
+		Task: model.Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "in_progress"},
 		Hierarchy: TaskHierarchy{Progress: TaskProgress{Closed: 3, Total: 7}},
 	})
@@ -154,9 +156,9 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
 	TreeRender(&buf, []TreeNode{{
-		Parent:   Task{ID: "WL-1", Title: "Container", State: "in_progress"},
+		Parent:   model.Task{ID: "WL-1", Title: "Container", State: "in_progress"},
 		Progress: TaskProgress{Closed: 1, Total: 2},
-		Children: []Task{
+		Children: []model.Task{
 			{ID: "WL-2", Title: "Done piece", State: "merged"},
 			{ID: "WL-3", Title: "Open piece", State: "ready"},
 		},
@@ -293,7 +295,7 @@ func TestBoardHolderShowsUsernameAndTimeLeft(t *testing.T) {
 	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
 		ID: "proj", Name: "Proj",
 		InProgress: []BoardTask{{
-			Task: Task{ID: "WL-1", Title: "Work", Priority: "medium"},
+			Task: model.Task{ID: "WL-1", Title: "Work", Priority: "medium"},
 			Holder: &Holder{
 				ActorID:   "stig@sunstoneinstitute.ai",
 				ExpiresAt: time.Now().Add(74*time.Minute + 30*time.Second),

@@ -33,6 +33,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -248,7 +249,7 @@ const (
 
 // recordFormTask writes the task through the same RecordEvent + CreateTask
 // path POST /api/v1/tasks uses, under the "web" event source.
-func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFormValues, actorID string) (*store.Task, error) {
+func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFormValues, actorID string) (*model.Task, error) {
 	extID, err := randomExternalID()
 	if err != nil {
 		return nil, err
@@ -263,7 +264,7 @@ func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFor
 	}
 	now := s.st.Now()
 
-	var created *store.Task
+	var created *model.Task
 	if _, _, err := s.st.RecordEvent(ctx, "web", extID, "task.created", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			t, err := store.CreateTask(tx, now, store.TaskInput{
