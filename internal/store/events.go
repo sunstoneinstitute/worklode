@@ -417,3 +417,41 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 	}
 	return nil
 }
+
+// SubscriberLag is how far one subscriber trails the log: the highest event
+// id below the commit horizon minus what it has acked (025 §15.7).
+type SubscriberLag struct {
+	Name string
+	Lag  int64
+}
+
+// EventSubscriberLags returns the lag of every subscriber, by name. The
+// horizon tail is shared by all of them, which is what makes the gauge read
+// two pathologies at once: a stuck subscriber lags alone, a long transaction
+// holding the horizon back (025 §15) lags every subscriber together.
+func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT s.name, GREATEST(h.max_id - s.last_acked_offset, 0)
+		   FROM event_subscribers s,
+		        (SELECT COALESCE(MAX(id), 0) AS max_id
+		           FROM events
+		          WHERE txid < pg_snapshot_xmin(pg_current_snapshot())) h
+		  ORDER BY s.name`)
+	if err != nil {
+		return nil, fmt.Errorf("event subscriber lags: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SubscriberLag
+	for rows.Next() {
+		var l SubscriberLag
+		if err := rows.Scan(&l.Name, &l.Lag); err != nil {
+			return nil, fmt.Errorf("scan event subscriber lag: %w", err)
+		}
+		out = append(out, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event subscriber lags: %w", err)
+	}
+	return out, nil
+}

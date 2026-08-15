@@ -567,3 +567,69 @@ func TestResetEventReadRedeliversUnacked(t *testing.T) {
 		t.Fatalf("got %+v, want events 2 and 3 in order", got)
 	}
 }
+
+// EventSubscriberLags reports, per subscriber, how far the horizon tail runs
+// ahead of what that subscriber has acked (025 §15.7). The horizon term is
+// shared, so an unconsumed subscriber lags by the whole log while a caught-up
+// one lags by nothing.
+func TestEventSubscriberLags(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	for _, name := range []string{"docs", "watcher"} {
+		if err := s.EnsureEventSubscriber(ctx, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, _, err := s.RecordEvent(ctx, "system", fmt.Sprintf("lag-%d", i), "test.event", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	// Poll: the horizon is cluster-wide, so the tail reaches the last id only
+	// once every concurrent transaction on the instance has drained.
+	lagsFor := func() map[string]int64 {
+		lags, err := s.EventSubscriberLags(ctx)
+		if err != nil {
+			t.Fatalf("EventSubscriberLags: %v", err)
+		}
+		out := make(map[string]int64, len(lags))
+		for _, l := range lags {
+			out[l.Name] = l.Lag
+		}
+		return out
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		got := lagsFor()
+		if got["docs"] == 3 && got["watcher"] == 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("lags = %v, want 3 for both (horizon held back by a concurrent transaction?)", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Reading without acking does not reduce the lag; acking does.
+	if _, err := s.ReadEventBatch(ctx, "docs", 10); err != nil {
+		t.Fatalf("ReadEventBatch: %v", err)
+	}
+	if got := lagsFor(); got["docs"] != 3 {
+		t.Fatalf("lag after read without ack = %d, want 3", got["docs"])
+	}
+	if err := s.AckEvents(ctx, "docs", ids[2]); err != nil {
+		t.Fatalf("AckEvents: %v", err)
+	}
+	got := lagsFor()
+	if got["docs"] != 0 {
+		t.Fatalf("lag after acking everything = %d, want 0", got["docs"])
+	}
+	if got["watcher"] != 3 {
+		t.Fatalf("other subscriber's lag = %d, want 3 (unaffected)", got["watcher"])
+	}
+}
