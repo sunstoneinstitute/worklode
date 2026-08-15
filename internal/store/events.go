@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -224,6 +225,46 @@ func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error)
 		return nil, fmt.Errorf("list event subscribers: %w", err)
 	}
 	return out, nil
+}
+
+// SubscriberLock pins one pool connection holding the pg_try_advisory_lock
+// for a subscriber (spec 025 §15.1: one active consumer). The connection is
+// held for the consumer's lifetime; a crashed process drops it and
+// Postgres releases the lock — failover with no lease table.
+type SubscriberLock struct {
+	conn *sql.Conn
+	name string
+}
+
+// TryLockSubscriber takes a dedicated connection from the pool and
+// attempts the advisory lock. ok=false means another consumer holds it;
+// the connection is returned to the pool (safe: no lock was granted).
+func (s *Store) TryLockSubscriber(ctx context.Context, name string) (l *SubscriberLock, ok bool, err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var got bool
+	err = conn.QueryRowContext(ctx,
+		`SELECT pg_try_advisory_lock(hashtext('wl:subscriber:' || $1)::bigint)`,
+		name).Scan(&got)
+	if err != nil || !got {
+		conn.Close()
+		return nil, false, err
+	}
+	return &SubscriberLock{conn: conn, name: name}, true, nil
+}
+
+// Release unlocks and then discards the underlying session instead of
+// pooling it. driver.ErrBadConn from Raw marks the connection broken, so
+// database/sql closes the real TCP session — Postgres then guarantees the
+// lock is gone even if the unlock round-trip failed.
+func (l *SubscriberLock) Release(ctx context.Context) error {
+	_, unlockErr := l.conn.ExecContext(ctx,
+		`SELECT pg_advisory_unlock(hashtext('wl:subscriber:' || $1)::bigint)`, l.name)
+	l.conn.Raw(func(any) error { return driver.ErrBadConn })
+	l.conn.Close()
+	return unlockErr
 }
 
 // StateLogEntry is one recorded field-level change to an entity, as written

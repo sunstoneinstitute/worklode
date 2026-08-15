@@ -273,6 +273,60 @@ func TestAckEventsMonotonic(t *testing.T) {
 	}
 }
 
+func TestSubscriberLockExclusive(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	l1, ok, err := s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("first lock: ok=%v err=%v", ok, err)
+	}
+	_, ok, err = s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || ok {
+		t.Fatalf("second lock while held: ok=%v err=%v, want false", ok, err)
+	}
+	// A different subscriber name is a different lock.
+	l2, ok, err := s.TryLockSubscriber(ctx, "other")
+	if err != nil || !ok {
+		t.Fatalf("other name: ok=%v err=%v", ok, err)
+	}
+	l2.Release(ctx)
+
+	if err := l1.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	l3, ok, err := s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("after release: ok=%v err=%v, want acquired", ok, err)
+	}
+	l3.Release(ctx)
+}
+
+// The lock's connection must be pinned out of the pool for the consumer's
+// lifetime, not silently recycled. Running more queries than the pool has
+// connections (16) must not free the lock.
+func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	l1, ok, err := s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("first lock: ok=%v err=%v", ok, err)
+	}
+	defer l1.Release(ctx)
+
+	for i := 0; i < 40; i++ {
+		if _, err := s.db.ExecContext(ctx, `SELECT 1`); err != nil {
+			t.Fatalf("churn query %d: %v", i, err)
+		}
+	}
+
+	_, ok, err = s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || ok {
+		t.Fatalf("lock after pool churn: ok=%v err=%v, want false (lock connection must stay pinned)", ok, err)
+	}
+}
+
 func TestResetEventReadRedeliversUnacked(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
