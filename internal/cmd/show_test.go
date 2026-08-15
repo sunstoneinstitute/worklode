@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestClassify(t *testing.T) {
@@ -113,7 +113,7 @@ func TestShowTaskDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode show %s: %v\noutput: %s", task.ID, err, out)
 	}
-	var got cli.Task
+	var got model.Task
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("decode %q: %v", out, err)
 	}

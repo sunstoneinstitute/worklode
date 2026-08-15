@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func newInboxCmd() *cobra.Command {
@@ -104,7 +105,7 @@ func newInboxPromoteCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}

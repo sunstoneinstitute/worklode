@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -482,9 +483,9 @@ func newBlockCmd() *cobra.Command {
 // statusResult is the --json shape of `lode status`.
 type statusResult struct {
 	Worktree      string             `json:"worktree"`
-	Task          cli.Task           `json:"task"`
+	Task          model.Task         `json:"task"`
 	LeaseState    string             `json:"lease_state"` // held, expired, held_elsewhere, none
-	Lease         *cli.Lease         `json:"lease,omitempty"`
+	Lease         *model.Lease       `json:"lease,omitempty"`
 	OpenBlockers  []cli.BriefBlocker `json:"open_blockers"`
 	SessionMarker bool               `json:"session_marker"`
 	Project       string             `json:"project,omitempty"`
@@ -500,7 +501,7 @@ func orNone(s string) string {
 }
 
 // leaseState classifies lease relative to identity (this worktree) and now.
-func leaseState(lease *cli.Lease, identity string, now time.Time) string {
+func leaseState(lease *model.Lease, identity string, now time.Time) string {
 	switch {
 	case lease == nil:
 		return "none"

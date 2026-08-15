@@ -22,7 +22,7 @@ templ Task(v TaskView) {
 						}
 						<span class="chip plain">{ v.Task.Priority }</span>
 						<span class="chip plain">{ v.Task.Kind }</span>
-						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.ProjectID }>{ v.Task.ProjectID }</a></span>
+						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
 					</p>
 					<p class="muted small">Created { FmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { FmtTime(v.Task.UpdatedAt) }</p>
 					if v.Task.Assignee != "" {

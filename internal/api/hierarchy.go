@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -15,8 +16,8 @@ type decomposeRequest struct {
 // decomposeResponse returns both halves of the split: the parent, keeping its
 // id and its kind, and the children it now tracks.
 type decomposeResponse struct {
-	Parent   taskJSON   `json:"parent"`
-	Children []taskJSON `json:"children"`
+	Parent   model.Task   `json:"parent"`
+	Children []model.Task `json:"children"`
 }
 
 // decomposeTask handles POST /api/v1/tasks/{id}/decompose: create one draft
@@ -47,7 +48,7 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := actorFrom(r)
 
-	var children []store.Task
+	var children []model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.decomposed", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
@@ -64,9 +65,9 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := decomposeResponse{Parent: toTaskJSON(parent), Children: make([]taskJSON, 0, len(children))}
+	resp := decomposeResponse{Parent: *parent, Children: make([]model.Task, 0, len(children))}
 	for i := range children {
-		resp.Children = append(resp.Children, toTaskJSON(&children[i]))
+		resp.Children = append(resp.Children, children[i])
 	}
 	writeJSON(w, http.StatusCreated, resp)
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestInboxPromoteResolvesBareParentNumber mirrors the --under handling
@@ -34,7 +35,7 @@ func TestInboxPromoteResolvesBareParentNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inbox promote --parent %s: %v\noutput: %s", parentNumber, err, out)
 	}
-	var task cli.Task
+	var task model.Task
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}

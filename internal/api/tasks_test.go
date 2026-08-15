@@ -90,7 +90,7 @@ func TestCreateTaskDraft(t *testing.T) {
 }
 
 // TestCreateTaskWithConcern verifies the concern field round-trips into the
-// store and back out through taskJSON.
+// store and back out through model.Task.
 func TestCreateTaskWithConcern(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestCreateAndGetProject(t *testing.T) {
@@ -456,7 +458,7 @@ func TestPerProjectTaskNumbering(t *testing.T) {
 	}
 
 	mk := func(project string) string {
-		var task *Task
+		var task *model.Task
 		_, _, err := s.RecordEvent(ctx, "cli", mustExtID(t), "task.created", []byte(`{}`),
 			func(tx *sql.Tx, eventID int64) error {
 				var e error
