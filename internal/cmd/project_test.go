@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -22,7 +21,7 @@ func projectRepos(t *testing.T, id string) []model.RepoMapping {
 	if err != nil {
 		t.Fatalf("lode project list: %v\noutput: %s", err, out)
 	}
-	var resp cli.ProjectListResponse
+	var resp model.ProjectListResponse
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}

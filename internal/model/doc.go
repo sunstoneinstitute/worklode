@@ -53,6 +53,12 @@ type Doc struct {
 	Edges        []DocEdge       `json:"edges,omitempty"`
 }
 
+// DocListResponse is the response body of GET /api/v1/docs. List rows omit
+// each document's Body and Frontmatter.
+type DocListResponse struct {
+	Docs []Doc `json:"docs"`
+}
+
 // DocSyncResult is one document's outcome in a SyncDocs response.
 type DocSyncResult struct {
 	ID      string `json:"id"`

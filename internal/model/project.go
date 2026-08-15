@@ -17,6 +17,11 @@ type Project struct {
 	Focus []string      `json:"focus"`
 }
 
+// ProjectListResponse is the response body of GET /api/v1/projects.
+type ProjectListResponse struct {
+	Projects []Project `json:"projects"`
+}
+
 // CreateProjectInput is the request body for CreateProject (POST
 // /api/v1/projects).
 type CreateProjectInput struct {
@@ -47,4 +52,13 @@ type PatchProjectInput struct {
 type AddRepoInput struct {
 	Repo      string `json:"repo"`
 	DoneState string `json:"done_state"`
+}
+
+// AddRepoResult is the response from AddRepo. Warnings are non-fatal setup
+// problems — the mapping was created regardless.
+type AddRepoResult struct {
+	ProjectID string   `json:"project_id"`
+	Repo      string   `json:"repo"`
+	DoneState string   `json:"done_state"`
+	Warnings  []string `json:"warnings,omitempty"`
 }
