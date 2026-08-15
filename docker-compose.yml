@@ -35,9 +35,11 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      # Loopback-only by default: the web board has no auth (bearer tokens
-      # cover /api/v1 only). Change to "8080:8080" — or put a TLS-terminating
-      # reverse proxy in front — to expose it; see README "Network exposure".
+      # Loopback-only by default: the web board has no auth here because this
+      # file sets LODE_WEB_OPEN below (bearer tokens cover /api/v1 only). To
+      # expose the port, configure LODE_OIDC_* and drop LODE_WEB_OPEN rather
+      # than only changing this to "8080:8080" — a server without either
+      # refuses to serve web pages at all. See README "Network exposure".
       - "127.0.0.1:8080:8080"
     environment:
       LODE_DSN: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
@@ -45,6 +47,10 @@ services:
       # LODE_BOOTSTRAP_TOKEN must be set on first run to create the admin actor;
       # see README "Quickstart".
       LODE_BOOTSTRAP_TOKEN: ${LODE_BOOTSTRAP_TOKEN:-}
+      # The local stack configures no OIDC, so the cockpit would otherwise
+      # refuse to serve. Compose is a trusted-network deployment by
+      # definition; a real one configures LODE_OIDC_* instead.
+      LODE_WEB_OPEN: ${LODE_WEB_OPEN:-1}
       LODE_GITHUB_WEBHOOK_SECRET: ${LODE_GITHUB_WEBHOOK_SECRET:-}
       LODE_FLUX_WEBHOOK_SECRET: ${LODE_FLUX_WEBHOOK_SECRET:-}
       LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}

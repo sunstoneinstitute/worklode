@@ -12,16 +12,18 @@ import (
 
 // newOIDCServer stands up a store + server wired to a fake issuer. It returns
 // the store, the handler, and the fake issuer so tests can mint ID tokens.
-func newOIDCServer(t *testing.T) (*store.Store, http.Handler, *oidctest.Issuer) {
+// cfg carries any extra configuration the test needs; the OIDC fields are
+// filled in over it, since a server without them is not what this helper
+// builds. Pass api.Config{} when there is nothing extra to say.
+func newOIDCServer(t *testing.T, cfg api.Config) (*store.Store, http.Handler, *oidctest.Issuer) {
 	t.Helper()
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
-	h, _, err := api.NewServer(st, api.Config{
-		OIDCIssuer:    iss.URL(),
-		OIDCClientID:  iss.ClientID,
-		PublicURL:     "http://localhost:8080",
-		SessionSecret: "test-session-secret",
-	})
+	cfg.OIDCIssuer = iss.URL()
+	cfg.OIDCClientID = iss.ClientID
+	cfg.PublicURL = "http://localhost:8080"
+	cfg.SessionSecret = "test-session-secret"
+	h, _, err := api.NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new oidc server: %v", err)
 	}
@@ -90,7 +92,7 @@ func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
 }
 
 func TestOIDCConfig(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	_, h, iss := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "GET", "/auth/oidc/config", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
@@ -110,7 +112,7 @@ func TestOIDCConfig404WhenUnconfigured(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeMintsToken(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "bob",
 		"name":               "Bob Example",
@@ -139,7 +141,7 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
 	// First login with admin role -> Admin true.
@@ -174,7 +176,7 @@ func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
 // login carrying github_username sets it, and a later login without the
 // claim clears it back to empty while still succeeding (201).
 func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
 	raw := iss.SignToken(t, map[string]any{
@@ -211,7 +213,7 @@ func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "dan", "name": "Dan", "groups": []string{"other"},
 	})
@@ -222,7 +224,7 @@ func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsMissingIDToken(t *testing.T) {
-	_, h, _ := newOIDCServer(t)
+	_, h, _ := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body %s", rr.Code, rr.Body.String())
@@ -230,7 +232,7 @@ func TestOIDCTokenExchangeRejectsMissingIDToken(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeActorKindConflict(t *testing.T) {
-	st, h, iss := newOIDCServer(t)
+	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
 	// Pre-create a non-human actor whose id collides with the login username.
@@ -257,7 +259,7 @@ func TestOIDCTokenExchangeActorKindConflict(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsExpired(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "eve", "groups": []string{"user"},
 		"exp": int64(1), // 1970 — long expired
@@ -269,7 +271,7 @@ func TestOIDCTokenExchangeRejectsExpired(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsWrongAudience(t *testing.T) {
-	_, h, iss := newOIDCServer(t)
+	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "frank", "groups": []string{"user"},
 		"aud": "some-other-client",
