@@ -79,6 +79,153 @@ func (s *Store) RecordEvent(
 	return id, inserted, nil
 }
 
+// EventSubscriber mirrors one event_subscribers row (spec 025 §15.1).
+type EventSubscriber struct {
+	Name      string
+	LastRead  int64
+	LastAcked int64
+	UpdatedAt time.Time
+}
+
+// EnsureEventSubscriber creates the subscriber row if absent. Offset 0
+// means a new subscriber replays the whole log — the right default for a
+// rule set that should have been running all along (025 §15.1).
+func (s *Store) EnsureEventSubscriber(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO event_subscribers (name, updated_at) VALUES ($1, $2)
+		 ON CONFLICT (name) DO NOTHING`, name, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("ensure event subscriber %s: %w", name, err)
+	}
+	return nil
+}
+
+// ResetEventRead rewinds last_read_offset to last_acked_offset. Called
+// once when a consumer acquires the subscriber lock: everything read but
+// unacked by the previous holder is redelivered (at-least-once).
+func (s *Store) ResetEventRead(ctx context.Context, name string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE event_subscribers SET last_read_offset = last_acked_offset, updated_at = $2
+		 WHERE name = $1`, name, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("reset event read for %s: %w", name, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reset event read for %s: %w", name, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+	}
+	return nil
+}
+
+// ReadEventBatch returns up to limit events after the subscriber's
+// last_read_offset that are below the commit horizon, in id order, and
+// advances last_read_offset to the last id returned — one transaction.
+func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]Event, error) {
+	var events []Event
+	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		var lastRead int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT last_read_offset FROM event_subscribers WHERE name = $1 FOR UPDATE`,
+			name,
+		).Scan(&lastRead); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+			}
+			return fmt.Errorf("lock event subscriber %s: %w", name, err)
+		}
+
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id, source, external_id, type, payload, received_at
+			   FROM events
+			  WHERE id > $1
+			    AND txid < pg_snapshot_xmin(pg_current_snapshot())
+			  ORDER BY id
+			  LIMIT $2`,
+			lastRead, limit,
+		)
+		if err != nil {
+			return fmt.Errorf("read events for %s: %w", name, err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var e Event
+			if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+				return fmt.Errorf("scan event: %w", err)
+			}
+			e.ReceivedAt = e.ReceivedAt.UTC()
+			events = append(events, e)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("read events for %s: %w", name, err)
+		}
+
+		if len(events) == 0 {
+			return nil
+		}
+		lastID := events[len(events)-1].ID
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE event_subscribers SET last_read_offset = $2, updated_at = $3
+			 WHERE name = $1 AND last_read_offset < $2`,
+			name, lastID, s.nowFn().UTC(),
+		); err != nil {
+			return fmt.Errorf("advance read offset for %s: %w", name, err)
+		}
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return events, nil
+}
+
+// AckEvents advances last_acked_offset to upTo, forward only: a late or
+// replayed lower ack is a silent no-op. Acking past last_read_offset is an
+// error (the CHECK backstops it).
+func (s *Store) AckEvents(ctx context.Context, name string, upTo int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE event_subscribers SET last_acked_offset = $2, updated_at = $3
+		 WHERE name = $1 AND $2 > last_acked_offset`,
+		name, upTo, s.nowFn().UTC(),
+	)
+	if err != nil {
+		if isCheckViolationOn(err, "event_subscribers_acked_le_read") {
+			return fmt.Errorf("ack %s past last_read_offset: %w", name, err)
+		}
+		return fmt.Errorf("ack events for %s: %w", name, err)
+	}
+	return nil
+}
+
+// EventSubscribers lists all subscriber rows (offsets only; Task 7 adds
+// the lag/holder view).
+func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT name, last_read_offset, last_acked_offset, updated_at
+		   FROM event_subscribers ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list event subscribers: %w", err)
+	}
+	defer rows.Close()
+
+	var out []EventSubscriber
+	for rows.Next() {
+		var sub EventSubscriber
+		if err := rows.Scan(&sub.Name, &sub.LastRead, &sub.LastAcked, &sub.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan event subscriber: %w", err)
+		}
+		sub.UpdatedAt = sub.UpdatedAt.UTC()
+		out = append(out, sub)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list event subscribers: %w", err)
+	}
+	return out, nil
+}
+
 // StateLogEntry is one recorded field-level change to an entity, as written
 // by LogChange. Change is the raw JSON of the change object.
 type StateLogEntry struct {
