@@ -20,6 +20,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -1392,7 +1393,7 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	diagArchive, diagHash := buildSkillArchive(t, diagContent)
 
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
+		Task: model.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
 		Skills: cli.SkillRecommendation{
 			Pinned: []cli.PinnedSkill{
 				{Name: "tdd", Description: "Red-green-refactor discipline", Hash: tddHash, Content: tddContent},
@@ -1451,7 +1452,7 @@ func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
 	_, diagHash := buildSkillArchive(t, "# Diagnose\n") // archive itself is never served: forced 500
 
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
+		Task: model.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
 		Skills: cli.SkillRecommendation{
 			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
 			Matches: []cli.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
@@ -1493,7 +1494,7 @@ func TestSessionStartSkillsEmptySection(t *testing.T) {
 	root := initGitRepo(t)
 	wtDir := setupFakeWorktree(t, root, "PROJ-3", "empty")
 
-	brief := cli.Brief{Task: cli.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
+	brief := cli.Brief{Task: model.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
 	newSkillsBackbone(t, brief)
 
 	stdout, _ := runSessionStart(t, wtDir, "s-empty")
@@ -1512,7 +1513,7 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 
 	draftContent := "# Draft\n"
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
+		Task: model.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
 		Skills: cli.SkillRecommendation{
 			Pinned: []cli.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
 		},
@@ -1567,7 +1568,7 @@ func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
 	}
 
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
+		Task: model.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
 		Skills: cli.SkillRecommendation{
 			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
 			Matches: matches,
@@ -1628,7 +1629,7 @@ func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
 	bigArchive, bigHash := buildSkillArchive(t, big)
 
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
+		Task: model.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
 		Skills: cli.SkillRecommendation{
 			Pinned: []cli.PinnedSkill{
 				{Name: "small", Description: "d", Hash: smallHash, Content: small},
@@ -1671,7 +1672,7 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 	_, bigHash := buildSkillArchive(t, big)
 
 	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
+		Task: model.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
 		Skills: cli.SkillRecommendation{
 			Pinned: []cli.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
 		},

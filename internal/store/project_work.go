@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // EventFact is the event behind a fact: enough provenance (source, type,
@@ -41,7 +43,7 @@ type TaskRef struct {
 // newest state-change event recorded against it (nil for a task that has
 // never transitioned).
 type ProjectWorkFact struct {
-	Task         Task
+	Task         model.Task
 	Parent       *TaskRef
 	OpenBlockers []TaskRef
 	Lease        *Lease
@@ -170,7 +172,7 @@ SELECT e.to_task, b.id, b.title, b.state
 // against a wider, joined row), followed by the nullable parent, lease, and
 // state-event columns.
 func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
-	var t Task
+	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON string
 
@@ -185,7 +187,7 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	var eventAt sql.NullTime
 
 	if err := row.Scan(
-		&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
+		&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy,
 		&t.CreatedAt, &t.UpdatedAt, &skillsJSON,
 		&parentID, &parentTitle, &parentState,

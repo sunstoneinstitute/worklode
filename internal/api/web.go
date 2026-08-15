@@ -259,7 +259,8 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
-		view.Holder = lease
+		l := toLeaseJSON(lease)
+		view.Holder = &l
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.webStoreErr(w, err)
 		return

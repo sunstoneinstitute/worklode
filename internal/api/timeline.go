@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -35,7 +36,7 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 		timeline = append(timeline, e.obj)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"task":     toTaskJSON(t),
+		"task":     t,
 		"timeline": timeline,
 	})
 }
@@ -45,7 +46,7 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 // PRs' merge SHAs, deployments and runtime events referencing those
 // artifacts, and delivery milestones — ascending by time. Shared by the JSON
 // /api/v1/tasks/{id}/timeline handler and the GET /tasks/{id} web page.
-func (s *server) assembleTimeline(ctx context.Context, id string) (*store.Task, []timelineEntry, error) {
+func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, []timelineEntry, error) {
 	t, err := s.st.GetTask(ctx, id)
 	if err != nil {
 		return nil, nil, err

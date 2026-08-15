@@ -4,14 +4,18 @@ package ui
 // plus the small presentation helpers (chip-variant mapping, pluralization)
 // they call. These types are ui's own vocabulary: internal/api maps its DTOs
 // (boardResponse, cockpitProjection, ...) into them in render.go, so the
-// dependency only ever points api -> ui. View types may embed internal/store
-// types (ui may import store) but never reference api's DTOs.
+// dependency only ever points api -> ui. View types may embed internal/model
+// types (ui may import model) but never reference api's DTOs; a view type
+// still embedding internal/store directly (ProjectsView, TaskView.Progress)
+// is a shape Task 2/3 of the internal/model migration has not reached yet
+// (ADR 036 §3).
 
 import (
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -86,13 +90,14 @@ type ProjectsView struct {
 
 // --- task -------------------------------------------------------------------
 
-// TaskView is one task's detail page. Task/Holder/Progress embed store types
-// directly; the edge lists are task ids.
+// TaskView is one task's detail page. Task/Holder embed internal/model types
+// directly; Progress still embeds store.HierarchyProgress (Task 3 has not
+// moved it yet); the edge lists are task ids.
 type TaskView struct {
 	Page       PageProps
-	Task       store.Task
+	Task       model.Task
 	Blocked    bool
-	Holder     *store.Lease
+	Holder     *model.Lease
 	Blocks     []string
 	BlockedBy  []string
 	Parent     string

@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 var changesTestNow = time.Date(2026, 7, 19, 13, 0, 0, 0, time.UTC)
@@ -114,7 +116,7 @@ func TestTaskIDFromRefCustomTemplate(t *testing.T) {
 	if got := TaskIDFromRef("wl/AB-3-x"); got != "" {
 		t.Errorf("legacy prefix must not be recognized under a custom template: got %q, want \"\"", got)
 	}
-	if got := BranchFor(&Task{ID: "AB-3", Title: "Fix the thing"}); got != "team/AB-3-fix-the-thing" {
+	if got := BranchFor(&model.Task{ID: "AB-3", Title: "Fix the thing"}); got != "team/AB-3-fix-the-thing" {
 		t.Errorf("BranchFor = %q, want team/AB-3-fix-the-thing", got)
 	}
 }

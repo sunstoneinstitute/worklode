@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -24,12 +25,12 @@ type briefBlockerJSON struct {
 // pinned skills (content inline) plus embedding-matched suggestions, in the
 // same shape as POST /api/v1/skills/recommend.
 type briefJSON struct {
-	Task               taskJSON           `json:"task"`
+	Task               model.Task         `json:"task"`
 	Body               string             `json:"body"`
 	Branch             string             `json:"branch"`
 	OpenBlockers       []briefBlockerJSON `json:"open_blockers"`
 	Parent             *parentRefJSON     `json:"parent"`
-	Lease              *leaseJSON         `json:"lease"`
+	Lease              *model.Lease       `json:"lease"`
 	GoverningDesign    *string            `json:"governing_design"`
 	AffectedComponents []string           `json:"affected_components"`
 	DefinitionOfDone   *string            `json:"definition_of_done"`
@@ -41,7 +42,7 @@ type briefJSON struct {
 // is excluded from its own matches.
 func toBriefJSON(b *store.Brief) briefJSON {
 	out := briefJSON{
-		Task:               toTaskJSON(&b.Task),
+		Task:               b.Task,
 		Body:               b.Body,
 		Branch:             b.Branch,
 		OpenBlockers:       make([]briefBlockerJSON, 0, len(b.OpenBlockers)),

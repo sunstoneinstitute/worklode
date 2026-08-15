@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestClaimNextNoCollisionUnderContention pins spec-02 acceptance criterion
@@ -15,7 +17,7 @@ func TestClaimNextNoCollisionUnderContention(t *testing.T) {
 	ctx := t.Context()
 
 	const m = 4
-	tasks := make([]*Task, m)
+	tasks := make([]*model.Task, m)
 	for i := range m {
 		tasks[i] = createTask(t, s, claimNextTestNow, defaultTaskInput())
 	}

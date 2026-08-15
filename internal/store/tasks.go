@@ -10,29 +10,9 @@ import (
 	"slices"
 	"strings"
 	"time"
-)
 
-// Task is one unit of work, identified by a per-project <KEY>-<n> id.
-type Task struct {
-	ID        string
-	ProjectID string
-	Title     string
-	Body      string
-	Priority  string
-	Kind      string
-	State     string
-	Concern   string
-	// Assignee is the actor who owns the task without necessarily holding a
-	// lease on it ("" = unassigned). See assign.go.
-	Assignee           string
-	NeedsDecomposition bool
-	CreatedBy          string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	// Skills is the task's pinned skill names, always surfaced in a
-	// recommendation regardless of embedding similarity. Never nil.
-	Skills []string
-}
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
 
 // TaskInput carries the fields for creating a new task. Draft creates the
 // task in state "draft" (not claimable) instead of the default "ready".
@@ -127,7 +107,7 @@ var containerForbiddenStates = map[string]bool{
 // CreateTask allocates the next <KEY>-<n> id from the project's counter and
 // inserts the task inside the given transaction. It is meant to be called
 // from a RecordEvent apply callback with the store's clock as now.
-func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
+func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*model.Task, error) {
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
@@ -176,9 +156,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
 	}
-	return &Task{
+	created := &model.Task{
 		ID:        id,
-		ProjectID: in.ProjectID,
+		Project:   in.ProjectID,
 		Title:     in.Title,
 		Body:      in.Body,
 		Priority:  in.Priority,
@@ -189,7 +169,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*Task, error) {
 		CreatedAt: ts,
 		UpdatedAt: ts,
 		Skills:    skills,
-	}, nil
+	}
+	created.Branch = BranchFor(created)
+	return created, nil
 }
 
 // Transition moves a task from one state to another inside the given
@@ -345,11 +327,11 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanTask(row rowScanner) (*Task, error) {
-	var t Task
+func scanTask(row rowScanner) (*model.Task, error) {
+	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON string
-	if err := row.Scan(&t.ID, &t.ProjectID, &t.Title, &body, &t.Priority, &t.Kind,
+	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON); err != nil {
 		return nil, err
 	}
@@ -365,6 +347,10 @@ func scanTask(row rowScanner) (*Task, error) {
 	if t.Skills == nil {
 		t.Skills = []string{}
 	}
+	// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and
+	// is the authority on branch names (008 §3.1). Filling it here means every
+	// path that reads a task serves the same name.
+	t.Branch = BranchFor(&t)
 	return &t, nil
 }
 
@@ -454,7 +440,7 @@ func SlugifyTitle(title string) string {
 }
 
 // GetTask looks up a task by id. Returns ErrNotFound if it does not exist.
-func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
+func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+taskColumns+` FROM tasks WHERE id = $1`, id)
 	t, err := scanTask(row)
@@ -470,7 +456,7 @@ func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 // ListTasks returns tasks matching the filter, ordered by priority (critical
 // first), then by task id in CompareTaskIDs order (key lexically, suffix
 // numerically, so WL-9 precedes WL-10).
-func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
+func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, error) {
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
 	var args []any
@@ -542,7 +528,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	}
 	defer rows.Close()
 
-	var out []Task
+	var out []model.Task
 	for rows.Next() {
 		t, err := scanTask(rows)
 		if err != nil {

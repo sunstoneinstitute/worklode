@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Issue is one GitHub issue tracked in the inbox: an unfiltered feed of
@@ -73,7 +75,7 @@ func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 // recording appliesToVersions (marshalled to JSON). The issue must currently
 // be triage_state='new' — anything else (already promoted, dismissed, or no
 // such issue) is an error.
-func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*Task, error) {
+func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*model.Task, error) {
 	var triageState string
 	err := tx.QueryRow(
 		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,

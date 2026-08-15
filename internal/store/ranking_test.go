@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestBlockingFanOutChainAndBranch(t *testing.T) {
@@ -110,11 +112,11 @@ func TestBlockingFanOutDiamond(t *testing.T) {
 // about created_at ordering.
 var rankTestNow = time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
 
-func rankTask(id, priority, concern string, createdAt time.Time) Task {
-	return Task{ID: id, Priority: priority, Concern: concern, CreatedAt: createdAt}
+func rankTask(id, priority, concern string, createdAt time.Time) model.Task {
+	return model.Task{ID: id, Priority: priority, Concern: concern, CreatedAt: createdAt}
 }
 
-func rankIDs(tasks []Task) []string {
+func rankIDs(tasks []model.Task) []string {
 	ids := make([]string, len(tasks))
 	for i, t := range tasks {
 		ids[i] = t.ID
@@ -251,7 +253,7 @@ func openClaimNextStore(t *testing.T) *Store {
 // from task to each, giving task the desired blocking fan-out without
 // affecting task's own ready-set membership (a draft filler is never a
 // candidate, and blocking a filler does not block the blocker).
-func workedExampleFiller(t *testing.T, s *Store, task *Task, n int) {
+func workedExampleFiller(t *testing.T, s *Store, task *model.Task, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		in := defaultTaskInput()
@@ -268,14 +270,14 @@ func workedExampleFiller(t *testing.T, s *Store, task *Task, n int) {
 // worked example expects) with fan-out wired via real blocks edges to draft
 // filler tasks, and sets the project focus to [security, completeness]. It
 // returns the tasks in T1..T5 order.
-func workedExampleFixture(t *testing.T, s *Store) (t1, t2, t3, t4, t5 *Task) {
+func workedExampleFixture(t *testing.T, s *Store) (t1, t2, t3, t4, t5 *model.Task) {
 	t.Helper()
 	ctx := t.Context()
 	if err := s.SetProjectFocus(ctx, "horndb", []string{"security", "completeness"}); err != nil {
 		t.Fatalf("SetProjectFocus: %v", err)
 	}
 
-	mk := func(priority, concern string) *Task {
+	mk := func(priority, concern string) *model.Task {
 		in := defaultTaskInput()
 		in.Priority = priority
 		in.Concern = concern

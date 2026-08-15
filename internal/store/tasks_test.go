@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // extSeq feeds unique external ids so every RecordEvent call in the tests is
@@ -53,9 +55,9 @@ func defaultTaskInput() TaskInput {
 
 // createTask drives CreateTask through RecordEvent, the way production code
 // will use it.
-func createTask(t *testing.T, s *Store, now time.Time, in TaskInput) *Task {
+func createTask(t *testing.T, s *Store, now time.Time, in TaskInput) *model.Task {
 	t.Helper()
-	var task *Task
+	var task *model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
@@ -166,7 +168,7 @@ func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
 	if !reflect.DeepEqual(got, t1) {
 		t.Fatalf("GetTask: got %+v, want %+v", got, t1)
 	}
-	if got.ProjectID != "horndb" || got.Title != "a task" || got.Body != "body" ||
+	if got.Project != "horndb" || got.Title != "a task" || got.Body != "body" ||
 		got.Priority != "medium" || got.Kind != "feature" || got.CreatedBy != "stig" {
 		t.Fatalf("GetTask fields: got %+v", got)
 	}
@@ -787,7 +789,7 @@ func TestOpenBlockersPerRepoDoneState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readyCandidates after release: %v", err)
 	}
-	if !slices.ContainsFunc(ready, func(c Task) bool { return c.ID == blocked.ID }) {
+	if !slices.ContainsFunc(ready, func(c model.Task) bool { return c.ID == blocked.ID }) {
 		t.Fatalf("readyCandidates after release omitted %s", blocked.ID)
 	}
 }
@@ -995,7 +997,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 		t.Fatalf("CreateProject other: %v", err)
 	}
 
-	mk := func(project, priority string) *Task {
+	mk := func(project, priority string) *model.Task {
 		in := defaultTaskInput()
 		in.ProjectID = project
 		in.Priority = priority
@@ -1009,7 +1011,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 	tOther := mk("other", "high")        // OT-1
 	walkTo(t, s, tMed.ID, "in_progress") // HDB-3 -> in_progress
 
-	idsOf := func(tasks []Task) []string {
+	idsOf := func(tasks []model.Task) []string {
 		var ids []string
 		for _, task := range tasks {
 			ids = append(ids, task.ID)
@@ -1078,7 +1080,7 @@ func TestListTasksFilterByUpdatedSince(t *testing.T) {
 	atCut := createTask(t, s, cut, defaultTaskInput())
 	later := createTask(t, s, cut.Add(time.Minute), defaultTaskInput())
 
-	idsOf := func(tasks []Task) []string {
+	idsOf := func(tasks []model.Task) []string {
 		var ids []string
 		for _, task := range tasks {
 			ids = append(ids, task.ID)
@@ -1470,7 +1472,7 @@ func TestListTasksByRepo(t *testing.T) {
 		t.Fatalf("AddRepo other: %v", err)
 	}
 
-	mk := func(project string) *Task {
+	mk := func(project string) *model.Task {
 		in := defaultTaskInput()
 		in.ProjectID = project
 		return createTask(t, s, taskTestNow, in)

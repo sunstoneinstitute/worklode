@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // maxHierarchyDepth caps a child_of chain at two edges, now spanning task ->
@@ -193,8 +195,8 @@ func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProg
 // ParentOf returns taskID's parent, or nil when it has none. Only ID, Title,
 // and State are populated: one hop up is all any caller needs, and the full
 // ancestry is unbounded.
-func (s *Store) ParentOf(ctx context.Context, taskID string) (*Task, error) {
-	var p Task
+func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error) {
+	var p model.Task
 	err := s.db.QueryRowContext(ctx,
 		`SELECT t.id, t.title, t.state
 		   FROM task_edges e JOIN tasks t ON t.id = e.to_task
@@ -248,7 +250,7 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 // work someone is holding is a coordination bug), when it sits deep enough
 // that its children would exceed maxHierarchyDepth, and from the delivery
 // states a task with children can never occupy.
-func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]Task, error) {
+func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]model.Task, error) {
 	if len(titles) == 0 {
 		return nil, fmt.Errorf("decompose %s: at least one child title is required: %w",
 			parentID, ErrInvalidInput)
@@ -326,7 +328,7 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 		}
 	}
 
-	children := make([]Task, 0, len(trimmed))
+	children := make([]model.Task, 0, len(trimmed))
 	for _, title := range trimmed {
 		child, err := CreateTask(tx, now, TaskInput{
 			ProjectID: projectID,

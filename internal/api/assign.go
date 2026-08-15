@@ -56,7 +56,7 @@ func (s *server) assignTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // unassignTask handles POST /api/v1/tasks/{id}/unassign: clears the task's
@@ -89,7 +89,7 @@ func (s *server) unassignTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // startTask handles POST /api/v1/tasks/{id}/start: moves a ready task to
@@ -125,7 +125,7 @@ func (s *server) startTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // stopTask handles POST /api/v1/tasks/{id}/stop: moves an in_progress task
@@ -162,5 +162,5 @@ func (s *server) stopTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }

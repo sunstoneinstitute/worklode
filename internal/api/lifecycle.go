@@ -9,21 +9,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// leaseJSON is the wire form of a lease.
-type leaseJSON struct {
-	TaskID     string    `json:"task_id"`
-	ActorID    string    `json:"actor_id"`
-	Worktree   string    `json:"worktree"`
-	AcquiredAt time.Time `json:"acquired_at"`
-	RenewedAt  time.Time `json:"renewed_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
-}
-
-func toLeaseJSON(l *store.Lease) leaseJSON {
-	return leaseJSON{
+// toLeaseJSON converts a store.Lease (which additionally carries the
+// database primary key and released_at — see store.Lease's doc comment) to
+// its wire form, model.Lease.
+func toLeaseJSON(l *store.Lease) model.Lease {
+	return model.Lease{
 		TaskID:     l.TaskID,
 		ActorID:    l.ActorID,
 		Worktree:   l.Worktree,
@@ -113,7 +107,7 @@ type leasePickJSON struct {
 }
 
 // taskPickJSON is the wire form of a claim-next candidate/claimed task: a
-// slimmer projection than taskJSON, matching the ranking-relevant fields
+// slimmer projection than model.Task, matching the ranking-relevant fields
 // (spec 005) rather than the full task record.
 type taskPickJSON struct {
 	ID       string         `json:"id"`
@@ -128,7 +122,7 @@ type taskPickJSON struct {
 
 // toTaskPickJSON builds a claim-next response task, including a lease shard
 // only when lease is non-nil (dry-run and no-ready-task responses have none).
-func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
+func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) taskPickJSON {
 	pick := taskPickJSON{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
@@ -136,7 +130,7 @@ func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) t
 		Concern:  t.Concern,
 		Priority: t.Priority,
 		FanOut:   fanOut,
-		Project:  t.ProjectID,
+		Project:  t.Project,
 	}
 	if lease != nil {
 		pick.Lease = &leasePickJSON{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
@@ -268,7 +262,7 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // doneTask handles POST /api/v1/tasks/{id}/done: current state -> merged,

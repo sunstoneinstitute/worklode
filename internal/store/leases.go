@@ -18,6 +18,12 @@ import (
 // (migration 0016): a worktree identity is "<hostname>:<path>", so two
 // operators sharing a hostname would otherwise collide on their conventional
 // layout.
+//
+// Lease is deliberately not model.Lease: ID and ReleasedAt are database
+// bookkeeping this package needs internally (primary-key updates, the
+// sweeper) that never cross the wire, so they stay outside the six fields
+// model.Lease declares (ADR 036 §3, "store scan plumbing"). api.toLeaseJSON
+// is the one conversion point from this type to model.Lease.
 type Lease struct {
 	ID         int64
 	TaskID     string

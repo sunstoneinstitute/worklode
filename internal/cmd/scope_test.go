@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -166,7 +167,7 @@ func mapProjectRepo(t *testing.T, c *cli.Client, project, repo string) {
 
 // createOtherProjectTask creates a task in a second project, so scoping has
 // something to exclude.
-func createOtherProjectTask(t *testing.T, c *cli.Client) cli.Task {
+func createOtherProjectTask(t *testing.T, c *cli.Client) model.Task {
 	t.Helper()
 	ctx := context.Background()
 	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{

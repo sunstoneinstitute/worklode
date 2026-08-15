@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // DefaultBranchTemplate is the branch name Worklode hands out when
@@ -180,11 +182,11 @@ func BranchTemplate() string {
 // containing e.g. a space or ".." would otherwise render an illegal branch
 // that SetBranchTemplate's sample-render validation cannot see coming, since
 // it validates a sample, not the real value (spec 008 §3.1).
-func BranchFor(t *Task) string {
+func BranchFor(t *model.Task) string {
 	branchMu.RLock()
 	tmpl := branchTmpl
 	branchMu.RUnlock()
-	f := branchFields{id: t.ID, slug: SlugifyTitle(t.Title), projectID: SlugifyTitle(t.ProjectID), kind: SlugifyTitle(t.Kind)}
+	f := branchFields{id: t.ID, slug: SlugifyTitle(t.Title), projectID: SlugifyTitle(t.Project), kind: SlugifyTitle(t.Kind)}
 	out, err := render(tmpl, f)
 	if err != nil || out == "" {
 		return t.ID + "-" + SlugifyTitle(t.Title)

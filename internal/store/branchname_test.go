@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestSetBranchTemplateValid(t *testing.T) {
@@ -21,7 +23,7 @@ func TestSetBranchTemplateValid(t *testing.T) {
 			if err := SetBranchTemplate(c.tmpl); err != nil {
 				t.Fatalf("SetBranchTemplate(%q) = %v, want nil", c.tmpl, err)
 			}
-			task := &Task{ID: "WL-7", Title: "Fix the thing", ProjectID: "worklode", Kind: "feature"}
+			task := &model.Task{ID: "WL-7", Title: "Fix the thing", Project: "worklode", Kind: "feature"}
 			if got := BranchFor(task); got != c.want {
 				t.Errorf("BranchFor = %q, want %q", got, c.want)
 			}
@@ -40,7 +42,7 @@ func TestSetBranchTemplateRejects(t *testing.T) {
 	if err := SetBranchTemplate(goodTmpl); err != nil {
 		t.Fatalf("SetBranchTemplate(%q) = %v, want nil", goodTmpl, err)
 	}
-	goodBranch := BranchFor(&Task{ID: "WL-7", Title: "Fix the thing"})
+	goodBranch := BranchFor(&model.Task{ID: "WL-7", Title: "Fix the thing"})
 
 	cases := []struct{ name, tmpl string }{
 		{"unparseable", "{{ .id "},
@@ -99,10 +101,10 @@ func TestBranchRoundTrip(t *testing.T) {
 		"{{ .kind }}/{{ .id }}",
 		"{{ .id }}",
 	}
-	tasks := []*Task{
-		{ID: "WL-7", Title: "Fix the thing", ProjectID: "worklode", Kind: "feature"},
-		{ID: "SW-1234", Title: "A much longer title that will be truncated somewhere", ProjectID: "sw", Kind: "bug"},
-		{ID: "X9-1", Title: "!!!", ProjectID: "p", Kind: "chore"},
+	tasks := []*model.Task{
+		{ID: "WL-7", Title: "Fix the thing", Project: "worklode", Kind: "feature"},
+		{ID: "SW-1234", Title: "A much longer title that will be truncated somewhere", Project: "sw", Kind: "bug"},
+		{ID: "X9-1", Title: "!!!", Project: "p", Kind: "chore"},
 	}
 	for _, tmpl := range tmpls {
 		if err := SetBranchTemplate(tmpl); err != nil {
@@ -127,7 +129,7 @@ func TestBranchForSanitizesProjectID(t *testing.T) {
 	if err := SetBranchTemplate("{{ .projectId }}/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
 	}
-	task := &Task{ID: "WL-7", Title: "Fix the thing", ProjectID: "my project"}
+	task := &model.Task{ID: "WL-7", Title: "Fix the thing", Project: "my project"}
 	const want = "my-project/WL-7-fix-the-thing"
 	branch := BranchFor(task)
 	if branch != want {

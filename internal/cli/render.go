@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/term"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // newTabwriter returns a tabwriter configured the same way for every table
@@ -73,7 +75,7 @@ func Money(amount string) string {
 
 // TaskTable prints one row per task: id, priority, kind, state, project,
 // assignee (- when unassigned), title.
-func TaskTable(w io.Writer, tasks []Task) {
+func TaskTable(w io.Writer, tasks []model.Task) {
 	tbl := newTable(
 		column{header: "ID"},
 		column{header: "PRIORITY"},
@@ -482,9 +484,9 @@ func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
 // TreeNode is one parent and its direct children, with the parent's derived
 // progress — the unit `lode task tree` renders.
 type TreeNode struct {
-	Parent   Task
+	Parent   model.Task
 	Progress TaskProgress
-	Children []Task
+	Children []model.Task
 }
 
 // TreeRender prints each parent with its progress, then its children indented

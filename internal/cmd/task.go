@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -112,7 +113,7 @@ func newTaskAddCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -345,7 +346,7 @@ func newTaskEditCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -398,7 +399,7 @@ func newTaskReadyCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -427,7 +428,7 @@ func newTaskReopenCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -456,7 +457,7 @@ func newTaskReworkCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -662,7 +663,7 @@ func newTaskAssignCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -692,7 +693,7 @@ func newTaskUnassignCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -721,7 +722,7 @@ func newTaskStartCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -750,7 +751,7 @@ func newTaskStopCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -779,7 +780,7 @@ func newTaskSubmitCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -809,7 +810,7 @@ func newTaskDoneCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -839,7 +840,7 @@ func newTaskAbandonCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -1159,7 +1160,7 @@ func newTaskTreeCmd() *cobra.Command {
 
 			// Each parent and its progress, before its children are fetched.
 			type parentNode struct {
-				task     cli.Task
+				task     model.Task
 				progress cli.TaskProgress
 			}
 			var parents []parentNode
