@@ -79,9 +79,7 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Projects []model.Project `json:"projects"`
-	}{Projects: make([]model.Project, 0, len(ps))}
+	resp := model.ProjectListResponse{Projects: make([]model.Project, 0, len(ps))}
 	for _, p := range ps {
 		repos, err := s.st.ListRepos(r.Context(), p.ID)
 		if err != nil {
@@ -320,11 +318,9 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		}()
 		wg.Wait()
 	}
-	resp := map[string]any{"project_id": id, "repo": req.Repo, "done_state": doneState}
-	if len(warnings) > 0 {
-		resp["warnings"] = warnings
-	}
-	writeJSON(w, http.StatusCreated, resp)
+	writeJSON(w, http.StatusCreated, model.AddRepoResult{
+		ProjectID: id, Repo: req.Repo, DoneState: doneState, Warnings: warnings,
+	})
 }
 
 // subscriptionWarnings names the events the webhook handler routes that this
@@ -462,7 +458,7 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"token": plaintext})
+	writeJSON(w, http.StatusCreated, model.TokenResponse{Token: plaintext})
 }
 
 // revokeToken handles DELETE /api/v1/tokens: revoke by plaintext or hash.
@@ -493,9 +489,7 @@ func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Issues []model.Issue `json:"issues"`
-	}{Issues: issues}
+	resp := model.IssueListResponse{Issues: issues}
 	if resp.Issues == nil {
 		resp.Issues = []model.Issue{}
 	}

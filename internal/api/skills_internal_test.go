@@ -561,7 +561,7 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("sync: %d %s", rr.Code, rr.Body)
 	}
-	var resp syncResponse
+	var resp model.SkillSyncReport
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

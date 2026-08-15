@@ -72,3 +72,12 @@ type DecomposeResponse struct {
 	Parent   Task   `json:"parent"`
 	Children []Task `json:"children"`
 }
+
+// TimelineResponse is the response body of GET
+// /api/v1/tasks/{id}/timeline. Each entry always has "at" (RFC3339 string)
+// and "type" fields; the remaining fields vary by type — see
+// internal/api/timeline.go for the full set per type.
+type TimelineResponse struct {
+	Task     Task             `json:"task"`
+	Timeline []map[string]any `json:"timeline"`
+}

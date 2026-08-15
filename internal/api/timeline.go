@@ -35,10 +35,7 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		timeline = append(timeline, e.obj)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"task":     t,
-		"timeline": timeline,
-	})
+	writeJSON(w, http.StatusOK, model.TimelineResponse{Task: *t, Timeline: timeline})
 }
 
 // assembleTimeline returns a task and its full timeline — state changes,

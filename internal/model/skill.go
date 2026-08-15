@@ -9,6 +9,11 @@ type Skill struct {
 	Deleted     bool   `json:"deleted"`
 }
 
+// SkillsListResponse is the response body of GET /api/v1/skills.
+type SkillsListResponse struct {
+	Skills []Skill `json:"skills"`
+}
+
 // SkillMatch is one embedding-recommendation hit.
 type SkillMatch struct {
 	Name        string  `json:"name"`
@@ -32,6 +37,18 @@ type SkillRecommendation struct {
 	Matches  []SkillMatch  `json:"matches"`
 	Warnings []string      `json:"warnings"`
 	Provider string        `json:"provider"`
+}
+
+// SkillSyncReport is the response body of POST /api/v1/skills/sync:
+// skillsync.Summary plus, on a partial failure, the per-source error
+// messages — the counts are real work done and must not be thrown away just
+// because another source in the same request failed.
+type SkillSyncReport struct {
+	Synced   int      `json:"synced"`
+	Changed  int      `json:"changed"`
+	Deleted  int      `json:"deleted"`
+	Embedded int      `json:"embedded"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 // RecommendInput is the request body for RecommendSkills (POST

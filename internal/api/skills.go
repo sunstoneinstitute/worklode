@@ -54,7 +54,7 @@ func (s *server) listSkills(w http.ResponseWriter, r *http.Request) {
 	for _, sk := range skills {
 		out = append(out, toSkillJSON(sk))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": out})
+	writeJSON(w, http.StatusOK, model.SkillsListResponse{Skills: out})
 }
 
 func (s *server) getSkill(w http.ResponseWriter, r *http.Request) {
@@ -193,17 +193,6 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 	return matches, nil
 }
 
-// syncResponse is skillsync.Summary plus, on a partial failure, the
-// per-source error messages — the counts are real work done and must not be
-// thrown away just because another source in the same request failed.
-type syncResponse struct {
-	Synced   int      `json:"synced"`
-	Changed  int      `json:"changed"`
-	Deleted  int      `json:"deleted"`
-	Embedded int      `json:"embedded"`
-	Errors   []string `json:"errors,omitempty"`
-}
-
 func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 	if s.skillSyncer == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no skill sources configured (LODE_SKILL_SOURCES)")
@@ -245,13 +234,15 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		// Partial failure: real work happened alongside the failures, so it
 		// is reported rather than discarded.
-		writeJSON(w, http.StatusOK, syncResponse{
+		writeJSON(w, http.StatusOK, model.SkillSyncReport{
 			Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
 			Errors: joinedMessages(err),
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, sum)
+	writeJSON(w, http.StatusOK, model.SkillSyncReport{
+		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
+	})
 }
 
 // joinedMessages splits an errors.Join result back into its parts. SyncAll
