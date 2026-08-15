@@ -421,7 +421,7 @@ func TestChildProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 0, Total: 3}); got != want {
+	if want := (model.TaskProgress{Closed: 0, Total: 3}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 
@@ -431,7 +431,7 @@ func TestChildProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 2, Total: 3}); got != want {
+	if want := (model.TaskProgress{Closed: 2, Total: 3}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 }
@@ -456,7 +456,7 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 0, Total: 1}); got != want {
+	if want := (model.TaskProgress{Closed: 0, Total: 1}); got != want {
 		t.Fatalf("progress with merged child in a release-gated repo = %+v, want %+v", got, want)
 	}
 
@@ -467,7 +467,7 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 1, Total: 1}); got != want {
+	if want := (model.TaskProgress{Closed: 1, Total: 1}); got != want {
 		t.Fatalf("progress with released child = %+v, want %+v", got, want)
 	}
 }
@@ -479,7 +479,7 @@ func TestChildProgressNoChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{}); got != want {
+	if want := (model.TaskProgress{}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 }

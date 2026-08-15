@@ -191,7 +191,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp.Hierarchy.Progress = model.TaskProgress{Closed: progress.Closed, Total: progress.Total}
+	resp.Hierarchy.Progress = progress
 	if parent != nil {
 		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
 	}

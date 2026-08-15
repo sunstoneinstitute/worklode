@@ -169,25 +169,18 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 	return nil
 }
 
-// HierarchyProgress is a parent's derived roll-up: how many of its direct
-// children are closed, out of how many. It is computed on read and never
-// stored — there is no resolver, no migration, and no event-log noise behind
-// it.
-type HierarchyProgress struct {
-	Closed int
-	Total  int
-}
-
-// ChildProgress returns the closed/total counts over taskID's direct children.
-// A task with no children reports a zero value.
-func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProgress, error) {
-	var p HierarchyProgress
+// ChildProgress returns the closed/total counts over taskID's direct children:
+// a parent's derived roll-up, computed on read and never stored — there is no
+// resolver, no migration, and no event-log noise behind it. A task with no
+// children reports a zero value.
+func (s *Store) ChildProgress(ctx context.Context, taskID string) (model.TaskProgress, error) {
+	var p model.TaskProgress
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COUNT(*) FILTER (WHERE `+taskClosed("t")+`)
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
 		  WHERE e.to_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.Total, &p.Closed)
 	if err != nil {
-		return HierarchyProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
+		return model.TaskProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
 	}
 	return p, nil
 }
