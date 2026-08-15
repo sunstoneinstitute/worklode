@@ -867,6 +867,20 @@ docs/plans/2026-08-14-artifact-correlation-hardening.md:
     task-4-resolve-a-branch-target-commitish-through-the-github-app: "## Task 4: Resolve a branch `target_commitish` through the GitHub App"
     verification: "## Verification"
     follow-ups-this-plan-deliberately-does-not-close: "## Follow-ups this plan deliberately does not close"
+docs/plans/2026-08-14-cockpit-page-frame-unification.md:
+  sections:
+    audit-result-pages-on-a-bare-main: "## Audit result: pages on a bare `.main`"
+    coverage-notes: "## Coverage notes"
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-reword-032-2s-opening-a-navigation-region-not-a-top-bar: "### Task 1 — Reword 032 §2's opening: a navigation region, not a top bar"
+    task-2-move-the-seven-global-destinations-into-a-global-sidebar: "### Task 2 — Move the seven global destinations into a global sidebar"
+    task-3-task-page-joins-the-shell: "### Task 3 — Task page joins the shell"
+    task-4-all-projects-back-link-on-the-project-sidebar: "### Task 4 — \"All projects\" back-link on the project sidebar"
+    task-5-below-880px-the-sidebar-becomes-a-horizontal-nav-strip: "### Task 5 — Below 880px the sidebar becomes a horizontal nav strip"
+    task-6-shell-unification-sweep-test: "### Task 6 — Shell-unification sweep test"
+    task-7-visual-verification-at-desktop-strip-and-mobile-widths: "### Task 7 — Visual verification at desktop, strip, and mobile widths"
+    task-8-full-verification-and-comment-alignment: "### Task 8 — Full verification and comment alignment"
 docs/plans/2026-08-14-follow-up-edges.md:
   sections:
     global-constraints: "## Global Constraints"
