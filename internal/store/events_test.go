@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -150,6 +151,81 @@ func TestLogChange(t *testing.T) {
 // The §9 ordering trap, directly. A last_seen_id cursor sees B (id 2),
 // advances, and never delivers A (id 1). The horizon delivers neither
 // until A's transaction is finished, then both, in id order.
+func TestRecordEventWithID(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	payloadFor := func(eventID int64) ([]byte, error) {
+		return []byte(fmt.Sprintf(`{"@id":"wlid:event/%d"}`, eventID)), nil
+	}
+
+	id1, inserted1, err := s.RecordEventWithID(ctx, "cli", "wl:Test:wlid:doc/x:1", "wl:Test", payloadFor, nil)
+	if err != nil {
+		t.Fatalf("first RecordEventWithID: %v", err)
+	}
+	if !inserted1 {
+		t.Fatalf("first RecordEventWithID: want inserted=true, got false")
+	}
+
+	var payload1 []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE id = $1`, id1).Scan(&payload1); err != nil {
+		t.Fatalf("query payload: %v", err)
+	}
+	var decoded1 map[string]any
+	if err := json.Unmarshal(payload1, &decoded1); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	wantID := fmt.Sprintf("wlid:event/%d", id1)
+	if decoded1["@id"] != wantID {
+		t.Fatalf("payload @id: got %v, want %v", decoded1["@id"], wantID)
+	}
+
+	id2, inserted2, err := s.RecordEventWithID(ctx, "cli", "wl:Test:wlid:doc/x:1", "wl:Test", payloadFor, nil)
+	if err != nil {
+		t.Fatalf("second RecordEventWithID: %v", err)
+	}
+	if inserted2 {
+		t.Fatalf("second RecordEventWithID: want inserted=false, got true")
+	}
+	if id2 != id1 {
+		t.Fatalf("second RecordEventWithID: want same id %d, got %d", id1, id2)
+	}
+
+	var payload2 []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE id = $1`, id2).Scan(&payload2); err != nil {
+		t.Fatalf("query payload: %v", err)
+	}
+	if string(payload2) != string(payload1) {
+		t.Fatalf("payload changed on replay: got %s, want %s", payload2, payload1)
+	}
+
+	if _, _, err := s.RecordEventWithID(ctx, "cli", "wl:Test:wlid:doc/x:2", "wl:Test", nil, nil); err == nil {
+		t.Fatalf("RecordEventWithID with nil payloadFor: want error, got nil")
+	}
+}
+
+func TestGetEvent(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	id, _, err := s.RecordEvent(ctx, "cli", "e1", "test.event", []byte(`{"a":1}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, err := s.GetEvent(ctx, id)
+	if err != nil {
+		t.Fatalf("GetEvent: %v", err)
+	}
+	if e.ID != id || e.Source != "cli" || e.ExternalID != "e1" || e.Type != "test.event" {
+		t.Fatalf("GetEvent: got %+v", e)
+	}
+
+	if _, err := s.GetEvent(ctx, id+1_000_000); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetEvent unknown id: want ErrNotFound, got %v", err)
+	}
+}
+
 func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

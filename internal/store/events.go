@@ -80,6 +80,98 @@ func (s *Store) RecordEvent(
 	return id, inserted, nil
 }
 
+// RecordEventWithID is RecordEvent for payloads that must embed their own
+// event id (spec 025 §15.2: the JSON-LD `@id` is `wlid:event/<id>`). It
+// reserves the id from the events.id sequence first, then calls payloadFor
+// to build the payload before inserting — the reverse of RecordEvent, which
+// lets the INSERT assign the id. (source, externalID) still governs
+// idempotency: on conflict the existing id is returned, inserted=false, and
+// neither payloadFor nor apply is called.
+//
+// payloadFor must not be nil.
+func (s *Store) RecordEventWithID(
+	ctx context.Context,
+	source, externalID, typ string,
+	payloadFor func(eventID int64) ([]byte, error),
+	apply func(tx *sql.Tx, eventID int64) error,
+) (id int64, inserted bool, err error) {
+	if payloadFor == nil {
+		return 0, false, fmt.Errorf("record event with id: payloadFor must not be nil")
+	}
+	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		receivedAt := s.nowFn().UTC()
+
+		var reservedID int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT nextval(pg_get_serial_sequence('events', 'id'))`,
+		).Scan(&reservedID); err != nil {
+			return fmt.Errorf("reserve event id: %w", err)
+		}
+
+		payload, err := payloadFor(reservedID)
+		if err != nil {
+			return fmt.Errorf("build payload for event %d: %w", reservedID, err)
+		}
+
+		// With DO NOTHING, RETURNING yields no row on conflict, so
+		// sql.ErrNoRows means the event was already recorded. The
+		// reserved sequence value is burned in that case — fine,
+		// offsets are positions, not counts (025 §15).
+		scanErr := tx.QueryRowContext(ctx,
+			`INSERT INTO events (id, source, external_id, type, payload, received_at)
+			 OVERRIDING SYSTEM VALUE
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (source, external_id) DO NOTHING
+			 RETURNING id`,
+			reservedID, source, externalID, typ, payload, receivedAt,
+		).Scan(&id)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			row := tx.QueryRowContext(ctx,
+				`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
+				source, externalID,
+			)
+			if err := row.Scan(&id); err != nil {
+				return fmt.Errorf("look up existing event: %w", err)
+			}
+			inserted = false
+			return nil
+		}
+		if scanErr != nil {
+			return fmt.Errorf("insert event: %w", scanErr)
+		}
+		inserted = true
+
+		if apply != nil {
+			if err := apply(tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		return 0, false, txErr
+	}
+	return id, inserted, nil
+}
+
+// GetEvent looks up one event by id. Returns ErrNotFound if it does not
+// exist. Unlike ReadEventBatch, this is not horizon-bounded — callers that
+// already have an id (e.g. from RecordEvent/RecordEventWithID/Emit) don't
+// need to wait out the commit horizon to read their own write back.
+func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
+	var e Event
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, source, external_id, type, payload, received_at FROM events WHERE id = $1`, id)
+	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Event{}, ErrNotFound
+		}
+		return Event{}, fmt.Errorf("get event %d: %w", id, err)
+	}
+	e.ReceivedAt = e.ReceivedAt.UTC()
+	return e, nil
+}
+
 // EventSubscriber mirrors one event_subscribers row (spec 025 §15.1).
 type EventSubscriber struct {
 	Name      string
