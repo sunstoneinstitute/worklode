@@ -1,5 +1,6 @@
 ---
-status: draft
+status: accepted
+task: WL-24
 covers:
   - docs/specs/001-identity-and-authentication.md#sec-6
   - docs/specs/021-images-in-task-bodies.md#sec-4

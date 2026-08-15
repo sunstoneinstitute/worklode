@@ -54,6 +54,14 @@ type Config struct {
 	PublicURL     string // LODE_PUBLIC_URL
 	SessionSecret string // LODE_SESSION_SECRET
 
+	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
+	// an instance with *no* login provider configured — the local stack and
+	// CI. It is ignored when OIDC is configured: the opt-in is about the
+	// absence of a provider, never about weakening one that exists. Without
+	// it, an instance with no provider refuses to serve any web page rather
+	// than serving the whole cockpit to anyone who can reach the port.
+	WebOpen bool // LODE_WEB_OPEN
+
 	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
 	// are both set; independent of the OIDC feature. PublicURL and
 	// SessionSecret (above) are shared and required when this is enabled.
@@ -277,6 +285,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret)
 		s.tokenCipher = tc
+	}
+
+	if s.oidc == nil && cfg.WebOpen {
+		s.log.Warn("web UI is serving unauthenticated: no login provider is " +
+			"configured and LODE_WEB_OPEN is set; every page and every " +
+			"creation form is reachable by anyone who can reach this port")
 	}
 
 	appAuth, err := newAppAuth(cfg)

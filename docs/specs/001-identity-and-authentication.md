@@ -102,6 +102,7 @@ New env (all optional; feature disabled when issuer/client unset):
 | `LODE_OIDC_CLIENT_ID` | e.g. `worklode` |
 | `LODE_PUBLIC_URL` | External base URL, for the web callback redirect URI |
 | `LODE_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
+| `LODE_WEB_OPEN` | Serve the web UI to anonymous callers when no provider is configured (§6). Ignored when OIDC is enabled; a non-boolean value fails the boot |
 
 ID-token verification uses `github.com/coreos/go-oidc/v3` (JWKS fetch +
 cache; checks signature, `iss`, `aud`, `exp`). Shared by both flows below.
@@ -111,8 +112,11 @@ Claims used: `preferred_username`, `name`, `groups`.
 
 When OIDC is enabled, the web UI routes (`/`, `/tasks/{id}`,
 `/projects/{id}`) require a valid session cookie; otherwise they 302 to
-`/auth/login`. `/healthz` and `/metrics` stay open. When OIDC is
-unconfigured the UI stays open as today.
+`/auth/login`. `/healthz` and `/metrics` stay open. When OIDC is unconfigured
+the web routes refuse to serve at all — a 503 naming the missing
+configuration — unless `LODE_WEB_OPEN` is set, which serves them to anonymous
+callers on a trusted network. The opt-in is ignored when OIDC is configured:
+it is about the absence of a provider, never about weakening one.
 
 - `GET /auth/login` → 302 to Keycloak authorize URL (auth-code + PKCE,
   `state` + PKCE verifier in a short-lived signed cookie).
