@@ -603,6 +603,23 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 	return nil
 }
 
+// EventLogHorizonID returns the highest event id below the commit horizon —
+// the position every cursor read of the log can currently reach. It stops
+// advancing while any long-running transaction anywhere on the instance holds
+// pg_snapshot_xmin back, which is this design's characteristic failure and is
+// otherwise indistinguishable from a quiet log.
+//
+// It is the max-id half of EventSubscriberLags' query, without subtracting an
+// offset: a backward index scan that stops at the first row below the horizon.
+func (s *Store) EventLogHorizonID(ctx context.Context) (int64, error) {
+	var id int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(id), 0) FROM events WHERE `+eventHorizon).Scan(&id); err != nil {
+		return 0, fmt.Errorf("event log horizon id: %w", err)
+	}
+	return id, nil
+}
+
 // SubscriberLag is how far one subscriber trails the log: the highest event
 // id below the commit horizon minus what it has acked (025 §15.7).
 type SubscriberLag struct {

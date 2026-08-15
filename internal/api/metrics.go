@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -100,6 +101,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_event_stream_events_sent_total",
 		Help: "Events pushed to event-log followers, summed across all open streams.",
 	})
+	// The horizon's position is a scrape-time fact, not something a handler
+	// increments, so it is a collector rather than a gauge. It lives here
+	// because this is where it gets registered: eventbus.NewMetrics, which
+	// owns the per-subscriber lag gauge, has no caller yet.
+	if s.st != nil {
+		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
+	}
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.eventSubscriberSeeks,
@@ -145,6 +153,38 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	s.docSyncRuns.WithLabelValues("ok")
 	s.docSyncRuns.WithLabelValues("error")
+}
+
+// A follow that has gone quiet reads identically whether the log is quiet or
+// the commit horizon is stuck behind a long-running transaction: the stream
+// keeps heartbeating either way (025 §15). This gauge is the difference —
+// flat while events are still being recorded means the horizon is held back,
+// and pg_stat_activity is the next place to look.
+var eventLogHorizonDesc = prometheus.NewDesc(
+	"worklode_event_log_horizon_id",
+	"Highest event id below the commit horizon (pg_snapshot_xmin) at scrape time. A log position, not a count.",
+	nil, nil)
+
+// eventHorizonCollector reads the horizon at scrape time, in the same mould as
+// eventbus's lag collector: a bounded timeout, and an invalid metric on
+// failure so a scrape error surfaces instead of a stale zero.
+type eventHorizonCollector struct {
+	horizonID func(context.Context) (int64, error)
+}
+
+func (c *eventHorizonCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- eventLogHorizonDesc
+}
+
+func (c *eventHorizonCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	id, err := c.horizonID(ctx)
+	if err != nil {
+		ch <- prometheus.NewInvalidMetric(eventLogHorizonDesc, err)
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(eventLogHorizonDesc, prometheus.GaugeValue, float64(id))
 }
 
 // observeSkillSync records one sync pass, called from both syncOnce
