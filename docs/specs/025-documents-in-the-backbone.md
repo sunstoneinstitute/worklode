@@ -1471,13 +1471,16 @@ unattributed. Attributing them would mean billing a session to a task it had not
 ### 15.7 Metrics {#sec-15.7}
 
 Per 022's conventions, each in its owning package — the first three in `internal/eventbus`,
-the last in `internal/watcher`:
+the next two in `internal/api` with the stream handler they measure, the last in
+`internal/watcher`:
 
 | Metric | Type | Labels |
 |---|---|---|
 | `worklode_event_subscriber_lag` | gauge | `subscriber` — horizon offset minus `last_acked_offset` |
 | `worklode_events_processed_total` | counter | `subscriber`, `type`, `outcome` ∈ `applied\|suppressed\|error` |
 | `worklode_event_batch_duration_seconds` | histogram | `subscriber` |
+| `worklode_event_streams_active` | gauge | none — open `--follow` connections |
+| `worklode_event_stream_events_sent_total` | counter | none |
 | `worklode_watcher_actions_total` | counter | `rule`, `outcome` ∈ `applied\|suppressed\|error` |
 
 `type` is bounded by the generated event-type set; an unknown type is counted as `other`. The
@@ -1677,7 +1680,7 @@ The document and event surface, backed by the backbone store:
 | `lode doc pull [<id>\|--all]` | api→file mirror; any branch; no-op unless `[doc_sync]` is set |
 | `lode doc push [<id>\|--all]` | file→api; default branch only; no-op unless `[doc_sync]` is set |
 | `lode drift --docs` | Stale and orphaned claims (§11), alongside 007's other drift |
-| `lode event tail [--type] [--since]` | Read the log, newest last |
+| `lode event tail [--type] [--since] [--follow]` | Read the log, newest last; `--follow` streams live (admin) |
 | `lode event subscribers` | Name, read/acked offset, lag, holder |
 | `lode event seek <name> --to <offset>` | Admin: move a subscriber's offset (replay or skip) |
 | Read-only web view | Rendered document, per-section coverage badges, version history |
@@ -1692,6 +1695,15 @@ raw body overwrite.
 `lode event seek` is admin-gated and the only way an offset moves backwards; it is how a rule
 fixed after the fact gets applied to events it already skipped, and it is safe precisely
 because handlers are idempotent.
+
+`lode event tail --follow` streams the log as it is written, over server-sent events on a
+route of its own. It is admin-gated while the bounded `tail` is not, and the difference is
+operational rather than a wider data grant — both surfaces expose the same rows. A follow
+holds a connection, a goroutine and a horizon poll open per client for as long as the client
+cares to watch; that is a capacity an instance administrator hands out, not something every
+actor takes. The stream reads through the same commit horizon as every other reader (§15), so
+it cannot skip a late-committing event, and each message carries its event id — a client that
+drops resumes exactly where it stopped rather than re-reading from the top.
 
 Anchor depth (§6.1) is a **server setting**, surfaced through the existing admin configuration
 path rather than a per-repo file — it governs what claims are expressible across the whole
@@ -1724,6 +1736,7 @@ ceremony lives in skills while every state change is one of the deterministic ve
 | `internal/eventbus/loop.go` | the polling loop, batch/ack cycle, lock lifecycle, metrics |
 | `internal/eventbus/emit.go` | typed emit helpers, deterministic `external_id`, payload validation |
 | `internal/watcher/doclifecycle.go` | `Evaluate(event) → []Action` and the two rules of §15.4 |
+| `internal/api/eventstream.go` | the server-sent-events route behind `--follow`, its cursor and heartbeat |
 | `internal/cmd/event.go` | `lode event tail\|subscribers\|seek` |
 | `ns/ontology.ttl` | `wl:Event`, its subclasses, `wl:subject` and the per-type properties |
 | `deploy/base/migrations` | `events.txid`, `event_subscribers`, `tasks.about_doc` (§15.4) |
