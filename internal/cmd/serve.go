@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -44,6 +45,54 @@ func parseClusterEnvMap(s string) (map[string]string, error) {
 		m[k] = v
 	}
 	return m, nil
+}
+
+const (
+	// shutdownGrace is how long in-flight requests get to finish on their own
+	// before their context is cancelled; shutdownTimeout is the whole budget.
+	shutdownGrace   = 2 * time.Second
+	shutdownTimeout = 10 * time.Second
+)
+
+// shutdownServers stops every server gracefully and returns the first real
+// error, treating http.ErrServerClosed as success.
+//
+// cancelRequests cancels the context every in-flight request derives from
+// (http.Server.BaseContext). Shutdown waits for handlers and never cancels
+// them, and the event-log SSE stream returns only when its request context is
+// done — so without this a single open `lode event tail --follow` would hold
+// shutdown until the deadline and turn every SIGTERM into a non-zero exit.
+// Ordinary requests still get grace to finish untouched; the servers are shut
+// down concurrently so a slow one cannot spend another's budget.
+func shutdownServers(cancelRequests context.CancelFunc, grace, timeout time.Duration, srvs ...*http.Server) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	each := make(chan error, len(srvs))
+	for _, srv := range srvs {
+		go func(srv *http.Server) { each <- srv.Shutdown(ctx) }(srv)
+	}
+	all := make(chan error, 1)
+	go func() {
+		var firstErr error
+		for range srvs {
+			if err := <-each; err != nil && !errors.Is(err, http.ErrServerClosed) && firstErr == nil {
+				firstErr = err
+			}
+		}
+		all <- firstErr
+	}()
+
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case err := <-all:
+		return err // everything drained inside the grace window
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	cancelRequests()
+	return <-all
 }
 
 func newServeCmd() *cobra.Command {
@@ -135,11 +184,17 @@ func newServeCmd() *cobra.Command {
 				}
 			}()
 
-			srv := &http.Server{Addr: listen, Handler: handler}
+			// Every in-flight request derives from reqCtx, which shutdown
+			// cancels — see shutdownServers.
+			reqCtx, cancelRequests := context.WithCancel(context.Background())
+			defer cancelRequests()
+			baseCtx := func(net.Listener) context.Context { return reqCtx }
+
+			srv := &http.Server{Addr: listen, Handler: handler, BaseContext: baseCtx}
 			// Admin server (/healthz, /metrics) on a separate port so they are
 			// never reachable through the public ingress, which routes only the
 			// app port. Probes and in-cluster scraping hit this port directly.
-			adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler}
+			adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler, BaseContext: baseCtx}
 			errCh := make(chan error, 2)
 			go func() {
 				slog.Info("listening", "addr", listen)
@@ -155,17 +210,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			case <-ctx.Done():
 				slog.Info("shutting down")
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				mainErr := srv.Shutdown(shutdownCtx)
-				adminErr := adminSrv.Shutdown(shutdownCtx)
-				if mainErr != nil && !errors.Is(mainErr, http.ErrServerClosed) {
-					return mainErr
-				}
-				if adminErr != nil && !errors.Is(adminErr, http.ErrServerClosed) {
-					return adminErr
-				}
-				return nil
+				return shutdownServers(cancelRequests, shutdownGrace, shutdownTimeout, srv, adminSrv)
 			}
 		},
 	}
