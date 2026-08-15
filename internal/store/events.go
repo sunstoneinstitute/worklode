@@ -85,8 +85,11 @@ func (s *Store) RecordEvent(
 // reserves the id from the events.id sequence first, then calls payloadFor
 // to build the payload before inserting — the reverse of RecordEvent, which
 // lets the INSERT assign the id. (source, externalID) still governs
-// idempotency: on conflict the existing id is returned, inserted=false, and
-// neither payloadFor nor apply is called.
+// idempotency, but only for apply: payloadFor runs on every call, including
+// replays, because the reserved id is needed to build the payload before
+// the INSERT can detect the conflict. On conflict the existing id is
+// returned, inserted=false, and apply is not called; the payload just
+// built is discarded and its id is burned (see the INSERT comment below).
 //
 // payloadFor must not be nil.
 func (s *Store) RecordEventWithID(

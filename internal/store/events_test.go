@@ -148,9 +148,6 @@ func TestLogChange(t *testing.T) {
 	}
 }
 
-// The §9 ordering trap, directly. A last_seen_id cursor sees B (id 2),
-// advances, and never delivers A (id 1). The horizon delivers neither
-// until A's transaction is finished, then both, in id order.
 func TestRecordEventWithID(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
@@ -226,6 +223,9 @@ func TestGetEvent(t *testing.T) {
 	}
 }
 
+// The 025 §15 ordering trap, directly. A last_seen_id cursor sees B (id 2),
+// advances, and never delivers A (id 1). The horizon delivers neither
+// until A's transaction is finished, then both, in id order.
 func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
