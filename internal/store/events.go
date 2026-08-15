@@ -350,6 +350,20 @@ func (s *Store) TryLockSubscriber(ctx context.Context, name string) (l *Subscrib
 	return &SubscriberLock{conn: conn, name: name}, true, nil
 }
 
+// Healthy reports whether the lock is still held, by pinging the session
+// that holds it. A session-scoped advisory lock dies exactly with its
+// session and nothing but Release unlocks it, so a live connection is proof
+// of the lock and a dead one is proof it is gone.
+//
+// A consumer needs this because the lock connection sits idle between
+// polls, which is precisely when an idle_session_timeout, a pooler reap or
+// a pg_terminate_backend takes it — and no query through the pool would
+// notice: the pool stays healthy while the advisory lock is already
+// released and a standby is free to take the stream.
+func (l *SubscriberLock) Healthy(ctx context.Context) error {
+	return l.conn.PingContext(ctx)
+}
+
 // Release unlocks and then discards the underlying session instead of
 // pooling it. driver.ErrBadConn from Raw marks the connection broken, so
 // database/sql closes the real TCP session — Postgres then guarantees the

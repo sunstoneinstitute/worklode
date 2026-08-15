@@ -16,6 +16,9 @@ type Outcome string
 const (
 	OutcomeApplied    Outcome = "applied"
 	OutcomeSuppressed Outcome = "suppressed"
+	// OutcomeError is recorded by Run when a handler returns an error; a
+	// Handler never returns it itself. 025 §15.7 fixes the set at these three.
+	OutcomeError Outcome = "error"
 )
 
 // Handler processes one event. Returning an error stops the batch: the
@@ -50,6 +53,8 @@ const (
 // Run consumes until ctx is cancelled. Lifecycle per iteration:
 //  1. no lock → TryLockSubscriber; on failure sleep LockRetry.
 //  2. on acquiring the lock: ResetEventRead (redeliver read-but-unacked).
+//     2b. before every read: Healthy on the lock connection — the only way
+//     to notice a session killed while it sat idle between polls.
 //  3. ReadEventBatch; empty → sleep Poll.
 //  4. handle events in order; on first error ack the successful prefix,
 //     rewind the read offset onto it (ResetEventRead) so the failed event
@@ -147,6 +152,25 @@ func Run(ctx context.Context, o Options) error {
 			}
 		}
 
+		// 2b. Prove the lock is still ours before reading anything. Every
+		// other call in this loop goes through the pool, and the lock
+		// connection is idle between polls — exactly when an
+		// idle_session_timeout, a pooler reap or a pg_terminate_backend
+		// takes it. Without this check no store error ever fires, the
+		// advisory lock is already gone, a standby acquires it, and two
+		// consumers interleave batches: forward-only acks then let one of
+		// them ack past the other's head-of-line retry, marking an event
+		// done that was never handled. One round trip per Poll buys the
+		// at-least-once guarantee.
+		if err := lock.Healthy(ctx); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Error("event loop: subscriber lock session lost, re-acquiring", "err", err)
+			dropLock()
+			continue
+		}
+
 		// 3. Read the next batch below the commit horizon.
 		start := time.Now()
 		events, err := o.Store.ReadEventBatch(ctx, o.Name, batchSize)
@@ -174,7 +198,7 @@ func Run(ctx context.Context, o Options) error {
 		for _, ev := range events {
 			outcome, herr := o.Handler(ctx, ev)
 			if herr != nil {
-				o.Metrics.event(o.Name, ev.Type, "error")
+				o.Metrics.event(o.Name, ev.Type, string(OutcomeError))
 				log.Error("event loop: handler failed, retrying head of line",
 					"event", ev.ID, "type", ev.Type, "err", herr)
 				failed = true

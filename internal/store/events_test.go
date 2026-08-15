@@ -633,3 +633,48 @@ func TestEventSubscriberLags(t *testing.T) {
 		t.Fatalf("other subscriber's lag = %d, want 3 (unaffected)", got["watcher"])
 	}
 }
+
+// A session-scoped advisory lock dies with its session, and the pinned
+// connection sits idle between polls — so Healthy is a consumer's only way
+// to learn its lock is gone (an idle_session_timeout, a pooler reap, a
+// pg_terminate_backend). It must report the loss, not a healthy pool.
+func TestSubscriberLockHealthyDetectsLostSession(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	l, ok, err := s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("lock: ok=%v err=%v", ok, err)
+	}
+	defer l.Release(ctx)
+
+	if err := l.Healthy(ctx); err != nil {
+		t.Fatalf("Healthy on a freshly acquired lock: %v", err)
+	}
+	pid := advisoryLockHolderPID(t, ctx, s, "doc-lifecycle")
+	if pid == 0 {
+		t.Fatalf("advisory lock not visible in pg_locks after acquiring")
+	}
+
+	if _, err := s.db.ExecContext(ctx, `SELECT pg_terminate_backend($1)`, pid); err != nil {
+		t.Fatalf("terminate backend %d: %v", pid, err)
+	}
+
+	// The pool is fine — only the lock session died.
+	if err := s.db.PingContext(ctx); err != nil {
+		t.Fatalf("pool ping after terminating the lock session: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := l.Healthy(ctx); err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Healthy still reports the lock held 5s after its session was terminated")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := advisoryLockHolderPID(t, ctx, s, "doc-lifecycle"); got != 0 {
+		t.Fatalf("advisory lock still held by pid %d after its session died", got)
+	}
+}
