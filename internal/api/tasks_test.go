@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -737,5 +738,50 @@ func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
 		map[string]any{"to": "WL-1", "type": "follow_up_to"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestListTasksByRepoAndBranch covers what the local merge reporter needs
+// from the list endpoint: narrow to the repo the client is sitting in, and
+// read back the server-authoritative branch name so the client never has to
+// render one itself.
+func TestListTasksByRepoAndBranch(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	if err := st.AddRepo(context.Background(), "proj", "acme/app"); err != nil {
+		t.Fatalf("AddRepo: %v", err)
+	}
+	if err := st.AddRepo(context.Background(), "other", "acme/other"); err != nil {
+		t.Fatalf("AddRepo other: %v", err)
+	}
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Fix the thing", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "other", "title": "Not mine", "priority": "high", "kind": "feature"})
+
+	// A remote URL works as well as owner/name: the client has a remote.
+	rr := doReq(t, h, "GET", "/api/v1/tasks?repo="+url.QueryEscape("git@github.com:acme/app.git"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Tasks []struct {
+			ID     string `json:"id"`
+			Branch string `json:"branch"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rr.Body.String(), err)
+	}
+	if len(got.Tasks) != 1 {
+		t.Fatalf("tasks = %+v, want only this repo's", got.Tasks)
+	}
+	if got.Tasks[0].Branch != "WL-1-fix-the-thing" {
+		t.Fatalf("branch = %q, want WL-1-fix-the-thing", got.Tasks[0].Branch)
+	}
+
+	// A repo that is not a repo is a 422, not a silently unfiltered list.
+	rr = doReq(t, h, "GET", "/api/v1/tasks?repo=nope", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad repo status = %d, want 422", rr.Code)
 	}
 }

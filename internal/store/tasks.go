@@ -63,6 +63,11 @@ type TaskFilter struct {
 	// child. Container-ness is inferred from the edges, so this is the only
 	// selector for it; no kind declares one (004 §6.1).
 	HasChildren bool
+	// Repo narrows to the tasks of the project that owns this "owner/name"
+	// repo. A repo maps to at most one project (project_repos.repo is
+	// UNIQUE), so this is Project by another key — the one a client running
+	// inside a checkout actually has.
+	Repo string
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -499,6 +504,13 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 	if f.HasChildren {
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
 		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
+	}
+	if f.Repo != "" {
+		args = append(args, f.Repo)
+		conds = append(conds, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM project_repos pr
+			          WHERE pr.repo = $%d AND pr.project_id = tasks.project_id)`,
+			len(args)))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)

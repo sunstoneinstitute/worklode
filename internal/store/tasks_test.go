@@ -1326,3 +1326,47 @@ func TestTaskColumnsEntriesAreCommaFree(t *testing.T) {
 		}
 	}
 }
+
+// TestListTasksByRepo: a client running inside a checkout knows its repo, not
+// the project id, so the repo it is in must be a usable key for "which tasks
+// could this merge advance".
+func TestListTasksByRepo(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "other", "Other", "OT"); err != nil {
+		t.Fatalf("CreateProject other: %v", err)
+	}
+	if err := s.AddRepo(ctx, "horndb", "acme/horndb"); err != nil {
+		t.Fatalf("AddRepo horndb: %v", err)
+	}
+	if err := s.AddRepo(ctx, "other", "acme/other"); err != nil {
+		t.Fatalf("AddRepo other: %v", err)
+	}
+
+	mk := func(project string) *Task {
+		in := defaultTaskInput()
+		in.ProjectID = project
+		return createTask(t, s, taskTestNow, in)
+	}
+	mine := mk("horndb")
+	mk("other")
+
+	got, err := s.ListTasks(ctx, TaskFilter{Repo: "acme/horndb"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != mine.ID {
+		t.Fatalf("repo filter returned %+v, want only %s", got, mine.ID)
+	}
+
+	// An unmapped repo is empty, not everything: a filter that silently
+	// stops filtering would report another project's tasks as candidates.
+	got, err = s.ListTasks(ctx, TaskFilter{Repo: "acme/nope"})
+	if err != nil {
+		t.Fatalf("ListTasks unmapped: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("unmapped repo returned %+v, want none", got)
+	}
+}
