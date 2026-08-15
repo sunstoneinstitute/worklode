@@ -2041,3 +2041,79 @@ func TestSyncDocsWire(t *testing.T) {
 		t.Errorf("report = %+v", rep)
 	}
 }
+
+// TestClientEvents covers ListEvents, EventSubscribers and
+// SeekEventSubscriber end to end against a real server, including the
+// filter query string and the seek round-trip.
+func TestClientEvents(t *testing.T) {
+	st, c, _ := newTestServer(t)
+	ctx := context.Background()
+
+	if err := st.EnsureEventSubscriber(ctx, "cli-sub"); err != nil {
+		t.Fatalf("EnsureEventSubscriber: %v", err)
+	}
+	var firstID int64
+	for i, extID := range []string{"ce-1", "ce-2"} {
+		id, _, err := st.RecordEvent(ctx, "system", extID, "test.event", nil, nil)
+		if err != nil {
+			t.Fatalf("RecordEvent %s: %v", extID, err)
+		}
+		if i == 0 {
+			firstID = id
+		}
+	}
+
+	resp, raw, err := c.ListEvents(ctx, cli.EventListFilter{Type: "test.event"})
+	if err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("ListEvents: raw body empty")
+	}
+	if len(resp.Events) != 2 || resp.Events[0].ExternalID != "ce-1" || resp.Events[1].ExternalID != "ce-2" {
+		t.Fatalf("ListEvents = %+v, want [ce-1 ce-2] in id order", resp.Events)
+	}
+
+	resp, _, err = c.ListEvents(ctx, cli.EventListFilter{Type: "test.event", After: firstID})
+	if err != nil {
+		t.Fatalf("ListEvents after: %v", err)
+	}
+	if len(resp.Events) != 1 || resp.Events[0].ExternalID != "ce-2" {
+		t.Fatalf("ListEvents after = %+v, want just ce-2", resp.Events)
+	}
+
+	subResp, raw, err := c.EventSubscribers(ctx)
+	if err != nil {
+		t.Fatalf("EventSubscribers: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("EventSubscribers: raw body empty")
+	}
+	var found bool
+	for _, s := range subResp.Subscribers {
+		if s.Name == "cli-sub" {
+			found = true
+			if s.HolderPID != 0 {
+				t.Fatalf("cli-sub holder_pid = %d, want 0 (unlocked)", s.HolderPID)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("EventSubscribers = %+v, want cli-sub present", subResp.Subscribers)
+	}
+
+	status, raw, err := c.SeekEventSubscriber(ctx, "cli-sub", firstID)
+	if err != nil {
+		t.Fatalf("SeekEventSubscriber: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("SeekEventSubscriber: raw body empty")
+	}
+	if status.Name != "cli-sub" || status.LastReadOffset != firstID || status.LastAckedOffset != firstID {
+		t.Fatalf("SeekEventSubscriber = %+v, want offsets = %d", status, firstID)
+	}
+
+	if _, _, err := c.SeekEventSubscriber(ctx, "no-such-sub", 0); err == nil {
+		t.Fatal("SeekEventSubscriber(unknown name): want error, got nil")
+	}
+}

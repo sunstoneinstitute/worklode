@@ -72,9 +72,23 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_doc_sync_forced_total",
 		Help: "Forced (--force) doc syncs accepted.",
 	})
+	// A distinct counter, not left to http_requests_total, because a seek is
+	// the one admin-triggered write on this surface: it is the only way an
+	// operator moves a subscriber's offsets backwards (025 §18), and how
+	// often that happens is worth alerting on independently of request
+	// volume. The GET reads beside it (listEvents, listEventSubscribers) are
+	// ordinary reads with no derived outcome, so the generic HTTP middleware
+	// (http_requests_total/http_request_duration_seconds) is judged
+	// sufficient for them — see the eventbus package's
+	// worklode_event_subscriber_lag and worklode_events_processed_total for
+	// the domain-level visibility into the log itself.
+	s.eventSubscriberSeeks = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_event_subscriber_seeks_total",
+		Help: "Admin seeks of a subscriber's offsets (POST /api/v1/event-subscribers/{name}/seek), by subscriber.",
+	}, []string{"subscriber"})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced)
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.eventSubscriberSeeks)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -222,6 +236,16 @@ func (s *server) observeFormSubmission(form, outcome string) {
 		return
 	}
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
+}
+
+// observeEventSubscriberSeek records one successful admin seek of a
+// subscriber's offsets. Called on success only, matching observeAssignment.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventSubscriberSeek(subscriber string) {
+	if s.eventSubscriberSeeks == nil {
+		return
+	}
+	s.eventSubscriberSeeks.WithLabelValues(subscriber).Inc()
 }
 
 // observeDocSync records one sync request. Nil-safe: tests build a *server

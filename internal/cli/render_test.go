@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestProjectTableShowsKey(t *testing.T) {
@@ -139,6 +140,50 @@ func TestHumanTokens(t *testing.T) {
 		if got := HumanTokens(tc.n); got != tc.want {
 			t.Errorf("HumanTokens(%d) = %q, want %q", tc.n, got, tc.want)
 		}
+	}
+}
+
+func TestEventTable(t *testing.T) {
+	var buf bytes.Buffer
+	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	EventTable(&buf, []Event{
+		{ID: 1, Source: "github", ExternalID: "d1", Type: "push", ReceivedAt: at},
+		{ID: 2, Source: "cli", ExternalID: "c1", Type: "docs.synced", ReceivedAt: at.Add(time.Minute)},
+	})
+	out := buf.String()
+	for _, want := range []string{"ID", "RECEIVED", "SOURCE", "TYPE", "EXTERNAL_ID",
+		"1", "github", "push", "d1", "2", "cli", "docs.synced", "c1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("EventTable output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestEventSubscriberTable(t *testing.T) {
+	var buf bytes.Buffer
+	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	EventSubscriberTable(&buf, []EventSubscriberStatus{
+		{Name: "doc-lifecycle", LastReadOffset: 10, LastAckedOffset: 8, Lag: 2, HolderPID: 4242, UpdatedAt: at},
+		{Name: "idle-sub", LastReadOffset: 0, LastAckedOffset: 0, Lag: 0, HolderPID: 0, UpdatedAt: at},
+	})
+	out := buf.String()
+	for _, want := range []string{"NAME", "READ", "ACKED", "LAG", "HOLDER", "UPDATED",
+		"doc-lifecycle", "10", "8", "2", "4242", "idle-sub"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("EventSubscriberTable output missing %q:\n%s", want, out)
+		}
+	}
+	var holderCol string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "idle-sub") {
+			fields := strings.Fields(line)
+			if len(fields) > 4 {
+				holderCol = fields[4]
+			}
+		}
+	}
+	if holderCol != "-" {
+		t.Errorf("idle-sub HOLDER column = %q, want \"-\"\n%s", holderCol, out)
 	}
 }
 

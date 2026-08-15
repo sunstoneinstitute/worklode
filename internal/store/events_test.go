@@ -634,6 +634,271 @@ func TestEventSubscriberLags(t *testing.T) {
 	}
 }
 
+// pollListEvents retries ListEvents(f) until it has at least want events or
+// the timeout elapses, for the same cluster-wide-horizon reason as
+// pollReadEventBatch above.
+func pollListEvents(t *testing.T, ctx context.Context, s *Store, f EventFilter, want int) []Event {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		got, err := s.ListEvents(ctx, f)
+		if err != nil {
+			t.Fatalf("ListEvents: %v", err)
+		}
+		if len(got) >= want {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ListEvents: got %d events after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
+				len(got), want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestListEventsHonoursCommitHorizon is the 025 §15 ordering trap again, this
+// time against ListEvents directly rather than through a subscriber's
+// last_read_offset: an in-flight transaction's row must not appear even
+// though a later-committed row already has.
+func TestListEventsHonoursCommitHorizon(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	insert := func(tx *sql.Tx, ext string) {
+		t.Helper()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO events (source, external_id, type, payload, received_at)
+			 VALUES ('system', $1, 'test.event', '{}', now())`, ext); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	txA, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer txA.Rollback()
+	insert(txA, "le-slow") // uncommitted
+
+	txB, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert(txB, "le-fast")
+	if err := txB.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListEvents(ctx, EventFilter{Type: "test.event"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range got {
+		if e.ExternalID == "le-slow" {
+			t.Fatalf("ListEvents surfaced an uncommitted row: %+v", e)
+		}
+	}
+
+	if err := txA.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	got = pollListEvents(t, ctx, s, EventFilter{Type: "test.event"}, 2)
+	var extIDs []string
+	for _, e := range got {
+		extIDs = append(extIDs, e.ExternalID)
+	}
+	if len(got) != 2 || extIDs[0] != "le-slow" || extIDs[1] != "le-fast" {
+		t.Fatalf("ListEvents = %v, want [le-slow le-fast] in id order", extIDs)
+	}
+}
+
+// TestListEventsFilters covers type, since, after and the default/cap-200
+// limit in one pass: each filter narrows a shared seeded set independently.
+func TestListEventsFilters(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	base := s.Now()
+	var ids []int64
+	for i, typ := range []string{"alpha.event", "beta.event", "alpha.event"} {
+		id, _, err := s.RecordEvent(ctx, "system", fmt.Sprintf("lef-%d", i), typ, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	all := pollListEvents(t, ctx, s, EventFilter{After: ids[0] - 1}, 3)
+	var allExt []string
+	for _, e := range all {
+		allExt = append(allExt, e.ExternalID)
+	}
+	if len(all) < 3 {
+		t.Fatalf("seed events not all visible: got %v", allExt)
+	}
+
+	// Type filter.
+	got, err := s.ListEvents(ctx, EventFilter{Type: "beta.event", After: ids[0] - 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != ids[1] {
+		t.Fatalf("Type filter = %+v, want just event %d", got, ids[1])
+	}
+
+	// After filter: exclusive cursor, so ids[0] itself is excluded.
+	got, err = s.ListEvents(ctx, EventFilter{Type: "alpha.event", After: ids[0]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != ids[2] {
+		t.Fatalf("After filter = %+v, want just event %d", got, ids[2])
+	}
+
+	// Since filter: a timestamp before every seeded row includes them all;
+	// one after excludes them all.
+	got = pollListEvents(t, ctx, s, EventFilter{Since: base, After: ids[0] - 1}, 3)
+	if len(got) < 3 {
+		t.Fatalf("Since(before all) = %+v, want at least 3", got)
+	}
+	got, err = s.ListEvents(ctx, EventFilter{Since: base.Add(time.Hour), After: ids[0] - 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Since(after all) = %+v, want none", got)
+	}
+
+	// Limit: 0 defaults to 200 (no truncation of our 3-row set); an explicit
+	// limit truncates.
+	got, err = s.ListEvents(ctx, EventFilter{Type: "alpha.event", After: ids[0] - 1, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Limit=1 = %+v, want exactly 1", got)
+	}
+}
+
+// TestEventSubscriberStatusesReportsHolderAndLag exercises Task 7's join
+// against the same advisory-lock key TestSubscriberLockExclusive uses,
+// confirming holder_pid tracks the live lock and 0 once it is released, and
+// that lag matches EventSubscriberLags for the same subscriber.
+func TestEventSubscriberStatusesReportsHolderAndLag(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "status-sub"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.RecordEvent(ctx, "system", "ess-1", "test.event", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	statusFor := func(name string) (EventSubscriberStatus, bool) {
+		statuses, err := s.EventSubscriberStatuses(ctx)
+		if err != nil {
+			t.Fatalf("EventSubscriberStatuses: %v", err)
+		}
+		for _, st := range statuses {
+			if st.Name == name {
+				return st, true
+			}
+		}
+		return EventSubscriberStatus{}, false
+	}
+
+	st, ok := statusFor("status-sub")
+	if !ok || st.HolderPID != 0 {
+		t.Fatalf("status before locking = %+v, ok=%v, want holder_pid=0", st, ok)
+	}
+
+	l, ok, err := s.TryLockSubscriber(ctx, "status-sub")
+	if err != nil || !ok {
+		t.Fatalf("lock: ok=%v err=%v", ok, err)
+	}
+	wantPID := int64(advisoryLockHolderPID(t, ctx, s, "status-sub"))
+	if wantPID == 0 {
+		t.Fatal("advisory lock not visible in pg_locks after acquiring")
+	}
+
+	st, ok = statusFor("status-sub")
+	if !ok || st.HolderPID != wantPID {
+		t.Fatalf("status while locked: holder_pid = %d, want %d (ok=%v)", st.HolderPID, wantPID, ok)
+	}
+
+	if err := l.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st, ok = statusFor("status-sub")
+		if ok && st.HolderPID == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("status after release: holder_pid = %d, want 0", st.HolderPID)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestSeekEventSubscriberRedeliversAndRejectsUnknown covers both branches of
+// SeekEventSubscriber: moving offsets down onto an existing subscriber makes
+// a following ReadEventBatch redeliver from there, and seeking an unknown
+// name reports ErrNotFound.
+func TestSeekEventSubscriberRedeliversAndRejectsUnknown(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "seek-sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, _, err := s.RecordEvent(ctx, "system", fmt.Sprintf("seek-%d", i), "test.event", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	got := pollReadEventBatch(t, ctx, s, "seek-sub", 3, 3)
+	if len(got) != 3 {
+		t.Fatalf("initial read got %d events, want 3", len(got))
+	}
+	if err := s.AckEvents(ctx, "seek-sub", ids[2]); err != nil {
+		t.Fatalf("ack all: %v", err)
+	}
+
+	if err := s.SeekEventSubscriber(ctx, "seek-sub", ids[0]); err != nil {
+		t.Fatalf("seek: %v", err)
+	}
+
+	subs, err := s.EventSubscribers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sub EventSubscriber
+	for _, es := range subs {
+		if es.Name == "seek-sub" {
+			sub = es
+		}
+	}
+	if sub.LastRead != ids[0] || sub.LastAcked != ids[0] {
+		t.Fatalf("offsets after seek = (read=%d, acked=%d), want both %d", sub.LastRead, sub.LastAcked, ids[0])
+	}
+
+	redelivered := pollReadEventBatch(t, ctx, s, "seek-sub", 10, 2)
+	if len(redelivered) != 2 || redelivered[0].ID != ids[1] || redelivered[1].ID != ids[2] {
+		t.Fatalf("redelivered = %+v, want events 2 and 3", redelivered)
+	}
+
+	if err := s.SeekEventSubscriber(ctx, "no-such-subscriber", 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("seek unknown subscriber: err = %v, want ErrNotFound", err)
+	}
+}
+
 // A session-scoped advisory lock dies with its session, and the pinned
 // connection sits idle between polls — so Healthy is a consumer's only way
 // to learn its lock is gone (an idle_session_timeout, a pooler reap, a

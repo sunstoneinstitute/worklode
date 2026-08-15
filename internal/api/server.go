@@ -206,6 +206,10 @@ type server struct {
 	docSyncDuration prometheus.Histogram
 	docSyncDocs     *prometheus.CounterVec
 	docSyncForced   prometheus.Counter
+
+	// eventSubscriberSeeks counts admin seeks of a subscriber's offsets, by
+	// subscriber; see events.go and observeEventSubscriberSeek.
+	eventSubscriberSeeks *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -476,6 +480,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/docs/sync", s.syncDocs)
 	r.api("GET /api/v1/docs", s.listDocs)
 	r.api("GET /api/v1/docs/{id}", s.getDoc)
+
+	r.api("GET /api/v1/events", s.listEvents)
+	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
+	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
 
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
