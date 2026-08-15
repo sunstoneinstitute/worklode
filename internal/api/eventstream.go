@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -27,11 +30,19 @@ const (
 	// follower is behind, so the next poll happens immediately instead of
 	// after a tick — a backlog drains at query speed rather than at
 	// streamPageSize per interval.
+	//
+	// It must not exceed store.MaxEventListLimit, which ListEvents silently
+	// truncates to: a request for more would come back short every time, and
+	// streamHead reads a short page as "this is the head". The assertion
+	// below fails the build if the store's cap is ever lowered past it —
+	// a constant expression that would be negative does not convert to uint.
 	streamPageSize = 200
 
 	defaultStreamPollInterval      = time.Second
 	defaultStreamHeartbeatInterval = 30 * time.Second
 )
+
+const _ = uint(store.MaxEventListLimit - streamPageSize)
 
 // streamPollInterval and streamHeartbeatInterval are the loop's two timings,
 // in nanoseconds. Atomic and overridable so a test can shorten them without
@@ -91,10 +102,12 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
-	h.Set("Connection", "keep-alive")
 	// Nginx buffers proxied responses by default, which would hold a stream
 	// until its buffer filled.
 	h.Set("X-Accel-Buffering", "no")
+	// No Connection: keep-alive. It is hop-by-hop, net/http owns it, HTTP/1.1
+	// connections are keep-alive without being told, and it has no legal
+	// place in an HTTP/2 response.
 
 	// Flush the header before touching the database, so a client blocks
 	// waiting for data rather than waiting to learn whether it has a stream.
@@ -104,7 +117,7 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	// event stream.
 	rc := http.NewResponseController(w)
 	if err := rc.Flush(); err != nil {
-		for _, k := range []string{"Content-Type", "Cache-Control", "Connection", "X-Accel-Buffering"} {
+		for _, k := range []string{"Content-Type", "Cache-Control", "X-Accel-Buffering"} {
 			h.Del(k)
 		}
 		s.log.Error("event stream: response writer cannot flush", "err", err)
@@ -137,7 +150,12 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		if len(events) > 0 {
 			for _, e := range events {
 				if err := writeEventFrame(w, e); err != nil {
-					// The client hung up mid-write. Normal, not an error.
+					// A write error is the client hanging up mid-frame, which
+					// is normal and silent. An encoding error is ours, and
+					// the only place it would ever be visible.
+					if errors.Is(err, errEncodeEvent) {
+						s.log.Error("event stream: encoding an event failed", "event", e.ID, "err", err)
+					}
 					return
 				}
 				cursor = e.ID
@@ -176,10 +194,11 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 // reads the log, and the alternative is a second predicate to keep in step
 // with the first.
 //
-// The cost is one round trip per streamPageSize rows, paid only by a client
-// that supplies no cursor at all — `lode event tail --follow` always passes
-// the last id it printed. docs/follow-ups.md records the head query that
-// would make it O(1).
+// The cost is one round trip per streamPageSize rows, paid by any client that
+// supplies no cursor — which includes `lode event tail --follow` whenever its
+// backlog page came back empty, since it derives its cursor from that page's
+// last event. docs/follow-ups.md records the head query that would make it
+// O(1).
 func (s *server) streamHead(ctx context.Context, typ string) (int64, error) {
 	var head int64
 	for {
@@ -208,19 +227,37 @@ func (s *server) streamEnd(ctx context.Context, what string, err error) {
 	s.log.Error("event stream failed", "during", what, "err", err)
 }
 
+// errEncodeEvent distinguishes "this event cannot be rendered" from "the
+// client went away mid-write". They look identical at the call site and mean
+// opposite things: one is a server fault nobody would otherwise ever see, the
+// other is how a follow normally ends.
+var errEncodeEvent = errors.New("encode event")
+
+// eventLineBreaks strips the three characters SSE treats as line terminators
+// from a field value.
+var eventLineBreaks = strings.NewReplacer("\r\n", "", "\r", "", "\n", "")
+
 // writeEventFrame writes one SSE message. `id:` carries the event id so a
 // reconnecting client can send it back as Last-Event-ID, and `event:` the
 // event type so a browser can addEventListener on it; both are also inside
 // the JSON, which is the form a non-browser client parses.
-func writeEventFrame(w http.ResponseWriter, e store.Event) error {
+func writeEventFrame(w io.Writer, e store.Event) error {
 	// eventJSON is the same projection GET /api/v1/events serves, so a
 	// follower and a poller see identical objects. Marshalling compacts the
-	// embedded payload, which matters here: a data: line may not contain a
-	// newline.
+	// embedded payload and escapes any newline inside it, so the data: line
+	// is safe by construction.
 	data, err := json.Marshal(toEventJSON(e))
 	if err != nil {
-		return fmt.Errorf("encode event %d: %w", e.ID, err)
+		return fmt.Errorf("%w %d: %w", errEncodeEvent, e.ID, err)
 	}
-	_, err = fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", e.ID, e.Type, data)
+	// The type is not safe by construction: nothing validates it on the way
+	// in (store.RecordEvent takes it as given), and internal/hooks/flux.go
+	// builds one out of a webhook body's JSON strings, where a newline is
+	// legal. Unstripped, a crafted type would close the event: line early and
+	// let a webhook author write whole forged frames into an admin's stream.
+	// Stripped rather than rejected: an event that reached the log is a fact,
+	// and dropping it from a live follow would hide it exactly where someone
+	// is watching for it.
+	_, err = fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", e.ID, eventLineBreaks.Replace(e.Type), data)
 	return err
 }

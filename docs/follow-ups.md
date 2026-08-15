@@ -376,16 +376,41 @@ one pass.
 ## From the event stream (spec 025 §15/§18, `GET /api/v1/events/stream`)
 
 - `[P3]` **`lode event tail --follow` does not reconnect.** `Client.StreamEvents`
-  (`internal/cli/client.go`) returns a dropped connection to its caller rather
-  than retrying; the server already accepts `Last-Event-ID`, so a reconnect
-  loop that resumes from the last id delivered is the missing half. Until it
+  (`internal/cli/client.go`) returns `ErrStreamEnded` to its caller rather than
+  retrying; the server already accepts `Last-Event-ID`, so a reconnect loop
+  that resumes from the last id delivered is the missing half. Until it
   exists, a follow ends whenever a proxy or a server restart cuts the
-  connection.
+  connection — visibly now (the command exits non-zero saying so), but it
+  still ends.
 - `[P4]` **A bare follow finds the log head by paging.** `streamHead`
   (`internal/api/eventstream.go`) walks `ListEvents` 200 rows at a time
   because that is the one horizon-bounded query this package owns, so a client
   that supplies no `after` pays one round trip per 200 events at connect time.
-  `lode event tail --follow` always sends a cursor, so only a hand-rolled
-  request hits it. A `SELECT MAX(id) ... WHERE txid < pg_snapshot_xmin(...)`
-  store method makes it O(1) — at the cost of a second copy of the horizon
-  predicate to keep in step.
+  **The shipped CLI reaches this path too**, contrary to what an earlier
+  version of this entry claimed: `followEvents` (`internal/cmd/event.go`)
+  derives `after` from the last event of the printed backlog and leaves it 0
+  when that backlog is empty, and `StreamEvents` omits `after` when it is 0.
+  So `lode event tail --follow --since=5m` (or any `--type` with no recent
+  match) against a large, currently quiet log pages the whole log. A
+  `SELECT MAX(id) ... WHERE txid < pg_snapshot_xmin(...)` store method makes
+  it O(1) — at the cost of a second copy of the horizon predicate to keep in
+  step. Sending the backlog query's own upper bound as the cursor would also
+  work and needs no new query.
+- `[P4]` **An event type is not validated at ingest.** `store.RecordEvent`
+  takes `typ` as given, and `internal/hooks/flux.go` builds one out of a
+  webhook body's JSON strings — so a type can contain newlines, control
+  characters, or anything else. The one place that mattered is closed
+  (`writeEventFrame` strips CR/LF before the SSE `event:` line, or a crafted
+  Flux `Reason` could inject whole forged frames into an admin's stream), and
+  JSON escaping covers every other current reader. But the invariant lives in
+  one renderer instead of at the boundary, so the next non-JSON renderer
+  inherits the obligation. A `CHECK` on `events.type`, or validation in
+  `RecordEvent`, moves it where it belongs — a store decision, deliberately
+  not made inside a stream handler.
+- `[gated]` **Nothing caps concurrent event streams.** Each open follow holds a
+  connection and repeats a horizon-bounded query for as long as it lasts, and
+  `GET /api/v1/events/stream` accepts as many as are asked for. Contained for
+  now — admin-only, no goroutine beyond the request's own, no connection held
+  between polls, and `worklode_event_streams_active` makes the count visible —
+  so a ceiling picked today would be a guess. Set one when that gauge shows
+  what normal looks like.
