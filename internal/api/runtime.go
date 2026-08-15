@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -17,23 +18,13 @@ var validRuntimeEventKinds = map[string]bool{
 	"crashloop": true, "oom": true,
 }
 
-type runtimeEventRequest struct {
-	Cluster    string `json:"cluster"`
-	Kind       string `json:"kind"`
-	Workload   string `json:"workload"`
-	Image      string `json:"image"`
-	Message    string `json:"message"`
-	OccurredAt string `json:"occurred_at"`
-	DedupeKey  string `json:"dedupe_key"`
-}
-
 // createRuntimeEvent handles POST /api/v1/runtime-events: one recorded event
 // (source "watcher", external id = the caller's dedupe_key) whose apply
 // inserts the runtime event row. The store resolves the artifact from the
 // image name. A redelivered dedupe_key is a no-op answered with
 // {"status": "duplicate"}.
 func (s *server) createRuntimeEvent(w http.ResponseWriter, r *http.Request) {
-	var req runtimeEventRequest
+	var req model.RuntimeEventInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

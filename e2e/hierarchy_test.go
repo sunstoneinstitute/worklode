@@ -9,6 +9,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -30,12 +31,12 @@ func TestHierarchyLoop(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "hier", Name: "Hier", Key: "HIER",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-1", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -46,7 +47,7 @@ func TestHierarchyLoop(t *testing.T) {
 	}
 	agent := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
 
-	big, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	big, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "hier", Title: "Ship the thing", Priority: "critical", Kind: "feature",
 	})
 	if err != nil {
@@ -81,7 +82,7 @@ func TestHierarchyLoop(t *testing.T) {
 			t.Fatalf("publish %s: %v", c.ID, err)
 		}
 	}
-	pick, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Project: "hier", DryRun: true})
+	pick, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Project: "hier", DryRun: true})
 	if err != nil {
 		t.Fatalf("claim-next dry run: %v", err)
 	}

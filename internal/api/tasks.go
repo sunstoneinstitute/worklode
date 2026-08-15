@@ -32,22 +32,9 @@ var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,
 }
 
-type createTaskRequest struct {
-	Project    string   `json:"project"`
-	Title      string   `json:"title"`
-	Body       string   `json:"body"`
-	Priority   string   `json:"priority"`
-	Kind       string   `json:"kind"`
-	Concern    string   `json:"concern"`
-	Draft      bool     `json:"draft"`
-	Parent     string   `json:"parent"`
-	FollowUpTo string   `json:"follow_up_to"`
-	Skills     []string `json:"skills"`
-}
-
 // createTask handles POST /api/v1/tasks.
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
-	var req createTaskRequest
+	var req model.CreateTaskInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -298,15 +285,6 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-type patchTaskRequest struct {
-	Title              *string `json:"title"`
-	Body               *string `json:"body"`
-	Priority           *string `json:"priority"`
-	Concern            *string `json:"concern"`
-	NeedsDecomposition *bool   `json:"needs_decomposition"`
-	State              *string `json:"state"`
-}
-
 // patchStateFrom maps the states PATCH may move a task into to the required
 // current state. Only lease-free transitions are allowed here: "ready"
 // publishes a draft, "in_progress" reworks a task whose review requested
@@ -326,7 +304,7 @@ var patchStateFrom = map[string]string{
 // see patchStateFrom for the three transitions PATCH may perform.
 func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req patchTaskRequest
+	var req model.EditTaskInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -408,15 +386,9 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
-type edgeRequest struct {
-	To   *string `json:"to"`
-	From *string `json:"from"`
-	Type string  `json:"type"`
-}
-
 // resolveEdge validates an edge request against the {id} path task and
 // returns the (from, to) endpoints. A written response means failure.
-func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to string, ok bool) {
+func resolveEdge(w http.ResponseWriter, id string, req model.EdgeInput) (from, to string, ok bool) {
 	if (req.To == nil) == (req.From == nil) {
 		writeErr(w, http.StatusUnprocessableEntity, "exactly one of to/from must be set")
 		return "", "", false
@@ -441,7 +413,7 @@ func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to st
 // addEdge handles POST /api/v1/tasks/{id}/edges.
 func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req edgeRequest
+	var req model.EdgeInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -475,7 +447,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 // removeEdge handles DELETE /api/v1/tasks/{id}/edges.
 func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req edgeRequest
+	var req model.EdgeInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -506,16 +478,12 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type setSkillsRequest struct {
-	Skills []string `json:"skills"`
-}
-
 // setTaskSkills handles PUT /api/v1/tasks/{id}/skills: replaces the task's
 // pinned skill names, always surfaced in a recommendation regardless of
 // embedding similarity.
 func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req setSkillsRequest
+	var req model.SetSkillsInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

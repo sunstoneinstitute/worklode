@@ -249,7 +249,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		if err != nil {
 			return err
 		}
-		resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
+		resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
 		if err != nil {
 			return err
 		}

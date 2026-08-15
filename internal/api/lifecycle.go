@@ -43,18 +43,13 @@ func readOptionalJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	return nil
 }
 
-type claimRequest struct {
-	Worktree   string `json:"worktree"`
-	TTLSeconds int    `json:"ttl_seconds"`
-}
-
 // claimTask handles POST /api/v1/tasks/{id}/claim: lease the task to the
 // caller and move it ready -> in_progress, bound to the caller's worktree
 // identity (required). A 409 for an already-leased task carries the current
 // holder.
 func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req claimRequest
+	var req model.ClaimInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -118,14 +113,6 @@ func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) m
 	return pick
 }
 
-type claimNextRequest struct {
-	Project     string `json:"project"`
-	StrictFocus bool   `json:"strict_focus"`
-	DryRun      bool   `json:"dry_run"`
-	Worktree    string `json:"worktree"`
-	TTLSeconds  int    `json:"ttl_seconds"`
-}
-
 // claimNext handles POST /api/v1/tasks/claim-next: rank the ready set (see
 // store.ClaimNext) and atomically claim the top candidate, falling through to
 // the next-ranked one whenever a claim loses the race. worktree is required
@@ -133,7 +120,7 @@ type claimNextRequest struct {
 // reason set), a dry-run hit (claimed=false, dry_run=true, task set, no
 // lease), or a real claim (claimed=true, task set with its new lease).
 func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
-	var req claimNextRequest
+	var req model.ClaimNextInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -170,14 +157,10 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: true, Task: &pick})
 }
 
-type renewRequest struct {
-	TTLSeconds int `json:"ttl_seconds"`
-}
-
 // renewLease handles POST /api/v1/tasks/{id}/renew.
 func (s *server) renewLease(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req renewRequest
+	var req model.RenewInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

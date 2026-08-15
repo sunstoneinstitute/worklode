@@ -102,7 +102,7 @@ func newTaskAddCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
 			}
-			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
+			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
 			})
@@ -301,7 +301,7 @@ func newTaskEditCmd() *cobra.Command {
 		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var in cli.EditTaskInput
+			var in model.EditTaskInput
 			if cmd.Flags().Changed("title") {
 				in.Title = &title
 			}
@@ -540,9 +540,13 @@ func newTaskClaimCmd() *cobra.Command {
 				return err
 			}
 
-			resp, raw, err := c.ClaimNext(cmd.Context(), cli.ClaimNextInput{
-				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
-			})
+			in := model.ClaimNextInput{
+				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree,
+			}
+			if ttl > 0 {
+				in.TTLSeconds = int(ttl.Seconds())
+			}
+			resp, raw, err := c.ClaimNext(cmd.Context(), in)
 			if err != nil {
 				return err
 			}

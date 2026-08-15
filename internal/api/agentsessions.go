@@ -25,23 +25,13 @@ func toAgentSessionJSON(a *store.AgentSession) model.AgentSession {
 	}
 }
 
-type agentSessionRequest struct {
-	Agent        string `json:"agent"`
-	AgentVersion string `json:"agent_version"`
-	SessionID    string `json:"session_id"`
-	// Usage is the session's spend so far, in the same form and with the same
-	// nil-vs-empty meaning as the end request's. A session that never ends
-	// cleanly reports here or nowhere.
-	Usage []model.SessionUsageBucket `json:"usage"`
-}
-
 // touchAgentSession handles POST /api/v1/tasks/{id}/agent-session: record
 // that an agent session is working the task, or heartbeat an existing one.
 // Only the lease holder may report; a non-holder gets 404, the same
 // probe-resistant answer as renew.
 func (s *server) touchAgentSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req agentSessionRequest
+	var req model.AgentSessionInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -60,22 +50,6 @@ func (s *server) touchAgentSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toAgentSessionJSON(sess))
-}
-
-type agentSessionEndRequest struct {
-	Agent        string `json:"agent"`
-	SessionID    string `json:"session_id"`
-	InputTokens  *int64 `json:"input_tokens"`
-	OutputTokens *int64 `json:"output_tokens"`
-	// CostAmount is a decimal string, not a JSON number, so it round-trips
-	// through numeric(12,6) exactly (see store.SessionUsage).
-	CostAmount   *string `json:"cost_amount"`
-	CostCurrency string  `json:"cost_currency"`
-	// Usage is the per-day, per-model breakdown the server prices; when
-	// present it supersedes the scalars above. No omitempty on the way in:
-	// absent means "leave the recorded usage alone" and [] means "clear it",
-	// and only a nil-vs-empty slice keeps those apart.
-	Usage []model.SessionUsageBucket `json:"usage"`
 }
 
 // toUsageBuckets converts reported buckets to their store form, preserving
@@ -121,7 +95,7 @@ func toUsageBuckets(in []model.SessionUsageBucket) ([]store.SessionUsageBucket, 
 // which also rebuilds the project's daily rollup from it.
 func (s *server) endAgentSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req agentSessionEndRequest
+	var req model.EndAgentSessionInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

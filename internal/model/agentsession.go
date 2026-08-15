@@ -37,3 +37,39 @@ type SessionUsageBucket struct {
 	CacheReadTokens    int64  `json:"cache_read_tokens"`
 	OutputTokens       int64  `json:"output_tokens"`
 }
+
+// AgentSessionInput is the request body for TouchAgentSession (POST
+// /api/v1/tasks/{id}/agent-session): record that an agent session is
+// working the task, or heartbeat an existing one.
+type AgentSessionInput struct {
+	Agent        string `json:"agent"`
+	AgentVersion string `json:"agent_version"`
+	SessionID    string `json:"session_id"`
+	// Usage is the session's spend so far. omitempty: unlike
+	// EndAgentSessionInput.Usage, a touch has no "clear it" caller today, so
+	// nil and an empty slice are sent identically (the key absent) — the
+	// only production caller (internal/hookrun) already collapses "nothing
+	// read" to nil for exactly that reason. A caller that later needs to
+	// distinguish nil from empty here should drop omitempty and match
+	// EndAgentSessionInput's contract instead.
+	Usage []SessionUsageBucket `json:"usage,omitempty"`
+}
+
+// EndAgentSessionInput is the request body for EndAgentSession (POST
+// /api/v1/tasks/{id}/agent-session/end). Only Agent and SessionID are
+// required; the rest are optional accounting fields.
+type EndAgentSessionInput struct {
+	Agent        string `json:"agent"`
+	SessionID    string `json:"session_id"`
+	InputTokens  *int64 `json:"input_tokens"`
+	OutputTokens *int64 `json:"output_tokens"`
+	// CostAmount is a decimal string, not a JSON number, so it round-trips
+	// through numeric(12,6) exactly (see store.SessionUsage).
+	CostAmount   *string `json:"cost_amount"`
+	CostCurrency string  `json:"cost_currency"`
+	// Usage is the per-day, per-model breakdown the server prices; when
+	// present it supersedes the scalars above. No omitempty on the way in:
+	// absent means "leave the recorded usage alone" and [] means "clear it",
+	// and only a nil-vs-empty slice keeps those apart.
+	Usage []SessionUsageBucket `json:"usage"`
+}

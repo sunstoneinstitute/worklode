@@ -13,3 +13,15 @@ type RuntimeEvent struct {
 	Message    string    `json:"message"`
 	OccurredAt time.Time `json:"occurred_at"`
 }
+
+// RuntimeEventInput is the request body for creating a runtime event (POST
+// /api/v1/runtime-events), posted by the pod watcher.
+type RuntimeEventInput struct {
+	Cluster    string `json:"cluster"`
+	Kind       string `json:"kind"`
+	Workload   string `json:"workload"`
+	Image      string `json:"image"`
+	Message    string `json:"message"`
+	OccurredAt string `json:"occurred_at"`
+	DedupeKey  string `json:"dedupe_key"`
+}

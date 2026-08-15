@@ -25,3 +25,13 @@ type ImportResult struct {
 	// a PR timestamp here would be a cursor into a stream that cannot resume.
 	NewestUpdatedAt *time.Time `json:"newest_updated_at,omitempty"`
 }
+
+// ImportInput is the request body for ImportInbox (POST
+// /api/v1/inbox/import). An empty State means the server default, "open".
+type ImportInput struct {
+	Repo       string     `json:"repo"`
+	State      string     `json:"state,omitempty"`
+	IncludePRs bool       `json:"include_prs,omitempty"`
+	Since      *time.Time `json:"since,omitempty"`
+	DryRun     bool       `json:"dry_run,omitempty"`
+}

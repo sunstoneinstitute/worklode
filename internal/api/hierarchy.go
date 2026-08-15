@@ -9,17 +9,13 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-type decomposeRequest struct {
-	Into []string `json:"into"`
-}
-
 // decomposeTask handles POST /api/v1/tasks/{id}/decompose: create one draft
 // child per title under the task, in one transaction. This is the supported
 // way out of the spec-005 needs_decomposition gate. The parent's kind is not
 // touched — the child_of edges are what make it a container (004 §6.10).
 func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req decomposeRequest
+	var req model.DecomposeInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

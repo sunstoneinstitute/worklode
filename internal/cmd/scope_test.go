@@ -170,12 +170,12 @@ func mapProjectRepo(t *testing.T, c *cli.Client, project, repo string) {
 func createOtherProjectTask(t *testing.T, c *cli.Client) model.Task {
 	t.Helper()
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{
 		ID: "other", Name: "Other", Key: "OT",
 	}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "other", Title: "in another project", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {

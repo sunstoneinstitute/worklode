@@ -16,3 +16,11 @@ type Deliverable struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
+
+// CreateDeliverableInput is the request body for declaring a deliverable
+// (POST /api/v1/projects/{id}/deliverables).
+type CreateDeliverableInput struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
+}

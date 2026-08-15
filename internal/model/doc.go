@@ -68,3 +68,14 @@ type DocSyncReport struct {
 	Unchanged int             `json:"unchanged"`
 	Results   []DocSyncResult `json:"results"`
 }
+
+// DocSyncInput is the request body for SyncDocs (POST /api/v1/docs/sync —
+// spec 025 §16.2's bulk upsert).
+type DocSyncInput struct {
+	Project      string      `json:"project"`
+	SourceBranch string      `json:"source_branch"`
+	Dirty        bool        `json:"dirty"`
+	Force        bool        `json:"force"`
+	DryRun       bool        `json:"dry_run"`
+	Docs         []DocUpsert `json:"docs"`
+}
