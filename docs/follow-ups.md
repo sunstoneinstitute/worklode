@@ -386,16 +386,17 @@ one pass.
   (`internal/api/eventstream.go`) walks `ListEvents` 200 rows at a time
   because that is the one horizon-bounded query this package owns, so a client
   that supplies no `after` pays one round trip per 200 events at connect time.
-  **The shipped CLI reaches this path too**, contrary to what an earlier
-  version of this entry claimed: `followEvents` (`internal/cmd/event.go`)
+  The shipped CLI reaches this path: `followEvents` (`internal/cmd/event.go`)
   derives `after` from the last event of the printed backlog and leaves it 0
   when that backlog is empty, and `StreamEvents` omits `after` when it is 0.
   So `lode event tail --follow --since=5m` (or any `--type` with no recent
   match) against a large, currently quiet log pages the whole log. A
-  `SELECT MAX(id) ... WHERE txid < pg_snapshot_xmin(...)` store method makes
-  it O(1) — at the cost of a second copy of the horizon predicate to keep in
-  step. Sending the backlog query's own upper bound as the cursor would also
-  work and needs no new query.
+  `store.EventLogHorizonID` already runs exactly the
+  `SELECT MAX(id) ... WHERE <horizon>` that makes this O(1) (it backs
+  `worklode_event_log_horizon_id`), so the fix is now a call, not a new query
+  — though it answers for the whole log, so a `--type` follow would need the
+  filter added. Sending the backlog query's own upper bound as the cursor
+  would also work and needs nothing new at all.
 - `[P4]` **An event type is not validated at ingest.** `store.RecordEvent`
   takes `typ` as given, and `internal/hooks/flux.go` builds one out of a
   webhook body's JSON strings — so a type can contain newlines, control
@@ -414,6 +415,44 @@ one pass.
   between polls, and `worklode_event_streams_active` makes the count visible —
   so a ceiling picked today would be a guess. Set one when that gauge shows
   what normal looks like.
+  Two things bound how far that containment stretches. Stream polls draw from
+  the same `MaxOpenConns(16)` pool as all normal API traffic, so enough
+  concurrent follows starve ordinary requests rather than only each other. And
+  a `--type`-filtered poll has no index to use (next entry), so each one reads
+  the whole tail past its cursor, once per second, per open stream.
+- `[P3]` **No index supports a `type`-filtered read of `events`.** The table
+  carries its primary key and `UNIQUE (source, external_id)`, nothing on
+  `type`. `EXPLAIN ANALYZE` of the shape all three read paths now share —
+  `WHERE <horizon> AND type = ? AND id > ? ORDER BY id LIMIT 200` — plans a
+  `Seq Scan` whenever the type is rare enough that the `LIMIT` cannot be
+  filled, and a forward `events_pkey` scan with `type` as a row `Filter`
+  otherwise. Either way every row past the cursor is examined. `ListEvents`,
+  `streamHead` and the stream's 1 Hz poll loop share it, so `lode event tail
+  --follow --type=<rare>` is a full ordered scan once per second per open
+  connection, against the 16-connection pool it shares with normal API
+  traffic. Harmless at today's thousands of rows. Add
+  `events (type, id)` when the log reaches a size where a scan is measurable,
+  or when `--type` follows become routine — not before: an index on the
+  hottest ingest table is paid on every write.
+- `[P4]` **`events_txid_id` may be an index no query can use.** 0020 creates
+  `(txid, id)`, but the same `EXPLAIN` run shows the ordered cursor read
+  choosing `events_pkey` with the horizon as a row `Filter`, and
+  `MAX(id) WHERE <horizon>` choosing a backward `events_pkey` scan that stops
+  at the first passing row. Neither touches `(txid, id)`. Both plans are
+  driven by `ORDER BY id` / `MAX(id)` and so should not change with table
+  size, but the measurement was on ~300 rows: worth one `EXPLAIN` against real
+  data before concluding anything. If it holds, drop the index — an unused
+  index on the hottest ingest table is pure write amplification.
+- `[P3]` **A poison event wedges its subscriber with no backoff.** In
+  `internal/eventbus/loop.go` a handler that fails permanently is retried
+  head-of-line every `Poll` (1 s by default), forever, logging at `Error` each
+  time: the subscriber stops advancing and the logs fill at 1 Hz. Having no
+  dead-letter queue is deliberate (025 §22) — an event that cannot be handled
+  is a bug to fix, not a message to park — but the absence of any backoff is
+  not a spec question, just an unmade decision. The operator's escape hatch
+  exists today (`lode event seek --to <n+1>` steps the subscriber past the
+  event); what is missing is that the loop itself should widen its retry
+  interval and stop repeating the same log line.
 - `[gated]` **Residual ordering window in the commit horizon (spec 025 §15).**
   `events.id` (identity) and `events.txid` (`DEFAULT pg_current_xact_id()`)
   are separate default expressions evaluated during the same `INSERT`, and
@@ -422,11 +461,20 @@ one pass.
   draws id 10 and is descheduled; Q draws id 11, takes xid 500 and commits; P
   then takes xid 501. A read while P is in flight sees `xmin` 501, delivers
   row (id 11, txid 500), advances the offset past it, and row (id 10, txid
-  501) is never delivered. The horizon still narrows the loss window from "an
-  arbitrarily long transaction" to "the sub-statement gap between `nextval`
-  and XID assignment", but it is not zero. Closing it needs XID assignment
-  forced before the id is drawn, which changes 025 §15's schema — a spec
-  decision, not a code fix.
+  501) is never delivered.
+  The width of that window differs by write path, and the wider one is the
+  one domain events take. For `RecordEvent` the horizon narrows it to the
+  sub-statement gap between `nextval` and XID assignment inside one `INSERT`.
+  `RecordEventWithID` (`internal/store/events.go`) draws the id in a separate
+  `SELECT nextval(...)`, runs the caller's `payloadFor` callback in Go, and
+  only then issues the `INSERT` that assigns the XID — a client round trip
+  plus arbitrary callback work, orders of magnitude wider.
+  Closing it on that path needs no schema change and no spec decision: the id
+  is drawn by an explicit statement, so a leading `SELECT pg_current_xact_id()`
+  in the same transaction forces XID-before-id in one line. That only
+  partially closes the invariant — plain `RecordEvent` still lets the `INSERT`
+  draw the id first, so a mix of the two writers can still interleave. Closing
+  it everywhere is the schema question 025 §15 owns.
 - `[P4]` **Nothing validates `ns/*.ttl`.** There is no `riot`, rdflib, or
   Turtle-parsing step in `.github/workflows/` or `.pre-commit-config.yaml`,
   and `riot` is not installed in the dev environment. The Go↔Turtle drift
@@ -435,9 +483,21 @@ one pass.
   files do parse: rdflib 7.6.0 reads `ns/concept.ttl` at 144 triples,
   `ns/ontology.ttl` at 343, `ns/shapes.ttl` at 308.
 - `[P3]` **`eventbus.Run`'s return contract needs care from part 2's
-  supervisor.** It returns `context.Canceled` on shutdown and a wrapped
-  `ErrNotFound` for an unknown subscriber name. A supervisor that restarts on
-  any non-nil error will hot-loop on the `ErrNotFound` case.
+  supervisor.** It returns `ctx.Err()` on shutdown — `context.Canceled`, but
+  `context.DeadlineExceeded` for a context with a deadline — and a wrapped
+  `ErrNotFound` for an unknown subscriber name. A supervisor that tests for
+  `context.Canceled` alone will read a deadline as a crash, and one that
+  restarts on any non-nil error will hot-loop on the `ErrNotFound` case.
+- `[P4]` **The subscriber advisory-lock key is encoded three times.**
+  `hashtext('wl:subscriber:' || name)` appears in `TryLockSubscriber`, in
+  `Release`, and — split into its high and low 32 bits — in
+  `EventSubscriberStatuses`' `pg_locks` join (`internal/store/events.go`). The
+  join is the one that bites: if it ever drifted from the other two, nothing
+  would error. `holder_pid` would simply read 0 forever, and `lode event
+  subscribers` would report every subscriber as unheld while a consumer was
+  running. One SQL expression built in Go, or a small SQL function, would make
+  the three provably the same key — a store decision worth making before a
+  second lock namespace appears.
 - `[P2]` **Residual split-brain window in the subscriber loop, bounded to one
   batch.** The loop pings the pinned lock connection once per iteration, but
   a session killed strictly between that ping and the same iteration's ack
