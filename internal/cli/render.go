@@ -304,6 +304,34 @@ func timelineSummary(typ string, e map[string]any) string {
 	}
 }
 
+// EventTable prints one row per event, newest last (025 §18): id, received
+// time, source, type, external id. The `lode event tail` view.
+func EventTable(w io.Writer, events []Event) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "ID\tRECEIVED\tSOURCE\tTYPE\tEXTERNAL_ID")
+	for _, e := range events {
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
+	}
+	tw.Flush()
+}
+
+// EventSubscriberTable prints one row per subscriber: name, offsets, lag,
+// lock holder pid (- when unheld), last updated. The `lode event
+// subscribers` view.
+func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "NAME\tREAD\tACKED\tLAG\tHOLDER\tUPDATED")
+	for _, s := range subs {
+		holder := "-"
+		if s.HolderPID != 0 {
+			holder = strconv.FormatInt(s.HolderPID, 10)
+		}
+		fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%s\t%s\n",
+			s.Name, s.LastReadOffset, s.LastAckedOffset, s.Lag, holder, localTime(s.UpdatedAt))
+	}
+	tw.Flush()
+}
+
 // TreeNode is one parent and its direct children, with the parent's derived
 // progress — the unit `lode task tree` renders.
 type TreeNode struct {

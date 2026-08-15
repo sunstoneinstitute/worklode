@@ -149,6 +149,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/sync": guarded(permDocWrite),
 	"GET /api/v1/docs":       guarded(permDocRead),
 	"GET /api/v1/docs/{id}":  guarded(permDocRead),
+
+	// --- events (spec 025 §15/§18) --------------------------------------------
+	"GET /api/v1/events":                         guarded(permEventRead),
+	"GET /api/v1/event-subscribers":              guarded(permEventRead),
+	"POST /api/v1/event-subscribers/{name}/seek": guarded(permEventAdmin),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which
