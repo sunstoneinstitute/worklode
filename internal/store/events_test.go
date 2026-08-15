@@ -659,6 +659,43 @@ func TestEventSubscriberLags(t *testing.T) {
 	}
 }
 
+// EventLogHorizonID reports the position the log has actually reached, which
+// is what makes a held-back horizon visible. It is 0 on an empty log, and
+// polls up to the last recorded id for the cluster-wide reason above.
+func TestEventLogHorizonID(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if got, err := s.EventLogHorizonID(ctx); err != nil || got != 0 {
+		t.Fatalf("EventLogHorizonID on an empty log = %d, %v, want 0, nil", got, err)
+	}
+
+	var last int64
+	for i := 0; i < 3; i++ {
+		id, _, err := s.RecordEvent(ctx, "system", fmt.Sprintf("horizon-%d", i), "test.event", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = id
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		got, err := s.EventLogHorizonID(ctx)
+		if err != nil {
+			t.Fatalf("EventLogHorizonID: %v", err)
+		}
+		if got == last {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("EventLogHorizonID = %d after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)", got, last)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // pollListEvents retries ListEvents(f) until it has at least want events or
 // the timeout elapses, for the same cluster-wide-horizon reason as
 // pollReadEventBatch above.

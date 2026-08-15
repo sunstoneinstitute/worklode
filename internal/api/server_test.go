@@ -272,6 +272,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 		"go_sql_open_connections",
 		"worklode_skill_sync_runs_total",
 		"worklode_skill_sync_duration_seconds",
+		"worklode_event_log_horizon_id",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %s", want)
