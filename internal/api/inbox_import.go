@@ -27,21 +27,13 @@ const importTimeout = 60 * time.Second
 
 var validImportStates = map[string]bool{"open": true, "closed": true, "all": true}
 
-type importRequest struct {
-	Repo       string     `json:"repo"`
-	State      string     `json:"state"`
-	IncludePRs bool       `json:"include_prs"`
-	Since      *time.Time `json:"since"`
-	DryRun     bool       `json:"dry_run"`
-}
-
 // importInbox handles POST /api/v1/inbox/import. It fetches outside any
 // transaction, then applies every upsert inside one RecordEvent, so an import
 // is one event and one transaction — and re-running it is safe, because
 // UpsertIssue and UpsertPR never touch triage or correlation state that
 // triage already set.
 func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
-	var req importRequest
+	var req model.ImportInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

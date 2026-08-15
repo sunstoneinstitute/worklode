@@ -93,7 +93,7 @@ func newInboxPromoteCmd() *cobra.Command {
 					return err
 				}
 			}
-			t, raw, err := c.PromoteIssue(cmd.Context(), cli.PromoteInput{
+			t, raw, err := c.PromoteIssue(cmd.Context(), model.PromoteInput{
 				Repo: args[0], Number: number, Title: title, Body: body,
 				Priority: priority, Kind: kind, AppliesToVersions: versions, Draft: draft,
 				Parent: parent,
@@ -192,7 +192,7 @@ func newInboxImportCmd() *cobra.Command {
 			"Re-running is safe and leaves already-triaged issues alone.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			in := cli.ImportInput{
+			in := model.ImportInput{
 				Repo: args[0], State: state, IncludePRs: includePRs, DryRun: dryRun,
 			}
 			if since != "" {

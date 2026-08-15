@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -385,7 +384,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	setupProject(t, c)
 	setupRepoConfig(t, "proj") // so a bare task number resolves
 
-	container, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	container, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Container", Priority: "high", Kind: "feature",
 	})
 	if err != nil {

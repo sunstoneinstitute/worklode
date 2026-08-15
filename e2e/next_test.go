@@ -15,6 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/cmd"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -101,10 +102,10 @@ func TestNextEndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{ID: "nx", Name: "Next", Key: "NX"}); err != nil {
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{ID: "nx", Name: "Next", Key: "NX"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{ID: "agent-1", Kind: "agent", DisplayName: "Agent One"}); err != nil {
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{ID: "agent-1", Kind: "agent", DisplayName: "Agent One"}); err != nil {
 		t.Fatalf("create actor: %v", err)
 	}
 	tok, _, err := admin.CreateToken(ctx, "agent-1", "e2e next", nil)
@@ -116,7 +117,7 @@ func TestNextEndToEnd(t *testing.T) {
 	t.Setenv("LODE_TOKEN", tok.Token)
 	agent := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
 
-	task, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "nx", Title: "Wire up the widget", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -164,7 +165,7 @@ func TestNextEndToEnd(t *testing.T) {
 	// exact worktree identity a second claim would rebind to. `lode next`
 	// must claim, fail at the rebind step, then roll back: release its
 	// lease and best-effort remove the worktree it just created.
-	task2, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	task2, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "nx", Title: "Second task", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -172,7 +173,7 @@ func TestNextEndToEnd(t *testing.T) {
 	}
 	task2Dir := filepath.Join(root, worktree.DefaultBase, task2.ID+"-second-task")
 
-	decoy, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	decoy, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "nx", Title: "Decoy holder", Priority: "low", Kind: "chore",
 	})
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -31,12 +32,12 @@ func TestPickupLoop(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "pick", Name: "Pick", Key: "PICK",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-1", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -60,37 +61,37 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 3. Fixture, created in id order A, B, C, D, blocker, E.
-	taskA, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	taskA, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "A: critical usability", Priority: "critical", Kind: "feature", Concern: "usability",
 	})
 	if err != nil {
 		t.Fatalf("create task A: %v", err)
 	}
-	taskB, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	taskB, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "B: high security", Priority: "high", Kind: "feature", Concern: "security",
 	})
 	if err != nil {
 		t.Fatalf("create task B: %v", err)
 	}
-	taskC, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	taskC, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "C: high completeness", Priority: "high", Kind: "feature", Concern: "completeness",
 	})
 	if err != nil {
 		t.Fatalf("create task C: %v", err)
 	}
-	taskD, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	taskD, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "D: medium no concern", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
 		t.Fatalf("create task D: %v", err)
 	}
-	blocker, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	blocker, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "blocker: draft", Priority: "low", Kind: "chore", Draft: true,
 	})
 	if err != nil {
 		t.Fatalf("create blocker task: %v", err)
 	}
-	taskE, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	taskE, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "pick", Title: "E: critical security but blocked", Priority: "critical", Kind: "feature", Concern: "security",
 	})
 	if err != nil {
@@ -101,7 +102,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 4. claim --next #1: A (critical bypasses focus ordering).
-	resp1, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/0"})
+	resp1, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Worktree: "h:/.worktrees/0"})
 	if err != nil {
 		t.Fatalf("claim-next #1: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 5. claim --next #2: B (security, rank 0), distinct worktree.
-	resp2, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/1"})
+	resp2, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Worktree: "h:/.worktrees/1"})
 	if err != nil {
 		t.Fatalf("claim-next #2: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 6. dry-run: C (completeness, rank 1), no lease taken.
-	dry, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{DryRun: true})
+	dry, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{DryRun: true})
 	if err != nil {
 		t.Fatalf("claim-next dry-run: %v", err)
 	}
@@ -170,7 +171,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 7. claim --next #3: C for real, proving the dry-run consumed nothing.
-	resp3, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/2"})
+	resp3, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Worktree: "h:/.worktrees/2"})
 	if err != nil {
 		t.Fatalf("claim-next #3: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestPickupLoop(t *testing.T) {
 	}
 
 	// 8. claim --next #4: D (no-concern task; E stays blocked/excluded).
-	resp4, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/3"})
+	resp4, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Worktree: "h:/.worktrees/3"})
 	if err != nil {
 		t.Fatalf("claim-next #4: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestPickupLoop(t *testing.T) {
 
 	// 9. claim --next #5: claimable set exhausted (A, B, C, D claimed; E
 	// blocked by the still-open draft blocker) — no error, no-ready-task.
-	resp5, _, err := agent.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "h:/.worktrees/4"})
+	resp5, _, err := agent.ClaimNext(ctx, model.ClaimNextInput{Worktree: "h:/.worktrees/4"})
 	if err != nil {
 		t.Fatalf("claim-next #5: err = %v, want nil (empty ready set is normal)", err)
 	}

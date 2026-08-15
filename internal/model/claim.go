@@ -45,3 +45,42 @@ type ClaimNextResponse struct {
 	DryRun  bool           `json:"dry_run,omitempty"`
 	Task    *ClaimNextPick `json:"task,omitempty"`
 }
+
+// ClaimInput is the request body for ClaimTask (POST
+// /api/v1/tasks/{id}/claim). TTLSeconds <= 0 (the zero value) means the
+// server default.
+type ClaimInput struct {
+	Worktree   string `json:"worktree"`
+	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+// ClaimNextInput is the request body for ClaimNext (POST
+// /api/v1/tasks/claim-next). Worktree is required unless DryRun is set;
+// TTLSeconds <= 0 means the server default.
+type ClaimNextInput struct {
+	Project     string `json:"project"`
+	StrictFocus bool   `json:"strict_focus"`
+	DryRun      bool   `json:"dry_run"`
+	Worktree    string `json:"worktree"`
+	TTLSeconds  int    `json:"ttl_seconds"`
+}
+
+// RenewInput is the request body for RenewLease (POST
+// /api/v1/tasks/{id}/renew). TTLSeconds <= 0 means the server default.
+type RenewInput struct {
+	TTLSeconds int `json:"ttl_seconds"`
+}
+
+// RebindWorktreeInput is the request body for RebindWorktree (POST
+// /api/v1/tasks/{id}/lease/worktree): move the caller's active lease to a
+// new worktree.
+type RebindWorktreeInput struct {
+	Worktree string `json:"worktree"`
+}
+
+// AssignInput is the optional request body of POST
+// /api/v1/tasks/{id}/assign: an empty or missing assignee defaults to the
+// caller.
+type AssignInput struct {
+	Assignee string `json:"assignee"`
+}

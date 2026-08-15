@@ -144,7 +144,7 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 func createTestTask(t *testing.T, c *cli.Client, title string) model.Task {
 	t.Helper()
 	ctx := context.Background()
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task %q: %v", title, err)
 	}
@@ -153,7 +153,7 @@ func createTestTask(t *testing.T, c *cli.Client, title string) model.Task {
 
 func setupProject(t *testing.T, c *cli.Client) {
 	t.Helper()
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 }
@@ -1006,7 +1006,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	setupProject(t, c)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 
-	task, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	task, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Brief with skills", Priority: "high", Kind: "feature",
 		Skills: []string{"tdd", "ghost"},
 	})

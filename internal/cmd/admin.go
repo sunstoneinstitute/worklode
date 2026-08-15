@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func newActorCmd() *cobra.Command {
@@ -30,7 +30,7 @@ func newActorAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			a, raw, err := c.CreateActor(cmd.Context(), cli.CreateActorInput{
+			a, raw, err := c.CreateActor(cmd.Context(), model.CreateActorInput{
 				ID: args[0], Kind: kind, DisplayName: name, Admin: admin,
 			})
 			if err != nil {

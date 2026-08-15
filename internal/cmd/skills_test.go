@@ -250,10 +250,10 @@ func TestSkillsRecommendEmptyFile(t *testing.T) {
 func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
 	st, c, _, _ := skillsTestServer(t)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	task, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	task, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Fix it", Priority: "high", Kind: "bug",
 		Skills: []string{"tdd", "ghost"},
 	})

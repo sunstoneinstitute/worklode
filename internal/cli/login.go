@@ -27,6 +27,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 type LoginOptions struct {
@@ -262,7 +264,7 @@ func buildAuthURL(authorizeURL, redirectURL, state string) (string, error) {
 // token exchange is the most failure-prone step (expired/reused code, state
 // mismatch), so a non-2xx surfaces the server's own error message.
 func exchangeCLIToken(ctx context.Context, client *http.Client, tokenURL, code, state string) (*LoginResult, error) {
-	body, _ := json.Marshal(map[string]string{"code": code, "state": state})
+	body, _ := json.Marshal(model.CLITokenInput{Code: code, State: state})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
