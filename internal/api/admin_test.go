@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -990,7 +991,7 @@ func TestGetTaskIncludesLease(t *testing.T) {
 func seedIssue(t *testing.T, st *store.Store, repo string, number int64, title string) {
 	t.Helper()
 	err := st.Tx(context.Background(), func(tx *sql.Tx) error {
-		return store.UpsertIssue(tx, store.Issue{
+		return store.UpsertIssue(tx, model.Issue{
 			Repo: repo, Number: number, Title: title, State: "open",
 			URL: "https://github.com/" + repo + "/issues/" + strconv.FormatInt(number, 10),
 		})

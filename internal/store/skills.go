@@ -9,6 +9,13 @@ import (
 )
 
 // Skill is one org-wide agent skill at its latest synced version.
+//
+// Skill is deliberately not model.Skill: ID, SourcePath, and SkillMD's
+// content-hashed home are database bookkeeping this package needs internally
+// (sync, archive lookup) that never cross the wire, so they stay outside the
+// five fields model.Skill declares (ADR 036 §3, "store scan plumbing").
+// api.toSkillJSON and api.toPinnedSkillJSON are the conversion points from
+// this type to model.Skill and model.PinnedSkill.
 type Skill struct {
 	ID          int64
 	Name        string

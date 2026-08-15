@@ -1394,11 +1394,11 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{
 				{Name: "tdd", Description: "Red-green-refactor discipline", Hash: tddHash, Content: tddContent},
 			},
-			Matches: []cli.SkillMatch{
+			Matches: []model.SkillMatch{
 				{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.87},
 			},
 		},
@@ -1453,9 +1453,9 @@ func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
 
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
-			Matches: []cli.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
+		Skills: model.SkillRecommendation{
+			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
+			Matches: []model.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
 		},
 	}
 	back := newSkillsBackbone(t, brief)
@@ -1514,8 +1514,8 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 	draftContent := "# Draft\n"
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
 		},
 	}
 	newSkillsBackbone(t, brief)
@@ -1560,17 +1560,17 @@ func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
 	wtDir := setupFakeWorktree(t, root, "PROJ-5", "budget")
 
 	_, tddHash := buildSkillArchive(t, "# TDD\n")
-	matches := make([]cli.SkillMatch, 0, 5)
+	matches := make([]model.SkillMatch, 0, 5)
 	for i := 0; i < 5; i++ {
 		name := fmt.Sprintf("match-%d", i)
 		_, hash := buildSkillArchive(t, "# "+name+"\n")
-		matches = append(matches, cli.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
+		matches = append(matches, model.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
 	}
 
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
+		Skills: model.SkillRecommendation{
+			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
 			Matches: matches,
 		},
 	}
@@ -1630,8 +1630,8 @@ func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
 
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{
 				{Name: "small", Description: "d", Hash: smallHash, Content: small},
 				{Name: "big", Description: "d", Hash: bigHash, Content: big},
 			},
@@ -1673,8 +1673,8 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 
 	brief := cli.Brief{
 		Task: model.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
 		},
 	}
 	back := newSkillsBackbone(t, brief)
@@ -1813,14 +1813,14 @@ func TestSessionEndPostsTranscriptUsage(t *testing.T) {
 	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
 	body := rec.only(t)
-	var usage []cli.SessionUsageBucket
+	var usage []model.SessionUsageBucket
 	if err := json.Unmarshal(body["usage"], &usage); err != nil {
 		t.Fatalf("decode usage %s: %v", body["usage"], err)
 	}
-	want := []cli.SessionUsageBucket{{
+	want := []model.SessionUsageBucket{{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
-		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
-		CacheRead: 400, OutputTokens: 50,
+		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
+		CacheReadTokens: 400, OutputTokens: 50,
 	}}
 	if len(usage) != 1 || usage[0] != want[0] {
 		t.Fatalf("posted usage = %+v, want %+v", usage, want)
@@ -1845,14 +1845,14 @@ func TestHeartbeatPostsTranscriptUsage(t *testing.T) {
 
 	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
-	var usage []cli.SessionUsageBucket
+	var usage []model.SessionUsageBucket
 	if err := json.Unmarshal(rec.only(t)["usage"], &usage); err != nil {
 		t.Fatalf("decode usage: %v", err)
 	}
-	want := cli.SessionUsageBucket{
+	want := model.SessionUsageBucket{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
-		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
-		CacheRead: 400, OutputTokens: 50,
+		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
+		CacheReadTokens: 400, OutputTokens: 50,
 	}
 	if len(usage) != 1 || usage[0] != want {
 		t.Fatalf("posted usage = %+v, want %+v", usage, want)

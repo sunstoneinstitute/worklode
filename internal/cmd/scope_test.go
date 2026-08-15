@@ -368,7 +368,7 @@ func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
 	_, _, err := st.RecordEvent(context.Background(), "github",
 		fmt.Sprintf("%s-%s-%d", t.Name(), repo, number), "issues.opened", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.UpsertIssue(tx, store.Issue{
+			return store.UpsertIssue(tx, model.Issue{
 				Repo: repo, Number: number, Title: "issue", State: "open",
 				URL: "https://example.test/x",
 			})

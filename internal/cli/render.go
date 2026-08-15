@@ -145,7 +145,7 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 
 // IssueTable prints one row per inbox issue: repo, number, triage state,
 // state, title.
-func IssueTable(w io.Writer, issues []Issue) {
+func IssueTable(w io.Writer, issues []model.Issue) {
 	tbl := newTable(
 		column{header: "REPO"},
 		column{header: "#"},
@@ -161,7 +161,7 @@ func IssueTable(w io.Writer, issues []Issue) {
 
 // ProjectTable prints one row per project: id, key, name, repos. Each repo is
 // rendered as "owner/name (done_state)".
-func ProjectTable(w io.Writer, projects []Project) {
+func ProjectTable(w io.Writer, projects []model.Project) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tKEY\tNAME\tREPOS")
 	for _, p := range projects {
@@ -185,11 +185,11 @@ const (
 
 // SkillTable prints one row per skill: name, then the description wrapped to
 // the terminal width with continuation lines aligned under the first.
-func SkillTable(w io.Writer, skills []Skill) {
+func SkillTable(w io.Writer, skills []model.Skill) {
 	skillTable(w, skills, tableWidth(w))
 }
 
-func skillTable(w io.Writer, skills []Skill, width int) {
+func skillTable(w io.Writer, skills []model.Skill, width int) {
 	name := len("NAME")
 	for _, sk := range skills {
 		name = max(name, utf8.RuneCountInString(sk.Name))

@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func newProjectCmd() *cobra.Command {
@@ -51,7 +52,7 @@ func newProjectAddCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ProjectTable(cmd.OutOrStdout(), []cli.Project{p})
+			cli.ProjectTable(cmd.OutOrStdout(), []model.Project{p})
 			return nil
 		},
 	}
@@ -252,7 +253,7 @@ func newProjectFocusNoteCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ProjectTable(cmd.OutOrStdout(), []cli.Project{p})
+			cli.ProjectTable(cmd.OutOrStdout(), []model.Project{p})
 			return nil
 		},
 	}
@@ -294,7 +295,7 @@ func newProjectDecisionCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.ProjectTable(cmd.OutOrStdout(), []cli.Project{p})
+			cli.ProjectTable(cmd.OutOrStdout(), []model.Project{p})
 			return nil
 		},
 	}
