@@ -58,7 +58,8 @@ in `deploy/base/kustomization.yaml`.
 Request flow: `internal/cmd` (cobra commands, both server and client sides) →
 `internal/cli` (HTTP client, project scoping, rendering) → `internal/api`
 (HTTP server: `/api/v1` bearer-token API, a session-gated, read-mostly project
-cockpit; development mode remains open when no provider is configured, +
+cockpit; development mode is open only when `LODE_WEB_OPEN` is set and no
+provider is configured, +
 `/metrics`, OIDC login) → `internal/store` (all Postgres access via pgx;
 domain logic like task state machine, ranking, atomic `claim` live here). The
 cockpit's web pages render with `templ` components (`internal/ui/*.templ`,
@@ -90,7 +91,8 @@ it deliberately needs no worklode identity — and `NewServer` refuses to boot o
 a route the table does not name or a table entry no route uses, so a new
 endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 `Subject` derived once per request (bearer token, session cookie, or the
-anonymous `authOpen` subject an instance with no login provider serves),
+anonymous `authOpen` subject an instance with no login provider serves only
+under `LODE_WEB_OPEN`),
 a `grants` table of permission → roles, and a default-deny `Decide`. There is
 no RBAC model yet — the two roles are the `user`/`admin` Keycloak already
 syncs (001 §9.2), and decisions are not project-scoped — so add real roles by

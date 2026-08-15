@@ -155,6 +155,9 @@ func TestFullChain(t *testing.T) {
 		GitHubWebhookSecret: githubSecret,
 		FluxWebhookSecret:   fluxSecret,
 		ClusterEnvMap:       map[string]string{"testcluster": "prod"},
+		// This test drives web pages anonymously; without a login provider
+		// the cockpit refuses to serve unless the deployment opted in.
+		WebOpen: true,
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)

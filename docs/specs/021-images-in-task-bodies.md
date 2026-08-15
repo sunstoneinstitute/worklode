@@ -180,10 +180,11 @@ is unauthenticated on such an install. A blob route that authenticated unconditi
 render the task page fine and 401 every `<img>` on it. Consistency with the surrounding UI wins
 here: the blob route is not the place to unilaterally tighten the installation's auth model.
 
-The consequence is worth stating plainly rather than burying: **on an install with no web auth
-provider, blobs are readable by anyone who can reach the server**, exactly like the task pages
-that reference them. That is a property of the UI's auth model, not of this spec, and Q021.4
-tracks fixing it at the right level.
+The consequence follows the UI's auth model rather than restating it: an install with no web
+auth provider serves no web surface at all unless it sets `LODE_WEB_OPEN`, and the blob route
+inherits exactly that — refused on a closed instance, open on one that opted in. The blob route
+is still not the place to tighten the auth model unilaterally; it is now inheriting a model that
+is closed by default.
 
 Where web auth *is* configured, a content-addressed URL is unguessable and that is **not** the
 access control. Task bodies carry pre-release design work; the hash does dedup, the middleware
@@ -530,12 +531,10 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
   under different key prefixes halves the credential management and makes a prod-to-dev data
   copy trivially wrong. Separate buckets is the safer default; confirm against how the fleet
   provisions the other buckets.
-- **Q021.4 — The web UI is unauthenticated without an SSO provider.** §4 mirrors that bypass
-  for consistency, which means blobs inherit it. Spec 021 makes the stakes higher rather than
-  creating them: task bodies already carry pre-release design work, and now they carry the
-  screenshots too. The fix belongs to the UI's auth model — either require a provider before
-  serving any web surface, or gate the whole UI behind a default-deny. Tracked in
-  `docs/follow-ups.md`.
+- **Q021.4 — The web UI is unauthenticated without an SSO provider.**
+  *Resolved 2026-08-14.* The web surface now refuses to serve without a login provider unless
+  `LODE_WEB_OPEN` is set (001 §6), and §4's mirroring means blobs inherit the closed default.
+  Nothing in this spec changed.
 
 ---
 
@@ -546,9 +545,10 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 2. A 200 MiB upload gets `413`, and the server's memory does not track payload size on any
    upload — asserted by uploading 100 MiB with a bounded heap.
 3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session. With a
-   web auth provider configured it `401`s with neither; with no provider configured it passes
-   through, matching `webAuth`. The presigned response carries the sniffed `Content-Type`, a
-   correct `Content-Length`, and `Content-Disposition: attachment` for a non-embeddable type.
+   web auth provider configured it `401`s with neither; with no provider configured it refuses
+   with a `503` unless `LODE_WEB_OPEN` is set, matching `webGuard`. The presigned response
+   carries the sniffed `Content-Type`, a correct `Content-Length`, and `Content-Disposition:
+   attachment` for a non-embeddable type.
 4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose
    body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows at
    `embedded = true`.

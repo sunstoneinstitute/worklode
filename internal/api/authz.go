@@ -28,9 +28,9 @@
 // What this does NOT do, and should not be read as doing: there are no
 // project-scoped roles, no ownership checks, and no delegation. Decide takes
 // the resource it would need for those (see Request.Resource) so adding them
-// later does not change any call site, but today it is ignored. When a
-// deployment configures no login provider the web surface stays open, exactly
-// as before — that bypass is now a single named decision (authOpen) that is
+// later does not change any call site, but today it is ignored. A deployment
+// with no login provider serves no web surface at all unless it sets
+// LODE_WEB_OPEN, and that bypass is a single named decision (authOpen) that is
 // counted and logged rather than an implicit passthrough.
 package api
 
@@ -154,8 +154,9 @@ const (
 	authNone    authMethod = "none"    // no credential presented
 	authToken   authMethod = "token"   // wl_ bearer token (/api/v1)
 	authSession authMethod = "session" // signed session cookie (web UI)
-	// authOpen is the deployment-wide bypass: no login provider is
-	// configured, so the web UI serves anyone who can reach the port. It is a
+	// authOpen is the deployment-wide bypass: no login provider is configured
+	// and LODE_WEB_OPEN asked for it, so the web UI serves anyone who can
+	// reach the port. It is a
 	// Subject like any other, carrying only RoleUser — never RoleAdmin, so a
 	// future admin-only web route fails closed on an open instance.
 	authOpen authMethod = "open"
@@ -197,7 +198,10 @@ func subjectFromActor(a *store.Actor, via authMethod) Subject {
 }
 
 // openSubject is the subject an unauthenticated-by-configuration web request
-// gets: permitted as an ordinary user, attributable to nobody.
+// gets: permitted as an ordinary user, attributable to nobody. It is reached
+// only under webOpen — no login provider configured *and* LODE_WEB_OPEN set —
+// so it is never how a request is served on an instance that merely forgot to
+// configure one.
 func openSubject() Subject {
 	return Subject{Roles: []Role{RoleUser}, Via: authOpen}
 }
@@ -298,11 +302,13 @@ func (s *server) requirePerm(perm Permission, next http.HandlerFunc) http.Handle
 // point, replacing the former webAuth. It resolves the session cookie to a
 // subject (loading the actor, so the web surface knows who is acting and not
 // merely that the cookie verifies), decides, and then either serves the page,
-// sends an unauthenticated visitor to login, or renders a 403.
+// refuses on an instance with no login provider, sends an unauthenticated
+// visitor to login, or renders a 403.
 //
-// With no login provider configured it uses openSubject: the UI stays open as
-// it always has, but as a decision that is counted and logged rather than a
-// silent passthrough.
+// With no login provider configured it uses openSubject only when the
+// operator opted in (see webOpen): that bypass is a decision that is counted
+// and logged rather than a silent passthrough. Without the opt-in there is no
+// identity to derive and no login flow to offer, so the page is refused.
 func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sub := s.webSubject(r.Context(), r)
@@ -313,6 +319,17 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 			return
 		}
 		s.logDenial(r, sub, perm, d)
+		if s.oidc == nil {
+			// Refused because the instance is misconfigured, not because this
+			// caller lacks something. 503 and not 403: the page is unavailable
+			// on this deployment, and no credential the caller could present
+			// would change that.
+			webErr(w, http.StatusServiceUnavailable,
+				"the web UI needs a login provider: configure LODE_OIDC_ISSUER "+
+					"and LODE_OIDC_CLIENT_ID, or set LODE_WEB_OPEN=1 to serve it "+
+					"unauthenticated on a trusted network")
+			return
+		}
 		if !sub.Authenticated() {
 			http.Redirect(w, r, s.loginTarget(r.URL.Path), http.StatusFound)
 			return
@@ -321,14 +338,31 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 	}
 }
 
+// webOpen reports whether this instance deliberately serves the web UI to
+// anonymous callers: no login provider is configured *and* the operator asked
+// for it. Both halves matter — the first makes it the only way to serve a
+// page at all, the second makes it a decision rather than an oversight.
+func (s *server) webOpen() bool {
+	return s.oidc == nil && s.cfg.WebOpen
+}
+
 // webSubject derives the subject behind a web request: the open-deployment
-// subject when no login provider is configured, otherwise the actor named by
-// a valid session cookie. A cookie that verifies but names an actor that no
+// subject when no login provider is configured and the operator opted in,
+// nobody at all when no login provider is configured and they did not, and
+// otherwise the actor named by a valid session cookie. A cookie that verifies
+// but names an actor that no
 // longer exists yields an unauthenticated subject — the session outlived its
 // actor, and treating it as anonymous is both safe and honest.
 func (s *server) webSubject(ctx context.Context, r *http.Request) Subject {
 	if s.oidc == nil {
-		return openSubject()
+		if s.webOpen() {
+			return openSubject()
+		}
+		// No provider and no opt-in: there is no identity to derive and no
+		// login flow to send the caller into. webGuard turns this into a
+		// refusal; returning an unauthenticated subject here would send them
+		// to /auth/login, which 404s without OIDC.
+		return Subject{Via: authNone}
 	}
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil {
