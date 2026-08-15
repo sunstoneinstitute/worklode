@@ -83,14 +83,17 @@ func Emit(ctx context.Context, st *store.Store, source string, ev DomainEvent,
 	}
 	return st.RecordEventWithID(ctx, source, ev.ExternalID(), ev.EventType(),
 		func(id int64) ([]byte, error) {
-			full := map[string]any{
-				"@context": "https://worklode.io/ns/ontology#",
-				"@type":    ev.EventType(),
-				"@id":      fmt.Sprintf("wlid:event/%d", id),
-			}
+			full := make(map[string]any, len(props)+3)
 			for k, v := range props {
 				full[k] = v
 			}
+			// Set after the merge, unconditionally: a DomainEvent whose
+			// Properties() included one of these keys (validatePayload
+			// allows them — they're in baseProperties) must never override
+			// the id 025 §15.2 mandates.
+			full["@context"] = "https://worklode.io/ns/ontology#"
+			full["@type"] = ev.EventType()
+			full["@id"] = fmt.Sprintf("wlid:event/%d", id)
 			return json.Marshal(full)
 		}, apply)
 }
