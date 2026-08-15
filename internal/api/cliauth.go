@@ -288,9 +288,9 @@ func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"authorize_url": base + "/auth/cli/login",
-		"token_url":     base + "/auth/cli/token",
-		"providers":     []string{"keycloak"},
+	writeJSON(w, http.StatusOK, model.LoginDiscovery{
+		AuthorizeURL: base + "/auth/cli/login",
+		TokenURL:     base + "/auth/cli/token",
+		Providers:    []string{"keycloak"},
 	})
 }

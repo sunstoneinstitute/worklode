@@ -13,6 +13,11 @@ type Issue struct {
 	URL               string   `json:"url"`
 }
 
+// IssueListResponse is the response body of GET /api/v1/inbox.
+type IssueListResponse struct {
+	Issues []Issue `json:"issues"`
+}
+
 // PromoteInput is the request body for PromoteIssue (POST
 // /api/v1/inbox/promote). Title is optional — the server defaults it to the
 // issue's own title.

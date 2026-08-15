@@ -27,6 +27,12 @@ type CreateTokenInput struct {
 	ExpiresAt   *string `json:"expires_at"`
 }
 
+// TokenResponse is the response body of CreateToken: the plaintext token,
+// returned exactly once.
+type TokenResponse struct {
+	Token string `json:"token"`
+}
+
 // RevokeTokenInput is the request body for RevokeToken (DELETE
 // /api/v1/tokens). Token may be either the plaintext or its stored hash.
 type RevokeTokenInput struct {

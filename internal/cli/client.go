@@ -939,14 +939,9 @@ func (c *Client) Decompose(ctx context.Context, id string, titles []string) (mod
 
 // --- inbox ------------------------------------------------------------
 
-// IssueListResponse is the response body of ListIssues.
-type IssueListResponse struct {
-	Issues []model.Issue `json:"issues"`
-}
-
 // ListIssues calls GET /api/v1/inbox. An empty state lists every triage
 // state; an empty project lists every project's issues.
-func (c *Client) ListIssues(ctx context.Context, state, project string) (IssueListResponse, []byte, error) {
+func (c *Client) ListIssues(ctx context.Context, state, project string) (model.IssueListResponse, []byte, error) {
 	q := url.Values{}
 	if state != "" {
 		q.Set("state", state)
@@ -956,11 +951,11 @@ func (c *Client) ListIssues(ctx context.Context, state, project string) (IssueLi
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/inbox", q), nil)
 	if err != nil {
-		return IssueListResponse{}, nil, err
+		return model.IssueListResponse{}, nil, err
 	}
-	var resp IssueListResponse
+	var resp model.IssueListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return IssueListResponse{}, nil, fmt.Errorf("decode issue list: %w", err)
+		return model.IssueListResponse{}, nil, fmt.Errorf("decode issue list: %w", err)
 	}
 	return resp, raw, nil
 }
@@ -1020,20 +1015,15 @@ func (c *Client) CreateProject(ctx context.Context, in model.CreateProjectInput)
 	return p, raw, nil
 }
 
-// ProjectListResponse is the response body of ListProjects.
-type ProjectListResponse struct {
-	Projects []model.Project `json:"projects"`
-}
-
 // ListProjects calls GET /api/v1/projects.
-func (c *Client) ListProjects(ctx context.Context) (ProjectListResponse, []byte, error) {
+func (c *Client) ListProjects(ctx context.Context) (model.ProjectListResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/projects", nil)
 	if err != nil {
-		return ProjectListResponse{}, nil, err
+		return model.ProjectListResponse{}, nil, err
 	}
-	var resp ProjectListResponse
+	var resp model.ProjectListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return ProjectListResponse{}, nil, fmt.Errorf("decode project list: %w", err)
+		return model.ProjectListResponse{}, nil, fmt.Errorf("decode project list: %w", err)
 	}
 	return resp, raw, nil
 }
@@ -1141,27 +1131,18 @@ func (c *Client) ResolveRemote(ctx context.Context, remote string) (model.Projec
 	return p, nil
 }
 
-// AddRepoResult is the response from AddRepo. Warnings are non-fatal setup
-// problems — the mapping was created regardless.
-type AddRepoResult struct {
-	ProjectID string   `json:"project_id"`
-	Repo      string   `json:"repo"`
-	DoneState string   `json:"done_state"`
-	Warnings  []string `json:"warnings,omitempty"`
-}
-
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
-func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (AddRepoResult, []byte, error) {
+func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (model.AddRepoResult, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost,
 		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos",
 		model.AddRepoInput{Repo: repo, DoneState: doneState})
 	if err != nil {
-		return AddRepoResult{}, nil, err
+		return model.AddRepoResult{}, nil, err
 	}
-	var out AddRepoResult
+	var out model.AddRepoResult
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return AddRepoResult{}, nil, fmt.Errorf("decode add-repo response: %w", err)
+		return model.AddRepoResult{}, nil, fmt.Errorf("decode add-repo response: %w", err)
 	}
 	return out, raw, nil
 }
@@ -1193,15 +1174,9 @@ func (c *Client) CreateActor(ctx context.Context, in model.CreateActorInput) (mo
 	return a, raw, nil
 }
 
-// TokenResponse is the response body of CreateToken: the plaintext token,
-// returned exactly once.
-type TokenResponse struct {
-	Token string `json:"token"`
-}
-
 // CreateToken calls POST /api/v1/actors/{id}/tokens. A nil expiresAt means
 // the token never expires.
-func (c *Client) CreateToken(ctx context.Context, actorID, description string, expiresAt *time.Time) (TokenResponse, []byte, error) {
+func (c *Client) CreateToken(ctx context.Context, actorID, description string, expiresAt *time.Time) (model.TokenResponse, []byte, error) {
 	in := model.CreateTokenInput{Description: description}
 	if expiresAt != nil {
 		exp := expiresAt.UTC().Format(time.RFC3339)
@@ -1209,11 +1184,11 @@ func (c *Client) CreateToken(ctx context.Context, actorID, description string, e
 	}
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", in)
 	if err != nil {
-		return TokenResponse{}, nil, err
+		return model.TokenResponse{}, nil, err
 	}
-	var resp TokenResponse
+	var resp model.TokenResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return TokenResponse{}, nil, fmt.Errorf("decode token response: %w", err)
+		return model.TokenResponse{}, nil, fmt.Errorf("decode token response: %w", err)
 	}
 	return resp, raw, nil
 }
@@ -1228,18 +1203,13 @@ func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) 
 
 // --- skills -----------------------------------------------------------
 
-// skillsListResponse is the response body of Skills.
-type skillsListResponse struct {
-	Skills []model.Skill `json:"skills"`
-}
-
 // Skills calls GET /api/v1/skills.
 func (c *Client) Skills(ctx context.Context) ([]model.Skill, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills", nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	var resp skillsListResponse
+	var resp model.SkillsListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, nil, fmt.Errorf("decode skills: %w", err)
 	}
@@ -1305,23 +1275,15 @@ func (c *Client) Board(ctx context.Context, project string) (model.BoardResponse
 	return resp, raw, nil
 }
 
-// TimelineResponse is the response body of Timeline. Each entry always has
-// "at" (RFC3339 string) and "type" fields; the remaining fields vary by
-// type — see internal/api/timeline.go for the full set per type.
-type TimelineResponse struct {
-	Task     model.Task       `json:"task"`
-	Timeline []map[string]any `json:"timeline"`
-}
-
 // Timeline calls GET /api/v1/tasks/{id}/timeline.
-func (c *Client) Timeline(ctx context.Context, taskID string) (TimelineResponse, []byte, error) {
+func (c *Client) Timeline(ctx context.Context, taskID string) (model.TimelineResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(taskID)+"/timeline", nil)
 	if err != nil {
-		return TimelineResponse{}, nil, err
+		return model.TimelineResponse{}, nil, err
 	}
-	var resp TimelineResponse
+	var resp model.TimelineResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return TimelineResponse{}, nil, fmt.Errorf("decode timeline: %w", err)
+		return model.TimelineResponse{}, nil, fmt.Errorf("decode timeline: %w", err)
 	}
 	return resp, raw, nil
 }

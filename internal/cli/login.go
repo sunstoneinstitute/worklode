@@ -50,12 +50,6 @@ type LoginResult struct {
 	Token     string
 }
 
-type wlLoginDiscovery struct {
-	AuthorizeURL string   `json:"authorize_url"`
-	TokenURL     string   `json:"token_url"`
-	Providers    []string `json:"providers"`
-}
-
 func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
@@ -90,7 +84,7 @@ func RunLogin(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 // browser through the server's web login, and wait for the one-time code to come
 // back as a redirect. It returns ErrNoBrowser, unwrapped, when there is no
 // browser to send.
-func runLoopbackLogin(ctx context.Context, opts LoginOptions, disc wlLoginDiscovery) (*LoginResult, error) {
+func runLoopbackLogin(ctx context.Context, opts LoginOptions, disc model.LoginDiscovery) (*LoginResult, error) {
 	ln, port, err := listenLocal()
 	if err != nil {
 		return nil, err
@@ -147,7 +141,7 @@ func runLoopbackLogin(ctx context.Context, opts LoginOptions, disc wlLoginDiscov
 // runManualLogin is the flow of §8.7, for a machine that cannot launch a
 // browser or reach its own loopback port from one. It binds no listener: the
 // server renders the one-time code on a page and the user pastes it back here.
-func runManualLogin(ctx context.Context, opts LoginOptions, disc wlLoginDiscovery) (*LoginResult, error) {
+func runManualLogin(ctx context.Context, opts LoginOptions, disc model.LoginDiscovery) (*LoginResult, error) {
 	state := randState()
 	authURL, err := buildManualAuthURL(disc.AuthorizeURL, state)
 	if err != nil {
@@ -219,28 +213,28 @@ func readLine(ctx context.Context, in io.Reader) (string, error) {
 
 // fetchLoginConfig gets the discovery document. A 404 means the server has no
 // interactive login configured.
-func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (wlLoginDiscovery, error) {
+func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (model.LoginDiscovery, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(server, "/")+"/.well-known/lode-login", nil)
 	if err != nil {
-		return wlLoginDiscovery{}, err
+		return model.LoginDiscovery{}, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return wlLoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
+		return model.LoginDiscovery{}, fmt.Errorf("fetch login config: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return wlLoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set LODE_TOKEN")
+		return model.LoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set LODE_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return wlLoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
+		return model.LoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
 	}
-	var d wlLoginDiscovery
+	var d model.LoginDiscovery
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return wlLoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
+		return model.LoginDiscovery{}, fmt.Errorf("decode login config: %w", err)
 	}
 	if d.AuthorizeURL == "" || d.TokenURL == "" {
-		return wlLoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
+		return model.LoginDiscovery{}, errors.New("login config missing authorize_url or token_url")
 	}
 	return d, nil
 }
