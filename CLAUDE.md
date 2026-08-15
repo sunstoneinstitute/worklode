@@ -102,12 +102,14 @@ embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
 kinds of type stay package-local: `internal/ui` view types (page-shell state
 and pre-formatted strings, composing model types), `internal/store` scan
 plumbing, and `internal/api` transport internals (`Subject`, sessions, route
-guards). Anything else needs an amendment to 036, not a new struct. The
-migration is complete: `internal/model/rule_test.go` fails the build on a
-json-tagged struct declared in `internal/api` or `internal/cli`, and its
-`allowed` map grows only for a type serialized somewhere other than an HTTP
-body — with a comment saying where. `internal/model/deps_test.go` keeps the
-package a stdlib-only leaf.
+guards). Anything else needs an amendment to 036, not a new struct. Every
+*named* wire struct has moved, and `internal/model/rule_test.go` fails the
+build on a json-tagged struct declared in `internal/api` or `internal/cli`;
+its `allowed` map grows only for a type serialized somewhere other than an
+HTTP body — with a comment saying where. `internal/model/deps_test.go` keeps
+the package a stdlib-only leaf. What the guard cannot see is a handler that
+builds its body as an anonymous struct or a `map[string]any`; a few remain,
+and they are the one way left to reintroduce the drift 036 exists to stop.
 
 Every route is guarded through one table. `internal/api/router.go`'s
 `routeGuards` names the permission each route requires — or `open("why")` when
