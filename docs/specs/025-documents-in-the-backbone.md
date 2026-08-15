@@ -122,6 +122,42 @@ wl:Section a owl:Class ;               # §3
 `prov:wasAttributedTo` on documents, and each has `prov:Entity` as its domain. Without the parent,
 every provenanced document is an OWL violation the moment 006's `owlrl` pass runs.
 
+### 2.2 Documents are not closeable {#sec-2.2}
+
+Tasks close; documents do not. A task is an **undertaking**, and an undertaking completes — it
+reaches a terminal state, leaves the board, and stops being work. A document is a **standing
+description**, and a description is revised, superseded, or distrusted, but never finished. There is
+no state in which a spec is done.
+
+This is why §7.1 can remove `implemented` without replacing it. The scheme left behind is purely
+editorial not because implementation moved somewhere else, but because closure was never a property
+documents had. `draft → accepted → superseded` records how much a reader should trust the text; it
+does not record how far along anything is. Those are different questions, and only tasks answer the
+second.
+
+Supersession is the nearest thing to a document ending, and it is still not closure. A superseded
+document stays readable, stays true as of its issue, and stays linkable — §3's anchors outlive it
+deliberately, and §3.3 keeps the heading rather than deleting it. A delivered task leaves the board;
+a superseded spec does not leave the corpus. The corpus only accretes.
+
+**The cardinality is the test.** A document accrues many tasks over its life: the one that authored
+it, each revision, each review. A task produces at most one document. When a new object is proposed,
+ask which side of that asymmetry it falls on — what many undertakings act on over time is a
+document, what is undertaken once is a task.
+
+None of this needs a third category. A **decision** is a task whose deliverable is a recorded
+decision, and the record is an ADR, which is a document. The task closes when the record exists; the
+record never closes.
+
+**Consequence for the authoring task.** §10 closes a `spec`-kind task "when its document is
+accepted", which fuses two acts on two objects: the authoring work, and the acceptance §7 requires
+be deliberate and human. Fusing them makes a task's terminal state depend on an act performed on
+something other than the task, by someone other than whoever did the work — so the worker cannot
+close what they finished, and an unattended worker cannot close it at all. The two separate: the
+authoring task's deliverable is a document **submitted for review**, and it closes when the
+submission exists. Acceptance is a document status transition (§7), not a task closure. §7's
+requirement is unchanged; it simply stops holding a task hostage.
+
 ## 3. Sections as first-class nodes {#sec-3}
 
 Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
@@ -927,9 +963,10 @@ CHECK (kind IN ('feature','bug','chore','spec','review','spike'))
   ADR, or plan); the document produced is reachable via `prov:wasGeneratedBy`* (§12's
   mechanism, unchanged). It keeps the name `spec` rather than becoming `design`, which reads
   as both technical and visual work to the people using this tracker. A spec-kind task is
-  claimable, real work, and closes when its document is accepted — it is never an umbrella
-  held open against coverage. "Is the spec implemented?" is `lode doc coverage`, not a task
-  state.
+  claimable, real work, and closes when its document is **submitted for review** — not when the
+  document is accepted, which is a status transition on the document and not a state the task
+  can reach (§2.2). It is never an umbrella held open against coverage: "is the spec
+  implemented?" is `lode doc coverage`, not a task state.
 - **No kind is structural.** With no container row minted for a plan (§9.2), the only
   container is a decomposed parent, and its container-ness follows from having children rather
   than from a column. Task kinds therefore describe the nature of work throughout, and none is
