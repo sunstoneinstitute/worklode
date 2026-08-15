@@ -207,17 +207,12 @@ type server struct {
 	docSyncDocs     *prometheus.CounterVec
 	docSyncForced   prometheus.Counter
 
-	// eventSubscriberSeeks counts admin seeks of a subscriber's offsets, by
-	// subscriber; see events.go and observeEventSubscriberSeek.
-	eventSubscriberSeeks *prometheus.CounterVec
-
-	// eventStreamsActive is the number of open SSE follows and
-	// eventStreamEventsSent the events pushed over them; see eventstream.go.
-	// Both are unlabelled: a stream is a whole-instance resource, and the
-	// only cardinality worth adding (the client) is exactly the unbounded
-	// one.
-	eventStreamsActive    prometheus.Gauge
-	eventStreamEventsSent prometheus.Counter
+	// localMerges counts tasks named in a local merge report, by result
+	// (advanced, duplicate, unknown_task); see merges.go. In a repo where
+	// both a webhook and a developer's clone report merges, plenty of
+	// "duplicate" is the healthy signal — its disappearance means one of the
+	// two reporters has stopped.
+	localMerges *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -455,6 +450,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+	r.api("POST /api/v1/merges", s.reportMerge)
 
 	// Project, actor, and token management is admin-only (permProjectAdmin /
 	// permActorAdmin in routeGuards): any bearer token may otherwise mint

@@ -76,12 +76,38 @@ func fileMode(t *testing.T, path string) os.FileMode {
 	return info.Mode()
 }
 
+// chainFor returns what the named hook chains to in an installGitHooks
+// result, failing the test if the hook is missing from it.
+func chainFor(t *testing.T, chains []hookChain, hook string) string {
+	t.Helper()
+	for _, c := range chains {
+		if c.Hook == hook {
+			return c.ChainedTo
+		}
+	}
+	t.Fatalf("no %s in install result %+v", hook, chains)
+	return ""
+}
+
+// actionFor is chainFor for an uninstallGitHooks result.
+func actionFor(t *testing.T, removals []hookRemoval, hook string) string {
+	t.Helper()
+	for _, r := range removals {
+		if r.Hook == hook {
+			return r.Action
+		}
+	}
+	t.Fatalf("no %s in uninstall result %+v", hook, removals)
+	return ""
+}
+
 // --- fresh install -----------------------------------------------------
 
 func TestInstallGitHooksFreshInstall(t *testing.T) {
 	root := initGitRepo(t)
 
-	hooksDir, chainedTo, err := installGitHooks(root)
+	hooksDir, chains, err := installGitHooks(root)
+	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
 		t.Fatalf("installGitHooks: %v", err)
 	}
@@ -113,14 +139,14 @@ func TestInstallGitHooksFreshInstall(t *testing.T) {
 func TestInstallGitHooksIdempotent(t *testing.T) {
 	root := initGitRepo(t)
 
-	hooksDir, chainedTo1, err := installGitHooks(root)
+	hooksDir, chains1, err := installGitHooks(root)
 	if err != nil {
 		t.Fatalf("first installGitHooks: %v", err)
 	}
 	preCommitPath := filepath.Join(hooksDir, "pre-commit")
 	first := readFile(t, preCommitPath)
 
-	_, chainedTo2, err := installGitHooks(root)
+	_, chains2, err := installGitHooks(root)
 	if err != nil {
 		t.Fatalf("second installGitHooks: %v", err)
 	}
@@ -129,6 +155,7 @@ func TestInstallGitHooksIdempotent(t *testing.T) {
 	if first != second {
 		t.Fatalf("pre-commit changed across re-runs:\nfirst:  %q\nsecond: %q", first, second)
 	}
+	chainedTo1, chainedTo2 := chainFor(t, chains1, "pre-commit"), chainFor(t, chains2, "pre-commit")
 	if chainedTo1 != chainedTo2 {
 		t.Fatalf("chainedTo changed across re-runs: %q -> %q", chainedTo1, chainedTo2)
 	}
@@ -154,7 +181,8 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 		t.Fatalf("write third-party pre-commit: %v", err)
 	}
 
-	_, chainedTo, err := installGitHooks(root)
+	_, chains, err := installGitHooks(root)
+	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
 		t.Fatalf("installGitHooks: %v", err)
 	}
@@ -172,10 +200,11 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 	}
 
 	// Re-run: must not re-rename or clobber the preserved original.
-	_, chainedTo2, err := installGitHooks(root)
+	_, chains2, err := installGitHooks(root)
 	if err != nil {
 		t.Fatalf("second installGitHooks: %v", err)
 	}
+	chainedTo2 := chainFor(t, chains2, "pre-commit")
 	if chainedTo2 != preLodePath {
 		t.Fatalf("second run chainedTo = %q, want %q", chainedTo2, preLodePath)
 	}
@@ -195,7 +224,8 @@ func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
 		t.Fatalf("write .pre-commit-config.yaml: %v", err)
 	}
 
-	hooksDir, chainedTo, err := installGitHooks(root)
+	hooksDir, chains, err := installGitHooks(root)
+	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
 		t.Fatalf("installGitHooks: %v", err)
 	}
@@ -208,10 +238,11 @@ func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
 	}
 
 	// Re-run stays converged (still chains to the framework, no accumulation).
-	_, chainedTo2, err := installGitHooks(root)
+	_, chains2, err := installGitHooks(root)
 	if err != nil {
 		t.Fatalf("second installGitHooks: %v", err)
 	}
+	chainedTo2 := chainFor(t, chains2, "pre-commit")
 	if chainedTo2 != "pre-commit" {
 		t.Fatalf("second run chainedTo = %q, want %q", chainedTo2, "pre-commit")
 	}
@@ -333,7 +364,8 @@ func TestInstallGitHooksQuotesChainTargetWithSpaces(t *testing.T) {
 		t.Fatalf("write third-party pre-commit: %v", err)
 	}
 
-	_, chainedTo, err := installGitHooks(root)
+	_, chains, err := installGitHooks(root)
+	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
 		t.Fatalf("installGitHooks: %v", err)
 	}
@@ -430,7 +462,8 @@ func TestUninstallGitHooksRemovesOurHook(t *testing.T) {
 		t.Fatalf("installGitHooks: %v", err)
 	}
 
-	gotDir, action, err := uninstallGitHooks(root)
+	gotDir, removals, err := uninstallGitHooks(root)
+	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
 		t.Fatalf("uninstallGitHooks: %v", err)
 	}
@@ -445,10 +478,11 @@ func TestUninstallGitHooksRemovesOurHook(t *testing.T) {
 	}
 
 	// Re-running on an already-clean repo is a no-op, not an error.
-	_, action2, err := uninstallGitHooks(root)
+	_, removals2, err := uninstallGitHooks(root)
 	if err != nil {
 		t.Fatalf("second uninstallGitHooks: %v", err)
 	}
+	action2 := actionFor(t, removals2, "pre-commit")
 	if action2 != hookActionNone {
 		t.Fatalf("second run action = %q, want %q", action2, hookActionNone)
 	}
@@ -472,7 +506,8 @@ func TestUninstallGitHooksRestoresPreservedHook(t *testing.T) {
 		t.Fatalf("installGitHooks: %v", err)
 	}
 
-	_, action, err := uninstallGitHooks(root)
+	_, removals, err := uninstallGitHooks(root)
+	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
 		t.Fatalf("uninstallGitHooks: %v", err)
 	}
@@ -505,7 +540,8 @@ func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
 		t.Fatalf("write foreign pre-commit: %v", err)
 	}
 
-	_, action, err := uninstallGitHooks(root)
+	_, removals, err := uninstallGitHooks(root)
+	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
 		t.Fatalf("uninstallGitHooks: %v", err)
 	}
@@ -514,5 +550,110 @@ func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
 	}
 	if got := readFile(t, preCommitPath); got != foreign {
 		t.Fatalf("foreign pre-commit was modified: %q", got)
+	}
+}
+
+// --- the merge-reporting hooks ------------------------------------------------
+
+// TestInstallGitHooksInstallsMergeHooks: post-merge and post-commit are what
+// make a local merge visible to the backbone, so install must write them
+// alongside pre-commit, and uninstall must take all three away.
+func TestInstallGitHooksInstallsMergeHooks(t *testing.T) {
+	root := initGitRepo(t)
+
+	hooksDir, chains, err := installGitHooks(root)
+	if err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+	for _, hook := range []string{"pre-commit", "post-merge", "post-commit"} {
+		path := filepath.Join(hooksDir, hook)
+		content := readFile(t, path)
+		if !strings.Contains(content, "exec lode hook "+hook+" \"$@\"") {
+			t.Fatalf("%s = %q, want it to invoke `lode hook %s`", hook, content, hook)
+		}
+		if mode := fileMode(t, path); mode.Perm() != 0o755 {
+			t.Fatalf("%s mode = %v, want 0755", hook, mode.Perm())
+		}
+		if chainFor(t, chains, hook) != "" {
+			t.Fatalf("%s chains to something on a fresh install", hook)
+		}
+	}
+
+	_, removals, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("uninstallGitHooks: %v", err)
+	}
+	for _, hook := range []string{"pre-commit", "post-merge", "post-commit"} {
+		if got := actionFor(t, removals, hook); got != hookActionRemoved {
+			t.Fatalf("%s uninstall action = %q, want %q", hook, got, hookActionRemoved)
+		}
+		if fileExists(filepath.Join(hooksDir, hook)) {
+			t.Fatalf("%s still present after uninstall", hook)
+		}
+	}
+}
+
+// TestInstallGitHooksFrameworkChainIsPreCommitOnly: running the pre-commit
+// binary bare executes its pre-commit stage, which is the wrong thing to fire
+// from post-merge or post-commit.
+func TestInstallGitHooksFrameworkChainIsPreCommitOnly(t *testing.T) {
+	root := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".pre-commit-config.yaml"), []byte("repos: []\n"), 0o644); err != nil {
+		t.Fatalf("write .pre-commit-config.yaml: %v", err)
+	}
+
+	_, chains, err := installGitHooks(root)
+	if err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+	if got := chainFor(t, chains, "pre-commit"); got != "pre-commit" {
+		t.Fatalf("pre-commit chainedTo = %q, want the framework", got)
+	}
+	for _, hook := range []string{"post-merge", "post-commit"} {
+		if got := chainFor(t, chains, hook); got != "" {
+			t.Fatalf("%s chainedTo = %q, want no framework chain", hook, got)
+		}
+	}
+}
+
+// TestInstallGitHooksPreservesThirdPartyPostMerge: the preserve-and-chain
+// contract is per hook, not pre-commit's alone.
+func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, err := resolveHooksDir(root)
+	if err != nil {
+		t.Fatalf("resolveHooksDir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	postMergePath := filepath.Join(hooksDir, "post-merge")
+	thirdParty := "#!/bin/sh\necho distinctive-post-merge\n"
+	if err := os.WriteFile(postMergePath, []byte(thirdParty), 0o755); err != nil {
+		t.Fatalf("write third-party post-merge: %v", err)
+	}
+
+	_, chains, err := installGitHooks(root)
+	if err != nil {
+		t.Fatalf("installGitHooks: %v", err)
+	}
+	preLodePath := postMergePath + ".pre-lode"
+	if got := chainFor(t, chains, "post-merge"); got != preLodePath {
+		t.Fatalf("post-merge chainedTo = %q, want %q", got, preLodePath)
+	}
+	if got := readFile(t, preLodePath); got != thirdParty {
+		t.Fatalf("post-merge.pre-lode = %q, want the original %q", got, thirdParty)
+	}
+
+	// And uninstall puts it back.
+	_, removals, err := uninstallGitHooks(root)
+	if err != nil {
+		t.Fatalf("uninstallGitHooks: %v", err)
+	}
+	if got := actionFor(t, removals, "post-merge"); got != hookActionRestored {
+		t.Fatalf("post-merge uninstall action = %q, want %q", got, hookActionRestored)
+	}
+	if got := readFile(t, postMergePath); got != thirdParty {
+		t.Fatalf("post-merge after uninstall = %q, want the original %q", got, thirdParty)
 	}
 }

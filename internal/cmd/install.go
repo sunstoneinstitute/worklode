@@ -99,9 +99,11 @@ type installResult struct {
 }
 
 type vcsInstall struct {
-	VCS       string `json:"vcs"`
-	HooksDir  string `json:"hooks_dir"`
-	ChainedTo string `json:"chained_to"`
+	VCS      string `json:"vcs"`
+	HooksDir string `json:"hooks_dir"`
+	// Hooks is one entry per managed git hook, in install order, each naming
+	// what it chains to.
+	Hooks []hookChain `json:"hooks"`
 }
 
 type agentInstall struct {
@@ -133,7 +135,9 @@ type statusLineUninstall struct {
 type vcsUninstall struct {
 	VCS      string `json:"vcs"`
 	HooksDir string `json:"hooks_dir"`
-	Action   string `json:"action"`
+	// Hooks is one entry per managed git hook, in the same order, each
+	// naming what the uninstall did to it.
+	Hooks []hookRemoval `json:"hooks"`
 }
 
 type agentUninstall struct {
@@ -163,11 +167,11 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		}
 	}
 	if targets.vcs != "" {
-		hooksDir, chainedTo, err := installGitHooks(dir)
+		hooksDir, chains, err := installGitHooks(dir)
 		if err != nil {
 			return res, err
 		}
-		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, ChainedTo: chainedTo}
+		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: chains}
 	}
 	if targets.agent != "" {
 		path, err := settingsPathForScope(dir, scope)
@@ -197,11 +201,11 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallResult, error) {
 	var res uninstallResult
 	if targets.vcs != "" {
-		hooksDir, action, err := uninstallGitHooks(dir)
+		hooksDir, removals, err := uninstallGitHooks(dir)
 		if err != nil {
 			return res, err
 		}
-		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Action: action}
+		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: removals}
 	}
 	if targets.agent != "" {
 		path, err := settingsPathForScope(dir, scope)
@@ -229,9 +233,12 @@ func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Worklode's hooks for this repo's VCS and coding agent",
-		Long: "Installs two integrations. The VCS side writes a pre-commit hook (into the repo's " +
-			"shared hooks directory, honoring core.hooksPath) that invokes `lode hook pre-commit`, " +
-			"chaining any pre-commit hook already present or the pre-commit framework. The agent " +
+		Long: "Installs two integrations. The VCS side writes pre-commit, post-merge and post-commit " +
+			"hooks (into the repo's shared hooks directory, honoring core.hooksPath) that invoke " +
+			"`lode hook <event>`, chaining any hook already present on the same event, or — for " +
+			"pre-commit — the pre-commit framework. pre-commit keeps a working session's lease " +
+			"alive; post-merge and post-commit report a merge that lands on the default branch " +
+			"here, so a task advances without waiting for a GitHub webhook. The agent " +
 			"side writes Worklode's lifecycle hook bindings (session start/end, heartbeat, worktree " +
 			"enter) into the repo's Claude Code settings file. Use --no-vcs or --no-agent to skip " +
 			"either. Safe to re-run: both converge rather than accumulate.\n\n" +
@@ -272,8 +279,9 @@ func newUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove Worklode's hooks from this repo's VCS and coding agent",
-		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit hook " +
-			"and restores whatever it preserved, leaving a third-party pre-commit hook it does not " +
+		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit, " +
+			"post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
+			"third-party hook it does not " +
 			"recognize untouched. The agent side removes every `lode hook` binding from the repo's " +
 			"Claude Code settings file, leaving all other settings — including third-party hooks on " +
 			"the same events — in place. Use --no-vcs or --no-agent to skip either. A repo with " +
@@ -320,9 +328,11 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 	}
 	out := cmd.OutOrStdout()
 	if res.VCS != nil {
-		fmt.Fprintf(out, "%s: installed pre-commit hook in %s\n", res.VCS.VCS, res.VCS.HooksDir)
-		if res.VCS.ChainedTo != "" {
-			fmt.Fprintf(out, "%s: chains to %s\n", res.VCS.VCS, res.VCS.ChainedTo)
+		for _, h := range res.VCS.Hooks {
+			fmt.Fprintf(out, "%s: installed %s hook in %s\n", res.VCS.VCS, h.Hook, res.VCS.HooksDir)
+			if h.ChainedTo != "" {
+				fmt.Fprintf(out, "%s: %s chains to %s\n", res.VCS.VCS, h.Hook, h.ChainedTo)
+			}
 		}
 	}
 	if res.Agent != nil {
@@ -353,16 +363,19 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	}
 	out := cmd.OutOrStdout()
 	if res.VCS != nil {
-		switch res.VCS.Action {
-		case hookActionRestored:
-			fmt.Fprintf(out, "%s: removed pre-commit hook from %s and restored the previous one\n",
-				res.VCS.VCS, res.VCS.HooksDir)
-		case hookActionRemoved:
-			fmt.Fprintf(out, "%s: removed pre-commit hook from %s\n", res.VCS.VCS, res.VCS.HooksDir)
-		case hookActionNone:
-			fmt.Fprintf(out, "%s: no Worklode pre-commit hook in %s\n", res.VCS.VCS, res.VCS.HooksDir)
-		default:
-			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.VCS.VCS, res.VCS.Action, res.VCS.HooksDir)
+		for _, h := range res.VCS.Hooks {
+			switch h.Action {
+			case hookActionRestored:
+				fmt.Fprintf(out, "%s: removed %s hook from %s and restored the previous one\n",
+					res.VCS.VCS, h.Hook, res.VCS.HooksDir)
+			case hookActionRemoved:
+				fmt.Fprintf(out, "%s: removed %s hook from %s\n", res.VCS.VCS, h.Hook, res.VCS.HooksDir)
+			case hookActionNone:
+				fmt.Fprintf(out, "%s: no Worklode %s hook in %s\n", res.VCS.VCS, h.Hook, res.VCS.HooksDir)
+			default:
+				fmt.Fprintf(out, "%s: unexpected uninstall result %q for %s in %s\n",
+					res.VCS.VCS, h.Action, h.Hook, res.VCS.HooksDir)
+			}
 		}
 	}
 	if res.Agent != nil {

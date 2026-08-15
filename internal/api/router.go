@@ -117,6 +117,12 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
+	// --- delivery ------------------------------------------------------------
+	// Reporting a merge advances tasks, so it needs the same permission the
+	// done/abandon endpoints do. The webhook reporter carries no actor and is
+	// authenticated by HMAC instead; this one is a person's CLI token.
+	"POST /api/v1/merges": guarded(permTaskWrite),
+
 	// --- projects, actors, tokens -------------------------------------------
 	"GET /api/v1/projects":                    guarded(permProjectRead),
 	"GET /api/v1/projects/resolve":            guarded(permProjectRead),

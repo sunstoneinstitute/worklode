@@ -72,38 +72,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_doc_sync_forced_total",
 		Help: "Forced (--force) doc syncs accepted.",
 	})
-	// A distinct counter, not left to http_requests_total, because a seek is
-	// the one admin-triggered write on this surface: it is the only way an
-	// operator moves a subscriber's offsets backwards (025 §18), and how
-	// often that happens is worth alerting on independently of request
-	// volume. The GET reads beside it (listEvents, listEventSubscribers) are
-	// ordinary reads with no derived outcome, so the generic HTTP middleware
-	// (http_requests_total/http_request_duration_seconds) is judged
-	// sufficient for them — see the eventbus package's
-	// worklode_event_subscriber_lag and worklode_events_processed_total for
-	// the domain-level visibility into the log itself.
-	s.eventSubscriberSeeks = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_event_subscriber_seeks_total",
-		Help: "Admin seeks of a subscriber's offsets (POST /api/v1/event-subscribers/{name}/seek), by subscriber.",
-	}, []string{"subscriber"})
-	// The stream's own two instruments. http_requests_total cannot stand in
-	// for either: a follow is one request that lasts hours, so it is counted
-	// once at the end and its duration lands in http_request_duration_seconds
-	// only when the client hangs up. How many follows are open right now, and
-	// how much they are pushing, are the two questions an operator actually
-	// asks about this route.
-	s.eventStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "worklode_event_streams_active",
-		Help: "Open event-log follows (GET /api/v1/events/stream). Each holds a connection and a repeating horizon-bounded query.",
-	})
-	s.eventStreamEventsSent = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "worklode_event_stream_events_sent_total",
-		Help: "Events pushed to event-log followers, summed across all open streams.",
-	})
+	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_local_merge_reports_total",
+		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
+	}, []string{"result"})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.eventSubscriberSeeks,
-		s.eventStreamsActive, s.eventStreamEventsSent)
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -111,6 +86,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.syncRuns.WithLabelValues("error")
 	for _, action := range []string{"assign", "unassign", "start", "stop"} {
 		s.assignments.WithLabelValues(action)
+	}
+	for _, result := range []string{
+		store.LocalMergeAdvanced, store.LocalMergeDuplicate, store.LocalMergeUnknownTask,
+	} {
+		s.localMerges.WithLabelValues(result)
 	}
 	for _, surface := range []string{"api", "web"} {
 		for _, outcome := range []string{"ok", "not_found", "error"} {
@@ -175,6 +155,15 @@ func (s *server) observeAssignment(action string) {
 		return
 	}
 	s.assignments.WithLabelValues(action).Inc()
+}
+
+// recordLocalMerge records the result of one task named in a local merge
+// report. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) recordLocalMerge(result string) {
+	if s.localMerges == nil {
+		return
+	}
+	s.localMerges.WithLabelValues(result).Inc()
 }
 
 // cockpitOutcome classifies an assembleProjectCockpit error for the

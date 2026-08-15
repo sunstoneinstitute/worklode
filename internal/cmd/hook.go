@@ -91,9 +91,9 @@ func parseHookArgs(args []string) (event string, next []string, err error) {
 const unboundTrigger = "(unbound — callable from scripts)"
 
 // hookTriggers maps each Worklode event to what a default `lode install` binds
-// it to. Derived from claudeBindings (and, for pre-commit, the git hook
-// installGitHooks writes) rather than restated, so the listing cannot drift
-// from what installation actually wires up.
+// it to. Derived from claudeBindings and from gitHooks — the same lists
+// installation walks — rather than restated, so the listing cannot drift from
+// what installation actually wires up.
 func hookTriggers() map[string]string {
 	claude := map[string][]string{}
 	for _, b := range claudeBindings {
@@ -104,7 +104,10 @@ func hookTriggers() map[string]string {
 		}
 		claude[event] = append(claude[event], name)
 	}
-	triggers := map[string]string{"pre-commit": "git pre-commit"}
+	triggers := map[string]string{}
+	for _, h := range gitHooks {
+		triggers[h.name] = "git " + h.name
+	}
 	for event, names := range claude {
 		triggers[event] = "Claude Code " + strings.Join(names, ", ")
 	}

@@ -305,24 +305,64 @@ func TestDone(t *testing.T) {
 	}
 }
 
-func TestDoneBadStates(t *testing.T) {
+// TestDoneWithoutReview covers the two direct-to-main jumps legalTransitions
+// allows. Not every task earns a review, and one that is not code at all — an
+// admin UI change, a CMS edit — has no webhook to report a delivery, so a
+// manual done is its only close.
+func TestDoneWithoutReview(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Not there yet", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "From ready", "priority": "high", "kind": "chore"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "From in progress", "priority": "high", "kind": "chore"})
 
-	// From ready: 422.
+	// ready -> merged, no claim and no review in between.
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("done from ready status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("done from ready status = %d, want 200; body %s", rr.Code, rr.Body.String())
 	}
-	// From in_progress: still 422 per the transition table.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if got := decodeMap(t, rr); got["state"] != "merged" {
+		t.Fatalf("state = %v, want merged", got["state"])
+	}
+
+	// in_progress -> merged, and the claim's lease closes with it.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/claim", token, map[string]any{"worktree": "host:/wt-2"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/done", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("done from in_progress status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["state"] != "merged" {
+		t.Fatalf("state = %v, want merged", got["state"])
+	}
+	if _, err := st.ActiveLease(context.Background(), "WL-2"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("active lease after done: err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDoneBadStates: with the from-state read at transition time,
+// legalTransitions is the whole gate. A draft has not been published, and a
+// task already closed has nowhere left to go.
+func TestDoneBadStates(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Still a draft", "priority": "high", "kind": "feature", "draft": true})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Closed already", "priority": "high", "kind": "feature"})
+
+	// From draft: 422. Publish it first.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("done from in_progress status = %d, want 422", rr.Code)
+		t.Fatalf("done from draft status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	// From abandoned: 422. Closed is closed; reopen is the way back.
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/abandon", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("abandon status = %d", rr.Code)
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/done", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("done from abandoned status = %d, want 422", rr.Code)
 	}
 	// Unknown task: 404.
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/done", token, nil)

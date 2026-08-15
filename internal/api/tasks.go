@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -33,6 +34,11 @@ var validEdgeTypes = map[string]bool{
 // taskJSON is the wire form of a task: every store.Task field, so a client
 // reading JSON sees the same record the server holds. Concern is "" when the
 // task has none. Assignee is "" when the task is unassigned.
+//
+// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and is
+// the authority on branch names (008 §3.1), so a client that needs to match
+// local refs against tasks reads the name from here rather than rendering
+// one.
 type taskJSON struct {
 	ID                 string    `json:"id"`
 	Project            string    `json:"project"`
@@ -48,6 +54,7 @@ type taskJSON struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 	Skills             []string  `json:"skills"`
 	Assignee           string    `json:"assignee"`
+	Branch             string    `json:"branch"`
 }
 
 func toTaskJSON(t *store.Task) taskJSON {
@@ -70,6 +77,7 @@ func toTaskJSON(t *store.Task) taskJSON {
 		UpdatedAt:          t.UpdatedAt,
 		Skills:             skills,
 		Assignee:           t.Assignee,
+		Branch:             store.BranchFor(t),
 	}
 }
 
@@ -300,6 +308,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// The repo filter takes any remote URL form as well as owner/name, and is
+	// normalized here rather than in the client for resolveProjectByRemote's
+	// reason: a normalization fix must ship without a client upgrade.
+	var repo string
+	if raw := q.Get("repo"); raw != "" {
+		var err error
+		if repo, err = repourl.Normalize(raw); err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  q.Get("project"),
 		States:   states,
@@ -307,6 +326,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Kind:     q.Get("kind"),
 		Parent:   q.Get("parent"),
 		Assignee: q.Get("assignee"),
+		Repo:     repo,
 
 		HasChildren: q.Get("has_children") == "true",
 	})

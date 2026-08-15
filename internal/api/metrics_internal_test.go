@@ -233,3 +233,37 @@ func TestObserveDocSync(t *testing.T) {
 	// Nil-safe: a server built without initMetrics must not panic.
 	(&server{}).observeDocSync(nil, false, nil, 0)
 }
+
+func TestRecordLocalMerge(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	// Every label is pre-initialised, so a reporter that has gone silent
+	// reads as a flat zero rather than as no-data.
+	for _, result := range []string{"advanced", "duplicate", "unknown_task"} {
+		if got := testutil.ToFloat64(s.localMerges.WithLabelValues(result)); got != 0 {
+			t.Fatalf("localMerges{%s} = %v before any report, want 0", result, got)
+		}
+	}
+
+	s.recordLocalMerge(store.LocalMergeAdvanced)
+	s.recordLocalMerge(store.LocalMergeDuplicate)
+	s.recordLocalMerge(store.LocalMergeDuplicate)
+	s.recordLocalMerge(store.LocalMergeUnknownTask)
+
+	for _, tc := range []struct {
+		result string
+		want   float64
+	}{{"advanced", 1}, {"duplicate", 2}, {"unknown_task", 1}} {
+		if got := testutil.ToFloat64(s.localMerges.WithLabelValues(tc.result)); got != tc.want {
+			t.Fatalf("localMerges{%s} = %v, want %v", tc.result, got, tc.want)
+		}
+	}
+}
+
+// TestRecordLocalMergeNilSafe: handlers call this on a server a test may have
+// built without initMetrics.
+func TestRecordLocalMergeNilSafe(t *testing.T) {
+	(&server{}).recordLocalMerge(store.LocalMergeAdvanced)
+}
