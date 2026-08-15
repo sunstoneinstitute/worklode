@@ -442,7 +442,7 @@ func costWindowLabel(days int) string {
 
 // printProjectDetail renders `lode project show`: the project's identity,
 // focus, and repos, then one cost block per currency.
-func printProjectDetail(cmd *cobra.Command, d cli.ProjectDetail, window string) {
+func printProjectDetail(cmd *cobra.Command, d model.ProjectDetail, window string) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s%s — %s\n", d.ID, keySuffix(d.Key), d.Name)
 	printFocus(cmd, d.Focus)
@@ -460,7 +460,7 @@ func printProjectDetail(cmd *cobra.Command, d cli.ProjectDetail, window string) 
 // printCost writes one block per currency: a headline total, a row per day,
 // and — when some tokens were billed on a model with no price on file — the
 // shortfall that headline therefore omits.
-func printCost(out io.Writer, cost cli.ProjectCost, window string) {
+func printCost(out io.Writer, cost model.ProjectCost, window string) {
 	if len(cost.Totals) == 0 {
 		fmt.Fprintf(out, "\ncost, %s: none recorded\n", window)
 		return
@@ -478,8 +478,8 @@ func printCost(out io.Writer, cost cli.ProjectCost, window string) {
 			fmt.Fprintf(tw, "  %s\t%s\tin %s\tcache-w %s\tcache-r %s\tout %s\n",
 				d.Day, cli.Money(d.CostAmount),
 				cli.HumanTokens(d.InputTokens),
-				cli.HumanTokens(d.CacheWrite5m+d.CacheWrite1h),
-				cli.HumanTokens(d.CacheRead),
+				cli.HumanTokens(d.CacheWrite5mTokens+d.CacheWrite1hTokens),
+				cli.HumanTokens(d.CacheReadTokens),
 				cli.HumanTokens(d.OutputTokens))
 		}
 		tw.Flush()

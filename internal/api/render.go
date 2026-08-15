@@ -1,9 +1,9 @@
-// render.go maps internal/api's read-model DTOs (boardResponse,
-// cockpitProjection, timeline entries, ...) into the presentation view types
-// internal/ui's templ components render. This is the one-way seam that keeps
-// the dependency pointing api -> ui: ui never sees an api type, api never
-// imports ui's templates' internals. The web page handlers in web.go build a
-// ui view through these funcs and call ui.<Page>(view).Render.
+// render.go maps internal/model values (model.BoardResponse,
+// model.CockpitProjection, timeline entries, ...) into the presentation view
+// types internal/ui's templ components render. This is the one-way seam that
+// keeps the dependency pointing api -> ui: ui never sees an api type, api
+// never imports ui's templates' internals. The web page handlers in web.go
+// build a ui view through these funcs and call ui.<Page>(view).Render.
 package api
 
 import (
@@ -17,7 +17,7 @@ import (
 // boardView maps the org-wide board (shared with GET /api/v1/board) plus the
 // untriaged-inbox count into the ui board view. isHome selects the Home
 // heading over the Work heading; active/title drive the shell.
-func boardView(b *boardResponse, inboxCount int, isHome bool, title, active string) ui.BoardView {
+func boardView(b *model.BoardResponse, inboxCount int, isHome bool, title, active string) ui.BoardView {
 	v := ui.BoardView{
 		Page:       ui.PageProps{Title: title, ActiveGlobal: active},
 		IsHome:     isHome,
@@ -28,10 +28,10 @@ func boardView(b *boardResponse, inboxCount int, isHome bool, title, active stri
 		v.Projects = append(v.Projects, ui.BoardProject{
 			ID:         p.ID,
 			Name:       p.Name,
-			InProgress: boardItems(p.InProgress),
-			InReview:   boardItems(p.InReview),
-			Ready:      boardItems(p.Ready),
-			Blocked:    boardItems(p.Blocked),
+			InProgress: p.InProgress,
+			InReview:   p.InReview,
+			Ready:      p.Ready,
+			Blocked:    p.Blocked,
 		})
 	}
 	for _, f := range b.RecentFailures {
@@ -44,26 +44,6 @@ func boardView(b *boardResponse, inboxCount int, isHome bool, title, active stri
 		})
 	}
 	return v
-}
-
-// boardItems maps one board bucket's rows, carrying the lease holder through
-// as a nil-able BoardHolder.
-func boardItems(items []boardTaskJSON) []ui.BoardItem {
-	out := make([]ui.BoardItem, 0, len(items))
-	for _, it := range items {
-		bi := ui.BoardItem{
-			ID:       it.ID,
-			Title:    it.Title,
-			Priority: it.Priority,
-			State:    it.State,
-			Assignee: it.Assignee,
-		}
-		if it.Holder != nil {
-			bi.Holder = &ui.BoardHolder{ActorID: it.Holder.ActorID, ExpiresAt: it.Holder.ExpiresAt}
-		}
-		out = append(out, bi)
-	}
-	return out
 }
 
 // projectsView maps the cross-project portfolio, dropping store.Project's
@@ -103,7 +83,7 @@ func placeholderGlobalView(destination, heading, message string) ui.PlaceholderV
 // placeholderProjectView builds the honest placeholder for a not-yet-built
 // project section, carrying the project identity and active section so the
 // page renders the same sidebar as the overview page.
-func placeholderProjectView(c *cockpitProjection, heading, message, section string) ui.PlaceholderView {
+func placeholderProjectView(c *model.CockpitProjection, heading, message, section string) ui.PlaceholderView {
 	proj := cockpitProject(c.Project)
 	return ui.PlaceholderView{
 		Page:          ui.PageProps{Title: "worklode: " + c.Project.Name + ": " + heading},
@@ -116,13 +96,13 @@ func placeholderProjectView(c *cockpitProjection, heading, message, section stri
 }
 
 // cockpitView maps the project cockpit projection into the ui overview view.
-func cockpitView(c *cockpitProjection, title string) ui.CockpitView {
+func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	return ui.CockpitView{
 		Page:         ui.PageProps{Title: title},
 		CanonicalURL: c.CanonicalURL,
 		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks/new",
 		Project:      cockpitProject(c.Project),
-		ModeName:     string(c.Mode.Name),
+		ModeName:     c.Mode.Name,
 		ModeBasis:    c.Mode.Basis.Summary,
 		PinnedFocus:  cockpitFocus(c.PinnedFocus),
 		RankingFocus: c.RankingFocus,
@@ -228,13 +208,13 @@ func formOptionLabel(value string) string {
 
 // cockpitProject maps the project identity, reused by the cockpit and the
 // project placeholder sidebar.
-func cockpitProject(p cockpitProjectJSON) ui.CockpitProject {
+func cockpitProject(p model.CockpitProject) ui.CockpitProject {
 	return ui.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key}
 }
 
 // cockpitFocus maps the pinned-focus note, preserving nil (nothing pinned).
 // The pinner's display name flattens to "" when the actor is unknown.
-func cockpitFocus(f *focusJSON) *ui.CockpitFocus {
+func cockpitFocus(f *model.Focus) *ui.CockpitFocus {
 	if f == nil {
 		return nil
 	}
@@ -247,7 +227,7 @@ func cockpitFocus(f *focusJSON) *ui.CockpitFocus {
 
 // cockpitDecision maps the next governed decision, preserving nil (no decision
 // ready).
-func cockpitDecision(d *decisionJSON) *ui.CockpitDecision {
+func cockpitDecision(d *model.Decision) *ui.CockpitDecision {
 	if d == nil {
 		return nil
 	}
@@ -260,7 +240,7 @@ func cockpitDecision(d *decisionJSON) *ui.CockpitDecision {
 
 // workRows maps one cockpit work bucket, flattening owner/delegate to their
 // display names ("" when absent).
-func workRows(items []cockpitWorkItem) []ui.WorkRow {
+func workRows(items []model.CockpitWorkItem) []ui.WorkRow {
 	out := make([]ui.WorkRow, 0, len(items))
 	for _, it := range items {
 		wr := ui.WorkRow{
@@ -284,7 +264,7 @@ func workRows(items []cockpitWorkItem) []ui.WorkRow {
 }
 
 // cockpitConcerns maps the secondary concerns (open blockers).
-func cockpitConcerns(items []secondaryConcernJSON) []ui.CockpitConcern {
+func cockpitConcerns(items []model.SecondaryConcern) []ui.CockpitConcern {
 	out := make([]ui.CockpitConcern, 0, len(items))
 	for _, c := range items {
 		out = append(out, ui.CockpitConcern{
@@ -298,7 +278,7 @@ func cockpitConcerns(items []secondaryConcernJSON) []ui.CockpitConcern {
 
 // cockpitRepos maps the mapped repositories and their declared done-state
 // evidence.
-func cockpitRepos(items []repositoryJSON) []ui.CockpitRepo {
+func cockpitRepos(items []model.Repository) []ui.CockpitRepo {
 	out := make([]ui.CockpitRepo, 0, len(items))
 	for _, r := range items {
 		out = append(out, ui.CockpitRepo{
@@ -312,7 +292,7 @@ func cockpitRepos(items []repositoryJSON) []ui.CockpitRepo {
 
 // cockpitCostTotals maps the per-currency cost totals for the cockpit's cost
 // window.
-func cockpitCostTotals(c projectCostJSON) []ui.CockpitCostTotal {
+func cockpitCostTotals(c model.ProjectCost) []ui.CockpitCostTotal {
 	out := make([]ui.CockpitCostTotal, 0, len(c.Totals))
 	for _, t := range c.Totals {
 		out = append(out, ui.CockpitCostTotal{

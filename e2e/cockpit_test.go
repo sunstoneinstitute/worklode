@@ -31,7 +31,7 @@ const cockpitRepo = "acme/app"
 //
 // internal/cli has no typed client for GET /projects/{id}/cockpit (it is
 // consumed by the web UI in-process, not by the CLI), so this test decodes
-// the same JSON shape cockpit.go's cockpitProjection emits directly.
+// the same JSON shape model.CockpitProjection emits directly.
 
 type cockpitActorJSON struct {
 	ID   string `json:"id"`

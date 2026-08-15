@@ -24,6 +24,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -578,7 +579,7 @@ func assertBoard(t *testing.T, ctx context.Context, agent *cli.Client) {
 	if err != nil {
 		t.Fatalf("board: %v", err)
 	}
-	var demo *cli.BoardProject
+	var demo *model.BoardProject
 	for i := range board.Projects {
 		if board.Projects[i].ID == "demo" {
 			demo = &board.Projects[i]

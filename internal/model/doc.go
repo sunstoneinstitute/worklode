@@ -52,3 +52,19 @@ type Doc struct {
 	Sections     []DocSection    `json:"sections,omitempty"`
 	Edges        []DocEdge       `json:"edges,omitempty"`
 }
+
+// DocSyncResult is one document's outcome in a SyncDocs response.
+type DocSyncResult struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Outcome string `json:"outcome"`
+}
+
+// DocSyncReport is the wire form of POST /api/v1/docs/sync (spec 025 §16.2).
+type DocSyncReport struct {
+	DryRun    bool            `json:"dry_run"`
+	Added     int             `json:"added"`
+	Updated   int             `json:"updated"`
+	Unchanged int             `json:"unchanged"`
+	Results   []DocSyncResult `json:"results"`
+}
