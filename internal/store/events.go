@@ -326,7 +326,7 @@ func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error)
 type EventFilter struct {
 	Type  string
 	Since time.Time
-	After int64 // exclusive id cursor; the stream of Task 8 pages with it
+	After int64 // exclusive id cursor, for cursor-based paging
 	Limit int   // default/cap 200
 }
 
@@ -397,12 +397,12 @@ type EventSubscriberStatus struct {
 
 // EventSubscriberStatuses lists every subscriber with its lag and lock
 // holder. The pg_locks join splits the 64-bit advisory key into classid
-// (high 32 bits) / objid (low 32 bits) exactly as advisoryLockHolderPID in
-// events_test.go does — that split is load-bearing and was verified in an
-// earlier task. Scoped to the current database, like that helper: advisory
-// lock pids are visible cluster-wide in pg_locks, and a same-named
-// subscriber on a different database must not be reported as this one's
-// holder.
+// (high 32 bits) / objid (low 32 bits) — the same split
+// pg_try_advisory_lock's single-bigint form uses internally, so it must
+// match exactly for the join to find the right lock. It is also scoped to
+// the current database: advisory lock pids are visible cluster-wide in
+// pg_locks, and a same-named subscriber on a different database must not be
+// reported as this one's holder.
 func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberStatus, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.name, s.last_read_offset, s.last_acked_offset, s.updated_at,

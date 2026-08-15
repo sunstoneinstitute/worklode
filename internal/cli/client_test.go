@@ -2042,6 +2042,36 @@ func TestSyncDocsWire(t *testing.T) {
 	}
 }
 
+// pollClientEvents polls ListEvents(f) until it returns at least want
+// events, or fails the test — the same cluster-wide-commit-horizon
+// accommodation as pollEvents in internal/api/events_test.go and
+// pollListEvents in internal/store/events_test.go: a concurrent transaction
+// in another package's test binary sharing this Postgres instance (e.g.
+// internal/store's TestListEventsHonoursCommitHorizon, which deliberately
+// holds one open) can hold pg_snapshot_xmin back regardless of what this
+// test itself committed. Once a query has observed an id the horizon can
+// only advance, so callers only need this for the first read against a
+// freshly recorded id.
+func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []cli.Event {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp, _, err := c.ListEvents(ctx, f)
+		if err != nil {
+			t.Fatalf("ListEvents: %v", err)
+		}
+		if len(resp.Events) >= want {
+			return resp.Events
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ListEvents: got %d events after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
+				len(resp.Events), want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // TestClientEvents covers ListEvents, EventSubscribers and
 // SeekEventSubscriber end to end against a real server, including the
 // filter query string and the seek round-trip.
@@ -2063,6 +2093,13 @@ func TestClientEvents(t *testing.T) {
 		}
 	}
 
+	if events := pollClientEvents(t, ctx, c, cli.EventListFilter{Type: "test.event"}, 2); len(events) != 2 ||
+		events[0].ExternalID != "ce-1" || events[1].ExternalID != "ce-2" {
+		t.Fatalf("ListEvents = %+v, want [ce-1 ce-2] in id order", events)
+	}
+
+	// Both ids are now known visible past the commit horizon, so a single
+	// unpolled read is safe here and for the raw-body check below.
 	resp, raw, err := c.ListEvents(ctx, cli.EventListFilter{Type: "test.event"})
 	if err != nil {
 		t.Fatalf("ListEvents: %v", err)

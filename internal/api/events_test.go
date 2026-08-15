@@ -48,7 +48,10 @@ func TestListEventsFilters(t *testing.T) {
 	seedEvent(t, st, "le-1", func(tx *sql.Tx, _ int64) error { return nil })
 	seedEvent(t, st, "le-2", func(tx *sql.Tx, _ int64) error { return nil })
 
-	events := pollEvents(t, h, token, "", 2)
+	// Filtered on our own seeded type from the start: newTestServer records
+	// nothing of its own today, but this test's correctness must not depend
+	// on that staying true.
+	events := pollEvents(t, h, token, "?type=test.seed", 2)
 	first := events[0].(map[string]any)
 	second := events[1].(map[string]any)
 	if first["external_id"] != "le-1" || second["external_id"] != "le-2" {
@@ -60,17 +63,9 @@ func TestListEventsFilters(t *testing.T) {
 		}
 	}
 
-	// type filter. Both seeded rows are already known visible above, so a
-	// single read is enough here and below.
-	rr := doReq(t, h, "GET", "/api/v1/events?type=test.seed", token, nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("type filter status = %d, body %s", rr.Code, rr.Body.String())
-	}
-	events = decodeMap(t, rr)["events"].([]any)
-	if len(events) != 2 {
-		t.Fatalf("type filter events = %v, want 2", events)
-	}
-	rr = doReq(t, h, "GET", "/api/v1/events?type=nope.event", token, nil)
+	// Both seeded rows are already known visible above, so a single
+	// unpolled read is safe here and below.
+	rr := doReq(t, h, "GET", "/api/v1/events?type=nope.event", token, nil)
 	events = decodeMap(t, rr)["events"].([]any)
 	if len(events) != 0 {
 		t.Fatalf("non-matching type filter events = %v, want 0", events)
@@ -105,8 +100,11 @@ func TestListEventsFilters(t *testing.T) {
 		t.Fatalf("limit=1 events = %v, want 1", events)
 	}
 
-	// invalid query values are rejected, not silently ignored.
-	for _, q := range []string{"since=not-a-time", "after=not-an-int", "limit=not-an-int"} {
+	// invalid query values are rejected, not silently ignored — including a
+	// negative or zero limit, which strconv.Atoi parses without error but
+	// which ListEvents' default/cap logic would otherwise silently clamp to
+	// a full page instead of signalling the mistake.
+	for _, q := range []string{"since=not-a-time", "after=not-an-int", "limit=not-an-int", "limit=0", "limit=-1"} {
 		rr = doReq(t, h, "GET", "/api/v1/events?"+q, token, nil)
 		if rr.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("GET /api/v1/events?%s status = %d, want 422; body %s", q, rr.Code, rr.Body.String())
