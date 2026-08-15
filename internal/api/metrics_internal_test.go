@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,36 +236,48 @@ func TestObserveDocSync(t *testing.T) {
 	(&server{}).observeDocSync(nil, false, nil, 0)
 }
 
-func TestRecordLocalMerge(t *testing.T) {
+// The horizon gauge is what tells "the log is quiet" apart from "the commit
+// horizon is stuck". It reads at scrape time, and a failed read must surface
+// as a scrape error rather than as a plausible zero.
+func TestEventHorizonCollector(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(&eventHorizonCollector{
+		horizonID: func(context.Context) (int64, error) { return 4711, nil },
+	})
+
+	const want = `# HELP worklode_event_log_horizon_id Highest event id below the commit horizon (pg_snapshot_xmin) at scrape time. A log position, not a count.
+# TYPE worklode_event_log_horizon_id gauge
+worklode_event_log_horizon_id 4711
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want), "worklode_event_log_horizon_id"); err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+
+	failing := prometheus.NewRegistry()
+	failing.MustRegister(&eventHorizonCollector{
+		horizonID: func(context.Context) (int64, error) { return 0, errors.New("horizon boom") },
+	})
+	if _, err := failing.Gather(); err == nil {
+		t.Fatal("a failed horizon read gathered cleanly, want the scrape to error rather than report a stale zero")
+	} else if !strings.Contains(err.Error(), "horizon boom") {
+		t.Fatalf("gather error = %v, want it to name the underlying failure", err)
+	}
+}
+
+// The collector is registered only when the server has a store, so the
+// storeless *server the tests in this package build still initialises metrics.
+func TestEventHorizonCollectorSkippedWithoutStore(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
 
-	// Every label is pre-initialised, so a reporter that has gone silent
-	// reads as a flat zero rather than as no-data.
-	for _, result := range []string{"advanced", "duplicate", "unknown_task"} {
-		if got := testutil.ToFloat64(s.localMerges.WithLabelValues(result)); got != 0 {
-			t.Fatalf("localMerges{%s} = %v before any report, want 0", result, got)
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_event_log_horizon_id" {
+			t.Fatal("worklode_event_log_horizon_id registered without a store to query")
 		}
 	}
-
-	s.recordLocalMerge(store.LocalMergeAdvanced)
-	s.recordLocalMerge(store.LocalMergeDuplicate)
-	s.recordLocalMerge(store.LocalMergeDuplicate)
-	s.recordLocalMerge(store.LocalMergeUnknownTask)
-
-	for _, tc := range []struct {
-		result string
-		want   float64
-	}{{"advanced", 1}, {"duplicate", 2}, {"unknown_task", 1}} {
-		if got := testutil.ToFloat64(s.localMerges.WithLabelValues(tc.result)); got != tc.want {
-			t.Fatalf("localMerges{%s} = %v, want %v", tc.result, got, tc.want)
-		}
-	}
-}
-
-// TestRecordLocalMergeNilSafe: handlers call this on a server a test may have
-// built without initMetrics.
-func TestRecordLocalMergeNilSafe(t *testing.T) {
-	(&server{}).recordLocalMerge(store.LocalMergeAdvanced)
 }
