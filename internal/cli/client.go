@@ -1125,36 +1125,15 @@ type ImportInput struct {
 	DryRun     bool       `json:"dry_run,omitempty"`
 }
 
-// ImportCounts splits imported rows into ones that did not exist and ones
-// that were refreshed. Truncated is this kind's own page-cap signal — issues
-// and PRs page independently, so each has its own truncation state.
-type ImportCounts struct {
-	New       int  `json:"new"`
-	Updated   int  `json:"updated"`
-	Truncated bool `json:"truncated"`
-}
-
-// ImportResult is the response from ImportInbox. NewestUpdatedAt is set only
-// when Issues.Truncated — it resumes the issues stream via --since. PRs have
-// no such cursor; /pulls takes no since parameter.
-type ImportResult struct {
-	Repo            string       `json:"repo"`
-	Issues          ImportCounts `json:"issues"`
-	PRs             ImportCounts `json:"prs"`
-	Truncated       bool         `json:"truncated"`
-	DryRun          bool         `json:"dry_run"`
-	NewestUpdatedAt *time.Time   `json:"newest_updated_at,omitempty"`
-}
-
 // ImportInbox calls POST /api/v1/inbox/import.
-func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult, []byte, error) {
+func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (model.ImportResult, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/import", in)
 	if err != nil {
-		return ImportResult{}, nil, err
+		return model.ImportResult{}, nil, err
 	}
-	var out ImportResult
+	var out model.ImportResult
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
+		return model.ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
 	}
 	return out, raw, nil
 }
@@ -1258,48 +1237,9 @@ func (c *Client) patchProject(ctx context.Context, id string, body map[string]an
 	return p, raw, nil
 }
 
-// CostTotals is the tokens and money one currency accounts for over a
-// window. CostAmount is a decimal string, for the same reason
-// EndAgentSessionInput.CostAmount is.
-//
-// UnpricedTokens counts tokens whose model had no price on file: the amount
-// understates the bill by whatever they were worth, so it is reported rather
-// than folded in at zero.
-type CostTotals struct {
-	Currency       string `json:"currency"`
-	InputTokens    int64  `json:"input_tokens"`
-	CacheWrite5m   int64  `json:"cache_write_5m_tokens"`
-	CacheWrite1h   int64  `json:"cache_write_1h_tokens"`
-	CacheRead      int64  `json:"cache_read_tokens"`
-	OutputTokens   int64  `json:"output_tokens"`
-	CostAmount     string `json:"cost_amount"`
-	UnpricedTokens int64  `json:"unpriced_tokens"`
-}
-
-// CostDay is one UTC day's slice of CostTotals. Day is YYYY-MM-DD.
-type CostDay struct {
-	Day string `json:"day"`
-	CostTotals
-}
-
-// ProjectCost is a project's cost over the requested window: one row per
-// (day, currency) and one total per currency. Currencies are never summed
-// together.
-type ProjectCost struct {
-	Days   []CostDay    `json:"days"`
-	Totals []CostTotals `json:"totals"`
-}
-
-// ProjectDetail is the wire form of GET /api/v1/projects/{id}: a Project plus
-// its cost.
-type ProjectDetail struct {
-	model.Project
-	Cost ProjectCost `json:"cost"`
-}
-
 // ProjectDetail calls GET /api/v1/projects/{id}. A zero from or to leaves
 // that end of the cost window unbounded.
-func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Time) (ProjectDetail, []byte, error) {
+func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Time) (model.ProjectDetail, []byte, error) {
 	q := url.Values{}
 	if !from.IsZero() {
 		q.Set("from", from.Format(time.DateOnly))
@@ -1309,11 +1249,11 @@ func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Tim
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/"+url.PathEscape(id), q), nil)
 	if err != nil {
-		return ProjectDetail{}, nil, err
+		return model.ProjectDetail{}, nil, err
 	}
-	var p ProjectDetail
+	var p model.ProjectDetail
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return ProjectDetail{}, nil, fmt.Errorf("decode project detail: %w", err)
+		return model.ProjectDetail{}, nil, fmt.Errorf("decode project detail: %w", err)
 	}
 	return p, raw, nil
 }
@@ -1448,31 +1388,6 @@ func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) 
 
 // --- board and timeline -------------------------------------------------
 
-// Holder is the actor currently holding a lease on a board task.
-type Holder struct {
-	ActorID   string    `json:"actor_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// BoardTask is a model.Task as it appears on the board, with its lease holder when
-// in progress. Parent is its parent's id when it has one, so the board can
-// group children under it.
-type BoardTask struct {
-	model.Task
-	Parent string  `json:"parent,omitempty"`
-	Holder *Holder `json:"holder,omitempty"`
-}
-
-// BoardProject is one project's slice of the board.
-type BoardProject struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	InProgress []BoardTask `json:"in_progress"`
-	InReview   []BoardTask `json:"in_review"`
-	Ready      []BoardTask `json:"ready"`
-	Blocked    []BoardTask `json:"blocked"`
-}
-
 // --- skills -----------------------------------------------------------
 
 // skillsListResponse is the response body of Skills.
@@ -1535,27 +1450,19 @@ func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
 }
 
-// BoardResponse is the response body of Board. RecentFailures is nil when
-// project narrows the response to one project (it is not project-scoped),
-// non-nil (possibly empty) otherwise.
-type BoardResponse struct {
-	Projects       []BoardProject       `json:"projects"`
-	RecentFailures []model.RuntimeEvent `json:"recent_failures"`
-}
-
 // Board calls GET /api/v1/board. An empty project fetches every project.
-func (c *Client) Board(ctx context.Context, project string) (BoardResponse, []byte, error) {
+func (c *Client) Board(ctx context.Context, project string) (model.BoardResponse, []byte, error) {
 	q := url.Values{}
 	if project != "" {
 		q.Set("project", project)
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/board", q), nil)
 	if err != nil {
-		return BoardResponse{}, nil, err
+		return model.BoardResponse{}, nil, err
 	}
-	var resp BoardResponse
+	var resp model.BoardResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return BoardResponse{}, nil, fmt.Errorf("decode board: %w", err)
+		return model.BoardResponse{}, nil, fmt.Errorf("decode board: %w", err)
 	}
 	return resp, raw, nil
 }

@@ -123,108 +123,10 @@ func stateEvidence(source, eventType string, hasEvent bool) evidenceCategory {
 	}
 }
 
-// --- projection shape ------------------------------------------------------
-
-type evidenceSummary struct {
-	Category string `json:"category"`
-	Summary  string `json:"summary"`
-}
-
-type cockpitModeJSON struct {
-	Name  cockpitMode     `json:"name"`
-	Basis evidenceSummary `json:"basis"`
-}
-
-type cockpitProjectJSON struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Key  string `json:"key"`
-}
-
-type actorSummary struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type focusJSON struct {
-	ObjectType string        `json:"object_type"`
-	ObjectID   string        `json:"object_id"`
-	Note       string        `json:"note"`
-	PinnedBy   *actorSummary `json:"pinned_by"`
-	PinnedAt   time.Time     `json:"pinned_at"`
-}
-
-type decisionActionJSON struct {
-	Label  string `json:"label"`
-	Effect string `json:"effect"`
-	URL    string `json:"url"`
-}
-
-type evidenceReferenceJSON struct {
-	Label    string `json:"label"`
-	URL      string `json:"url"`
-	Category string `json:"category"`
-}
-
-type decisionJSON struct {
-	Title            string                  `json:"title"`
-	Accountable      string                  `json:"accountable"`
-	Subject          string                  `json:"subject"`
-	Readiness        string                  `json:"readiness"`
-	Actions          []decisionActionJSON    `json:"actions"`
-	Evidence         []evidenceReferenceJSON `json:"evidence"`
-	ContraryEvidence []evidenceReferenceJSON `json:"contrary_evidence"`
-}
-
-type secondaryConcernJSON struct {
-	Kind     string          `json:"kind"`
-	Title    string          `json:"title"`
-	URL      string          `json:"url"`
-	Evidence evidenceSummary `json:"evidence"`
-}
-
-type repositoryJSON struct {
-	Repo           string          `json:"repo"`
-	DoneState      string          `json:"done_state"`
-	StatusEvidence evidenceSummary `json:"status_evidence"`
-}
-
-type cockpitWorkItem struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	Priority       string          `json:"priority"`
-	State          string          `json:"state"`
-	Blocked        bool            `json:"blocked"`
-	URL            string          `json:"url"`
-	Owner          *actorSummary   `json:"owner"`
-	Delegate       *actorSummary   `json:"delegate"`
-	StatusEvidence evidenceSummary `json:"status_evidence"`
-}
-
-type cockpitWork struct {
-	InProgress []cockpitWorkItem `json:"in_progress"`
-	InReview   []cockpitWorkItem `json:"in_review"`
-	Ready      []cockpitWorkItem `json:"ready"`
-	Blocked    []cockpitWorkItem `json:"blocked"`
-}
-
-type cockpitProjection struct {
-	CanonicalURL      string                 `json:"canonical_url"`
-	Project           cockpitProjectJSON     `json:"project"`
-	Mode              cockpitModeJSON        `json:"mode"`
-	PinnedFocus       *focusJSON             `json:"pinned_focus"`
-	RankingFocus      []string               `json:"ranking_focus"`
-	NextDecision      *decisionJSON          `json:"next_decision"`
-	Work              cockpitWork            `json:"work"`
-	SecondaryConcerns []secondaryConcernJSON `json:"secondary_concerns"`
-	Repositories      []repositoryJSON       `json:"repositories"`
-	Cost              projectCostJSON        `json:"cost"`
-}
-
 // operationsModeBasis is the fixed evidence basis for modeOperations, the
 // only mode selectMode can produce until Part 2 stores promotion/Enter
 // Research facts (see modeFactsForProject).
-var operationsModeBasis = evidenceSummary{
+var operationsModeBasis = model.EvidenceSummary{
 	Category: "declared",
 	Summary:  "Existing Worklode project; no intake lifecycle facts are present",
 }
@@ -241,7 +143,7 @@ const costWindow = 30 * 24 * time.Hour
 // fresh on every call from GetProject, ListProjectWorkFacts, ListRepos, and
 // ProjectCost. Returns store.ErrNotFound (via GetProject) when the project
 // does not exist.
-func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpitProjection, error) {
+func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*model.CockpitProjection, error) {
 	p, err := s.st.GetProject(ctx, id)
 	if err != nil {
 		return nil, err
@@ -279,11 +181,11 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 		return a, nil
 	}
 
-	work := cockpitWork{
-		InProgress: []cockpitWorkItem{}, InReview: []cockpitWorkItem{},
-		Ready: []cockpitWorkItem{}, Blocked: []cockpitWorkItem{},
+	work := model.CockpitWork{
+		InProgress: []model.CockpitWorkItem{}, InReview: []model.CockpitWorkItem{},
+		Ready: []model.CockpitWorkItem{}, Blocked: []model.CockpitWorkItem{},
 	}
-	secondary := []secondaryConcernJSON{}
+	secondary := []model.SecondaryConcern{}
 
 	for _, f := range facts {
 		switch {
@@ -325,11 +227,11 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 		return nil, err
 	}
 
-	return &cockpitProjection{
+	return &model.CockpitProjection{
 		CanonicalURL: "/projects/" + p.ID,
-		Project:      cockpitProjectJSON{ID: p.ID, Name: p.Name, Key: p.Key},
-		Mode: cockpitModeJSON{
-			Name:  selectMode(modeFactsForProject(*p)),
+		Project:      model.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key},
+		Mode: model.CockpitMode{
+			Name:  string(selectMode(modeFactsForProject(*p))),
 			Basis: operationsModeBasis,
 		},
 		PinnedFocus:       pinnedFocus,
@@ -346,7 +248,7 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*cockpi
 // 0013): nil when no note is set, otherwise the note plus the resolved pinner.
 // Only a real actor-lookup error propagates — an unknown pinner falls back to
 // its raw string and never fails the whole cockpit (see pinnedBySummary).
-func buildPinnedFocus(p *store.Project, resolveActor func(string) (*store.Actor, error)) (*focusJSON, error) {
+func buildPinnedFocus(p *store.Project, resolveActor func(string) (*store.Actor, error)) (*model.Focus, error) {
 	if p.FocusNote == "" {
 		return nil, nil
 	}
@@ -354,7 +256,7 @@ func buildPinnedFocus(p *store.Project, resolveActor func(string) (*store.Actor,
 	if err != nil {
 		return nil, err
 	}
-	return &focusJSON{
+	return &model.Focus{
 		Note:     p.FocusNote,
 		PinnedBy: by,
 		PinnedAt: p.FocusPinnedAt,
@@ -368,32 +270,32 @@ func buildPinnedFocus(p *store.Project, resolveActor func(string) (*store.Actor,
 // name still shows); an empty value yields nil. store.ErrNotFound is the "no
 // such actor" signal and takes the fallback path — only some other lookup
 // error propagates, so an unknown pinner never fails the whole cockpit.
-func pinnedBySummary(pinnedBy string, resolveActor func(string) (*store.Actor, error)) (*actorSummary, error) {
+func pinnedBySummary(pinnedBy string, resolveActor func(string) (*store.Actor, error)) (*model.ActorSummary, error) {
 	if pinnedBy == "" {
 		return nil, nil
 	}
 	a, err := resolveActor(pinnedBy)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return &actorSummary{Name: pinnedBy}, nil
+			return &model.ActorSummary{Name: pinnedBy}, nil
 		}
 		return nil, err
 	}
 	if a == nil {
-		return &actorSummary{Name: pinnedBy}, nil
+		return &model.ActorSummary{Name: pinnedBy}, nil
 	}
-	return &actorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
+	return &model.ActorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
 }
 
 // buildNextDecision maps the project's curated "Next decision" card (migration
 // 0013): nil when no title is set, otherwise the title, who is accountable,
 // and the readiness note. Subject/Actions/Evidence stay at their zero values —
 // the curated v0 card carries none.
-func buildNextDecision(p *store.Project) *decisionJSON {
+func buildNextDecision(p *store.Project) *model.Decision {
 	if p.DecisionTitle == "" {
 		return nil
 	}
-	return &decisionJSON{
+	return &model.Decision{
 		Title:       p.DecisionTitle,
 		Accountable: p.DecisionAccountable,
 		Readiness:   p.DecisionReadiness,
@@ -411,26 +313,26 @@ func buildNextDecision(p *store.Project) *decisionJSON {
 // released_at IS NULL) whose holder is an agent actor — a human or service
 // lease is real, technical evidence of who is touching the task, but is
 // never surfaced as a delegate or Crew member (spec 032 §6).
-func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string) (*store.Actor, error)) (cockpitWorkItem, error) {
+func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string) (*store.Actor, error)) (model.CockpitWorkItem, error) {
 	t := f.Task
 
 	owner, err := resolveActorSummary(t.Assignee, resolveActor)
 	if err != nil {
-		return cockpitWorkItem{}, err
+		return model.CockpitWorkItem{}, err
 	}
 
-	var delegate *actorSummary
+	var delegate *model.ActorSummary
 	if f.Lease != nil {
 		leaseActor, err := resolveActor(f.Lease.ActorID)
 		if err != nil {
-			return cockpitWorkItem{}, err
+			return model.CockpitWorkItem{}, err
 		}
 		if leaseActor != nil && leaseActor.Kind == "agent" {
-			delegate = &actorSummary{ID: leaseActor.ID, Name: displayNameOrID(leaseActor)}
+			delegate = &model.ActorSummary{ID: leaseActor.ID, Name: displayNameOrID(leaseActor)}
 		}
 	}
 
-	return cockpitWorkItem{
+	return model.CockpitWorkItem{
 		ID:             t.ID,
 		Title:          t.Title,
 		Priority:       t.Priority,
@@ -448,16 +350,16 @@ func mapWorkItem(f store.ProjectWorkFact, blocked bool, resolveActor func(string
 // the task has never transitioned, otherwise the exact source, type, event
 // id, and time of the event that produced it — stateEvidence's classifying
 // inputs are always retained in the human-readable summary, not thrown away.
-func workItemEvidence(state string, ev *store.EventFact) evidenceSummary {
+func workItemEvidence(state string, ev *store.EventFact) model.EvidenceSummary {
 	if ev == nil {
 		cat := evidenceDeclared
-		return evidenceSummary{
+		return model.EvidenceSummary{
 			Category: string(cat),
 			Summary:  fmt.Sprintf("%s: task state is %s (no recorded event)", cat.Label(), state),
 		}
 	}
 	cat := stateEvidence(ev.Source, ev.Type, true)
-	return evidenceSummary{
+	return model.EvidenceSummary{
 		Category: string(cat),
 		Summary: fmt.Sprintf("%s: %s event %q (id %d) at %s set state to %s",
 			cat.Label(), ev.Source, ev.Type, ev.ID, ev.At.UTC().Format(time.RFC3339), state),
@@ -468,14 +370,14 @@ func workItemEvidence(state string, ev *store.EventFact) evidenceSummary {
 // entry per open blocker, naming the blocked task it holds up. f is assumed
 // to be blocked (f.Blocked() true) — assembleProjectCockpit only calls this
 // for the ready-and-blocked case.
-func blockerConcerns(f store.ProjectWorkFact) []secondaryConcernJSON {
-	out := make([]secondaryConcernJSON, 0, len(f.OpenBlockers))
+func blockerConcerns(f store.ProjectWorkFact) []model.SecondaryConcern {
+	out := make([]model.SecondaryConcern, 0, len(f.OpenBlockers))
 	for _, b := range f.OpenBlockers {
-		out = append(out, secondaryConcernJSON{
+		out = append(out, model.SecondaryConcern{
 			Kind:  "blocker",
 			Title: b.Title,
 			URL:   "/tasks/" + b.ID,
-			Evidence: evidenceSummary{
+			Evidence: model.EvidenceSummary{
 				Category: string(evidenceDeclared),
 				Summary:  fmt.Sprintf("Blocks %s (blocker state %s)", f.Task.ID, b.State),
 			},
@@ -485,10 +387,10 @@ func blockerConcerns(f store.ProjectWorkFact) []secondaryConcernJSON {
 }
 
 // resolveActorSummary resolves id through resolveActor and, if found, builds
-// an actorSummary with its display name (falling back to the id when the
+// a model.ActorSummary with its display name (falling back to the id when the
 // actor has none). Returns nil, nil for an empty id or an actor that does
 // not resolve.
-func resolveActorSummary(id string, resolveActor func(string) (*store.Actor, error)) (*actorSummary, error) {
+func resolveActorSummary(id string, resolveActor func(string) (*store.Actor, error)) (*model.ActorSummary, error) {
 	a, err := resolveActor(id)
 	if err != nil {
 		return nil, err
@@ -496,7 +398,7 @@ func resolveActorSummary(id string, resolveActor func(string) (*store.Actor, err
 	if a == nil {
 		return nil, nil
 	}
-	return &actorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
+	return &model.ActorSummary{ID: a.ID, Name: displayNameOrID(a)}, nil
 }
 
 // displayNameOrID returns a's display name, falling back to its id when the
@@ -511,13 +413,13 @@ func displayNameOrID(a *store.Actor) string {
 // toCockpitRepositories adapts mapped repos into cockpit repository facts:
 // a project_repos row is a declared fact (someone mapped the repo and its
 // done_state; no event backs it), never observed or recommended.
-func toCockpitRepositories(repos []model.RepoMapping) []repositoryJSON {
-	out := make([]repositoryJSON, 0, len(repos))
+func toCockpitRepositories(repos []model.RepoMapping) []model.Repository {
+	out := make([]model.Repository, 0, len(repos))
 	for _, m := range repos {
-		out = append(out, repositoryJSON{
+		out = append(out, model.Repository{
 			Repo:      m.Repo,
 			DoneState: m.DoneState,
-			StatusEvidence: evidenceSummary{
+			StatusEvidence: model.EvidenceSummary{
 				Category: string(evidenceDeclared),
 				Summary:  fmt.Sprintf("Repo mapping declares done_state %s", m.DoneState),
 			},

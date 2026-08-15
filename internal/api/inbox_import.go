@@ -35,26 +35,6 @@ type importRequest struct {
 	DryRun     bool       `json:"dry_run"`
 }
 
-type importCounts struct {
-	New       int  `json:"new"`
-	Updated   int  `json:"updated"`
-	Truncated bool `json:"truncated"`
-}
-
-type importResponse struct {
-	Repo      string       `json:"repo"`
-	Issues    importCounts `json:"issues"`
-	PRs       importCounts `json:"prs"`
-	Truncated bool         `json:"truncated"`
-	DryRun    bool         `json:"dry_run"`
-	// NewestUpdatedAt is the latest issue updated_at fetched this run, set
-	// only when Issues.Truncated: it is the value that makes --since a resume
-	// cursor (see listQuery in internal/githubauth/list.go) rather than just
-	// a filter. It is issues-only because /pulls takes no since parameter, so
-	// a PR timestamp here would be a cursor into a stream that cannot resume.
-	NewestUpdatedAt *time.Time `json:"newest_updated_at,omitempty"`
-}
-
 // importInbox handles POST /api/v1/inbox/import. It fetches outside any
 // transaction, then applies every upsert inside one RecordEvent, so an import
 // is one event and one transaction — and re-running it is safe, because
@@ -120,7 +100,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := importResponse{Repo: req.Repo, DryRun: req.DryRun}
+	resp := model.ImportResult{Repo: req.Repo, DryRun: req.DryRun}
 	resp.Issues.Truncated = issuesTruncated
 	resp.PRs.Truncated = prsTruncated
 	resp.Truncated = issuesTruncated || prsTruncated

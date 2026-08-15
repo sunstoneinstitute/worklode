@@ -99,18 +99,10 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// tokenCountsJSON is the per-class token breakdown, shared by the daily rows
-// and the window totals.
-type tokenCountsJSON struct {
-	InputTokens        int64 `json:"input_tokens"`
-	CacheWrite5mTokens int64 `json:"cache_write_5m_tokens"`
-	CacheWrite1hTokens int64 `json:"cache_write_1h_tokens"`
-	CacheReadTokens    int64 `json:"cache_read_tokens"`
-	OutputTokens       int64 `json:"output_tokens"`
-}
-
-func toTokenCountsJSON(t store.TokenCounts) tokenCountsJSON {
-	return tokenCountsJSON{
+// toTokenCountsJSON builds the wire form of a token breakdown, shared by the
+// daily rows and the window totals.
+func toTokenCountsJSON(t store.TokenCounts) model.TokenCounts {
+	return model.TokenCounts{
 		InputTokens:        t.Input,
 		CacheWrite5mTokens: t.CacheWrite5m,
 		CacheWrite1hTokens: t.CacheWrite1h,
@@ -119,63 +111,28 @@ func toTokenCountsJSON(t store.TokenCounts) tokenCountsJSON {
 	}
 }
 
-// projectDayCostJSON is one day of a project's accounted usage in one
-// currency. CostAmount is a decimal string for the same reason the agent
-// session endpoints use one: numeric(14,6) does not survive a float64.
-type projectDayCostJSON struct {
-	Day      string `json:"day"`
-	Currency string `json:"currency"`
-	tokenCountsJSON
-	CostAmount string `json:"cost_amount"`
-	// UnpricedTokens are tokens whose model had no rate on file, so
-	// CostAmount understates the bill by whatever they were worth.
-	UnpricedTokens int64 `json:"unpriced_tokens"`
-}
-
-// projectCostTotalJSON is the window total for one currency. Totals are per
-// currency because summing across them needs a dated conversion rate the
-// server does not own.
-type projectCostTotalJSON struct {
-	Currency string `json:"currency"`
-	tokenCountsJSON
-	CostAmount     string `json:"cost_amount"`
-	UnpricedTokens int64  `json:"unpriced_tokens"`
-}
-
-type projectCostJSON struct {
-	Days   []projectDayCostJSON   `json:"days"`
-	Totals []projectCostTotalJSON `json:"totals"`
-}
-
-// projectDetailJSON is a project plus its cost. The list-shape fields are
-// embedded so the two endpoints cannot drift apart.
-type projectDetailJSON struct {
-	model.Project
-	Cost projectCostJSON `json:"cost"`
-}
-
 // toProjectCostJSON builds the wire form of a cost window, normalizing nil
 // slices to empty arrays so days and totals never serialize as null.
-func toProjectCostJSON(pc *store.ProjectCost) projectCostJSON {
-	out := projectCostJSON{
-		Days:   make([]projectDayCostJSON, 0, len(pc.Days)),
-		Totals: make([]projectCostTotalJSON, 0, len(pc.Totals)),
+func toProjectCostJSON(pc *store.ProjectCost) model.ProjectCost {
+	out := model.ProjectCost{
+		Days:   make([]model.CostDay, 0, len(pc.Days)),
+		Totals: make([]model.CostTotals, 0, len(pc.Totals)),
 	}
 	for _, d := range pc.Days {
-		out.Days = append(out.Days, projectDayCostJSON{
-			Day:             d.Day.Format(time.DateOnly),
-			Currency:        d.Currency,
-			tokenCountsJSON: toTokenCountsJSON(d.Tokens),
-			CostAmount:      d.Cost,
-			UnpricedTokens:  d.UnpricedTokens,
+		out.Days = append(out.Days, model.CostDay{
+			Day:            d.Day.Format(time.DateOnly),
+			Currency:       d.Currency,
+			TokenCounts:    toTokenCountsJSON(d.Tokens),
+			CostAmount:     d.Cost,
+			UnpricedTokens: d.UnpricedTokens,
 		})
 	}
 	for _, t := range pc.Totals {
-		out.Totals = append(out.Totals, projectCostTotalJSON{
-			Currency:        t.Currency,
-			tokenCountsJSON: toTokenCountsJSON(t.Tokens),
-			CostAmount:      t.Cost,
-			UnpricedTokens:  t.UnpricedTokens,
+		out.Totals = append(out.Totals, model.CostTotals{
+			Currency:       t.Currency,
+			TokenCounts:    toTokenCountsJSON(t.Tokens),
+			CostAmount:     t.Cost,
+			UnpricedTokens: t.UnpricedTokens,
 		})
 	}
 	return out
@@ -227,7 +184,7 @@ func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, projectDetailJSON{
+	writeJSON(w, http.StatusOK, model.ProjectDetail{
 		Project: toProjectJSON(p, repos),
 		Cost:    toProjectCostJSON(cost),
 	})
@@ -781,40 +738,11 @@ func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
 
 // --- board ---------------------------------------------------------------
 
-type holderJSON struct {
-	ActorID   string    `json:"actor_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// boardTaskJSON is a board row. Parent is the task's parent when it has one,
-// so a board can group a parent's children under it without a lookup per task.
-type boardTaskJSON struct {
-	model.Task
-	Parent string      `json:"parent,omitempty"`
-	Holder *holderJSON `json:"holder,omitempty"`
-}
-
-type boardProjectJSON struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
-	InProgress []boardTaskJSON `json:"in_progress"`
-	InReview   []boardTaskJSON `json:"in_review"`
-	Ready      []boardTaskJSON `json:"ready"`
-	Blocked    []boardTaskJSON `json:"blocked"`
-}
-
 func toRuntimeEventJSON(re *store.RuntimeEvent) model.RuntimeEvent {
 	return model.RuntimeEvent{
 		ID: re.ID, Cluster: re.Cluster, Kind: re.Kind, Workload: re.Workload,
 		Image: re.Image, Message: re.Message, OccurredAt: re.OccurredAt,
 	}
-}
-
-// boardResponse is the JSON shape of GET /api/v1/board, and the data the web
-// board pages (GET / and GET /projects/{id}) render.
-type boardResponse struct {
-	Projects       []boardProjectJSON   `json:"projects"`
-	RecentFailures []model.RuntimeEvent `json:"recent_failures"`
 }
 
 // board handles GET /api/v1/board?project=: a read-only summary of each
@@ -848,7 +776,7 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 // non-nil (possibly empty) slice otherwise — that is how a CLI or other
 // caller tells "board scoped to one project" from "board with no recent
 // failures" apart.
-func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boardResponse, error) {
+func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*model.BoardResponse, error) {
 	var projects []store.Project
 	if projectFilter != "" {
 		p, err := s.st.GetProject(ctx, projectFilter)
@@ -876,24 +804,24 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		byProject[f.Task.Project] = append(byProject[f.Task.Project], f)
 	}
 
-	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
+	resp := &model.BoardResponse{Projects: make([]model.BoardProject, 0, len(projects))}
 
 	for _, p := range projects {
-		bp := boardProjectJSON{
+		bp := model.BoardProject{
 			ID: p.ID, Name: p.Name,
-			InProgress: []boardTaskJSON{}, InReview: []boardTaskJSON{},
-			Ready: []boardTaskJSON{}, Blocked: []boardTaskJSON{},
+			InProgress: []model.BoardTask{}, InReview: []model.BoardTask{},
+			Ready: []model.BoardTask{}, Blocked: []model.BoardTask{},
 		}
 		for _, f := range byProject[p.ID] {
 			t := f.Task
-			bt := boardTaskJSON{Task: t}
+			bt := model.BoardTask{Task: t}
 			if f.Parent != nil {
 				bt.Parent = f.Parent.ID
 			}
 			switch {
 			case t.State == "in_progress":
 				if f.Lease != nil {
-					bt.Holder = &holderJSON{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
+					bt.Holder = &model.Holder{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
 				}
 				bp.InProgress = append(bp.InProgress, bt)
 			case t.State == "in_review":

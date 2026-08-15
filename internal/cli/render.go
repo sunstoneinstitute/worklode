@@ -267,7 +267,7 @@ const (
 // BoardRender prints one section per project, one table per non-empty
 // bucket (in progress, in review, blocked, ready), and a trailing recent-
 // failures section when present.
-func BoardRender(w io.Writer, board BoardResponse) {
+func BoardRender(w io.Writer, board model.BoardResponse) {
 	for i, p := range board.Projects {
 		if i > 0 {
 			fmt.Fprintln(w)
@@ -299,7 +299,7 @@ func BoardRender(w io.Writer, board BoardResponse) {
 	}
 }
 
-func boardSection(w io.Writer, label string, tasks []BoardTask) {
+func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -311,13 +311,13 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 	// anything else at its own (rank 0), so grouping keeps a parent and its
 	// children adjacent without disturbing the server's priority ordering. A
 	// child whose parent is in another bucket keeps its own position.
-	anchor := func(t BoardTask) (int, int) {
+	anchor := func(t model.BoardTask) (int, int) {
 		if p, ok := pos[t.Parent]; ok {
 			return p, 1
 		}
 		return pos[t.ID], 0
 	}
-	rows := make([]BoardTask, len(tasks))
+	rows := make([]model.BoardTask, len(tasks))
 	copy(rows, tasks)
 	sort.SliceStable(rows, func(i, j int) bool {
 		ai, ri := anchor(rows[i])
