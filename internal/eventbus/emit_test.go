@@ -105,6 +105,31 @@ func TestEmitIdempotentAtTheLog(t *testing.T) {
 	if id2 != id1 {
 		t.Fatalf("second Emit: want same id %d, got %d", id1, id2)
 	}
+
+	// The stored payload's @id must still point at the original event, not
+	// a value derived from the (discarded) second call's reserved id.
+	e1, err := s.GetEvent(ctx, id1)
+	if err != nil {
+		t.Fatalf("GetEvent(id1): %v", err)
+	}
+	e2, err := s.GetEvent(ctx, id2)
+	if err != nil {
+		t.Fatalf("GetEvent(id2): %v", err)
+	}
+	var p1, p2 map[string]any
+	if err := json.Unmarshal(e1.Payload, &p1); err != nil {
+		t.Fatalf("unmarshal payload 1: %v", err)
+	}
+	if err := json.Unmarshal(e2.Payload, &p2); err != nil {
+		t.Fatalf("unmarshal payload 2: %v", err)
+	}
+	wantID := fmt.Sprintf("wlid:event/%d", id1)
+	if p1["@id"] != wantID {
+		t.Fatalf("@id after first emit: got %v, want %v", p1["@id"], wantID)
+	}
+	if p2["@id"] != wantID {
+		t.Fatalf("@id after replay: got %v, want %v (unchanged)", p2["@id"], wantID)
+	}
 }
 
 func TestValidatePayloadRejectsUnknownProperty(t *testing.T) {
@@ -115,5 +140,18 @@ func TestValidatePayloadRejectsUnknownProperty(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "wl:bogus") {
 		t.Fatalf("validatePayload error: want it to name wl:bogus, got %q", err.Error())
+	}
+}
+
+// A missing required per-type property fails at emit time, not just an
+// unknown one (025 §15.3).
+func TestValidatePayloadRejectsMissingProperty(t *testing.T) {
+	keys := []string{"prov:atTime", "prov:wasAssociatedWith", "wl:subject", "wl:fromStatus"}
+	err := validatePayload(TypeDocumentAccepted, keys)
+	if err == nil {
+		t.Fatalf("validatePayload: want error for missing wl:toStatus, got nil")
+	}
+	if !strings.Contains(err.Error(), "wl:toStatus") {
+		t.Fatalf("validatePayload error: want it to name wl:toStatus, got %q", err.Error())
 	}
 }
