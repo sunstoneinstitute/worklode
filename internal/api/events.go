@@ -75,8 +75,8 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid limit: must be an integer")
+		if err != nil || n < 1 {
+			writeErr(w, http.StatusUnprocessableEntity, "invalid limit: must be a positive integer")
 			return
 		}
 		f.Limit = n

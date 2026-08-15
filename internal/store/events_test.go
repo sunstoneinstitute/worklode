@@ -781,11 +781,11 @@ func TestListEventsFilters(t *testing.T) {
 	}
 }
 
-// TestEventSubscriberStatusesReportsHolderAndLag exercises Task 7's join
-// against the same advisory-lock key TestSubscriberLockExclusive uses,
-// confirming holder_pid tracks the live lock and 0 once it is released, and
-// that lag matches EventSubscriberLags for the same subscriber.
-func TestEventSubscriberStatusesReportsHolderAndLag(t *testing.T) {
+// TestEventSubscriberStatusesReportsHolder exercises the subscriber-status
+// join against the same advisory-lock key TestSubscriberLockExclusive uses,
+// confirming holder_pid tracks the live lock and goes back to 0 once it is
+// released. See TestEventSubscriberStatusesReportsLag for the lag column.
+func TestEventSubscriberStatusesReportsHolder(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "status-sub"); err != nil {
@@ -840,6 +840,69 @@ func TestEventSubscriberStatusesReportsHolderAndLag(t *testing.T) {
 			t.Fatalf("status after release: holder_pid = %d, want 0", st.HolderPID)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestEventSubscriberStatusesReportsLag asserts the exact value of the
+// status join's lag column — GREATEST(horizon_max_id -
+// last_acked_offset, 0) — through none-acked, partially-acked, and
+// fully-acked, so a wrong GREATEST bound or a sign error in the subtraction
+// would fail here rather than pass silently behind an unchecked field.
+func TestEventSubscriberStatusesReportsLag(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.EnsureEventSubscriber(ctx, "lag-sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		id, _, err := s.RecordEvent(ctx, "system", fmt.Sprintf("essl-%d", i), "test.event", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	lagFor := func(name string) (int64, bool) {
+		statuses, err := s.EventSubscriberStatuses(ctx)
+		if err != nil {
+			t.Fatalf("EventSubscriberStatuses: %v", err)
+		}
+		for _, st := range statuses {
+			if st.Name == name {
+				return st.Lag, true
+			}
+		}
+		return 0, false
+	}
+
+	// AckEvents requires last_acked_offset <= last_read_offset (the CHECK
+	// constraint), so last_read_offset must be advanced past ids[1] and
+	// ids[2] before acking them — pollReadEventBatch does that and, being
+	// itself horizon-bounded, also waits out the same cluster-wide commit
+	// horizon hazard lag's own max-id subquery is subject to (a concurrent
+	// transaction elsewhere on this Postgres instance can hold
+	// pg_snapshot_xmin back regardless of what this test committed).
+	if got := pollReadEventBatch(t, ctx, s, "lag-sub", 3, 3); len(got) != 3 {
+		t.Fatalf("read got %d events, want 3", len(got))
+	}
+	if lag, ok := lagFor("lag-sub"); !ok || lag != 3 {
+		t.Fatalf("lag before any ack = %d (ok=%v), want 3", lag, ok)
+	}
+
+	if err := s.AckEvents(ctx, "lag-sub", ids[1]); err != nil {
+		t.Fatalf("ack first two of three: %v", err)
+	}
+	if lag, ok := lagFor("lag-sub"); !ok || lag != 1 {
+		t.Fatalf("lag after acking 2 of 3 = %d (ok=%v), want 1", lag, ok)
+	}
+
+	if err := s.AckEvents(ctx, "lag-sub", ids[2]); err != nil {
+		t.Fatalf("ack all three: %v", err)
+	}
+	if lag, ok := lagFor("lag-sub"); !ok || lag != 0 {
+		t.Fatalf("lag fully acked = %d (ok=%v), want 0", lag, ok)
 	}
 }
 
