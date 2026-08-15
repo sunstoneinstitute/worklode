@@ -216,3 +216,36 @@ func TestDocTable(t *testing.T) {
 		t.Errorf("WL-ADR-1 DIRTY column = %q, want \"-\"\n%s", dirtyCol, out)
 	}
 }
+
+// TestEventStreamRow pins the follow view against EventTable: same columns in
+// the same order, so `--follow` output is not a second format to learn. Its
+// widths are fixed rather than measured because a stream has no complete row
+// set to measure.
+func TestEventStreamRow(t *testing.T) {
+	var buf bytes.Buffer
+	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	EventStreamHeader(&buf)
+	EventStreamRow(&buf, Event{ID: 7, Source: "github", ExternalID: "d7", Type: "push", ReceivedAt: at})
+	EventStreamRow(&buf, Event{ID: 8, Source: "cli", ExternalID: "c8", Type: "docs.synced", ReceivedAt: at})
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %d, want a header and two rows:\n%s", len(lines), buf.String())
+	}
+	if got := strings.Fields(lines[0]); len(got) != 5 ||
+		got[0] != "ID" || got[4] != "EXTERNAL_ID" {
+		t.Errorf("header = %v, want EventTable's five columns", got)
+	}
+	for i, want := range [][]string{{"7", "github", "push", "d7"}, {"8", "cli", "docs.synced", "c8"}} {
+		for _, w := range want {
+			if !strings.Contains(lines[i+1], w) {
+				t.Errorf("row %d missing %q: %s", i, w, lines[i+1])
+			}
+		}
+	}
+	// Columns line up across rows even though nothing measured them: the
+	// source column starts at the same offset in both.
+	if strings.Index(lines[1], "github") != strings.Index(lines[2], "cli") {
+		t.Errorf("source column not aligned across rows:\n%s", buf.String())
+	}
+}

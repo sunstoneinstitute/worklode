@@ -315,6 +315,22 @@ func EventTable(w io.Writer, events []Event) {
 	tw.Flush()
 }
 
+// eventStreamRowFmt lays out one `lode event tail --follow` row. Fixed
+// widths rather than a tabwriter: a stream has no complete row set to
+// measure, and re-measuring per row would make the columns jitter as events
+// arrive.
+const eventStreamRowFmt = "%-8v  %-20v  %-10v  %-28v  %v\n"
+
+// EventStreamHeader prints the follow view's column header, once.
+func EventStreamHeader(w io.Writer) {
+	fmt.Fprintf(w, eventStreamRowFmt, "ID", "RECEIVED", "SOURCE", "TYPE", "EXTERNAL_ID")
+}
+
+// EventStreamRow prints one streamed event in EventTable's column order.
+func EventStreamRow(w io.Writer, e Event) {
+	fmt.Fprintf(w, eventStreamRowFmt, e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
+}
+
 // EventSubscriberTable prints one row per subscriber: name, offsets, lag,
 // lock holder pid (- when unheld), last updated. The `lode event
 // subscribers` view.

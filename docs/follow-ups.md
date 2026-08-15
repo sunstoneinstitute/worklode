@@ -370,3 +370,20 @@ one pass.
   corpus's one existing cross-project reference"; the fold dropped that key, so
   the corpus now has none and the unresolvable-reference example survives only
   in prose.
+
+## From the event stream (spec 025 §15/§18, `GET /api/v1/events/stream`)
+
+- `[P3]` **`lode event tail --follow` does not reconnect.** `Client.StreamEvents`
+  (`internal/cli/client.go`) returns a dropped connection to its caller rather
+  than retrying; the server already accepts `Last-Event-ID`, so a reconnect
+  loop that resumes from the last id delivered is the missing half. Until it
+  exists, a follow ends whenever a proxy or a server restart cuts the
+  connection.
+- `[P4]` **A bare follow finds the log head by paging.** `streamHead`
+  (`internal/api/eventstream.go`) walks `ListEvents` 200 rows at a time
+  because that is the one horizon-bounded query this package owns, so a client
+  that supplies no `after` pays one round trip per 200 events at connect time.
+  `lode event tail --follow` always sends a cursor, so only a hand-rolled
+  request hits it. A `SELECT MAX(id) ... WHERE txid < pg_snapshot_xmin(...)`
+  store method makes it O(1) — at the cost of a second copy of the horizon
+  predicate to keep in step.
