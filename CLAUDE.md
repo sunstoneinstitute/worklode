@@ -146,15 +146,25 @@ the `can-be-tested` label forces a run. `docs/specs/`, `docs/plans/` and
 
 ## The lode plugin
 
-`plugins/lode/` is the agent-facing half of this repo: the `/lode:*` slash
-commands and the `lode-worker` agent. It lives here so it versions with the
-binary it drives — the lifecycle hooks it used to carry now ship with the CLI
-(`lode install`). This repo is its own marketplace, named `worklode`:
+`plugins/lode/` is the agent-facing half of this repo: the `/lode:*` task
+pickup surface and the `lode-worker` agent. It lives here so it versions with
+the binary it drives — the lifecycle hooks it used to carry now ship with the
+CLI (`lode install`). There is no `commands/` directory: every `/lode:*` entry
+point is a skill under `plugins/lode/skills/`. `next`, `resume`, `done`,
+`block` and `status` set `disable-model-invocation: true`, so they are
+reachable only as the slash commands `/lode:next` and friends;
+`working-under-worklode` stays model-invocable — it is the done/block/release
+judgment loop a worktree session loads on its own. This repo is its own
+marketplace, named `worklode`:
 
 ```
 /plugin marketplace add sunstoneinstitute/worklode
 /plugin install lode@worklode
 ```
+
+`.claude/settings.json` enables `lode@worklode` for this repo, but enabling is
+not installing: a fresh checkout still needs the install above — and a session
+restart after it — before any `/lode:*` command exists.
 
 **The Claude JSON is the source of truth.** Edit
 `.claude-plugin/marketplace.json`; never hand-edit `.agents/plugins/marketplace.json`
