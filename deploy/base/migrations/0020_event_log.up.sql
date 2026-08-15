@@ -5,14 +5,18 @@
 -- handling in the comparison.
 --
 -- The volatile DEFAULT forces a full rewrite of events under an ACCESS
--- EXCLUSIVE lock. Deliberate and acceptable today: the log is small
--- (thousands of rows), and migrations run before the server starts
--- (compose migrate service / K8s initContainer), so nothing reads or
--- writes events during the rewrite. Every pre-existing row takes the
--- migration's own transaction id and drops below the horizon the moment
--- the migration commits. If the table ever grows to where a rewrite hurts,
--- the two-step ADD NULL + backfill dance is the escape hatch — do not need
--- it now, do not build it now.
+-- EXCLUSIVE lock. The one thing that makes this safe is that the log is
+-- small (thousands of rows), so the lock is held for milliseconds. It is
+-- NOT safe because nothing is running: deploy/base/deployment.yaml is
+-- replicas: 1 with the default RollingUpdate strategy and a migrate
+-- initContainer,
+-- so this rewrite runs while the old pod is still serving, and for its
+-- duration every RecordEvent — every webhook, every state change — blocks
+-- on the lock. Every pre-existing row takes the migration's own
+-- transaction id and drops below the horizon the moment the migration
+-- commits. Once the table is large enough that the rewrite is no longer
+-- measured in milliseconds, the two-step ADD NULL + backfill dance is the
+-- escape hatch — do not need it now, do not build it now.
 ALTER TABLE events ADD COLUMN txid xid8 NOT NULL DEFAULT pg_current_xact_id();
 CREATE INDEX events_txid_id ON events (txid, id);
 
