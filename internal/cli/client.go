@@ -2009,9 +2009,17 @@ const maxSSELine = 4 << 20
 // this one is a stream, and a refusal is a small JSON object.
 const maxAPIErrBody = 64 << 10
 
+// ErrStreamEnded reports that the server closed the stream. A follow is meant
+// to last, so this is never success — and because reconnecting is not
+// implemented yet, it is the only thing that tells a caller its view of the
+// log has stopped advancing. Without it a server restart is indistinguishable
+// from a clean stop.
+var ErrStreamEnded = errors.New("event stream closed by the server")
+
 // StreamEvents follows GET /api/v1/events/stream, calling fn once per event
-// until the context is cancelled, the server closes the stream, or fn returns
-// an error (which is returned unchanged, so a caller can stop cleanly).
+// until the context is cancelled (returning the context's error), the server
+// closes the stream (ErrStreamEnded), or fn returns an error (returned
+// unchanged, so a caller can stop cleanly).
 //
 // A dropped connection is returned, not retried: reconnecting means deciding
 // what to do about the gap, and the server already has the mechanism for that
@@ -2077,6 +2085,14 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 		case strings.HasPrefix(line, ":"):
 			// Comment line: the server's heartbeat.
 		case strings.HasPrefix(line, "data:"):
+			// The spec joins repeated data: lines with a newline, which is
+			// how a value containing one is transmitted at all. The server
+			// emits a single line per message today, so this is latent —
+			// but a parser that concatenates instead would corrupt the first
+			// message that isn't, silently.
+			if len(data) > 0 {
+				data = append(data, '\n')
+			}
 			data = append(data, strings.TrimSpace(strings.TrimPrefix(line, "data:"))...)
 		}
 	}
@@ -2086,7 +2102,10 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 		}
 		return fmt.Errorf("read event stream: %w", err)
 	}
-	return nil
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return ErrStreamEnded
 }
 
 // EventSubscriberStatus is the wire form of one event_subscribers row plus

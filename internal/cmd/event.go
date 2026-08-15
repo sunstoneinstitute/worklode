@@ -82,25 +82,32 @@ func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []cli.E
 
 	// NDJSON under --json: a stream has no closing bracket, so one object per
 	// line is the only form a reader can consume incrementally.
-	print := func(e cli.Event) error { cli.EventStreamRow(out, e); return nil }
+	emit := func(e cli.Event) error { cli.EventStreamRow(out, e); return nil }
 	if asJSON {
-		print = func(e cli.Event) error { return enc.Encode(e) }
+		emit = func(e cli.Event) error { return enc.Encode(e) }
 	} else {
 		cli.EventStreamHeader(out)
 	}
 
 	var after int64
 	for _, e := range backlog {
-		if err := print(e); err != nil {
+		if err := emit(e); err != nil {
 			return err
 		}
 		after = e.ID
 	}
 
-	err := c.StreamEvents(ctx, cli.EventStreamFilter{Type: typ, After: after}, print)
+	err := c.StreamEvents(ctx, cli.EventStreamFilter{Type: typ, After: after}, emit)
+	switch {
 	// Ctrl-C is how a follow ends, so it is a success.
-	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+	case errors.Is(err, context.Canceled) && ctx.Err() != nil:
 		return nil
+	// The server closing the connection is not. Reconnecting is not
+	// implemented yet, so the follow is over and the user's view of the log
+	// has quietly stopped advancing — say so rather than exit 0 as if they
+	// had pressed Ctrl-C.
+	case errors.Is(err, cli.ErrStreamEnded):
+		return fmt.Errorf("%w: reconnect is not implemented yet — rerun to resume", err)
 	}
 	return err
 }

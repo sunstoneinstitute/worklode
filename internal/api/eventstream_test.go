@@ -326,6 +326,65 @@ func TestEventStreamRejectsBadCursor(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
+
+	// Last-Event-ID gets the same treatment: it is the cursor a browser
+	// resends on its own, so it is the one a client is least able to inspect
+	// when it goes wrong.
+	for _, h := range []string{"not-an-int", "-1", "4 OR 1=1"} {
+		resp := streamRequest(t, ctx, f, "", f.adminToken, h)
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			resp.Body.Close()
+			t.Fatalf("Last-Event-ID %q status = %d, want 422", h, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}
+
+// TestEventStreamTypeCannotInjectFrames covers the one field of an event that
+// reaches the wire outside JSON. An event type is not validated on the way in
+// — internal/hooks/flux.go builds one as "flux.<kind>.<reason>" from a signed
+// webhook's JSON body, where a newline in Reason is perfectly legal — so a
+// type carrying CR or LF could otherwise close the event: line early and
+// write a whole forged message into every admin follower's stream. Being
+// HMAC-signed buys the right to record an event, not the right to author
+// frames in someone else's connection.
+func TestEventStreamTypeCannotInjectFrames(t *testing.T) {
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	f := newStreamTestServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const evil = "flux.Kustomization.ok\ndata: {\"id\":999,\"type\":\"forged\"}\n\nevent: forged"
+	s := openEventStream(t, ctx, f, "", f.adminToken, "")
+	s.awaitLive(t)
+	id := recordStreamEvent(t, f.st, "inject-1", evil, nil)
+
+	m := s.nextEvent(t, 15*time.Second)
+	if m.ID != strconv.FormatInt(id, 10) {
+		t.Fatalf("message id = %q, want %d", m.ID, id)
+	}
+	if strings.ContainsAny(m.Event, "\r\n") {
+		t.Fatalf("event field carries a line break: %q", m.Event)
+	}
+	if m.Event != strings.ReplaceAll(strings.ReplaceAll(evil, "\r", ""), "\n", "") {
+		t.Fatalf("event field = %q, want the type with its line breaks stripped", m.Event)
+	}
+	// The forged frame's data must have arrived as part of *this* message's
+	// event: line, never as a message of its own.
+	if got := dataField(t, m, "id"); got != float64(id) {
+		t.Fatalf("data id = %v, want %d — a second frame was injected", got, id)
+	}
+
+	// And nothing else is queued behind it: the next thing on the wire is a
+	// heartbeat, not the forged message.
+	for {
+		next := s.next(t, 15*time.Second)
+		if next.Comment {
+			break
+		}
+		t.Fatalf("unexpected second message after the injecting event: %+v", next)
+	}
 }
 
 // TestEventStreamDeliversLive is the heart of it: an event recorded after the

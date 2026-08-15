@@ -1,11 +1,17 @@
 package api
 
 import (
+	"bytes"
+	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // SetStreamPollInterval shortens the stream's poll interval for one test and
@@ -23,6 +29,57 @@ func SetStreamHeartbeatInterval(t *testing.T, d time.Duration) {
 	t.Helper()
 	old := streamHeartbeatInterval.Swap(int64(d))
 	t.Cleanup(func() { streamHeartbeatInterval.Store(old) })
+}
+
+// TestStreamPageSizeWithinStoreCap pins the dependency streamHead's
+// termination condition rests on. streamHead stops when a page comes back
+// short; if streamPageSize ever exceeded the store's own cap, every page
+// would look short and a bare follow would take the last id of the first page
+// as the head — then replay an arbitrary backlog, silently. The compile-time
+// assertion in eventstream.go is the real guard; this test is what names the
+// failure if someone deletes it.
+func TestStreamPageSizeWithinStoreCap(t *testing.T) {
+	if streamPageSize > store.MaxEventListLimit {
+		t.Fatalf("streamPageSize = %d exceeds store.MaxEventListLimit = %d: "+
+			"streamHead would read every page as short and stop at the first",
+			streamPageSize, store.MaxEventListLimit)
+	}
+}
+
+// TestWriteEventFrameStripsLineBreaks is the unit-level half of
+// TestEventStreamTypeCannotInjectFrames: whatever an event type contains, the
+// frame it produces has exactly the four lines a frame has.
+func TestWriteEventFrameStripsLineBreaks(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeEventFrame(&buf, store.Event{
+		ID:      7,
+		Type:    "a\r\nevent: forged\r\ndata: {}\r\n\r\nb",
+		Payload: []byte(`{"k":"v"}`),
+	})
+	if err != nil {
+		t.Fatalf("writeEventFrame: %v", err)
+	}
+	got := buf.String()
+	if !strings.HasSuffix(got, "\n\n") {
+		t.Fatalf("frame does not end in a blank line: %q", got)
+	}
+	lines := strings.Split(strings.TrimSuffix(got, "\n\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("frame has %d lines, want 3 (id, event, data): %q", len(lines), got)
+	}
+	if lines[1] != "event: aevent: forgeddata: {}b" {
+		t.Fatalf("event line = %q, want the type with every line break removed", lines[1])
+	}
+}
+
+// TestWriteEventFrameReportsEncodeFailure pins that an unencodable payload is
+// reported as an encoding fault and not as the client hanging up — the
+// handler branches on it to decide whether anything gets logged.
+func TestWriteEventFrameReportsEncodeFailure(t *testing.T) {
+	err := writeEventFrame(io.Discard, store.Event{ID: 9, Type: "bad", Payload: []byte(`{"unterminated`)})
+	if !errors.Is(err, errEncodeEvent) {
+		t.Fatalf("writeEventFrame with an invalid payload = %v, want errEncodeEvent", err)
+	}
 }
 
 func TestObserveEventStream(t *testing.T) {
