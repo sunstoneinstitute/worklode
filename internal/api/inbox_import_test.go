@@ -462,7 +462,7 @@ func TestImportDoesNotClobberPromotedRow(t *testing.T) {
 	if got.TriageState != "promoted" {
 		t.Errorf("triage_state = %q, want promoted — re-import must not reset triage", got.TriageState)
 	}
-	if got.TaskID == nil || *got.TaskID != taskID {
+	if got.TaskID != taskID {
 		t.Errorf("task_id = %v, want %s — re-import must not drop the task link", got.TaskID, taskID)
 	}
 	if got.Title != "renamed upstream" {

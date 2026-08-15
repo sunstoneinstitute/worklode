@@ -7,11 +7,20 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Project groups one or more repos under a single unit of work. Focus is the
 // ordered list of concerns (see ValidConcern) the project's ranking should
 // prioritize; an empty slice means no focus preference.
+//
+// Project is deliberately not model.Project: the curated cockpit columns
+// below (migration 0013) are internal bookkeeping this package and the
+// cockpit projection need that never cross the /api/v1/projects wire shape,
+// so they stay outside the five fields model.Project declares (ADR 036 §3,
+// "store scan plumbing"). api.toProjectJSON is the one conversion point from
+// this type to model.Project.
 type Project struct {
 	ID    string
 	Name  string
@@ -293,13 +302,6 @@ func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, erro
 	return s.GetProject(ctx, projectID)
 }
 
-// RepoMapping is a repo mapped to a project, with the terminal delivery
-// state that counts as fully delivered for it (see SetRepoDoneState).
-type RepoMapping struct {
-	Repo      string
-	DoneState string
-}
-
 // DefaultDoneState is the project_repos.done_state schema default, used for
 // repos with no explicit terminal state (and for unmapped repos).
 const DefaultDoneState = "merged"
@@ -335,7 +337,7 @@ func (s *Store) SetRepoDoneState(ctx context.Context, repo, state string) error 
 }
 
 // ListRepos returns the repos mapped to a project, each with its done_state.
-func (s *Store) ListRepos(ctx context.Context, projectID string) ([]RepoMapping, error) {
+func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMapping, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT repo, done_state FROM project_repos WHERE project_id = $1`, projectID)
 	if err != nil {
@@ -343,9 +345,9 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]RepoMapping,
 	}
 	defer rows.Close()
 
-	var out []RepoMapping
+	var out []model.RepoMapping
 	for rows.Next() {
-		var m RepoMapping
+		var m model.RepoMapping
 		if err := rows.Scan(&m.Repo, &m.DoneState); err != nil {
 			return nil, fmt.Errorf("scan repo: %w", err)
 		}

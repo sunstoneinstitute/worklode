@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -510,7 +511,7 @@ func displayNameOrID(a *store.Actor) string {
 // toCockpitRepositories adapts mapped repos into cockpit repository facts:
 // a project_repos row is a declared fact (someone mapped the repo and its
 // done_state; no event backs it), never observed or recommended.
-func toCockpitRepositories(repos []store.RepoMapping) []repositoryJSON {
+func toCockpitRepositories(repos []model.RepoMapping) []repositoryJSON {
 	out := make([]repositoryJSON, 0, len(repos))
 	for _, m := range repos {
 		out = append(out, repositoryJSON{

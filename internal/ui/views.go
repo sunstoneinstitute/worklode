@@ -5,10 +5,9 @@ package ui
 // they call. These types are ui's own vocabulary: internal/api maps its DTOs
 // (boardResponse, cockpitProjection, ...) into them in render.go, so the
 // dependency only ever points api -> ui. View types may embed internal/model
-// types (ui may import model) but never reference api's DTOs; a view type
-// still embedding internal/store directly (ProjectsView, TaskView.Progress)
-// is a shape Task 2/3 of the internal/model migration has not reached yet
-// (ADR 036 §3).
+// types (ui may import model) but never reference api's DTOs; TaskView.Progress
+// still embeds store.HierarchyProgress directly, a shape Task 3 of the
+// internal/model migration has not reached yet (ADR 036 §3).
 
 import (
 	"strings"
@@ -81,11 +80,11 @@ type BoardFailure struct {
 
 // --- projects portfolio -----------------------------------------------------
 
-// ProjectsView is the cross-project portfolio. It embeds store.Project rows
-// directly (ui may import store); the template reads ID/Name/Key.
+// ProjectsView is the cross-project portfolio. It embeds model.Project rows
+// directly; the template reads ID/Name/Key.
 type ProjectsView struct {
 	Page     PageProps
-	Projects []store.Project
+	Projects []model.Project
 }
 
 // --- task -------------------------------------------------------------------

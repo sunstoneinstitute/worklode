@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -30,44 +31,15 @@ const (
 // corpus, so this is generous rather than tight.
 const skillSyncTimeout = 5 * time.Minute
 
-type skillJSON struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	SourceRepo  string `json:"source_repo"`
-	Hash        string `json:"hash"`
-	Deleted     bool   `json:"deleted"`
-}
-
-type skillMatchJSON struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Hash        string  `json:"hash"`
-	Score       float64 `json:"score"`
-}
-
-type pinnedSkillJSON struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Hash        string `json:"hash"`
-	Content     string `json:"content"`
-}
-
-type recommendationJSON struct {
-	Pinned   []pinnedSkillJSON `json:"pinned"`
-	Matches  []skillMatchJSON  `json:"matches"`
-	Warnings []string          `json:"warnings"`
-	Provider string            `json:"provider"`
-}
-
-func toSkillJSON(sk store.Skill) skillJSON {
-	return skillJSON{
+func toSkillJSON(sk store.Skill) model.Skill {
+	return model.Skill{
 		Name: sk.Name, Description: sk.Description, SourceRepo: sk.SourceRepo,
 		Hash: sk.ContentHash, Deleted: sk.Deleted,
 	}
 }
 
-func toPinnedSkillJSON(sk store.Skill) pinnedSkillJSON {
-	return pinnedSkillJSON{
+func toPinnedSkillJSON(sk store.Skill) model.PinnedSkill {
+	return model.PinnedSkill{
 		Name: sk.Name, Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
 	}
 }
@@ -78,7 +50,7 @@ func (s *server) listSkills(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	out := make([]skillJSON, 0, len(skills))
+	out := make([]model.Skill, 0, len(skills))
 	for _, sk := range skills {
 		out = append(out, toSkillJSON(sk))
 	}
@@ -149,9 +121,9 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 // work. Matching itself is shared with the task brief via skillMatches: the
 // brief already has its pins resolved by store.Brief, so taskBrief calls
 // skillMatches directly instead of re-resolving them here.
-func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*recommendationJSON, error) {
-	rec := &recommendationJSON{
-		Pinned: []pinnedSkillJSON{}, Matches: []skillMatchJSON{}, Warnings: []string{},
+func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*model.SkillRecommendation, error) {
+	rec := &model.SkillRecommendation{
+		Pinned: []model.PinnedSkill{}, Matches: []model.SkillMatch{}, Warnings: []string{},
 		Provider: "none",
 	}
 
@@ -192,8 +164,8 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // matches plus a warning. Pins-only is a fully functional mode per spec 016,
 // and this path serves the task brief: an error here would stop anyone from
 // starting work.
-func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]skillMatchJSON, []string) {
-	matches := []skillMatchJSON{}
+func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
+	matches := []model.SkillMatch{}
 	switch {
 	case limit <= 0:
 		limit = defaultSkillLimit
@@ -220,7 +192,7 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 		if exclude[m.Name] || len(matches) >= limit {
 			continue
 		}
-		matches = append(matches, skillMatchJSON{
+		matches = append(matches, model.SkillMatch{
 			Name: m.Name, Description: m.Description, Hash: m.ContentHash, Score: m.Score,
 		})
 	}

@@ -776,15 +776,15 @@ type BriefBlocker struct {
 // reserved fields that serialize as JSON null in v1. Skills carries the
 // task's pinned skills (content inline) plus embedding-matched suggestions.
 type Brief struct {
-	Task               model.Task          `json:"task"`
-	Body               string              `json:"body"`
-	Branch             string              `json:"branch"`
-	OpenBlockers       []BriefBlocker      `json:"open_blockers"`
-	Lease              *model.Lease        `json:"lease"`
-	GoverningDesign    *string             `json:"governing_design"`
-	AffectedComponents []string            `json:"affected_components"`
-	DefinitionOfDone   *string             `json:"definition_of_done"`
-	Skills             SkillRecommendation `json:"skills"`
+	Task               model.Task                `json:"task"`
+	Body               string                    `json:"body"`
+	Branch             string                    `json:"branch"`
+	OpenBlockers       []BriefBlocker            `json:"open_blockers"`
+	Lease              *model.Lease              `json:"lease"`
+	GoverningDesign    *string                   `json:"governing_design"`
+	AffectedComponents []string                  `json:"affected_components"`
+	DefinitionOfDone   *string                   `json:"definition_of_done"`
+	Skills             model.SkillRecommendation `json:"skills"`
 	// Parent is the task's parent, one hop up; nil for a root task.
 	Parent *TaskParent `json:"parent"`
 }
@@ -830,21 +830,6 @@ func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model
 	return l, raw, nil
 }
 
-// AgentSession is the wire form of an agent session on a task's lease.
-type AgentSession struct {
-	LeaseID      int64      `json:"lease_id"`
-	Agent        string     `json:"agent"`
-	AgentVersion string     `json:"agent_version,omitempty"`
-	SessionID    string     `json:"session_id"`
-	StartedAt    time.Time  `json:"started_at"`
-	LastSeenAt   time.Time  `json:"last_seen_at"`
-	EndedAt      *time.Time `json:"ended_at,omitempty"`
-	InputTokens  *int64     `json:"input_tokens"`
-	OutputTokens *int64     `json:"output_tokens"`
-	CostAmount   *string    `json:"cost_amount"`
-	CostCurrency string     `json:"cost_currency"`
-}
-
 // TouchAgentSession calls POST /api/v1/tasks/{id}/agent-session: report that
 // this agent session is working id, or heartbeat an already-reported one.
 //
@@ -852,7 +837,7 @@ type AgentSession struct {
 // recorded alone. Reporting it on a heartbeat is what gets a crashed or
 // swept session's tokens onto the books at all, since only a clean end
 // reports them otherwise.
-func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string, usage []SessionUsageBucket) (AgentSession, []byte, error) {
+func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string, usage []model.SessionUsageBucket) (model.AgentSession, []byte, error) {
 	body := map[string]any{
 		"agent":         agent,
 		"agent_version": agentVersion,
@@ -864,27 +849,13 @@ func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion,
 	raw, err := c.do(ctx, http.MethodPost,
 		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", body)
 	if err != nil {
-		return AgentSession{}, nil, err
+		return model.AgentSession{}, nil, err
 	}
-	var a AgentSession
+	var a model.AgentSession
 	if err := json.Unmarshal(raw, &a); err != nil {
-		return AgentSession{}, nil, fmt.Errorf("decode agent session: %w", err)
+		return model.AgentSession{}, nil, fmt.Errorf("decode agent session: %w", err)
 	}
 	return a, raw, nil
-}
-
-// SessionUsageBucket is the tokens one model billed on one UTC day at one
-// billing speed — the granularity a price can be applied at. Mirrors
-// transcript.Bucket; Day is YYYY-MM-DD.
-type SessionUsageBucket struct {
-	Day          string `json:"day"`
-	Model        string `json:"model"`
-	Speed        string `json:"speed"`
-	InputTokens  int64  `json:"input_tokens"`
-	CacheWrite5m int64  `json:"cache_write_5m_tokens"`
-	CacheWrite1h int64  `json:"cache_write_1h_tokens"`
-	CacheRead    int64  `json:"cache_read_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
 }
 
 // EndAgentSessionInput carries the required identity plus optional accounting
@@ -902,7 +873,7 @@ type EndAgentSessionInput struct {
 	// must reach the server as JSON null (leave stored usage alone), which an
 	// empty slice — meaning "clear it" — would otherwise be indistinguishable
 	// from.
-	Usage []SessionUsageBucket `json:"usage"`
+	Usage []model.SessionUsageBucket `json:"usage"`
 }
 
 // EndAgentSession calls POST /api/v1/tasks/{id}/agent-session/end.
@@ -1199,21 +1170,9 @@ func (c *Client) Decompose(ctx context.Context, id string, titles []string) (Dec
 
 // --- inbox ------------------------------------------------------------
 
-// Issue is the wire form of an inbox issue.
-type Issue struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title"`
-	State             string   `json:"state"`
-	TriageState       string   `json:"triage_state"`
-	TaskID            string   `json:"task_id,omitempty"`
-	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
-	URL               string   `json:"url"`
-}
-
 // IssueListResponse is the response body of ListIssues.
 type IssueListResponse struct {
-	Issues []Issue `json:"issues"`
+	Issues []model.Issue `json:"issues"`
 }
 
 // ListIssues calls GET /api/v1/inbox. An empty state lists every triage
@@ -1324,23 +1283,6 @@ func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (ImportResult,
 
 // --- projects ---------------------------------------------------------
 
-// Project is the wire form of a project, including its mapped repos and
-// ranking focus (the ordered list of concerns claim-next should prioritize).
-type Project struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Key   string        `json:"key"`
-	Repos []RepoMapping `json:"repos"`
-	Focus []string      `json:"focus"`
-}
-
-// RepoMapping is a repo mapped to a project, with the terminal delivery state
-// that counts as fully delivered for it (merged, deployed_prod, or released).
-type RepoMapping struct {
-	Repo      string `json:"repo"`
-	DoneState string `json:"done_state"`
-}
-
 // CreateProjectInput is the request body for CreateProject.
 type CreateProjectInput struct {
 	ID   string `json:"id"`
@@ -1349,21 +1291,21 @@ type CreateProjectInput struct {
 }
 
 // CreateProject calls POST /api/v1/projects.
-func (c *Client) CreateProject(ctx context.Context, in CreateProjectInput) (Project, []byte, error) {
+func (c *Client) CreateProject(ctx context.Context, in CreateProjectInput) (model.Project, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/projects", in)
 	if err != nil {
-		return Project{}, nil, err
+		return model.Project{}, nil, err
 	}
-	var p Project
+	var p model.Project
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
 	}
 	return p, raw, nil
 }
 
 // ProjectListResponse is the response body of ListProjects.
 type ProjectListResponse struct {
-	Projects []Project `json:"projects"`
+	Projects []model.Project `json:"projects"`
 }
 
 // ListProjects calls GET /api/v1/projects.
@@ -1383,18 +1325,18 @@ func (c *Client) ListProjects(ctx context.Context) (ProjectListResponse, []byte,
 // list and returns the updated project. focus is always sent non-nil (an
 // empty slice clears the focus) since the server rejects a missing/null
 // focus with 422.
-func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string) (Project, []byte, error) {
+func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string) (model.Project, []byte, error) {
 	if focus == nil {
 		focus = []string{}
 	}
 	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id),
 		map[string]any{"focus": focus})
 	if err != nil {
-		return Project{}, nil, err
+		return model.Project{}, nil, err
 	}
-	var p Project
+	var p model.Project
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
 	}
 	return p, raw, nil
 }
@@ -1403,7 +1345,7 @@ func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string)
 // curated pinned-focus card and returns the updated project. An empty note
 // clears the card; pinnedBy is an actor id or a plain display name. The fields
 // are always sent, so the server reads note:"" as an explicit clear.
-func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string) (Project, []byte, error) {
+func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string) (model.Project, []byte, error) {
 	return c.patchProject(ctx, id, map[string]any{
 		"focus_note":      note,
 		"focus_pinned_by": pinnedBy,
@@ -1414,7 +1356,7 @@ func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string)
 // the curated next-decision card and returns the updated project. An empty
 // title clears the card. The fields are always sent, so the server reads
 // title:"" as an explicit clear.
-func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accountable, readiness string) (Project, []byte, error) {
+func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accountable, readiness string) (model.Project, []byte, error) {
 	return c.patchProject(ctx, id, map[string]any{
 		"decision_title":       title,
 		"decision_accountable": accountable,
@@ -1424,14 +1366,14 @@ func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accounta
 
 // patchProject PATCHes body to /api/v1/projects/{id} and decodes the updated
 // project it returns, shared by the project-mutation client methods.
-func (c *Client) patchProject(ctx context.Context, id string, body map[string]any) (Project, []byte, error) {
+func (c *Client) patchProject(ctx context.Context, id string, body map[string]any) (model.Project, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), body)
 	if err != nil {
-		return Project{}, nil, err
+		return model.Project{}, nil, err
 	}
-	var p Project
+	var p model.Project
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return Project{}, nil, fmt.Errorf("decode project: %w", err)
+		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
 	}
 	return p, raw, nil
 }
@@ -1471,7 +1413,7 @@ type ProjectCost struct {
 // ProjectDetail is the wire form of GET /api/v1/projects/{id}: a Project plus
 // its cost.
 type ProjectDetail struct {
-	Project
+	model.Project
 	Cost ProjectCost `json:"cost"`
 }
 
@@ -1499,33 +1441,33 @@ func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Tim
 // GetProject returns one project by id, or a *ClientError with Status 404 if
 // no such project exists. There is no single-project GET endpoint, so this
 // filters the project list.
-func (c *Client) GetProject(ctx context.Context, id string) (Project, error) {
+func (c *Client) GetProject(ctx context.Context, id string) (model.Project, error) {
 	resp, _, err := c.ListProjects(ctx)
 	if err != nil {
-		return Project{}, err
+		return model.Project{}, err
 	}
 	for _, p := range resp.Projects {
 		if p.ID == id {
 			return p, nil
 		}
 	}
-	return Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
+	return model.Project{}, &ClientError{Status: http.StatusNotFound, Msg: "project not found: " + id}
 }
 
 // ResolveRemote calls GET /api/v1/projects/resolve, returning the project the
 // given git remote URL maps to. The URL is sent exactly as git reported it —
 // the server owns normalization — and a *ClientError with Status 404 means
 // the repo is not mapped to any project.
-func (c *Client) ResolveRemote(ctx context.Context, remote string) (Project, error) {
+func (c *Client) ResolveRemote(ctx context.Context, remote string) (model.Project, error) {
 	q := url.Values{}
 	q.Set("remote", remote)
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil)
 	if err != nil {
-		return Project{}, err
+		return model.Project{}, err
 	}
-	var p Project
+	var p model.Project
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return Project{}, fmt.Errorf("decode project: %w", err)
+		return model.Project{}, fmt.Errorf("decode project: %w", err)
 	}
 	return p, nil
 }
@@ -1572,14 +1514,6 @@ func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) (
 
 // --- actors and tokens --------------------------------------------------
 
-// Actor is the wire form of an actor.
-type Actor struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
 // CreateActorInput is the request body for CreateActor. Admin grants the
 // actor the right to manage projects, actors, and tokens.
 type CreateActorInput struct {
@@ -1590,14 +1524,14 @@ type CreateActorInput struct {
 }
 
 // CreateActor calls POST /api/v1/actors.
-func (c *Client) CreateActor(ctx context.Context, in CreateActorInput) (Actor, []byte, error) {
+func (c *Client) CreateActor(ctx context.Context, in CreateActorInput) (model.Actor, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors", in)
 	if err != nil {
-		return Actor{}, nil, err
+		return model.Actor{}, nil, err
 	}
-	var a Actor
+	var a model.Actor
 	if err := json.Unmarshal(raw, &a); err != nil {
-		return Actor{}, nil, fmt.Errorf("decode actor: %w", err)
+		return model.Actor{}, nil, fmt.Errorf("decode actor: %w", err)
 	}
 	return a, raw, nil
 }
@@ -1661,49 +1595,13 @@ type BoardProject struct {
 
 // --- skills -----------------------------------------------------------
 
-// Skill mirrors internal/api's skillJSON.
-type Skill struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	SourceRepo  string `json:"source_repo"`
-	Hash        string `json:"hash"`
-	Deleted     bool   `json:"deleted"`
-}
-
-// SkillMatch mirrors internal/api's skillMatchJSON: one embedding-recommend
-// hit.
-type SkillMatch struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Hash        string  `json:"hash"`
-	Score       float64 `json:"score"`
-}
-
-// PinnedSkill mirrors internal/api's pinnedSkillJSON: a task-pinned skill
-// with its content inlined, so a caller never needs a second round trip to
-// read it.
-type PinnedSkill struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Hash        string `json:"hash"`
-	Content     string `json:"content"`
-}
-
-// SkillRecommendation mirrors internal/api's recommendationJSON.
-type SkillRecommendation struct {
-	Pinned   []PinnedSkill `json:"pinned"`
-	Matches  []SkillMatch  `json:"matches"`
-	Warnings []string      `json:"warnings"`
-	Provider string        `json:"provider"`
-}
-
 // skillsListResponse is the response body of Skills.
 type skillsListResponse struct {
-	Skills []Skill `json:"skills"`
+	Skills []model.Skill `json:"skills"`
 }
 
 // Skills calls GET /api/v1/skills.
-func (c *Client) Skills(ctx context.Context) ([]Skill, []byte, error) {
+func (c *Client) Skills(ctx context.Context) ([]model.Skill, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills", nil)
 	if err != nil {
 		return nil, nil, err
@@ -1716,14 +1614,14 @@ func (c *Client) Skills(ctx context.Context) ([]Skill, []byte, error) {
 }
 
 // Skill calls GET /api/v1/skills/{name}.
-func (c *Client) Skill(ctx context.Context, name string) (Skill, []byte, error) {
+func (c *Client) Skill(ctx context.Context, name string) (model.Skill, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills/"+url.PathEscape(name), nil)
 	if err != nil {
-		return Skill{}, nil, err
+		return model.Skill{}, nil, err
 	}
-	var sk Skill
+	var sk model.Skill
 	if err := json.Unmarshal(raw, &sk); err != nil {
-		return Skill{}, nil, fmt.Errorf("decode skill: %w", err)
+		return model.Skill{}, nil, fmt.Errorf("decode skill: %w", err)
 	}
 	return sk, raw, nil
 }
@@ -1739,15 +1637,15 @@ func (c *Client) SkillArchive(ctx context.Context, name, hash string) ([]byte, e
 
 // RecommendSkills calls POST /api/v1/skills/recommend. Exactly one of taskID
 // or text is required by the server.
-func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit int) (SkillRecommendation, []byte, error) {
+func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit int) (model.SkillRecommendation, []byte, error) {
 	body := map[string]any{"task_id": taskID, "text": text, "limit": limit}
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/skills/recommend", body)
 	if err != nil {
-		return SkillRecommendation{}, nil, err
+		return model.SkillRecommendation{}, nil, err
 	}
-	var rec SkillRecommendation
+	var rec model.SkillRecommendation
 	if err := json.Unmarshal(raw, &rec); err != nil {
-		return SkillRecommendation{}, nil, fmt.Errorf("decode skill recommendation: %w", err)
+		return model.SkillRecommendation{}, nil, fmt.Errorf("decode skill recommendation: %w", err)
 	}
 	return rec, raw, nil
 }
@@ -1757,23 +1655,12 @@ func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
 }
 
-// RuntimeEvent is a recent runtime event as shown on the board.
-type RuntimeEvent struct {
-	ID         int64     `json:"id"`
-	Cluster    string    `json:"cluster"`
-	Kind       string    `json:"kind"`
-	Workload   string    `json:"workload"`
-	Image      string    `json:"image"`
-	Message    string    `json:"message"`
-	OccurredAt time.Time `json:"occurred_at"`
-}
-
 // BoardResponse is the response body of Board. RecentFailures is nil when
 // project narrows the response to one project (it is not project-scoped),
 // non-nil (possibly empty) otherwise.
 type BoardResponse struct {
-	Projects       []BoardProject `json:"projects"`
-	RecentFailures []RuntimeEvent `json:"recent_failures"`
+	Projects       []BoardProject       `json:"projects"`
+	RecentFailures []model.RuntimeEvent `json:"recent_failures"`
 }
 
 // Board calls GET /api/v1/board. An empty project fetches every project.
