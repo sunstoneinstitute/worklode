@@ -983,7 +983,7 @@ func TestTaskBriefCmd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode task brief: %v\noutput: %s", err, out)
 	}
-	var b cli.Brief
+	var b model.Brief
 	if err := json.Unmarshal([]byte(out), &b); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
@@ -1018,7 +1018,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode task brief: %v\noutput: %s", err, out)
 	}
-	var b cli.Brief
+	var b model.Brief
 	if err := json.Unmarshal([]byte(out), &b); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
@@ -1045,7 +1045,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 // --- printBrief -------------------------------------------------------
 
 func TestPrintBriefRendersSkillsSection(t *testing.T) {
-	b := cli.Brief{
+	b := model.Brief{
 		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: model.SkillRecommendation{
@@ -1080,7 +1080,7 @@ func TestPrintBriefRendersSkillsSection(t *testing.T) {
 // misspelled every pin would otherwise see nothing, which is the one case the
 // warnings exist for.
 func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
-	b := cli.Brief{
+	b := model.Brief{
 		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: model.SkillRecommendation{
@@ -1100,7 +1100,7 @@ func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 }
 
 func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
-	b := cli.Brief{
+	b := model.Brief{
 		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
 		Skills: model.SkillRecommendation{Provider: "none"},

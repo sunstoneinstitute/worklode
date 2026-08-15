@@ -7,45 +7,15 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// briefBlockerJSON is the slim projection of an open blocker in a brief: just
-// the fields an agent needs to see why a task is blocked.
-type briefBlockerJSON struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	State string `json:"state"`
-}
-
-// briefJSON is the wire form of a task brief. lease is null when the task has
-// no active lease. open_blockers is always an array (never null). parent is
-// null for a root task (no omitempty, so the key is always present — see
-// hierarchyJSON.Parent for the same convention on task detail). The three
-// reserved fields serialize as JSON null in v1: governing_design and
-// definition_of_done are *string, affected_components is a nil []string
-// (marshals to null, not []) — see store.Brief. skills carries the task's
-// pinned skills (content inline) plus embedding-matched suggestions, in the
-// same shape as POST /api/v1/skills/recommend.
-type briefJSON struct {
-	Task               model.Task                `json:"task"`
-	Body               string                    `json:"body"`
-	Branch             string                    `json:"branch"`
-	OpenBlockers       []briefBlockerJSON        `json:"open_blockers"`
-	Parent             *parentRefJSON            `json:"parent"`
-	Lease              *model.Lease              `json:"lease"`
-	GoverningDesign    *string                   `json:"governing_design"`
-	AffectedComponents []string                  `json:"affected_components"`
-	DefinitionOfDone   *string                   `json:"definition_of_done"`
-	Skills             model.SkillRecommendation `json:"skills"`
-}
-
 // toBriefJSON fills every field except Skills.Matches: those come from
 // skillMatches, which taskBrief calls once pins are known so a pinned skill
 // is excluded from its own matches.
-func toBriefJSON(b *store.Brief) briefJSON {
-	out := briefJSON{
+func toBriefJSON(b *store.Brief) model.Brief {
+	out := model.Brief{
 		Task:               b.Task,
 		Body:               b.Body,
 		Branch:             b.Branch,
-		OpenBlockers:       make([]briefBlockerJSON, 0, len(b.OpenBlockers)),
+		OpenBlockers:       make([]model.BriefBlocker, 0, len(b.OpenBlockers)),
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,
@@ -58,12 +28,12 @@ func toBriefJSON(b *store.Brief) briefJSON {
 	}
 	for i := range b.OpenBlockers {
 		blk := &b.OpenBlockers[i]
-		out.OpenBlockers = append(out.OpenBlockers, briefBlockerJSON{
+		out.OpenBlockers = append(out.OpenBlockers, model.BriefBlocker{
 			ID: blk.ID, Title: blk.Title, State: blk.State,
 		})
 	}
 	if b.Parent != nil {
-		out.Parent = &parentRefJSON{ID: b.Parent.ID, Title: b.Parent.Title, State: b.Parent.State}
+		out.Parent = &model.TaskParent{ID: b.Parent.ID, Title: b.Parent.Title, State: b.Parent.State}
 	}
 	if b.Lease != nil {
 		l := toLeaseJSON(b.Lease)

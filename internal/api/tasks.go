@@ -147,68 +147,25 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-type edgeOut struct {
-	To   string `json:"to"`
-	Type string `json:"type"`
-}
-
-type edgeIn struct {
-	From string `json:"from"`
-	Type string `json:"type"`
-}
-
+// getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
+// the task has an active lease, so a CLI `show` can display the holder
+// without a second request.
 // edgesToJSON converts a task's outgoing and incoming store edges to their
 // wire types, shared by getTask and listTasks' detail expansion so the two
 // projections cannot drift. Always returns non-nil slices, even for nil
 // input, so "edges" serializes as [] rather than null for an edgeless task.
-func edgesToJSON(out, in []store.Edge) ([]edgeOut, []edgeIn) {
-	outJSON := make([]edgeOut, 0, len(out))
+func edgesToJSON(out, in []store.Edge) ([]model.TaskEdgeOut, []model.TaskEdgeIn) {
+	outJSON := make([]model.TaskEdgeOut, 0, len(out))
 	for _, e := range out {
-		outJSON = append(outJSON, edgeOut{To: e.ToTask, Type: e.Type})
+		outJSON = append(outJSON, model.TaskEdgeOut{To: e.ToTask, Type: e.Type})
 	}
-	inJSON := make([]edgeIn, 0, len(in))
+	inJSON := make([]model.TaskEdgeIn, 0, len(in))
 	for _, e := range in {
-		inJSON = append(inJSON, edgeIn{From: e.FromTask, Type: e.Type})
+		inJSON = append(inJSON, model.TaskEdgeIn{From: e.FromTask, Type: e.Type})
 	}
 	return outJSON, inJSON
 }
 
-// parentRefJSON is the one-hop-up projection of a task's parent: enough to
-// render a breadcrumb without a second request.
-type parentRefJSON struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	State string `json:"state"`
-}
-
-// progressJSON is the derived child roll-up, closed of total direct children.
-// Computed on read, never stored.
-type progressJSON struct {
-	Closed int `json:"closed"`
-	Total  int `json:"total"`
-}
-
-// hierarchyJSON is the spec-004 hierarchy block on a task detail. parent is
-// null for a root task; progress is zeroed for a task with no children.
-type hierarchyJSON struct {
-	Parent   *parentRefJSON `json:"parent"`
-	Progress progressJSON   `json:"progress"`
-}
-
-type taskDetailJSON struct {
-	model.Task
-	Blocked bool `json:"blocked"`
-	Edges   struct {
-		Out []edgeOut `json:"out"`
-		In  []edgeIn  `json:"in"`
-	} `json:"edges"`
-	Lease     *model.Lease  `json:"lease,omitempty"`
-	Hierarchy hierarchyJSON `json:"hierarchy"`
-}
-
-// getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
-// the task has an active lease, so a CLI `show` can display the holder
-// without a second request.
 func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := s.st.GetTask(r.Context(), id)
@@ -227,7 +184,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := taskDetailJSON{Task: *t, Blocked: blocked[id]}
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id]}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
@@ -247,25 +204,11 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp.Hierarchy.Progress = progressJSON{Closed: progress.Closed, Total: progress.Total}
+	resp.Hierarchy.Progress = model.TaskProgress{Closed: progress.Closed, Total: progress.Total}
 	if parent != nil {
-		resp.Hierarchy.Parent = &parentRefJSON{ID: parent.ID, Title: parent.Title, State: parent.State}
+		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// taskListDetailJSON is one row of GET /api/v1/tasks?detail=true: the base
-// task plus the two field groups a list consumer cannot cheaply reconstruct.
-// It is not taskDetailJSON: hierarchy is derivable from the child_of edges
-// below, and lease is per-task ephemeral state that a cached list would
-// misreport. Both stay on GET /api/v1/tasks/{id}.
-type taskListDetailJSON struct {
-	model.Task
-	Blocked bool `json:"blocked"`
-	Edges   struct {
-		Out []edgeOut `json:"out"`
-		In  []edgeIn  `json:"in"`
-	} `json:"edges"`
 }
 
 // listTasks handles
@@ -273,7 +216,7 @@ type taskListDetailJSON struct {
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
-// detail=true adds "blocked" and "edges" to each row (see taskListDetailJSON)
+// detail=true adds "blocked" and "edges" to each row (see model.TaskListDetail)
 // at the cost of two extra bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -324,9 +267,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("detail") != "true" {
-		resp := struct {
-			Tasks []model.Task `json:"tasks"`
-		}{Tasks: make([]model.Task, 0, len(tasks))}
+		resp := model.TaskListResponse{Tasks: make([]model.Task, 0, len(tasks))}
 		resp.Tasks = append(resp.Tasks, tasks...)
 		writeJSON(w, http.StatusOK, resp)
 		return
@@ -347,11 +288,9 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Tasks []taskListDetailJSON `json:"tasks"`
-	}{Tasks: make([]taskListDetailJSON, 0, len(tasks))}
+	resp := model.TaskListDetailResponse{Tasks: make([]model.TaskListDetail, 0, len(tasks))}
 	for i := range tasks {
-		row := taskListDetailJSON{Task: tasks[i], Blocked: blocked[tasks[i].ID]}
+		row := model.TaskListDetail{Task: tasks[i], Blocked: blocked[tasks[i].ID]}
 		te := edges[tasks[i].ID]
 		row.Edges.Out, row.Edges.In = edgesToJSON(te.Out, te.In)
 		resp.Tasks = append(resp.Tasks, row)
