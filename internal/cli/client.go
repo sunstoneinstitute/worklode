@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -1934,4 +1935,103 @@ func (c *Client) Timeline(ctx context.Context, taskID string) (TimelineResponse,
 		return TimelineResponse{}, nil, fmt.Errorf("decode timeline: %w", err)
 	}
 	return resp, raw, nil
+}
+
+// --- events (spec 025 §15/§18) ---------------------------------------------
+
+// Event is the wire form of one event log row, matching internal/api's
+// eventJSON.
+type Event struct {
+	ID         int64           `json:"id"`
+	Source     string          `json:"source"`
+	ExternalID string          `json:"external_id"`
+	Type       string          `json:"type"`
+	Payload    json.RawMessage `json:"payload"`
+	ReceivedAt time.Time       `json:"received_at"`
+}
+
+// EventListFilter narrows ListEvents. Zero-valued fields do not filter.
+type EventListFilter struct {
+	Type  string
+	Since time.Time
+	After int64 // exclusive id cursor
+	Limit int
+}
+
+// EventListResponse is the response body of ListEvents.
+type EventListResponse struct {
+	Events []Event `json:"events"`
+}
+
+// ListEvents calls GET /api/v1/events.
+func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (EventListResponse, []byte, error) {
+	q := url.Values{}
+	if f.Type != "" {
+		q.Set("type", f.Type)
+	}
+	if !f.Since.IsZero() {
+		q.Set("since", f.Since.UTC().Format(time.RFC3339))
+	}
+	if f.After != 0 {
+		q.Set("after", strconv.FormatInt(f.After, 10))
+	}
+	if f.Limit != 0 {
+		q.Set("limit", strconv.Itoa(f.Limit))
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/events", q), nil)
+	if err != nil {
+		return EventListResponse{}, nil, err
+	}
+	var resp EventListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return EventListResponse{}, nil, fmt.Errorf("decode event list: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// EventSubscriberStatus is the wire form of one event_subscribers row plus
+// its derived lag and lock holder, matching internal/api's
+// eventSubscriberJSON.
+type EventSubscriberStatus struct {
+	Name            string    `json:"name"`
+	LastReadOffset  int64     `json:"last_read_offset"`
+	LastAckedOffset int64     `json:"last_acked_offset"`
+	Lag             int64     `json:"lag"`
+	HolderPID       int64     `json:"holder_pid"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// EventSubscriberListResponse is the response body of EventSubscribers.
+type EventSubscriberListResponse struct {
+	Subscribers []EventSubscriberStatus `json:"subscribers"`
+}
+
+// EventSubscribers calls GET /api/v1/event-subscribers.
+func (c *Client) EventSubscribers(ctx context.Context) (EventSubscriberListResponse, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/event-subscribers", nil)
+	if err != nil {
+		return EventSubscriberListResponse{}, nil, err
+	}
+	var resp EventSubscriberListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return EventSubscriberListResponse{}, nil, fmt.Errorf("decode event subscriber list: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// SeekEventSubscriber calls POST /api/v1/event-subscribers/{name}/seek,
+// moving both of the subscriber's offsets to to — an admin correction of
+// consumer state (025 §18), safe only because handlers are idempotent.
+func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (EventSubscriberStatus, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost,
+		"/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek",
+		map[string]any{"to": to})
+	if err != nil {
+		return EventSubscriberStatus{}, nil, err
+	}
+	var st EventSubscriberStatus
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return EventSubscriberStatus{}, nil, fmt.Errorf("decode event subscriber status: %w", err)
+	}
+	return st, raw, nil
 }

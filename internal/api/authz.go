@@ -96,6 +96,16 @@ const (
 
 	permWebRead  Permission = "web.read"
 	permWebWrite Permission = "web.write"
+
+	// permEventRead covers the read surfaces over the ordered event log
+	// (spec 025 §15/§18): the log itself and subscriber status. Any
+	// authenticated actor may read them — they are operational visibility,
+	// not a write.
+	permEventRead Permission = "event.read"
+	// permEventAdmin covers seeking a subscriber's offsets: an admin
+	// correction of consumer state, not a domain fact (it deliberately
+	// bypasses RecordEvent — see events.go).
+	permEventAdmin Permission = "event.admin"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -142,6 +152,9 @@ var grants = map[Permission][]Role{
 
 	permWebRead:  {RoleUser, RoleAdmin},
 	permWebWrite: {RoleUser, RoleAdmin},
+
+	permEventRead:  {RoleUser, RoleAdmin},
+	permEventAdmin: {RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say

@@ -322,6 +322,146 @@ func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error)
 	return out, nil
 }
 
+// EventFilter narrows ListEvents. Zero values do not filter.
+type EventFilter struct {
+	Type  string
+	Since time.Time
+	After int64 // exclusive id cursor; the stream of Task 8 pages with it
+	Limit int   // default/cap 200
+}
+
+// maxEventListLimit is both the default and the cap for ListEvents: a
+// caller that omits Limit gets it, and a caller that asks for more than it
+// is silently truncated to it rather than erroring.
+const maxEventListLimit = 200
+
+// ListEvents returns matching events in id order (newest last, 025 §18),
+// horizon-bounded like every subscriber read so the tail never shows an id
+// that later reads would order before.
+func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
+	where := "txid < pg_snapshot_xmin(pg_current_snapshot())"
+	var args []any
+	if f.Type != "" {
+		args = append(args, f.Type)
+		where += fmt.Sprintf(" AND type = $%d", len(args))
+	}
+	if !f.Since.IsZero() {
+		args = append(args, f.Since.UTC())
+		where += fmt.Sprintf(" AND received_at >= $%d", len(args))
+	}
+	if f.After != 0 {
+		args = append(args, f.After)
+		where += fmt.Sprintf(" AND id > $%d", len(args))
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > maxEventListLimit {
+		limit = maxEventListLimit
+	}
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(
+		`SELECT id, source, external_id, type, payload, received_at
+		   FROM events
+		  WHERE %s
+		  ORDER BY id
+		  LIMIT $%d`, where, len(args)), args...)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Event
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		e.ReceivedAt = e.ReceivedAt.UTC()
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	return out, nil
+}
+
+// EventSubscriberStatus is the lode event subscribers row (025 §18): the
+// durable offsets plus two derived, point-in-time facts — how far the
+// subscriber trails the commit horizon, and which Postgres backend (if any)
+// currently holds its advisory lock.
+type EventSubscriberStatus struct {
+	EventSubscriber
+	Lag       int64
+	HolderPID int64 // Postgres backend pid holding the lock; 0 = none
+}
+
+// EventSubscriberStatuses lists every subscriber with its lag and lock
+// holder. The pg_locks join splits the 64-bit advisory key into classid
+// (high 32 bits) / objid (low 32 bits) exactly as advisoryLockHolderPID in
+// events_test.go does — that split is load-bearing and was verified in an
+// earlier task. Scoped to the current database, like that helper: advisory
+// lock pids are visible cluster-wide in pg_locks, and a same-named
+// subscriber on a different database must not be reported as this one's
+// holder.
+func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberStatus, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.name, s.last_read_offset, s.last_acked_offset, s.updated_at,
+		       GREATEST(h.max_id - s.last_acked_offset, 0) AS lag,
+		       COALESCE(l.pid, 0) AS holder_pid
+		  FROM event_subscribers s
+		 CROSS JOIN (SELECT COALESCE(MAX(id), 0) AS max_id
+		               FROM events
+		              WHERE txid < pg_snapshot_xmin(pg_current_snapshot())) h
+		  LEFT JOIN LATERAL (
+		       SELECT pid FROM pg_locks
+		        WHERE locktype = 'advisory' AND granted AND objsubid = 1
+		          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+		          AND classid = ((hashtext('wl:subscriber:' || s.name)::bigint >> 32) & 4294967295)::oid
+		          AND objid   = (hashtext('wl:subscriber:' || s.name)::bigint & 4294967295)::oid
+		        LIMIT 1) l ON true
+		 ORDER BY s.name`)
+	if err != nil {
+		return nil, fmt.Errorf("event subscriber statuses: %w", err)
+	}
+	defer rows.Close()
+
+	var out []EventSubscriberStatus
+	for rows.Next() {
+		var st EventSubscriberStatus
+		if err := rows.Scan(&st.Name, &st.LastRead, &st.LastAcked, &st.UpdatedAt, &st.Lag, &st.HolderPID); err != nil {
+			return nil, fmt.Errorf("scan event subscriber status: %w", err)
+		}
+		st.UpdatedAt = st.UpdatedAt.UTC()
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event subscriber statuses: %w", err)
+	}
+	return out, nil
+}
+
+// SeekEventSubscriber moves both offsets to the given position — the only
+// path that moves an offset backwards (admin replay/skip, 025 §18). Setting
+// last_read_offset and last_acked_offset to the same value keeps the
+// event_subscribers_acked_le_read CHECK satisfied by construction. Safe
+// precisely because handlers are idempotent.
+func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE event_subscribers SET last_read_offset = $2, last_acked_offset = $2, updated_at = $3
+		 WHERE name = $1`, name, to, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("seek event subscriber %s: %w", name, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("seek event subscriber %s: %w", name, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+	}
+	return nil
+}
+
 // SubscriberLock pins one pool connection holding the pg_try_advisory_lock
 // for a subscriber (spec 025 §15.1: one active consumer). The connection is
 // held for the consumer's lifetime; a crashed process drops it and
