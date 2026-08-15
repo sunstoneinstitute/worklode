@@ -5,6 +5,8 @@ package ui
 // as worklist rows, plus recent runtime failures. Restyled from the former
 // internal/api/board.templ tables into the design system's .card + .wl rows.
 
+import "github.com/sunstoneinstitute/worklode/internal/model"
+
 templ Board(v BoardView) {
 	@Page(v.Page) {
 		<div class="main">
@@ -54,7 +56,7 @@ templ boardProject(proj BoardProject) {
 
 // boardBucket renders one named bucket as a worklist, or "None" when empty.
 // blockedLabel forces the fixed "blocked" chip label the Blocked bucket used.
-templ boardBucket(heading, variant string, blockedLabel bool, items []BoardItem) {
+templ boardBucket(heading, variant string, blockedLabel bool, items []model.BoardTask) {
 	<h4 class="small muted">{ heading }</h4>
 	if len(items) == 0 {
 		<p class="muted small">None</p>
@@ -69,7 +71,7 @@ templ boardBucket(heading, variant string, blockedLabel bool, items []BoardItem)
 
 // boardRow renders one task row: id/title link, the bucket's state chip and a
 // priority chip, and — when present — the lease holder and the assignee.
-templ boardRow(item BoardItem, variant string, blockedLabel bool) {
+templ boardRow(item model.BoardTask, variant string, blockedLabel bool) {
 	<div class="wlrow">
 		<div class="tl">
 			<div class="t"><a href={ "/tasks/" + item.ID }>{ item.ID }</a> &mdash; { item.Title }</div>

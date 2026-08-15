@@ -30,9 +30,9 @@ func TestProjectTableShowsKey(t *testing.T) {
 // WL-4.
 func TestBoardSectionGroupsChildren(t *testing.T) {
 	var buf bytes.Buffer
-	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
 		ID: "proj", Name: "Proj",
-		Ready: []BoardTask{
+		Ready: []model.BoardTask{
 			{Task: model.Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
 			{Task: model.Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
 			{Task: model.Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
@@ -292,11 +292,11 @@ func TestEventStreamRow(t *testing.T) {
 // for, and an absolute expiry timestamp makes the reader do the subtraction.
 func TestBoardHolderShowsUsernameAndTimeLeft(t *testing.T) {
 	var buf bytes.Buffer
-	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
 		ID: "proj", Name: "Proj",
-		InProgress: []BoardTask{{
+		InProgress: []model.BoardTask{{
 			Task: model.Task{ID: "WL-1", Title: "Work", Priority: "medium"},
-			Holder: &Holder{
+			Holder: &model.Holder{
 				ActorID:   "stig@sunstoneinstitute.ai",
 				ExpiresAt: time.Now().Add(74*time.Minute + 30*time.Second),
 			},
