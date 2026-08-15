@@ -20,6 +20,7 @@ import (
 	"html"
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -274,7 +275,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 			s.webStoreErr(w, err)
 			return
 		}
-		view.Progress = progress
+		view.Progress = model.TaskProgress{Closed: progress.Closed, Total: progress.Total}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

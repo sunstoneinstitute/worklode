@@ -482,14 +482,14 @@ func newBlockCmd() *cobra.Command {
 
 // statusResult is the --json shape of `lode status`.
 type statusResult struct {
-	Worktree      string             `json:"worktree"`
-	Task          model.Task         `json:"task"`
-	LeaseState    string             `json:"lease_state"` // held, expired, held_elsewhere, none
-	Lease         *model.Lease       `json:"lease,omitempty"`
-	OpenBlockers  []cli.BriefBlocker `json:"open_blockers"`
-	SessionMarker bool               `json:"session_marker"`
-	Project       string             `json:"project,omitempty"`
-	ProjectSource string             `json:"project_source"`
+	Worktree      string               `json:"worktree"`
+	Task          model.Task           `json:"task"`
+	LeaseState    string               `json:"lease_state"` // held, expired, held_elsewhere, none
+	Lease         *model.Lease         `json:"lease,omitempty"`
+	OpenBlockers  []model.BriefBlocker `json:"open_blockers"`
+	SessionMarker bool                 `json:"session_marker"`
+	Project       string               `json:"project,omitempty"`
+	ProjectSource string               `json:"project_source"`
 }
 
 // orNone renders an empty scope as "-" rather than a blank column.
