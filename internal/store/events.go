@@ -330,10 +330,16 @@ type EventFilter struct {
 	Limit int   // default/cap 200
 }
 
-// maxEventListLimit is both the default and the cap for ListEvents: a
+// MaxEventListLimit is both the default and the cap for ListEvents: a
 // caller that omits Limit gets it, and a caller that asks for more than it
 // is silently truncated to it rather than erroring.
-const maxEventListLimit = 200
+//
+// Exported because a caller that pages ListEvents has to know it. Paging
+// stops on a short page, so a pager whose own page size exceeds this cap
+// would read every page as short and stop after the first —
+// internal/api/eventstream.go's streamHead is exactly that pager, and it
+// pins the relationship at compile time.
+const MaxEventListLimit = 200
 
 // ListEvents returns matching events in id order (newest last, 025 §18),
 // horizon-bounded like every subscriber read so the tail never shows an id
@@ -354,8 +360,8 @@ func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) 
 		where += fmt.Sprintf(" AND id > $%d", len(args))
 	}
 	limit := f.Limit
-	if limit <= 0 || limit > maxEventListLimit {
-		limit = maxEventListLimit
+	if limit <= 0 || limit > MaxEventListLimit {
+		limit = MaxEventListLimit
 	}
 	args = append(args, limit)
 

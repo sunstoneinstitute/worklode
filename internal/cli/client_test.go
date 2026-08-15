@@ -2219,3 +2219,42 @@ func TestClientStreamEvents(t *testing.T) {
 		t.Fatalf("non-admin StreamEvents = %v, want a 403 ClientError", err)
 	}
 }
+
+// TestClientStreamEventsFraming covers the two parts of SSE framing the real
+// server does not currently exercise: a message split across several data:
+// lines (the spec joins them with a newline, and a payload that ever grows a
+// literal newline would otherwise silently lose it), and a stream the server
+// ends on its own. The latter must be distinguishable from a clean stop —
+// with reconnect deferred, a server restart that looked like success would
+// leave `lode event tail --follow` exiting 0 in silence.
+func TestClientStreamEventsFraming(t *testing.T) {
+	body := "id: 1\nevent: t.one\n" +
+		"data: {\"id\":1,\"type\":\"t.one\",\n" +
+		"data: \"external_id\":\"multi\"}\n\n" +
+		":\n\n" +
+		"id: 2\nevent: t.two\ndata: {\"id\":2,\"type\":\"t.two\"}\n\n"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, body)
+	}))
+	t.Cleanup(ts.Close)
+
+	c := cli.NewClient(cli.Config{ServerURL: ts.URL, Token: "wl_" + strings.Repeat("a", 40)})
+	var got []cli.Event
+	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e cli.Event) error {
+		got = append(got, e)
+		return nil
+	})
+	if !errors.Is(err, cli.ErrStreamEnded) {
+		t.Fatalf("StreamEvents on a server-closed stream = %v, want ErrStreamEnded", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("events = %+v, want 2", got)
+	}
+	if got[0].ID != 1 || got[0].ExternalID != "multi" {
+		t.Fatalf("first event = %+v, want id 1 with external_id multi (data: lines joined by a newline)", got[0])
+	}
+	if got[1].ID != 2 || got[1].Type != "t.two" {
+		t.Fatalf("second event = %+v, want id 2 of type t.two", got[1])
+	}
+}

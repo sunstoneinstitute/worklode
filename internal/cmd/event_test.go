@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -156,5 +160,30 @@ func recordTailEvent(t *testing.T, st *store.Store, extID, typ string) {
 	t.Helper()
 	if _, _, err := st.RecordEvent(context.Background(), "system", extID, typ, nil, nil); err != nil {
 		t.Fatalf("RecordEvent %s: %v", extID, err)
+	}
+}
+
+// TestEventTailFollowServerClose covers the other way a follow ends: the
+// server closes the connection. Ctrl-C exits 0, but this must not — with
+// reconnect deferred, a silent exit 0 would tell the user their view of the
+// log is current when it stopped advancing at the restart.
+func TestEventTailFollowServerClose(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "id: 1\nevent: t.one\ndata: {\"id\":1,\"type\":\"t.one\"}\n\n")
+	}))
+	t.Cleanup(ts.Close)
+	c := cli.NewClient(cli.Config{ServerURL: ts.URL, Token: "wl_" + strings.Repeat("a", 40)})
+
+	out := &syncBuffer{}
+	err := followEvents(followCmd(context.Background(), out, false), c, "", nil)
+	if !errors.Is(err, cli.ErrStreamEnded) {
+		t.Fatalf("followEvents on a server-closed stream = %v, want ErrStreamEnded", err)
+	}
+	if !strings.Contains(err.Error(), "rerun") {
+		t.Errorf("error does not tell the user what to do: %v", err)
+	}
+	if !strings.Contains(out.String(), "t.one") {
+		t.Errorf("the event received before the close was not printed:\n%s", out.String())
 	}
 }
