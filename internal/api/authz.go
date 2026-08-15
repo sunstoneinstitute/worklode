@@ -106,6 +106,13 @@ const (
 	// correction of consumer state, not a domain fact (it deliberately
 	// bypasses RecordEvent — see events.go).
 	permEventAdmin Permission = "event.admin"
+	// permEventStream covers following the log live over server-sent events.
+	// Admin-only although it exposes exactly the rows permEventRead already
+	// does: the grant being narrowed is operational, not informational — a
+	// follow holds a connection, a goroutine and a repeating horizon-bounded
+	// query open for as long as the client watches, which is a resource an
+	// instance hands out deliberately.
+	permEventStream Permission = "event.stream"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -153,8 +160,9 @@ var grants = map[Permission][]Role{
 	permWebRead:  {RoleUser, RoleAdmin},
 	permWebWrite: {RoleUser, RoleAdmin},
 
-	permEventRead:  {RoleUser, RoleAdmin},
-	permEventAdmin: {RoleAdmin},
+	permEventRead:   {RoleUser, RoleAdmin},
+	permEventAdmin:  {RoleAdmin},
+	permEventStream: {RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say

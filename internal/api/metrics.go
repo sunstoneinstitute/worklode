@@ -86,9 +86,24 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_event_subscriber_seeks_total",
 		Help: "Admin seeks of a subscriber's offsets (POST /api/v1/event-subscribers/{name}/seek), by subscriber.",
 	}, []string{"subscriber"})
+	// The stream's own two instruments. http_requests_total cannot stand in
+	// for either: a follow is one request that lasts hours, so it is counted
+	// once at the end and its duration lands in http_request_duration_seconds
+	// only when the client hangs up. How many follows are open right now, and
+	// how much they are pushing, are the two questions an operator actually
+	// asks about this route.
+	s.eventStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "worklode_event_streams_active",
+		Help: "Open event-log follows (GET /api/v1/events/stream). Each holds a connection and a repeating horizon-bounded query.",
+	})
+	s.eventStreamEventsSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_event_stream_events_sent_total",
+		Help: "Events pushed to event-log followers, summed across all open streams.",
+	})
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.eventSubscriberSeeks)
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.eventSubscriberSeeks,
+		s.eventStreamsActive, s.eventStreamEventsSent)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -246,6 +261,34 @@ func (s *server) observeEventSubscriberSeek(subscriber string) {
 		return
 	}
 	s.eventSubscriberSeeks.WithLabelValues(subscriber).Inc()
+}
+
+// observeEventStreamOpen and observeEventStreamClose bracket one open
+// follow; eventstream.go pairs them with a defer so a panicking handler still
+// decrements.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventStreamOpen() {
+	if s.eventStreamsActive == nil {
+		return
+	}
+	s.eventStreamsActive.Inc()
+}
+
+func (s *server) observeEventStreamClose() {
+	if s.eventStreamsActive == nil {
+		return
+	}
+	s.eventStreamsActive.Dec()
+}
+
+// observeEventStreamSent records n events pushed to one follower, called once
+// per flushed batch rather than once per event.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventStreamSent(n int) {
+	if s.eventStreamEventsSent == nil {
+		return
+	}
+	s.eventStreamEventsSent.Add(float64(n))
 }
 
 // observeDocSync records one sync request. Nil-safe: tests build a *server
