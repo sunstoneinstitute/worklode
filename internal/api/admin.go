@@ -30,12 +30,6 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // --- projects ---------------------------------------------------------
 
-type createProjectRequest struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Key  string `json:"key"`
-}
-
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
 // focus slices to empty arrays so they serialize as [] rather than null.
 func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
@@ -52,7 +46,7 @@ func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
 
 // createProject handles POST /api/v1/projects.
 func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
-	var req createProjectRequest
+	var req model.CreateProjectInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -213,21 +207,6 @@ func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
-// patchProjectRequest is the settable-field set of PATCH /api/v1/projects/{id}.
-// Every field is a pointer so an absent field (nil) is distinguished from one
-// present-but-empty (a clear): sending focus_note:"" clears the pinned-focus
-// card, decision_title:"" clears the next-decision card. focus_pinned_by,
-// decision_accountable, and decision_readiness are the companion fields of
-// their trigger (focus_note / decision_title) and are ignored without it.
-type patchProjectRequest struct {
-	Focus               *[]string `json:"focus"`
-	FocusNote           *string   `json:"focus_note"`
-	FocusPinnedBy       *string   `json:"focus_pinned_by"`
-	DecisionTitle       *string   `json:"decision_title"`
-	DecisionAccountable *string   `json:"decision_accountable"`
-	DecisionReadiness   *string   `json:"decision_readiness"`
-}
-
 // derefString returns *p, or "" when p is nil — for optional string body
 // fields that default to empty when the caller omits them.
 func derefString(p *string) string {
@@ -244,7 +223,7 @@ func derefString(p *string) string {
 // project mutations, since focus affects claim-next ordering for everyone.
 func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req patchProjectRequest
+	var req model.PatchProjectInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -289,16 +268,10 @@ func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
-type addRepoRequest struct {
-	Repo string `json:"repo"`
-	// DoneState is optional; empty leaves the mapping at the schema default.
-	DoneState string `json:"done_state"`
-}
-
 // addRepo handles POST /api/v1/projects/{id}/repos.
 func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req addRepoRequest
+	var req model.AddRepoInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -436,16 +409,9 @@ func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 
 // --- actors and tokens --------------------------------------------------
 
-type createActorRequest struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
 // createActor handles POST /api/v1/actors.
 func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
-	var req createActorRequest
+	var req model.CreateActorInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -467,16 +433,11 @@ func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type createTokenRequest struct {
-	Description string  `json:"description"`
-	ExpiresAt   *string `json:"expires_at"`
-}
-
 // createToken handles POST /api/v1/actors/{id}/tokens. The plaintext token
 // is returned exactly once; only its hash is stored (see Store.CreateToken).
 func (s *server) createToken(w http.ResponseWriter, r *http.Request) {
 	actorID := r.PathValue("id")
-	var req createTokenRequest
+	var req model.CreateTokenInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -504,13 +465,9 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"token": plaintext})
 }
 
-type revokeTokenRequest struct {
-	Token string `json:"token"`
-}
-
 // revokeToken handles DELETE /api/v1/tokens: revoke by plaintext or hash.
 func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
-	var req revokeTokenRequest
+	var req model.RevokeTokenInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -545,24 +502,12 @@ func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-type promoteRequest struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title"`
-	Body              string   `json:"body"`
-	Priority          string   `json:"priority"`
-	Kind              string   `json:"kind"`
-	AppliesToVersions []string `json:"applies_to_versions"`
-	Draft             bool     `json:"draft"`
-	Parent            string   `json:"parent"`
-}
-
 // promoteInbox handles POST /api/v1/inbox/promote: turn an inbox issue into a
 // task. The repo contains a slash, so repo and number travel as body fields
 // rather than path segments. When title is empty it defaults to the issue's
 // own title, read inside the same transaction as the promotion.
 func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
-	var req promoteRequest
+	var req model.PromoteInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -647,14 +592,9 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-type dismissRequest struct {
-	Repo   string `json:"repo"`
-	Number int64  `json:"number"`
-}
-
 // dismissInbox handles POST /api/v1/inbox/dismiss.
 func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
-	var req dismissRequest
+	var req model.DismissInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -685,16 +625,10 @@ func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type linkRequest struct {
-	Repo   string `json:"repo"`
-	Number int64  `json:"number"`
-	TaskID string `json:"task_id"`
-}
-
 // linkInbox handles POST /api/v1/inbox/link: mark an inbox issue as covered
 // by a task that already exists, instead of creating a new one.
 func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
-	var req linkRequest
+	var req model.LinkInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

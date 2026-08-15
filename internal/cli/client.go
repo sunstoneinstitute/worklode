@@ -513,26 +513,8 @@ func withQuery(path string, q url.Values) string {
 
 // --- tasks ----------------------------------------------------------------
 
-// CreateTaskInput is the request body for CreateTask.
-type CreateTaskInput struct {
-	Project  string   `json:"project"`
-	Title    string   `json:"title"`
-	Body     string   `json:"body"`
-	Priority string   `json:"priority"`
-	Kind     string   `json:"kind"`
-	Concern  string   `json:"concern,omitempty"`
-	Draft    bool     `json:"draft"`
-	Skills   []string `json:"skills,omitempty"`
-	// Parent, when set, files the new task under this parent in the same
-	// request instead of a separate edge call.
-	Parent string `json:"parent,omitempty"`
-	// FollowUpTo, when set, records the task this one was spun out of in the
-	// same request instead of a separate edge call.
-	FollowUpTo string `json:"follow_up_to,omitempty"`
-}
-
 // CreateTask calls POST /api/v1/tasks.
-func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (model.Task, []byte, error) {
+func (c *Client) CreateTask(ctx context.Context, in model.CreateTaskInput) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks", in)
 	if err != nil {
 		return model.Task{}, nil, err
@@ -616,18 +598,18 @@ func (c *Client) GetTask(ctx context.Context, id string) (model.TaskDetail, []by
 // pinned skill names. A nil or empty skills clears existing pins.
 func (c *Client) SetTaskSkills(ctx context.Context, id string, skills []string) ([]byte, error) {
 	return c.do(ctx, http.MethodPut, "/api/v1/tasks/"+url.PathEscape(id)+"/skills",
-		map[string]any{"skills": skills})
+		model.SetSkillsInput{Skills: skills})
 }
 
 // ClaimTask calls POST /api/v1/tasks/{id}/claim. worktree is the caller's
 // worktree identity (required by the server); ttl <= 0 means the server
 // default (2h).
 func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Duration) (model.ClaimResponse, []byte, error) {
-	body := map[string]any{"worktree": worktree}
+	in := model.ClaimInput{Worktree: worktree}
 	if ttl > 0 {
-		body["ttl_seconds"] = int(ttl.Seconds())
+		in.TTLSeconds = int(ttl.Seconds())
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/claim", body)
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/claim", in)
 	if err != nil {
 		return model.ClaimResponse{}, nil, err
 	}
@@ -638,34 +620,12 @@ func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Du
 	return resp, raw, nil
 }
 
-// ClaimNextInput is the request body for ClaimNext.
-type ClaimNextInput struct {
-	Project     string
-	StrictFocus bool
-	DryRun      bool
-	Worktree    string
-	TTL         time.Duration
-}
-
 // ClaimNext calls POST /api/v1/tasks/claim-next: rank the ready set
 // server-side and atomically claim the top candidate. worktree is required
 // unless DryRun is set. A "no ready task" or dry-run result is a normal
 // (non-error) response — see model.ClaimNextResponse.
-func (c *Client) ClaimNext(ctx context.Context, in ClaimNextInput) (model.ClaimNextResponse, []byte, error) {
-	body := map[string]any{
-		"strict_focus": in.StrictFocus,
-		"dry_run":      in.DryRun,
-	}
-	if in.Project != "" {
-		body["project"] = in.Project
-	}
-	if in.Worktree != "" {
-		body["worktree"] = in.Worktree
-	}
-	if in.TTL > 0 {
-		body["ttl_seconds"] = int(in.TTL.Seconds())
-	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/claim-next", body)
+func (c *Client) ClaimNext(ctx context.Context, in model.ClaimNextInput) (model.ClaimNextResponse, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/claim-next", in)
 	if err != nil {
 		return model.ClaimNextResponse{}, nil, err
 	}
@@ -706,7 +666,7 @@ func (c *Client) brief(ctx context.Context, id, query string) (model.Brief, []by
 // updated lease.
 func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model.Lease, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/lease/worktree",
-		map[string]string{"worktree": worktree})
+		model.RebindWorktreeInput{Worktree: worktree})
 	if err != nil {
 		return model.Lease{}, nil, err
 	}
@@ -725,16 +685,9 @@ func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model
 // swept session's tokens onto the books at all, since only a clean end
 // reports them otherwise.
 func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string, usage []model.SessionUsageBucket) (model.AgentSession, []byte, error) {
-	body := map[string]any{
-		"agent":         agent,
-		"agent_version": agentVersion,
-		"session_id":    sessionID,
-	}
-	if usage != nil {
-		body["usage"] = usage
-	}
+	in := model.AgentSessionInput{Agent: agent, AgentVersion: agentVersion, SessionID: sessionID, Usage: usage}
 	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", body)
+		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", in)
 	if err != nil {
 		return model.AgentSession{}, nil, err
 	}
@@ -745,74 +698,16 @@ func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion,
 	return a, raw, nil
 }
 
-// EndAgentSessionInput carries the required identity plus optional accounting
-// for ending a session. A nil usage field leaves the stored value untouched.
-type EndAgentSessionInput struct {
-	Agent        string
-	SessionID    string
-	InputTokens  *int64
-	OutputTokens *int64
-	// CostAmount is a decimal string, not a float, so it round-trips through
-	// the server's numeric(12,6) column exactly (see agentsessions.go).
-	CostAmount   *string
-	CostCurrency string
-	// Usage replaces the session's stored per-model usage. No omitempty: nil
-	// must reach the server as JSON null (leave stored usage alone), which an
-	// empty slice — meaning "clear it" — would otherwise be indistinguishable
-	// from.
-	Usage []model.SessionUsageBucket `json:"usage"`
-}
-
 // EndAgentSession calls POST /api/v1/tasks/{id}/agent-session/end.
-func (c *Client) EndAgentSession(ctx context.Context, id string, in EndAgentSessionInput) error {
-	body := map[string]any{"agent": in.Agent, "session_id": in.SessionID}
-	if in.InputTokens != nil {
-		body["input_tokens"] = *in.InputTokens
-	}
-	if in.OutputTokens != nil {
-		body["output_tokens"] = *in.OutputTokens
-	}
-	if in.CostAmount != nil {
-		body["cost_amount"] = *in.CostAmount
-	}
-	if in.CostCurrency != "" {
-		body["cost_currency"] = in.CostCurrency
-	}
-	body["usage"] = in.Usage // nil marshals as null: leave stored usage alone
+func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAgentSessionInput) error {
 	_, err := c.do(ctx, http.MethodPost,
-		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session/end", body)
+		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session/end", in)
 	return err
 }
 
-// EditTaskInput carries the optional fields of a task edit; nil means leave
-// the field unchanged. Concern "" or "none" clears the concern.
-type EditTaskInput struct {
-	Title              *string
-	Body               *string
-	Concern            *string
-	Priority           *string
-	NeedsDecomposition *bool
-}
-
 // EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
-func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (model.Task, []byte, error) {
-	body := map[string]any{}
-	if in.Title != nil {
-		body["title"] = *in.Title
-	}
-	if in.Body != nil {
-		body["body"] = *in.Body
-	}
-	if in.Concern != nil {
-		body["concern"] = *in.Concern
-	}
-	if in.Priority != nil {
-		body["priority"] = *in.Priority
-	}
-	if in.NeedsDecomposition != nil {
-		body["needs_decomposition"] = *in.NeedsDecomposition
-	}
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), body)
+func (c *Client) EditTask(ctx context.Context, id string, in model.EditTaskInput) (model.Task, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), in)
 	if err != nil {
 		return model.Task{}, nil, err
 	}
@@ -825,11 +720,11 @@ func (c *Client) EditTask(ctx context.Context, id string, in EditTaskInput) (mod
 
 // RenewLease calls POST /api/v1/tasks/{id}/renew.
 func (c *Client) RenewLease(ctx context.Context, id string, ttl time.Duration) (model.Lease, []byte, error) {
-	body := map[string]any{}
+	in := model.RenewInput{}
 	if ttl > 0 {
-		body["ttl_seconds"] = int(ttl.Seconds())
+		in.TTLSeconds = int(ttl.Seconds())
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/renew", body)
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/renew", in)
 	if err != nil {
 		return model.Lease{}, nil, err
 	}
@@ -936,7 +831,7 @@ func (c *Client) SubmitTask(ctx context.Context, id string) (model.Task, []byte,
 // An empty assignee assigns the task to the calling actor.
 func (c *Client) AssignTask(ctx context.Context, id, assignee string) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/assign",
-		map[string]string{"assignee": assignee})
+		model.AssignInput{Assignee: assignee})
 	if err != nil {
 		return model.Task{}, nil, err
 	}
@@ -968,7 +863,7 @@ func (c *Client) StopTask(ctx context.Context, id string) (model.Task, []byte, e
 
 func (c *Client) patchTaskState(ctx context.Context, id, state string) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id),
-		map[string]string{"state": state})
+		model.EditTaskInput{State: &state})
 	if err != nil {
 		return model.Task{}, nil, err
 	}
@@ -991,53 +886,47 @@ func (c *Client) taskAction(ctx context.Context, id, action string) (model.Task,
 	return t, raw, nil
 }
 
-type edgeBody struct {
-	To   *string `json:"to,omitempty"`
-	From *string `json:"from,omitempty"`
-	Type string  `json:"type"`
-}
-
 // Block calls POST /api/v1/tasks/{id}/edges to record that by blocks id.
 func (c *Client) Block(ctx context.Context, id, by string) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", edgeBody{From: &by, Type: "blocks"})
+	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{From: &by, Type: "blocks"})
 }
 
 // Unblock calls DELETE /api/v1/tasks/{id}/edges to remove the "by blocks id" edge.
 func (c *Client) Unblock(ctx context.Context, id, by string) ([]byte, error) {
-	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", edgeBody{From: &by, Type: "blocks"})
+	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges", model.EdgeInput{From: &by, Type: "blocks"})
 }
 
 // Parent calls POST /api/v1/tasks/{id}/edges to file id under a parent.
 func (c *Client) Parent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &parent, Type: "child_of"})
+		model.EdgeInput{To: &parent, Type: "child_of"})
 }
 
 // Unparent calls DELETE /api/v1/tasks/{id}/edges to detach id from its parent.
 func (c *Client) Unparent(ctx context.Context, id, parent string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &parent, Type: "child_of"})
+		model.EdgeInput{To: &parent, Type: "child_of"})
 }
 
 // FollowUp calls POST /api/v1/tasks/{id}/edges to record that id was spun out
 // of the work on origin.
 func (c *Client) FollowUp(ctx context.Context, id, origin string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &origin, Type: "follow_up_to"})
+		model.EdgeInput{To: &origin, Type: "follow_up_to"})
 }
 
 // UnfollowUp calls DELETE /api/v1/tasks/{id}/edges to drop the follow-up edge
 // from id to origin.
 func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, error) {
 	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
-		edgeBody{To: &origin, Type: "follow_up_to"})
+		model.EdgeInput{To: &origin, Type: "follow_up_to"})
 }
 
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
 // parent and files titles as new children under it.
 func (c *Client) Decompose(ctx context.Context, id string, titles []string) (model.DecomposeResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose",
-		map[string]any{"into": titles})
+		model.DecomposeInput{Into: titles})
 	if err != nil {
 		return model.DecomposeResponse{}, nil, err
 	}
@@ -1076,22 +965,8 @@ func (c *Client) ListIssues(ctx context.Context, state, project string) (IssueLi
 	return resp, raw, nil
 }
 
-// PromoteInput is the request body for PromoteIssue. Title is optional — the
-// server defaults it to the issue's own title.
-type PromoteInput struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title,omitempty"`
-	Body              string   `json:"body,omitempty"`
-	Priority          string   `json:"priority"`
-	Kind              string   `json:"kind"`
-	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
-	Draft             bool     `json:"draft,omitempty"`
-	Parent            string   `json:"parent,omitempty"`
-}
-
 // PromoteIssue calls POST /api/v1/inbox/promote.
-func (c *Client) PromoteIssue(ctx context.Context, in PromoteInput) (model.Task, []byte, error) {
+func (c *Client) PromoteIssue(ctx context.Context, in model.PromoteInput) (model.Task, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/promote", in)
 	if err != nil {
 		return model.Task{}, nil, err
@@ -1105,28 +980,18 @@ func (c *Client) PromoteIssue(ctx context.Context, in PromoteInput) (model.Task,
 
 // DismissIssue calls POST /api/v1/inbox/dismiss (204, no body).
 func (c *Client) DismissIssue(ctx context.Context, repo string, number int64) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/inbox/dismiss", map[string]any{"repo": repo, "number": number})
+	return c.do(ctx, http.MethodPost, "/api/v1/inbox/dismiss", model.DismissInput{Repo: repo, Number: number})
 }
 
 // LinkIssue calls POST /api/v1/inbox/link (204, no body): attach an inbox
 // issue to a task that already exists.
 func (c *Client) LinkIssue(ctx context.Context, repo string, number int64, taskID string) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/inbox/link",
-		map[string]any{"repo": repo, "number": number, "task_id": taskID})
-}
-
-// ImportInput is the request body for ImportInbox. An empty State means the
-// server default, "open".
-type ImportInput struct {
-	Repo       string     `json:"repo"`
-	State      string     `json:"state,omitempty"`
-	IncludePRs bool       `json:"include_prs,omitempty"`
-	Since      *time.Time `json:"since,omitempty"`
-	DryRun     bool       `json:"dry_run,omitempty"`
+		model.LinkInput{Repo: repo, Number: number, TaskID: taskID})
 }
 
 // ImportInbox calls POST /api/v1/inbox/import.
-func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (model.ImportResult, []byte, error) {
+func (c *Client) ImportInbox(ctx context.Context, in model.ImportInput) (model.ImportResult, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/import", in)
 	if err != nil {
 		return model.ImportResult{}, nil, err
@@ -1142,15 +1007,8 @@ func (c *Client) ImportInbox(ctx context.Context, in ImportInput) (model.ImportR
 
 // --- projects ---------------------------------------------------------
 
-// CreateProjectInput is the request body for CreateProject.
-type CreateProjectInput struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Key  string `json:"key"`
-}
-
 // CreateProject calls POST /api/v1/projects.
-func (c *Client) CreateProject(ctx context.Context, in CreateProjectInput) (model.Project, []byte, error) {
+func (c *Client) CreateProject(ctx context.Context, in model.CreateProjectInput) (model.Project, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/projects", in)
 	if err != nil {
 		return model.Project{}, nil, err
@@ -1188,16 +1046,7 @@ func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string)
 	if focus == nil {
 		focus = []string{}
 	}
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id),
-		map[string]any{"focus": focus})
-	if err != nil {
-		return model.Project{}, nil, err
-	}
-	var p model.Project
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
-	}
-	return p, raw, nil
+	return c.patchProject(ctx, id, model.PatchProjectInput{Focus: &focus})
 }
 
 // PinProjectFocus calls PATCH /api/v1/projects/{id} to set (or clear) the
@@ -1205,9 +1054,9 @@ func (c *Client) SetProjectFocus(ctx context.Context, id string, focus []string)
 // clears the card; pinnedBy is an actor id or a plain display name. The fields
 // are always sent, so the server reads note:"" as an explicit clear.
 func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string) (model.Project, []byte, error) {
-	return c.patchProject(ctx, id, map[string]any{
-		"focus_note":      note,
-		"focus_pinned_by": pinnedBy,
+	return c.patchProject(ctx, id, model.PatchProjectInput{
+		FocusNote:     &note,
+		FocusPinnedBy: &pinnedBy,
 	})
 }
 
@@ -1216,17 +1065,17 @@ func (c *Client) PinProjectFocus(ctx context.Context, id, note, pinnedBy string)
 // title clears the card. The fields are always sent, so the server reads
 // title:"" as an explicit clear.
 func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accountable, readiness string) (model.Project, []byte, error) {
-	return c.patchProject(ctx, id, map[string]any{
-		"decision_title":       title,
-		"decision_accountable": accountable,
-		"decision_readiness":   readiness,
+	return c.patchProject(ctx, id, model.PatchProjectInput{
+		DecisionTitle:       &title,
+		DecisionAccountable: &accountable,
+		DecisionReadiness:   &readiness,
 	})
 }
 
-// patchProject PATCHes body to /api/v1/projects/{id} and decodes the updated
+// patchProject PATCHes in to /api/v1/projects/{id} and decodes the updated
 // project it returns, shared by the project-mutation client methods.
-func (c *Client) patchProject(ctx context.Context, id string, body map[string]any) (model.Project, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), body)
+func (c *Client) patchProject(ctx context.Context, id string, in model.PatchProjectInput) (model.Project, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), in)
 	if err != nil {
 		return model.Project{}, nil, err
 	}
@@ -1304,12 +1153,9 @@ type AddRepoResult struct {
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
 func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (AddRepoResult, []byte, error) {
-	body := map[string]string{"repo": repo}
-	if doneState != "" {
-		body["done_state"] = doneState
-	}
 	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos", body)
+		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos",
+		model.AddRepoInput{Repo: repo, DoneState: doneState})
 	if err != nil {
 		return AddRepoResult{}, nil, err
 	}
@@ -1334,17 +1180,8 @@ func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) (
 
 // --- actors and tokens --------------------------------------------------
 
-// CreateActorInput is the request body for CreateActor. Admin grants the
-// actor the right to manage projects, actors, and tokens.
-type CreateActorInput struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
 // CreateActor calls POST /api/v1/actors.
-func (c *Client) CreateActor(ctx context.Context, in CreateActorInput) (model.Actor, []byte, error) {
+func (c *Client) CreateActor(ctx context.Context, in model.CreateActorInput) (model.Actor, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors", in)
 	if err != nil {
 		return model.Actor{}, nil, err
@@ -1365,11 +1202,12 @@ type TokenResponse struct {
 // CreateToken calls POST /api/v1/actors/{id}/tokens. A nil expiresAt means
 // the token never expires.
 func (c *Client) CreateToken(ctx context.Context, actorID, description string, expiresAt *time.Time) (TokenResponse, []byte, error) {
-	body := map[string]any{"description": description}
+	in := model.CreateTokenInput{Description: description}
 	if expiresAt != nil {
-		body["expires_at"] = expiresAt.UTC().Format(time.RFC3339)
+		exp := expiresAt.UTC().Format(time.RFC3339)
+		in.ExpiresAt = &exp
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", body)
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", in)
 	if err != nil {
 		return TokenResponse{}, nil, err
 	}
@@ -1383,7 +1221,7 @@ func (c *Client) CreateToken(ctx context.Context, actorID, description string, e
 // RevokeToken calls DELETE /api/v1/tokens (204, no body). token may be
 // either the plaintext or its stored hash.
 func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) {
-	return c.do(ctx, http.MethodDelete, "/api/v1/tokens", map[string]string{"token": token})
+	return c.do(ctx, http.MethodDelete, "/api/v1/tokens", model.RevokeTokenInput{Token: token})
 }
 
 // --- board and timeline -------------------------------------------------
@@ -1433,8 +1271,8 @@ func (c *Client) SkillArchive(ctx context.Context, name, hash string) ([]byte, e
 // RecommendSkills calls POST /api/v1/skills/recommend. Exactly one of taskID
 // or text is required by the server.
 func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit int) (model.SkillRecommendation, []byte, error) {
-	body := map[string]any{"task_id": taskID, "text": text, "limit": limit}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/skills/recommend", body)
+	in := model.RecommendInput{TaskID: taskID, Text: text, Limit: limit}
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/skills/recommend", in)
 	if err != nil {
 		return model.SkillRecommendation{}, nil, err
 	}

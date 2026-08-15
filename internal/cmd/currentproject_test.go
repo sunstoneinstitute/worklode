@@ -8,7 +8,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -82,7 +81,7 @@ func TestTaskAddUsesCurrentProject(t *testing.T) {
 func TestTaskAddProjectFlagBeatsCurrentProject(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
 	setupRepoConfig(t, "proj")
@@ -99,11 +98,11 @@ func TestTaskListDefaultsToCurrentProject(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
 	mine := createTestTask(t, c, "Mine")
-	theirs, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "other", Title: "Theirs", Priority: "high", Kind: "feature"})
+	theirs, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "other", Title: "Theirs", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task in other project: %v", err)
 	}

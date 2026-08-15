@@ -39,7 +39,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "human", Name: "Human", Key: "HUM",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -48,7 +48,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	// Two human actors, each with their own token minted through the public
 	// admin API — the negative case needs the second actor's identity to
 	// come from a real credential, not a borrowed one.
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "alice", Kind: "human", DisplayName: "Alice",
 	}); err != nil {
 		t.Fatalf("create actor alice: %v", err)
@@ -59,7 +59,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	}
 	alice := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: aliceTok.Token})
 
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "bob", Kind: "human", DisplayName: "Bob",
 	}); err != nil {
 		t.Fatalf("create actor bob: %v", err)
@@ -72,7 +72,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 
 	// --- Positive case: the full human lifecycle -------------------------
 
-	task, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "human", Title: "Write the onboarding doc", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
@@ -127,7 +127,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 
 	// --- Negative case: a second actor cannot start someone else's task --
 
-	other, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	other, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "human", Title: "Rotate the deploy keys", Priority: "medium", Kind: "chore",
 	})
 	if err != nil {

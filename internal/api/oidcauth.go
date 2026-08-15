@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -69,10 +70,6 @@ func (s *server) oidcConfig(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-type oidcTokenRequest struct {
-	IDToken string `json:"id_token"`
-}
-
 // oidcTokenExchange handles POST /auth/oidc/token: verify a Keycloak ID token
 // and mint a wl_ token for the corresponding human actor. 404 when OIDC is
 // unconfigured; 401 for an invalid/expired/wrong-audience or malformed token;
@@ -82,7 +79,7 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "oidc not configured")
 		return
 	}
-	var req oidcTokenRequest
+	var req model.OIDCTokenInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

@@ -357,7 +357,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 
 	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if err := c.EndAgentSession(ectx, taskID, cli.EndAgentSessionInput{
+	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
 		Agent: agentName(), SessionID: sessionID, Usage: usage,
 	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)

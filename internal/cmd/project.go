@@ -42,7 +42,7 @@ func newProjectAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p, raw, err := c.CreateProject(cmd.Context(), cli.CreateProjectInput{
+			p, raw, err := c.CreateProject(cmd.Context(), model.CreateProjectInput{
 				ID: args[0], Name: name, Key: key,
 			})
 			if err != nil {

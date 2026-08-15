@@ -25,3 +25,56 @@ type Task struct {
 	// local refs to tasks reads it rather than rendering one (008 §3.1).
 	Branch string `json:"branch"`
 }
+
+// CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
+type CreateTaskInput struct {
+	Project  string   `json:"project"`
+	Title    string   `json:"title"`
+	Body     string   `json:"body"`
+	Priority string   `json:"priority"`
+	Kind     string   `json:"kind"`
+	Concern  string   `json:"concern,omitempty"`
+	Draft    bool     `json:"draft"`
+	Skills   []string `json:"skills,omitempty"`
+	// Parent, when set, files the new task under this parent in the same
+	// request instead of a separate edge call.
+	Parent string `json:"parent,omitempty"`
+	// FollowUpTo, when set, records the task this one was spun out of in the
+	// same request instead of a separate edge call.
+	FollowUpTo string `json:"follow_up_to,omitempty"`
+}
+
+// EditTaskInput carries the optional fields of a task edit (PATCH
+// /api/v1/tasks/{id}); nil means leave the field unchanged. Concern "" or
+// "none" clears the concern. State requests one of the transitions
+// patchStateFrom allows (internal/api/tasks.go) in the same request.
+type EditTaskInput struct {
+	Title              *string `json:"title"`
+	Body               *string `json:"body"`
+	Priority           *string `json:"priority"`
+	Concern            *string `json:"concern"`
+	NeedsDecomposition *bool   `json:"needs_decomposition"`
+	State              *string `json:"state"`
+}
+
+// EdgeInput is the request body for adding or removing a task edge
+// (POST/DELETE /api/v1/tasks/{id}/edges). Exactly one of To or From must be
+// set: To names the task {id} points to, From names the task pointing at
+// {id} — the two directions the endpoint accepts.
+type EdgeInput struct {
+	To   *string `json:"to"`
+	From *string `json:"from"`
+	Type string  `json:"type"`
+}
+
+// SetSkillsInput is the request body for PUT /api/v1/tasks/{id}/skills:
+// replaces the task's pinned skill names.
+type SetSkillsInput struct {
+	Skills []string `json:"skills"`
+}
+
+// DecomposeInput is the request body for POST /api/v1/tasks/{id}/decompose:
+// one draft child is created per title.
+type DecomposeInput struct {
+	Into []string `json:"into"`
+}

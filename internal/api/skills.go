@@ -80,14 +80,8 @@ func (s *server) skillArchive(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-type recommendRequest struct {
-	TaskID string `json:"task_id"`
-	Text   string `json:"text"`
-	Limit  int    `json:"limit"`
-}
-
 func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
-	var req recommendRequest
+	var req model.RecommendInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

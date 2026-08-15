@@ -33,3 +33,11 @@ type SkillRecommendation struct {
 	Warnings []string      `json:"warnings"`
 	Provider string        `json:"provider"`
 }
+
+// RecommendInput is the request body for RecommendSkills (POST
+// /api/v1/skills/recommend). Exactly one of TaskID or Text is required.
+type RecommendInput struct {
+	TaskID string `json:"task_id"`
+	Text   string `json:"text"`
+	Limit  int    `json:"limit"`
+}

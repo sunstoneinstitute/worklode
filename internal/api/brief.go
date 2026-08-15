@@ -81,10 +81,6 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-type rebindWorktreeRequest struct {
-	Worktree string `json:"worktree"`
-}
-
 // rebindWorktree handles POST /api/v1/tasks/{id}/lease/worktree: move the
 // caller's active lease to a new worktree. A non-holder gets 404 (same
 // probe-resistant policy as renew/release); a worktree already holding another
@@ -92,7 +88,7 @@ type rebindWorktreeRequest struct {
 // can confirm the new binding.
 func (s *server) rebindWorktree(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req rebindWorktreeRequest
+	var req model.RebindWorktreeInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

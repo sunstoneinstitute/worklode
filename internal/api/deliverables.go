@@ -27,12 +27,6 @@ const (
 	maxDeliverableURL         = 2000
 )
 
-type createDeliverableRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-}
-
 // validateDeliverable trims and checks the three descriptive fields, returning
 // the cleaned input or a message naming the one thing to fix. Shared by the
 // JSON handler and the web form so the two surfaces cannot drift into
@@ -122,7 +116,7 @@ func (s *server) listProjectDeliverables(w http.ResponseWriter, r *http.Request)
 
 // createDeliverable handles POST /api/v1/projects/{id}/deliverables.
 func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
-	var req createDeliverableRequest
+	var req model.CreateDeliverableInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

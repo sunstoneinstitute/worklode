@@ -168,7 +168,7 @@ func TestFullChain(t *testing.T) {
 
 	// 2. Bootstrap admin sets up project, repo, and an agent actor + token.
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "demo", Name: "Demo", Key: "DEMO",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -176,7 +176,7 @@ func TestFullChain(t *testing.T) {
 	if _, _, err := admin.AddRepo(ctx, "demo", repo, ""); err != nil {
 		t.Fatalf("add repo: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-1", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -191,7 +191,7 @@ func TestFullChain(t *testing.T) {
 	agent := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
 
 	// 3. Task flow: create + claim as the agent.
-	task, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "demo", Title: "Add login page", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -415,7 +415,7 @@ func TestFullChain(t *testing.T) {
 	if len(issues.Issues) != 1 || issues.Issues[0].Number != 7 {
 		t.Fatalf("inbox = %+v, want the one opened issue #7", issues.Issues)
 	}
-	promoted, _, err := agent.PromoteIssue(ctx, cli.PromoteInput{
+	promoted, _, err := agent.PromoteIssue(ctx, model.PromoteInput{
 		Repo:              repo,
 		Number:            7,
 		Priority:          "medium",
