@@ -5,12 +5,46 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 )
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	return OpenTestStore(t)
+}
+
+// pollReadEventBatch retries ReadEventBatch(name, limit), accumulating
+// results across calls (each resumes from the offset the previous one
+// advanced to), until it has at least want events or the timeout elapses.
+// The commit horizon (pg_snapshot_xmin) is cluster-wide, not per-test
+// database: a concurrent transaction in another test binary sharing this
+// Postgres instance can hold a single read back to zero events even after
+// the events under test have committed. Polling absorbs that operational
+// hazard without weakening the assertion — a genuinely broken horizon
+// predicate (e.g. a bare id > last_seen) delivers the wrong events or the
+// wrong order, not merely late ones, so it still fails here.
+func pollReadEventBatch(t *testing.T, ctx context.Context, s *Store, name string, limit, want int) []Event {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var all []Event
+	for {
+		got, err := s.ReadEventBatch(ctx, name, limit)
+		if err != nil {
+			t.Fatalf("ReadEventBatch(%s): %v", name, err)
+		}
+		all = append(all, got...)
+		if len(all) >= want {
+			return all
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ReadEventBatch(%s): got %d events after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
+				name, len(all), want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func TestRecordEventIdempotent(t *testing.T) {
@@ -159,10 +193,7 @@ func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
 	if err := txA.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.ReadEventBatch(ctx, "sub", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = pollReadEventBatch(t, ctx, s, "sub", 10, 2)
 	if len(got) != 2 || got[0].ExternalID != "slow" || got[1].ExternalID != "fast" {
 		t.Fatalf("got %+v, want slow then fast", got)
 	}
@@ -196,10 +227,7 @@ func TestReadEventBatchSkipsAbortedHole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.ReadEventBatch(ctx, "sub", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := pollReadEventBatch(t, ctx, s, "sub", 10, 1)
 	if len(got) != 1 || got[0].ID != id || got[0].ExternalID != "committed" {
 		t.Fatalf("got %+v, want just the committed event", got)
 	}
@@ -226,10 +254,7 @@ func TestAckEventsMonotonic(t *testing.T) {
 		}
 	}
 
-	got, err := s.ReadEventBatch(ctx, "sub", 3)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := pollReadEventBatch(t, ctx, s, "sub", 3, 3)
 	if len(got) != 3 {
 		t.Fatalf("got %d events, want 3", len(got))
 	}
@@ -302,9 +327,41 @@ func TestSubscriberLockExclusive(t *testing.T) {
 	l3.Release(ctx)
 }
 
+// advisoryLockHolderPID returns the backend pid holding the wl:subscriber
+// advisory lock for name in the current database, or 0 if unlocked. Splits
+// the 64-bit key the way Postgres itself does for pg_locks (classid = high
+// 32 bits, objid = low 32 bits, objsubid = 1 for the single-bigint lock
+// form) — Task 7's subscriber-status view joins pg_locks the same way, so
+// this exercises that exact join.
+func advisoryLockHolderPID(t *testing.T, ctx context.Context, s *Store, name string) int {
+	t.Helper()
+	var pid int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT pid FROM pg_locks
+		 WHERE locktype = 'advisory'
+		   AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+		   AND classid = ((hashtext('wl:subscriber:' || $1)::bigint >> 32) & 4294967295)::oid
+		   AND objid = (hashtext('wl:subscriber:' || $1)::bigint & 4294967295)::oid
+		   AND objsubid = 1
+		   AND granted`, name).Scan(&pid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0
+	}
+	if err != nil {
+		t.Fatalf("query advisory lock holder for %s: %v", name, err)
+	}
+	return pid
+}
+
 // The lock's connection must be pinned out of the pool for the consumer's
-// lifetime, not silently recycled. Running more queries than the pool has
-// connections (16) must not free the lock.
+// lifetime, surviving genuine pool churn: concurrent use that forces
+// database/sql to open new connections and evict idle ones past
+// MaxIdleConns(4) (store.go), not a run of sequential queries that all
+// reuse one idle connection. The assertion also has to be direct — a
+// second TryLockSubscriber failing does not prove the lock stayed pinned,
+// since any other session's pg_try_advisory_lock fails regardless of who
+// holds it — so this checks the actual holder in pg_locks is the same
+// backend pid before and after the churn.
 func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -315,15 +372,89 @@ func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
 	}
 	defer l1.Release(ctx)
 
-	for i := 0; i < 40; i++ {
-		if _, err := s.db.ExecContext(ctx, `SELECT 1`); err != nil {
-			t.Fatalf("churn query %d: %v", i, err)
-		}
+	holder := advisoryLockHolderPID(t, ctx, s, "doc-lifecycle")
+	if holder == 0 {
+		t.Fatalf("advisory lock not visible in pg_locks after acquiring")
+	}
+
+	// 12 concurrent holders, within MaxOpenConns(16) minus the one pinned
+	// to the lock, well past MaxIdleConns(4): forces the pool to open new
+	// connections and, once they return, evict the excess idle ones.
+	var wg sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := s.db.Conn(ctx)
+			if err != nil {
+				t.Errorf("churn conn: %v", err)
+				return
+			}
+			defer conn.Close()
+			if _, err := conn.ExecContext(ctx, `SELECT pg_sleep(0.05)`); err != nil {
+				t.Errorf("churn query: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := advisoryLockHolderPID(t, ctx, s, "doc-lifecycle"); got != holder {
+		t.Fatalf("advisory lock holder pid changed across pool churn: was %d, now %d (lock connection was recycled)", holder, got)
 	}
 
 	_, ok, err = s.TryLockSubscriber(ctx, "doc-lifecycle")
 	if err != nil || ok {
 		t.Fatalf("lock after pool churn: ok=%v err=%v, want false (lock connection must stay pinned)", ok, err)
+	}
+}
+
+// Release must discard the underlying session, not return it to the pool:
+// a session-scoped advisory lock survives (*sql.Conn).Close() on a pooled
+// connection, so an idle pooled connection would hold the lock forever.
+// TestSubscriberLockExclusive alone cannot catch a missing
+// Raw(driver.ErrBadConn) — re-acquiring on a recycled session is just a
+// re-entrant grant to the same session, so it still reports ok=true either
+// way. This checks the backend actually disconnects: its pg_stat_activity
+// row must disappear, not merely go idle.
+func TestSubscriberLockReleaseDiscardsSession(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	backendCount := func() int {
+		t.Helper()
+		var n int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()`,
+		).Scan(&n); err != nil {
+			t.Fatalf("count pg_stat_activity: %v", err)
+		}
+		return n
+	}
+
+	before := backendCount()
+
+	l, ok, err := s.TryLockSubscriber(ctx, "doc-lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("lock: ok=%v err=%v", ok, err)
+	}
+	if got := backendCount(); got != before+1 {
+		t.Fatalf("backend count after lock: got %d, want %d (one dedicated session)", got, before+1)
+	}
+
+	if err := l.Release(ctx); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got := backendCount()
+		if got == before {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("backend count after release: got %d, want back to %d — session was pooled, not discarded", got, before)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -343,10 +474,7 @@ func TestResetEventReadRedeliversUnacked(t *testing.T) {
 		ids = append(ids, id)
 	}
 
-	got, err := s.ReadEventBatch(ctx, "sub", 3)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := pollReadEventBatch(t, ctx, s, "sub", 3, 3)
 	if len(got) != 3 {
 		t.Fatalf("got %d events, want 3", len(got))
 	}
@@ -358,10 +486,7 @@ func TestResetEventReadRedeliversUnacked(t *testing.T) {
 		t.Fatalf("reset event read: %v", err)
 	}
 
-	got, err = s.ReadEventBatch(ctx, "sub", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = pollReadEventBatch(t, ctx, s, "sub", 10, 2)
 	if len(got) != 2 || got[0].ID != ids[1] || got[1].ID != ids[2] {
 		t.Fatalf("got %+v, want events 2 and 3 in order", got)
 	}
