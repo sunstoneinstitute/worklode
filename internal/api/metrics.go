@@ -77,6 +77,10 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
 	}, []string{"result"})
+	s.listExpansions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_list_expansions_total",
+		Help: "List endpoint requests that asked for an expansion, by endpoint (tasks, docs) and expansion (detail, body).",
+	}, []string{"endpoint", "expansion"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
 	// operator moves a subscriber's offsets backwards (025 §18), and how
@@ -115,7 +119,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges,
-		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent)
+		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -347,6 +351,15 @@ func (s *server) observeEventStreamSent(n int) {
 		return
 	}
 	s.eventStreamEventsSent.Add(float64(n))
+}
+
+// observeListExpansion records one expanded list request. Nil-safe: tests
+// build a *server directly without initMetrics.
+func (s *server) observeListExpansion(endpoint, expansion string) {
+	if s.listExpansions == nil {
+		return
+	}
+	s.listExpansions.WithLabelValues(endpoint, expansion).Inc()
 }
 
 // observeDocSync records one sync request. Nil-safe: tests build a *server
