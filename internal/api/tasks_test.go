@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -783,5 +785,184 @@ func TestListTasksByRepoAndBranch(t *testing.T) {
 	rr = doReq(t, h, "GET", "/api/v1/tasks?repo=nope", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("bad repo status = %d, want 422", rr.Code)
+	}
+}
+
+// listDetailRow is the subset of GET /api/v1/tasks?detail=true's row shape
+// these tests care about. Edges is a pointer so its absence (unexpanded
+// path) is distinguishable from an empty object.
+type listDetailRow struct {
+	ID      string `json:"id"`
+	Blocked *bool  `json:"blocked"`
+	Edges   *struct {
+		Out []struct {
+			To   string `json:"to"`
+			Type string `json:"type"`
+		} `json:"out"`
+		In []struct {
+			From string `json:"from"`
+			Type string `json:"type"`
+		} `json:"in"`
+	} `json:"edges"`
+}
+
+// TestListTasksDetailExpansion proves the unexpanded task list is unchanged
+// (no "blocked" or "edges" key on any row) while detail=true adds both per
+// row, that empty edge lists serialize as [] rather than null, that row
+// order is preserved, and that worklode_list_expansions_total{tasks,detail}
+// increments only on the expanded request.
+func TestListTasksDetailExpansion(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	h, admin, err := api.NewServer(st, api.Config{})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	createProject(t, st, "proj")
+	for _, title := range []string{"One", "Two", "Three", "Four"} {
+		createTaskViaAPI(t, h, token, map[string]any{
+			"project": "proj", "title": title, "priority": "medium", "kind": "feature",
+		})
+	}
+	// WL-1 blocks WL-2.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"}); rr.Code != http.StatusCreated {
+		t.Fatalf("blocks edge: %d %s", rr.Code, rr.Body)
+	}
+	// WL-3 child_of WL-1.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"from": "WL-3", "type": "child_of"}); rr.Code != http.StatusCreated {
+		t.Fatalf("child_of edge: %d %s", rr.Code, rr.Body)
+	}
+
+	list := func(qs string) []listDetailRow {
+		t.Helper()
+		rr := doReq(t, h, "GET", "/api/v1/tasks?project=proj"+qs, token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list %s: %d %s", qs, rr.Code, rr.Body)
+		}
+		var got struct {
+			Tasks []listDetailRow `json:"tasks"`
+		}
+		decodeInto(t, rr, &got)
+		return got.Tasks
+	}
+
+	unexpanded := list("")
+	if len(unexpanded) != 4 {
+		t.Fatalf("unexpanded: got %d tasks, want 4", len(unexpanded))
+	}
+	for _, row := range unexpanded {
+		if row.Blocked != nil {
+			t.Errorf("unexpanded %s: blocked present, want absent", row.ID)
+		}
+		if row.Edges != nil {
+			t.Errorf("unexpanded %s: edges present, want absent", row.ID)
+		}
+	}
+
+	metrics := func() string {
+		t.Helper()
+		return doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	}
+	const detailMetric = `worklode_list_expansions_total{endpoint="tasks",expansion="detail"}`
+	if strings.Contains(metrics(), detailMetric) {
+		t.Errorf("unexpanded request touched %s", detailMetric)
+	}
+
+	expanded := list("&detail=true")
+	if len(expanded) != 4 {
+		t.Fatalf("expanded: got %d tasks, want 4", len(expanded))
+	}
+	for i, row := range expanded {
+		if row.ID != unexpanded[i].ID {
+			t.Fatalf("row order differs at %d: expanded %s, unexpanded %s", i, row.ID, unexpanded[i].ID)
+		}
+	}
+
+	if got := metrics(); !strings.Contains(got, detailMetric+" 1") {
+		t.Errorf("expanded request did not record %s = 1:\n%s", detailMetric, got)
+	}
+
+	byID := make(map[string]listDetailRow, len(expanded))
+	for _, row := range expanded {
+		byID[row.ID] = row
+	}
+
+	wl2 := byID["WL-2"]
+	if wl2.Blocked == nil || !*wl2.Blocked {
+		t.Errorf("WL-2 blocked = %v, want true", wl2.Blocked)
+	}
+	if wl2.Edges == nil || len(wl2.Edges.In) != 1 || wl2.Edges.In[0].From != "WL-1" || wl2.Edges.In[0].Type != "blocks" {
+		t.Errorf("WL-2 edges.in = %+v, want [{WL-1 blocks}]", wl2.Edges)
+	}
+
+	wl1 := byID["WL-1"]
+	if wl1.Blocked == nil || *wl1.Blocked {
+		t.Errorf("WL-1 blocked = %v, want false", wl1.Blocked)
+	}
+	if wl1.Edges == nil || len(wl1.Edges.Out) != 1 || wl1.Edges.Out[0].To != "WL-2" || wl1.Edges.Out[0].Type != "blocks" {
+		t.Errorf("WL-1 edges.out = %+v, want [{WL-2 blocks}]", wl1.Edges)
+	}
+	if wl1.Edges == nil || len(wl1.Edges.In) != 1 || wl1.Edges.In[0].From != "WL-3" || wl1.Edges.In[0].Type != "child_of" {
+		t.Errorf("WL-1 edges.in = %+v, want [{WL-3 child_of}]", wl1.Edges)
+	}
+
+	wl4 := byID["WL-4"]
+	if wl4.Edges == nil || wl4.Edges.Out == nil || len(wl4.Edges.Out) != 0 {
+		t.Errorf("WL-4 edges.out = %#v, want [] (non-nil, empty)", wl4.Edges)
+	}
+	if wl4.Edges == nil || wl4.Edges.In == nil || len(wl4.Edges.In) != 0 {
+		t.Errorf("WL-4 edges.in = %#v, want [] (non-nil, empty)", wl4.Edges)
+	}
+}
+
+// TestListTasksDetailMatchesGetTask guards against the list-detail and
+// get-task edge/blocked projections drifting apart: both read the same
+// store facts and must agree.
+func TestListTasksDetailMatchesGetTask(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocked", "priority": "high", "kind": "feature"})
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"}); rr.Code != http.StatusCreated {
+		t.Fatalf("blocks edge: %d %s", rr.Code, rr.Body)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks?project=proj&detail=true", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", rr.Code, rr.Body)
+	}
+	var list struct {
+		Tasks []listDetailRow `json:"tasks"`
+	}
+	decodeInto(t, rr, &list)
+	var row listDetailRow
+	for _, r := range list.Tasks {
+		if r.ID == "WL-2" {
+			row = r
+		}
+	}
+	if row.ID != "WL-2" {
+		t.Fatalf("WL-2 missing from list: %+v", list.Tasks)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get: %d %s", rr.Code, rr.Body)
+	}
+	var single listDetailRow
+	decodeInto(t, rr, &single)
+
+	if row.Blocked == nil || single.Blocked == nil || *row.Blocked != *single.Blocked {
+		t.Errorf("blocked: list %v, get %v", row.Blocked, single.Blocked)
+	}
+	if row.Edges == nil || single.Edges == nil || !reflect.DeepEqual(*row.Edges, *single.Edges) {
+		t.Errorf("edges: list %+v, get %+v", row.Edges, single.Edges)
 	}
 }
