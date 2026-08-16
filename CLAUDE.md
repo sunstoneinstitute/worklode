@@ -118,6 +118,15 @@ architecture facts and the queryable view of both belong to the data-platform
 knowledge graph (specs 006/025), which receives documents by projection.
 No fact has two owners — keep new state on the right side of that split.
 
+## The Obsidian mirror
+
+`obsidian/` is a top-level TypeScript Obsidian plugin, built and shipped
+independently of the Go binary, that mirrors a Worklode instance's projects,
+docs, and tasks into a machine-owned vault folder. It is a read-only client
+of the public `/api/v1` HTTP API — it never writes back and has no store or
+server access. Its wire types (`obsidian/src/api/types.ts`) are a hand-kept
+mirror of `internal/cli/client.go`, which stays the source of truth.
+
 ## Specs, plans, tasks
 
 The model (spec 025; files under `docs/` are the transitional mirror until it
