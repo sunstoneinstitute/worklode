@@ -56,8 +56,17 @@ Restricted Mode off) → enable "Worklode".
 - **Desktop only.** `manifest.json` sets `isDesktopOnly: true`: etag
   computation uses Node's `node:crypto`, which is not available on Obsidian
   mobile.
-- **Mount root can't be nested.** It must be a single path segment — no `/`,
-  no `.`, no `..`. `Team/Worklode` is refused, not partially honoured.
+- **Mount root can't be nested.** It must be a single path segment: no `/` or
+  `\`, no `..` anywhere in it, not `.` or `..` on its own, not blank, and no
+  leading or trailing whitespace. `Team/Worklode` is refused, not partially
+  honoured.
+- **A sync deletes foreign notes under the mount root.** Every `.md` file
+  under the root that the mirror does not currently produce is removed on each
+  sync — including files the plugin never created. They are moved to the
+  vault's trash (Settings → Files and links → Deleted files), so an accident
+  is recoverable, but do not point the mount root at a folder of your own
+  notes.
 - **Purge deletes the whole mount folder.** The "Purge the Worklode folder"
   command removes everything under the mount root, including files the
-  plugin did not create — not just the notes it manages.
+  plugin did not create — not just the notes it manages. Unlike a sync, this
+  is a permanent delete, not a move to trash.

@@ -160,6 +160,18 @@ export function taskToNote(t: TaskListDetail): Note {
 
 // ---- Doc notes ----
 
+/** The doc as the etag is computed over it: everything but `synced_at`. The
+ *  backbone rewrites `docs.synced_at` on every `lode doc sync`, including for
+ *  a doc whose content did not change, so an etag covering it would rewrite
+ *  every doc note (and, since a project note's etag covers its member docs,
+ *  every project note) on every sync. `synced_at` is backbone bookkeeping the
+ *  mirror does not carry, so it is out of the rendered `wl` block too. */
+function docEtagSource(d: Doc): Record<string, unknown> {
+  const source: Record<string, unknown> = { ...d };
+  delete source.synced_at;
+  return source;
+}
+
 /** Renders a stored document: its own frontmatter verbatim, plus the
  *  reserved `wl` block beside it. The document's own frontmatter is never
  *  edited, only accompanied — see the round-trip rules in the module docs. */
@@ -175,7 +187,7 @@ export function docToNote(d: Doc): Note {
   const hasAliases = Object.prototype.hasOwnProperty.call(source, "aliases");
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
-  const etag = computeEtag(d);
+  const etag = computeEtag(docEtagSource(d));
 
   const wl: WlBlock = {
     type: "doc",
@@ -190,7 +202,6 @@ export function docToNote(d: Doc): Note {
     version: d.version,
     source_branch: d.source_branch,
     source_dirty: d.source_dirty,
-    synced_at: d.synced_at,
     etag,
   };
 
@@ -268,7 +279,9 @@ function renderProjectBody(docs: Doc[], tasks: TaskListDetail[]): string {
 }
 
 export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Note {
-  const etag = computeEtag({ project: p, docs, tasks });
+  // Same `synced_at` exclusion as docToNote: otherwise every doc sync would
+  // rewrite every project note as well.
+  const etag = computeEtag({ project: p, docs: docs.map(docEtagSource), tasks });
 
   const wl: WlBlock = {
     type: "project",

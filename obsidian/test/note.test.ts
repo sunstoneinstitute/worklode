@@ -285,6 +285,27 @@ describe("docToNote", () => {
     expect(note.content).toContain("wl:");
   });
 
+  // The backbone bumps docs.synced_at on every `lode doc sync`, unchanged
+  // content included. An etag covering it would make every sync rewrite
+  // every doc note -- and every project note, whose etag covers its docs.
+  it("ignores synced_at in the etag, and carries no synced_at in the note", () => {
+    const d = fixtureDoc();
+    const resynced = fixtureDoc({ synced_at: "2026-09-01T00:00:00Z" });
+
+    expect(docToNote(resynced).etag).toBe(docToNote(d).etag);
+    expect(docToNote(d).content).not.toContain("synced_at");
+    expect(projectToNote(fixtureProject(), [resynced], []).etag).toBe(
+      projectToNote(fixtureProject(), [d], []).etag,
+    );
+  });
+
+  it("still changes the etag when the body or the version changes", () => {
+    const d = fixtureDoc();
+
+    expect(docToNote(fixtureDoc({ body: "different body" })).etag).not.toBe(docToNote(d).etag);
+    expect(docToNote(fixtureDoc({ version: 4 })).etag).not.toBe(docToNote(d).etag);
+  });
+
   it("round-trips a doc note back to its own frontmatter and body", () => {
     const frontmatter = {
       status: "draft",

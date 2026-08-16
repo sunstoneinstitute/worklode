@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMirror, desiredNotes, desiredPath, type VaultWriter } from "../src/sync/mirror";
+import { applyMirror, desiredNotes, desiredPath, isSafePathSegment, type VaultWriter } from "../src/sync/mirror";
 import { parseNote } from "../src/serialize/note";
 import type { Doc, Project, TaskListDetail } from "../src/api/types";
 
@@ -95,6 +95,35 @@ class MapVaultWriter implements VaultWriter {
     this.removed.push(path);
   }
 }
+
+// The one predicate behind both a backbone id and (in src/main.ts, which
+// vitest cannot import) the mount root. The cases below are the ones the two
+// earlier predicates disagreed on.
+describe("isSafePathSegment", () => {
+  it("accepts an ordinary segment", () => {
+    expect(isSafePathSegment("Worklode")).toBe(true);
+    expect(isSafePathSegment("WL-SPEC-025")).toBe(true);
+    expect(isSafePathSegment("My Notes")).toBe(true);
+  });
+
+  it("rejects blank, empty, and edge-whitespace segments", () => {
+    expect(isSafePathSegment("")).toBe(false);
+    expect(isSafePathSegment("   ")).toBe(false);
+    expect(isSafePathSegment(" x ")).toBe(false);
+    expect(isSafePathSegment("x ")).toBe(false);
+  });
+
+  it('rejects ".", "..", and any ".." substring', () => {
+    expect(isSafePathSegment(".")).toBe(false);
+    expect(isSafePathSegment("..")).toBe(false);
+    expect(isSafePathSegment("My..Notes")).toBe(false);
+  });
+
+  it("rejects separators", () => {
+    expect(isSafePathSegment("Team/Worklode")).toBe(false);
+    expect(isSafePathSegment("Team\\Worklode")).toBe(false);
+  });
+});
 
 describe("desiredPath", () => {
   it("builds the vault-relative path for each note kind", () => {
@@ -330,6 +359,35 @@ describe("desiredNotes conflicts", () => {
     expect(desired.conflicts.some((c) => c.includes(collidingDoc.id))).toBe(true);
     // The note is still produced -- the backbone block wins, per note.ts.
     expect(desired.notes.some((n) => n.path === "worklode/docs/WL-SPEC-1.md")).toBe(true);
+  });
+
+  // A server predating the detail=true expansion returns task rows with no
+  // `edges`, which taskToNote dereferences. That must cost one note, not the
+  // whole sync -- the plugin ships independently of the binary, so the skew
+  // is ordinary rather than exotic. The cast through unknown is deliberate:
+  // the shape is not type-valid, which is exactly the point.
+  it("reports a serializer failure as a conflict instead of failing the sync", async () => {
+    const project = fixtureProject();
+    const oldServerTask = { ...fixtureTask({ id: "WL-9" }) } as Record<string, unknown>;
+    delete oldServerTask.edges;
+    const goodTask = fixtureTask({ id: "WL-1" });
+
+    const byProject = new Map([
+      ["worklode", { docs: [], tasks: [oldServerTask as unknown as TaskListDetail, goodTask] }],
+    ]);
+
+    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+
+    expect(desired.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
+    expect(desired.notes.some((n) => n.path === "worklode/tasks/WL-9.md")).toBe(false);
+    // Everything else still syncs.
+    expect(desired.notes.some((n) => n.path === "worklode/tasks/WL-1.md")).toBe(true);
+
+    const writer = new MapVaultWriter();
+    const stats = await applyMirror(writer, ROOT, desired);
+
+    expect(stats.written).toBe(desired.notes.length);
+    expect(stats.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
   });
 
   it("skips the index and records a conflict when the root name is unsafe", () => {
