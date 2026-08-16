@@ -43,8 +43,8 @@ type DocSyncResult struct {
 	DocID, Kind, Outcome string
 }
 
-// Doc is one stored document. Body is "" in ListDocs rows (list is metadata;
-// the full text comes from GetDoc).
+// Doc is one stored document. Body is "" in ListDocs rows unless
+// DocFilter.Body is set; GetDoc always carries the full text.
 type Doc struct {
 	Project, Kind, Ordinal, DocID  string
 	Status, Title, Body            string
@@ -324,15 +324,22 @@ func (s *Store) GetDoc(ctx context.Context, docID string) (*Doc, []DocSection, [
 // DocFilter narrows ListDocs; zero fields do not filter.
 type DocFilter struct {
 	Project, Kind, Status string
+	// Body includes the body column in the result rows. Off by default:
+	// body is the large column, and most list callers only want the
+	// catalogue. Frontmatter is selected either way (it always was).
+	Body bool
 }
 
 // ListDocs returns matching documents ordered by project, kind, then ordinal
 // numerically (spec 10 after spec 9; plan 34-2 after 34-1). Rows are
-// bodyless (Body == ""); GetDoc carries the full text.
+// bodyless (Body == "") unless f.Body; GetDoc always carries the full text.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]Doc, error) {
-	q := `SELECT project, kind, ordinal, doc_id, status, title, frontmatter,
-	             version, source_branch, source_dirty, synced_at, created_at, updated_at
-	        FROM docs`
+	cols := `project, kind, ordinal, doc_id, status, title, frontmatter,
+	         version, source_branch, source_dirty, synced_at, created_at, updated_at`
+	if f.Body {
+		cols += `, body`
+	}
+	q := `SELECT ` + cols + ` FROM docs`
 	var conds []string
 	var args []any
 	if f.Project != "" {
@@ -365,8 +372,12 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]Doc, error) {
 	for rows.Next() {
 		var d Doc
 		var frontmatter []byte
-		if err := rows.Scan(&d.Project, &d.Kind, &d.Ordinal, &d.DocID, &d.Status, &d.Title, &frontmatter,
-			&d.Version, &d.SourceBranch, &d.SourceDirty, &d.SyncedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		dest := []any{&d.Project, &d.Kind, &d.Ordinal, &d.DocID, &d.Status, &d.Title, &frontmatter,
+			&d.Version, &d.SourceBranch, &d.SourceDirty, &d.SyncedAt, &d.CreatedAt, &d.UpdatedAt}
+		if f.Body {
+			dest = append(dest, &d.Body)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan doc: %w", err)
 		}
 		d.Frontmatter = json.RawMessage(frontmatter)
