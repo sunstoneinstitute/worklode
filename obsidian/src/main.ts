@@ -37,13 +37,21 @@ const obsidianHttp: HttpTransport = async (req) => {
 };
 
 /** The mount root is the only writable territory: every write, delete and
- *  (for purge) recursive rmdir happens under it. An empty root, or one
- *  containing "..", would put those operations outside the intended
- *  folder -- up to and including the whole vault for purgeRoot's rmdir. */
+ *  (for purge) recursive rmdir happens under it, so this has to reject
+ *  anything that could resolve outside the folder it names. A single path
+ *  segment only -- no nesting; Task 10 tracks making that work as a
+ *  feature, refused consistently for now rather than half-working (the
+ *  index note silently drops today for a nested root, since mirror.ts's
+ *  own isSafeId also refuses "/"). Never "." or ".." -- a root of "."
+ *  resolves to the vault root itself, which would turn a sync or purge
+ *  into an operation on the whole vault. Never empty. Never carrying
+ *  leading/trailing whitespace: the caller trims once and validates and
+ *  uses that same trimmed value, so a root that fails this check because
+ *  of whitespace was never silently trimmed-then-used elsewhere. */
 function isSafeMountRoot(root: string): boolean {
-  const trimmed = root.trim();
-  if (trimmed.length === 0 || trimmed.startsWith("/") || trimmed.startsWith("\\")) return false;
-  return !trimmed.split(/[\\/]/).includes("..");
+  if (root.length === 0 || root !== root.trim()) return false;
+  if (root.includes("/") || root.includes("\\")) return false;
+  return root !== "." && root !== "..";
 }
 
 /** "" means no filter (sync every project); otherwise a trimmed, non-empty
@@ -62,11 +70,15 @@ function formatTime(d: Date): string {
 }
 
 export default class WorklodePlugin extends Plugin {
-  override settings: WorklodeSettings = DEFAULT_SETTINGS;
+  override settings: WorklodeSettings = { ...DEFAULT_SETTINGS };
 
   private writer!: ObsidianVaultWriter;
   private statusBarItem!: HTMLElement;
-  private syncing = false;
+  /** True while a sync or a purge is running. Shared between the two: a
+   *  purge mid-flight during an interval sync would otherwise remove the
+   *  root out from under applyMirror, which throws partway and can then
+   *  re-create part of the tree the purge just deleted. */
+  private busy = false;
   private intervalId: number | undefined;
 
   override async onload(): Promise<void> {
@@ -90,7 +102,7 @@ export default class WorklodePlugin extends Plugin {
       id: "purge-worklode-folder",
       name: "Purge the Worklode folder",
       callback: () => {
-        new PurgeConfirmModal(this.app, this.settings.mountRoot, () => {
+        new PurgeConfirmModal(this.app, this.settings.mountRoot.trim(), () => {
           void this.purge();
         }).open();
       },
@@ -138,10 +150,11 @@ export default class WorklodePlugin extends Plugin {
    *  Guarded against overlapping runs: a slow sync plus a short interval
    *  must not stack. */
   async sync(): Promise<void> {
-    if (this.syncing) return;
+    if (this.busy) return;
 
     const baseUrl = this.settings.baseUrl.trim();
     const token = this.settings.token.trim();
+    const mountRoot = this.settings.mountRoot.trim();
     if (!baseUrl) {
       new Notice("Worklode: set the base URL in plugin settings before syncing.");
       return;
@@ -150,17 +163,27 @@ export default class WorklodePlugin extends Plugin {
       new Notice("Worklode: set the API token in plugin settings before syncing.");
       return;
     }
-    if (!isSafeMountRoot(this.settings.mountRoot)) {
-      new Notice("Worklode: set a valid mount root (non-empty, no \"..\") in plugin settings before syncing.");
+    if (!isSafeMountRoot(mountRoot)) {
+      new Notice(
+        'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before syncing.',
+      );
       return;
     }
 
-    this.syncing = true;
+    this.busy = true;
     try {
       const client = new WorklodeClient(baseUrl, token, obsidianHttp);
       const allProjects = await client.listProjects();
       const allowList = parseAllowList(this.settings.projects);
       const selected = allowList ? allProjects.filter((p) => allowList.has(p.id)) : allProjects;
+
+      if (allowList) {
+        const foundIds = new Set(selected.map((p) => p.id));
+        const missing = [...allowList].filter((id) => !foundIds.has(id));
+        if (missing.length > 0) {
+          new Notice(`Worklode: project id(s) not found, skipped: ${missing.join(", ")}.`);
+        }
+      }
 
       const byProject = new Map<string, ProjectMembers>();
       for (const project of selected) {
@@ -169,23 +192,32 @@ export default class WorklodePlugin extends Plugin {
       }
 
       const syncedAt = new Date().toISOString();
-      const desired = desiredNotes(selected, byProject, this.settings.mountRoot, syncedAt);
-      const stats = await applyMirror(this.writer, this.settings.mountRoot, desired);
+      const desired = desiredNotes(selected, byProject, mountRoot, syncedAt);
+      const stats = await applyMirror(this.writer, mountRoot, desired);
 
       this.reportSuccess(stats);
     } catch (err) {
       this.reportFailure(err);
     } finally {
-      this.syncing = false;
+      this.busy = false;
     }
   }
 
   async purge(): Promise<void> {
-    const mountRoot = this.settings.mountRoot;
-    if (!isSafeMountRoot(mountRoot)) {
-      new Notice("Worklode: set a valid mount root (non-empty, no \"..\") in plugin settings before purging.");
+    if (this.busy) {
+      new Notice("Worklode: a sync is already in progress; try purging again once it finishes.");
       return;
     }
+
+    const mountRoot = this.settings.mountRoot.trim();
+    if (!isSafeMountRoot(mountRoot)) {
+      new Notice(
+        'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before purging.',
+      );
+      return;
+    }
+
+    this.busy = true;
     try {
       const removed = await this.writer.purgeRoot(mountRoot);
       new Notice(`Worklode: purged ${removed} file(s) from "${mountRoot}".`);
@@ -193,6 +225,8 @@ export default class WorklodePlugin extends Plugin {
       const message = err instanceof Error ? err.message : String(err);
       new Notice(`Worklode purge failed: ${message}`);
       console.error("Worklode purge failed:", err);
+    } finally {
+      this.busy = false;
     }
   }
 
