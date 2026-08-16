@@ -618,8 +618,9 @@ docs/plans/2026-08-03-event-watchers-1-ordered-log.md:
     task-5-typed-emission-deterministic-ids-json-ld-payloads-validation: "### Task 5 — Typed emission: deterministic ids, JSON-LD payloads, validation"
     task-6-the-consumer-loop-and-the-eventbus-metrics: "### Task 6 — The consumer loop and the eventbus metrics"
     task-7-read-surfaces-store-queries-api-cli: "### Task 7 — Read surfaces: store queries, API, CLI"
-    task-8-e2e-the-log-is-readable-through-public-surfaces: "### Task 8 — e2e: the log is readable through public surfaces"
-    task-9-docs-amend-004-fix-027s-citation-claudemd: "### Task 9 — Docs: amend 004, fix 027's citation, CLAUDE.md"
+    task-8-the-live-stream-lode-event-tail-follow: "### Task 8 — The live stream: `lode event tail --follow`"
+    task-9-e2e-the-log-is-readable-through-public-surfaces: "### Task 9 — e2e: the log is readable through public surfaces"
+    task-10-docs-amend-004-mirror-025-claudemd: "### Task 10 — Docs: amend 004, mirror 025, CLAUDE.md"
     done-when-maps-to-025-24: "## Done when (maps to 025 §24)"
 docs/plans/2026-08-03-event-watchers-2-doc-lifecycle.md:
   sections:

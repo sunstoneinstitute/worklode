@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -76,9 +77,45 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
 	}, []string{"result"})
+	// A distinct counter, not left to http_requests_total, because a seek is
+	// the one admin-triggered write on this surface: it is the only way an
+	// operator moves a subscriber's offsets backwards (025 §18), and how
+	// often that happens is worth alerting on independently of request
+	// volume. The GET reads beside it (listEvents, listEventSubscribers) are
+	// ordinary reads with no derived outcome, so the generic HTTP middleware
+	// (http_requests_total/http_request_duration_seconds) is judged
+	// sufficient for them — see the eventbus package's
+	// worklode_event_subscriber_lag and worklode_events_processed_total for
+	// the domain-level visibility into the log itself.
+	s.eventSubscriberSeeks = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_event_subscriber_seeks_total",
+		Help: "Admin seeks of a subscriber's offsets (POST /api/v1/event-subscribers/{name}/seek), by subscriber.",
+	}, []string{"subscriber"})
+	// The stream's own two instruments. http_requests_total cannot stand in
+	// for either: a follow is one request that lasts hours, so it is counted
+	// once at the end and its duration lands in http_request_duration_seconds
+	// only when the client hangs up. How many follows are open right now, and
+	// how much they are pushing, are the two questions an operator actually
+	// asks about this route.
+	s.eventStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "worklode_event_streams_active",
+		Help: "Open event-log follows (GET /api/v1/events/stream). Each holds a connection and a repeating horizon-bounded query.",
+	})
+	s.eventStreamEventsSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_event_stream_events_sent_total",
+		Help: "Events pushed to event-log followers, summed across all open streams.",
+	})
+	// The horizon's position is a scrape-time fact, not something a handler
+	// increments, so it is a collector rather than a gauge. It lives here
+	// because this is where it gets registered: eventbus.NewMetrics, which
+	// owns the per-subscriber lag gauge, has no caller yet.
+	if s.st != nil {
+		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
+	}
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges)
+		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges,
+		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper).
@@ -120,6 +157,38 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	s.docSyncRuns.WithLabelValues("ok")
 	s.docSyncRuns.WithLabelValues("error")
+}
+
+// A follow that has gone quiet reads identically whether the log is quiet or
+// the commit horizon is stuck behind a long-running transaction: the stream
+// keeps heartbeating either way (025 §15). This gauge is the difference —
+// flat while events are still being recorded means the horizon is held back,
+// and pg_stat_activity is the next place to look.
+var eventLogHorizonDesc = prometheus.NewDesc(
+	"worklode_event_log_horizon_id",
+	"Highest event id below the commit horizon (pg_snapshot_xmin) at scrape time. A log position, not a count.",
+	nil, nil)
+
+// eventHorizonCollector reads the horizon at scrape time, in the same mould as
+// eventbus's lag collector: a bounded timeout, and an invalid metric on
+// failure so a scrape error surfaces instead of a stale zero.
+type eventHorizonCollector struct {
+	horizonID func(context.Context) (int64, error)
+}
+
+func (c *eventHorizonCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- eventLogHorizonDesc
+}
+
+func (c *eventHorizonCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	id, err := c.horizonID(ctx)
+	if err != nil {
+		ch <- prometheus.NewInvalidMetric(eventLogHorizonDesc, err)
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(eventLogHorizonDesc, prometheus.GaugeValue, float64(id))
 }
 
 // observeSkillSync records one sync pass, called from both syncOnce
@@ -240,6 +309,44 @@ func (s *server) observeFormSubmission(form, outcome string) {
 		return
 	}
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
+}
+
+// observeEventSubscriberSeek records one successful admin seek of a
+// subscriber's offsets. Called on success only, matching observeAssignment.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventSubscriberSeek(subscriber string) {
+	if s.eventSubscriberSeeks == nil {
+		return
+	}
+	s.eventSubscriberSeeks.WithLabelValues(subscriber).Inc()
+}
+
+// observeEventStreamOpen and observeEventStreamClose bracket one open
+// follow; eventstream.go pairs them with a defer so a panicking handler still
+// decrements.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventStreamOpen() {
+	if s.eventStreamsActive == nil {
+		return
+	}
+	s.eventStreamsActive.Inc()
+}
+
+func (s *server) observeEventStreamClose() {
+	if s.eventStreamsActive == nil {
+		return
+	}
+	s.eventStreamsActive.Dec()
+}
+
+// observeEventStreamSent records n events pushed to one follower, called once
+// per flushed batch rather than once per event.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeEventStreamSent(n int) {
+	if s.eventStreamEventsSent == nil {
+		return
+	}
+	s.eventStreamEventsSent.Add(float64(n))
 }
 
 // observeDocSync records one sync request. Nil-safe: tests build a *server

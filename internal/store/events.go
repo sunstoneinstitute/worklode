@@ -3,11 +3,19 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 )
+
+// eventHorizon is the commit-horizon predicate every cursor read of events
+// carries (spec 025 §15): a row is only readable once no transaction older
+// than its writer can still commit, so an id can never appear behind a
+// position a subscriber has already passed. One const, not one literal per
+// query — the whole ordered-log guarantee is this line.
+const eventHorizon = "txid < pg_snapshot_xmin(pg_current_snapshot())"
 
 // Event is one ingested fact: a webhook delivery, a watcher observation, a
 // CLI action, or an internal system event. Events are the append-only log
@@ -79,6 +87,466 @@ func (s *Store) RecordEvent(
 	return id, inserted, nil
 }
 
+// RecordEventWithID is RecordEvent for payloads that must embed their own
+// event id (spec 025 §15.2: the JSON-LD `@id` is `wlid:event/<id>`). It
+// reserves the id from the events.id sequence first, then calls payloadFor
+// to build the payload before inserting — the reverse of RecordEvent, which
+// lets the INSERT assign the id. (source, externalID) still governs
+// idempotency, but only for apply: payloadFor runs on every call, including
+// replays, because the reserved id is needed to build the payload before
+// the INSERT can detect the conflict. On conflict the existing id is
+// returned, inserted=false, and apply is not called; the payload just
+// built is discarded and its id is burned (see the INSERT comment below).
+//
+// payloadFor must not be nil.
+func (s *Store) RecordEventWithID(
+	ctx context.Context,
+	source, externalID, typ string,
+	payloadFor func(eventID int64) ([]byte, error),
+	apply func(tx *sql.Tx, eventID int64) error,
+) (id int64, inserted bool, err error) {
+	if payloadFor == nil {
+		return 0, false, fmt.Errorf("record event with id: payloadFor must not be nil")
+	}
+	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		receivedAt := s.nowFn().UTC()
+
+		var reservedID int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT nextval(pg_get_serial_sequence('events', 'id'))`,
+		).Scan(&reservedID); err != nil {
+			return fmt.Errorf("reserve event id: %w", err)
+		}
+
+		payload, err := payloadFor(reservedID)
+		if err != nil {
+			return fmt.Errorf("build payload for event %d: %w", reservedID, err)
+		}
+
+		// With DO NOTHING, RETURNING yields no row on conflict, so
+		// sql.ErrNoRows means the event was already recorded. The
+		// reserved sequence value is burned in that case — fine,
+		// offsets are positions, not counts (025 §15).
+		scanErr := tx.QueryRowContext(ctx,
+			`INSERT INTO events (id, source, external_id, type, payload, received_at)
+			 OVERRIDING SYSTEM VALUE
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (source, external_id) DO NOTHING
+			 RETURNING id`,
+			reservedID, source, externalID, typ, payload, receivedAt,
+		).Scan(&id)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			row := tx.QueryRowContext(ctx,
+				`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
+				source, externalID,
+			)
+			if err := row.Scan(&id); err != nil {
+				return fmt.Errorf("look up existing event: %w", err)
+			}
+			inserted = false
+			return nil
+		}
+		if scanErr != nil {
+			return fmt.Errorf("insert event: %w", scanErr)
+		}
+		inserted = true
+
+		if apply != nil {
+			if err := apply(tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		return 0, false, txErr
+	}
+	return id, inserted, nil
+}
+
+// GetEvent looks up one event by id. Returns ErrNotFound if it does not
+// exist.
+//
+// It reads by primary key and is deliberately not eventHorizon-bounded — it
+// is not a cursor read, and a caller that already has an id (from
+// RecordEvent/RecordEventWithID/Emit) would otherwise have to wait out the
+// commit horizon to read its own write back. Do not add the predicate here.
+func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
+	var e Event
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, source, external_id, type, payload, received_at FROM events WHERE id = $1`, id)
+	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Event{}, ErrNotFound
+		}
+		return Event{}, fmt.Errorf("get event %d: %w", id, err)
+	}
+	e.ReceivedAt = e.ReceivedAt.UTC()
+	return e, nil
+}
+
+// EventSubscriber mirrors one event_subscribers row (spec 025 §15.1).
+type EventSubscriber struct {
+	Name      string
+	LastRead  int64
+	LastAcked int64
+	UpdatedAt time.Time
+}
+
+// EnsureEventSubscriber creates the subscriber row if absent. Offset 0
+// means a new subscriber replays the whole log — the right default for a
+// rule set that should have been running all along (025 §15.1).
+func (s *Store) EnsureEventSubscriber(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO event_subscribers (name, updated_at) VALUES ($1, $2)
+		 ON CONFLICT (name) DO NOTHING`, name, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("ensure event subscriber %s: %w", name, err)
+	}
+	return nil
+}
+
+// ResetEventRead rewinds last_read_offset to last_acked_offset. Called
+// once when a consumer acquires the subscriber lock: everything read but
+// unacked by the previous holder is redelivered (at-least-once).
+func (s *Store) ResetEventRead(ctx context.Context, name string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE event_subscribers SET last_read_offset = last_acked_offset, updated_at = $2
+		 WHERE name = $1`, name, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("reset event read for %s: %w", name, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reset event read for %s: %w", name, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+	}
+	return nil
+}
+
+// ReadEventBatch returns up to limit events after the subscriber's
+// last_read_offset that are below the commit horizon, in id order, and
+// advances last_read_offset to the last id returned — one transaction.
+func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]Event, error) {
+	var events []Event
+	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		var lastRead int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT last_read_offset FROM event_subscribers WHERE name = $1 FOR UPDATE`,
+			name,
+		).Scan(&lastRead); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+			}
+			return fmt.Errorf("lock event subscriber %s: %w", name, err)
+		}
+
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id, source, external_id, type, payload, received_at
+			   FROM events
+			  WHERE id > $1
+			    AND `+eventHorizon+`
+			  ORDER BY id
+			  LIMIT $2`,
+			lastRead, limit,
+		)
+		if err != nil {
+			return fmt.Errorf("read events for %s: %w", name, err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var e Event
+			if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+				return fmt.Errorf("scan event: %w", err)
+			}
+			e.ReceivedAt = e.ReceivedAt.UTC()
+			events = append(events, e)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("read events for %s: %w", name, err)
+		}
+
+		if len(events) == 0 {
+			return nil
+		}
+		lastID := events[len(events)-1].ID
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE event_subscribers SET last_read_offset = $2, updated_at = $3
+			 WHERE name = $1 AND last_read_offset < $2`,
+			name, lastID, s.nowFn().UTC(),
+		); err != nil {
+			return fmt.Errorf("advance read offset for %s: %w", name, err)
+		}
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return events, nil
+}
+
+// AckEvents advances last_acked_offset to upTo, forward only: a late or
+// replayed lower ack is a silent no-op. Acking past last_read_offset is an
+// error (the CHECK backstops it), and an unknown subscriber is ErrNotFound —
+// like ResetEventRead and SeekEventSubscriber, because a consumer whose row
+// was deleted underneath it must not believe its acks are landing.
+//
+// The existence check rides in the same statement as the update precisely
+// because both a missing row and a non-advancing ack update zero rows, so
+// RowsAffected alone cannot tell them apart. The data-modifying CTE runs
+// whether or not the outer SELECT reads it.
+func (s *Store) AckEvents(ctx context.Context, name string, upTo int64) error {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`WITH acked AS (
+		   UPDATE event_subscribers SET last_acked_offset = $2, updated_at = $3
+		    WHERE name = $1 AND $2 > last_acked_offset
+		   RETURNING 1
+		 )
+		 SELECT EXISTS (SELECT 1 FROM event_subscribers WHERE name = $1)`,
+		name, upTo, s.nowFn().UTC(),
+	).Scan(&exists)
+	if err != nil {
+		if isCheckViolationOn(err, "event_subscribers_acked_le_read") {
+			return fmt.Errorf("ack %s past last_read_offset: %w", name, err)
+		}
+		return fmt.Errorf("ack events for %s: %w", name, err)
+	}
+	if !exists {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+	}
+	return nil
+}
+
+// EventSubscribers lists all subscriber rows (offsets only; Task 7 adds
+// the lag/holder view).
+func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT name, last_read_offset, last_acked_offset, updated_at
+		   FROM event_subscribers ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list event subscribers: %w", err)
+	}
+	defer rows.Close()
+
+	var out []EventSubscriber
+	for rows.Next() {
+		var sub EventSubscriber
+		if err := rows.Scan(&sub.Name, &sub.LastRead, &sub.LastAcked, &sub.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan event subscriber: %w", err)
+		}
+		sub.UpdatedAt = sub.UpdatedAt.UTC()
+		out = append(out, sub)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list event subscribers: %w", err)
+	}
+	return out, nil
+}
+
+// EventFilter narrows ListEvents. Zero values do not filter.
+type EventFilter struct {
+	Type  string
+	Since time.Time
+	After int64 // exclusive id cursor, for cursor-based paging
+	Limit int   // default/cap 200
+}
+
+// MaxEventListLimit is both the default and the cap for ListEvents: a
+// caller that omits Limit gets it, and a caller that asks for more than it
+// is silently truncated to it rather than erroring.
+//
+// Exported because a caller that pages ListEvents has to know it. Paging
+// stops on a short page, so a pager whose own page size exceeds this cap
+// would read every page as short and stop after the first —
+// internal/api/eventstream.go's streamHead is exactly that pager, and it
+// pins the relationship at compile time.
+const MaxEventListLimit = 200
+
+// ListEvents returns matching events in id order (newest last, 025 §18),
+// horizon-bounded like every subscriber read so the tail never shows an id
+// that later reads would order before.
+func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
+	where := eventHorizon
+	var args []any
+	if f.Type != "" {
+		args = append(args, f.Type)
+		where += fmt.Sprintf(" AND type = $%d", len(args))
+	}
+	if !f.Since.IsZero() {
+		args = append(args, f.Since.UTC())
+		where += fmt.Sprintf(" AND received_at >= $%d", len(args))
+	}
+	if f.After != 0 {
+		args = append(args, f.After)
+		where += fmt.Sprintf(" AND id > $%d", len(args))
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > MaxEventListLimit {
+		limit = MaxEventListLimit
+	}
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(
+		`SELECT id, source, external_id, type, payload, received_at
+		   FROM events
+		  WHERE %s
+		  ORDER BY id
+		  LIMIT $%d`, where, len(args)), args...)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Event
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		e.ReceivedAt = e.ReceivedAt.UTC()
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	return out, nil
+}
+
+// EventSubscriberStatus is the lode event subscribers row (025 §18): the
+// durable offsets plus two derived, point-in-time facts — how far the
+// subscriber trails the commit horizon, and which Postgres backend (if any)
+// currently holds its advisory lock.
+type EventSubscriberStatus struct {
+	EventSubscriber
+	Lag       int64
+	HolderPID int64 // Postgres backend pid holding the lock; 0 = none
+}
+
+// EventSubscriberStatuses lists every subscriber with its lag and lock
+// holder. The pg_locks join splits the 64-bit advisory key into classid
+// (high 32 bits) / objid (low 32 bits) — the same split
+// pg_try_advisory_lock's single-bigint form uses internally, so it must
+// match exactly for the join to find the right lock. It is also scoped to
+// the current database: advisory lock pids are visible cluster-wide in
+// pg_locks, and a same-named subscriber on a different database must not be
+// reported as this one's holder.
+func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberStatus, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.name, s.last_read_offset, s.last_acked_offset, s.updated_at,
+		       GREATEST(h.max_id - s.last_acked_offset, 0) AS lag,
+		       COALESCE(l.pid, 0) AS holder_pid
+		  FROM event_subscribers s
+		 CROSS JOIN (SELECT COALESCE(MAX(id), 0) AS max_id
+		               FROM events
+		              WHERE `+eventHorizon+`) h
+		  LEFT JOIN LATERAL (
+		       SELECT pid FROM pg_locks
+		        WHERE locktype = 'advisory' AND granted AND objsubid = 1
+		          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+		          AND classid = ((hashtext('wl:subscriber:' || s.name)::bigint >> 32) & 4294967295)::oid
+		          AND objid   = (hashtext('wl:subscriber:' || s.name)::bigint & 4294967295)::oid
+		        LIMIT 1) l ON true
+		 ORDER BY s.name`)
+	if err != nil {
+		return nil, fmt.Errorf("event subscriber statuses: %w", err)
+	}
+	defer rows.Close()
+
+	var out []EventSubscriberStatus
+	for rows.Next() {
+		var st EventSubscriberStatus
+		if err := rows.Scan(&st.Name, &st.LastRead, &st.LastAcked, &st.UpdatedAt, &st.Lag, &st.HolderPID); err != nil {
+			return nil, fmt.Errorf("scan event subscriber status: %w", err)
+		}
+		st.UpdatedAt = st.UpdatedAt.UTC()
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event subscriber statuses: %w", err)
+	}
+	return out, nil
+}
+
+// SeekEventSubscriber moves both offsets to the given position — the only
+// path that moves an offset backwards (admin replay/skip, 025 §18). Setting
+// last_read_offset and last_acked_offset to the same value keeps the
+// event_subscribers_acked_le_read CHECK satisfied by construction. Safe
+// precisely because handlers are idempotent.
+func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE event_subscribers SET last_read_offset = $2, last_acked_offset = $2, updated_at = $3
+		 WHERE name = $1`, name, to, s.nowFn().UTC())
+	if err != nil {
+		return fmt.Errorf("seek event subscriber %s: %w", name, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("seek event subscriber %s: %w", name, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
+	}
+	return nil
+}
+
+// SubscriberLock pins one pool connection holding the pg_try_advisory_lock
+// for a subscriber (spec 025 §15.1: one active consumer). The connection is
+// held for the consumer's lifetime; a crashed process drops it and
+// Postgres releases the lock — failover with no lease table.
+type SubscriberLock struct {
+	conn *sql.Conn
+	name string
+}
+
+// TryLockSubscriber takes a dedicated connection from the pool and
+// attempts the advisory lock. ok=false means another consumer holds it;
+// the connection is returned to the pool (safe: no lock was granted).
+func (s *Store) TryLockSubscriber(ctx context.Context, name string) (l *SubscriberLock, ok bool, err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var got bool
+	err = conn.QueryRowContext(ctx,
+		`SELECT pg_try_advisory_lock(hashtext('wl:subscriber:' || $1)::bigint)`,
+		name).Scan(&got)
+	if err != nil || !got {
+		conn.Close()
+		return nil, false, err
+	}
+	return &SubscriberLock{conn: conn, name: name}, true, nil
+}
+
+// Healthy reports whether the lock is still held, by pinging the session
+// that holds it. A session-scoped advisory lock dies exactly with its
+// session and nothing but Release unlocks it, so a live connection is proof
+// of the lock and a dead one is proof it is gone.
+//
+// A consumer needs this because the lock connection sits idle between
+// polls, which is precisely when an idle_session_timeout, a pooler reap or
+// a pg_terminate_backend takes it — and no query through the pool would
+// notice: the pool stays healthy while the advisory lock is already
+// released and a standby is free to take the stream.
+func (l *SubscriberLock) Healthy(ctx context.Context) error {
+	return l.conn.PingContext(ctx)
+}
+
+// Release unlocks and then discards the underlying session instead of
+// pooling it. driver.ErrBadConn from Raw marks the connection broken, so
+// database/sql closes the real TCP session — Postgres then guarantees the
+// lock is gone even if the unlock round-trip failed.
+func (l *SubscriberLock) Release(ctx context.Context) error {
+	_, unlockErr := l.conn.ExecContext(ctx,
+		`SELECT pg_advisory_unlock(hashtext('wl:subscriber:' || $1)::bigint)`, l.name)
+	l.conn.Raw(func(any) error { return driver.ErrBadConn })
+	l.conn.Close()
+	return unlockErr
+}
+
 // StateLogEntry is one recorded field-level change to an entity, as written
 // by LogChange. Change is the raw JSON of the change object.
 type StateLogEntry struct {
@@ -133,4 +601,59 @@ func LogChange(tx *sql.Tx, entityKind, entityID string, eventID int64, change an
 		return fmt.Errorf("insert state_log: %w", err)
 	}
 	return nil
+}
+
+// EventLogHorizonID returns the highest event id below the commit horizon —
+// the position every cursor read of the log can currently reach. It stops
+// advancing while any long-running transaction anywhere on the instance holds
+// pg_snapshot_xmin back, which is this design's characteristic failure and is
+// otherwise indistinguishable from a quiet log.
+//
+// It is the max-id half of EventSubscriberLags' query, without subtracting an
+// offset: a backward index scan that stops at the first row below the horizon.
+func (s *Store) EventLogHorizonID(ctx context.Context) (int64, error) {
+	var id int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(id), 0) FROM events WHERE `+eventHorizon).Scan(&id); err != nil {
+		return 0, fmt.Errorf("event log horizon id: %w", err)
+	}
+	return id, nil
+}
+
+// SubscriberLag is how far one subscriber trails the log: the highest event
+// id below the commit horizon minus what it has acked (025 §15.7).
+type SubscriberLag struct {
+	Name string
+	Lag  int64
+}
+
+// EventSubscriberLags returns the lag of every subscriber, by name. The
+// horizon tail is shared by all of them, which is what makes the gauge read
+// two pathologies at once: a stuck subscriber lags alone, a long transaction
+// holding the horizon back (025 §15) lags every subscriber together.
+func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT s.name, GREATEST(h.max_id - s.last_acked_offset, 0)
+		   FROM event_subscribers s,
+		        (SELECT COALESCE(MAX(id), 0) AS max_id
+		           FROM events
+		          WHERE `+eventHorizon+`) h
+		  ORDER BY s.name`)
+	if err != nil {
+		return nil, fmt.Errorf("event subscriber lags: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SubscriberLag
+	for rows.Next() {
+		var l SubscriberLag
+		if err := rows.Scan(&l.Name, &l.Lag); err != nil {
+			return nil, fmt.Errorf("scan event subscriber lag: %w", err)
+		}
+		out = append(out, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event subscriber lags: %w", err)
+	}
+	return out, nil
 }

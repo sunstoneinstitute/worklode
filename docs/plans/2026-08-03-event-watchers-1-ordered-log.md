@@ -15,10 +15,11 @@ covers:
 **Series:** Part 1 of 2 (spec 025 §19 mandates the split). Task numbers
 restart at 1 per part.
 
-- **Part 1 — the ordered log (this file, 9 tasks):** `events.txid` and the
+- **Part 1 — the ordered log (this file, 10 tasks):** `events.txid` and the
   commit horizon, `event_subscribers` offsets, the advisory-lock consumer
   loop, the event vocabulary and typed emission, `lode event
-  tail|subscribers|seek`, the three `internal/eventbus` metrics.
+  tail|subscribers|seek`, `tail --follow` over server-sent events, the
+  three `internal/eventbus` metrics and the two stream metrics.
   Ships against the existing log; depends on nothing unmerged.
 - **Part 2 — the doc-lifecycle subscriber
   (`2026-08-03-event-watchers-2-doc-lifecycle.md`):** the two §5 rules, §7's
@@ -27,9 +28,10 @@ restart at 1 per part.
   `wl:DocumentAccepted` to emit.
 
 **Goal:** Turn the append-only `events` table into a totally ordered,
-offset-tracked log with at-least-once subscribers (025 §15–§4), plus the
-`lode event` verbs (§6) and eventbus metrics (§8) — with the §9 ordering-trap
-test proving a naive `last_seen_id` cursor would skip late-committing events.
+offset-tracked log with at-least-once subscribers (025 §15–§15.3), plus the
+`lode event` verbs including the live `tail --follow` (§18) and the metrics
+(§15.7) — with the ordering-trap test proving a naive `last_seen_id` cursor
+would skip late-committing events.
 
 **Architecture:** One migration adds `events.txid xid8` (default
 `pg_current_xact_id()`) and the `event_subscribers` offsets table. Readers
@@ -40,7 +42,9 @@ gains the horizon read, monotonic ack, and a per-subscriber
 `pg_try_advisory_lock` held on a dedicated pool connection;
 `internal/eventbus` owns the polling loop, the typed emit helpers with
 deterministic `external_id`, the hand-mirrored event vocabulary, and the
-metrics. The API gains three read/admin endpoints and the CLI three verbs.
+metrics. The API gains three read/admin endpoints plus a fourth,
+admin-only server-sent-events route reading through the same horizon, and
+the CLI three verbs one of which can follow.
 No subscriber is wired into the server in this part — part 2 wires the first
 one — so the loop is proven by store-backed package tests.
 
@@ -66,7 +70,7 @@ golang-migrate, cobra, prometheus/client_golang.
   `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,
   override with `TEST_POSTGRES_DSN`. Tests skip silently without Postgres —
   run against a real one.
-- Migration number `0013` is provisional: `0010`–`0012` are claimed by the
+- Migration number `0020` is provisional: `0010`–`0012` are claimed by the
   keycloak-primary-auth and documents-in-the-backbone plans. Run
   `./scripts/check-migrations.sh --no-fix` and use whatever number it
   settles on; list both files in `deploy/base/kustomization.yaml`.
@@ -79,7 +83,7 @@ golang-migrate, cobra, prometheus/client_golang.
 
 | File | Responsibility |
 |---|---|
-| `deploy/base/migrations/0013_event_log.{up,down}.sql` (new) | `events.txid`, `events_txid_id` index, `event_subscribers` |
+| `deploy/base/migrations/0020_event_log.{up,down}.sql` (new) | `events.txid`, `events_txid_id` index, `event_subscribers` |
 | `deploy/base/kustomization.yaml` | list the new pair |
 | `internal/store/events.go` (+`events_test.go`) | horizon read, offsets, monotonic ack, subscriber lock, tail/status/seek queries, lag query, `RecordEventWithID` |
 | `internal/eventbus/vocab.go` (+`vocab_test.go`) (new) | event-type constants + per-type payload property sets, hand-mirrored from `ns/` |
@@ -87,11 +91,13 @@ golang-migrate, cobra, prometheus/client_golang.
 | `internal/eventbus/loop.go` (+`loop_test.go`) (new) | polling consumer: lock lifecycle, batch/ack, redelivery |
 | `internal/eventbus/metrics.go` (new) | `worklode_event_subscriber_lag`, `worklode_events_processed_total`, `worklode_event_batch_duration_seconds` |
 | `internal/api/events.go` (+`events_test.go`) (new) | `GET /api/v1/events`, `GET /api/v1/event-subscribers`, `POST /api/v1/event-subscribers/{name}/seek` |
-| `internal/cli/client.go`, `internal/cli/render.go` | client methods + table rendering |
-| `internal/cmd/event.go` (new) | `lode event tail\|subscribers\|seek` |
+| `internal/api/eventstream.go` (+`eventstream_test.go`) (new) | `GET /api/v1/events/stream`: SSE, cursor, heartbeat, `Last-Event-ID` resume |
+| `internal/api/authz.go`, `internal/api/router.go`, `internal/api/metrics.go` | `event.read`/`event.admin`/`event.stream` permissions, guard rows, the two stream metrics |
+| `internal/cli/client.go`, `internal/cli/render.go` | client methods incl. the SSE reader + table rendering |
+| `internal/cmd/event.go` (new) | `lode event tail [--follow]\|subscribers\|seek` |
 | `ns/ontology.ttl` | `wl:Event`, `wl:DocumentSubmitted`, `wl:DocumentAccepted`, `wl:subject`, `wl:fromStatus`, `wl:toStatus` |
 | `docs/specs/004-execution-backbone.md`, `docs/specs/025-documents-in-the-backbone.md`, `CLAUDE.md` | amendment note + mirrors, architecture blurb |
-| `e2e/events_test.go` (new) | webhook delivery visible through `GET /api/v1/events` |
+| `e2e/events_test.go` (new) | webhook delivery visible through `GET /api/v1/events` and on the open stream |
 
 ---
 
@@ -108,12 +114,12 @@ blockedBy: [ ]
 ```
 
 **Files:**
-- Create: `deploy/base/migrations/0013_event_log.up.sql`, `.down.sql`
+- Create: `deploy/base/migrations/0020_event_log.up.sql`, `.down.sql`
 - Modify: `deploy/base/kustomization.yaml`
 
 - [ ] **Step 1: Write the up migration**
 
-`deploy/base/migrations/0013_event_log.up.sql`:
+`deploy/base/migrations/0020_event_log.up.sql`:
 
 ```sql
 -- Spec 025 §15: total order for the event log. txid records the writing
@@ -147,7 +153,7 @@ CREATE TABLE event_subscribers (
 );
 ```
 
-`deploy/base/migrations/0013_event_log.down.sql`:
+`deploy/base/migrations/0020_event_log.down.sql`:
 
 ```sql
 DROP TABLE event_subscribers;
@@ -173,7 +179,7 @@ the migration applies. Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add deploy/base/migrations/0013_event_log.* deploy/base/kustomization.yaml
+git add deploy/base/migrations/0020_event_log.* deploy/base/kustomization.yaml
 git commit -m "Add events.txid and event_subscribers for the ordered log"
 ```
 
@@ -557,8 +563,8 @@ false.
 - [ ] **Step 3: Implement `internal/eventbus/vocab.go`**
 
 ```go
-// Package eventbus implements spec 027: typed domain-event emission and the
-// offset-tracked subscriber loop over the store's events table.
+// Package eventbus implements spec 025 §15: typed domain-event emission and
+// the offset-tracked subscriber loop over the store's events table.
 package eventbus
 
 // Hand-mirrored from ns/ontology.ttl (spec 025 §15.2).
@@ -900,7 +906,8 @@ blockedBy: [2, 3]
 type EventFilter struct {
 	Type  string
 	Since time.Time
-	Limit int // default/cap 200
+	After int64 // exclusive id cursor; the stream of Task 8 pages with it
+	Limit int   // default/cap 200
 }
 
 // ListEvents returns matching events in id order (newest last, 025 §18),
@@ -956,17 +963,27 @@ name returns `ErrNotFound`.
 
 | Route | Behaviour |
 |---|---|
-| `GET /api/v1/events?type=&since=&limit=` | 200, `{"events": [...]}`; `since` RFC 3339; any authed actor |
+| `GET /api/v1/events?type=&since=&after=&limit=` | 200, `{"events": [...]}`; `since` RFC 3339, `after` an id; any authed actor |
 | `GET /api/v1/event-subscribers` | 200, `{"subscribers": [...]}` with lag + holder_pid; any authed actor |
-| `POST /api/v1/event-subscribers/{name}/seek` | body `{"to": 42}`; admin only (403 otherwise, the `requireAdmin` wrapper); 404 unknown name; 200 with the updated row |
+| `POST /api/v1/event-subscribers/{name}/seek` | body `{"to": 42}`; admin only (403 otherwise); 404 unknown name; 200 with the updated row |
 
-Register in `server.go` beside the inbox routes:
+Registration goes through `internal/api/router.go`'s table, not a bare
+`mux.Handle` — a pattern the table does not name panics at boot. Two new
+permissions in `internal/api/authz.go`, both listed in `grants` (a
+permission absent from that map is denied to everyone):
 
 ```go
-mux.Handle("GET /api/v1/events", s.auth(s.listEvents))
-mux.Handle("GET /api/v1/event-subscribers", s.auth(s.listEventSubscribers))
-mux.Handle("POST /api/v1/event-subscribers/{name}/seek", s.auth(requireAdmin(s.seekEventSubscriber)))
+permEventRead  Permission = "event.read"  // {RoleUser, RoleAdmin}
+permEventAdmin Permission = "event.admin" // {RoleAdmin}
 ```
+
+```go
+"GET /api/v1/events":                            guarded(permEventRead),
+"GET /api/v1/event-subscribers":                 guarded(permEventRead),
+"POST /api/v1/event-subscribers/{name}/seek":    guarded(permEventAdmin),
+```
+
+registered with `r.api(...)` beside the inbox routes in `server.go`.
 
 Seek is an admin correction of consumer state, not a domain fact — it is
 deliberately **not** wrapped in `RecordEvent` (nothing derives from
@@ -986,6 +1003,8 @@ lode event subscribers          NAME  READ  ACKED  LAG  HOLDER  UPDATED
 lode event seek <name> --to <offset>
 ```
 
+`tail` is one-shot here; Task 8 adds `--follow` to the same command.
+
 `--since 2h` converts to `time.Now().Add(-d)` client-side. Table rendering
 in `internal/cli/render.go` next to the existing renderers; `tail` prints
 `ID  RECEIVED  SOURCE  TYPE  EXTERNAL_ID`. `seek` prints the updated row
@@ -1000,14 +1019,126 @@ git commit -am "Add lode event tail/subscribers/seek over the ordered log"
 
 ---
 
-### Task 8 — e2e: the log is readable through public surfaces
+### Task 8 — The live stream: `lode event tail --follow`
+
+```yaml
+kind: feature
+priority: medium
+skills:
+  - superpowers:test-driven-development
+blockedBy: [7]
+```
+
+**Files:**
+- Create: `internal/api/eventstream.go`, `internal/api/eventstream_test.go`
+- Modify: `internal/api/authz.go`, `internal/api/router.go`,
+  `internal/api/server.go`, `internal/api/metrics.go`,
+  `internal/cli/client.go`, `internal/cmd/event.go`
+
+`--follow` streams the log as it is written, over server-sent events
+(025 §18). It is admin-gated while the bounded `tail` is not, and the
+difference is operational, not a wider data grant — both expose the same
+rows, but a follow holds a connection, a goroutine and a horizon poll open
+per client for as long as the client watches.
+
+- [ ] **Step 1: The route and its guard, failing tests first**
+
+A **separate route**, not a flag on `GET /api/v1/events`: `routeGuards`
+keys on the exact pattern, so a distinct route is how "the stream is
+admin, the bounded read is not" gets expressed as data rather than as a
+branch inside a handler.
+
+```go
+permEventStream Permission = "event.stream" // {RoleAdmin}
+```
+
+```go
+"GET /api/v1/events/stream": guarded(permEventStream),
+```
+
+Tests in `internal/api/eventstream_test.go`: an admin token gets 200 with
+`Content-Type: text/event-stream`; a plain user token gets 403 and no
+stream body.
+
+- [ ] **Step 2: The handler**
+
+`internal/api/eventstream.go`, one handler `streamEvents`:
+
+- Headers `Content-Type: text/event-stream`, `Cache-Control: no-cache`,
+  `Connection: keep-alive`, `X-Accel-Buffering: no`; write them and flush
+  before the first poll, so a client blocks on data rather than on
+  headers.
+- Cursor starts at the `Last-Event-ID` request header when present (an
+  integer event id), else at `?after=`, else at the current horizon head —
+  a bare `--follow` shows what happens next, and the CLI supplies the
+  backlog cursor itself (Step 4).
+- Loop: `store.ListEvents(ctx, EventFilter{After: cursor, Type: typ,
+  Limit: 200})` — the same horizon-bounded query as every other reader, so
+  the stream structurally cannot skip a late-committing event. Emit each
+  row as
+
+  ```
+  id: 41
+  event: task.claimed
+  data: {"id":41,"source":"cli","type":"task.claimed",...}
+
+  ```
+
+  advancing the cursor, then `Flush()`. Sleep 1s between polls
+  (`time.NewTicker`, package-level `streamPollInterval` so a test can
+  shorten it).
+- Heartbeat: when a poll yields nothing and 30s have passed since the last
+  write, send the comment line `:\n\n` and flush, so proxies and idle
+  timeouts do not silently drop a quiet stream.
+- Exit on `r.Context().Done()` — the client hanging up is the normal
+  termination, not an error to log. If the `ResponseWriter` is not an
+  `http.Flusher`, 500 with a plain JSON error before any stream bytes.
+
+Tests: an event recorded after the stream opens arrives on it within a
+shortened poll interval; `Last-Event-ID: 3` replays from 4, not from the
+head; `?type=` filters; cancelling the request context returns the handler
+promptly.
+
+- [ ] **Step 3: Metrics** (`internal/api/metrics.go`, 022's conventions)
+
+`worklode_event_streams_active` (gauge, `Inc`/`defer Dec` around the
+handler body) and `worklode_event_stream_events_sent_total` (counter). Both
+on the existing nil-safe metrics struct, asserted with `testutil`.
+
+- [ ] **Step 4: The CLI half**
+
+`internal/cli/client.go`: `StreamEvents(ctx, EventStreamFilter, func(Event) error) error`
+— issues the request, then reads the body line by line with a
+`bufio.Scanner`, accumulating `id:`/`event:`/`data:` until a blank line and
+invoking the callback per message. Comment lines (`:` prefix) are skipped.
+A read error returns rather than reconnecting; reconnect-on-drop is a
+follow-up, not this task (`docs/follow-ups.md`).
+
+`internal/cmd/event.go`: `--follow`/`-f` on `tail`. Semantics are `tail -f`
+— print the same bounded backlog first, honouring `--type`, `--since` and
+`--limit`, then stream from the last id printed (passed as `after`), so no
+event is shown twice and none is missed in the gap. Under `--json`,
+`--follow` prints NDJSON, one event object per line, flushed per event;
+otherwise the same columns the one-shot table prints, without a repeated
+header. Ctrl-C exits 0.
+
+- [ ] **Step 5: Verify and commit**
+
+```bash
+go test ./internal/api ./internal/cli ./internal/cmd -count=1
+git commit -am "Stream the event log over SSE behind lode event tail --follow"
+```
+
+---
+
+### Task 9 — e2e: the log is readable through public surfaces
 
 ```yaml
 kind: chore
 priority: medium
 skills:
   - superpowers:test-driven-development
-blockedBy: [7]
+blockedBy: [7, 8]
 ```
 
 **Files:**
@@ -1027,6 +1158,9 @@ Copy `e2e/smoke_test.go`'s boot (its `store.OpenTestStore` +
    wired until part 2).
 4. Admin `POST /api/v1/event-subscribers/nope/seek` — 404; agent-token
    seek — 403.
+5. Open `GET /api/v1/events/stream` as admin, deliver a second signed
+   webhook, and assert it arrives on the open stream; the same request
+   with an agent token gets 403.
 
 - [ ] **Step 2: Verify and commit**
 
@@ -1037,7 +1171,7 @@ git commit -am "Add e2e coverage for the event log read surface"
 
 ---
 
-### Task 9 — Docs: amend 004, fix 027's citation, CLAUDE.md
+### Task 10 — Docs: amend 004, mirror 025, CLAUDE.md
 
 ```yaml
 kind: chore
@@ -1049,56 +1183,54 @@ blockedBy: [ ]
 - Modify: `docs/specs/004-execution-backbone.md`,
   `docs/specs/025-documents-in-the-backbone.md`, `CLAUDE.md`
 
-Read `docs/authoring-design-docs.md` §"Amending a section" first — three
-edits, all required. Note: 004's events table lives in **§1.5**
-(`{#sec-1.5}` "events + state_log"), not §2 as spec 027 cites — 004 §3 is
-the lease lifecycle. 027 is `draft`, so correcting its citations is a
-plain edit.
+Read `docs/authoring-design-docs.md` §"Amending a section" first. **There
+is no spec 027** — the event-watcher design lives in 025 §15, and every
+reference below is to 025. 004's events table is **§1.4**
+(`{#sec-1.4}` "events + state_log — append-only log, provenance"), not §2
+or §3.
 
-- [ ] **Step 1: The amendment, all three edits**
+- [ ] **Step 1: The amendment, both halves**
 
-In `004-execution-backbone.md` under the `### 1.5` heading:
+In `004-execution-backbone.md` under the `### 1.4` heading:
 
 ```markdown
-> **Amended by spec 027.** The events table gains `txid xid8` and a commit
-> horizon so the log is totally ordered; `event_subscribers` rows give it
-> offset-tracked, at-least-once subscribers. The log stops being write-only.
+> **Amended by spec 025 §15.** The events table gains `txid xid8` and a
+> commit horizon so the log is totally ordered; `event_subscribers` rows
+> give it offset-tracked, at-least-once subscribers, and
+> `GET /api/v1/events/stream` serves it live. The log stops being
+> write-only.
 ```
 
 In 004's frontmatter:
 
 ```yaml
 amendedBy:
-  "#sec-1.5":
-    - 027-event-watchers.md
+  "#sec-1.4":
+    - 025-documents-in-the-backbone.md#sec-15
 ```
 
-In 027's frontmatter (merge with what is there; re-read the file first —
+In 025's frontmatter (merge with what is there; re-read the file first —
 another session may have touched it):
 
 ```yaml
 amends:
-  ".":
-    - 004-execution-backbone.md#sec-1.5
+  "#sec-15":
+    - 004-execution-backbone.md#sec-1.4
 ```
 
-- [ ] **Step 2: Fix 027's `(004 §3)` citations**
-
-In `027-event-watchers.md` §0 and §2, change the two `(004 §3)` references
-for the events table to `(004 §1.4)`.
-
-- [ ] **Step 3: CLAUDE.md**
+- [ ] **Step 2: CLAUDE.md**
 
 In the "Architecture" cross-cutting paragraph, extend the list with one
 clause: `internal/eventbus` (offset-tracked subscribers over the events
-log, spec 027) — keep it to a line, per the comment-hygiene rule.
+log, spec 025 §15) — keep it to a line, per the comment-hygiene rule.
 
-- [ ] **Step 4: Verify and commit**
+- [ ] **Step 3: Verify and commit**
 
 ```bash
 ./scripts/secfmt.py -l
+./scripts/secmeta.py
 ./scripts/secindex.py && git diff --stat docs/specs/index.yaml docs/plans/index.yaml
-git add -A && git commit -m "Record spec 027's amendment of 004 and the eventbus in CLAUDE.md"
+git add -A && git commit -m "Record spec 025's amendment of 004 and the eventbus in CLAUDE.md"
 ```
 
 ---
@@ -1113,8 +1245,12 @@ git add -A && git commit -m "Record spec 027's amendment of 004 and the eventbus
 4. AC7: the e2e test shows vendor events in `lode event tail`'s API with
    dotted types, no CHECK on `events.type`.
 5. AC8's eventbus half: the three `internal/eventbus` metrics registered
-   and asserted with `testutil`.
-6. AC6 is **partial by design**: emit-time validation is enforced and
+   and asserted with `testutil`, plus the two `internal/api` stream metrics.
+6. `lode event tail --follow` shows an event recorded after the stream
+   opened, resumes from `Last-Event-ID` rather than the head, and is
+   refused (403) for a non-admin token — all three asserted in
+   `internal/api`, the first and last again end-to-end.
+7. AC6 is **partial by design**: emit-time validation is enforced and
    tested, but "generated from `ns/` with CI drift-fail" is only fully
    satisfied once 025's codegen exists — the vocab drift test is the
    stand-in until then.

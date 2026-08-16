@@ -166,6 +166,27 @@ wl:Skill a owl:Class ;
         because the node mirrors git through the backbone, like Issue and PullRequest — the pin
         that names it is the declared half (016 §1). IRI is wlid:skill/<name>.""" .
 
+wl:Event a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A domain event in the backbone's append-only log (spec 025 §15.2): a state
+        change witnessed at commit, curie in events.type, JSON-LD in events.payload. One subclass
+        per event type — types differ in shape, so a class hierarchy, not a SKOS kind scheme.
+        Vendor webhook deliveries share the events table but are not wl:Events (025 §15.2: one
+        log, two populations).""" .
+
+wl:DocumentSubmitted a owl:Class ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A draft document was handed to review (lode doc submit, 025 §15.4). Changes no
+        document column: the open review task is 'under review' (025 §7).""" .
+
+wl:DocumentAccepted a owl:Class ;
+    rdfs:subClassOf wl:Event ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A document moved draft → accepted (025 §7). Carries the status transition as
+        wl:fromStatus / wl:toStatus.""" .
+
 
 # ---------------------------------------------------------------------------
 # Layer 3 — runtime · deploy (observed; projected from ingest). Every class is
@@ -446,6 +467,22 @@ wl:mirrors a owl:ObjectProperty, owl:SymmetricProperty ;
         differ entails that every Issue is a Task, which contradicts their disjointness. OWL
         therefore states the pair; shapes.ttl pins the intended direction (a Task mirrors an
         Issue).""" .
+
+wl:subject a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Event ;
+    rdfs:comment """The thing the event is about (025 §15.2). Range deliberately open: any
+        backbone entity.""" .
+
+wl:fromStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:DocumentAccepted ; rdfs:range skos:Concept ;
+    rdfs:comment "Status before the transition (a wlc: editorial status)." .
+
+wl:toStatus a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:DocumentAccepted ; rdfs:range skos:Concept ;
+    rdfs:comment "Status after the transition (a wlc: editorial status)." .
 
 
 # ---------------------------------------------------------------------------

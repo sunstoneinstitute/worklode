@@ -213,6 +213,18 @@ type server struct {
 	// "duplicate" is the healthy signal — its disappearance means one of the
 	// two reporters has stopped.
 	localMerges *prometheus.CounterVec
+
+	// eventSubscriberSeeks counts admin seeks of a subscriber's offsets, by
+	// subscriber; see events.go and observeEventSubscriberSeek.
+	eventSubscriberSeeks *prometheus.CounterVec
+
+	// eventStreamsActive is the number of open SSE follows and
+	// eventStreamEventsSent the events pushed over them; see eventstream.go.
+	// Both are unlabelled: a stream is a whole-instance resource, and the
+	// only cardinality worth adding (the client) is exactly the unbounded
+	// one.
+	eventStreamsActive    prometheus.Gauge
+	eventStreamEventsSent prometheus.Counter
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -485,6 +497,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("GET /api/v1/docs", s.listDocs)
 	r.api("GET /api/v1/docs/{id}", s.getDoc)
 
+	r.api("GET /api/v1/events", s.listEvents)
+	r.api("GET /api/v1/events/stream", s.streamEvents)
+	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
+	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
+
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
 	// rather than sitting in the file looking enforced.
@@ -576,6 +593,18 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap exposes the wrapped writer to http.ResponseController, which walks
+// the Unwrap chain to find the optional interfaces net/http's own writer
+// implements.
+//
+// Without it, nothing served by this server can stream. Embedding an
+// interface promotes only that interface's methods, so *statusWriter is not
+// an http.Flusher no matter what it wraps — and logging and metrics wrap
+// every single request in one, twice over. A handler that flushed would
+// silently buffer instead, which for a server-sent-event stream means the
+// client sees nothing until the connection closes.
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // routeLabel returns the matched mux pattern without its method prefix
 // (r.Pattern is set by ServeMux during routing), or "unmatched".

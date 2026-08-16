@@ -149,6 +149,16 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/sync": guarded(permDocWrite),
 	"GET /api/v1/docs":       guarded(permDocRead),
 	"GET /api/v1/docs/{id}":  guarded(permDocRead),
+
+	// --- events (spec 025 §15/§18) --------------------------------------------
+	"GET /api/v1/events": guarded(permEventRead),
+	// A route of its own rather than ?follow=1 on the line above: the table
+	// keys on the exact pattern, which is how "the stream is admin, the
+	// bounded read is not" stays data instead of becoming a branch inside a
+	// handler.
+	"GET /api/v1/events/stream":                  guarded(permEventStream),
+	"GET /api/v1/event-subscribers":              guarded(permEventRead),
+	"POST /api/v1/event-subscribers/{name}/seek": guarded(permEventAdmin),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which
