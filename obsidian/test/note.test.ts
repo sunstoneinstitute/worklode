@@ -152,13 +152,62 @@ body markdown verbatim`;
       },
     });
     expect(taskToNote(changedEdges).etag).not.toBe(taskToNote(t).etag);
+
+    // body is not part of the wl block; a naive computeEtag(wl) refactor
+    // would stop seeing this change.
+    const changedBody = fixtureTask({ body: "different body" });
+    expect(taskToNote(changedBody).etag).not.toBe(taskToNote(t).etag);
+  });
+
+  it("ignores edge types other than child_of and blocks", () => {
+    const t = fixtureTask({
+      edges: {
+        out: [
+          { to: "WL-7", type: "child_of" },
+          { to: "WL-44", type: "blocks" },
+          { to: "WL-99", type: "relates_to" },
+        ],
+        in: [
+          { from: "WL-43", type: "child_of" },
+          { from: "WL-41", type: "blocks" },
+        ],
+      },
+    });
+    const note = taskToNote(t);
+
+    expect(note.content).not.toContain("WL-99");
+  });
+});
+
+describe("parseNote(taskToNote(t))", () => {
+  it("round-trips the root/empty-list shape too", () => {
+    const t = fixtureTask({
+      edges: { out: [], in: [] },
+    });
+    const note = taskToNote(t);
+    const parsed = parseNote(note.content);
+
+    expect(parsed.wl.parent).toBeUndefined();
+    expect(parsed.wl.children).toEqual([]);
+    expect(parsed.wl.blocks).toEqual([]);
+    expect(parsed.wl.blocked_by).toEqual([]);
   });
 });
 
 describe("computeEtag", () => {
-  it("is order-independent over object key order", () => {
+  it("is order-independent over object key order, at every nesting level", () => {
     const a = computeEtag({ x: 1, y: 2 });
     const b = computeEtag({ y: 2, x: 1 });
     expect(a).toBe(b);
+
+    const nestedA = computeEtag({ a: { y: 2, x: 1 } });
+    const nestedB = computeEtag({ a: { x: 1, y: 2 } });
+    expect(nestedA).toBe(nestedB);
+  });
+
+  it("treats array order as significant", () => {
+    const a = computeEtag([1, 2]);
+    const b = computeEtag([2, 1]);
+    expect(a).not.toBe(b);
   });
 });
