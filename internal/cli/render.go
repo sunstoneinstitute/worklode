@@ -71,16 +71,23 @@ func Money(amount string) string {
 // TaskTable prints one row per task: id, priority, kind, state, project,
 // assignee (- when unassigned), title.
 func TaskTable(w io.Writer, tasks []Task) {
-	tw := newTabwriter(w)
-	fmt.Fprintln(tw, "ID\tPRIORITY\tKIND\tSTATE\tPROJECT\tASSIGNEE\tTITLE")
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "PRIORITY"},
+		column{header: "KIND"},
+		column{header: "STATE"},
+		column{header: "PROJECT"},
+		column{header: "ASSIGNEE"},
+		titleColumn("TITLE"),
+	)
 	for _, t := range tasks {
 		assignee := t.Assignee
 		if assignee == "" {
 			assignee = "-"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Priority, t.Kind, t.State, t.Project, assignee, t.Title)
+		tbl.add(t.ID, t.Priority, t.Kind, t.State, t.Project, assignee, t.Title)
 	}
-	tw.Flush()
+	tbl.flush(w)
 }
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
@@ -134,27 +141,38 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 // IssueTable prints one row per inbox issue: repo, number, triage state,
 // state, title.
 func IssueTable(w io.Writer, issues []Issue) {
-	tw := newTabwriter(w)
-	fmt.Fprintln(tw, "REPO\t#\tTRIAGE\tSTATE\tTITLE")
+	tbl := newTable(
+		column{header: "REPO"},
+		column{header: "#"},
+		column{header: "TRIAGE"},
+		column{header: "STATE"},
+		titleColumn("TITLE"),
+	)
 	for _, is := range issues {
-		fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\n", is.Repo, is.Number, is.TriageState, is.State, is.Title)
+		tbl.add(is.Repo, strconv.FormatInt(is.Number, 10), is.TriageState, is.State, is.Title)
 	}
-	tw.Flush()
+	tbl.flush(w)
 }
 
 // DocTable prints one row per synced document: id, kind, status, version, a
 // dirty-provenance marker (025 §16.2), and title.
 func DocTable(w io.Writer, docs []Doc) {
-	tw := newTabwriter(w)
-	fmt.Fprintln(tw, "ID\tKIND\tSTATUS\tV\tDIRTY\tTITLE")
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "KIND"},
+		column{header: "STATUS"},
+		column{header: "V"},
+		column{header: "DIRTY"},
+		titleColumn("TITLE"),
+	)
 	for _, d := range docs {
 		dirty := "-"
 		if d.SourceDirty {
 			dirty = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n", d.ID, d.Kind, d.Status, d.Version, dirty, d.Title)
+		tbl.add(d.ID, d.Kind, d.Status, strconv.Itoa(d.Version), dirty, d.Title)
 	}
-	tw.Flush()
+	tbl.flush(w)
 }
 
 // ProjectTable prints one row per project: id, key, name, repos. Each repo is
@@ -193,12 +211,17 @@ func BoardRender(w io.Writer, board BoardResponse) {
 			fmt.Fprintln(w, "(none)")
 			return
 		}
-		tw := newTabwriter(w)
-		fmt.Fprintln(tw, "TIME\tCLUSTER\tKIND\tWORKLOAD\tMESSAGE")
+		tbl := newTable(
+			column{header: "TIME"},
+			column{header: "CLUSTER"},
+			column{header: "KIND"},
+			column{header: "WORKLOAD"},
+			titleColumn("MESSAGE"),
+		)
 		for _, e := range board.RecentFailures {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", localTime(e.OccurredAt), e.Cluster, e.Kind, e.Workload, e.Message)
+			tbl.add(localTime(e.OccurredAt), e.Cluster, e.Kind, e.Workload, e.Message)
 		}
-		tw.Flush()
+		tbl.flush(w)
 	}
 }
 
@@ -232,8 +255,12 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 	})
 
 	fmt.Fprintf(w, "\n%s\n", label)
-	tw := newTabwriter(w)
-	fmt.Fprintln(tw, "ID\tPRIORITY\tTITLE\tHOLDER")
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "PRIORITY"},
+		titleColumn("TITLE"),
+		holderColumn("HOLDER"),
+	)
 	for _, t := range rows {
 		holder := "-"
 		if t.Holder != nil {
@@ -243,9 +270,9 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 		if _, ok := pos[t.Parent]; ok {
 			id = "└ " + id
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", id, t.Priority, t.Title, holder)
+		tbl.add(id, t.Priority, t.Title, holder)
 	}
-	tw.Flush()
+	tbl.flush(w)
 }
 
 // TimelineRender prints one line per entry: timestamp, type, and a
