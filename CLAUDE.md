@@ -231,6 +231,13 @@ ground without adding a Python stack to a Go repo.
   repo's own local config — global config does not count — which `lode
   install` sets per-repo; `lode next` also sets it defensively before
   creating a worktree.
+- **Integrating a diverged `main` is a rebase, never a merge.** When local
+  `main` is ahead and `origin/main` has also moved, `git pull --rebase` before
+  pushing; a merge commit created only to absorb remote commits is noise in the
+  trunk. Rebasing rewrites the SHA of every replayed commit, so check first
+  whether an open PR's head sits on one of them (`gh pr list --state open`) —
+  that PR goes stale with an empty diff instead of landing. Say so and let the
+  author decide; never quietly substitute a merge.
 - `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
   reasoning effort each agent role uses when working this repo with subagents.
 - **Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
