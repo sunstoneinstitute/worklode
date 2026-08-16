@@ -323,7 +323,9 @@ class PurgeConfirmModal extends Modal {
     const { contentEl } = this;
     contentEl.createEl("h2", { text: "Purge the Worklode folder?" });
     contentEl.createEl("p", {
-      text: `This deletes every file under "${this.mountRoot}" in this vault. This cannot be undone.`,
+      text:
+        `This deletes the entire "${this.mountRoot}" folder in this vault -- ` +
+        `every file in it, including anything not created by this plugin. This cannot be undone.`,
     });
 
     new Setting(contentEl)
