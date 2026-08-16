@@ -79,6 +79,8 @@ export function parseNote(content: string): {
   if (!content.startsWith("---\n")) {
     throw new Error("note is missing its opening frontmatter fence");
   }
+  // Safe to stop at the first match: yaml.stringify indents every multi-line
+  // scalar, so generated frontmatter never emits a bare column-0 "---".
   const closeIdx = content.indexOf("\n---\n", 4);
   if (closeIdx === -1) {
     throw new Error("note frontmatter is not closed");
