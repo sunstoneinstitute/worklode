@@ -122,7 +122,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
-	// for the sweeper).
+	// for the sweeper). listExpansions is deliberately left out: an absent
+	// series is how "no client has ever asked for an expansion" reads, and a
+	// test asserts the series is absent before the first expanded request.
 	s.syncRuns.WithLabelValues("ok")
 	s.syncRuns.WithLabelValues("error")
 	for _, action := range []string{"assign", "unassign", "start", "stop"} {

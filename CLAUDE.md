@@ -124,8 +124,9 @@ No fact has two owners — keep new state on the right side of that split.
 independently of the Go binary, that mirrors a Worklode instance's projects,
 docs, and tasks into a machine-owned vault folder. It is a read-only client
 of the public `/api/v1` HTTP API — it never writes back and has no store or
-server access. Its wire types (`obsidian/src/api/types.ts`) are a hand-kept
-mirror of `internal/cli/client.go`, which stays the source of truth.
+server access. Its wire types (`obsidian/src/api/types.ts`) are hand-kept
+against the `internal/api` serializers that produce them — today's reference,
+until ADR 036 makes `internal/model` the one declaration they mirror.
 
 ## Specs, plans, tasks
 

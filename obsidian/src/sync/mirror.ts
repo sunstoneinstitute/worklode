@@ -26,6 +26,10 @@ export interface VaultWriter {
   list(root: string): Promise<string[]>;
   read(root: string, path: string): Promise<string>;
   write(root: string, path: string, content: string): Promise<void>;
+  /** Takes the file out of the mirror. Recoverable in the Obsidian
+   *  implementation (vault trash), because applyMirror deletes every .md
+   *  under the root the backbone does not imply -- including files the
+   *  mirror never created. */
   remove(root: string, path: string): Promise<void>;
 }
 
@@ -47,20 +51,30 @@ export interface DesiredSet {
 
 type NoteKind = "project" | "doc" | "task";
 
-/** A single path segment (a raw backbone id, or a root name) is safe when
- *  non-blank and free of separators or "..". */
-function isSafeId(id: string): boolean {
-  return id.trim().length > 0 && !id.includes("/") && !id.includes("\\") && !id.includes("..");
+/** The one rule for anything used as a single path segment: a backbone id,
+ *  and the mount root src/main.ts validates before any write, delete or
+ *  recursive rmdir happens under it. Two predicates that disagreed produced
+ *  both a root accepted here and rejected there (its notes silently
+ *  conflicted) and ids like "." that name a path the writer creates and the
+ *  vault lists back differently, rewritten forever. Safe means: non-blank,
+ *  already trimmed (the caller validates and uses the same value, so nothing
+ *  is silently trimmed downstream), no separator, and no ".." anywhere --
+ *  neither as the whole segment, which for a mount root would resolve onto
+ *  the vault itself, nor as a substring. */
+export function isSafePathSegment(segment: string): boolean {
+  if (segment.length === 0 || segment !== segment.trim()) return false;
+  if (segment.includes("/") || segment.includes("\\")) return false;
+  return segment !== "." && !segment.includes("..");
 }
 
-/** The vault-relative path for a project/doc/task note, or undefined when
- *  a backbone id it's built from is unsafe: blank, or containing "/", "\",
- *  or "..". Exposed as the reference implementation of what a safe path
- *  looks like, built only from trusted (already-known-safe) components. */
+/** The vault-relative path for a project/doc/task note, or undefined when a
+ *  backbone id it's built from fails isSafePathSegment. Exposed as the
+ *  reference implementation of what a safe path looks like, built only from
+ *  trusted (already-known-safe) components. */
 export function desiredPath(kind: NoteKind, projectId: string, id?: string): string | undefined {
-  if (!isSafeId(projectId)) return undefined;
+  if (!isSafePathSegment(projectId)) return undefined;
   if (kind === "project") return `${projectId}/${projectId}.md`;
-  if (id === undefined || !isSafeId(id)) return undefined;
+  if (id === undefined || !isSafePathSegment(id)) return undefined;
   return kind === "doc" ? `${projectId}/docs/${id}.md` : `${projectId}/tasks/${id}.md`;
 }
 
@@ -76,7 +90,12 @@ function sortById<T extends { id: string }>(items: T[]): T[] {
  *  against the produced path, rather than trusting the object's own field,
  *  is what catches that divergence. A mismatch (including `desiredPath`
  *  itself rejecting the id) is dropped and reported in `conflicts`, along
- *  with any conflict the note itself carries (e.g. a wl-key collision). */
+ *  with any conflict the note itself carries (e.g. a wl-key collision).
+ *
+ *  Rendering itself is caught too: a row shaped differently from what the
+ *  serializer expects -- a server predating the `detail=true` expansion
+ *  returns tasks with no `edges` at all -- costs that one note, not the
+ *  whole sync. */
 function filterSafe<T extends { id: string }>(
   kind: "doc" | "task",
   projectId: string,
@@ -87,7 +106,14 @@ function filterSafe<T extends { id: string }>(
   const keptItems: T[] = [];
   const keptNotes: Note[] = [];
   for (const item of items) {
-    const note = toNote(item);
+    let note: Note;
+    try {
+      note = toNote(item);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      conflicts.push(`${kind} ${JSON.stringify(item.id)}: could not be rendered (${message}), skipped`);
+      continue;
+    }
     const expected = desiredPath(kind, projectId, item.id);
     if (expected === undefined || note.path !== expected) {
       conflicts.push(
@@ -137,7 +163,7 @@ export function desiredNotes(
     notes.push(projectNote, ...docs.notes, ...tasks.notes);
   }
 
-  if (isSafeId(rootName)) {
+  if (isSafePathSegment(rootName)) {
     notes.unshift(indexToNote(safeProjects, filteredByProject, rootName, syncedAt));
   } else {
     conflicts.push(`index root name ${JSON.stringify(rootName)}: unsafe, index note skipped`);
