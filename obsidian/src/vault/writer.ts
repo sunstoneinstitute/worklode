@@ -30,10 +30,16 @@ export class ObsidianVaultWriter implements VaultWriter {
     return [...files, ...nested.flat()];
   }
 
+  /** A path the adapter returns that doesn't start with "root/" is a
+   *  contract violation (a malformed root -- e.g. "." or a trailing slash --
+   *  that never matches the vault-relative paths the adapter actually
+   *  emits), not something to hand to remove(): dropped, never passed
+   *  through unchanged. This is what turns a bad root into "nothing looks
+   *  synced" instead of "everything under it looks deletable". */
   async list(root: string): Promise<string[]> {
     const all = await this.listAll(root);
     const prefix = `${root}/`;
-    return all.filter((p) => p.endsWith(".md")).map((p) => (p.startsWith(prefix) ? p.slice(prefix.length) : p));
+    return all.filter((p) => p.endsWith(".md") && p.startsWith(prefix)).map((p) => p.slice(prefix.length));
   }
 
   async read(root: string, path: string): Promise<string> {
