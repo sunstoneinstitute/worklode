@@ -182,3 +182,61 @@ func TestDocsListAndGet(t *testing.T) {
 		t.Errorf("bad kind filter: %d, want 422", rr.Code)
 	}
 }
+
+// TestListDocsBodyExpansion proves list rows are bodyless by default and
+// carry body and frontmatter, matching GetDoc, only when body=true — and
+// that any value other than exactly "true" still means false.
+func TestListDocsBodyExpansion(t *testing.T) {
+	_, h, token := newTestServer(t)
+	createDocProject(t, h, token)
+	doReq(t, h, http.MethodPost, "/api/v1/docs/sync", token, syncBody(false, specDocPayload()))
+
+	type doc struct {
+		ID          string          `json:"id"`
+		Body        string          `json:"body"`
+		Frontmatter json.RawMessage `json:"frontmatter"`
+	}
+	list := func(qs string) doc {
+		t.Helper()
+		rr := doReq(t, h, http.MethodGet, "/api/v1/docs?project=wl"+qs, token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list %s: %d %s", qs, rr.Code, rr.Body)
+		}
+		var got struct {
+			Docs []doc `json:"docs"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Docs) != 1 {
+			t.Fatalf("list %s: docs = %+v, want 1", qs, got.Docs)
+		}
+		return got.Docs[0]
+	}
+
+	def := list("")
+	if def.Body != "" {
+		t.Errorf("default: body = %q, want empty", def.Body)
+	}
+	if len(def.Frontmatter) != 0 {
+		t.Errorf("default: frontmatter = %s, want absent", def.Frontmatter)
+	}
+
+	expanded := list("&body=true")
+	rr := doReq(t, h, http.MethodGet, "/api/v1/docs/WL-SPEC-34", token, nil)
+	var full doc
+	if err := json.Unmarshal(rr.Body.Bytes(), &full); err != nil {
+		t.Fatal(err)
+	}
+	if expanded.Body == "" || expanded.Body != full.Body {
+		t.Errorf("body=true: body = %q, want GetDoc's body %q", expanded.Body, full.Body)
+	}
+	if string(expanded.Frontmatter) != string(full.Frontmatter) {
+		t.Errorf("body=true: frontmatter = %s, want GetDoc's %s", expanded.Frontmatter, full.Frontmatter)
+	}
+
+	notTrue := list("&body=1")
+	if notTrue.Body != "" {
+		t.Errorf("body=1: body = %q, want empty (only exactly \"true\" expands)", notTrue.Body)
+	}
+}

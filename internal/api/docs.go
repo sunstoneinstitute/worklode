@@ -171,10 +171,15 @@ func (s *server) syncDocs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toSyncResponse(false, results))
 }
 
-// listDocs handles GET /api/v1/docs.
+// listDocs handles GET /api/v1/docs?project=&kind=&status=&body=. body=true
+// includes each row's body and frontmatter (omitted otherwise); any other
+// value means false.
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.DocFilter{Project: q.Get("project"), Kind: q.Get("kind"), Status: q.Get("status")}
+	f := store.DocFilter{
+		Project: q.Get("project"), Kind: q.Get("kind"), Status: q.Get("status"),
+		Body: q.Get("body") == "true",
+	}
 	if f.Kind != "" && f.Kind != "spec" && f.Kind != "adr" && f.Kind != "plan" {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid kind: must be spec, adr, or plan")
 		return
@@ -184,12 +189,17 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	if f.Body {
+		s.observeListExpansion("docs", "body")
+	}
 	out := make([]docJSON, 0, len(docs))
 	for i := range docs {
 		dj := toDocJSON(&docs[i])
-		// List rows omit body and frontmatter; only getDoc returns them.
-		dj.Body = ""
-		dj.Frontmatter = nil
+		if !f.Body {
+			// List rows omit body and frontmatter unless body=true.
+			dj.Body = ""
+			dj.Frontmatter = nil
+		}
 		out = append(out, dj)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"docs": out})

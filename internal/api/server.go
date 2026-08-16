@@ -225,6 +225,11 @@ type server struct {
 	// one.
 	eventStreamsActive    prometheus.Gauge
 	eventStreamEventsSent prometheus.Counter
+
+	// listExpansions counts list endpoint requests that asked for an
+	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
+	// observeListExpansion.
+	listExpansions *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
