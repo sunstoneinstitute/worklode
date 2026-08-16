@@ -1,6 +1,6 @@
 // Renders backbone entities as Obsidian notes, and parses them back. Pure:
-// no Obsidian, no I/O. This file builds the task half plus the machinery
-// shared by every note kind (doc/project/index land in a later task).
+// no Obsidian, no I/O. Covers all four note kinds — task, doc, project,
+// index — plus the machinery shared across them.
 
 import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -29,7 +29,7 @@ export interface WlBlock {
   [key: string]: unknown;
 }
 
-// ---- Shared machinery (reused by doc/project/index in a later task) ----
+// ---- Shared machinery (reused by every note kind below) ----
 
 /** Recursively sorts object keys so JSON.stringify output is deterministic. */
 function canonicalize(value: unknown): unknown {
@@ -164,7 +164,14 @@ export function taskToNote(t: TaskListDetail): Note {
  *  reserved `wl` block beside it. The document's own frontmatter is never
  *  edited, only accompanied — see the round-trip rules in the module docs. */
 export function docToNote(d: Doc): Note {
-  const source = (d.frontmatter as Record<string, unknown> | undefined) ?? {};
+  // frontmatter is unknown (it's json.RawMessage on the Go side): a non-null,
+  // non-object payload (a string, a number, an array) would otherwise spread
+  // into garbage index keys. Treat it as absent and surface a conflict
+  // instead of rendering corrupted frontmatter silently.
+  const raw = d.frontmatter;
+  const isFrontmatterObject = typeof raw === "object" && raw !== null && !Array.isArray(raw);
+  const malformedFrontmatter = raw !== undefined && raw !== null && !isFrontmatterObject;
+  const source = isFrontmatterObject ? (raw as Record<string, unknown>) : {};
   const hasAliases = Object.prototype.hasOwnProperty.call(source, "aliases");
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
@@ -205,11 +212,15 @@ export function docToNote(d: Doc): Note {
     etag,
   };
 
-  if (hasWlCollision) {
+  if (malformedFrontmatter) {
+    note.conflict =
+      `${d.id}: frontmatter is not a JSON object (got ${Array.isArray(raw) ? "an array" : typeof raw}); ` +
+      `ignored, and the note was rendered with no author frontmatter.`;
+  } else if (hasWlCollision) {
     note.conflict =
       `${d.id}: frontmatter already has a "wl" key, which collides with the ` +
       `backbone-reserved block. The backbone wl block was kept; the doc's own ` +
-      `wl key was dropped from the rendered note.`;
+      `wl key was dropped from the rendered note. dropped value: ${JSON.stringify(source.wl)}`;
   }
 
   return note;
@@ -250,7 +261,10 @@ function renderProjectBody(docs: Doc[], tasks: TaskListDetail[]): string {
     "",
     ...taskLines,
   ];
-  return `${lines.join("\n").trimEnd()}\n`;
+  // An empty docs/tasks list otherwise leaves two blank lines in a row
+  // (the section's own separator plus the empty content it precedes).
+  const collapsed = lines.filter((line, i) => line !== "" || lines[i - 1] !== "");
+  return `${collapsed.join("\n").trimEnd()}\n`;
 }
 
 export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Note {
@@ -284,7 +298,7 @@ export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]):
  *  its call site costs one argument. A project id absent from the map (the
  *  edge case a map lookup invites) has zero of both — rendered as `0`, the
  *  project itself is never omitted. */
-type ProjectMembers = { docs: Doc[]; tasks: TaskListDetail[] };
+export type ProjectMembers = { docs: Doc[]; tasks: TaskListDetail[] };
 
 function projectCounts(id: string, byProject: Map<string, ProjectMembers>): { docs: number; tasks: number } {
   const members = byProject.get(id);
