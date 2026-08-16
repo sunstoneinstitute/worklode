@@ -213,6 +213,18 @@ type server struct {
 	// "duplicate" is the healthy signal — its disappearance means one of the
 	// two reporters has stopped.
 	localMerges *prometheus.CounterVec
+
+	// eventSubscriberSeeks counts admin seeks of a subscriber's offsets, by
+	// subscriber; see events.go and observeEventSubscriberSeek.
+	eventSubscriberSeeks *prometheus.CounterVec
+
+	// eventStreamsActive is the number of open SSE follows and
+	// eventStreamEventsSent the events pushed over them; see eventstream.go.
+	// Both are unlabelled: a stream is a whole-instance resource, and the
+	// only cardinality worth adding (the client) is exactly the unbounded
+	// one.
+	eventStreamsActive    prometheus.Gauge
+	eventStreamEventsSent prometheus.Counter
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,

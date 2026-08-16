@@ -281,3 +281,19 @@ func TestEventHorizonCollectorSkippedWithoutStore(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordLocalMerge(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_event_log_horizon_id" {
+			t.Fatal("worklode_event_log_horizon_id registered without a store to query")
+		}
+	}
+}
