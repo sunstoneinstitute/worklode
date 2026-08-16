@@ -52,5 +52,7 @@ configMapGenerator:
       - migrations/0018_follow_up_edges.down.sql
       - migrations/0019_artifact_digest_index.up.sql
       - migrations/0019_artifact_digest_index.down.sql
-      - migrations/0020_event_log.up.sql
-      - migrations/0020_event_log.down.sql
+      - migrations/0020_local_merge_source.up.sql
+      - migrations/0020_local_merge_source.down.sql
+      - migrations/0021_event_log.up.sql
+      - migrations/0021_event_log.down.sql

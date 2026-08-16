@@ -207,6 +207,13 @@ type server struct {
 	docSyncDocs     *prometheus.CounterVec
 	docSyncForced   prometheus.Counter
 
+	// localMerges counts tasks named in a local merge report, by result
+	// (advanced, duplicate, unknown_task); see merges.go. In a repo where
+	// both a webhook and a developer's clone report merges, plenty of
+	// "duplicate" is the healthy signal — its disappearance means one of the
+	// two reporters has stopped.
+	localMerges *prometheus.CounterVec
+
 	// eventSubscriberSeeks counts admin seeks of a subscriber's offsets, by
 	// subscriber; see events.go and observeEventSubscriberSeek.
 	eventSubscriberSeeks *prometheus.CounterVec
