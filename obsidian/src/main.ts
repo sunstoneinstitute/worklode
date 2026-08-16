@@ -7,7 +7,7 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl } from "obsidian";
 import { WorklodeApiError, WorklodeClient, type HttpTransport } from "./api/client";
 import type { ProjectMembers } from "./serialize/note";
-import { applyMirror, desiredNotes, type MirrorStats } from "./sync/mirror";
+import { applyMirror, desiredNotes, isSafePathSegment, type MirrorStats } from "./sync/mirror";
 import { ObsidianVaultWriter } from "./vault/writer";
 
 interface WorklodeSettings {
@@ -35,24 +35,6 @@ const obsidianHttp: HttpTransport = async (req) => {
   const res = await requestUrl({ url: req.url, method: req.method, headers: req.headers, throw: false });
   return { status: res.status, text: res.text };
 };
-
-/** The mount root is the only writable territory: every write, delete and
- *  (for purge) recursive rmdir happens under it, so this has to reject
- *  anything that could resolve outside the folder it names. A single path
- *  segment only -- no nesting; Task 10 tracks making that work as a
- *  feature, refused consistently for now rather than half-working (the
- *  index note silently drops today for a nested root, since mirror.ts's
- *  own isSafeId also refuses "/"). Never "." or ".." -- a root of "."
- *  resolves to the vault root itself, which would turn a sync or purge
- *  into an operation on the whole vault. Never empty. Never carrying
- *  leading/trailing whitespace: the caller trims once and validates and
- *  uses that same trimmed value, so a root that fails this check because
- *  of whitespace was never silently trimmed-then-used elsewhere. */
-function isSafeMountRoot(root: string): boolean {
-  if (root.length === 0 || root !== root.trim()) return false;
-  if (root.includes("/") || root.includes("\\")) return false;
-  return root !== "." && root !== "..";
-}
 
 /** "" means no filter (sync every project); otherwise a trimmed, non-empty
  *  comma-separated id list. */
@@ -163,7 +145,12 @@ export default class WorklodePlugin extends Plugin {
       new Notice("Worklode: set the API token in plugin settings before syncing.");
       return;
     }
-    if (!isSafeMountRoot(mountRoot)) {
+    // The mount root is the only writable territory: every write, delete and
+    // (for purge) recursive rmdir happens under it. It is validated with the
+    // same predicate mirror.ts applies to backbone ids, so a root accepted
+    // here can never be one desiredNotes then judges unsafe. A single path
+    // segment only: nesting is refused consistently rather than half-working.
+    if (!isSafePathSegment(mountRoot)) {
       new Notice(
         'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before syncing.',
       );
@@ -210,7 +197,7 @@ export default class WorklodePlugin extends Plugin {
     }
 
     const mountRoot = this.settings.mountRoot.trim();
-    if (!isSafeMountRoot(mountRoot)) {
+    if (!isSafePathSegment(mountRoot)) {
       new Notice(
         'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before purging.',
       );

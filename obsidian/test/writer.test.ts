@@ -3,18 +3,20 @@ import type { DataAdapter, DataWriteOptions, ListedFiles, Stat } from "obsidian"
 import { ObsidianVaultWriter } from "../src/vault/writer";
 
 /** In-memory DataAdapter fake, backing only the methods ObsidianVaultWriter
- *  actually calls (exists/list/read/write/mkdir/remove/rmdir); everything
- *  else throws, so a stray call is a loud test failure rather than a silent
- *  no-op. list()/exists() resolve case-insensitively, mirroring a
+ *  actually calls (exists/list/read/write/mkdir/trashLocal/rmdir); everything
+ *  else throws -- `remove` included, so a sync-time delete that regressed
+ *  from the recoverable trashLocal back to a permanent unlink fails the
+ *  suite. list()/exists() resolve case-insensitively, mirroring a
  *  case-insensitive filesystem (the common case for desktop Obsidian) --
  *  the scenario the writer's own case-sensitive prefix check in list() has
- *  to defend against. write/read/remove/mkdir/rmdir stay exact-match: the
+ *  to defend against. write/read/trashLocal/mkdir/rmdir stay exact-match: the
  *  writer always uses one consistently-cased root per call chain, so
  *  fidelity there isn't needed to exercise the case-mismatch guard. */
 class FakeAdapter implements DataAdapter {
   files = new Map<string, string>();
   dirs = new Set<string>();
   mkdirCalls = 0;
+  trashed: string[] = [];
 
   private normalize(path: string): string {
     if (path === ".") return "";
@@ -76,8 +78,14 @@ class FakeAdapter implements DataAdapter {
     this.dirs.add(path);
   }
 
-  async remove(path: string): Promise<void> {
-    if (!this.files.delete(path)) throw new Error(`not found: ${path}`);
+  /** Obsidian's local trash: the file leaves its folder and lands under
+   *  ".trash", recoverable, rather than being unlinked. */
+  async trashLocal(path: string): Promise<void> {
+    const content = this.files.get(path);
+    if (content === undefined) throw new Error(`not found: ${path}`);
+    this.files.delete(path);
+    this.trashed.push(path);
+    this.files.set(`.trash/${path.slice(path.lastIndexOf("/") + 1)}`, content);
   }
 
   async rmdir(path: string, recursive: boolean): Promise<void> {
@@ -119,8 +127,8 @@ class FakeAdapter implements DataAdapter {
   trashSystem(_path: string): Promise<boolean> {
     throw new Error("not implemented in test fake");
   }
-  trashLocal(_path: string): Promise<void> {
-    throw new Error("not implemented in test fake");
+  remove(_path: string): Promise<void> {
+    throw new Error("remove() is a permanent unlink; sync-time deletion must use trashLocal()");
   }
   rename(_path: string, _newPath: string): Promise<void> {
     throw new Error("not implemented in test fake");
@@ -243,6 +251,10 @@ describe("ObsidianVaultWriter.remove", () => {
     await writer.remove(ROOT, "worklode/tasks/WL-1.md");
 
     expect(adapter.files.has("Worklode/worklode/tasks/WL-1.md")).toBe(false);
+    // Trashed, not unlinked: a sync deletes foreign .md files under the root
+    // too, so the delete has to be recoverable.
+    expect(adapter.trashed).toEqual(["Worklode/worklode/tasks/WL-1.md"]);
+    expect(adapter.files.get(".trash/WL-1.md")).toBe("content");
     // Both "worklode/tasks" and "worklode" are now empty and pruned...
     expect(await adapter.exists("Worklode/worklode/tasks")).toBe(false);
     expect(await adapter.exists("Worklode/worklode")).toBe(false);

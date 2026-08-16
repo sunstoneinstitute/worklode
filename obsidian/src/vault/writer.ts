@@ -1,7 +1,7 @@
 // The VaultWriter implementation backed by Obsidian's vault adapter. Uses
-// the adapter's path-based API (list/read/write/remove/mkdir/rmdir) rather
-// than app.vault.create/modify: it maps directly onto VaultWriter and does
-// not need a TFile handle for a file the plugin is about to overwrite.
+// the adapter's path-based API (list/read/write/trashLocal/mkdir/rmdir)
+// rather than app.vault.create/modify: it maps directly onto VaultWriter and
+// does not need a TFile handle for a file the plugin is about to overwrite.
 
 import type { DataAdapter } from "obsidian";
 import type { VaultWriter } from "../sync/mirror";
@@ -69,13 +69,17 @@ export class ObsidianVaultWriter implements VaultWriter {
     }
   }
 
-  /** Removes the file, then prunes any ancestor directory left empty by the
-   *  removal (stopping at root), so a deleted project does not leave a
-   *  husk of empty folders under the mount. */
+  /** Moves the file to the vault's local trash, then prunes any ancestor
+   *  directory left empty by the removal (stopping at root), so a deleted
+   *  project does not leave a husk of empty folders under the mount.
+   *  trashLocal, not remove: a sync deletes every .md under the root the
+   *  backbone does not imply, so a mount root pointed at a folder of the
+   *  user's own notes must leave them recoverable. Purge, which is explicit
+   *  and confirmed, keeps its hard delete. */
   async remove(root: string, path: string): Promise<void> {
     assertInsideRoot(path);
     const full = `${root}/${path}`;
-    await this.adapter.remove(full);
+    await this.adapter.trashLocal(full);
     await this.pruneEmptyDirs(root, full.slice(0, full.lastIndexOf("/")));
   }
 
