@@ -1,0 +1,10 @@
+{
+  "id": "worklode",
+  "name": "Worklode",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Mirror a Worklode instance into this vault: a folder per project, a note per document and task.",
+  "author": "Sunstone Institute",
+  "authorUrl": "https://sunstone.institute",
+  "isDesktopOnly": false
+}

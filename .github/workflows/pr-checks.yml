@@ -100,6 +100,11 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_test.yml
 
+  obsidian:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    uses: ./.github/workflows/_obsidian.yml
+
   build-image:
     needs: gate
     if: needs.gate.outputs.run == 'true'
