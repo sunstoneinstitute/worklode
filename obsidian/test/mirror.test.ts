@@ -58,11 +58,8 @@ const ROOT = "/vault/Worklode Mount";
 const ROOT_NAME = "Worklode Vault";
 const SYNCED_AT = "2026-08-16T09:12:00Z";
 
-/** In-memory VaultWriter for tests. Guards against any path escaping the
- *  mount root the way a real filesystem-backed writer would refuse to (or
- *  worse, silently wouldn't) -- so a mirror.ts regression that ever tries
- *  to write outside root fails the test loudly instead of getting masked
- *  by the Map happily accepting any key. */
+/** In-memory VaultWriter for tests. Throws if ever asked to touch a path
+ *  outside the mount root, so a mirror.ts regression fails the test loudly. */
 class MapVaultWriter implements VaultWriter {
   files = new Map<string, string>();
   written: string[] = [];
@@ -233,6 +230,54 @@ describe("applyMirror", () => {
     expect(remaining).not.toContain("worklode/tasks/WL-1.md");
   });
 
+  it("never deletes a non-.md file under root", async () => {
+    const { project, byProject } = fullScenario();
+    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+
+    const writer = new MapVaultWriter();
+    // A file a user dropped directly into the mount; not a mirror note, so
+    // it must never be swept up by the delete pass.
+    writer.files.set(`${ROOT}/worklode/attachment.png`, "not markdown");
+
+    const stats = await applyMirror(writer, ROOT, desired);
+
+    expect(stats.removed).toBe(0);
+    const remaining = await writer.list(ROOT);
+    expect(remaining).toContain("worklode/attachment.png");
+  });
+
+  it("never touches a path outside the mount root when a doc/task's own project field disagrees with its grouping key", async () => {
+    // The bug this guards against: a doc/task's rendered path comes from
+    // its own `project` field (note.ts's *ToNote), not from the key it was
+    // grouped under in byProject. A backbone response could carry either
+    // one hostile while the other looks fine.
+    const project = fixtureProject({ id: "worklode" });
+    const hostileDoc = fixtureDoc({ id: "WL-SPEC-9", project: "../../../escape" });
+    const hostileTask = fixtureTask({ id: "WL-9", project: "../../../escape" });
+    const goodTask = fixtureTask({ id: "WL-1", project: "worklode" });
+
+    const byProject = new Map([["worklode", { docs: [hostileDoc], tasks: [hostileTask, goodTask] }]]);
+
+    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+
+    expect(desired.conflicts.some((c) => c.includes("WL-SPEC-9"))).toBe(true);
+    expect(desired.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
+    expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
+    expect(desired.notes.map((n) => n.path).sort()).toEqual(
+      ["Worklode Vault.md", "worklode/tasks/WL-1.md", "worklode/worklode.md"].sort(),
+    );
+
+    const writer = new MapVaultWriter();
+    const stats = await applyMirror(writer, ROOT, desired);
+
+    expect(stats.conflicts.some((c) => c.includes("WL-SPEC-9"))).toBe(true);
+    expect(writer.written.every((p) => !p.includes(".."))).toBe(true);
+    for (const key of writer.files.keys()) {
+      expect(key.startsWith(`${ROOT}/`)).toBe(true);
+      expect(key.includes("..")).toBe(false);
+    }
+  });
+
   it("never touches a path outside the mount root", async () => {
     const badProject = fixtureProject({ id: "../escape", name: "Escape" });
     const goodProject = fixtureProject({ id: "worklode" });
@@ -251,8 +296,7 @@ describe("applyMirror", () => {
 
     expect(desired.conflicts.some((c) => c.includes("../escape"))).toBe(true);
     expect(desired.conflicts.some((c) => c.includes("a/b"))).toBe(true);
-    // The whole "../escape" project subtree is unrepresentable without a
-    // safe directory, so none of its notes exist in the desired set.
+    // The whole "../escape" subtree has no safe directory, so none of its notes exist.
     expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
     expect(desired.notes.some((n) => n.path.includes("a/b"))).toBe(false);
     // Only the good project's index/project/task notes remain.
@@ -261,8 +305,7 @@ describe("applyMirror", () => {
     );
 
     const writer = new MapVaultWriter();
-    // Should not throw: the writer's own guard would reject any path that
-    // ever escaped the mount root, which is what "never touches" asserts.
+    // Should not throw: the writer's guard rejects any path outside root.
     const stats = await applyMirror(writer, ROOT, desired);
 
     expect(stats.conflicts.some((c) => c.includes("../escape"))).toBe(true);
@@ -287,6 +330,18 @@ describe("desiredNotes conflicts", () => {
     expect(desired.conflicts.some((c) => c.includes(collidingDoc.id))).toBe(true);
     // The note is still produced -- the backbone block wins, per note.ts.
     expect(desired.notes.some((n) => n.path === "worklode/docs/WL-SPEC-1.md")).toBe(true);
+  });
+
+  it("skips the index and records a conflict when the root name is unsafe", () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
+
+    const desired = desiredNotes([project], byProject, "../evil", SYNCED_AT);
+
+    expect(desired.conflicts.some((c) => c.includes("../evil"))).toBe(true);
+    expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
+    // The rest of the sync is unaffected.
+    expect(desired.notes.some((n) => n.path === "worklode/worklode.md")).toBe(true);
   });
 });
 
