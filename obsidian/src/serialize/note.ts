@@ -279,7 +279,19 @@ export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]):
   };
 }
 
-function renderIndexBody(projects: Project[]): string {
+/** The docs and tasks belonging to one project, keyed by project id — the
+ *  same shape Task 8's desiredNotes builds and passes straight through, so
+ *  its call site costs one argument. A project id absent from the map (the
+ *  edge case a map lookup invites) has zero of both — rendered as `0`, the
+ *  project itself is never omitted. */
+type ProjectMembers = { docs: Doc[]; tasks: TaskListDetail[] };
+
+function projectCounts(id: string, byProject: Map<string, ProjectMembers>): { docs: number; tasks: number } {
+  const members = byProject.get(id);
+  return { docs: members?.docs.length ?? 0, tasks: members?.tasks.length ?? 0 };
+}
+
+function renderIndexBody(projects: Project[], byProject: Map<string, ProjectMembers>): string {
   const byId = new Map(projects.map((p) => [p.id, p]));
   const lines = [
     GENERATED_NOTICE,
@@ -288,14 +300,21 @@ function renderIndexBody(projects: Project[]): string {
     "",
     ...sortIds(projects.map((p) => p.id)).map((id) => {
       const p = byId.get(id)!;
-      return `- ${wikilink(p.id)} ${p.name}`;
+      const counts = projectCounts(id, byProject);
+      return `- ${wikilink(p.id)} ${p.name} — ${counts.docs} docs, ${counts.tasks} tasks`;
     }),
   ];
   return `${lines.join("\n")}\n`;
 }
 
-export function indexToNote(projects: Project[], rootName: string, syncedAt: string): Note {
-  const etag = computeEtag({ projects, syncedAt });
+export function indexToNote(
+  projects: Project[],
+  byProject: Map<string, ProjectMembers>,
+  rootName: string,
+  syncedAt: string,
+): Note {
+  const counts = sortIds(projects.map((p) => p.id)).map((id) => ({ id, ...projectCounts(id, byProject) }));
+  const etag = computeEtag({ projects, counts, syncedAt });
 
   const wl: WlBlock = {
     type: "index",
@@ -306,7 +325,7 @@ export function indexToNote(projects: Project[], rootName: string, syncedAt: str
     etag,
   };
 
-  const body = renderIndexBody(projects);
+  const body = renderIndexBody(projects, byProject);
   const content = renderNote({ aliases: [rootName], wl }, rootName, body);
 
   return {
