@@ -2004,44 +2004,6 @@ func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
 	}
 }
 
-func TestSyncDocsWire(t *testing.T) {
-	var gotPath string
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotBody)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"dry_run":false,"added":1,"updated":0,"unchanged":0,
-			"results":[{"id":"WL-SPEC-34","kind":"spec","outcome":"added"}]}`)
-	}))
-	defer srv.Close()
-
-	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_" + strings.Repeat("a", 40)})
-	rep, _, err := c.SyncDocs(context.Background(), cli.DocSyncInput{
-		Project: "wl", SourceBranch: "main", Force: true,
-		Docs: []cli.DocUpsert{{Kind: "spec", Ordinal: "34", Status: "accepted",
-			Title: "T", Body: "B", Frontmatter: json.RawMessage(`{"status":"accepted"}`)}},
-	})
-	if err != nil {
-		t.Fatalf("SyncDocs: %v", err)
-	}
-	if gotPath != "/api/v1/docs/sync" {
-		t.Errorf("path = %q", gotPath)
-	}
-	if gotBody["project"] != "wl" || gotBody["force"] != true || gotBody["source_branch"] != "main" {
-		t.Errorf("body = %v", gotBody)
-	}
-	if gotBody["dirty"] != false || gotBody["dry_run"] != false {
-		t.Errorf("body = %v", gotBody)
-	}
-	if docs, ok := gotBody["docs"].([]any); !ok || len(docs) == 0 {
-		t.Errorf("body docs = %v, want a non-empty array", gotBody["docs"])
-	}
-	if rep.Added != 1 || rep.Results[0].ID != "WL-SPEC-34" {
-		t.Errorf("report = %+v", rep)
-	}
-}
-
 // pollClientEvents polls ListEvents(f) until it returns at least want
 // events, or fails the test — the same cluster-wide-commit-horizon
 // accommodation as pollEvents in internal/api/events_test.go and

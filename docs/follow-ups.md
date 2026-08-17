@@ -334,13 +334,6 @@ Design items landed in spec 025. These are the mechanical leftovers.
   intake and promotion stores do not exist, so mode selection cannot see them.
   Spec 032's `PinnedFocus`/`NextDecision` no longer belong here — both are
   built.
-- `[P1]` **`worklode_doc_upserts_total` is incremented inside `ApplyDocSync`'s
-  transaction (spec 025 follow-up).** `internal/store/docs.go` calls
-  `s.metrics.docUpsert(outcome)` per doc before the transaction commits; a
-  mid-batch DB failure that rolls the tx back leaves the counter already
-  advanced for docs earlier in the batch, even though no rows were written.
-  Extreme edge (requires a failure partway through a multi-doc sync). Move the
-  increment to after commit when this is next touched.
 
 ## From the 2026-08-14 spec-corpus consolidation (part 5)
 

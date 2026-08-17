@@ -145,11 +145,6 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/inbox/link":    guarded(permInboxTriage),
 	"POST /api/v1/inbox/import":  guarded(permInboxAdmin),
 
-	// --- documents -----------------------------------------------------------
-	"POST /api/v1/docs/sync": guarded(permDocWrite),
-	"GET /api/v1/docs":       guarded(permDocRead),
-	"GET /api/v1/docs/{id}":  guarded(permDocRead),
-
 	// --- events (spec 025 §15/§18) --------------------------------------------
 	"GET /api/v1/events": guarded(permEventRead),
 	// A route of its own rather than ?follow=1 on the line above: the table

@@ -85,9 +85,6 @@ const (
 	permSkillRead  Permission = "skill.read"
 	permSkillAdmin Permission = "skill.admin"
 
-	permDocRead  Permission = "doc.read"
-	permDocWrite Permission = "doc.write"
-
 	permInboxRead   Permission = "inbox.read"
 	permInboxTriage Permission = "inbox.triage"
 	permInboxAdmin  Permission = "inbox.admin"
@@ -147,9 +144,6 @@ var grants = map[Permission][]Role{
 
 	permSkillRead:  {RoleUser, RoleAdmin},
 	permSkillAdmin: {RoleAdmin},
-
-	permDocRead:  {RoleUser, RoleAdmin},
-	permDocWrite: {RoleUser, RoleAdmin},
 
 	permInboxRead:   {RoleUser, RoleAdmin},
 	permInboxTriage: {RoleUser, RoleAdmin},
