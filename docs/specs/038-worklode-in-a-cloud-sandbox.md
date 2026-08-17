@@ -1,0 +1,230 @@
+---
+status: draft
+requires:
+- docs/specs/001-identity-and-authentication.md
+- docs/specs/004-execution-backbone.md
+- docs/specs/008-worklode-plugin.md
+- docs/specs/016-org-wide-skills.md
+- docs/specs/017-task-secrets.md
+- docs/specs/032-project-cockpit.md
+---
+# Spec 038 — Worklode in a cloud sandbox
+
+## 0. Why {#sec-0}
+
+Worklode's agent-side integration assumes a laptop: a `lode` binary already on `PATH`, a keychain
+holding its token, `lode install` long since run, and a human present to restart a session when the
+plugin changes. A coding agent started from a phone, running in a provider-managed cloud sandbox,
+has none of that. It has a fresh checkout, an ephemeral filesystem, no keychain, and no operator to
+intervene.
+
+Nothing about the execution *model* needs to change to support it. The backbone is reachable over a
+public API ingress, so a sandbox is an ordinary CLI client: it claims, heartbeats and closes tasks
+exactly as a laptop does. What is missing is **provisioning** — and one genuine behavioural
+difference, in §4.2, where the laptop's install-then-work order cannot hold.
+
+This spec makes the environment reproducible from the repository, so that the same definition serves
+a laptop, CI, a worker image, and a sandbox without four descriptions of one thing.
+
+## 1. What changes, and what does not {#sec-1}
+
+Unchanged, and deliberately so:
+
+| Concern | Why it needs nothing |
+|---|---|
+| Leases and worktrees | `lode next` creates a worktree under `.worktrees/` in a sandbox exactly as on a laptop. One code path, one lease model, one binding shape for the sweeper, `resume` and `status` to understand. |
+| Heartbeat | Commits are the heartbeat, carried to the API by the git hooks the image installed. A sandbox that dies lets its lease expire, which is already the intended behaviour rather than a gap. |
+| Token plumbing | `LODE_SERVER` and `LODE_TOKEN` already override both the config file and the keychain, so the absence of a keychain is a non-event. |
+| Skills | 016's lazy fetch links `<worktree>/.agents/skills/<name>` per task. 008 §17.3 already states the intent: a container that never ran `lode install` still gets exactly the skills its task named. |
+
+A sandbox is therefore not a new class of executor. It is the existing executor with its environment
+built from the repository rather than accumulated by hand.
+
+## 2. The bootstrap is repo-committed {#sec-2}
+
+`scripts/bootstrap.sh` takes a bare checkout to a working environment, and is the **only**
+description of that environment. CI, the worker image build, a laptop and a sandbox all call it.
+Everything downstream — including every image in §3 — is a cache of what this script would do.
+
+It delegates rather than restates. Each tool this repository needs already has exactly one source of
+truth, and the bootstrap consumes those sources instead of copying their versions:
+
+| Tool | Single source | Consumed via |
+|---|---|---|
+| Go | `go.mod` | `go-version-file: go.mod` in every workflow |
+| templ | `tool github.com/a-h/templ/cmd/templ` in `go.mod` | `go tool templ` |
+| Tailwind | `scripts/tailwind.sha256` — version plus per-platform SHA256 | `scripts/fetch-tailwind.sh` |
+
+### 2.1 Why not a tool manager, yet {#sec-2.1}
+
+A cross-platform tool manager (`mise` and its `.tool-versions` ancestry) is the obvious candidate for
+"one declarative environment file". It is declined for now, on evidence rather than taste.
+
+The problem it solves — several configurations restating one version until they drift — does not
+exist here. There is no `.tool-versions`, no `devcontainer.json`, and no duplicated version literal:
+the table above has three entries and three sources, each read rather than mirrored. Adopting a tool
+manager today adds a fourth mechanism to unify three that are not drifting, and for Go it must
+either duplicate `go.mod`'s version — creating exactly the drift it exists to prevent — or defer to
+it, in which case it manages nothing. Its Windows support is also its weakest, and `_build-windows.yml`
+makes Windows a real build target.
+
+What it would buy is a single bootstrap verb on a bare machine, which §2 already provides.
+
+**The trigger to revisit is a second runtime, not a second opinion.** The `obsidian/` TypeScript
+plugin introduces one: a Node version needing a pin that no existing source of truth carries. Adopt a
+tool manager then, with that pin as its first real job, rather than retrofitting it onto three
+things that are fine.
+
+### 2.2 System packages stay in the image {#sec-2.2}
+
+A declarative, platform-abstracted list of system libraries — naming each dependency's `apt`, `brew`
+and `winget` package — is deliberately **not** specified.
+
+System libraries are needed for building; building happens in the worker image; that image is Linux
+by definition. A three-way name mapping would be a schema Worklode owns, that no build exercises on
+two of its three platforms, and that goes stale silently — a wrong `winget` name survives a year
+because nothing reads it. The cost is real and the coverage is imaginary.
+
+System packages therefore live in the Dockerfile, which is honest about being Linux-only, and
+`bootstrap.sh` fails loudly naming what is missing when a laptop lacks something. Revisit only when a
+concrete case appears where a laptop needs a system library that CI does not.
+
+## 3. Worker images {#sec-3}
+
+An image exists so a worker does not repeat, on every run, work that is identical across runs. It is
+an optimisation over §2, never a second source of truth: an image whose contents disagree with
+`bootstrap.sh` is a defect in the image.
+
+### 3.1 The image family {#sec-3.1}
+
+The repository's existing root `Dockerfile` is the **server** image — distroless, non-root, no shell
+and no package manager. It is deliberately hostile to being a worker, so worker images are a new
+family beside it rather than a refactor of it:
+
+| Image | Contents | Purpose |
+|---|---|---|
+| `docker/base/Dockerfile` | shell, `git`, CA certificates, `lode` | The minimum that can claim a task and run a hook |
+| `docker/generic/Dockerfile` | base plus the toolchains `bootstrap.sh` installs | Covers the typical repository; the default when a project declares nothing |
+| `<repo>/.worklode/Dockerfile` | `FROM` one of the above | A project's own additions, versioned with the project |
+
+A project that needs nothing special declares nothing and gets `docker/generic`.
+
+### 3.2 Tagging is content-addressed {#sec-3.2}
+
+No mechanism detects that a Dockerfile changed. Detection is unnecessary, and a detector is a thing
+that can miss an edit.
+
+A worker image is tagged by a digest over its inputs — the base image digest, `.worklode/Dockerfile`,
+and the pin files the bootstrap reads (`go.mod`, `scripts/tailwind.sha256`). A change to any input
+yields a different tag by construction. A starting worker requests the tag its checkout implies and
+either finds it, which is the fast path, or does not, which *is* the build trigger. Staleness is not
+possible: an image that exists under a tag is, by definition, built from those inputs.
+
+## 4. The sandbox session {#sec-4}
+
+### 4.1 The entry point is the CLI, not the plugin {#sec-4.1}
+
+A sandbox session starts work with `lode next --json` and works the worktree it returns.
+
+The `/lode:*` commands are not available to it. Enabling `lode@worklode` in `.claude/settings.json`
+is not installing it (008 §17); a fresh checkout needs a plugin install **and a session restart**
+before any slash command exists, and a session started from a phone cannot restart itself mid-run.
+The plugin remains the laptop's ergonomics; the CLI is the contract. This is the shape the
+`lode-worker` agent already uses, so the sandbox path is not a new one.
+
+### 4.2 Hooks must arrive before the session, not during it {#sec-4.2}
+
+This is the one place a sandbox genuinely differs, rather than merely being provisioned differently.
+
+`lode install` writes the agent's lifecycle hooks into its settings file. On a laptop that happens
+long before any session starts. In a sandbox the agent is **already running** when the checkout
+appears, so hooks written at that point are too late to be that session's own lifecycle hooks —
+`SessionStart` has already fired.
+
+The hooks are therefore installed at **image build time**: `docker/base` runs `lode install --agent
+all`, the flag 008 §17.2 added for exactly this. Two alternatives are rejected. Committing the hook
+configuration to the repository drifts from whatever CLI version the image carries, and having the
+session install hooks for itself accepts a session whose first lifecycle event was never delivered.
+
+`lode install --no-statusline` in worker images. The status line renders for a human watching a
+terminal, which no sandbox session has, and the `claude-ctx-<session>.json` bridge file it writes has
+no reader anywhere in the tree. It is a moving part in the environment that is hardest to debug, and
+it buys nothing there.
+
+### 4.3 Identity {#sec-4.3}
+
+A sandbox session authenticates with `LODE_SERVER` and `LODE_TOKEN` injected into its environment.
+This needs no server change: the environment already overrides both the config file and the keychain.
+
+It is **transitional and known to be so**. The token is the operator's own, long-lived, and sitting
+in a provider-managed sandbox, and every action it takes is attributed to the operator rather than to
+an agent — which 017 names as the thing least privilege exists to prevent. The replacement is a
+short-lived token bound to the claimed task and expiring with its lease. What that changes is the
+*source* of the token, not its plumbing, so §5's seam is where the change lands and nothing in this
+section is rewritten by it.
+
+### 4.4 Secrets {#sec-4.4}
+
+Task secrets are out of scope here and specified by 017, which already treats this environment as its
+motivating case: detached and remote executors cannot fetch a credential interactively at all, so a
+declared, pre-materialised set is what makes execution off the operator's laptop possible. A sandbox
+inherits that design when it is built; until then, a task needing a secret is not a task for a
+sandbox.
+
+## 5. Seams for backbone-initiated dispatch {#sec-5}
+
+The backbone does not launch sandboxes. When it does — 032's agent pools, concurrency and
+confirmation surface — dispatch should be the human path parameterised, not a second implementation.
+Four seams keep that true, and each is load-bearing today rather than speculative:
+
+| Seam | Human path | What dispatch substitutes |
+|---|---|---|
+| Image selection | The tag the checkout implies (§3.2) | The same tag, resolved server-side |
+| Provisioning | `bootstrap.sh` | The same script, unchanged |
+| Token acquisition | `LODE_TOKEN` in the environment (§4.3) | A minted task-scoped token in the same variable |
+| Entry point | `lode next --json` | The same command, with the task id supplied |
+
+Nothing here requires dispatch to exist. The point is that when it arrives, no part of §4 is
+rewritten to accommodate it.
+
+## 6. Testing {#sec-6}
+
+- **Environment authentication.** A session holding only `LODE_SERVER` and `LODE_TOKEN`, with no
+  configuration file and no keychain, claims and closes a task. This is the genuinely new code path
+  and belongs in `e2e/`, which drives public surfaces only.
+- **Image and script agree.** A CI job builds `docker/base` and `docker/generic` and runs
+  `bootstrap.sh` inside each. Because the image is a cache of the script (§3), divergence between
+  them is the failure that matters, and it is the one a passing unit suite cannot see.
+- **Content addressing.** Changing any tagged input yields a different tag; changing nothing yields
+  the same one.
+
+## 7. Out of scope {#sec-7}
+
+- **Backbone-initiated dispatch.** §5 names its seams and stops there. Holding cloud credentials and
+  driving a provider's sandbox API is 032's work.
+- **Task secrets.** 017 owns them (§4.4).
+- **A tool manager.** Declined with a named trigger (§2.1), not forgotten.
+- **A cross-platform system-package schema.** Declined on cost (§2.2).
+- **Windows sandboxes.** Windows is a build target, not an execution environment for workers.
+
+## 8. Open questions {#sec-8}
+
+1. Where do worker images live, and who may pull them? A private registry the sandbox can reach is a
+   reachability question of the same kind as the API ingress, and it has not been settled.
+2. Does the sandbox provider guarantee a setup step running before the agent session starts? §4.2
+   depends on hooks pre-existing the session; if no such step exists, the image must be the *only*
+   supported sandbox path rather than the fast one.
+3. What builds a project's `.worklode/Dockerfile` on first use, and who pays for the wait? The
+   content-addressed tag says when a build is needed, not who runs it.
+
+## 9. Acceptance criteria {#sec-9}
+
+1. `scripts/bootstrap.sh` exists, is the only description of the environment, and takes a bare
+   checkout to a state where `go test ./...` and `go generate ./...` both succeed.
+2. CI calls `bootstrap.sh` rather than restating any tool version.
+3. `docker/base` and `docker/generic` build, carry hooks installed at build time, and carry no status
+   line.
+4. A sandbox holding only `LODE_SERVER` and `LODE_TOKEN` claims a task, commits, and closes it
+   through the public API, with the lease bound to a worktree exactly as on a laptop.
+5. Changing a tagged input produces a different worker image tag; changing none produces the same
+   tag.
