@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["DOM", "ES2022"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "resolveJsonModule": true,
+    // Mandatory, not a convenience: obsidian.d.ts does not typecheck on its
+    // own (TS2420 on Menu/Modal/PopoverSuggest), so removing this breaks CI.
+    "skipLibCheck": true
+  },
+  "include": ["src", "test"]
+}

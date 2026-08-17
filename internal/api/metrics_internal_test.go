@@ -236,6 +236,22 @@ func TestObserveDocSync(t *testing.T) {
 	(&server{}).observeDocSync(nil, false, nil, 0)
 }
 
+func TestObserveListExpansion(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeListExpansion("docs", "body")
+	s.observeListExpansion("docs", "body")
+
+	if got := testutil.ToFloat64(s.listExpansions.WithLabelValues("docs", "body")); got != 2 {
+		t.Errorf("listExpansions{docs,body} = %v, want 2", got)
+	}
+
+	// Nil-safe: a server built without initMetrics must not panic.
+	(&server{}).observeListExpansion("docs", "body")
+}
+
 // The horizon gauge is what tells "the log is quiet" apart from "the commit
 // horizon is stuck". It reads at scrape time, and a failed read must surface
 // as a scrape error rather than as a plausible zero.

@@ -32,6 +32,16 @@ go tool templ generate --watch        # regenerate *_templ.go on change
 go generate ./...                     # regenerate both committed artifacts
 ```
 
+The Obsidian plugin (`obsidian/`) is the repo's only Node package and uses
+**pnpm**, pinned by `package.json`'s `packageManager` and supplied by corepack —
+`npm` there will fight the lockfile:
+
+```bash
+corepack enable pnpm                            # once per machine
+pnpm -C obsidian install --frozen-lockfile
+pnpm -C obsidian test                           # also: typecheck, build
+```
+
 Store tests need a reachable Postgres with **pgvector**
 (CI uses `pgvector/pgvector:pg17`); default DSN
 `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,
@@ -118,6 +128,16 @@ architecture facts and the queryable view of both belong to the data-platform
 knowledge graph (specs 006/025), which receives documents by projection.
 No fact has two owners — keep new state on the right side of that split.
 
+## The Obsidian mirror
+
+`obsidian/` is a top-level TypeScript Obsidian plugin, built and shipped
+independently of the Go binary, that mirrors a Worklode instance's projects,
+docs, and tasks into a machine-owned vault folder. It is a read-only client
+of the public `/api/v1` HTTP API — it never writes back and has no store or
+server access. Its wire types (`obsidian/src/api/types.ts`) are hand-kept
+against the `internal/api` serializers that produce them — today's reference,
+until ADR 036 makes `internal/model` the one declaration they mirror.
+
 ## Specs, plans, tasks
 
 The model (spec 025; files under `docs/` are the transitional mirror until it
@@ -147,6 +167,11 @@ to prove the real user path works.
 the Go build. Docs-only PRs (only `*.md`, `docs/`, `www/`) skip CI checks;
 the `can-be-tested` label forces a run. `docs/specs/`, `docs/plans/` and
 `plugins/` are exempt from that skip — their markdown is input, not prose.
+The `obsidian` job is the one check scoped to a subtree: it runs only when a PR
+touches `obsidian/` or `_obsidian.yml`, decided by a `gate` output rather than a
+`paths:` filter, because a reusable workflow cannot take one. `can-be-tested`
+does not force it — that label authorises CI, it does not make an untouched
+subtree worth rebuilding.
 
 ## The lode plugin
 

@@ -692,6 +692,59 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
+// TaskEdges is one task's edges, in the same split ListEdges returns.
+type TaskEdges struct {
+	Out []Edge
+	In  []Edge
+}
+
+// ListEdgesForTasks returns the edges touching each of ids, keyed by task id,
+// in one query. The bulk form of ListEdges: a list endpoint that reported
+// edges by calling ListEdges per row would issue one query per task. Tasks
+// with no edges are absent from the map; ids is empty-safe.
+//
+// Ordering within each slice matches ListEdges (from_task, to_task, type) so
+// callers see the same sequence whichever reader they used.
+func (s *Store) ListEdgesForTasks(ctx context.Context, ids []string) (map[string]TaskEdges, error) {
+	m := map[string]TaskEdges{}
+	if len(ids) == 0 {
+		return m, nil
+	}
+
+	inSet := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		inSet[id] = true
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT from_task, to_task, type FROM task_edges WHERE from_task = ANY($1) OR to_task = ANY($1) ORDER BY from_task, to_task, type`,
+		ids)
+	if err != nil {
+		return nil, fmt.Errorf("list edges for tasks: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e Edge
+		if err := rows.Scan(&e.FromTask, &e.ToTask, &e.Type); err != nil {
+			return nil, fmt.Errorf("scan edge: %w", err)
+		}
+		if inSet[e.FromTask] {
+			te := m[e.FromTask]
+			te.Out = append(te.Out, e)
+			m[e.FromTask] = te
+		}
+		if inSet[e.ToTask] {
+			te := m[e.ToTask]
+			te.In = append(te.In, e)
+			m[e.ToTask] = te
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list edges for tasks: %w", err)
+	}
+	return m, nil
+}
+
 // deliveryRanks places the delivery states on one "how far delivered" axis, so
 // "at or past a repo's done_state" is a single integer comparison.
 //

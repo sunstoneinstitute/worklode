@@ -206,6 +206,22 @@ type edgeIn struct {
 	Type string `json:"type"`
 }
 
+// edgesToJSON converts a task's outgoing and incoming store edges to their
+// wire types, shared by getTask and listTasks' detail expansion so the two
+// projections cannot drift. Always returns non-nil slices, even for nil
+// input, so "edges" serializes as [] rather than null for an edgeless task.
+func edgesToJSON(out, in []store.Edge) ([]edgeOut, []edgeIn) {
+	outJSON := make([]edgeOut, 0, len(out))
+	for _, e := range out {
+		outJSON = append(outJSON, edgeOut{To: e.ToTask, Type: e.Type})
+	}
+	inJSON := make([]edgeIn, 0, len(in))
+	for _, e := range in {
+		inJSON = append(inJSON, edgeIn{From: e.FromTask, Type: e.Type})
+	}
+	return outJSON, inJSON
+}
+
 // parentRefJSON is the one-hop-up projection of a task's parent: enough to
 // render a breadcrumb without a second request.
 type parentRefJSON struct {
@@ -261,14 +277,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := taskDetailJSON{taskJSON: toTaskJSON(t), Blocked: blocked[id]}
-	resp.Edges.Out = make([]edgeOut, 0, len(out))
-	for _, e := range out {
-		resp.Edges.Out = append(resp.Edges.Out, edgeOut{To: e.ToTask, Type: e.Type})
-	}
-	resp.Edges.In = make([]edgeIn, 0, len(in))
-	for _, e := range in {
-		resp.Edges.In = append(resp.Edges.In, edgeIn{From: e.FromTask, Type: e.Type})
-	}
+	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
 		resp.Lease = &l
@@ -294,10 +303,25 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// taskListDetailJSON is one row of GET /api/v1/tasks?detail=true: the base
+// task plus the two field groups a list consumer cannot cheaply reconstruct.
+// It is not taskDetailJSON: hierarchy is derivable from the child_of edges
+// below, and lease is per-task ephemeral state that a cached list would
+// misreport. Both stay on GET /api/v1/tasks/{id}.
+type taskListDetailJSON struct {
+	taskJSON
+	Blocked bool `json:"blocked"`
+	Edges   struct {
+		Out []edgeOut `json:"out"`
+		In  []edgeIn  `json:"in"`
+	} `json:"edges"`
+}
+
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
-// containers.
+// containers; detail=true adds "blocked" and "edges" to each row (see
+// taskListDetailJSON) at the cost of two extra bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -334,11 +358,40 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Tasks []taskJSON `json:"tasks"`
-	}{Tasks: make([]taskJSON, 0, len(tasks))}
+	if q.Get("detail") != "true" {
+		resp := struct {
+			Tasks []taskJSON `json:"tasks"`
+		}{Tasks: make([]taskJSON, 0, len(tasks))}
+		for i := range tasks {
+			resp.Tasks = append(resp.Tasks, toTaskJSON(&tasks[i]))
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	s.observeListExpansion("tasks", "detail")
+
+	ids := make([]string, 0, len(tasks))
 	for i := range tasks {
-		resp.Tasks = append(resp.Tasks, toTaskJSON(&tasks[i]))
+		ids = append(ids, tasks[i].ID)
+	}
+	blocked, err := s.st.BlockedTaskIDs(r.Context())
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	edges, err := s.st.ListEdgesForTasks(r.Context(), ids)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp := struct {
+		Tasks []taskListDetailJSON `json:"tasks"`
+	}{Tasks: make([]taskListDetailJSON, 0, len(tasks))}
+	for i := range tasks {
+		row := taskListDetailJSON{taskJSON: toTaskJSON(&tasks[i]), Blocked: blocked[tasks[i].ID]}
+		te := edges[tasks[i].ID]
+		row.Edges.Out, row.Edges.In = edgesToJSON(te.Out, te.In)
+		resp.Tasks = append(resp.Tasks, row)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

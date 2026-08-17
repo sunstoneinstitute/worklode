@@ -290,3 +290,47 @@ func TestListDocsFiltersAndOrder(t *testing.T) {
 		t.Errorf("filtered = %+v, want just WL-SPEC-9", drafts)
 	}
 }
+
+// TestListDocsBody proves body is omitted by default and included verbatim,
+// in the same row order, when DocFilter.Body is set.
+func TestListDocsBody(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "wl", "Worklode", "WL"); err != nil {
+		t.Fatal(err)
+	}
+	syncDocs(t, s, "wl", DocSyncProvenance{SourceBranch: "main"},
+		[]DocUpsert{specUpsert(), planUpsert()})
+
+	bodyless, err := s.ListDocs(ctx, DocFilter{Project: "wl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bodyless) != 2 {
+		t.Fatalf("bodyless = %+v, want 2 docs", bodyless)
+	}
+	for _, d := range bodyless {
+		if d.Body != "" {
+			t.Errorf("%s: Body = %q, want empty", d.DocID, d.Body)
+		}
+	}
+
+	withBody, err := s.ListDocs(ctx, DocFilter{Project: "wl", Body: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(withBody) != 2 {
+		t.Fatalf("withBody = %+v, want 2 docs", withBody)
+	}
+	for i, d := range withBody {
+		if d.DocID != bodyless[i].DocID {
+			t.Fatalf("row order changed: withBody[%d]=%s, bodyless[%d]=%s", i, d.DocID, i, bodyless[i].DocID)
+		}
+	}
+	want := map[string]string{"WL-SPEC-34": specUpsert().Body, "WL-PLAN-34-1": planUpsert().Body}
+	for _, d := range withBody {
+		if d.Body != want[d.DocID] {
+			t.Errorf("%s: Body = %q, want %q", d.DocID, d.Body, want[d.DocID])
+		}
+	}
+}
