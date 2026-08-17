@@ -22,7 +22,8 @@ wikilinks, so Obsidian's graph view renders the task graph.
 ## Build and install
 
 ```bash
-npm ci && npm run build
+corepack enable pnpm          # once per machine; pnpm version comes from package.json
+pnpm install --frozen-lockfile && pnpm build
 mkdir -p "$VAULT/.obsidian/plugins/worklode"
 cp manifest.json main.js "$VAULT/.obsidian/plugins/worklode/"
 ```
@@ -30,6 +31,10 @@ cp manifest.json main.js "$VAULT/.obsidian/plugins/worklode/"
 `main.js` is not committed (it's build output), so a fresh clone must run the
 build before copying. Then, in Obsidian: Settings → Community plugins (needs
 Restricted Mode off) → enable "Worklode".
+
+This package uses pnpm, pinned by `package.json`'s `packageManager` field. It is
+the only Node package in the repo and shares no dependency tree with the Go
+build.
 
 ## Settings
 
