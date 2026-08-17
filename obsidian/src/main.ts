@@ -194,17 +194,26 @@ export default class WorklodePlugin extends Plugin {
         }
       }
 
+      // A server with no docs endpoint costs the doc notes and nothing else:
+      // projects and tasks still mirror, the notice says docs were skipped,
+      // and the delete pass is told not to prune doc notes it never
+      // enumerated. Every other failure still fails the sync.
+      let docsUnavailable = false;
       const byProject = new Map<string, ProjectMembers>();
       for (const project of selected) {
-        const [tasks, docs] = await Promise.all([client.listTasks(project.id), client.listDocs(project.id)]);
-        byProject.set(project.id, { docs, tasks });
+        const [tasks, docs] = await Promise.all([
+          client.listTasks(project.id),
+          client.listDocsIfPresent(project.id),
+        ]);
+        if (docs === undefined) docsUnavailable = true;
+        byProject.set(project.id, { docs: docs ?? [], tasks });
       }
 
       const syncedAt = new Date().toISOString();
       const desired = await desiredNotes(selected, byProject, mountRoot, syncedAt);
-      const stats = await applyMirror(this.writer, mountRoot, desired);
+      const stats = await applyMirror(this.writer, mountRoot, desired, { pruneDocNotes: !docsUnavailable });
 
-      this.reportSuccess(stats);
+      this.reportSuccess(stats, docsUnavailable);
     } catch (err) {
       this.reportFailure(err);
     } finally {
@@ -277,11 +286,17 @@ export default class WorklodePlugin extends Plugin {
     }
   }
 
-  private reportSuccess(stats: MirrorStats): void {
+  private reportSuccess(stats: MirrorStats, docsUnavailable: boolean): void {
     const noteCount = stats.written + stats.skipped;
     this.statusBarItem.setText(`Worklode: ${noteCount} notes · ${formatTime(new Date())}`);
 
     let message = `Worklode sync: ${stats.written} written, ${stats.skipped} unchanged, ${stats.removed} removed.`;
+    // Once per sync, not once per project: the endpoint is a property of the
+    // server, and the user needs to know the empty docs folder means "this
+    // server has no docs endpoint", not "this project has no docs".
+    if (docsUnavailable) {
+      message += " Doc notes skipped and left as they were: this server has no /api/v1/docs endpoint.";
+    }
     if (stats.conflicts.length > 0) {
       message += ` ${stats.conflicts.length} conflict(s) skipped -- see console for details.`;
       console.warn("Worklode sync conflicts:", stats.conflicts);

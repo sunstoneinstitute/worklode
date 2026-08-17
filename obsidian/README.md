@@ -102,6 +102,12 @@ build.
   vault's trash (Settings → Files and links → Deleted files), so an accident
   is recoverable, but do not point the mount root at a folder of your own
   notes. The first sync into such a folder asks first: see below.
+- **A server with no docs endpoint costs the doc notes only.** The plugin
+  ships independently of the binary, so `GET /api/v1/docs` may be absent
+  (404). Projects and tasks still mirror, the sync notice says doc notes were
+  skipped, and existing doc notes are left in place rather than pruned — a
+  missing route is no evidence the documents are gone. Any other API failure
+  (401, 5xx, no connection) still fails the whole sync.
 - **Purge deletes the whole mount folder.** The "Purge the Worklode folder"
   command removes everything under the mount root, including files the
   plugin did not create — not just the notes it manages. Unlike a sync, this
