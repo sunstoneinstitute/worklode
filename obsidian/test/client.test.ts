@@ -80,6 +80,43 @@ describe("WorklodeClient", () => {
     expect(err.message).toContain("/api/v1/tasks");
   });
 
+  // The docs endpoint is optional: a server that never shipped it (or that
+  // retired it) answers 404 for the route itself. That must cost the doc
+  // notes and nothing else, so absence is a value, not a throw.
+  it("reports an absent docs endpoint as undefined, not an error", async () => {
+    const { transport } = fakeTransport(404, "404 page not found\n");
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    expect(await client.listDocsIfPresent("worklode")).toBeUndefined();
+  });
+
+  it("returns the docs when the endpoint is present", async () => {
+    const { transport } = fakeTransport(200, JSON.stringify({ docs: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    expect(await client.listDocsIfPresent("worklode")).toEqual([]);
+  });
+
+  // Only 404 degrades. A rejected token or a broken server is a real failure
+  // and has to stay one -- silently mirroring no docs would hide it.
+  it("still throws for any other non-2xx status", async () => {
+    for (const status of [401, 403, 500, 502]) {
+      const { transport } = fakeTransport(status, "nope");
+      const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+      await expect(client.listDocsIfPresent("worklode")).rejects.toBeInstanceOf(WorklodeApiError);
+    }
+  });
+
+  it("still throws when the transport itself fails", async () => {
+    const transport: HttpTransport = async () => {
+      throw new Error("ECONNREFUSED");
+    };
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await expect(client.listDocsIfPresent("worklode")).rejects.toThrow("ECONNREFUSED");
+  });
+
   it("parses a task row's edges", async () => {
     const body = JSON.stringify({
       tasks: [
