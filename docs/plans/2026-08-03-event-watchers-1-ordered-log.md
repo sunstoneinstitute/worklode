@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 covers:
   - docs/specs/025-documents-in-the-backbone.md#sec-15
   - docs/specs/025-documents-in-the-backbone.md#sec-15.1
