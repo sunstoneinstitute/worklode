@@ -6,8 +6,13 @@ disable-model-invocation: true
 allowed-tools: Bash(lode *) Bash(git *)
 ---
 
-## Claim result
-!`lode next $ARGUMENTS --json`
+Invocation arguments: $ARGUMENTS
+
+Run `lode next --json`, adding only the parts of those arguments that are
+genuine CLI input: an optional task id, `--project <key>`, `--strict-focus`.
+`lode next` takes at most one positional argument, so anything else the user
+typed is context for the work, not command input — never pass it to the
+command; carry it into the task instead and mention you did.
 
 If `claimed` is false: tell the user nothing is ready and stop.
 Otherwise a worktree was created and the lease is bound to it. cd into the
