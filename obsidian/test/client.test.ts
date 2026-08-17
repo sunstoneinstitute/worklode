@@ -5,6 +5,7 @@ interface RecordedRequest {
   url: string;
   method: string;
   headers: Record<string, string>;
+  body?: string;
 }
 
 function fakeTransport(
@@ -139,6 +140,51 @@ describe("WorklodeClient", () => {
     const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
 
     await expect(client.listDocsIfPresent("worklode")).rejects.toThrow("ECONNREFUSED");
+  });
+
+  // The one write the plugin makes. The body is the whole payload: a state or
+  // priority field here would let a note's frontmatter drive a lifecycle
+  // transition, which is `lode`'s job.
+  it("patches a task body and sends nothing else", async () => {
+    const patched = { id: "WL-1", body: "edited", updated_at: "2026-08-17T14:30:00Z" };
+    const { transport, requests } = fakeTransport(200, JSON.stringify(patched));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    const task = await client.patchTaskBody("WL-1", "edited");
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("PATCH");
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks/WL-1");
+    expect(requests[0].headers.Authorization).toBe("Bearer wl_abc123");
+    expect(requests[0].headers["Content-Type"]).toBe("application/json");
+    expect(requests[0].body).toBe(JSON.stringify({ body: "edited" }));
+    expect(task.updated_at).toBe("2026-08-17T14:30:00Z");
+  });
+
+  it("sends no body and no content type on a read", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ projects: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.listProjects();
+
+    expect(requests[0].body).toBeUndefined();
+    expect(requests[0].headers["Content-Type"]).toBeUndefined();
+  });
+
+  it("escapes a task id in the patch path", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ id: "a b" }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.patchTaskBody("a b", "edited");
+
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks/a%20b");
+  });
+
+  it("throws WorklodeApiError when a patch is refused", async () => {
+    const { transport } = fakeTransport(403, JSON.stringify({ error: "forbidden" }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await expect(client.patchTaskBody("WL-1", "edited")).rejects.toBeInstanceOf(WorklodeApiError);
   });
 
   it("parses a task row's edges", async () => {

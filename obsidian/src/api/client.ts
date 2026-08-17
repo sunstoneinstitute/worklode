@@ -1,8 +1,10 @@
-import type { Doc, Project, TaskListDetail } from "./types";
+import type { Doc, Project, Task, TaskListDetail } from "./types";
 
-/** The subset of Obsidian's requestUrl that this client needs. */
+/** The subset of Obsidian's requestUrl that this client needs. `body` is the
+ *  serialized request body, absent on a GET -- requestUrl takes it under the
+ *  same name. */
 export interface HttpTransport {
-  (req: { url: string; method: string; headers: Record<string, string> }): Promise<{
+  (req: { url: string; method: string; headers: Record<string, string>; body?: string }): Promise<{
     status: number;
     text: string;
   }>;
@@ -25,7 +27,9 @@ export class WorklodeApiError extends Error {
   }
 }
 
-/** Read-only HTTP client for the worklode API, used by the Obsidian sync loop. */
+/** HTTP client for the worklode API, used by the Obsidian sync loop. Reads
+ *  everything the mirror renders; the one write is a task's body, sent by the
+ *  opt-in write-back pass. */
 export class WorklodeClient {
   private readonly baseUrl: string;
 
@@ -84,14 +88,36 @@ export class WorklodeClient {
     }
   }
 
-  private async get<T>(path: string): Promise<T> {
+  /**
+   * PATCH /api/v1/tasks/{id} with nothing but the body, answering with the
+   * task as the backbone now holds it -- the plain task shape, without the
+   * `detail=true` expansion's edges.
+   *
+   * The body is the only field the mirror ever writes: everything else a task
+   * note shows lives in the backbone-owned `wl` block, and the state
+   * transitions this endpoint also accepts belong to `lode`, not to a text
+   * editor.
+   */
+  patchTaskBody(id: string, body: string): Promise<Task> {
+    return this.send<Task>("PATCH", `/api/v1/tasks/${encodeURIComponent(id)}`, { body });
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.send<T>("GET", path);
+  }
+
+  private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: "application/json",
+    };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+
     const res = await this.http({
       url: this.baseUrl + path,
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        Accept: "application/json",
-      },
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     if (res.status < 200 || res.status >= 300) {
       throw new WorklodeApiError(res.status, path, res.text);

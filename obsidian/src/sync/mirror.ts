@@ -4,6 +4,7 @@
 // import, so this runs under vitest without a runtime.
 
 import {
+  CONFLICT_FOLDER,
   docToNote,
   indexToNote,
   parseNote,
@@ -157,6 +158,15 @@ export function isDocNotePath(path: string): boolean {
  *  what it must leave alone is identified by path. */
 export function isTaskNotePath(path: string): boolean {
   return isMemberNotePath(path, "tasks");
+}
+
+/** Whether a mirror-relative path is a conflict note the write-back pass
+ *  wrote (see conflictToNote). No desired set ever contains one, so without
+ *  this the delete pass would sweep it up on the very sync that created it --
+ *  destroying the body it exists to preserve. It is the user's copy to keep or
+ *  delete, so the mirror never removes one. */
+export function isConflictNotePath(path: string): boolean {
+  return path.startsWith(`${CONFLICT_FOLDER}/`) && path.endsWith(".md");
 }
 
 function isMemberNotePath(path: string, folder: "docs" | "tasks"): boolean {
@@ -352,6 +362,9 @@ export async function applyMirror(
   options: MirrorOptions = {},
 ): Promise<MirrorStats> {
   const mayPrune = (path: string): boolean => {
+    // Checked first and answered false unconditionally: a conflict note is
+    // never desired and never pruned.
+    if (isConflictNotePath(path)) return false;
     if (isDocNotePath(path)) return options.pruneDocNotes ?? true;
     if (isTaskNotePath(path)) return options.pruneTaskNotes ?? true;
     return options.pruneOtherNotes ?? true;

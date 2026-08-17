@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { computeEtag, docToNote, indexToNote, parseNote, projectToNote, taskToNote } from "../src/serialize/note";
+import {
+  computeEtag,
+  conflictToNote,
+  docToNote,
+  indexToNote,
+  parseNote,
+  projectToNote,
+  taskToNote,
+} from "../src/serialize/note";
 import type { Doc, Project, TaskListDetail } from "../src/api/types";
 
 function fixtureTask(overrides: Partial<TaskListDetail> = {}): TaskListDetail {
@@ -511,6 +519,45 @@ describe("parseNote(taskToNote(t))", () => {
     expect(parsed.wl.children).toEqual([]);
     expect(parsed.wl.blocks).toEqual([]);
     expect(parsed.wl.blocked_by).toEqual([]);
+  });
+});
+
+// The write-back pass's escape hatch: a body the backbone overwrote, kept
+// verbatim beside the note it was taken from.
+describe("conflictToNote", () => {
+  const AT = "2026-08-17T14:30:00.000Z";
+
+  it("puts the note under _conflicts, stamped with the instant and free of ':'", async () => {
+    const note = await conflictToNote(fixtureTask(), "my version\n", AT);
+
+    expect(note.path).toBe("_conflicts/worklode/WL-42 2026-08-17T14-30-00Z.md");
+    expect(note.path).not.toContain(":");
+  });
+
+  it("names the task, the note it came from, and when", async () => {
+    const note = await conflictToNote(fixtureTask(), "my version\n", AT);
+    const parsed = parseNote(note.content);
+
+    expect(parsed.wl.type).toBe("conflict");
+    expect(parsed.wl.task).toBe("[[WL-42]]");
+    expect(parsed.wl.task_note).toBe("worklode/tasks/WL-42.md");
+    expect(parsed.wl.detected_at).toBe(AT);
+  });
+
+  it("keeps the local body verbatim, after the explanation", async () => {
+    const localBody = "# My heading\n\n- a list item\n- another\n";
+    const note = await conflictToNote(fixtureTask(), localBody, AT);
+    const parsed = parseNote(note.content);
+
+    expect(parsed.body.endsWith(localBody)).toBe(true);
+    expect(parsed.body).toContain("your text is");
+  });
+
+  it("distinguishes two conflicts on the same task", async () => {
+    const first = await conflictToNote(fixtureTask(), "one\n", AT);
+    const second = await conflictToNote(fixtureTask(), "two\n", "2026-08-17T15:00:00.000Z");
+
+    expect(second.path).not.toBe(first.path);
   });
 });
 

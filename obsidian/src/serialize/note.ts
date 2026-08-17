@@ -3,7 +3,7 @@
 // index — plus the machinery shared across them.
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { Doc, Project, TaskListDetail } from "../api/types";
+import type { Doc, Project, Task, TaskListDetail } from "../api/types";
 
 /** A rendered note: where it goes, what it contains, and what it was made from. */
 export interface Note {
@@ -26,7 +26,7 @@ export const SERIALIZER_VERSION = 2;
 
 /** The reserved frontmatter block. Everything the backbone owns lives here. */
 export interface WlBlock {
-  type: "task" | "doc" | "project" | "index";
+  type: "task" | "doc" | "project" | "index" | "conflict";
   /** SERIALIZER_VERSION at the time the note was written. Not narrowed to
    *  the current value: parseNote reads notes older plugins wrote. */
   serializer: number;
@@ -218,6 +218,60 @@ export async function taskToNote(t: TaskListDetail): Promise<Note> {
     content,
     etag,
   };
+}
+
+// ---- Conflict notes ----
+
+/** The folder conflict notes live in, directly under the mount root. Its own
+ *  segment, rather than a suffix beside the task note, so a conflict is
+ *  obvious in the file tree and cannot be mistaken for a mirrored note: every
+ *  mirrored path starts with a project id, and the delete pass exempts this
+ *  prefix outright (see mirror.ts's isConflictNotePath). */
+export const CONFLICT_FOLDER = "_conflicts";
+
+/** The vault-relative path of a conflict note. `at` is stamped into the name
+ *  so a second conflict on the same task never overwrites the first; ":" is
+ *  not a legal filename character on every platform Obsidian runs on, so the
+ *  instant is spelled with "-" and without its milliseconds. */
+function conflictPath(t: Task, at: string): string {
+  return `${CONFLICT_FOLDER}/${t.project}/${t.id} ${at.replace(/\.\d+Z$/, "Z").replace(/:/g, "-")}.md`;
+}
+
+/** Preserves a task body the backbone overwrote. Written when a task note was
+ *  edited locally *and* the backbone moved on since it was rendered: the task
+ *  note is re-rendered from the backbone as usual, and the local body is kept
+ *  here verbatim so nothing is destroyed.
+ *
+ *  Never part of a desired set -- the write-back pass writes it directly and
+ *  the delete pass exempts it -- so its `etag` identifies the capture rather
+ *  than driving a re-render. It carries a `wl` block all the same, so
+ *  foreignNotes counts it as the mirror's own rather than a note the user
+ *  would be asked about. */
+export async function conflictToNote(t: Task, localBody: string, at: string): Promise<Note> {
+  const path = conflictPath(t, at);
+  const etag = await computeEtag({ id: t.id, at, body: localBody });
+  const title = `Conflict: ${t.title}`;
+
+  const wl: WlBlock = {
+    type: "conflict",
+    serializer: SERIALIZER_VERSION,
+    aliases_added: true,
+    heading_added: true,
+    task: wikilink(t.id),
+    project: t.project,
+    task_note: `${t.project}/tasks/${t.id}.md`,
+    detected_at: at,
+    etag,
+  };
+
+  const body =
+    `> Worklode changed ${wikilink(t.id)} while this vault held an edit to its body.\n` +
+    `> The backbone's version was written to \`${wl.task_note as string}\`; your text is\n` +
+    `> below, verbatim. Nothing here syncs anywhere -- keep what you need and\n` +
+    `> delete this note.\n\n` +
+    localBody;
+
+  return { path, content: renderNote({ aliases: [`${t.id} conflict`], wl }, title, body, true), etag };
 }
 
 // ---- Doc notes ----
