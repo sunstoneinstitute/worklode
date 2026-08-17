@@ -318,10 +318,12 @@ type taskListDetailJSON struct {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&detail=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
-// containers; detail=true adds "blocked" and "edges" to each row (see
-// taskListDetailJSON) at the cost of two extra bulk queries.
+// containers; updated_since is an RFC3339 instant that narrows to the tasks
+// touched at or after it (the incremental fetch a polling mirror makes);
+// detail=true adds "blocked" and "edges" to each row (see taskListDetailJSON)
+// at the cost of two extra bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -343,6 +345,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A watermark that is not a timestamp is refused rather than dropped: an
+	// ignored one looks like a working incremental sync while returning
+	// everything, which the client would then take as "all of this changed".
+	var updatedSince time.Time
+	if raw := q.Get("updated_since"); raw != "" {
+		var err error
+		if updatedSince, err = time.Parse(time.RFC3339, raw); err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, "updated_since must be an RFC3339 timestamp, e.g. 2026-08-18T09:30:00Z")
+			return
+		}
+	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  q.Get("project"),
 		States:   states,
@@ -352,7 +365,8 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Assignee: q.Get("assignee"),
 		Repo:     repo,
 
-		HasChildren: q.Get("has_children") == "true",
+		HasChildren:  q.Get("has_children") == "true",
+		UpdatedSince: updatedSince,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

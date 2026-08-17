@@ -1066,6 +1066,45 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 	}
 }
 
+// TestListTasksFilterByUpdatedSince covers the incremental sync path: a
+// client (the Obsidian mirror) re-asks for what changed since the highest
+// updated_at it has seen, and gets that boundary row back with it.
+func TestListTasksFilterByUpdatedSince(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	older := createTask(t, s, taskTestNow, defaultTaskInput())
+	cut := taskTestNow.Add(time.Hour)
+	atCut := createTask(t, s, cut, defaultTaskInput())
+	later := createTask(t, s, cut.Add(time.Minute), defaultTaskInput())
+
+	idsOf := func(tasks []Task) []string {
+		var ids []string
+		for _, task := range tasks {
+			ids = append(ids, task.ID)
+		}
+		return ids
+	}
+
+	// >=, not >: the row sitting exactly on the watermark comes back.
+	changed, err := s.ListTasks(ctx, TaskFilter{UpdatedSince: cut})
+	if err != nil {
+		t.Fatalf("ListTasks updated_since: %v", err)
+	}
+	if got := idsOf(changed); !reflect.DeepEqual(got, []string{atCut.ID, later.ID}) {
+		t.Fatalf("ListTasks updated_since=cut: got %v, want [%s %s]", got, atCut.ID, later.ID)
+	}
+
+	// The zero value does not filter.
+	all, err := s.ListTasks(ctx, TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks all: %v", err)
+	}
+	if got := idsOf(all); !reflect.DeepEqual(got, []string{older.ID, atCut.ID, later.ID}) {
+		t.Fatalf("ListTasks zero filter: got %v, want all three", got)
+	}
+}
+
 func TestGetTaskNotFound(t *testing.T) {
 	s := openTaskStore(t)
 

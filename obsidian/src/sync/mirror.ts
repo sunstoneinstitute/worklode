@@ -51,12 +51,23 @@ export interface DesiredSet {
   conflicts: string[];
 }
 
+/** What the delete pass is allowed to remove. Every flag defaults to true --
+ *  a full sync enumerated everything, so anything it does not imply is gone
+ *  -- and is set false by a sync that did not enumerate that kind, where an
+ *  absent note means "unknown", not "deleted". */
 export interface MirrorOptions {
-  /** Whether the delete pass may remove doc notes. False when the sync could
-   *  not enumerate docs at all -- a server with no docs endpoint -- where an
-   *  absent doc note means "unknown", not "deleted". Defaults to true;
-   *  project and task notes always prune. */
+  /** Doc notes. False when the sync could not enumerate docs at all -- a
+   *  server with no docs endpoint. */
   pruneDocNotes?: boolean;
+  /** Task notes. False for an incremental sync, whose task set is "what
+   *  changed since", not "what exists": a task deleted from the backbone
+   *  never appears in that answer. */
+  pruneTaskNotes?: boolean;
+  /** Everything else under the root -- project notes, the index note, and any
+   *  .md the mirror did not write. False for an incremental sync, which
+   *  renders neither of the first two (see desiredTaskNotes) and would
+   *  otherwise delete both. */
+  pruneOtherNotes?: boolean;
 }
 
 type NoteKind = "project" | "doc" | "task";
@@ -137,8 +148,20 @@ export function desiredPath(kind: NoteKind, projectId: string, id?: string): str
  *  doc set to compare against, and what it must leave alone is whatever it
  *  wrote there on a healthier pass. */
 export function isDocNotePath(path: string): boolean {
+  return isMemberNotePath(path, "docs");
+}
+
+/** Whether a mirror-relative path has the task-note shape desiredPath builds:
+ *  `<project>/tasks/<id>.md`. The counterpart of isDocNotePath, for the same
+ *  reason: an incremental sync has no full task set to compare against, so
+ *  what it must leave alone is identified by path. */
+export function isTaskNotePath(path: string): boolean {
+  return isMemberNotePath(path, "tasks");
+}
+
+function isMemberNotePath(path: string, folder: "docs" | "tasks"): boolean {
   const segments = path.split("/");
-  return segments.length === 3 && segments[1] === "docs" && path.endsWith(".md");
+  return segments.length === 3 && segments[1] === folder && path.endsWith(".md");
 }
 
 function sortById<T extends { id: string }>(items: T[]): T[] {
@@ -270,6 +293,47 @@ export async function desiredNotes(
   return { notes, conflicts };
 }
 
+/** The task notes alone, for an incremental sync: the same notes desiredNotes
+ *  would render for these tasks, without the project notes, the doc notes and
+ *  the index note.
+ *
+ *  Those three are omitted rather than merely unchanged. Each rolls up a
+ *  project's whole doc and task set, and an incremental sync holds only the
+ *  tasks that changed since its watermark -- rendering them from that delta
+ *  would give the wrong counts and rewrite every one of them on every tick.
+ *  Left alone they stay as the last full sync wrote them: stale roll-ups that
+ *  the next full sync corrects, which is cheaper than caching the full task
+ *  set in the vault to merge deltas into.
+ *
+ *  A project whose own id is unsafe still drops its tasks and reports it,
+ *  exactly as in desiredNotes -- there is no safe directory to put them
+ *  under. */
+export async function desiredTaskNotes(
+  projects: Project[],
+  byProject: Map<string, ProjectMembers>,
+): Promise<DesiredSet> {
+  const rendered = await Promise.all(
+    sortById(projects).map(async (p) => {
+      const conflicts: string[] = [];
+      if (desiredPath("project", p.id) === undefined) {
+        conflicts.push(`project ${JSON.stringify(p.id)}: unsafe id, skipped along with its tasks`);
+        return { notes: [] as Note[], conflicts };
+      }
+      const members = byProject.get(p.id) ?? { docs: [], tasks: [] };
+      const tasks = await filterSafe("task", p.id, sortById(members.tasks), taskToNote, conflicts);
+      return { notes: tasks.notes, conflicts };
+    }),
+  );
+
+  const conflicts: string[] = [];
+  const notes: Note[] = [];
+  for (const result of rendered) {
+    conflicts.push(...result.conflicts);
+    notes.push(...result.notes);
+  }
+  return { notes, conflicts };
+}
+
 /** Write what changed, delete what no longer belongs, leave the rest
  *  alone. The mount root is machine-owned: a note that exists but whose
  *  stored wl.etag no longer matches -- because the backbone data changed,
@@ -277,17 +341,21 @@ export async function desiredNotes(
  *  rewritten unconditionally, never merged.
  *
  *  The delete pass reads "not in the desired set" as "gone from the
- *  backbone", which only holds for a kind the sync actually enumerated:
- *  `options.pruneDocNotes: false` says the docs endpoint was absent, so
- *  existing doc notes are left in place rather than deleted on a signal that
- *  says nothing about docs. */
+ *  backbone", which only holds for a kind the sync actually enumerated -- see
+ *  MirrorOptions. A degraded sync passes `pruneDocNotes: false`; an
+ *  incremental one, which enumerated only the tasks that changed, prunes
+ *  nothing at all. */
 export async function applyMirror(
   writer: VaultWriter,
   root: string,
   desired: DesiredSet,
   options: MirrorOptions = {},
 ): Promise<MirrorStats> {
-  const pruneDocNotes = options.pruneDocNotes ?? true;
+  const mayPrune = (path: string): boolean => {
+    if (isDocNotePath(path)) return options.pruneDocNotes ?? true;
+    if (isTaskNotePath(path)) return options.pruneTaskNotes ?? true;
+    return options.pruneOtherNotes ?? true;
+  };
   const stats: MirrorStats = { written: 0, skipped: 0, removed: 0, conflicts: [...desired.conflicts] };
 
   const existing = new Set(await writer.list(root));
@@ -312,7 +380,7 @@ export async function applyMirror(
   for (const path of existing) {
     if (!path.endsWith(".md")) continue;
     if (desiredPaths.has(path)) continue;
-    if (!pruneDocNotes && isDocNotePath(path)) continue;
+    if (!mayPrune(path)) continue;
     await writer.remove(root, path);
     stats.removed++;
   }
