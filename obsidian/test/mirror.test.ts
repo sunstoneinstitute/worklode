@@ -110,26 +110,26 @@ class MapVaultWriter implements VaultWriter {
 // the note somewhere the mirror never surveyed. The cases below are the ones
 // the two earlier predicates disagreed on.
 describe("isSafePathSegment", () => {
-  it("accepts an ordinary segment", () => {
+  it("accepts an ordinary segment", async () => {
     expect(isSafePathSegment("Worklode")).toBe(true);
     expect(isSafePathSegment("WL-SPEC-025")).toBe(true);
     expect(isSafePathSegment("My Notes")).toBe(true);
   });
 
-  it("rejects blank, empty, and edge-whitespace segments", () => {
+  it("rejects blank, empty, and edge-whitespace segments", async () => {
     expect(isSafePathSegment("")).toBe(false);
     expect(isSafePathSegment("   ")).toBe(false);
     expect(isSafePathSegment(" x ")).toBe(false);
     expect(isSafePathSegment("x ")).toBe(false);
   });
 
-  it('rejects ".", "..", and any ".." substring', () => {
+  it('rejects ".", "..", and any ".." substring', async () => {
     expect(isSafePathSegment(".")).toBe(false);
     expect(isSafePathSegment("..")).toBe(false);
     expect(isSafePathSegment("My..Notes")).toBe(false);
   });
 
-  it("rejects separators", () => {
+  it("rejects separators", async () => {
     expect(isSafePathSegment("Team/Worklode")).toBe(false);
     expect(isSafePathSegment("Team\\Worklode")).toBe(false);
   });
@@ -140,17 +140,17 @@ describe("isSafePathSegment", () => {
 // segments instead of disqualifying the value. Every segment still has to
 // clear the single-segment bar on its own.
 describe("isSafeMountRoot", () => {
-  it("accepts a single segment, exactly as before", () => {
+  it("accepts a single segment, exactly as before", async () => {
     expect(isSafeMountRoot("Worklode")).toBe(true);
     expect(isSafeMountRoot("My Notes")).toBe(true);
   });
 
-  it("accepts a nested root whose every segment is safe", () => {
+  it("accepts a nested root whose every segment is safe", async () => {
     expect(isSafeMountRoot("Team/Worklode")).toBe(true);
     expect(isSafeMountRoot("Team/Shared Notes/Worklode")).toBe(true);
   });
 
-  it('rejects ".." in any segment, at any depth', () => {
+  it('rejects ".." in any segment, at any depth', async () => {
     expect(isSafeMountRoot("..")).toBe(false);
     expect(isSafeMountRoot("../Worklode")).toBe(false);
     expect(isSafeMountRoot("Team/..")).toBe(false);
@@ -160,14 +160,14 @@ describe("isSafeMountRoot", () => {
     expect(isSafeMountRoot("Team/My..Notes/Worklode")).toBe(false);
   });
 
-  it('rejects "." as any segment', () => {
+  it('rejects "." as any segment', async () => {
     expect(isSafeMountRoot(".")).toBe(false);
     expect(isSafeMountRoot("./Worklode")).toBe(false);
     expect(isSafeMountRoot("Team/./Worklode")).toBe(false);
     expect(isSafeMountRoot("Team/.")).toBe(false);
   });
 
-  it("rejects empty segments: blank, doubled, leading or trailing separator", () => {
+  it("rejects empty segments: blank, doubled, leading or trailing separator", async () => {
     expect(isSafeMountRoot("")).toBe(false);
     expect(isSafeMountRoot("/")).toBe(false);
     expect(isSafeMountRoot("/Team/Worklode")).toBe(false);
@@ -175,7 +175,7 @@ describe("isSafeMountRoot", () => {
     expect(isSafeMountRoot("Team//Worklode")).toBe(false);
   });
 
-  it("rejects a segment that is blank or not already trimmed", () => {
+  it("rejects a segment that is blank or not already trimmed", async () => {
     expect(isSafeMountRoot("   ")).toBe(false);
     expect(isSafeMountRoot(" Team/Worklode")).toBe(false);
     expect(isSafeMountRoot("Team /Worklode")).toBe(false);
@@ -187,7 +187,7 @@ describe("isSafeMountRoot", () => {
   // A backslash is a forbidden character on the root, never a separator: the
   // writer's assertInsideRoot splits relative paths on both "\" and "/", so a
   // root carrying one would have a different segment count there than here.
-  it("rejects a backslash anywhere, rather than reading it as a separator", () => {
+  it("rejects a backslash anywhere, rather than reading it as a separator", async () => {
     expect(isSafeMountRoot("Team\\Worklode")).toBe(false);
     expect(isSafeMountRoot("Team/Sub\\Worklode")).toBe(false);
     expect(isSafeMountRoot("Team\\..\\Worklode")).toBe(false);
@@ -198,24 +198,24 @@ describe("isSafeMountRoot", () => {
 // folder name -- its last segment -- and lands inside the root, as it always
 // has for a single-segment root.
 describe("mountRootName", () => {
-  it("is the root itself when the root is a single segment", () => {
+  it("is the root itself when the root is a single segment", async () => {
     expect(mountRootName("Worklode")).toBe("Worklode");
   });
 
-  it("is the last segment of a nested root", () => {
+  it("is the last segment of a nested root", async () => {
     expect(mountRootName("Team/Worklode")).toBe("Worklode");
     expect(mountRootName("Team/Shared Notes/Worklode")).toBe("Worklode");
   });
 });
 
 describe("desiredPath", () => {
-  it("builds the vault-relative path for each note kind", () => {
+  it("builds the vault-relative path for each note kind", async () => {
     expect(desiredPath("project", "worklode")).toBe("worklode/worklode.md");
     expect(desiredPath("doc", "worklode", "WL-SPEC-1")).toBe("worklode/docs/WL-SPEC-1.md");
     expect(desiredPath("task", "worklode", "WL-1")).toBe("worklode/tasks/WL-1.md");
   });
 
-  it("rejects an id containing '/', '\\', '..', or that is empty", () => {
+  it("rejects an id containing '/', '\\', '..', or that is empty", async () => {
     expect(desiredPath("project", "../escape")).toBeUndefined();
     expect(desiredPath("task", "worklode", "a/b")).toBeUndefined();
     expect(desiredPath("task", "worklode", "a\\b")).toBeUndefined();
@@ -236,7 +236,7 @@ describe("applyMirror", () => {
 
   it("writes every note on a first sync", async () => {
     const { project, byProject } = fullScenario();
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
     expect(desired.conflicts).toEqual([]);
     // index + project + doc + task
     expect(desired.notes).toHaveLength(4);
@@ -256,7 +256,7 @@ describe("applyMirror", () => {
     // legitimately cause an extra write on the second pass. Holding it
     // fixed keeps this test deterministic.
     const { project, byProject } = fullScenario();
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     await applyMirror(writer, ROOT, desired);
@@ -269,19 +269,19 @@ describe("applyMirror", () => {
 
   it("rewrites a file whose etag changed", async () => {
     const { project, doc, task, byProject } = fullScenario();
-    const desired1 = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired1 = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     await applyMirror(writer, ROOT, desired1);
 
     const changedTask = { ...task, title: "Fix the other thing" };
     const byProject2 = new Map([["worklode", { docs: [doc], tasks: [changedTask] }]]);
-    const desired2 = desiredNotes([project], byProject2, ROOT_NAME, SYNCED_AT);
+    const desired2 = await desiredNotes([project], byProject2, ROOT_NAME, SYNCED_AT);
 
     const stats = await applyMirror(writer, ROOT, desired2);
 
     // The task note itself changes, and so does the project note: its etag
-    // is computed over the full task list (projectToNote(p, docs, tasks)),
+    // is computed over the full task list (await projectToNote(p, docs, tasks)),
     // so any member's field change dirties the project note's etag too.
     // The index note's etag only covers doc/task counts, and the doc is
     // untouched, so both of those are skipped.
@@ -296,7 +296,7 @@ describe("applyMirror", () => {
 
   it("rewrites a file a user edited, discarding the edit", async () => {
     const { project, byProject } = fullScenario();
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     await applyMirror(writer, ROOT, desired);
@@ -320,7 +320,7 @@ describe("applyMirror", () => {
 
   it("rewrites a note an older serializer wrote, unchanged etag and all", async () => {
     const { project, byProject } = fullScenario();
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     await applyMirror(writer, ROOT, desired);
@@ -342,14 +342,14 @@ describe("applyMirror", () => {
 
   it("removes a note whose backbone object disappeared", async () => {
     const { project, doc, byProject } = fullScenario();
-    const desired1 = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired1 = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     await applyMirror(writer, ROOT, desired1);
 
     // The task is gone from the backbone.
     const byProject2 = new Map([["worklode", { docs: [doc], tasks: [] }]]);
-    const desired2 = desiredNotes([project], byProject2, ROOT_NAME, SYNCED_AT);
+    const desired2 = await desiredNotes([project], byProject2, ROOT_NAME, SYNCED_AT);
 
     const stats = await applyMirror(writer, ROOT, desired2);
 
@@ -366,7 +366,7 @@ describe("applyMirror", () => {
 
   it("never deletes a non-.md file under root", async () => {
     const { project, byProject } = fullScenario();
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     // A file a user dropped directly into the mount; not a mirror note, so
@@ -392,7 +392,7 @@ describe("applyMirror", () => {
 
     const byProject = new Map([["worklode", { docs: [hostileDoc], tasks: [hostileTask, goodTask] }]]);
 
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes("WL-SPEC-9"))).toBe(true);
     expect(desired.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
@@ -426,7 +426,7 @@ describe("applyMirror", () => {
       ["worklode", { docs: [], tasks: [badIdTask, goodTask] }],
     ]);
 
-    const desired = desiredNotes([badProject, goodProject], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([badProject, goodProject], byProject, ROOT_NAME, SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes("../escape"))).toBe(true);
     expect(desired.conflicts.some((c) => c.includes("a/b"))).toBe(true);
@@ -459,11 +459,11 @@ describe("applyMirror", () => {
 describe("a nested mount root", () => {
   const NESTED = "Team/Worklode";
 
-  it("names the index note after the root's own folder, inside the root", () => {
+  it("names the index note after the root's own folder, inside the root", async () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
 
-    const desired = desiredNotes([project], byProject, NESTED, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, NESTED, SYNCED_AT);
 
     expect(desired.conflicts).toEqual([]);
     // "Worklode.md", not "Team/Worklode.md": paths are relative to the root,
@@ -484,7 +484,7 @@ describe("a nested mount root", () => {
   it("writes every note under the nested root and nowhere else", async () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
-    const desired = desiredNotes([project], byProject, NESTED, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, NESTED, SYNCED_AT);
 
     const writer = new MapVaultWriter();
     const stats = await applyMirror(writer, NESTED, desired);
@@ -507,11 +507,11 @@ describe("a nested mount root", () => {
     expect(second.removed).toBe(0);
   });
 
-  it("skips the index and records a conflict when a segment of the root is unsafe", () => {
+  it("skips the index and records a conflict when a segment of the root is unsafe", async () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
 
-    const desired = desiredNotes([project], byProject, "Team/../evil", SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, "Team/../evil", SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes("Team/../evil"))).toBe(true);
     expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
@@ -532,7 +532,7 @@ describe("foreignNotes", () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
     const writer = new MapVaultWriter();
-    await applyMirror(writer, ROOT, desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
 
     expect(await foreignNotes(writer, ROOT)).toEqual([]);
   });
@@ -556,7 +556,7 @@ describe("foreignNotes", () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
     const writer = new MapVaultWriter();
-    await applyMirror(writer, ROOT, desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
     await writer.write(ROOT, "Groceries.md", "# Groceries\n\nmilk\n");
 
     expect(await foreignNotes(writer, ROOT)).toEqual(["Groceries.md"]);
@@ -570,13 +570,97 @@ describe("foreignNotes", () => {
   });
 });
 
+// desiredNotes renders projects concurrently (each note costs an awaited
+// digest), so the order it documents is no longer a free consequence of a
+// serial loop -- it is stitched back together deliberately, and these are the
+// assertions that say so. The index note's own etag hashes the project array,
+// so a reordering here would change it and rewrite the note for nothing.
+describe("desiredNotes ordering", () => {
+  it("emits the index first, then each project in id order with its docs then tasks", async () => {
+    const projects = [
+      fixtureProject({ id: "zebra", name: "Zebra" }),
+      fixtureProject({ id: "alpha", name: "Alpha" }),
+      fixtureProject({ id: "middle", name: "Middle" }),
+    ];
+    // Members are supplied out of id order, so the sorting is the code's own
+    // doing rather than the fixture's. A member's `project` field has to
+    // match its grouping key, or filterSafe drops it as a mismatched path.
+    const members = (project: string, prefix: string) => ({
+      docs: [
+        fixtureDoc({ id: `${prefix}-DOC-2`, project }),
+        fixtureDoc({ id: `${prefix}-DOC-1`, project }),
+      ],
+      tasks: [fixtureTask({ id: `${prefix}-2`, project }), fixtureTask({ id: `${prefix}-1`, project })],
+    });
+    const byProject = new Map([
+      ["zebra", members("zebra", "Z")],
+      ["alpha", members("alpha", "A")],
+      ["middle", members("middle", "M")],
+    ]);
+
+    const desired = await desiredNotes(projects, byProject, ROOT_NAME, SYNCED_AT);
+
+    expect(desired.conflicts).toEqual([]);
+    expect(desired.notes.map((n) => n.path)).toEqual([
+      "Worklode Vault.md",
+      "alpha/alpha.md",
+      "alpha/docs/A-DOC-1.md",
+      "alpha/docs/A-DOC-2.md",
+      "alpha/tasks/A-1.md",
+      "alpha/tasks/A-2.md",
+      "middle/middle.md",
+      "middle/docs/M-DOC-1.md",
+      "middle/docs/M-DOC-2.md",
+      "middle/tasks/M-1.md",
+      "middle/tasks/M-2.md",
+      "zebra/zebra.md",
+      "zebra/docs/Z-DOC-1.md",
+      "zebra/docs/Z-DOC-2.md",
+      "zebra/tasks/Z-1.md",
+      "zebra/tasks/Z-2.md",
+    ]);
+  });
+
+  it("reports conflicts in project-id order, docs before tasks within a project", async () => {
+    const projects = [fixtureProject({ id: "zebra" }), fixtureProject({ id: "alpha" })];
+    const bad = (id: string, project: string) => ({ ...fixtureDoc({ id, project }) });
+    const byProject = new Map([
+      [
+        "zebra",
+        {
+          docs: [bad("Z/DOC", "zebra")],
+          tasks: [fixtureTask({ id: "Z/TASK", project: "zebra" })],
+        },
+      ],
+      [
+        "alpha",
+        {
+          docs: [bad("A/DOC", "alpha")],
+          tasks: [fixtureTask({ id: "A/TASK", project: "alpha" })],
+        },
+      ],
+    ]);
+
+    const desired = await desiredNotes(projects, byProject, ROOT_NAME, SYNCED_AT);
+
+    // alpha before zebra, and within each, the doc before the task -- the
+    // order a serial loop produced, preserved across the concurrency.
+    expect(desired.conflicts.map((c) => c.split(":")[0])).toEqual([
+      'doc "A/DOC"',
+      'task "A/TASK"',
+      'doc "Z/DOC"',
+      'task "Z/TASK"',
+    ]);
+  });
+});
+
 describe("desiredNotes conflicts", () => {
-  it("drains a rendered note's own conflict (e.g. a wl key collision) into the report", () => {
+  it("drains a rendered note's own conflict (e.g. a wl key collision) into the report", async () => {
     const project = fixtureProject();
     const collidingDoc = fixtureDoc({ frontmatter: { wl: { author_note: "collides" } } });
     const byProject = new Map([["worklode", { docs: [collidingDoc], tasks: [] }]]);
 
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes(collidingDoc.id))).toBe(true);
     // The note is still produced -- the backbone block wins, per note.ts.
@@ -598,7 +682,7 @@ describe("desiredNotes conflicts", () => {
       ["worklode", { docs: [], tasks: [oldServerTask as unknown as TaskListDetail, goodTask] }],
     ]);
 
-    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
     expect(desired.notes.some((n) => n.path === "worklode/tasks/WL-9.md")).toBe(false);
@@ -612,11 +696,11 @@ describe("desiredNotes conflicts", () => {
     expect(stats.conflicts.some((c) => c.includes("WL-9"))).toBe(true);
   });
 
-  it("skips the index and records a conflict when the root name is unsafe", () => {
+  it("skips the index and records a conflict when the root name is unsafe", async () => {
     const project = fixtureProject();
     const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
 
-    const desired = desiredNotes([project], byProject, "../evil", SYNCED_AT);
+    const desired = await desiredNotes([project], byProject, "../evil", SYNCED_AT);
 
     expect(desired.conflicts.some((c) => c.includes("../evil"))).toBe(true);
     expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
@@ -628,7 +712,7 @@ describe("desiredNotes conflicts", () => {
 // Sanity check that parseNote itself still throws on non-mirror content --
 // the behaviour applyMirror's "not a mirror file, rewrite it" path relies on.
 describe("parseNote tolerance assumption", () => {
-  it("throws on content with no frontmatter fence", () => {
+  it("throws on content with no frontmatter fence", async () => {
     expect(() => parseNote("plain text, no frontmatter")).toThrow();
   });
 });

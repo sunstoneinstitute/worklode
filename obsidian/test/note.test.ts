@@ -67,9 +67,9 @@ function fixtureProject(overrides: Partial<Project> = {}): Project {
 }
 
 describe("taskToNote", () => {
-  it("renders a task note with relations as wikilinks", () => {
+  it("renders a task note with relations as wikilinks", async () => {
     const t = fixtureTask();
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
 
     expect(note.path).toBe("worklode/tasks/WL-42.md");
     expect(note.etag).toMatch(/^[0-9a-f]{16}$/);
@@ -113,11 +113,11 @@ body markdown verbatim`;
     expect(note.content).toBe(expected);
   });
 
-  it("omits parent for a root task and renders empty relation lists", () => {
+  it("omits parent for a root task and renders empty relation lists", async () => {
     const t = fixtureTask({
       edges: { out: [], in: [] },
     });
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
 
     expect(note.content).not.toMatch(/^\s*parent:/m);
     expect(note.content).toMatch(/children: \[\]/);
@@ -125,20 +125,20 @@ body markdown verbatim`;
     expect(note.content).toMatch(/blocked_by: \[\]/);
   });
 
-  it("writes the body verbatim", () => {
+  it("writes the body verbatim", async () => {
     const body = "line one\n---\nline with a\ttab\nline with trailing space   \n```\ncode fence\n```";
     const t = fixtureTask({ body });
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
 
     expect(note.content.endsWith(body)).toBe(true);
     expect(parseNote(note.content).body).toBe(body);
   });
 
-  it("round-trips: parseNote(taskToNote(t)) recovers the wl block and body", () => {
+  it("round-trips: parseNote(taskToNote(t)) recovers the wl block and body", async () => {
     const t = fixtureTask({
       body: "some body text\nwith multiple lines\n",
     });
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
     const parsed = parseNote(note.content);
 
     expect(parsed.wl).toEqual({
@@ -171,13 +171,13 @@ body markdown verbatim`;
     expect(parsed.frontmatter).toEqual({});
   });
 
-  it("changes the etag when any backbone field changes, and not otherwise", () => {
+  it("changes the etag when any backbone field changes, and not otherwise", async () => {
     const t = fixtureTask();
     const again = fixtureTask();
-    expect(taskToNote(t).etag).toBe(taskToNote(again).etag);
+    expect((await taskToNote(t)).etag).toBe((await taskToNote(again)).etag);
 
     const changed = fixtureTask({ title: "Fix the other thing" });
-    expect(taskToNote(changed).etag).not.toBe(taskToNote(t).etag);
+    expect((await taskToNote(changed)).etag).not.toBe((await taskToNote(t)).etag);
 
     const changedEdges = fixtureTask({
       edges: {
@@ -185,15 +185,15 @@ body markdown verbatim`;
         in: [],
       },
     });
-    expect(taskToNote(changedEdges).etag).not.toBe(taskToNote(t).etag);
+    expect((await taskToNote(changedEdges)).etag).not.toBe((await taskToNote(t)).etag);
 
     // body is not part of the wl block; a naive computeEtag(wl) refactor
     // would stop seeing this change.
     const changedBody = fixtureTask({ body: "different body" });
-    expect(taskToNote(changedBody).etag).not.toBe(taskToNote(t).etag);
+    expect((await taskToNote(changedBody)).etag).not.toBe((await taskToNote(t)).etag);
   });
 
-  it("ignores edge types other than child_of and blocks", () => {
+  it("ignores edge types other than child_of and blocks", async () => {
     const t = fixtureTask({
       edges: {
         out: [
@@ -207,14 +207,14 @@ body markdown verbatim`;
         ],
       },
     });
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
 
     expect(note.content).not.toContain("WL-99");
   });
 });
 
 describe("docToNote", () => {
-  it("preserves the doc's own frontmatter verbatim", () => {
+  it("preserves the doc's own frontmatter verbatim", async () => {
     const frontmatter = {
       status: "draft",
       covers: "docs/specs/025-documents-in-the-backbone.md",
@@ -223,7 +223,7 @@ describe("docToNote", () => {
       unknown_key: "surprise",
     };
     const d = fixtureDoc({ frontmatter });
-    const note = docToNote(d);
+    const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
     // plugin-added aliases are stripped by parseNote, so what remains is
@@ -232,34 +232,34 @@ describe("docToNote", () => {
     expect(parsed.wl.aliases_added).toBe(true);
   });
 
-  it("does not add aliases when the doc already has them", () => {
+  it("does not add aliases when the doc already has them", async () => {
     const frontmatter = {
       status: "draft",
       aliases: ["Custom Alias"],
     };
     const d = fixtureDoc({ frontmatter });
-    const note = docToNote(d);
+    const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
     expect(parsed.wl.aliases_added).toBe(false);
     expect(parsed.frontmatter.aliases).toEqual(["Custom Alias"]);
   });
 
-  it("keeps ordinal a string", () => {
+  it("keeps ordinal a string", async () => {
     const d = fixtureDoc({ ordinal: "025" });
-    const note = docToNote(d);
+    const note = await docToNote(d);
 
     expect(note.content).toContain('ordinal: "025"');
     expect(note.content).not.toMatch(/ordinal: 025\b/);
   });
 
-  it("reports a wl key collision instead of dropping either", () => {
+  it("reports a wl key collision instead of dropping either", async () => {
     const frontmatter = {
       status: "draft",
       wl: { author_note: "this collides with the reserved block" },
     };
     const d = fixtureDoc({ frontmatter });
-    const note = docToNote(d);
+    const note = await docToNote(d);
 
     expect(note.conflict).toBeDefined();
     expect(note.conflict).toContain(d.id);
@@ -274,9 +274,9 @@ describe("docToNote", () => {
     expect(note.conflict).toContain(JSON.stringify(frontmatter.wl));
   });
 
-  it("reports a conflict and ignores non-object frontmatter instead of corrupting the note", () => {
+  it("reports a conflict and ignores non-object frontmatter instead of corrupting the note", async () => {
     const d = fixtureDoc({ frontmatter: "not an object" as unknown as Doc["frontmatter"] });
-    const note = docToNote(d);
+    const note = await docToNote(d);
 
     expect(note.conflict).toBeDefined();
     expect(note.conflict).toContain(d.id);
@@ -290,25 +290,25 @@ describe("docToNote", () => {
   // The backbone bumps docs.synced_at on every `lode doc sync`, unchanged
   // content included. An etag covering it would make every sync rewrite
   // every doc note -- and every project note, whose etag covers its docs.
-  it("ignores synced_at in the etag, and carries no synced_at in the note", () => {
+  it("ignores synced_at in the etag, and carries no synced_at in the note", async () => {
     const d = fixtureDoc();
     const resynced = fixtureDoc({ synced_at: "2026-09-01T00:00:00Z" });
 
-    expect(docToNote(resynced).etag).toBe(docToNote(d).etag);
-    expect(docToNote(d).content).not.toContain("synced_at");
-    expect(projectToNote(fixtureProject(), [resynced], []).etag).toBe(
-      projectToNote(fixtureProject(), [d], []).etag,
+    expect((await docToNote(resynced)).etag).toBe((await docToNote(d)).etag);
+    expect((await docToNote(d)).content).not.toContain("synced_at");
+    expect((await projectToNote(fixtureProject(), [resynced], [])).etag).toBe(
+      (await projectToNote(fixtureProject(), [d], [])).etag,
     );
   });
 
-  it("still changes the etag when the body or the version changes", () => {
+  it("still changes the etag when the body or the version changes", async () => {
     const d = fixtureDoc();
 
-    expect(docToNote(fixtureDoc({ body: "different body" })).etag).not.toBe(docToNote(d).etag);
-    expect(docToNote(fixtureDoc({ version: 4 })).etag).not.toBe(docToNote(d).etag);
+    expect((await docToNote(fixtureDoc({ body: "different body" }))).etag).not.toBe((await docToNote(d)).etag);
+    expect((await docToNote(fixtureDoc({ version: 4 }))).etag).not.toBe((await docToNote(d)).etag);
   });
 
-  it("round-trips a doc note back to its own frontmatter and body", () => {
+  it("round-trips a doc note back to its own frontmatter and body", async () => {
     const frontmatter = {
       status: "draft",
       covers: "docs/specs/025-documents-in-the-backbone.md",
@@ -316,7 +316,7 @@ describe("docToNote", () => {
     };
     const body = "# Documents in the backbone\n\nSome body text.\n";
     const d = fixtureDoc({ frontmatter, body });
-    const note = docToNote(d);
+    const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
     expect(parsed.frontmatter).toEqual(frontmatter);
@@ -332,34 +332,34 @@ describe("the injected # <title> heading", () => {
     return body.split("\n").filter((line) => /^ {0,3}#(?:[ \t]|$)/.test(line));
   }
 
-  it("does not inject one when the doc body already opens with its own H1", () => {
+  it("does not inject one when the doc body already opens with its own H1", async () => {
     const body = "# Documents in the backbone\n\nSome body text.\n";
-    const note = docToNote(fixtureDoc({ title: "Documents in the backbone", body }));
+    const note = await docToNote(fixtureDoc({ title: "Documents in the backbone", body }));
 
     expect(h1Lines(note.content)).toEqual(["# Documents in the backbone"]);
     expect(parseNote(note.content).wl.heading_added).toBe(false);
     expect(parseNote(note.content).body).toBe(body);
   });
 
-  it("injects one when the doc body does not open with an H1", () => {
+  it("injects one when the doc body does not open with an H1", async () => {
     const body = "Some body text with no heading.\n";
-    const note = docToNote(fixtureDoc({ title: "A doc", body }));
+    const note = await docToNote(fixtureDoc({ title: "A doc", body }));
 
     expect(h1Lines(note.content)).toEqual(["# A doc"]);
     expect(parseNote(note.content).wl.heading_added).toBe(true);
     expect(parseNote(note.content).body).toBe(body);
   });
 
-  it("treats leading blank lines as not part of the question", () => {
+  it("treats leading blank lines as not part of the question", async () => {
     const body = "\n\n# Real Title\n\ntext\n";
-    const note = docToNote(fixtureDoc({ title: "Real Title", body }));
+    const note = await docToNote(fixtureDoc({ title: "Real Title", body }));
 
     expect(h1Lines(note.content)).toEqual(["# Real Title"]);
     expect(parseNote(note.content).wl.heading_added).toBe(false);
     expect(parseNote(note.content).body).toBe(body);
   });
 
-  it("injects one when the body only looks like it opens with a heading", () => {
+  it("injects one when the body only looks like it opens with a heading", async () => {
     // None of these is an ATX H1: "#" needs a space, a tab or the end of the
     // line after it; four spaces of indent is an indented code block; "##" is
     // an H2; and the Setext form is deliberately not recognised.
@@ -372,40 +372,40 @@ describe("the injected # <title> heading", () => {
     ];
 
     for (const body of notHeadings) {
-      const note = docToNote(fixtureDoc({ title: "A doc", body }));
+      const note = await docToNote(fixtureDoc({ title: "A doc", body }));
       expect(parseNote(note.content).wl.heading_added, JSON.stringify(body)).toBe(true);
       expect(note.content, JSON.stringify(body)).toContain("---\n# A doc\n");
       expect(parseNote(note.content).body, JSON.stringify(body)).toBe(body);
     }
   });
 
-  it("recognises the corner forms CommonMark counts as an H1", () => {
+  it("recognises the corner forms CommonMark counts as an H1", async () => {
     // Up to three spaces of indent is still a heading; so is a bare "#" and
     // a tab-separated one.
     const headings = ["   # Indented\n", "#\n\ntext\n", "#\tTabbed\n"];
 
     for (const body of headings) {
-      const note = docToNote(fixtureDoc({ title: "A doc", body }));
+      const note = await docToNote(fixtureDoc({ title: "A doc", body }));
       expect(parseNote(note.content).wl.heading_added, JSON.stringify(body)).toBe(false);
       expect(parseNote(note.content).body, JSON.stringify(body)).toBe(body);
     }
   });
 
-  it("applies the same rule to task bodies, which are author-written too", () => {
+  it("applies the same rule to task bodies, which are author-written too", async () => {
     const body = "# Fix the thing\n\nthe real explanation\n";
-    const note = taskToNote(fixtureTask({ title: "Fix the thing", body }));
+    const note = await taskToNote(fixtureTask({ title: "Fix the thing", body }));
 
     expect(h1Lines(note.content)).toEqual(["# Fix the thing"]);
     expect(parseNote(note.content).wl.heading_added).toBe(false);
     expect(parseNote(note.content).body).toBe(body);
   });
 
-  it("always injects one into the generated project and index bodies", () => {
+  it("always injects one into the generated project and index bodies", async () => {
     // Their bodies are the plugin's own and open with the generated-by
     // notice, never a heading -- the bit is recorded all the same so every
     // note kind answers the same question the same way.
-    const projectNote = projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()]);
-    const indexNote = indexToNote([fixtureProject()], new Map(), "Worklode", "2026-08-16T09:12:00Z");
+    const projectNote = await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()]);
+    const indexNote = await indexToNote([fixtureProject()], new Map(), "Worklode", "2026-08-16T09:12:00Z");
 
     for (const note of [projectNote, indexNote]) {
       expect(parseNote(note.content).wl.heading_added).toBe(true);
@@ -413,7 +413,7 @@ describe("the injected # <title> heading", () => {
     }
   });
 
-  it("reads a note written before the bit existed as heading-injected", () => {
+  it("reads a note written before the bit existed as heading-injected", async () => {
     // Serializer 1 injected the heading unconditionally, so a missing bit
     // can only mean "injected" -- anything else would leave the old title
     // line stuck to the front of the body.
@@ -441,12 +441,12 @@ describe("the injected # <title> heading", () => {
 });
 
 describe("projectToNote / indexToNote", () => {
-  it("renders project and index notes with wikilinks to their members", () => {
+  it("renders project and index notes with wikilinks to their members", async () => {
     const p = fixtureProject();
     const docs = [fixtureDoc()];
     const tasks = [fixtureTask()];
 
-    const projectNote = projectToNote(p, docs, tasks);
+    const projectNote = await projectToNote(p, docs, tasks);
     expect(projectNote.path).toBe("worklode/worklode.md");
     expect(projectNote.content).toContain("[[WL-SPEC-025]]");
     expect(projectNote.content).toContain("[[WL-42]]");
@@ -455,14 +455,14 @@ describe("projectToNote / indexToNote", () => {
     );
   });
 
-  it("does not double-blank the body when a project has no docs", () => {
+  it("does not double-blank the body when a project has no docs", async () => {
     const p = fixtureProject();
-    const note = projectToNote(p, [], [fixtureTask()]);
+    const note = await projectToNote(p, [], [fixtureTask()]);
 
     expect(note.content).not.toContain("\n\n\n");
   });
 
-  it("renders the index body with each project's doc and task counts", () => {
+  it("renders the index body with each project's doc and task counts", async () => {
     const withMembers = fixtureProject({ id: "worklode", name: "Worklode" });
     const withoutMembers = fixtureProject({ id: "other", name: "Other Project", key: "OP" });
 
@@ -482,7 +482,7 @@ describe("projectToNote / indexToNote", () => {
       // here, the edge case the map lookup invites.
     ]);
 
-    const indexNote = indexToNote(
+    const indexNote = await indexToNote(
       [withMembers, withoutMembers],
       byProject,
       "Worklode Vault",
@@ -500,11 +500,11 @@ describe("projectToNote / indexToNote", () => {
 });
 
 describe("parseNote(taskToNote(t))", () => {
-  it("round-trips the root/empty-list shape too", () => {
+  it("round-trips the root/empty-list shape too", async () => {
     const t = fixtureTask({
       edges: { out: [], in: [] },
     });
-    const note = taskToNote(t);
+    const note = await taskToNote(t);
     const parsed = parseNote(note.content);
 
     expect(parsed.wl.parent).toBeUndefined();
@@ -515,19 +515,62 @@ describe("parseNote(taskToNote(t))", () => {
 });
 
 describe("computeEtag", () => {
-  it("is order-independent over object key order, at every nesting level", () => {
-    const a = computeEtag({ x: 1, y: 2 });
-    const b = computeEtag({ y: 2, x: 1 });
+  it("is order-independent over object key order, at every nesting level", async () => {
+    const a = await computeEtag({ x: 1, y: 2 });
+    const b = await computeEtag({ y: 2, x: 1 });
     expect(a).toBe(b);
 
-    const nestedA = computeEtag({ a: { y: 2, x: 1 } });
-    const nestedB = computeEtag({ a: { x: 1, y: 2 } });
+    const nestedA = await computeEtag({ a: { y: 2, x: 1 } });
+    const nestedB = await computeEtag({ a: { x: 1, y: 2 } });
     expect(nestedA).toBe(nestedB);
   });
 
-  it("treats array order as significant", () => {
-    const a = computeEtag([1, 2]);
-    const b = computeEtag([2, 1]);
+  it("treats array order as significant", async () => {
+    const a = await computeEtag([1, 2]);
+    const b = await computeEtag([2, 1]);
     expect(a).not.toBe(b);
+  });
+
+  // The etag is a persisted value: it sits in every mirrored note's wl block,
+  // and applyMirror skips a note whose stored etag still matches. Change what
+  // is hashed, or how, and every vault in the org silently rewrites itself
+  // whole on the next sync. These digests are therefore pinned rather than
+  // derived -- each is `sha256(<the literal below>) | head -c 16`, verifiable
+  // outside this codebase with `printf '%s' '{}' | sha256sum`, so a change to
+  // the payload or the algorithm fails here instead of in a user's vault.
+  //
+  // They also pin the move off node:crypto's createHash to Web Crypto's
+  // subtle.digest (the change that lets the plugin run on Obsidian mobile):
+  // same canonical JSON, same UTF-8 bytes, same sha256, same 16-char prefix.
+  // The multi-byte case is the one that would catch an encoding slip.
+  it("produces known digests for known payloads", async () => {
+    expect(await computeEtag({})).toBe("44136fa355b3678a"); // {}
+    expect(await computeEtag({ a: 1, b: "two", c: [3, null, true] })).toBe("01998eb1fc2cc3f2");
+    expect(await computeEtag("")).toBe("12ae32cb1ec02d01"); // ""
+    expect(await computeEtag({ "å": "ø — ünïcode" })).toBe("6426518f21ed682c");
+  });
+
+  it("is 16 lowercase hex chars", async () => {
+    expect(await computeEtag({ any: "payload" })).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+// The end-to-end half of the pin above: not just the digest function, but the
+// payload each note kind feeds it. A change to what a note hashes -- a field
+// added to or dropped from the etag source -- rewrites every note of that
+// kind in every mirrored vault, so it has to be a deliberate act, not a side
+// effect. If one of these fails, check whether the fixture above changed
+// before changing the constant.
+describe("golden note etags", () => {
+  it("hashes the same payload it always has, per note kind", async () => {
+    expect((await taskToNote(fixtureTask())).etag).toBe("9cf7929f46269e43");
+    expect((await docToNote(fixtureDoc())).etag).toBe("ab506e628af51f3b");
+    expect((await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()])).etag).toBe(
+      "dad9be294b40224b",
+    );
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+    expect(
+      (await indexToNote([fixtureProject()], byProject, "Worklode", "2026-08-16T09:12:00Z")).etag,
+    ).toBe("4064b66232456442");
   });
 });
