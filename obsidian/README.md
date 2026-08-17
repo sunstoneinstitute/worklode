@@ -16,6 +16,10 @@ Worklode/<project>/docs/<id>.md   # one note per synced document
 Worklode/<project>/tasks/<id>.md  # one note per synced task
 ```
 
+The index note is named after the mount root's own folder and lives inside
+it, so a nested root of `Team/Worklode` puts it at
+`Team/Worklode/Worklode.md` — the folder name, not the path.
+
 Task notes carry `parent`/`children`/`blocks`/`blocked_by` as frontmatter
 wikilinks, so Obsidian's graph view renders the task graph.
 
@@ -42,7 +46,8 @@ build.
 - **Token** — a bearer token for an actor with read access, minted with
   `lode token create --actor <id>`.
 - **Mount root** — the vault folder the mirror owns (default `Worklode`).
-  Must be a single path segment: see Limits below. Saved a moment after you
+  May be nested, e.g. `Team/Worklode`; every folder name in it has to be a
+  plain name, see Limits below. Saved a moment after you
   stop typing rather than on each keystroke, so an armed sync interval can't
   fire against a half-typed folder name. The first sync into a root that
   already holds notes the mirror did not write stops and asks — see
@@ -65,10 +70,20 @@ build.
 - **Desktop only.** `manifest.json` sets `isDesktopOnly: true`: etag
   computation uses Node's `node:crypto`, which is not available on Obsidian
   mobile.
-- **Mount root can't be nested.** It must be a single path segment: no `/` or
-  `\`, no `..` anywhere in it, not `.` or `..` on its own, not blank, and no
-  leading or trailing whitespace. `Team/Worklode` is refused, not partially
-  honoured.
+- **The mount root is checked folder name by folder name.** It may be nested
+  — `Team/Worklode` is fine — but every name between the slashes must be
+  non-blank, carry no leading or trailing whitespace, not be `.`, and contain
+  no `..`. So is an empty name: a leading or trailing `/`, or `Team//Worklode`,
+  is refused. A backslash is a forbidden character rather than a separator,
+  so `Team\Worklode` is rejected outright instead of being read as two
+  folders. A root that fails the check is refused whole, not partially
+  honoured. Missing parent folders are created on the first write, and a
+  purge removes the root itself while leaving its parents alone.
+- **Project, doc, and task ids stay single-segment.** Each becomes one folder
+  or file name under the root, so an id carrying `/`, `\`, `..`, or edge
+  whitespace is skipped and reported as a conflict rather than nesting the
+  note somewhere the mirror does not manage. Only the mount root — your own
+  setting, surveyed before anything is deleted under it — may span folders.
 - **A sync deletes foreign notes under the mount root.** Every `.md` file
   under the root that the mirror does not currently produce is removed on each
   sync — including files the plugin never created. They are moved to the
@@ -89,7 +104,7 @@ over, naming what it found. Cancelling changes nothing; confirming records
 the root and hands it to the mirror, which from then on deletes anything
 under it the backbone does not imply.
 
-The question is asked once per root name, and only when the root already has
+The question is asked once per root path, and only when the root already has
 foreign notes in it: a root the mirror created, or one that was empty, is
 adopted silently. Confirmed roots are remembered in the plugin's
 `data.json` (`adoptedRoots`), so pointing the setting back at a folder you

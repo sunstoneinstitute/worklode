@@ -7,17 +7,17 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, debounce, requestUrl } from "obsidian";
 import { WorklodeApiError, WorklodeClient, type HttpTransport } from "./api/client";
 import type { ProjectMembers } from "./serialize/note";
-import { applyMirror, desiredNotes, foreignNotes, isSafePathSegment, type MirrorStats } from "./sync/mirror";
+import { applyMirror, desiredNotes, foreignNotes, isSafeMountRoot, type MirrorStats } from "./sync/mirror";
 import { ObsidianVaultWriter } from "./vault/writer";
 
 interface WorklodeSettings {
   baseUrl: string; // "" until configured
   token: string; // wl_<40 hex>
-  mountRoot: string; // default "Worklode"
+  mountRoot: string; // default "Worklode"; may be nested, e.g. "Team/Worklode"
   projects: string; // comma-separated allow-list; "" means all
   syncOnStartup: boolean; // default false
   intervalMinutes: number; // 0 = manual only; default 0
-  /** Mount roots the mirror is allowed to own, by name. A root lands here
+  /** Mount roots the mirror is allowed to own, by their full path. A root lands here
    *  when the mirror first syncs into it while it holds nothing but mirror
    *  notes, or when the user confirms taking over a folder that already
    *  held their own. Kept as a list rather than a single value so switching
@@ -163,13 +163,14 @@ export default class WorklodePlugin extends Plugin {
       return;
     }
     // The mount root is the only writable territory: every write, delete and
-    // (for purge) recursive rmdir happens under it. It is validated with the
-    // same predicate mirror.ts applies to backbone ids, so a root accepted
-    // here can never be one desiredNotes then judges unsafe. A single path
-    // segment only: nesting is refused consistently rather than half-working.
-    if (!isSafePathSegment(mountRoot)) {
+    // (for purge) recursive rmdir happens under it. isSafeMountRoot is the
+    // same predicate desiredNotes applies to it, so a root accepted here can
+    // never be one desiredNotes then judges unsafe. It may be nested, but
+    // every segment must clear the single-segment rule backbone ids clear.
+    if (!isSafeMountRoot(mountRoot)) {
       new Notice(
-        'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before syncing.',
+        'Worklode: set a valid mount root (a folder path like "Worklode" or "Team/Worklode", ' +
+          'with no "." or ".." segment) in plugin settings before syncing.',
       );
       return;
     }
@@ -255,9 +256,10 @@ export default class WorklodePlugin extends Plugin {
     }
 
     const mountRoot = this.settings.mountRoot.trim();
-    if (!isSafePathSegment(mountRoot)) {
+    if (!isSafeMountRoot(mountRoot)) {
       new Notice(
-        'Worklode: set a valid mount root (a single folder name, not ".", "..", or nested) in plugin settings before purging.',
+        'Worklode: set a valid mount root (a folder path like "Worklode" or "Team/Worklode", ' +
+          'with no "." or ".." segment) in plugin settings before purging.',
       );
       return;
     }
@@ -350,8 +352,9 @@ class WorklodeSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Mount root")
       .setDesc(
-        "The vault folder the mirror owns. Everything under it is machine-managed: " +
-          "a sync deletes anything under it Worklode does not mirror.",
+        'The vault folder the mirror owns; may be nested, e.g. "Team/Worklode". ' +
+          "Everything under it is machine-managed: a sync deletes anything under it " +
+          "Worklode does not mirror.",
       )
       .addText((text) =>
         text
