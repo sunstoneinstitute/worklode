@@ -1,9 +1,11 @@
 # Worklode for Obsidian
 
 Mirrors a Worklode instance into an Obsidian vault: one folder per project,
-one note per document and task, plus an index note. It is a read-only,
-one-way mirror — everything under the mount folder is machine-owned, and any
-edit made inside it is discarded on the next sync.
+one note per document and task, plus an index note. One-way by default:
+everything under the mount folder is machine-owned, and any edit made inside
+it is discarded on the next sync. Turning on **Write edits back** opens one
+narrow return path — a task note's body — and nothing else; see Writing edits
+back.
 
 ## Layout
 
@@ -14,6 +16,7 @@ Worklode/Worklode.md              # index: every synced project
 Worklode/<project>/<project>.md   # project note: doc/task roll-up by state
 Worklode/<project>/docs/<id>.md   # one note per synced document
 Worklode/<project>/tasks/<id>.md  # one note per synced task
+Worklode/_conflicts/<project>/    # only with write-back on; see below
 ```
 
 The index note is named after the mount root's own folder and lives inside
@@ -70,16 +73,20 @@ build.
 - **Projects** — comma-separated project ids to sync; empty syncs every
   project the token can read.
 - **Sync on startup** — run a sync automatically when the plugin loads.
+- **Write edits back** — off by default. When on, an edit to a task note's
+  body is pushed to Worklode on the next full sync. Nothing else a note shows
+  is writable. See Writing edits back.
 - **Sync interval (minutes)** — 0 (default) means manual only, via the
   "Worklode: Sync now" command. Every 5th automatic sync is a full one; the
   four in between fetch only the tasks that changed — see Limits.
 
 ## Limits
 
-- **Read-only.** The plugin never writes back to the backbone. Everything
-  under the mount root is rewritten unconditionally on every sync where its
-  etag changed — a local edit there is not preserved, and does not error, it
-  is just silently overwritten on the next sync.
+- **Read-only unless you turn write-back on**, and even then only a task
+  note's body travels back. Everything under the mount root is rewritten
+  unconditionally on every sync where its etag changed — an edit to anything
+  else is not preserved, and does not error, it is just overwritten on the
+  next sync. See Writing edits back.
 - **Plaintext token.** The token is stored in the vault's
   `.obsidian/plugins/worklode/data.json`, unencrypted. Anyone with read
   access to the vault (including a sync service backing it up) can read it.
@@ -126,6 +133,46 @@ build.
   command removes everything under the mount root, including files the
   plugin did not create — not just the notes it manages. Unlike a sync, this
   is a permanent delete, not a move to trash.
+
+## Writing edits back
+
+Off unless **Write edits back** is on: it turns the mount root from
+machine-owned into jointly written, which is a decision to make deliberately.
+
+What travels back is one thing — **a task note's body**, the text below the
+frontmatter. Everything else a note shows lives in the reserved `wl` block,
+which is Worklode's; editing it changes nothing and is restored on the next
+sync, the same way any etag mismatch is. State transitions are deliberately
+not writable even though the API would accept a few of them: claiming and
+finishing work belongs to `lode`, not to a text editor. Doc, project and index
+notes are read-only outright.
+
+The token needs write access to tasks (`PATCH /api/v1/tasks/{id}`), which an
+ordinary non-admin token has.
+
+**Full syncs only.** An incremental sync holds only the tasks that changed, so
+it cannot tell an edited note from an untouched one. An edit therefore reaches
+Worklode on the next *full* sync: immediately on "Worklode: Sync now" (always
+full), on plugin load with Sync on startup, or on the 5th automatic tick — up
+to five intervals away. Run "Sync now" when you want an edit to land now.
+
+**Worklode wins a real conflict, and your text is never destroyed.** A note
+whose body you changed while Worklode's copy of that task did not change is
+pushed. If the task changed on both sides, the note is rewritten from Worklode
+as usual and your body is saved beside it:
+
+```
+Worklode/_conflicts/<project>/<task id> <timestamp>.md
+```
+
+Conflict notes are yours to keep or delete: a sync never removes one, and they
+are the only files under the mount root exempt from the delete pass. They
+carry a `wl` block of their own, so the mirror recognises them as its own
+rather than asking to take them over.
+
+A push the server refuses (or a note that no longer parses) is reported in the
+sync notice, with the detail in the console; the note is left exactly as you
+edited it and the next full sync tries again.
 
 ## Taking over a folder
 

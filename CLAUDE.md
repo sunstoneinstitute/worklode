@@ -143,11 +143,14 @@ No fact has two owners — keep new state on the right side of that split.
 
 `obsidian/` is a top-level TypeScript Obsidian plugin, built and shipped
 independently of the Go binary, that mirrors a Worklode instance's projects,
-docs, and tasks into a machine-owned vault folder. It is a read-only client
-of the public `/api/v1` HTTP API — it never writes back and has no store or
-server access. Its wire types (`obsidian/src/api/types.ts`) are hand-kept
-against the `internal/api` serializers that produce them — today's reference,
-until ADR 036 makes `internal/model` the one declaration they mirror.
+docs, and tasks into a machine-owned vault folder. It is a client of the
+public `/api/v1` HTTP API only — no store or server access. Read-only but for
+one opt-in return path (`writeBack`, default off): a task note's edited body,
+pushed with `PATCH /api/v1/tasks/{id}` on a full sync. The backbone wins any
+conflict and the local text is preserved as a conflict note. Its wire types
+(`obsidian/src/api/types.ts`) are hand-kept against the `internal/api`
+serializers that produce them — today's reference, until ADR 036 makes
+`internal/model` the one declaration they mirror.
 
 ## Specs, plans, tasks
 

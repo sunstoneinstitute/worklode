@@ -5,6 +5,7 @@ import {
   desiredPath,
   desiredTaskNotes,
   foreignNotes,
+  isConflictNotePath,
   isDocNotePath,
   isSafeMountRoot,
   isSafePathSegment,
@@ -250,6 +251,19 @@ describe("isTaskNotePath", () => {
     expect(isTaskNotePath("Worklode Vault.md")).toBe(false);
     expect(isTaskNotePath("worklode/tasks/nested/WL-1.md")).toBe(false);
     expect(isTaskNotePath("worklode/tasks/WL-1.png")).toBe(false);
+  });
+});
+
+// Conflict notes are the one thing under the root the mirror writes but never
+// desires, so the delete pass has to know them by their path.
+describe("isConflictNotePath", () => {
+  it("matches a conflict note and nothing the mirror renders", async () => {
+    expect(isConflictNotePath("_conflicts/worklode/WL-1 2026-08-17T14-30-00Z.md")).toBe(true);
+    expect(isConflictNotePath("worklode/tasks/WL-1.md")).toBe(false);
+    expect(isConflictNotePath("worklode/docs/WL-SPEC-1.md")).toBe(false);
+    expect(isConflictNotePath("worklode/worklode.md")).toBe(false);
+    expect(isConflictNotePath("Worklode Vault.md")).toBe(false);
+    expect(isConflictNotePath("_conflicts/worklode/screenshot.png")).toBe(false);
   });
 });
 

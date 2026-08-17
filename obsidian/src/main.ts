@@ -22,6 +22,7 @@ import {
   isSafeMountRoot,
   type MirrorStats,
 } from "./sync/mirror";
+import { writeBackTaskNotes, type WriteBackStats } from "./sync/writeback";
 import { ObsidianVaultWriter } from "./vault/writer";
 
 interface WorklodeSettings {
@@ -31,6 +32,12 @@ interface WorklodeSettings {
   projects: string; // comma-separated allow-list; "" means all
   syncOnStartup: boolean; // default false
   intervalMinutes: number; // 0 = manual only; default 0
+  /** Push a task note's edited body back to the backbone. Default false: it
+   *  turns the mount root from machine-owned into jointly written, which is
+   *  the user's decision to make, not a default to inherit. Full syncs only --
+   *  an incremental one holds only the tasks that changed and cannot classify
+   *  a note it did not fetch. */
+  writeBack: boolean;
   /** Mount roots the mirror is allowed to own, by their full path. A root lands here
    *  when the mirror first syncs into it while it holds nothing but mirror
    *  notes, or when the user confirms taking over a folder that already
@@ -46,6 +53,7 @@ const DEFAULT_SETTINGS: WorklodeSettings = {
   projects: "",
   syncOnStartup: false,
   intervalMinutes: 0,
+  writeBack: false,
   adoptedRoots: [],
 };
 
@@ -76,7 +84,13 @@ const MOUNT_ROOT_SAVE_DELAY_MS = 800;
  *  throw:false hands control of non-2xx handling to WorklodeClient, which
  *  turns it into a WorklodeApiError with a legible message. */
 const obsidianHttp: HttpTransport = async (req) => {
-  const res = await requestUrl({ url: req.url, method: req.method, headers: req.headers, throw: false });
+  const res = await requestUrl({
+    url: req.url,
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    throw: false,
+  });
   return { status: res.status, text: res.text };
 };
 
@@ -194,7 +208,11 @@ export default class WorklodePlugin extends Plugin {
    *  watermark, writes only task notes, and deletes nothing -- see
    *  desiredTaskNotes and MirrorOptions for why both restrictions are
    *  required rather than an optimisation. It degrades to a full sync
-   *  whenever the watermark cannot be trusted. */
+   *  whenever the watermark cannot be trusted.
+   *
+   *  A full run with write-back enabled first pushes any locally edited task
+   *  body (src/sync/writeback.ts) and renders from what the backbone answered
+   *  with. */
   async sync(mode: SyncMode = "full"): Promise<void> {
     if (this.busy) return;
 
@@ -268,8 +286,26 @@ export default class WorklodePlugin extends Plugin {
         byProject.set(project.id, { docs: docs ?? [], tasks });
       }
 
+      // Write-back runs before the notes are rendered, so the render sees the
+      // bodies the backbone just accepted rather than the ones it was fetched
+      // with. Full syncs only: an incremental run holds only the tasks that
+      // changed, and a note it did not fetch cannot be classified.
+      let toRender = byProject;
+      let writeBack: WriteBackStats | undefined;
+      if (this.settings.writeBack && !incremental) {
+        const pushed = await writeBackTaskNotes(
+          this.writer,
+          mountRoot,
+          byProject,
+          (id, body) => client.patchTaskBody(id, body),
+          new Date().toISOString(),
+        );
+        toRender = pushed.byProject;
+        writeBack = pushed.stats;
+      }
+
       const stats = incremental
-        ? await applyMirror(this.writer, mountRoot, await desiredTaskNotes(selected, byProject), {
+        ? await applyMirror(this.writer, mountRoot, await desiredTaskNotes(selected, toRender), {
             pruneDocNotes: false,
             pruneTaskNotes: false,
             pruneOtherNotes: false,
@@ -277,12 +313,12 @@ export default class WorklodePlugin extends Plugin {
         : await applyMirror(
             this.writer,
             mountRoot,
-            await desiredNotes(selected, byProject, mountRoot, new Date().toISOString()),
+            await desiredNotes(selected, toRender, mountRoot, new Date().toISOString()),
             { pruneDocNotes: !docsUnavailable },
           );
 
-      await this.advanceWatermark(origin, byProject);
-      this.reportSuccess(stats, docsUnavailable, incremental);
+      await this.advanceWatermark(origin, toRender);
+      this.reportSuccess(stats, docsUnavailable, incremental, writeBack);
     } catch (err) {
       this.reportFailure(err);
     } finally {
@@ -368,7 +404,12 @@ export default class WorklodePlugin extends Plugin {
     }
   }
 
-  private reportSuccess(stats: MirrorStats, docsUnavailable: boolean, incremental: boolean): void {
+  private reportSuccess(
+    stats: MirrorStats,
+    docsUnavailable: boolean,
+    incremental: boolean,
+    writeBack: WriteBackStats | undefined,
+  ): void {
     const noteCount = stats.written + stats.skipped;
     // An incremental run saw only the changed tasks, so its count is not the
     // vault's note count and must not read like one.
@@ -382,6 +423,17 @@ export default class WorklodePlugin extends Plugin {
     // server has no docs endpoint", not "this project has no docs".
     if (docsUnavailable) {
       message += " Doc notes skipped and left as they were: this server has no /api/v1/docs endpoint.";
+    }
+    // Write-back gets its own clause: "pushed" and "written" count opposite
+    // directions, and a user who edited a note needs to see where their edit
+    // went without opening the console.
+    if (writeBack && (writeBack.pushed > 0 || writeBack.conflicts.length > 0)) {
+      message += ` Write-back: ${writeBack.pushed} edit(s) pushed, ${writeBack.conflicted} conflict note(s) saved.`;
+      // An edit that was neither pushed nor turned into a conflict note --
+      // a refused PATCH, or a note that no longer parses -- is still on disk.
+      const left = writeBack.conflicts.length - writeBack.conflicted;
+      if (left > 0) message += ` ${left} edit(s) left in place.`;
+      if (writeBack.conflicts.length > 0) console.warn("Worklode write-back:", writeBack.conflicts);
     }
     if (stats.conflicts.length > 0) {
       message += ` ${stats.conflicts.length} conflict(s) skipped -- see console for details.`;
@@ -483,6 +535,22 @@ class WorklodeSettingTab extends PluginSettingTab {
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.syncOnStartup).onChange(async (value) => {
           this.plugin.settings.syncOnStartup = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Write edits back")
+      .setDesc(
+        "Off by default. When on, an edit to a task note's body is pushed to worklode on " +
+          'the next full sync ("Worklode: Sync now", startup, or every ' +
+          `${FULL_SYNC_EVERY}th automatic sync). Only the body: everything else a note shows ` +
+          "is worklode's and is restored. If the task also changed in worklode, worklode wins " +
+          'and your text is saved under "_conflicts".',
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.writeBack).onChange(async (value) => {
+          this.plugin.settings.writeBack = value;
           await this.plugin.saveSettings();
         }),
       );
