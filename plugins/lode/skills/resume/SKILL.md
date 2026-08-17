@@ -6,8 +6,12 @@ disable-model-invocation: true
 allowed-tools: Bash(lode *) Bash(git *)
 ---
 
-## Resume result
-!`lode resume $ARGUMENTS --json`
+Invocation arguments: $ARGUMENTS
+
+Run `lode resume --json`, adding only a worktree directory if those arguments
+name one. `lode resume` takes at most one positional argument, so anything else
+the user typed is context for the work, not command input — never pass it to
+the command; carry it into the task instead and mention you did.
 
 Re-acquire this worktree's task. Report what state it was in (lease renewed, or
 re-claimed after the sweeper reclaimed it). Then continue from the `brief` in
