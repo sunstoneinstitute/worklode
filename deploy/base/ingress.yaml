@@ -5,6 +5,12 @@ metadata:
   name: worklode-ingress
   namespace: worklode
   annotations:
+    # nginx defaults client_max_body_size to 1m and answers a larger body with
+    # its own HTML 413 before the request reaches the server. 2m keeps the
+    # server's maxAPIBody (1 MiB) the authority, so an over-limit body comes
+    # back as the API's JSON error. The client also batches `lode doc sync`
+    # under that limit; the two guards cover different failures.
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
