@@ -124,14 +124,22 @@ func TestTaskIDFromBody(t *testing.T) {
 		body string
 		want string
 	}{
-		{"WL-Task: HDB-42", "HDB-42"},
-		{"some text\nWL-Task: HDB-7\nmore text", "HDB-7"},
+		{"Worklode-Task: HDB-42", "HDB-42"},
+		{"some text\nWorklode-Task: HDB-7\nmore text", "HDB-7"},
 		{"no marker here", ""},
 		{"", ""},
-		{"wl-task: HDB-7", ""},          // case-sensitive prefix
-		{"  WL-Task: HDB-7  ", "HDB-7"}, // surrounding whitespace on the line is trimmed
-		{"WL-Task: HDB-7 trailing text", "HDB-7"},
-		{"prefix WL-Task: HDB-7", ""}, // marker must start the line, not be embedded mid-line
+		{"worklode-task: HDB-7", ""},          // case-sensitive prefix
+		{"  Worklode-Task: HDB-7  ", "HDB-7"}, // surrounding whitespace on the line is trimmed
+		{"Worklode-Task: HDB-7 trailing text", "HDB-7"},
+		{"prefix Worklode-Task: HDB-7", ""}, // trailer must start the line, not be embedded mid-line
+
+		// The pre-rename spelling is not recognized. Nothing ever wrote one, so
+		// there is no history to be compatible with.
+		{"WL-Task: HDB-42", ""},
+
+		// No match on a bare word that merely starts the same way.
+		{"Worklode-Tasks: HDB-7", ""},
+		{"Worklode: HDB-7", ""},
 	}
 	for _, c := range cases {
 		if got := TaskIDFromBody(c.body); got != c.want {
@@ -154,7 +162,7 @@ func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
 }
 
 func TestTaskIDFromBodyGeneralPrefix(t *testing.T) {
-	if got := TaskIDFromBody("WL-Task: SW-12\nother"); got != "SW-12" {
+	if got := TaskIDFromBody("Worklode-Task: SW-12\nother"); got != "SW-12" {
 		t.Errorf("TaskIDFromBody = %q, want SW-12", got)
 	}
 }
@@ -187,7 +195,7 @@ func TestUpsertPRCorrelatesViaBody(t *testing.T) {
 
 	pr := defaultPR("ignored")
 	pr.HeadRef = "some-branch"
-	body := "Description.\n\nWL-Task: " + task.ID + "\n"
+	body := "Description.\n\nWorklode-Task: " + task.ID + "\n"
 	got, err := upsertPR(t, s, pr, body)
 	if err != nil {
 		t.Fatalf("UpsertPR: %v", err)

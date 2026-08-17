@@ -179,7 +179,7 @@ func TestPushMainFastForwardAdvancesTask(t *testing.T) {
 	}
 }
 
-// TestPushMainMarkerOtherProjectKey pins the marker rule: "WL-Task:" is a
+// TestPushMainMarkerOtherProjectKey pins the marker rule: "Worklode-Task:" is a
 // fixed label followed by any project's task key, not a WL- prefix match.
 func TestPushMainMarkerOtherProjectKey(t *testing.T) {
 	e := newEnv(t)

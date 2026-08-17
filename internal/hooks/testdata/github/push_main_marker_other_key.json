@@ -2,7 +2,7 @@
   "ref": "refs/heads/main",
   "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
   "commits": [
-    {"id": "8888888888888888888888888888888888888888", "message": "Tighten input validation\n\nWL-Task: SW-1"}
+    {"id": "8888888888888888888888888888888888888888", "message": "Tighten input validation\n\nWorklode-Task: SW-1"}
   ],
-  "head_commit": {"id": "8888888888888888888888888888888888888888", "message": "Tighten input validation\n\nWL-Task: SW-1"}
+  "head_commit": {"id": "8888888888888888888888888888888888888888", "message": "Tighten input validation\n\nWorklode-Task: SW-1"}
 }
