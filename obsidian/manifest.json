@@ -6,5 +6,5 @@
   "description": "Mirror a Worklode instance into this vault: a folder per project, a note per document and task.",
   "author": "Sunstone Institute",
   "authorUrl": "https://sunstone.institute",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }

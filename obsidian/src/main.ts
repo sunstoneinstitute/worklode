@@ -201,7 +201,7 @@ export default class WorklodePlugin extends Plugin {
       }
 
       const syncedAt = new Date().toISOString();
-      const desired = desiredNotes(selected, byProject, mountRoot, syncedAt);
+      const desired = await desiredNotes(selected, byProject, mountRoot, syncedAt);
       const stats = await applyMirror(this.writer, mountRoot, desired);
 
       this.reportSuccess(stats);
