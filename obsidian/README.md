@@ -23,6 +23,16 @@ it, so a nested root of `Team/Worklode` puts it at
 Task notes carry `parent`/`children`/`blocks`/`blocked_by` as frontmatter
 wikilinks, so Obsidian's graph view renders the task graph.
 
+Every note carries a reserved `wl` frontmatter block — the backbone's fields,
+the note's `etag`, and a record of what the plugin itself added, so a note can
+be read back to exactly the body it was rendered from. A note opens with an
+`# <title>` heading unless the body already brought its own H1 (a spec or a
+plan normally does), which `wl.heading_added` records. `wl.serializer` is the
+version of that rendering contract: a note written by an older plugin is
+re-rendered on the next sync even when the backbone data has not changed,
+because the `etag` covers the data and not the layout. Upgrading the plugin
+therefore rewrites every note in the mount root once.
+
 ## Build and install
 
 ```bash
