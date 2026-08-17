@@ -19,6 +19,7 @@ go test ./internal/store -run TestClaim   # single test
 go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
+./scripts/inlinespec.py             # regenerate docs/specs/inlined/
 ```
 
 Cockpit dev loop (`internal/api` and `internal/ui`'s templ + Tailwind build,

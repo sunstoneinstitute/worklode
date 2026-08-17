@@ -330,3 +330,31 @@ will be once the open drafts land. It also names references that point at
 sections which do not exist. Pass a spec — `4`, `004`,
 `004-execution-backbone.md`, or the repo-relative path — to see just that
 document; supersession is still resolved against the whole corpus.
+
+## The consolidated views (`docs/specs/inlined/`)
+
+```bash
+./scripts/inlinespec.py           # regenerate docs/specs/inlined/
+./scripts/inlinespec.py --check   # report a stale or missing file (exit 1)
+```
+
+`currentspec.py` says *which* section still states the design;
+`inlinespec.py` renders the corpus it describes. For each spec it writes one
+file under `docs/specs/inlined/` holding that spec's text with every amendment
+and supersession that is in force folded in: an amended section keeps its text
+and gains the amending text beneath it, a replaced section keeps its heading
+and loses its body, and every borrowed block leads with `**[amending …]**` or
+`**[superseding …]**` naming the section it came from. Inlining is transitive,
+and only claims from documents that are already effective are folded in — a
+draft's proposal is listed as `pending`. This is spec 026 §3.2's `lode show
+--resolved` rendering, written to files so a reader who has no shell (a
+document-ingesting tool that takes URLs, for instance) gets the same view.
+
+**The views are generated, and are not the corpus.** `docs/specs/` remains the
+source of record: never edit a file under `inlined/`, never cite one as a
+source, and never amend one. Fix the spec and regenerate. Like `index.yaml`, no
+hook regenerates them — run the script yourself when the corpus changes and
+commit the result. `secfmt.py` and `secmeta.py` both skip the directory
+(`secfmt.generated`), because its files carry no frontmatter and their headings
+are one spec's numbering with borrowed text folded in; a walk that picked them
+up would report the generator's output as your defect.
