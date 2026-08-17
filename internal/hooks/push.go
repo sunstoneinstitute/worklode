@@ -166,9 +166,9 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 }
 
 // taskIDsFromMessage extracts task ids from a commit message: the branch
-// named in a merge-commit subject, plus any "WL-Task: <id>" marker line.
-// "WL-Task" is the fixed marker label — the id after it carries its own
-// project key (SW-3, ...), matched by store.TaskIDFromBody.
+// named in a merge-commit subject, plus any "Worklode-Task: <id>" trailer
+// line. The label is fixed — the id after it carries its own project key
+// (SW-3, ...), matched by store.TaskIDFromBody.
 func taskIDsFromMessage(msg string) []string {
 	var out []string
 	for _, pat := range mergeMessagePatterns {

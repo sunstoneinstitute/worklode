@@ -239,7 +239,8 @@ Task IDs are `WL-<n>` for every project: the prefix is the literal `"WL-"`
 | ID format | `<KEY>-<n>` (e.g. `WL-12`, `SW-1`) |
 
 Immutable because the key is baked into permanent task IDs, branch names (then
-spelled `wl/<id>`, since retired — §2.5), and `WL-Task:` PR markers — changing it
+spelled `wl/<id>`, since retired — §2.5), and `Worklode-Task:` PR trailers —
+changing it
 would orphan those references.
 
 ### 2.2 Data model — migration `0003_project_keys` {#sec-2.2}
@@ -310,9 +311,12 @@ literal `WL-` matches `[A-Z][A-Z0-9]*-\d+` instead:
 
 - `internal/worktree/worktree.go:18` — `dirRe` for `wt/<id>[-slug]`.
 - `internal/store/changes.go:51` — `refTaskIDPattern` for task branches.
-- `internal/store/changes.go:67` — `bodyTaskIDPattern`: keep the literal
-  `WL-Task:` marker label (a fixed convention, not the id prefix); generalize
-  only the captured id.
+- `internal/store/changes.go:67` — `bodyTaskIDPattern`: keep the label literal
+  (a fixed convention, not the id prefix); generalize only the captured id.
+  **Amended:** the label is now `Worklode-Task:`. `WL-Task:` read as though
+  `WL` were the project key, which is exactly what the label is not. Renamed
+  outright, with no compatibility for the old spelling: nothing ever wrote a
+  trailer, so no commit or PR body carries one.
 - `internal/store/ranking.go:167` — `numericTaskID`: parse the digits after the
   last `-` (`id[strings.LastIndex(id,"-")+1:]`) instead of `TrimPrefix(id,"WL-")`.
 
@@ -529,7 +533,7 @@ commits to tasks. Sources:
   `LODE_BRANCH_TEMPLATE` (default `{{ .id }}-{{ .slug }}`; `008-worklode-plugin.md`
   is authoritative, and §2.5 restates it) rather than from a fixed prefix; the
   retired `wl/` prefix is no longer recognized.
-- PR correlation (existing head-ref / `WL-Task:` body mechanisms; the PR's
+- PR correlation (existing head-ref / `Worklode-Task:` body mechanisms; the PR's
   SHAs join this table).
 - task-key references in commit messages on default-branch pushes (fallback
   for commits made directly on main).
