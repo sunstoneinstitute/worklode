@@ -51,6 +51,14 @@ export interface DesiredSet {
   conflicts: string[];
 }
 
+export interface MirrorOptions {
+  /** Whether the delete pass may remove doc notes. False when the sync could
+   *  not enumerate docs at all -- a server with no docs endpoint -- where an
+   *  absent doc note means "unknown", not "deleted". Defaults to true;
+   *  project and task notes always prune. */
+  pruneDocNotes?: boolean;
+}
+
 type NoteKind = "project" | "doc" | "task";
 
 /** The one rule for anything used as a single path segment: every backbone
@@ -121,6 +129,16 @@ export function desiredPath(kind: NoteKind, projectId: string, id?: string): str
   if (kind === "project") return `${projectId}/${projectId}.md`;
   if (id === undefined || !isSafePathSegment(id)) return undefined;
   return kind === "doc" ? `${projectId}/docs/${id}.md` : `${projectId}/tasks/${id}.md`;
+}
+
+/** Whether a mirror-relative path has the doc-note shape desiredPath builds:
+ *  `<project>/docs/<id>.md`, exactly three segments deep. Matching on the
+ *  path rather than on the desired set is the point -- a degraded sync has no
+ *  doc set to compare against, and what it must leave alone is whatever it
+ *  wrote there on a healthier pass. */
+export function isDocNotePath(path: string): boolean {
+  const segments = path.split("/");
+  return segments.length === 3 && segments[1] === "docs" && path.endsWith(".md");
 }
 
 function sortById<T extends { id: string }>(items: T[]): T[] {
@@ -256,8 +274,20 @@ export async function desiredNotes(
  *  alone. The mount root is machine-owned: a note that exists but whose
  *  stored wl.etag no longer matches -- because the backbone data changed,
  *  or because a user edited (or otherwise replaced) the file -- is
- *  rewritten unconditionally, never merged. */
-export async function applyMirror(writer: VaultWriter, root: string, desired: DesiredSet): Promise<MirrorStats> {
+ *  rewritten unconditionally, never merged.
+ *
+ *  The delete pass reads "not in the desired set" as "gone from the
+ *  backbone", which only holds for a kind the sync actually enumerated:
+ *  `options.pruneDocNotes: false` says the docs endpoint was absent, so
+ *  existing doc notes are left in place rather than deleted on a signal that
+ *  says nothing about docs. */
+export async function applyMirror(
+  writer: VaultWriter,
+  root: string,
+  desired: DesiredSet,
+  options: MirrorOptions = {},
+): Promise<MirrorStats> {
+  const pruneDocNotes = options.pruneDocNotes ?? true;
   const stats: MirrorStats = { written: 0, skipped: 0, removed: 0, conflicts: [...desired.conflicts] };
 
   const existing = new Set(await writer.list(root));
@@ -281,10 +311,10 @@ export async function applyMirror(writer: VaultWriter, root: string, desired: De
 
   for (const path of existing) {
     if (!path.endsWith(".md")) continue;
-    if (!desiredPaths.has(path)) {
-      await writer.remove(root, path);
-      stats.removed++;
-    }
+    if (desiredPaths.has(path)) continue;
+    if (!pruneDocNotes && isDocNotePath(path)) continue;
+    await writer.remove(root, path);
+    stats.removed++;
   }
 
   return stats;

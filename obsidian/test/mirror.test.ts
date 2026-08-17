@@ -4,6 +4,7 @@ import {
   desiredNotes,
   desiredPath,
   foreignNotes,
+  isDocNotePath,
   isSafeMountRoot,
   isSafePathSegment,
   mountRootName,
@@ -225,6 +226,20 @@ describe("desiredPath", () => {
   });
 });
 
+// Which existing files a degraded sync must leave alone: exactly the shape
+// desiredPath builds for a doc, and nothing else.
+describe("isDocNotePath", () => {
+  it("matches a doc note and nothing else", async () => {
+    expect(isDocNotePath("worklode/docs/WL-SPEC-1.md")).toBe(true);
+    expect(isDocNotePath("worklode/tasks/WL-1.md")).toBe(false);
+    expect(isDocNotePath("worklode/worklode.md")).toBe(false);
+    expect(isDocNotePath("Worklode Vault.md")).toBe(false);
+    // Not the doc-note shape: too deep, or not markdown.
+    expect(isDocNotePath("worklode/docs/nested/WL-SPEC-1.md")).toBe(false);
+    expect(isDocNotePath("worklode/docs/diagram.png")).toBe(false);
+  });
+});
+
 describe("applyMirror", () => {
   function fullScenario() {
     const project = fixtureProject();
@@ -362,6 +377,44 @@ describe("applyMirror", () => {
 
     const remaining = await writer.list(ROOT);
     expect(remaining).not.toContain("worklode/tasks/WL-1.md");
+  });
+
+  // A sync that could not enumerate docs (the server has no docs endpoint)
+  // hands desiredNotes an empty doc list. Without pruneDocNotes:false that
+  // reads as "every doc was deleted" and the delete pass takes the user's
+  // mirrored doc notes with it -- data loss on a signal that says nothing
+  // about docs.
+  it("keeps doc notes a degraded sync could not enumerate, and still prunes tasks", async () => {
+    const { project, byProject } = fullScenario();
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    // No docs enumerated, and the task really is gone from the backbone.
+    const degraded = new Map([["worklode", { docs: [], tasks: [] }]]);
+    const desired = await desiredNotes([project], degraded, ROOT_NAME, SYNCED_AT);
+    const stats = await applyMirror(writer, ROOT, desired, { pruneDocNotes: false });
+
+    expect(writer.removed).toEqual(["worklode/tasks/WL-1.md"]);
+    expect(stats.removed).toBe(1);
+
+    const remaining = await writer.list(ROOT);
+    expect(remaining).toContain("worklode/docs/WL-SPEC-1.md");
+    expect(await writer.read(ROOT, "worklode/docs/WL-SPEC-1.md")).toContain("doc body");
+  });
+
+  it("prunes a doc note when docs were enumerated", async () => {
+    const { project, byProject } = fullScenario();
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    // The doc is gone from the backbone, and this sync did enumerate docs.
+    const without = new Map([["worklode", { docs: [], tasks: [fixtureTask()] }]]);
+    const desired = await desiredNotes([project], without, ROOT_NAME, SYNCED_AT);
+    const stats = await applyMirror(writer, ROOT, desired);
+
+    expect(writer.removed).toEqual(["worklode/docs/WL-SPEC-1.md"]);
+    expect(stats.removed).toBe(1);
+    expect(await writer.list(ROOT)).not.toContain("worklode/docs/WL-SPEC-1.md");
   });
 
   it("never deletes a non-.md file under root", async () => {

@@ -53,6 +53,28 @@ export class WorklodeClient {
     return this.get<{ docs: Doc[] }>(path).then((r) => r.docs);
   }
 
+  /**
+   * listDocs, but `undefined` when the server has no docs endpoint at all.
+   * The plugin ships independently of the binary, so a server without that
+   * route is ordinary rather than exotic, and it must cost the doc notes
+   * only -- not the projects and tasks synced in the same pass.
+   *
+   * Only 404 (the route is absent) degrades: 401, 403, 5xx and a failing
+   * transport are real failures and stay thrown, because mirroring no docs
+   * for one of those would hide it. `undefined` rather than `[]` so the
+   * caller can tell "no docs endpoint" from "no docs" -- the sync report
+   * says which, and the delete pass must not prune doc notes it never
+   * enumerated.
+   */
+  async listDocsIfPresent(project: string): Promise<Doc[] | undefined> {
+    try {
+      return await this.listDocs(project);
+    } catch (err) {
+      if (err instanceof WorklodeApiError && err.status === 404) return undefined;
+      throw err;
+    }
+  }
+
   private async get<T>(path: string): Promise<T> {
     const res = await this.http({
       url: this.baseUrl + path,
