@@ -32,6 +32,16 @@ go tool templ generate --watch        # regenerate *_templ.go on change
 go generate ./...                     # regenerate both committed artifacts
 ```
 
+The Obsidian plugin (`obsidian/`) is the repo's only Node package and uses
+**pnpm**, pinned by `package.json`'s `packageManager` and supplied by corepack —
+`npm` there will fight the lockfile:
+
+```bash
+corepack enable pnpm                            # once per machine
+pnpm -C obsidian install --frozen-lockfile
+pnpm -C obsidian test                           # also: typecheck, build
+```
+
 Store tests need a reachable Postgres with **pgvector**
 (CI uses `pgvector/pgvector:pg17`); default DSN
 `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`,

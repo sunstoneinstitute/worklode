@@ -4,6 +4,7 @@
   "private": true,
   "description": "Mirror a Worklode instance into an Obsidian vault.",
   "type": "module",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
