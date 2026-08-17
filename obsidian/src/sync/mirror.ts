@@ -206,6 +206,33 @@ export async function applyMirror(writer: VaultWriter, root: string, desired: De
   return stats;
 }
 
+/** Every .md under `root` that the mirror did not write -- no readable `wl`
+ *  block, so nothing identifies it as ours. Empty for a root the mirror owns
+ *  and for one that does not exist yet.
+ *
+ *  applyMirror deletes every .md under the root the backbone does not imply,
+ *  including files it never created, so this is the question a first-sync
+ *  guard has to answer before a root is taken over: is anything under here
+ *  the user's? Unreadable and malformed files count as foreign -- the
+ *  conservative direction is to ask rather than to delete. */
+export async function foreignNotes(writer: VaultWriter, root: string): Promise<string[]> {
+  const foreign: string[] = [];
+  for (const path of await writer.list(root)) {
+    if (!path.endsWith(".md")) continue;
+    if (!(await isMirrorNote(writer, root, path))) foreign.push(path);
+  }
+  return foreign.sort();
+}
+
+async function isMirrorNote(writer: VaultWriter, root: string, path: string): Promise<boolean> {
+  try {
+    parseNote(await writer.read(root, path));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The stored note's wl.etag, or undefined if the file isn't a mirror note
  *  at all (malformed content, missing wl block) -- tolerated as "rewrite
  *  it" rather than a fatal error. */
