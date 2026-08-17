@@ -9,7 +9,7 @@ import {
   mountRootName,
   type VaultWriter,
 } from "../src/sync/mirror";
-import { parseNote } from "../src/serialize/note";
+import { parseNote, SERIALIZER_VERSION } from "../src/serialize/note";
 import type { Doc, Project, TaskListDetail } from "../src/api/types";
 
 function fixtureProject(overrides: Partial<Project> = {}): Project {
@@ -316,6 +316,28 @@ describe("applyMirror", () => {
     const wantTask = desired.notes.find((n) => n.path === "worklode/tasks/WL-1.md")!;
     expect(restored).toBe(wantTask.content);
     expect(restored).not.toContain("I edited this note by hand.");
+  });
+
+  it("rewrites a note an older serializer wrote, unchanged etag and all", async () => {
+    const { project, byProject } = fullScenario();
+    const desired = desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, desired);
+
+    // A note left by a previous plugin version: same backbone data, so the
+    // same etag, but rendered by a serializer whose layout has since changed.
+    // The etag covers the source, not the layout, so only the version stamp
+    // can say the file needs re-rendering.
+    const path = "worklode/docs/WL-SPEC-1.md";
+    const current = await writer.read(ROOT, path);
+    await writer.write(ROOT, path, current.replace(`serializer: ${SERIALIZER_VERSION}`, "serializer: 1"));
+
+    const stats = await applyMirror(writer, ROOT, desired);
+
+    expect(stats.written).toBe(1);
+    expect(stats.skipped).toBe(3);
+    expect(await writer.read(ROOT, path)).toBe(current);
   });
 
   it("removes a note whose backbone object disappeared", async () => {

@@ -17,15 +17,33 @@ export interface Note {
   conflict?: string;
 }
 
+/** The version of the rendering contract every note is stamped with. Bumped
+ *  when the rendered layout changes in a way `etag` cannot see — the etag
+ *  covers the backbone source, not how it was laid out — so applyMirror can
+ *  tell a note an older plugin wrote from one that is already current.
+ *
+ *  2: a body that already opens with its own H1 no longer gets one injected. */
+export const SERIALIZER_VERSION = 2;
+
 /** The reserved frontmatter block. Everything the backbone owns lives here. */
 export interface WlBlock {
   type: "task" | "doc" | "project" | "index";
-  serializer: 1;
+  /** SERIALIZER_VERSION at the time the note was written. Not narrowed to
+   *  the current value: parseNote reads notes older plugins wrote. */
+  serializer: number;
   etag: string;
   /** True when the plugin added the note's `aliases` key. See the
    *  round-trip rule: without this bit, a write-back cannot tell a
    *  plugin-added alias from an author's own. */
   aliases_added: boolean;
+  /** True when the plugin added the note's `# <title>` heading, which it
+   *  does unless `bodyOpensWithH1` says the body already brought one. Same
+   *  round-trip rule as `aliases_added`: without this bit parseNote cannot
+   *  tell the injected heading from the source document's own, and stripping
+   *  the wrong one eats a line of body. Absent on notes written before
+   *  serializer 2, which always injected — parseNote reads a missing value
+   *  as true. */
+  heading_added: boolean;
   [key: string]: unknown;
 }
 
@@ -62,12 +80,40 @@ function wikilink(id: string): string {
   return `[[${id}]]`;
 }
 
+/** Whether `body` already opens with an H1 of its own: its first non-blank
+ *  line, indented by at most three spaces, is `#` followed by a space, a tab,
+ *  or the end of the line.
+ *
+ *  That is CommonMark's ATX rule and nothing more. The Setext form
+ *  (`Title\n=====`) is deliberately not recognised: telling one from a
+ *  paragraph followed by a row of `=` needs real block parsing, and no
+ *  document in the corpus this mirrors uses it — every spec, ADR and plan
+ *  under docs/ opens with `# <Title>` on the first body line. Missing a
+ *  Setext heading costs a second H1 in the rendered note, which is cosmetic;
+ *  claiming a heading that is not one would strip a line of body on the way
+ *  back, which is not. */
+function bodyOpensWithH1(body: string): boolean {
+  for (const line of body.split("\n")) {
+    if (line.trim() === "") continue;
+    return /^ {0,3}#(?:[ \t]|$)/.test(line);
+  }
+  return false;
+}
+
 /** Serializes a frontmatter document (an object whose own key order is the
- *  emitted order) with the `---` fences and a trailing blank line before
- *  the body, if any. */
-function renderNote(frontmatter: Record<string, unknown>, title: string, body: string): string {
-  const yamlBlock = stringifyYaml(frontmatter);
-  const header = `---\n${yamlBlock}---\n# ${title}\n`;
+ *  emitted order) with the `---` fences, and — when `injectHeading` — an
+ *  `# <title>` line and a blank line before the body, if any. The caller
+ *  passes the same bit it recorded as `wl.heading_added`, so what parseNote
+ *  is told to strip is exactly what was added here. */
+function renderNote(
+  frontmatter: Record<string, unknown>,
+  title: string,
+  body: string,
+  injectHeading: boolean,
+): string {
+  const fence = `---\n${stringifyYaml(frontmatter)}---\n`;
+  if (!injectHeading) return `${fence}${body}`;
+  const header = `${fence}# ${title}\n`;
   return body ? `${header}\n${body}` : header;
 }
 
@@ -104,12 +150,17 @@ export function parseNote(content: string): {
     delete frontmatter.aliases;
   }
 
-  // rest is "# <title>\n" optionally followed by "\n<body>".
+  // With an injected heading, rest is "# <title>\n" optionally followed by
+  // "\n<body>"; without one it is the body verbatim. A note written before
+  // serializer 2 carries no heading_added and always had one injected, so a
+  // missing value reads as true.
+  return { wl, frontmatter, body: wl.heading_added === false ? rest : stripHeading(rest) };
+}
+
+function stripHeading(rest: string): string {
   const newlineIdx = rest.indexOf("\n");
   const afterHeading = newlineIdx === -1 ? "" : rest.slice(newlineIdx + 1);
-  const body = afterHeading.startsWith("\n") ? afterHeading.slice(1) : afterHeading;
-
-  return { wl, frontmatter, body };
+  return afterHeading.startsWith("\n") ? afterHeading.slice(1) : afterHeading;
 }
 
 // ---- Task notes ----
@@ -122,11 +173,13 @@ export function taskToNote(t: TaskListDetail): Note {
   const blockedBy = sortIds(t.edges.in.filter((e) => e.type === "blocks").map((e) => e.from));
 
   const etag = computeEtag(t);
+  const headingAdded = !bodyOpensWithH1(t.body);
 
   const wl: WlBlock = {
     type: "task",
-    serializer: 1,
+    serializer: SERIALIZER_VERSION,
     aliases_added: true,
+    heading_added: headingAdded,
     id: t.id,
     project: t.project,
     title: t.title,
@@ -149,7 +202,7 @@ export function taskToNote(t: TaskListDetail): Note {
     etag,
   };
 
-  const content = renderNote({ aliases: [t.title], wl }, t.title, t.body);
+  const content = renderNote({ aliases: [t.title], wl }, t.title, t.body, headingAdded);
 
   return {
     path: `${t.project}/tasks/${t.id}.md`,
@@ -188,11 +241,16 @@ export function docToNote(d: Doc): Note {
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
   const etag = computeEtag(docEtagSource(d));
+  const body = d.body ?? "";
+  // The one case this bit exists for: a spec, ADR or plan body opens with its
+  // own "# <Title>", so injecting one would render the note with two.
+  const headingAdded = !bodyOpensWithH1(body);
 
   const wl: WlBlock = {
     type: "doc",
-    serializer: 1,
+    serializer: SERIALIZER_VERSION,
     aliases_added: !hasAliases,
+    heading_added: headingAdded,
     id: d.id,
     project: d.project,
     kind: d.kind,
@@ -215,7 +273,7 @@ export function docToNote(d: Doc): Note {
   }
   frontmatter.wl = wl;
 
-  const content = renderNote(frontmatter, d.title, d.body ?? "");
+  const content = renderNote(frontmatter, d.title, body, headingAdded);
 
   const note: Note = {
     path: `${d.project}/docs/${d.id}.md`,
@@ -283,10 +341,16 @@ export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]):
   // rewrite every project note as well.
   const etag = computeEtag({ project: p, docs: docs.map(docEtagSource), tasks });
 
+  // A generated body opens with the generated-by notice, never a heading, so
+  // this is always true. Asked anyway: one rule, put to every note kind.
+  const body = renderProjectBody(docs, tasks);
+  const headingAdded = !bodyOpensWithH1(body);
+
   const wl: WlBlock = {
     type: "project",
-    serializer: 1,
+    serializer: SERIALIZER_VERSION,
     aliases_added: true,
+    heading_added: headingAdded,
     id: p.id,
     name: p.name,
     key: p.key,
@@ -296,8 +360,7 @@ export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]):
     etag,
   };
 
-  const body = renderProjectBody(docs, tasks);
-  const content = renderNote({ aliases: [p.name], wl }, p.name, body);
+  const content = renderNote({ aliases: [p.name], wl }, p.name, body, headingAdded);
 
   return {
     path: `${p.id}/${p.id}.md`,
@@ -343,17 +406,20 @@ export function indexToNote(
   const counts = sortIds(projects.map((p) => p.id)).map((id) => ({ id, ...projectCounts(id, byProject) }));
   const etag = computeEtag({ projects, counts, syncedAt });
 
+  const body = renderIndexBody(projects, byProject);
+  const headingAdded = !bodyOpensWithH1(body);
+
   const wl: WlBlock = {
     type: "index",
-    serializer: 1,
+    serializer: SERIALIZER_VERSION,
     aliases_added: true,
+    heading_added: headingAdded,
     projects: sortIds(projects.map((p) => p.id)).map(wikilink),
     synced_at: syncedAt,
     etag,
   };
 
-  const body = renderIndexBody(projects, byProject);
-  const content = renderNote({ aliases: [rootName], wl }, rootName, body);
+  const content = renderNote({ aliases: [rootName], wl }, rootName, body, headingAdded);
 
   return {
     path: `${rootName}.md`,

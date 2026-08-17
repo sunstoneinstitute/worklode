@@ -8,9 +8,11 @@ import {
   indexToNote,
   parseNote,
   projectToNote,
+  SERIALIZER_VERSION,
   taskToNote,
   type Note,
   type ProjectMembers,
+  type WlBlock,
 } from "../serialize/note";
 import type { Project } from "../api/types";
 
@@ -232,8 +234,12 @@ export async function applyMirror(writer: VaultWriter, root: string, desired: De
 
   for (const note of desired.notes) {
     if (existing.has(note.path)) {
-      const currentEtag = await readEtag(writer, root, note.path);
-      if (currentEtag === note.etag) {
+      const current = await readWl(writer, root, note.path);
+      // Current data *and* current rendering. The etag covers the backbone
+      // source, not the layout it was rendered into, so a note an older
+      // serializer wrote is stale even when its etag still matches — without
+      // the version check it would never be re-rendered.
+      if (current?.etag === note.etag && current.serializer === SERIALIZER_VERSION) {
         stats.skipped++;
         continue;
       }
@@ -280,13 +286,13 @@ async function isMirrorNote(writer: VaultWriter, root: string, path: string): Pr
   }
 }
 
-/** The stored note's wl.etag, or undefined if the file isn't a mirror note
+/** The stored note's wl block, or undefined if the file isn't a mirror note
  *  at all (malformed content, missing wl block) -- tolerated as "rewrite
  *  it" rather than a fatal error. */
-async function readEtag(writer: VaultWriter, root: string, path: string): Promise<string | undefined> {
+async function readWl(writer: VaultWriter, root: string, path: string): Promise<WlBlock | undefined> {
   const content = await writer.read(root, path);
   try {
-    return parseNote(content).wl.etag;
+    return parseNote(content).wl;
   } catch {
     return undefined;
   }

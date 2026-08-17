@@ -79,8 +79,9 @@ aliases:
   - Fix the thing
 wl:
   type: task
-  serializer: 1
+  serializer: 2
   aliases_added: true
+  heading_added: true
   id: WL-42
   project: worklode
   title: Fix the thing
@@ -142,8 +143,9 @@ body markdown verbatim`;
 
     expect(parsed.wl).toEqual({
       type: "task",
-      serializer: 1,
+      serializer: 2,
       aliases_added: true,
+      heading_added: true,
       id: "WL-42",
       project: "worklode",
       title: "Fix the thing",
@@ -319,6 +321,122 @@ describe("docToNote", () => {
 
     expect(parsed.frontmatter).toEqual(frontmatter);
     expect(parsed.body).toBe(body);
+  });
+});
+
+describe("the injected # <title> heading", () => {
+  /** Every line of the rendered note after the closing frontmatter fence
+   *  that is an ATX H1. Two of them is the bug this suite exists for. */
+  function h1Lines(content: string): string[] {
+    const body = content.slice(content.indexOf("\n---\n", 4) + 5);
+    return body.split("\n").filter((line) => /^ {0,3}#(?:[ \t]|$)/.test(line));
+  }
+
+  it("does not inject one when the doc body already opens with its own H1", () => {
+    const body = "# Documents in the backbone\n\nSome body text.\n";
+    const note = docToNote(fixtureDoc({ title: "Documents in the backbone", body }));
+
+    expect(h1Lines(note.content)).toEqual(["# Documents in the backbone"]);
+    expect(parseNote(note.content).wl.heading_added).toBe(false);
+    expect(parseNote(note.content).body).toBe(body);
+  });
+
+  it("injects one when the doc body does not open with an H1", () => {
+    const body = "Some body text with no heading.\n";
+    const note = docToNote(fixtureDoc({ title: "A doc", body }));
+
+    expect(h1Lines(note.content)).toEqual(["# A doc"]);
+    expect(parseNote(note.content).wl.heading_added).toBe(true);
+    expect(parseNote(note.content).body).toBe(body);
+  });
+
+  it("treats leading blank lines as not part of the question", () => {
+    const body = "\n\n# Real Title\n\ntext\n";
+    const note = docToNote(fixtureDoc({ title: "Real Title", body }));
+
+    expect(h1Lines(note.content)).toEqual(["# Real Title"]);
+    expect(parseNote(note.content).wl.heading_added).toBe(false);
+    expect(parseNote(note.content).body).toBe(body);
+  });
+
+  it("injects one when the body only looks like it opens with a heading", () => {
+    // None of these is an ATX H1: "#" needs a space, a tab or the end of the
+    // line after it; four spaces of indent is an indented code block; "##" is
+    // an H2; and the Setext form is deliberately not recognised.
+    const notHeadings = [
+      "#Documents\n\ntext\n",
+      "    # Documents\n\ntext\n",
+      "## Documents\n\ntext\n",
+      "Documents\n=========\n\ntext\n",
+      "> # Documents\n",
+    ];
+
+    for (const body of notHeadings) {
+      const note = docToNote(fixtureDoc({ title: "A doc", body }));
+      expect(parseNote(note.content).wl.heading_added, JSON.stringify(body)).toBe(true);
+      expect(note.content, JSON.stringify(body)).toContain("---\n# A doc\n");
+      expect(parseNote(note.content).body, JSON.stringify(body)).toBe(body);
+    }
+  });
+
+  it("recognises the corner forms CommonMark counts as an H1", () => {
+    // Up to three spaces of indent is still a heading; so is a bare "#" and
+    // a tab-separated one.
+    const headings = ["   # Indented\n", "#\n\ntext\n", "#\tTabbed\n"];
+
+    for (const body of headings) {
+      const note = docToNote(fixtureDoc({ title: "A doc", body }));
+      expect(parseNote(note.content).wl.heading_added, JSON.stringify(body)).toBe(false);
+      expect(parseNote(note.content).body, JSON.stringify(body)).toBe(body);
+    }
+  });
+
+  it("applies the same rule to task bodies, which are author-written too", () => {
+    const body = "# Fix the thing\n\nthe real explanation\n";
+    const note = taskToNote(fixtureTask({ title: "Fix the thing", body }));
+
+    expect(h1Lines(note.content)).toEqual(["# Fix the thing"]);
+    expect(parseNote(note.content).wl.heading_added).toBe(false);
+    expect(parseNote(note.content).body).toBe(body);
+  });
+
+  it("always injects one into the generated project and index bodies", () => {
+    // Their bodies are the plugin's own and open with the generated-by
+    // notice, never a heading -- the bit is recorded all the same so every
+    // note kind answers the same question the same way.
+    const projectNote = projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()]);
+    const indexNote = indexToNote([fixtureProject()], new Map(), "Worklode", "2026-08-16T09:12:00Z");
+
+    for (const note of [projectNote, indexNote]) {
+      expect(parseNote(note.content).wl.heading_added).toBe(true);
+      expect(h1Lines(note.content)).toHaveLength(1);
+    }
+  });
+
+  it("reads a note written before the bit existed as heading-injected", () => {
+    // Serializer 1 injected the heading unconditionally, so a missing bit
+    // can only mean "injected" -- anything else would leave the old title
+    // line stuck to the front of the body.
+    const legacy = [
+      "---",
+      "aliases:",
+      "  - A doc",
+      "wl:",
+      "  type: doc",
+      "  serializer: 1",
+      "  aliases_added: true",
+      "  etag: 0123456789abcdef",
+      "---",
+      "# A doc",
+      "",
+      "body text",
+      "",
+    ].join("\n");
+    const parsed = parseNote(legacy);
+
+    expect(parsed.wl.heading_added).toBeUndefined();
+    expect(parsed.body).toBe("body text\n");
+    expect(parsed.frontmatter).toEqual({});
   });
 });
 
