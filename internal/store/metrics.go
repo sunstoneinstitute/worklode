@@ -32,7 +32,6 @@ type storeMetrics struct {
 	releases         *prometheus.CounterVec
 	expiries         prometheus.Counter
 	projectWorkReads *prometheus.CounterVec
-	docUpserts       *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -57,15 +56,8 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_project_work_reads_total",
 			Help: "ListProjectWorkFacts reads by outcome.",
 		}, []string{"outcome"}),
-		docUpserts: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "worklode_doc_upserts_total",
-			Help: "Doc-store upserts by outcome (added, updated, unchanged).",
-		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads, m.docUpserts)
-	for _, o := range []string{"added", "updated", "unchanged"} {
-		m.docUpserts.WithLabelValues(o)
-	}
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads)
 	return m
 }
 
@@ -105,13 +97,6 @@ func (m *storeMetrics) projectWorkRead(err error) {
 		return
 	}
 	m.projectWorkReads.WithLabelValues(outcome(err)).Inc()
-}
-
-func (m *storeMetrics) docUpsert(outcome string) {
-	if m == nil {
-		return
-	}
-	m.docUpserts.WithLabelValues(outcome).Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the

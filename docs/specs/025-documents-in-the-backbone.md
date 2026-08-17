@@ -379,6 +379,10 @@ authoring surface.
 
 ### 5.1 The document store {#sec-5.1}
 
+> **Withdrawn with §16.** This slice existed to receive that sync; with the
+> on-ramp retired it has no writer, and its schema is not the one §9.2 needs.
+> The store that gets built is §5's, authored server-side. Kept for its anchor.
+
 A minimal slice of that store — enough to receive the sync of §16 and serve reads, and no more:
 
 - `docs` — identity (`project`, `kind ∈ {spec, adr, plan}`, ordinal, §16.3),
@@ -1534,6 +1538,18 @@ Every metrics struct here is nil-safe and lives in the owning package, with the
 `prometheus.Registerer` threaded from `serve.go` and label values bounded.
 
 ## 16. Git → backbone sync: the on-ramp {#sec-16}
+
+> **Withdrawn — built, never used, and removed.** The on-ramp shipped
+> (`lode doc sync`, `POST /api/v1/docs/sync`, migrations `0011`/`0012`) and
+> was retired without ever running: `docs` held zero rows. It is a bridge to
+> backbone authoring for instances that want the corpus queryable *before*
+> §7/§9.2 land. Going straight to backbone authoring makes it dead weight,
+> and its projection schema — identity `(project, kind, ordinal)`, no
+> lifecycle columns — cannot carry the `tasks.plan_doc` reference §9.2 needs
+> without a three-column foreign key on every task row. §5.1's store went
+> with it; §5's store, authored server-side, is the one that gets built.
+> The parsing half (`internal/designdoc`) survives and is what the §22 corpus
+> import reuses. This section and §16.1–§16.5 stay for their anchors.
 
 §5 moves specs, ADRs, and plans into the backbone: authored there, reviewed there, projected to
 the graph, with the git `docs/specs/` and `docs/plans/` trees a transitional mirror — deleted, or

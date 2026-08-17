@@ -2,11 +2,22 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
 )
+
+// randomID returns a random hex string, for driving RecordEvent's
+// (source, externalID) idempotency key in tests that don't otherwise care
+// about the external id.
+func randomID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 // createDeliverable drives CreateDeliverable through RecordEvent, the way
 // every caller does, and returns its error.

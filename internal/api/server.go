@@ -202,10 +202,6 @@ type server struct {
 
 	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
-	docSyncRuns     *prometheus.CounterVec
-	docSyncDuration prometheus.Histogram
-	docSyncDocs     *prometheus.CounterVec
-	docSyncForced   prometheus.Counter
 
 	// localMerges counts tasks named in a local merge report, by result
 	// (advanced, duplicate, unknown_task); see merges.go. In a repo where
@@ -497,10 +493,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/inbox/import", s.importInbox)
 
 	r.api("GET /api/v1/board", s.board)
-
-	r.api("POST /api/v1/docs/sync", s.syncDocs)
-	r.api("GET /api/v1/docs", s.listDocs)
-	r.api("GET /api/v1/docs/{id}", s.getDoc)
 
 	r.api("GET /api/v1/events", s.listEvents)
 	r.api("GET /api/v1/events/stream", s.streamEvents)

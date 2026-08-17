@@ -56,23 +56,6 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI creation-form submissions, by form (task, deliverable) and outcome (created, invalid, forbidden, not_found, error).",
 	}, []string{"form", "outcome"})
-	s.docSyncRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_doc_sync_runs_total",
-		Help: "Doc sync requests by result.",
-	}, []string{"result"})
-	s.docSyncDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "worklode_doc_sync_duration_seconds",
-		Help:    "Doc sync request duration.",
-		Buckets: []float64{0.05, 0.1, 0.5, 1, 5, 15},
-	})
-	s.docSyncDocs = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_doc_sync_docs_total",
-		Help: "Documents synced, by kind and outcome.",
-	}, []string{"kind", "outcome"})
-	s.docSyncForced = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "worklode_doc_sync_forced_total",
-		Help: "Forced (--force) doc syncs accepted.",
-	})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
@@ -118,7 +101,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
-		s.docSyncRuns, s.docSyncDuration, s.docSyncDocs, s.docSyncForced, s.localMerges,
+		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -161,8 +144,6 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
 	}
-	s.docSyncRuns.WithLabelValues("ok")
-	s.docSyncRuns.WithLabelValues("error")
 }
 
 // A follow that has gone quiet reads identically whether the log is quiet or
@@ -362,24 +343,4 @@ func (s *server) observeListExpansion(endpoint, expansion string) {
 		return
 	}
 	s.listExpansions.WithLabelValues(endpoint, expansion).Inc()
-}
-
-// observeDocSync records one sync request. Nil-safe: tests build a *server
-// directly without initMetrics.
-func (s *server) observeDocSync(results []store.DocSyncResult, forced bool, err error, d time.Duration) {
-	if s.docSyncRuns == nil {
-		return
-	}
-	s.docSyncDuration.Observe(d.Seconds())
-	result := "ok"
-	if err != nil {
-		result = "error"
-	}
-	s.docSyncRuns.WithLabelValues(result).Inc()
-	if forced && err == nil {
-		s.docSyncForced.Inc()
-	}
-	for _, r := range results {
-		s.docSyncDocs.WithLabelValues(r.Kind, r.Outcome).Inc()
-	}
 }

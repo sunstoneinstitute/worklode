@@ -187,40 +187,6 @@ func TestEventSubscriberTable(t *testing.T) {
 	}
 }
 
-func TestDocTable(t *testing.T) {
-	var buf bytes.Buffer
-	DocTable(&buf, []Doc{
-		{ID: "WL-SPEC-34", Kind: "spec", Status: "accepted", Version: 2,
-			SourceDirty: true, Title: "Design-doc sync"},
-		{ID: "WL-ADR-1", Kind: "adr", Status: "draft", Version: 1,
-			SourceDirty: false, Title: "Clean checkout"},
-	})
-	out := buf.String()
-	for _, want := range []string{"ID", "KIND", "STATUS", "V", "DIRTY", "TITLE",
-		"WL-SPEC-34", "accepted", "yes", "Design-doc sync",
-		"WL-ADR-1", "draft", "Clean checkout"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("DocTable output missing %q:\n%s", want, out)
-		}
-	}
-	var dirtyCol string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "WL-ADR-1") {
-			fields := strings.Fields(line)
-			if len(fields) > 4 {
-				dirtyCol = fields[4]
-			}
-		}
-	}
-	if dirtyCol != "-" {
-		t.Errorf("WL-ADR-1 DIRTY column = %q, want \"-\"\n%s", dirtyCol, out)
-	}
-}
-
-// TestEventStreamRow pins the follow view against EventTable: same columns in
-// the same order, so `--follow` output is not a second format to learn. Its
-// widths are fixed rather than measured because a stream has no complete row
-// set to measure.
 func TestEventStreamRow(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)

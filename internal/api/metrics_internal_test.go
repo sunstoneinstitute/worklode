@@ -212,30 +212,6 @@ func TestObserveNavigationNilSafe(t *testing.T) {
 	s.observeNavigation("home", "ok")
 }
 
-func TestObserveDocSync(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	s := &server{}
-	s.initMetrics(reg)
-
-	s.observeDocSync([]store.DocSyncResult{
-		{DocID: "WL-SPEC-34", Kind: "spec", Outcome: "added"},
-		{DocID: "WL-PLAN-34-1", Kind: "plan", Outcome: "unchanged"},
-	}, true, nil, 40*time.Millisecond)
-
-	if got := testutil.ToFloat64(s.docSyncDocs.WithLabelValues("spec", "added")); got != 1 {
-		t.Errorf("docSyncDocs{spec,added} = %v, want 1", got)
-	}
-	if got := testutil.ToFloat64(s.docSyncForced); got != 1 {
-		t.Errorf("docSyncForced = %v, want 1", got)
-	}
-	if got := testutil.ToFloat64(s.docSyncRuns.WithLabelValues("ok")); got != 1 {
-		t.Errorf("docSyncRuns{ok} = %v, want 1", got)
-	}
-
-	// Nil-safe: a server built without initMetrics must not panic.
-	(&server{}).observeDocSync(nil, false, nil, 0)
-}
-
 func TestObserveListExpansion(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	s := &server{}
