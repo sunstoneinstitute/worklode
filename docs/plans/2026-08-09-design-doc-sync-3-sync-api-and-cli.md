@@ -1,8 +1,14 @@
 ---
-status: draft
+status: superseded
 covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design-doc sync, part 3 — API surface and lode doc
+
+> **Superseded — the on-ramp this plan built was retired.** `lode doc
+> sync` and the 025 §5.1 store shipped, never ran against a non-empty
+> corpus, and were removed; 025 §16 records why. Backbone authoring
+> (025 §7/§9.2) replaces it — see
+> `2026-08-03-documents-in-the-backbone-2-document-store.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
