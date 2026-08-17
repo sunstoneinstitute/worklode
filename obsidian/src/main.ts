@@ -7,7 +7,21 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, debounce, requestUrl } from "obsidian";
 import { WorklodeApiError, WorklodeClient, type HttpTransport } from "./api/client";
 import type { ProjectMembers } from "./serialize/note";
-import { applyMirror, desiredNotes, foreignNotes, isSafeMountRoot, type MirrorStats } from "./sync/mirror";
+import {
+  FULL_SYNC_EVERY,
+  highestUpdatedAt,
+  syncModeForTick,
+  syncOrigin,
+  type SyncMode,
+} from "./sync/incremental";
+import {
+  applyMirror,
+  desiredNotes,
+  desiredTaskNotes,
+  foreignNotes,
+  isSafeMountRoot,
+  type MirrorStats,
+} from "./sync/mirror";
 import { ObsidianVaultWriter } from "./vault/writer";
 
 interface WorklodeSettings {
@@ -34,6 +48,23 @@ const DEFAULT_SETTINGS: WorklodeSettings = {
   intervalMinutes: 0,
   adoptedRoots: [],
 };
+
+/** How far the mirror has read, persisted next to the settings in data.json.
+ *  Not a setting: nothing here is user-editable, and it is meaningless on its
+ *  own. */
+interface MirrorState {
+  /** Highest task `updated_at` seen across every synced project, RFC3339.
+   *  "" means "nothing read yet", which forces a full sync. */
+  watermark: string;
+  /** syncOrigin() of the settings the watermark was collected under. */
+  origin: string;
+}
+
+const DEFAULT_STATE: MirrorState = { watermark: "", origin: "" };
+
+/** The shape of data.json: the settings plus the mirror state under its own
+ *  key, so a state field can never be mistaken for a setting. */
+type PersistedData = Partial<WorklodeSettings> & { mirrorState?: Partial<MirrorState> };
 
 /** How long the mount-root field waits after the last keystroke before it
  *  saves. The tab otherwise saves on every character, so with an interval
@@ -67,6 +98,9 @@ function formatTime(d: Date): string {
 export default class WorklodePlugin extends Plugin {
   override settings: WorklodeSettings = { ...DEFAULT_SETTINGS };
 
+  private state: MirrorState = { ...DEFAULT_STATE };
+  /** Automatic ticks since load; every FULL_SYNC_EVERY-th one syncs fully. */
+  private tick = 0;
   private writer!: ObsidianVaultWriter;
   private statusBarItem!: HTMLElement;
   /** True while a sync or a purge is running. Shared between the two: a
@@ -115,12 +149,16 @@ export default class WorklodePlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = (await this.loadData()) as Partial<WorklodeSettings> | null;
-    this.settings = { ...DEFAULT_SETTINGS, ...data };
+    const { mirrorState, ...settings } = ((await this.loadData()) as PersistedData | null) ?? {};
+    this.settings = { ...DEFAULT_SETTINGS, ...settings };
+    this.state = { ...DEFAULT_STATE, ...mirrorState };
   }
 
+  /** Writes settings and mirror state together: they share one data.json and
+   *  saveData replaces the whole file, so persisting either alone would drop
+   *  the other. */
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    await this.saveData({ ...this.settings, mirrorState: this.state } satisfies PersistedData);
   }
 
   /** Re-registers the interval sync from the current settings. Clearing any
@@ -136,7 +174,10 @@ export default class WorklodePlugin extends Plugin {
       this.intervalId = this.registerInterval(
         window.setInterval(
           () => {
-            void this.sync();
+            // Automatic ticks alternate: mostly incremental, fully every
+            // FULL_SYNC_EVERY-th. The counter survives a settings edit, which
+            // only re-arms the timer.
+            void this.sync(syncModeForTick(++this.tick));
           },
           this.settings.intervalMinutes * 60 * 1000,
         ),
@@ -147,8 +188,14 @@ export default class WorklodePlugin extends Plugin {
   /** Fetches projects, filters by the allow-list, fetches each project's
    *  tasks and docs, diffs against the vault, and applies the difference.
    *  Guarded against overlapping runs: a slow sync plus a short interval
-   *  must not stack. */
-  async sync(): Promise<void> {
+   *  must not stack.
+   *
+   *  An "incremental" run asks only for the tasks changed since the stored
+   *  watermark, writes only task notes, and deletes nothing -- see
+   *  desiredTaskNotes and MirrorOptions for why both restrictions are
+   *  required rather than an optimisation. It degrades to a full sync
+   *  whenever the watermark cannot be trusted. */
+  async sync(mode: SyncMode = "full"): Promise<void> {
     if (this.busy) return;
 
     const baseUrl = this.settings.baseUrl.trim();
@@ -181,6 +228,12 @@ export default class WorklodePlugin extends Plugin {
     try {
       if (!(await this.ensureRootAdopted(mountRoot))) return;
 
+      // A watermark is a position in one server's task history, read with one
+      // token, against notes in one folder: a first run has none, and a
+      // changed server, token or mount root invalidates the one it has.
+      const origin = syncOrigin(baseUrl, token, mountRoot);
+      const incremental = mode === "incremental" && this.state.watermark !== "" && this.state.origin === origin;
+
       const client = new WorklodeClient(baseUrl, token, obsidianHttp);
       const allProjects = await client.listProjects();
       const allowList = parseAllowList(this.settings.projects);
@@ -201,6 +254,12 @@ export default class WorklodePlugin extends Plugin {
       let docsUnavailable = false;
       const byProject = new Map<string, ProjectMembers>();
       for (const project of selected) {
+        if (incremental) {
+          // Tasks only, and only the changed ones: an incremental run writes
+          // no doc note, so fetching the documents would be wasted bytes.
+          byProject.set(project.id, { docs: [], tasks: await client.listTasks(project.id, this.state.watermark) });
+          continue;
+        }
         const [tasks, docs] = await Promise.all([
           client.listTasks(project.id),
           client.listDocsIfPresent(project.id),
@@ -209,11 +268,21 @@ export default class WorklodePlugin extends Plugin {
         byProject.set(project.id, { docs: docs ?? [], tasks });
       }
 
-      const syncedAt = new Date().toISOString();
-      const desired = await desiredNotes(selected, byProject, mountRoot, syncedAt);
-      const stats = await applyMirror(this.writer, mountRoot, desired, { pruneDocNotes: !docsUnavailable });
+      const stats = incremental
+        ? await applyMirror(this.writer, mountRoot, await desiredTaskNotes(selected, byProject), {
+            pruneDocNotes: false,
+            pruneTaskNotes: false,
+            pruneOtherNotes: false,
+          })
+        : await applyMirror(
+            this.writer,
+            mountRoot,
+            await desiredNotes(selected, byProject, mountRoot, new Date().toISOString()),
+            { pruneDocNotes: !docsUnavailable },
+          );
 
-      this.reportSuccess(stats, docsUnavailable);
+      await this.advanceWatermark(origin, byProject);
+      this.reportSuccess(stats, docsUnavailable, incremental);
     } catch (err) {
       this.reportFailure(err);
     } finally {
@@ -252,6 +321,19 @@ export default class WorklodePlugin extends Plugin {
     return false;
   }
 
+  /** Records how far this sync read, so the next incremental one can ask for
+   *  what changed after it. It only ever moves forward -- see
+   *  highestUpdatedAt -- except when the settings now point somewhere else,
+   *  where the stored watermark belongs to another backbone and is dropped
+   *  rather than carried over. */
+  private async advanceWatermark(origin: string, byProject: Map<string, ProjectMembers>): Promise<void> {
+    const from = origin === this.state.origin ? this.state.watermark : "";
+    const watermark = highestUpdatedAt(from, [...byProject.values()].flatMap((m) => m.tasks));
+    if (watermark === this.state.watermark && origin === this.state.origin) return;
+    this.state = { watermark, origin };
+    await this.saveSettings();
+  }
+
   private async adoptRoot(root: string): Promise<void> {
     if (this.settings.adoptedRoots.includes(root)) return;
     this.settings.adoptedRoots = [...this.settings.adoptedRoots, root];
@@ -286,11 +368,15 @@ export default class WorklodePlugin extends Plugin {
     }
   }
 
-  private reportSuccess(stats: MirrorStats, docsUnavailable: boolean): void {
+  private reportSuccess(stats: MirrorStats, docsUnavailable: boolean, incremental: boolean): void {
     const noteCount = stats.written + stats.skipped;
-    this.statusBarItem.setText(`Worklode: ${noteCount} notes · ${formatTime(new Date())}`);
+    // An incremental run saw only the changed tasks, so its count is not the
+    // vault's note count and must not read like one.
+    const seen = incremental ? `${noteCount} changed` : `${noteCount} notes`;
+    this.statusBarItem.setText(`Worklode: ${seen} · ${formatTime(new Date())}`);
 
-    let message = `Worklode sync: ${stats.written} written, ${stats.skipped} unchanged, ${stats.removed} removed.`;
+    const kind = incremental ? "incremental sync" : "sync";
+    let message = `Worklode ${kind}: ${stats.written} written, ${stats.skipped} unchanged, ${stats.removed} removed.`;
     // Once per sync, not once per project: the endpoint is a property of the
     // server, and the user needs to know the empty docs folder means "this
     // server has no docs endpoint", not "this project has no docs".
@@ -403,7 +489,10 @@ class WorklodeSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Sync interval (minutes)")
-      .setDesc("0 = manual only (use the \"Worklode: Sync now\" command).")
+      .setDesc(
+        '0 = manual only (use the "Worklode: Sync now" command). ' +
+          `Every ${FULL_SYNC_EVERY}th automatic sync is a full one; the others fetch only what changed.`,
+      )
       .addText((text) => {
         text.inputEl.type = "number";
         text

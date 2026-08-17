@@ -71,7 +71,8 @@ build.
   project the token can read.
 - **Sync on startup** — run a sync automatically when the plugin loads.
 - **Sync interval (minutes)** — 0 (default) means manual only, via the
-  "Worklode: Sync now" command.
+  "Worklode: Sync now" command. Every 5th automatic sync is a full one; the
+  four in between fetch only the tasks that changed — see Limits.
 
 ## Limits
 
@@ -102,6 +103,19 @@ build.
   vault's trash (Settings → Files and links → Deleted files), so an accident
   is recoverable, but do not point the mount root at a folder of your own
   notes. The first sync into such a folder asks first: see below.
+- **Most automatic syncs are incremental, and an incremental sync is
+  partial.** It asks the server for the tasks changed since the newest
+  `updated_at` it has seen (`GET /api/v1/tasks?updated_since=`) and writes
+  only task notes. Two consequences, both healed by the next full sync: a
+  task deleted from the backbone never appears in a "what changed" answer, so
+  its note stays until then — an incremental sync deletes nothing at all —
+  and the project and index notes, whose roll-ups are built from a project's
+  whole task set, are left exactly as the last full sync wrote them rather
+  than re-rendered from a partial one. A full sync runs on plugin load, on
+  "Worklode: Sync now", and on every 5th automatic tick; the watermark it
+  keeps lives in `data.json` (`mirrorState`) and is discarded when the base
+  URL, token or mount root changes, since it means nothing against a
+  different backbone.
 - **A server with no docs endpoint costs the doc notes only.** The plugin
   ships independently of the binary, so `GET /api/v1/docs` may be absent
   (404). Projects and tasks still mirror, the sync notice says doc notes were

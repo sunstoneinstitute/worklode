@@ -35,6 +35,30 @@ describe("WorklodeClient", () => {
     expect(requests[0].headers.Accept).toBe("application/json");
   });
 
+  // The incremental path: the watermark rides along as updated_since, and
+  // the "+" in a non-UTC offset must survive as %2B rather than reaching the
+  // server as a space.
+  it("appends the watermark as an encoded updated_since", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ tasks: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.listTasks("worklode", "2026-08-16T09:12:00+02:00");
+
+    expect(requests[0].url).toBe(
+      "https://lode.example.com/api/v1/tasks?project=worklode&detail=true" +
+        "&updated_since=2026-08-16T09%3A12%3A00%2B02%3A00",
+    );
+  });
+
+  it("omits updated_since when there is no watermark", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ tasks: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.listTasks("worklode", "");
+
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks?project=worklode&detail=true");
+  });
+
   it("requests docs with the body param and sends the bearer token", async () => {
     const { transport, requests } = fakeTransport(200, JSON.stringify({ docs: [] }));
     const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);

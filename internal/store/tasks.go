@@ -68,6 +68,10 @@ type TaskFilter struct {
 	// UNIQUE), so this is Project by another key — the one a client running
 	// inside a checkout actually has.
 	Repo string
+	// UpdatedSince narrows to the tasks touched at or after this instant —
+	// the incremental fetch a polling mirror makes with the highest
+	// updated_at it has already seen. The zero value does not filter.
+	UpdatedSince time.Time
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -511,6 +515,14 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]Task, error) {
 			`EXISTS (SELECT 1 FROM project_repos pr
 			          WHERE pr.repo = $%d AND pr.project_id = tasks.project_id)`,
 			len(args)))
+	}
+	if !f.UpdatedSince.IsZero() {
+		// >=, never >: the caller sends the highest updated_at it has seen and
+		// re-receives that boundary row, which is cheap and idempotent. With >
+		// a second write landing in the same clock tick as the watermark would
+		// never be handed out again — a silently lost update.
+		args = append(args, f.UpdatedSince.UTC())
+		conds = append(conds, fmt.Sprintf(`updated_at >= $%d`, len(args)))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
