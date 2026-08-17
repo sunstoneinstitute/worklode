@@ -6,11 +6,17 @@
 import type { DataAdapter } from "obsidian";
 import type { VaultWriter } from "../sync/mirror";
 
-/** A path segment (relative to root) is safe when it has no ".." segment,
- *  no empty segment, and does not start with a path separator -- the same
- *  check test/mirror.test.ts's in-memory fake applies. Defense in depth:
- *  the whole mount-root guarantee already lives in desiredNotes, but this
- *  is the last line before a real delete/write reaches disk. */
+/** A path relative to root is safe when it has no ".." segment, no empty
+ *  segment, and does not start with a path separator -- the same check
+ *  test/mirror.test.ts's in-memory fake applies. Defense in depth: the whole
+ *  mount-root guarantee already lives in desiredNotes, but this is the last
+ *  line before a real delete/write reaches disk.
+ *
+ *  This guards the *relative* path only. The root itself is validated once,
+ *  by src/main.ts's isSafeMountRoot, and may be nested ("Team/Worklode");
+ *  every method below treats it as one opaque prefix. Because "\" counts as
+ *  a separator here, isSafeMountRoot forbids it in a root outright -- the
+ *  two must not disagree about where a segment ends. */
 function assertInsideRoot(path: string): void {
   const segments = path.split(/[\\/]/);
   if (path.startsWith("/") || path.startsWith("\\") || segments.includes("..") || segments.includes("")) {
@@ -83,6 +89,12 @@ export class ObsidianVaultWriter implements VaultWriter {
     await this.pruneEmptyDirs(root, full.slice(0, full.lastIndexOf("/")));
   }
 
+  /** Walks up from the removed file's folder, stopping at root. Cannot walk
+   *  above a nested root: `dir` starts as an ancestor of `${root}/${path}`
+   *  with `path` already through assertInsideRoot, so it is always a strict
+   *  descendant of root and each step drops exactly one segment -- root is
+   *  hit exactly, never stepped over. The `dir &&` term is belt and braces
+   *  for a root that is somehow not a prefix at all. */
   private async pruneEmptyDirs(root: string, dir: string): Promise<void> {
     while (dir && dir !== root) {
       const { files, folders } = await this.adapter.list(dir);
@@ -95,7 +107,9 @@ export class ObsidianVaultWriter implements VaultWriter {
   /** Deletes everything under root, root included -- used by the explicit
    *  "purge" command, which (unlike a mirror sync) is not limited to .md
    *  files: it is the user asking to wipe the whole mount. Returns the
-   *  number of files that were under root, for the confirmation report. */
+   *  number of files that were under root, for the confirmation report.
+   *  A nested root's parents are left alone even if empty afterwards: the
+   *  mirror owns the root, not the folders it was placed in. */
   async purgeRoot(root: string): Promise<number> {
     const all = await this.listAll(root);
     if (await this.adapter.exists(root)) {

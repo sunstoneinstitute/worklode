@@ -4,7 +4,9 @@ import {
   desiredNotes,
   desiredPath,
   foreignNotes,
+  isSafeMountRoot,
   isSafePathSegment,
+  mountRootName,
   type VaultWriter,
 } from "../src/sync/mirror";
 import { parseNote } from "../src/serialize/note";
@@ -103,9 +105,10 @@ class MapVaultWriter implements VaultWriter {
   }
 }
 
-// The one predicate behind both a backbone id and (in src/main.ts, which
-// vitest cannot import) the mount root. The cases below are the ones the two
-// earlier predicates disagreed on.
+// The predicate behind every backbone id (project/doc/task): each becomes
+// one path segment under the mount root, so a separator in one would move
+// the note somewhere the mirror never surveyed. The cases below are the ones
+// the two earlier predicates disagreed on.
 describe("isSafePathSegment", () => {
   it("accepts an ordinary segment", () => {
     expect(isSafePathSegment("Worklode")).toBe(true);
@@ -129,6 +132,79 @@ describe("isSafePathSegment", () => {
   it("rejects separators", () => {
     expect(isSafePathSegment("Team/Worklode")).toBe(false);
     expect(isSafePathSegment("Team\\Worklode")).toBe(false);
+  });
+});
+
+// The mount root's own predicate (applied in src/main.ts, which vitest cannot
+// import). It differs from isSafePathSegment in exactly one way: "/" joins
+// segments instead of disqualifying the value. Every segment still has to
+// clear the single-segment bar on its own.
+describe("isSafeMountRoot", () => {
+  it("accepts a single segment, exactly as before", () => {
+    expect(isSafeMountRoot("Worklode")).toBe(true);
+    expect(isSafeMountRoot("My Notes")).toBe(true);
+  });
+
+  it("accepts a nested root whose every segment is safe", () => {
+    expect(isSafeMountRoot("Team/Worklode")).toBe(true);
+    expect(isSafeMountRoot("Team/Shared Notes/Worklode")).toBe(true);
+  });
+
+  it('rejects ".." in any segment, at any depth', () => {
+    expect(isSafeMountRoot("..")).toBe(false);
+    expect(isSafeMountRoot("../Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/..")).toBe(false);
+    expect(isSafeMountRoot("Team/../Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/../../etc/Worklode")).toBe(false);
+    // ".." as a substring too, not just as a whole segment.
+    expect(isSafeMountRoot("Team/My..Notes/Worklode")).toBe(false);
+  });
+
+  it('rejects "." as any segment', () => {
+    expect(isSafeMountRoot(".")).toBe(false);
+    expect(isSafeMountRoot("./Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/./Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/.")).toBe(false);
+  });
+
+  it("rejects empty segments: blank, doubled, leading or trailing separator", () => {
+    expect(isSafeMountRoot("")).toBe(false);
+    expect(isSafeMountRoot("/")).toBe(false);
+    expect(isSafeMountRoot("/Team/Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/Worklode/")).toBe(false);
+    expect(isSafeMountRoot("Team//Worklode")).toBe(false);
+  });
+
+  it("rejects a segment that is blank or not already trimmed", () => {
+    expect(isSafeMountRoot("   ")).toBe(false);
+    expect(isSafeMountRoot(" Team/Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team /Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/ Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/Worklode ")).toBe(false);
+    expect(isSafeMountRoot("Team/   /Worklode")).toBe(false);
+  });
+
+  // A backslash is a forbidden character on the root, never a separator: the
+  // writer's assertInsideRoot splits relative paths on both "\" and "/", so a
+  // root carrying one would have a different segment count there than here.
+  it("rejects a backslash anywhere, rather than reading it as a separator", () => {
+    expect(isSafeMountRoot("Team\\Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team/Sub\\Worklode")).toBe(false);
+    expect(isSafeMountRoot("Team\\..\\Worklode")).toBe(false);
+  });
+});
+
+// A nested root has no single name, so the index note takes the root's own
+// folder name -- its last segment -- and lands inside the root, as it always
+// has for a single-segment root.
+describe("mountRootName", () => {
+  it("is the root itself when the root is a single segment", () => {
+    expect(mountRootName("Worklode")).toBe("Worklode");
+  });
+
+  it("is the last segment of a nested root", () => {
+    expect(mountRootName("Team/Worklode")).toBe("Worklode");
+    expect(mountRootName("Team/Shared Notes/Worklode")).toBe("Worklode");
   });
 });
 
@@ -352,6 +428,73 @@ describe("applyMirror", () => {
       expect(key.startsWith(`${ROOT}/`)).toBe(true);
       expect(key.includes("..")).toBe(false);
     }
+  });
+});
+
+// A nested mount root, end to end: what src/main.ts hands desiredNotes and
+// applyMirror is one and the same string, so the two have to agree about a
+// multi-segment root the way they already do about a single-segment one.
+describe("a nested mount root", () => {
+  const NESTED = "Team/Worklode";
+
+  it("names the index note after the root's own folder, inside the root", () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+
+    const desired = desiredNotes([project], byProject, NESTED, SYNCED_AT);
+
+    expect(desired.conflicts).toEqual([]);
+    // "Worklode.md", not "Team/Worklode.md": paths are relative to the root,
+    // so naming the index after the whole root would put it one level above
+    // the folder it indexes.
+    expect(desired.notes.map((n) => n.path).sort()).toEqual(
+      ["Worklode.md", "worklode/docs/WL-SPEC-1.md", "worklode/tasks/WL-1.md", "worklode/worklode.md"].sort(),
+    );
+    // The note's title and alias are the folder name too -- parseNote strips
+    // the alias back out (aliases_added), so this reads the rendered form.
+    const index = desired.notes.find((n) => n.path === "Worklode.md")!;
+    expect(index.content).toContain("aliases:\n  - Worklode\n");
+    expect(index.content).toContain("# Worklode\n");
+    // The root's parent is not part of the note's identity.
+    expect(index.content).not.toContain("Team");
+  });
+
+  it("writes every note under the nested root and nowhere else", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+    const desired = desiredNotes([project], byProject, NESTED, SYNCED_AT);
+
+    const writer = new MapVaultWriter();
+    const stats = await applyMirror(writer, NESTED, desired);
+
+    expect(stats.written).toBe(4);
+    expect(stats.conflicts).toEqual([]);
+    expect([...writer.files.keys()].sort()).toEqual(
+      [
+        "Team/Worklode/Worklode.md",
+        "Team/Worklode/worklode/docs/WL-SPEC-1.md",
+        "Team/Worklode/worklode/tasks/WL-1.md",
+        "Team/Worklode/worklode/worklode.md",
+      ].sort(),
+    );
+
+    // Second pass: nothing moved, so nothing is rewritten or swept up.
+    const second = await applyMirror(writer, NESTED, desired);
+    expect(second.written).toBe(0);
+    expect(second.skipped).toBe(4);
+    expect(second.removed).toBe(0);
+  });
+
+  it("skips the index and records a conflict when a segment of the root is unsafe", () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
+
+    const desired = desiredNotes([project], byProject, "Team/../evil", SYNCED_AT);
+
+    expect(desired.conflicts.some((c) => c.includes("Team/../evil"))).toBe(true);
+    expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
+    // The rest of the sync is unaffected, as with a single-segment bad root.
+    expect(desired.notes.some((n) => n.path === "worklode/worklode.md")).toBe(true);
   });
 });
 

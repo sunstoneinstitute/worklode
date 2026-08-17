@@ -291,6 +291,88 @@ describe("ObsidianVaultWriter.remove", () => {
   });
 });
 
+// The mount root may be nested (e.g. "Team/Worklode"). Every place the
+// writer uses the root as a prefix, a boundary, or a delete target has to
+// treat the whole multi-segment string as one unit -- above all
+// pruneEmptyDirs, which walks up from a removed file and must stop at the
+// root rather than continuing into the user's own folders above it.
+describe("ObsidianVaultWriter with a nested mount root", () => {
+  const NESTED = "Team/Worklode";
+
+  it("lists paths relative to the whole nested root, and nothing beside it", async () => {
+    const adapter = new FakeAdapter();
+    adapter.files.set("Team/Worklode/worklode/worklode.md", "a");
+    adapter.files.set("Team/Worklode/worklode/tasks/WL-1.md", "b");
+    adapter.files.set("Team/Worklode/attachment.png", "not markdown");
+    // Siblings of the root, inside and outside "Team": neither is under it.
+    adapter.files.set("Team/Worklode2/x.md", "sibling, not a child");
+    adapter.files.set("Team/Retro.md", "the team's own note, one level up");
+    adapter.files.set("Worklode/x.md", "same leaf name, different place");
+
+    const writer = new ObsidianVaultWriter(adapter);
+
+    expect((await writer.list(NESTED)).sort()).toEqual(
+      ["worklode/tasks/WL-1.md", "worklode/worklode.md"].sort(),
+    );
+  });
+
+  it("creates every ancestor of a nested root before writing", async () => {
+    const adapter = new FakeAdapter();
+    const writer = new ObsidianVaultWriter(adapter);
+
+    await writer.write(NESTED, "worklode/tasks/WL-1.md", "content");
+
+    expect(adapter.files.get("Team/Worklode/worklode/tasks/WL-1.md")).toBe("content");
+    expect(await adapter.exists("Team")).toBe(true);
+    expect(await adapter.exists("Team/Worklode")).toBe(true);
+    expect(await adapter.exists("Team/Worklode/worklode/tasks")).toBe(true);
+  });
+
+  it("prunes emptied folders up to the nested root and never above it", async () => {
+    const adapter = new FakeAdapter();
+    const writer = new ObsidianVaultWriter(adapter);
+    await writer.write(NESTED, "worklode/tasks/WL-1.md", "content");
+
+    await writer.remove(NESTED, "worklode/tasks/WL-1.md");
+
+    expect(adapter.files.has("Team/Worklode/worklode/tasks/WL-1.md")).toBe(false);
+    expect(adapter.trashed).toEqual(["Team/Worklode/worklode/tasks/WL-1.md"]);
+    // Emptied intermediate folders go...
+    expect(await adapter.exists("Team/Worklode/worklode/tasks")).toBe(false);
+    expect(await adapter.exists("Team/Worklode/worklode")).toBe(false);
+    // ...the root stays, and so does its parent, which the mirror does not own
+    // even though it is now empty of anything but the root itself.
+    expect(await adapter.exists("Team/Worklode")).toBe(true);
+    expect(await adapter.exists("Team")).toBe(true);
+  });
+
+  it("refuses an adversarial relative path under a nested root", async () => {
+    const adapter = new FakeAdapter();
+    adapter.files.set("Team/Retro.md", "the team's own note");
+    const writer = new ObsidianVaultWriter(adapter);
+
+    await expect(writer.remove(NESTED, "../Retro.md")).rejects.toThrow();
+    await expect(writer.remove(NESTED, "../../Team/Retro.md")).rejects.toThrow();
+    await expect(writer.write(NESTED, "/abs.md", "x")).rejects.toThrow();
+    expect(adapter.files.has("Team/Retro.md")).toBe(true);
+  });
+
+  it("purges the nested root only, leaving its parent and the parent's files", async () => {
+    const adapter = new FakeAdapter();
+    adapter.files.set("Team/Worklode/worklode/worklode.md", "a");
+    adapter.files.set("Team/Worklode/attachment.png", "purged anyway");
+    adapter.files.set("Team/Retro.md", "the team's own note");
+
+    const writer = new ObsidianVaultWriter(adapter);
+    const removed = await writer.purgeRoot(NESTED);
+
+    expect(removed).toBe(2);
+    expect(await adapter.exists("Team/Worklode")).toBe(false);
+    expect(adapter.files.has("Team/Retro.md")).toBe(true);
+    expect(await adapter.exists("Team")).toBe(true);
+  });
+});
+
 describe("ObsidianVaultWriter.purgeRoot", () => {
   it("deletes everything under root, including non-.md files, and reports the count", async () => {
     const adapter = new FakeAdapter();
