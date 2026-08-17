@@ -46,6 +46,11 @@ cp manifest.json main.js "$VAULT/.obsidian/plugins/worklode/"
 build before copying. Then, in Obsidian: Settings → Community plugins (needs
 Restricted Mode off) → enable "Worklode".
 
+The plugin runs on desktop and mobile alike (`isDesktopOnly: false`): it
+imports no Node builtin, hashing etags through the Web Crypto `crypto.subtle`
+every Obsidian platform provides rather than `node:crypto`. Keep it that way —
+a single `node:` import anywhere under `src/` puts mobile back out of reach.
+
 This package uses pnpm, pinned by `package.json`'s `packageManager` field. It is
 the only Node package in the repo and shares no dependency tree with the Go
 build.
@@ -77,9 +82,6 @@ build.
 - **Plaintext token.** The token is stored in the vault's
   `.obsidian/plugins/worklode/data.json`, unencrypted. Anyone with read
   access to the vault (including a sync service backing it up) can read it.
-- **Desktop only.** `manifest.json` sets `isDesktopOnly: true`: etag
-  computation uses Node's `node:crypto`, which is not available on Obsidian
-  mobile.
 - **The mount root is checked folder name by folder name.** It may be nested
   — `Team/Worklode` is fine — but every name between the slashes must be
   non-blank, carry no leading or trailing whitespace, not be `.`, and contain

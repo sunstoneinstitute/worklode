@@ -2,7 +2,6 @@
 // no Obsidian, no I/O. Covers all four note kinds — task, doc, project,
 // index — plus the machinery shared across them.
 
-import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { Doc, Project, TaskListDetail } from "../api/types";
 
@@ -65,10 +64,20 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-/** First 16 hex chars of sha256 of the canonical (key-sorted) JSON of `payload`. */
-export function computeEtag(payload: unknown): string {
+/** First 16 hex chars of sha256 of the canonical (key-sorted) JSON of `payload`.
+ *
+ *  Async because it hashes through Web Crypto's `crypto.subtle`, which is
+ *  promise-returning and has no sync twin. That is the whole reason every
+ *  *ToNote function below is async: `node:crypto`'s sync `createHash` exists
+ *  only on desktop, and the mirror has to run on Obsidian mobile too. The
+ *  digest itself is unchanged — same UTF-8 bytes of the same canonical JSON,
+ *  same sha256, same 16-char prefix — so no mirrored vault is invalidated by
+ *  the move. `test/note.test.ts` pins known digests against that promise. */
+export async function computeEtag(payload: unknown): Promise<string> {
   const canonicalJson = JSON.stringify(canonicalize(payload));
-  return createHash("sha256").update(canonicalJson).digest("hex").slice(0, 16);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson));
+  // 8 bytes is the 16 hex chars the etag keeps; hashing produces 32.
+  return [...new Uint8Array(digest, 0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Locale-independent ascending sort on plain `<`. */
@@ -165,14 +174,14 @@ function stripHeading(rest: string): string {
 
 // ---- Task notes ----
 
-export function taskToNote(t: TaskListDetail): Note {
+export async function taskToNote(t: TaskListDetail): Promise<Note> {
   const parentEdges = t.edges.out.filter((e) => e.type === "child_of");
   const parent = parentEdges.length > 0 ? parentEdges[0].to : undefined;
   const children = sortIds(t.edges.in.filter((e) => e.type === "child_of").map((e) => e.from));
   const blocks = sortIds(t.edges.out.filter((e) => e.type === "blocks").map((e) => e.to));
   const blockedBy = sortIds(t.edges.in.filter((e) => e.type === "blocks").map((e) => e.from));
 
-  const etag = computeEtag(t);
+  const etag = await computeEtag(t);
   const headingAdded = !bodyOpensWithH1(t.body);
 
   const wl: WlBlock = {
@@ -228,7 +237,7 @@ function docEtagSource(d: Doc): Record<string, unknown> {
 /** Renders a stored document: its own frontmatter verbatim, plus the
  *  reserved `wl` block beside it. The document's own frontmatter is never
  *  edited, only accompanied — see the round-trip rules in the module docs. */
-export function docToNote(d: Doc): Note {
+export async function docToNote(d: Doc): Promise<Note> {
   // frontmatter is unknown (it's json.RawMessage on the Go side): a non-null,
   // non-object payload (a string, a number, an array) would otherwise spread
   // into garbage index keys. Treat it as absent and surface a conflict
@@ -240,7 +249,7 @@ export function docToNote(d: Doc): Note {
   const hasAliases = Object.prototype.hasOwnProperty.call(source, "aliases");
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
-  const etag = computeEtag(docEtagSource(d));
+  const etag = await computeEtag(docEtagSource(d));
   const body = d.body ?? "";
   // The one case this bit exists for: a spec, ADR or plan body opens with its
   // own "# <Title>", so injecting one would render the note with two.
@@ -336,10 +345,10 @@ function renderProjectBody(docs: Doc[], tasks: TaskListDetail[]): string {
   return `${collapsed.join("\n").trimEnd()}\n`;
 }
 
-export function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Note {
+export async function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Promise<Note> {
   // Same `synced_at` exclusion as docToNote: otherwise every doc sync would
   // rewrite every project note as well.
-  const etag = computeEtag({ project: p, docs: docs.map(docEtagSource), tasks });
+  const etag = await computeEtag({ project: p, docs: docs.map(docEtagSource), tasks });
 
   // A generated body opens with the generated-by notice, never a heading, so
   // this is always true. Asked anyway: one rule, put to every note kind.
@@ -397,14 +406,14 @@ function renderIndexBody(projects: Project[], byProject: Map<string, ProjectMemb
   return `${lines.join("\n")}\n`;
 }
 
-export function indexToNote(
+export async function indexToNote(
   projects: Project[],
   byProject: Map<string, ProjectMembers>,
   rootName: string,
   syncedAt: string,
-): Note {
+): Promise<Note> {
   const counts = sortIds(projects.map((p) => p.id)).map((id) => ({ id, ...projectCounts(id, byProject) }));
-  const etag = computeEtag({ projects, counts, syncedAt });
+  const etag = await computeEtag({ projects, counts, syncedAt });
 
   const body = renderIndexBody(projects, byProject);
   const headingAdded = !bodyOpensWithH1(body);

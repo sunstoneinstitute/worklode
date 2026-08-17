@@ -140,25 +140,34 @@ function sortById<T extends { id: string }>(items: T[]): T[] {
  *  Rendering itself is caught too: a row shaped differently from what the
  *  serializer expects -- a server predating the `detail=true` expansion
  *  returns tasks with no `edges` at all -- costs that one note, not the
- *  whole sync. */
-function filterSafe<T extends { id: string }>(
+ *  whole sync. A rendering failure is now a rejected promise rather than a
+ *  synchronous throw, which allSettled turns back into a per-item outcome.
+ *
+ *  Every item is rendered concurrently and the outcomes are drained in the
+ *  input order: rendering awaits a digest per note, so a serial loop would
+ *  make a sync as slow as its note count, while draining by index keeps both
+ *  the kept-note order and the order conflicts are reported in exactly what
+ *  the serial version produced. */
+async function filterSafe<T extends { id: string }>(
   kind: "doc" | "task",
   projectId: string,
   items: T[],
-  toNote: (item: T) => Note,
+  toNote: (item: T) => Promise<Note>,
   conflicts: string[],
-): { items: T[]; notes: Note[] } {
+): Promise<{ items: T[]; notes: Note[] }> {
+  const rendered = await Promise.allSettled(items.map((item) => toNote(item)));
+
   const keptItems: T[] = [];
   const keptNotes: Note[] = [];
-  for (const item of items) {
-    let note: Note;
-    try {
-      note = toNote(item);
-    } catch (err) {
+  for (const [i, outcome] of rendered.entries()) {
+    const item = items[i];
+    if (outcome.status === "rejected") {
+      const err: unknown = outcome.reason;
       const message = err instanceof Error ? err.message : String(err);
       conflicts.push(`${kind} ${JSON.stringify(item.id)}: could not be rendered (${message}), skipped`);
       continue;
     }
+    const note = outcome.value;
     const expected = desiredPath(kind, projectId, item.id);
     if (expected === undefined || note.path !== expected) {
       conflicts.push(
@@ -182,38 +191,60 @@ function filterSafe<T extends { id: string }>(
  *
  *  `mountRoot` is the vault folder the mirror owns -- the same string
  *  applyMirror is given as `root`. Note paths are relative to it; it appears
- *  here only to name the index note, after the root's own folder. */
-export function desiredNotes(
+ *  here only to name the index note, after the root's own folder.
+ *
+ *  Projects render concurrently -- each note costs an awaited digest -- but
+ *  each keeps its own notes and conflicts, which are concatenated in
+ *  project-id order below. Concurrency therefore buys the wall time without
+ *  costing the documented order, which the index note's own etag depends on:
+ *  it hashes `safeProjects` as an array. Within a project, docs are awaited
+ *  before tasks for the same reason -- they share one conflicts array, and
+ *  the two are reported docs-first. */
+export async function desiredNotes(
   projects: Project[],
   byProject: Map<string, ProjectMembers>,
   mountRoot: string,
   syncedAt: string,
-): DesiredSet {
+): Promise<DesiredSet> {
+  const rendered = await Promise.all(
+    sortById(projects).map(async (p) => {
+      const conflicts: string[] = [];
+      if (desiredPath("project", p.id) === undefined) {
+        conflicts.push(`project ${JSON.stringify(p.id)}: unsafe id, skipped along with its docs and tasks`);
+        return { project: undefined, members: undefined, notes: [] as Note[], conflicts };
+      }
+
+      const members = byProject.get(p.id) ?? { docs: [], tasks: [] };
+      const docs = await filterSafe("doc", p.id, sortById(members.docs), docToNote, conflicts);
+      const tasks = await filterSafe("task", p.id, sortById(members.tasks), taskToNote, conflicts);
+
+      const projectNote = await projectToNote(p, docs.items, tasks.items);
+      if (projectNote.conflict) conflicts.push(projectNote.conflict);
+
+      return {
+        project: p,
+        members: { docs: docs.items, tasks: tasks.items },
+        notes: [projectNote, ...docs.notes, ...tasks.notes],
+        conflicts,
+      };
+    }),
+  );
+
   const conflicts: string[] = [];
   const notes: Note[] = [];
   const safeProjects: Project[] = [];
   const filteredByProject = new Map<string, ProjectMembers>();
 
-  for (const p of sortById(projects)) {
-    if (desiredPath("project", p.id) === undefined) {
-      conflicts.push(`project ${JSON.stringify(p.id)}: unsafe id, skipped along with its docs and tasks`);
-      continue;
-    }
-
-    const members = byProject.get(p.id) ?? { docs: [], tasks: [] };
-    const docs = filterSafe("doc", p.id, sortById(members.docs), docToNote, conflicts);
-    const tasks = filterSafe("task", p.id, sortById(members.tasks), taskToNote, conflicts);
-
-    filteredByProject.set(p.id, { docs: docs.items, tasks: tasks.items });
-    safeProjects.push(p);
-
-    const projectNote = projectToNote(p, docs.items, tasks.items);
-    if (projectNote.conflict) conflicts.push(projectNote.conflict);
-    notes.push(projectNote, ...docs.notes, ...tasks.notes);
+  for (const result of rendered) {
+    conflicts.push(...result.conflicts);
+    if (result.project === undefined || result.members === undefined) continue;
+    filteredByProject.set(result.project.id, result.members);
+    safeProjects.push(result.project);
+    notes.push(...result.notes);
   }
 
   if (isSafeMountRoot(mountRoot)) {
-    notes.unshift(indexToNote(safeProjects, filteredByProject, mountRootName(mountRoot), syncedAt));
+    notes.unshift(await indexToNote(safeProjects, filteredByProject, mountRootName(mountRoot), syncedAt));
   } else {
     conflicts.push(`index root name ${JSON.stringify(mountRoot)}: unsafe, index note skipped`);
   }
