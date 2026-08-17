@@ -14,7 +14,18 @@ requires:
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Series:** Part 3 of 4 (7 tasks; numbering restarts at 1 per part). See
-part 1 for the series map. Part 2 must be merged first.
+part 1 for the series map. Part 2 must be merged first, and it is
+**unexecuted** — no `docs` rows of its shape, no `AcceptDoc`, no
+`tasks.plan_doc` exist yet. Part 2's Task 1 replaces the retired sync
+on-ramp's `docs`/`doc_sections`/`doc_edges` tables (migrations `0011`/`0012`,
+025 §16, superseded) with the authoring schema this part writes against; do
+not read the tables shipped today as part 2's.
+
+**Task 1 has already landed** — `internal/designdoc/plantasks.go` and its
+test, commit `2d38827`, currently stranded on the unmerged branch
+`WL-40-execute-plan-documents-in-the-backbone-3`. Rebase or cherry-pick it
+rather than rewriting it; see the note on Task 1 below for the one place it
+deviates from this plan's text.
 
 **Goal:** Implement 025 §9, §4.1, §5, §7 and §10: accepting a plan document
 mints its execution tasks from the §4.1 `## Tasks` declarations — draft rows
@@ -72,24 +83,29 @@ resolve with §4.1's after-colon fallback (Task 7).
   numbering, heading and cycle rules, the skill-identifier fallback), §5
   (the two-acts table and the nullable `plan_doc`), §7 (the query table),
   §10 (the verb set), §13 AC2/AC4
-- `internal/store/docs.go` (part 2 — `AcceptDoc`'s plan stub is what Task 2
-  here replaces)
-- `internal/store/tasks.go:36-46` (`TaskInput` — `Skills` already exists;
-  minted skills ride it into the `tasks.skills` jsonb column from migration
-  0007, surfaced in every brief), `:675-717` (`blockedCondition`,
-  `IsBlocked`); `internal/store/ranking.go` (`readyCandidates`)
+- `internal/store/docs.go` — part 2's Task 4 builds
+  `AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*Doc, error)`,
+  whose plan branch returns `ErrInvalidInput` ("plan acceptance mints its
+  tasks; lands in part 3"). That branch is the seam Task 2 here replaces —
+  the whole function is not new work
+- `internal/store/tasks.go` — `TaskInput` (~:41; `Skills` already exists,
+  and minted skills ride it into the `tasks.skills` jsonb column from
+  migration 0007, surfaced in every brief), `taskColumns`/`scanTask`
+  (~:333-350), `blockedCondition`/`IsBlocked` (~:829-869);
+  `internal/store/ranking.go` (`readyCandidates`)
 - `docs/specs/026-design-doc-queries.md` §2 — the selector semantics
   `--needs-planning`/`--needs-execution` must match; 026 AC9 promises that a
   store-backed loader is the whole migration, and this part is that loader
 
 **Conventions:** as part 1.
 
-**Interaction with spec 026:** 026 implements `lode doc list/show/sections`
-against the *git mirror*; no plan for that read surface has been executed. If
-its commands exist when this part runs, Tasks 4–5 swap their data source to
-the store (026 AC9) rather than adding parallel verbs; if they do not, Tasks
-4–5 create the commands store-backed and 026's mirror-backed variant is
-moot. Either way the verb names, flags and semantics are 025 §18's.
+**Interaction with spec 026:** 026 specifies `lode doc list/show/sections`
+against the *git mirror*; no plan for that read surface has been executed.
+What does exist is `lode doc list` from the sync on-ramp — store-backed
+already, but against the schema part 2 replaces, so Task 5 rewrites it rather
+than adding a parallel verb (026 AC9). `lode doc show`/`sections` do not
+exist and Task 5 creates them store-backed. Either way the verb names, flags
+and semantics are 025 §18's.
 
 **Non-goals:** `lode doc coverage` (needs the `.worklode/implements.yaml`
 deriver, never built — stays with the 014 plan's deferred table);
@@ -123,13 +139,13 @@ Milestone (v2, 025 §22); tier-2 shorthand resolution for foreign corpora
 
 | File | Responsibility |
 |---|---|
-| `internal/designdoc/plantasks.go` (+ test) (new) | plan-task-format parsing |
+| `internal/designdoc/plantasks.go` (+ test) | plan-task-format parsing — **already written**, commit `2d38827` |
 | `internal/store/docs.go` | the plan branch of `AcceptDoc`; `NeedsPlanning`/`NeedsExecution` queries |
 | `internal/store/tasks.go`, `ranking.go` | `planBlockedCondition`; `TaskInput.PlanDoc`; filters |
 | `internal/store/brief.go` (+ test) | `ResolvePins` after-colon fallback (§4.1) |
 | `internal/store/metrics.go` | `worklode_doc_plan_tasks_minted_total` |
 | `internal/api/docs.go`, `tasks.go` | accept response gains the minted set; `plan_doc` on task JSON; list filters |
-| `internal/cli/client.go` (new methods), `internal/cmd/doc.go` (new) | the `lode doc` verbs |
+| `internal/cli/client.go`, `internal/cmd/doc.go`, `docrender.go` | the `lode doc` verbs (the files exist; `list` is rewritten, the rest are new) |
 | `e2e/docs_test.go` | plan accept → claim flow |
 
 ---
@@ -145,6 +161,17 @@ skills:
   - superpowers:test-driven-development
 blockedBy: [ ]
 ```
+
+> **Already landed.** Commit `2d38827` on the unmerged branch
+> `WL-40-execute-plan-documents-in-the-backbone-3` implements this task in
+> full — `internal/designdoc/plantasks.go` (314 lines) and
+> `plantasks_test.go` (527 lines), green, with no dependency on the accept
+> lifecycle. Bring that commit forward; do not re-implement it. The one
+> deviation from the text below: the no-drift test binds `planMintableKinds`
+> to `internal/api`'s `validKinds` (migration `0017`'s mirror) rather than
+> `ns.TaskKinds`, because `internal/ns` does not exist — part 1's Task 1 is
+> unexecuted (WL-70). Retarget it at `ns.TaskKinds` when WL-70 lands. The
+> rest of this task is kept as the record of what was built.
 
 **Files:**
 - Create: `internal/designdoc/plantasks.go`, `internal/designdoc/plantasks_test.go`
@@ -314,9 +341,8 @@ blockedBy: [2]
 
 - [ ] **Step 2: Implement**
 
-Append `plan_doc` to `taskColumns` (last, matching the skills precedent at
-`tasks.go:315-320` — comma-free entry, positional scans elsewhere
-unaffected). `Task.PlanDoc int64`; filter wiring mirrors `Kind`. CLI `--plan`
+Append `plan_doc` to `taskColumns` (last, matching the `skills::text`
+precedent at `tasks.go:333-338` — positional scans elsewhere unaffected). `Task.PlanDoc int64`; filter wiring mirrors `Kind`. CLI `--plan`
 resolves the doc ref via the part-2 list endpoint, then filters.
 
 - [ ] **Step 3: Verify and commit**
@@ -395,7 +421,10 @@ blockedBy: [3, 4]
 ```
 
 **Files:**
-- Create: `internal/cmd/doc.go`, `internal/cmd/doc_test.go`
+- Modify: `internal/cmd/doc.go`, `internal/cmd/doc_test.go`,
+  `internal/cmd/docrender.go` (they exist as the sync on-ramp's `lode doc
+  list`; `sync` is gone with the retirement, `list` is rewritten against the
+  new schema, the other verbs are new)
 - Modify: `internal/cli/client.go` (doc methods), `internal/store/docs.go`
   (`NeedsPlanning`, `NeedsExecution`), `internal/api/docs.go` (list selectors)
 - Test: `internal/api/docs_test.go`
@@ -405,7 +434,9 @@ blockedBy: [3, 4]
 Selector semantics are 026 §2's, store-backed:
 
 - `NeedsPlanning`: accepted specs having ≥1 section that no accepted plan's
-  `implements` edge names — a whole-document edge (`to_anchor IS NULL`)
+  `covers` edge names (`covers`, not `implements` — 026 §6.2 split them and
+  part 2 writes plan coverage as `covers`) — a whole-document edge
+  (`to_anchor IS NULL`)
   covers every section the doc has, present and future; overlap between
   plans is legal and unremarked. Output: doc + unplanned anchors.
 - `NeedsExecution`: accepted plans whose task set has any non-closed task.

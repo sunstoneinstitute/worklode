@@ -2,6 +2,7 @@
 status: accepted
 covers:
   - docs/specs/025-documents-in-the-backbone.md#sec-5
+  - docs/specs/025-documents-in-the-backbone.md#sec-6
   - docs/specs/025-documents-in-the-backbone.md#sec-7
 requires:
   - 2026-08-03-documents-in-the-backbone-1-kinds-and-containers.md
@@ -11,14 +12,35 @@ requires:
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Series:** Part 2 of 4 (6 tasks; numbering restarts at 1 per part). See
-part 1 for the series map. Part 1 must be merged first (the `docs.status`
-CHECK is generated from part 1's `ns.DesignDocStatuses`).
+part 1 for the series map. Part 1 has landed apart from its Task 1 (`ns/`
+codegen and `internal/ns`, filed as WL-70 and still unexecuted), so
+`internal/ns` does not exist: write the `docs.status` and `docs.kind` CHECKs
+literally, with a comment naming the generated constant that replaces them
+once WL-70 lands. `internal/designdoc/plantasks.go` already makes the same
+accommodation for `planMintableKinds`.
 
-**Goal:** Implement 025 §5 and §3: documents become Postgres rows wrapped in
-the backbone's event-logged transaction machinery — `docs`, `doc_sections`,
+**Goal:** Implement 025 §5, §6 and §7: documents become Postgres rows wrapped
+in the backbone's event-logged transaction machinery — `docs`, `doc_sections`,
 `doc_edges`, and a nullable `tasks.plan_doc` — with the
-draft → accepted → superseded lifecycle, assignee-gated acceptance, and 014
-§7's anchor constraints enforced server-side at accept time.
+draft → accepted → superseded lifecycle, assignee-gated acceptance, and §6's
+anchor constraints enforced server-side at accept time.
+
+**This part replaces the sync on-ramp's tables.** Migrations `0011_docs` and
+`0012_doc_edges_covers` created `docs`, `doc_sections` and `doc_edges` for
+025 §16's git→backbone sync — a different subsystem that took the same three
+table names. That sync is retired (§16 superseded, its Go surface deleted) and
+the tables are empty in every deployment, so Task 1 **drops** them and creates
+this part's schema in their place. There is no second owner to reconcile with
+and no data to preserve.
+
+Why the authoring schema is the one that survives: 025 §9.2 requires
+`tasks.plan_doc REFERENCES docs(id)`. Against this part's surrogate key that
+is one `bigint` column per task row; against the on-ramp's composite
+`(project, kind, ordinal)` primary key it is a three-column foreign key on
+every task row, and the same again for `doc_edges.to_doc`. The on-ramp's
+provenance columns (`source_branch`, `source_dirty`, `synced_at`, all NOT
+NULL) also have no meaning for a document authored in the backbone rather than
+projected from a file.
 
 **Architecture:** The authored artifact stays one markdown file: `lode doc
 new` (part 3) submits body-with-frontmatter, and the server parses it with
@@ -28,7 +50,7 @@ edge row carries both directions (`amends` read backward is `amendedBy`), so
 the mirror-agreement check of 025 §14 becomes an import-time concern rather
 than a stored invariant that can drift. Revising an accepted spec is a
 candidate body in `doc_revisions`; accepting it runs
-`designdoc.CompareSections` — the §7 gate as a set diff — and the body swap,
+`designdoc.CompareSections` — the §6 gate as a set diff — and the body swap,
 version bump and `last_revised_in` stamps in one transaction. Plans store no
 sections and skip the gate entirely (025 §9); accepting a plan is **rejected
 in this part** and lands with minting in part 3, so the §5 invariant is never
@@ -37,20 +59,42 @@ half-true.
 **Tech Stack:** Go 1.25+, Postgres via golang-migrate + `database/sql`,
 `gopkg.in/yaml.v3` (already used by `designdoc`), Prometheus client.
 
-**Spec:** `docs/specs/025-documents-in-the-backbone.md` §2–§3 (and 025 §3,
-§5, §7 as amended, which §2 adopts wholesale)
+**Spec:** `docs/specs/025-documents-in-the-backbone.md` §3, §5, §6, §7
 
 **Read first:**
-- 025 §5, §3; 025 §3, §5, §7 (the constraints the accept gate enforces)
+- 025 §3 (anchors and the letter-suffix convention), §5 (the store), §6 (the
+  constraints the accept gate enforces), §7 (the editorial lifecycle)
 - `internal/designdoc/designdoc.go` (`Parse`, `Document`, `Section` — the
   parser this part builds on), `internal/designdoc/frontmatter.go`
-- `internal/store/events.go:34` (`RecordEvent` — every write goes through it)
+  (`Frontmatter`, `CoverageEntries` — `covers` with `implements` as its
+  retired spelling, 026 §5.1)
+- `internal/store/events.go` (`(*Store).RecordEvent` — every write goes
+  through it; it is a `Store` method, not a package function)
 - `internal/store/metrics.go` (the nil-safe metrics struct convention,
   spec 022)
-- `internal/api/server.go` (route table, `readJSON`, `writeErr`),
-  `internal/api/web.go` (unauthenticated read-only pages)
+- `internal/api/router.go` (`routeGuards` — a route the table does not name
+  panics at boot; `permDocRead`/`permDocWrite` already exist in
+  `internal/api/authz.go`), `internal/api/server.go` (`readJSON`, `writeErr`,
+  `actorFrom`), `internal/api/web.go` + `internal/ui/*.templ` (the cockpit's
+  pages: templ components, session-gated when a login provider is configured
+  — there is no `internal/api/templates/` directory and no unauthenticated
+  page surface)
 
-**Conventions:** as part 1. Migration number `0012` is provisional.
+**Conventions:** as part 1. The migration is `0022_docs` — the head is
+`0021_event_log`, and `0011`/`0012` are the tables this one drops. Confirm
+with `./scripts/check-migrations.sh --no-fix` before committing and take the
+number it settles on; both files must be listed in
+`deploy/base/kustomization.yaml`.
+
+**Interaction with ADR 036 (one model, not one per package):** 036 puts every
+shape that crosses the HTTP boundary in `internal/model`. That package does
+not exist on `main` — its plan is unexecuted (branch
+`WL-48-execute-plan-one-model-across-packages-a`) — so the type sketches below
+declare `Doc` and friends in `internal/store` as the rest of the tree still
+does. If `internal/model` exists when this part runs, declare them there
+instead and let `store`/`api`/`cli` share the one declaration; do not create a
+`Doc`/`docJSON`/`cli.Doc` triplicate, which 036 names as the work to undo
+rather than the pattern to copy.
 
 **Non-goals:** plan acceptance and task minting (part 3); the `lode doc` CLI
 (part 3); graph projection of docs (025 §22 — 006 §11's contract, no projector
@@ -75,6 +119,14 @@ Flagged for the spec's owner rather than buried:
 - **Assignee gating.** 025 §7/AC5 say "assignee only" without defining a
   document's assignee. Here: `docs.assignee` (an actor id), defaulting to the
   creator; `AcceptDoc` rejects any other actor.
+- **Edge vocabulary.** 026 §6.2 split `covers` (a plan's promise about spec
+  sections) from `implements` (a component's evidence about its code), and
+  migration `0012_doc_edges_covers` widened the on-ramp's rel enum for it.
+  This part's `doc_edges.type` therefore admits **both**: `covers` is what a
+  plan's frontmatter emits, `implements` is retained for components and as
+  `covers`'s retired spelling (`Frontmatter.CoverageEntries` already
+  implements that precedence). Every query over plan coverage — part 3's
+  `NeedsPlanning` included — reads `covers`.
 - **Supersession.** No verb exists in §10. Here: accepting a document whose
   doc-level `replaces` edges name other documents flips those targets to
   `superseded` in the same transaction (the file corpus's semantics, per
@@ -86,19 +138,34 @@ Flagged for the spec's owner rather than buried:
 
 | File | Responsibility |
 |---|---|
-| `deploy/base/migrations/0012_docs.{up,down}.sql` (new) | the three tables + `tasks.plan_doc` |
+| `deploy/base/migrations/0022_docs.{up,down}.sql` (new) | drop the on-ramp's tables; create the four + `tasks.plan_doc` |
+| `deploy/base/kustomization.yaml` | list both migration files |
 | `internal/designdoc/diff.go` (+ test) (new) | `CompareSections` — 025 §6 as a set diff |
-| `internal/store/docs.go` (+ `docs_test.go`) (new) | rows, lifecycle, sections, edges, revisions |
-| `internal/store/metrics.go` | `worklode_doc_operations_total` |
-| `internal/api/docs.go` (+ test) (new) | `/api/v1/docs` handlers |
-| `internal/api/web.go`, `internal/api/templates/` | read-only `/docs` pages |
+| `internal/store/docs.go`, `docs_test.go` | rewritten: rows, lifecycle, sections, edges, revisions |
+| `internal/store/metrics.go` | `worklode_doc_operations_total` replaces `worklode_doc_upserts_total` |
+| `internal/api/docs.go`, `docs_test.go` | rewritten: `/api/v1/docs` handlers |
+| `internal/api/router.go` | `routeGuards` entries for the new routes |
+| `internal/api/web.go`, `internal/api/render.go`, `internal/ui/docs.templ` (new) | read-only `/docs` cockpit pages |
 | `e2e/docs_test.go` (new) | the lifecycle through public surfaces |
+
+**On the files marked "rewritten".** `internal/store/docs.go`,
+`internal/api/docs.go`, `internal/cmd/doc.go` and `e2e/docsync_test.go` exist
+today as the sync on-ramp's implementation, and the doc-sync retirement
+removes the sync-only half of each (`lode doc sync`, `POST
+/api/v1/docs/sync`, `store.ApplyDocSync`, `store.DocSyncOutcomes`, the sync
+config keys and their tests). Whatever of those files still reads the dropped
+tables — `store.GetDoc`/`ListDocs` over `(project, kind, ordinal)`, the
+`GET /api/v1/docs` handlers, `lode doc list`, `store.Doc`/`DocSection`/
+`DocEdge`/`DocFilter`/`validDocEdgeRels` — is replaced by this part's Task 3
+and Task 5 equivalents and part 3's CLI verbs. Task 1 is not done until
+nothing in the tree selects a dropped column. If the retirement has already
+deleted a file outright, create it.
 
 ---
 
 ## Tasks
 
-### Task 1 — Add migration `0012_docs`
+### Task 1 — Replace the sync tables with migration `0022_docs`
 
 ```yaml
 kind: feature
@@ -109,18 +176,35 @@ blockedBy: [ ]
 ```
 
 **Files:**
-- Create: `deploy/base/migrations/0012_docs.up.sql`, `.down.sql`
+- Create: `deploy/base/migrations/0022_docs.up.sql`, `.down.sql`
 - Modify: `deploy/base/kustomization.yaml`
 - Test: `internal/store/docs_test.go` (schema smoke: insert/CHECK/uniques)
 
 - [ ] **Step 1: Write the migration**
 
-`0012_docs.up.sql`:
+`0022_docs.up.sql` drops the on-ramp's tables before creating this part's.
+The drop is unconditional and takes no backup: 025 §16 is superseded, `lode
+doc sync` never ran against any deployment, and the three tables are empty
+everywhere. A `DROP TABLE` (not `IF EXISTS`) is deliberate — if the tables are
+missing, the migration history is not what this one assumes and failing is the
+correct outcome.
 
 ```sql
 -- Documents in the backbone (docs/specs/025-documents-in-the-backbone.md §5).
--- The status CHECK mirrors ns.DesignDocStatuses (generated from ns/concept.ttl);
--- the kind CHECK mirrors the wl:Spec/wl:ADR/wl:Plan classes.
+--
+-- Replaces the git→backbone sync on-ramp's tables from 0011_docs and
+-- 0012_doc_edges_covers. That subsystem (025 §16, superseded) projected files
+-- into rows keyed (project, kind, ordinal) and carried sync provenance; this
+-- one authors documents in the backbone and needs a single-column identity
+-- that tasks.plan_doc and doc_edges.to_doc can reference. The tables are
+-- empty, so this is a replacement and not a data migration.
+--
+-- The status CHECK mirrors ns.DesignDocStatuses (generated from ns/concept.ttl
+-- once WL-70 lands); the kind CHECK mirrors the wl:Spec/wl:ADR/wl:Plan classes.
+
+DROP TABLE doc_edges;
+DROP TABLE doc_sections;
+DROP TABLE docs;
 
 CREATE TABLE docs (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -160,12 +244,14 @@ CREATE TABLE doc_sections (
 -- One row carries both directions: amends read backward is amendedBy, so the
 -- 025 §14 mirror cannot disagree by construction. to_external holds a
 -- cross-corpus shorthand this backbone cannot resolve (025 §14.3).
+-- covers is a plan's promise about spec sections; implements is a component's
+-- evidence about its code and covers's retired spelling (026 §5.1, §6.2).
 CREATE TABLE doc_edges (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     from_doc    bigint NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
     from_anchor text,
     type        text NOT NULL CHECK (type IN
-                ('implements','amends','replaces','requires','wasDerivedFrom','blocks')),
+                ('covers','implements','amends','replaces','requires','wasDerivedFrom','blocks')),
     to_doc      bigint REFERENCES docs(id),
     to_anchor   text,
     to_external text,
@@ -178,8 +264,8 @@ CREATE UNIQUE INDEX doc_edges_unique ON doc_edges
      coalesce(to_doc, 0), coalesce(to_anchor,''), coalesce(to_external,''));
 CREATE INDEX doc_edges_to ON doc_edges (to_doc) WHERE to_doc IS NOT NULL;
 
--- One open candidate revision per doc (025 §7 as amended by 025 §7: the
--- candidate carries draft implicitly by being here).
+-- One open candidate revision per doc (025 §7: the candidate carries draft
+-- implicitly by being here).
 CREATE TABLE doc_revisions (
     doc_id     bigint PRIMARY KEY REFERENCES docs(id) ON DELETE CASCADE,
     body       text NOT NULL,
@@ -194,26 +280,35 @@ ALTER TABLE tasks ADD COLUMN plan_doc bigint REFERENCES docs(id);
 CREATE INDEX tasks_plan_doc ON tasks (plan_doc) WHERE plan_doc IS NOT NULL;
 ```
 
-`.down.sql` drops in reverse order (`ALTER TABLE tasks DROP COLUMN plan_doc`
-first). List both files in `deploy/base/kustomization.yaml`.
+`.down.sql` reverses it: `ALTER TABLE tasks DROP COLUMN plan_doc`, drop the
+four tables, then re-create the on-ramp's three exactly as `0011_docs.up.sql`
+and `0012_doc_edges_covers.up.sql` left them (copy the DDL — the shipped files
+stay in the tree as history and must not be edited). Add both new files to
+`deploy/base/kustomization.yaml`.
 
 - [ ] **Step 2: Schema smoke test**
 
-In a new `internal/store/docs_test.go`: insert a spec row, a plan row without
+In `internal/store/docs_test.go` (it exists and tests the sync schema; the
+sync-era cases go with the retirement): insert a spec row, a plan row without
 number (passes), a spec without number (CHECK violation), a duplicate
 `(project, kind, number)` (unique violation), a `blocks` edge with an anchor
-(CHECK violation).
+(CHECK violation), a `covers` edge (accepted).
 
 - [ ] **Step 3: Verify and commit**
 
+Renumber if the collision check says so, and use the number it settles on.
+The build must be clean, which means nothing left in the tree selects a
+dropped column — see "On the files marked rewritten" above.
+
 ```bash
 ./scripts/check-migrations.sh --no-fix
+go build ./... && go vet ./...
 go test ./internal/store/ -run 'TestMigrate|TestDocSchema' -count=1
 ```
 
 ---
 
-### Task 2 — Implement `designdoc.CompareSections`, the §7 gate
+### Task 2 — Implement `designdoc.CompareSections`, the §6 gate
 
 ```yaml
 kind: feature
@@ -238,12 +333,12 @@ Table-driven over accepted/candidate source pairs:
 | Case | Expectation |
 |---|---|
 | identical | empty diff, no violations |
-| section deleted | `Removed = [sec-2.1]`, violation naming it (§7.1) |
-| `## 2.` renumbered `## 3.` under the same anchor | `Renumbered`, violation (§7.3) |
+| section deleted | `Removed = [sec-2.1]`, violation naming it (§6 rule 1) |
+| `## 2.` renumbered `## 3.` under the same anchor | `Renumbered`, violation (§6 rule 3) |
 | `## 1a.` letter-suffix insert | `Added = [sec-1a]`, **no** violation |
-| body of §2 edited | `Changed = [sec-2]` only — §1 untouched (§7.5) |
+| body of §2 edited | `Changed = [sec-2]` only — §1 untouched (§6 rule 5) |
 | heading reworded, body identical | nothing changed, no violation (025 §3) |
-| depth-4 anchored heading with limit 3 | violation naming the anchor (§7.6) |
+| depth-4 anchored heading with limit 3 | violation naming the anchor (§6.1) |
 
 - [ ] **Step 2: Implement**
 
@@ -288,8 +383,9 @@ blockedBy: [1]
 ```
 
 **Files:**
-- Create: `internal/store/docs.go`
-- Modify: `internal/store/metrics.go`
+- Modify: `internal/store/docs.go` (replace the sync-era `Doc`, `DocSection`,
+  `DocEdge`, `DocFilter`, `GetDoc`, `ListDocs` and `validDocEdgeRels`),
+  `internal/store/metrics.go`
 - Test: `internal/store/docs_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -352,19 +448,24 @@ Implementation notes that decide it:
   deletes and re-inserts the section rows, preserving `last_revised_in` and
   `published` for anchors that survive (keyed by anchor). Plans skip it.
 - One unexported `rebuildEdges(tx, docID, fm *designdoc.Frontmatter)` maps the
-  acting-direction keys (`implements`, `requires`, `amends`, `replaces`,
+  acting-direction keys (`covers`, `requires`, `amends`, `replaces`,
   `wasDerivedFrom`) to rows; inverse keys (`isRequiredBy`, `amendedBy`,
   `isReplacedBy`) are ignored on write — the row read backward is the
-  inverse. Targets resolve by filename-style reference against
+  inverse. Coverage comes from `fm.CoverageEntries()`, which already reads
+  `implements` as `covers`'s retired spelling (026 §5.1), and is written as
+  type `covers`; the `implements` edge type stays reserved for components.
+  Targets resolve by filename-style reference against
   `(project, slug)`/`(project, kind, number)`; misses store the raw string in
   `to_external`.
-- Every mutation goes through `RecordEvent` at the caller (API layer), so
-  these take `tx` like `CreateTask` does.
+- Every mutation goes through `(*Store).RecordEvent` at the caller (API
+  layer), so these take `tx` like `CreateTask` does.
 - Metrics: extend `storeMetrics` with
   `docOps *prometheus.CounterVec` (`worklode_doc_operations_total`,
   labels `op` ∈ create/update/accept/revise, `outcome` ∈ ok/error), nil-safe
   methods, registered in `newStoreMetrics`. Recorded by the `Store`-level
-  wrappers the API calls.
+  wrappers the API calls. This replaces the on-ramp's
+  `worklode_doc_upserts_total` (`storeMetrics.docUpserts`) — delete it with
+  its last caller rather than leaving a counter nothing increments.
 
 - [ ] **Step 3: Verify and commit**
 
@@ -449,9 +550,10 @@ blockedBy: [4]
 ```
 
 **Files:**
-- Create: `internal/api/docs.go`, `internal/api/docs_test.go`,
-  `internal/api/templates/docs.html`, `internal/api/templates/doc.html`
-- Modify: `internal/api/server.go` (routes), `internal/api/web.go`
+- Modify: `internal/api/docs.go`, `internal/api/docs_test.go` (both exist as
+  the sync on-ramp's handlers), `internal/api/router.go` (`routeGuards`),
+  `internal/api/web.go`, `internal/api/render.go`
+- Create: `internal/ui/docs.templ` (and its generated `docs_templ.go`)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -468,21 +570,37 @@ Handler tests in the style of `tasks_test.go` (bearer token, `doReq`):
 
 Web: `GET /docs` lists documents; `GET /docs/{id}` renders title, status
 badge, version, and the body (same markdown rendering path the task pages
-use). Unauthenticated read-only, matching the existing web posture.
+use). Read-only, and gated by `permWebRead` like every other cockpit page —
+the cockpit is session-gated whenever a login provider is configured, so
+"unauthenticated read-only pages" is no longer the web posture.
 
 - [ ] **Step 2: Implement**
 
-Each handler wraps its store call in `RecordEvent`
+Each handler wraps its store call in `(*Store).RecordEvent`
 (`doc.created` / `doc.updated` / `doc.accepted` / `doc.revised` /
 `doc.revision_accepted`) with a random external id, mirroring `createTask`.
-`actorFrom(r)` supplies the acceptor. Register routes beside the task routes
-in `server.go`. HTTP metrics ride the existing middleware; the domain
-counters landed in Task 3.
+`actorFrom(r)` supplies the acceptor. HTTP metrics ride the existing
+middleware; the domain counters landed in Task 3.
+
+Routes go in `internal/api/router.go`'s `routeGuards`, not `server.go`:
+`NewServer` panics on a registered route the table does not name and fails on
+a table entry no route uses, so the guard rows and the registrations land
+together. `permDocRead`/`permDocWrite` already exist (`internal/api/authz.go`)
+and are what the on-ramp's rows used; the `POST /api/v1/docs/sync` row goes
+with the sync retirement, `GET /api/v1/docs` and `GET /api/v1/docs/{id}` are
+reused, and the write routes are new rows under `permDocWrite`. The `/docs`
+pages take `permWebRead`.
+
+The cockpit pages are templ components in `internal/ui`, taking view types
+`internal/api/render.go` builds — `internal/ui` imports nothing beyond stdlib
+and the templ runtime, never `internal/api`. Regenerate the committed
+`*_templ.go` and the stylesheet with `go generate ./...`.
 
 - [ ] **Step 3: Verify and commit**
 
 ```bash
-go test ./internal/api/ -count=1
+go generate ./... && git diff --exit-code internal/ui
+go test ./internal/api/ ./internal/ui/ -count=1
 ```
 
 ---
@@ -498,7 +616,8 @@ blockedBy: [5]
 ```
 
 **Files:**
-- Create: `e2e/docs_test.go`
+- Create: `e2e/docs_test.go` (the on-ramp's `e2e/docsync_test.go` goes with
+  the sync retirement; this is not a rename of it)
 
 - [ ] **Step 1: Write the test**
 
