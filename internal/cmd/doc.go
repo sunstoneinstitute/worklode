@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -130,6 +131,10 @@ func newDocSyncCmd() *cobra.Command {
 				Docs:         corpusToUpserts(docs),
 			})
 			if err != nil {
+				// The corpus goes out in several requests, so a failure can
+				// leave earlier documents already stored: name them here, and
+				// let the error name the ones that did not sync.
+				renderSyncOutcomes(cmd.OutOrStdout(), rep)
 				return err
 			}
 			if jsonOut(cmd) {
@@ -145,14 +150,20 @@ func newDocSyncCmd() *cobra.Command {
 	return cmd
 }
 
-// renderSyncReport prints the per-doc outcomes and a summary line.
-func renderSyncReport(cmd *cobra.Command, rep cli.DocSyncReport) {
-	out := cmd.OutOrStdout()
+// renderSyncOutcomes prints one line per document that changed; "unchanged"
+// rows are noise on a corpus this size.
+func renderSyncOutcomes(out io.Writer, rep cli.DocSyncReport) {
 	for _, r := range rep.Results {
 		if r.Outcome != "unchanged" {
 			fmt.Fprintf(out, "%-9s %s\n", r.Outcome, r.ID)
 		}
 	}
+}
+
+// renderSyncReport prints the per-doc outcomes and a summary line.
+func renderSyncReport(cmd *cobra.Command, rep cli.DocSyncReport) {
+	out := cmd.OutOrStdout()
+	renderSyncOutcomes(out, rep)
 	verb := "synced"
 	if rep.DryRun {
 		verb = "would sync"
