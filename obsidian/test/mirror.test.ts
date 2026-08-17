@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyMirror, desiredNotes, desiredPath, isSafePathSegment, type VaultWriter } from "../src/sync/mirror";
+import {
+  applyMirror,
+  desiredNotes,
+  desiredPath,
+  foreignNotes,
+  isSafePathSegment,
+  type VaultWriter,
+} from "../src/sync/mirror";
 import { parseNote } from "../src/serialize/note";
 import type { Doc, Project, TaskListDetail } from "../src/api/types";
 
@@ -345,6 +352,56 @@ describe("applyMirror", () => {
       expect(key.startsWith(`${ROOT}/`)).toBe(true);
       expect(key.includes("..")).toBe(false);
     }
+  });
+});
+
+// What the first-sync guard in src/main.ts asks before letting applyMirror
+// loose on a root: is anything under here not ours?
+describe("foreignNotes", () => {
+  it("reports nothing for a root that does not exist yet", async () => {
+    const writer = new MapVaultWriter();
+    expect(await foreignNotes(writer, ROOT)).toEqual([]);
+  });
+
+  it("reports nothing for a root the mirror wrote", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    expect(await foreignNotes(writer, ROOT)).toEqual([]);
+  });
+
+  it("reports every .md with no readable wl block, sorted", async () => {
+    const writer = new MapVaultWriter();
+    await writer.write(ROOT, "Groceries.md", "# Groceries\n\nmilk\n");
+    await writer.write(ROOT, "journal/2026-08-16.md", "no frontmatter at all");
+    await writer.write(ROOT, "half-fenced.md", "---\ntitle: unterminated\n");
+    await writer.write(ROOT, "no-wl.md", "---\ntitle: mine\n---\n# Mine\n");
+
+    expect(await foreignNotes(writer, ROOT)).toEqual([
+      "Groceries.md",
+      "half-fenced.md",
+      "journal/2026-08-16.md",
+      "no-wl.md",
+    ]);
+  });
+
+  it("separates the user's notes from the mirror's in a shared root", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [], tasks: [] }]]);
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+    await writer.write(ROOT, "Groceries.md", "# Groceries\n\nmilk\n");
+
+    expect(await foreignNotes(writer, ROOT)).toEqual(["Groceries.md"]);
+  });
+
+  it("ignores non-markdown files", async () => {
+    const writer = new MapVaultWriter();
+    await writer.write(ROOT, "attachments/diagram.png", "binary-ish");
+
+    expect(await foreignNotes(writer, ROOT)).toEqual([]);
   });
 });
 

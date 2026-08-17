@@ -42,7 +42,11 @@ build.
 - **Token** — a bearer token for an actor with read access, minted with
   `lode token create --actor <id>`.
 - **Mount root** — the vault folder the mirror owns (default `Worklode`).
-  Must be a single path segment: see Limits below.
+  Must be a single path segment: see Limits below. Saved a moment after you
+  stop typing rather than on each keystroke, so an armed sync interval can't
+  fire against a half-typed folder name. The first sync into a root that
+  already holds notes the mirror did not write stops and asks — see
+  Taking over a folder.
 - **Projects** — comma-separated project ids to sync; empty syncs every
   project the token can read.
 - **Sync on startup** — run a sync automatically when the plugin loads.
@@ -70,8 +74,23 @@ build.
   sync — including files the plugin never created. They are moved to the
   vault's trash (Settings → Files and links → Deleted files), so an accident
   is recoverable, but do not point the mount root at a folder of your own
-  notes.
+  notes. The first sync into such a folder asks first: see below.
 - **Purge deletes the whole mount folder.** The "Purge the Worklode folder"
   command removes everything under the mount root, including files the
   plugin did not create — not just the notes it manages. Unlike a sync, this
   is a permanent delete, not a move to trash.
+
+## Taking over a folder
+
+Before the first sync into a mount root, the plugin looks for `.md` files
+under it that carry no `wl` frontmatter block — anything it did not write. If
+it finds any, the sync stops and asks whether the folder is yours to take
+over, naming what it found. Cancelling changes nothing; confirming records
+the root and hands it to the mirror, which from then on deletes anything
+under it the backbone does not imply.
+
+The question is asked once per root name, and only when the root already has
+foreign notes in it: a root the mirror created, or one that was empty, is
+adopted silently. Confirmed roots are remembered in the plugin's
+`data.json` (`adoptedRoots`), so pointing the setting back at a folder you
+already confirmed does not ask again. Delete that entry to be asked afresh.
