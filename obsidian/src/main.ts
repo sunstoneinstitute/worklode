@@ -4,10 +4,10 @@
 // src/vault/writer.ts, this is the only file in the plugin that imports
 // "obsidian" -- everything it drives stays unit-testable without one.
 
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl } from "obsidian";
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, debounce, requestUrl } from "obsidian";
 import { WorklodeApiError, WorklodeClient, type HttpTransport } from "./api/client";
 import type { ProjectMembers } from "./serialize/note";
-import { applyMirror, desiredNotes, isSafePathSegment, type MirrorStats } from "./sync/mirror";
+import { applyMirror, desiredNotes, foreignNotes, isSafePathSegment, type MirrorStats } from "./sync/mirror";
 import { ObsidianVaultWriter } from "./vault/writer";
 
 interface WorklodeSettings {
@@ -17,6 +17,12 @@ interface WorklodeSettings {
   projects: string; // comma-separated allow-list; "" means all
   syncOnStartup: boolean; // default false
   intervalMinutes: number; // 0 = manual only; default 0
+  /** Mount roots the mirror is allowed to own, by name. A root lands here
+   *  when the mirror first syncs into it while it holds nothing but mirror
+   *  notes, or when the user confirms taking over a folder that already
+   *  held their own. Kept as a list rather than a single value so switching
+   *  the setting back to a previously confirmed root does not ask again. */
+  adoptedRoots: string[];
 }
 
 const DEFAULT_SETTINGS: WorklodeSettings = {
@@ -26,7 +32,14 @@ const DEFAULT_SETTINGS: WorklodeSettings = {
   projects: "",
   syncOnStartup: false,
   intervalMinutes: 0,
+  adoptedRoots: [],
 };
+
+/** How long the mount-root field waits after the last keystroke before it
+ *  saves. The tab otherwise saves on every character, so with an interval
+ *  armed a sync could fire against a transient prefix of the name being
+ *  typed -- "Not" on the way to "Notes". */
+const MOUNT_ROOT_SAVE_DELAY_MS = 800;
 
 /** requestUrl bypasses CORS, which a plain fetch from the renderer does not.
  *  throw:false hands control of non-2xx handling to WorklodeClient, which
@@ -62,6 +75,10 @@ export default class WorklodePlugin extends Plugin {
    *  re-create part of the tree the purge just deleted. */
   private busy = false;
   private intervalId: number | undefined;
+  /** The root an adoption prompt is currently open for. Interval syncs keep
+   *  arriving while the user reads the modal; without this they would stack
+   *  one on top of another. */
+  private adoptPromptFor: string | undefined;
 
   override async onload(): Promise<void> {
     await this.loadSettings();
@@ -156,9 +173,13 @@ export default class WorklodePlugin extends Plugin {
       );
       return;
     }
-
+    // Inside the busy window: the guard awaits the vault, so two syncs
+    // started close together would otherwise both get past the check above
+    // while the first one is still surveying.
     this.busy = true;
     try {
+      if (!(await this.ensureRootAdopted(mountRoot))) return;
+
       const client = new WorklodeClient(baseUrl, token, obsidianHttp);
       const allProjects = await client.listProjects();
       const allowList = parseAllowList(this.settings.projects);
@@ -188,6 +209,43 @@ export default class WorklodePlugin extends Plugin {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** The first-sync guard. applyMirror deletes every .md under the mount
+   *  root the backbone does not imply -- including files it never wrote --
+   *  so a root that already holds the user's own notes is never taken over
+   *  silently: the sync stops and asks. Returns whether the sync may
+   *  proceed now; a confirmed prompt starts its own.
+   *
+   *  Deliberately checked here rather than when the setting is saved: every
+   *  way a sync starts (the command, startup, the interval) goes through
+   *  this one path, and it is the state at sync time that decides whether
+   *  files are about to be deleted. */
+  private async ensureRootAdopted(mountRoot: string): Promise<boolean> {
+    if (this.settings.adoptedRoots.includes(mountRoot)) return true;
+    if (this.adoptPromptFor !== undefined) return false;
+
+    const foreign = await foreignNotes(this.writer, mountRoot);
+    if (foreign.length === 0) {
+      // Empty, absent, or already all ours: the mirror owns it from here on,
+      // so the question is asked once and never again.
+      await this.adoptRoot(mountRoot);
+      return true;
+    }
+
+    this.adoptPromptFor = mountRoot;
+    new AdoptRootModal(this.app, mountRoot, foreign, (confirmed) => {
+      this.adoptPromptFor = undefined;
+      if (!confirmed) return;
+      void this.adoptRoot(mountRoot).then(() => this.sync());
+    }).open();
+    return false;
+  }
+
+  private async adoptRoot(root: string): Promise<void> {
+    if (this.settings.adoptedRoots.includes(root)) return;
+    this.settings.adoptedRoots = [...this.settings.adoptedRoots, root];
+    await this.saveSettings();
   }
 
   async purge(): Promise<void> {
@@ -276,17 +334,30 @@ class WorklodeSettingTab extends PluginSettingTab {
           });
       });
 
+    // The one debounced field: a half-typed root names a real folder as
+    // often as not, and the value is what a sync is allowed to delete
+    // under. resetTimer:true so it saves once the typing stops, not once
+    // per burst.
+    const saveMountRoot = debounce(
+      (value: string) => {
+        this.plugin.settings.mountRoot = value;
+        void this.plugin.saveSettings();
+      },
+      MOUNT_ROOT_SAVE_DELAY_MS,
+      true,
+    );
+
     new Setting(containerEl)
       .setName("Mount root")
-      .setDesc("The vault folder the mirror owns. Everything under it is machine-managed.")
+      .setDesc(
+        "The vault folder the mirror owns. Everything under it is machine-managed: " +
+          "a sync deletes anything under it Worklode does not mirror.",
+      )
       .addText((text) =>
         text
           .setPlaceholder("Worklode")
           .setValue(this.plugin.settings.mountRoot)
-          .onChange(async (value) => {
-            this.plugin.settings.mountRoot = value;
-            await this.plugin.saveSettings();
-          }),
+          .onChange((value) => saveMountRoot(value)),
       );
 
     new Setting(containerEl)
@@ -327,6 +398,75 @@ class WorklodeSettingTab extends PluginSettingTab {
             this.plugin.scheduleInterval();
           });
       });
+  }
+}
+
+/** Confirms before the mirror takes over a mount root that already holds
+ *  notes it did not write. Answers exactly once, on the first of confirm,
+ *  cancel, or dismissal, so the caller's prompt flag is always cleared. */
+class AdoptRootModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private readonly mountRoot: string,
+    private readonly foreign: string[],
+    private readonly onAnswer: (confirmed: boolean) => void,
+  ) {
+    super(app);
+  }
+
+  private answer(confirmed: boolean): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.onAnswer(confirmed);
+  }
+
+  override onOpen(): void {
+    const { contentEl } = this;
+    const shown = this.foreign.slice(0, 10);
+
+    contentEl.createEl("h2", { text: `Let Worklode take over "${this.mountRoot}"?` });
+    contentEl.createEl("p", {
+      text:
+        `"${this.mountRoot}" already contains ${this.foreign.length} note(s) this plugin did not write. ` +
+        `The mount root is machine-managed: every sync deletes anything under it that Worklode does not ` +
+        `currently mirror. Those notes would be moved to this vault's trash on the next sync.`,
+    });
+    contentEl.createEl("p", {
+      text: "If this is not the folder you meant, cancel and change the mount root in plugin settings.",
+    });
+
+    const list = contentEl.createEl("ul");
+    for (const path of shown) list.createEl("li", { text: path });
+    if (this.foreign.length > shown.length) {
+      list.createEl("li", { text: `... and ${this.foreign.length - shown.length} more` });
+    }
+
+    new Setting(contentEl)
+      .addButton((btn) =>
+        btn
+          .setButtonText("Cancel")
+          .setCta()
+          .onClick(() => {
+            this.answer(false);
+            this.close();
+          }),
+      )
+      .addButton((btn) =>
+        btn
+          .setButtonText("Take over the folder")
+          .setWarning()
+          .onClick(() => {
+            this.answer(true);
+            this.close();
+          }),
+      );
+  }
+
+  override onClose(): void {
+    this.answer(false);
+    this.contentEl.empty();
   }
 }
 
