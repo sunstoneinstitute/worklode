@@ -46,13 +46,17 @@ type Review struct {
 	SubmittedAt time.Time
 }
 
-// bodyTaskIDPattern matches a "WL-Task: <ID>" marker line (after trimming
-// surrounding whitespace), capturing the task id. "WL-Task" is the fixed
-// marker label, not the id prefix.
-var bodyTaskIDPattern = regexp.MustCompile(`^WL-Task:\s*([A-Z][A-Z0-9]*-[0-9]+)`)
+// bodyTaskIDPattern matches a "Worklode-Task: <ID>" trailer line (after
+// trimming surrounding whitespace), capturing the task id.
+//
+// "Worklode-Task" is the fixed label; the id after it carries its own project
+// key (WL-72, SW-3, ...). The label is deliberately not key-shaped: the
+// earlier "WL-Task" read as though "WL" were a project key, in the one signal
+// that most needs to be unambiguous.
+var bodyTaskIDPattern = regexp.MustCompile(`^Worklode-Task:\s*([A-Z][A-Z0-9]*-[0-9]+)`)
 
-// TaskIDFromBody scans body line by line for a "WL-Task: <task-id>" marker
-// (case-sensitive prefix, after trimming the line's surrounding
+// TaskIDFromBody scans body line by line for a "Worklode-Task: <task-id>"
+// trailer (case-sensitive prefix, after trimming the line's surrounding
 // whitespace) and returns the task id from the first line found. Returns ""
 // if no such line exists.
 func TaskIDFromBody(body string) string {

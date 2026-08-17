@@ -343,8 +343,8 @@ separate opt-in step. What that means for in-flight work:
 **Mitigation:** deploy with `LODE_BRANCH_TEMPLATE=lode/{{ .id }}-{{ .slug }}`
 first (the pre-cutover shape), let every open task PR land or get migrated, then
 flip to the default template. Where that sequencing isn't practical, add a
-`WL-Task: <id>` line to an open PR's body — `store.TaskIDFromBody` still
-correlates on that marker regardless of branch shape, so it recovers
+`Worklode-Task: <id>` line to an open PR's body — `store.TaskIDFromBody` still
+correlates on that trailer regardless of branch shape, so it recovers
 correlation without renaming anything.
 
 A deployment that needs namespaced branches sets `LODE_BRANCH_TEMPLATE` to
