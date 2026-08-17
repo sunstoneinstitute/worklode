@@ -51,20 +51,63 @@ export interface DesiredSet {
 
 type NoteKind = "project" | "doc" | "task";
 
-/** The one rule for anything used as a single path segment: a backbone id,
- *  and the mount root src/main.ts validates before any write, delete or
- *  recursive rmdir happens under it. Two predicates that disagreed produced
- *  both a root accepted here and rejected there (its notes silently
- *  conflicted) and ids like "." that name a path the writer creates and the
- *  vault lists back differently, rewritten forever. Safe means: non-blank,
- *  already trimmed (the caller validates and uses the same value, so nothing
- *  is silently trimmed downstream), no separator, and no ".." anywhere --
- *  neither as the whole segment, which for a mount root would resolve onto
- *  the vault itself, nor as a substring. */
+/** The one rule for anything used as a single path segment: every backbone
+ *  id (project, doc, task), each of which becomes one directory or file name
+ *  under the mount root. Safe means: non-blank, already trimmed (the caller
+ *  validates and uses the same value, so nothing is silently trimmed
+ *  downstream), no separator, and no ".." anywhere -- neither as the whole
+ *  segment nor as a substring.
+ *
+ *  Ids stay single-segment even though the mount root no longer has to be
+ *  (see isSafeMountRoot). The root is the setting's own path, chosen once by
+ *  the user and surveyed before anything is deleted under it; an id is
+ *  whatever the server sent, and a separator in one would place a note
+ *  outside the subtree the mirror actually surveyed while still looking
+ *  local. The two jobs shared a predicate while the root happened to be one
+ *  segment too; they are not the same rule, and only one of them may relax.
+ *  What both still forbid is a value the writer creates and the vault lists
+ *  back differently -- "." or an untrimmed name -- which would be rewritten
+ *  forever. */
 export function isSafePathSegment(segment: string): boolean {
   if (segment.length === 0 || segment !== segment.trim()) return false;
   if (segment.includes("/") || segment.includes("\\")) return false;
   return segment !== "." && !segment.includes("..");
+}
+
+/** The rule for the mount root: the one territory the mirror may write,
+ *  delete and (for purge) recursively rmdir under, validated by src/main.ts
+ *  before any of that happens. A root may be nested ("Team/Worklode"), so
+ *  "/" joins segments here instead of disqualifying the value -- but every
+ *  segment must independently clear isSafePathSegment. That rejects ".." at
+ *  any depth (which would resolve above the intended folder), an empty
+ *  segment (a leading or trailing "/", or "a//b" -- forms the vault lists
+ *  back differently from how the writer spells them), "." as a segment, and
+ *  a segment with edge whitespace.
+ *
+ *  A backslash is a forbidden character on the root, never a separator: the
+ *  writer's assertInsideRoot splits relative paths on both "\" and "/", so a
+ *  root containing one would have a different segment count here than there
+ *  -- and Obsidian's adapter, which joins with "/" only, would read it as a
+ *  literal character in a name. isSafePathSegment rejecting "\" gives that
+ *  for free.
+ *
+ *  Nothing else about the root is relaxed: it stays the exact string every
+ *  writer call prefixes with, so a root accepted here can never be one
+ *  desiredNotes then judges unsafe. */
+export function isSafeMountRoot(root: string): boolean {
+  return root.split("/").every(isSafePathSegment);
+}
+
+/** The mount root's own folder name -- its last segment. A nested root has
+ *  no single name, and the index note lives *inside* the root at a path
+ *  relative to it, so naming it after the whole root ("Team/Worklode.md")
+ *  would put it beside the folder it indexes rather than in it. The leaf is
+ *  what identifies the folder in Obsidian's own UI, and for a single-segment
+ *  root it is the root itself -- so this changes nothing for existing
+ *  vaults. Safe by construction: every segment of a safe root is a safe
+ *  segment. */
+export function mountRootName(root: string): string {
+  return root.slice(root.lastIndexOf("/") + 1);
 }
 
 /** The vault-relative path for a project/doc/task note, or undefined when a
@@ -133,11 +176,15 @@ function filterSafe<T extends { id: string }>(
  *  docs and tasks, each in id order. A project whose own id is unsafe drops
  *  its entire subtree -- there is no safe directory to put its docs and
  *  tasks under -- while an unsafe doc or task drops just that one note,
- *  keeping the rest of its project. An unsafe root name drops the index. */
+ *  keeping the rest of its project. An unsafe mount root drops the index.
+ *
+ *  `mountRoot` is the vault folder the mirror owns -- the same string
+ *  applyMirror is given as `root`. Note paths are relative to it; it appears
+ *  here only to name the index note, after the root's own folder. */
 export function desiredNotes(
   projects: Project[],
   byProject: Map<string, ProjectMembers>,
-  rootName: string,
+  mountRoot: string,
   syncedAt: string,
 ): DesiredSet {
   const conflicts: string[] = [];
@@ -163,10 +210,10 @@ export function desiredNotes(
     notes.push(projectNote, ...docs.notes, ...tasks.notes);
   }
 
-  if (isSafePathSegment(rootName)) {
-    notes.unshift(indexToNote(safeProjects, filteredByProject, rootName, syncedAt));
+  if (isSafeMountRoot(mountRoot)) {
+    notes.unshift(indexToNote(safeProjects, filteredByProject, mountRootName(mountRoot), syncedAt));
   } else {
-    conflicts.push(`index root name ${JSON.stringify(rootName)}: unsafe, index note skipped`);
+    conflicts.push(`index root name ${JSON.stringify(mountRoot)}: unsafe, index note skipped`);
   }
 
   return { notes, conflicts };
