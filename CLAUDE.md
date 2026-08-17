@@ -167,6 +167,11 @@ to prove the real user path works.
 the Go build. Docs-only PRs (only `*.md`, `docs/`, `www/`) skip CI checks;
 the `can-be-tested` label forces a run. `docs/specs/`, `docs/plans/` and
 `plugins/` are exempt from that skip — their markdown is input, not prose.
+The `obsidian` job is the one check scoped to a subtree: it runs only when a PR
+touches `obsidian/` or `_obsidian.yml`, decided by a `gate` output rather than a
+`paths:` filter, because a reusable workflow cannot take one. `can-be-tested`
+does not force it — that label authorises CI, it does not make an untouched
+subtree worth rebuilding.
 
 ## The lode plugin
 

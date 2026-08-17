@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.decide.outputs.run }}
+      obsidian: ${{ steps.decide.outputs.obsidian }}
     steps:
       - name: Decide whether to run checks
         id: decide
@@ -41,6 +42,28 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Changed-file list, fetched once and reused by every check below. On
+          # API failure it is empty, which each check treats as "fail open
+          # towards running".
+          CHANGED=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[].filename' 2>/dev/null || true)
+
+          # The obsidian job is the only one scoped to a subtree: the plugin is
+          # the repo's sole Node package, nothing in the Go build imports it,
+          # and it ships separately — so a PR that touches neither obsidian/
+          # nor its own workflow cannot change its result. Decided here rather
+          # than with a `paths:` filter because a reusable workflow cannot take
+          # one. Deliberately independent of `run` below: `can-be-tested`
+          # authorises CI on an untrusted PR, it does not make an untouched
+          # subtree worth rebuilding.
+          if [ -z "$CHANGED" ] \
+             || echo "$CHANGED" | grep -qE '^obsidian/|^\.github/workflows/_obsidian\.yml$'; then
+            echo "obsidian=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "obsidian=false" >> "$GITHUB_OUTPUT"
+          fi
+
           # Opt-in label (needs Triage+, so authors cannot self-authorise).
           # Checked first so it also forces a run on a docs-only PR.
           if ${{ contains(github.event.pull_request.labels.*.name, 'can-be-tested') }}; then
@@ -50,9 +73,7 @@ jobs:
           fi
 
           # Docs/site-only skip. www/ is the static marketing site; it has its
-          # own deploy workflow and shares no code with the Go build. On API
-          # failure CHANGED is empty and we fall through to the trust checks —
-          # failing open towards running.
+          # own deploy workflow and shares no code with the Go build.
           #
           # docs/specs/, docs/plans/ and plugins/ are excluded from the skip:
           # their markdown is input, not just prose. internal/designdoc parses
@@ -60,9 +81,6 @@ jobs:
           # is shipped content whose manifests the Codex mirror check reads —
           # so a markdown-only change there can break something with no CI
           # signal.
-          CHANGED=$(gh api --paginate \
-            "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[].filename' 2>/dev/null || true)
           if [ -n "$CHANGED" ] && ! echo "$CHANGED" | grep -qvE '(^docs/|^www/|\.md$)' \
              && ! echo "$CHANGED" | grep -qE '^docs/(specs|plans)/|^plugins/'; then
             echo "::notice::PR touches only docs/, www/ and markdown files (and no docs/specs/, docs/plans/ or plugins/) — skipping the checks. Apply the 'can-be-tested' label to force a full run."
@@ -102,7 +120,7 @@ jobs:
 
   obsidian:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.obsidian == 'true'
     uses: ./.github/workflows/_obsidian.yml
 
   build-image:
