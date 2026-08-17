@@ -196,7 +196,7 @@ direction. The spec+plan ceremony is deliberately skippable for simple work;
 `PLAN-0` keeps the skip visible instead of laundering it.
 
 Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch names,
-`WL-Task:` trailers, or merge-subject correlation — the existing patterns
+`Worklode-Task:` trailers, or merge-subject correlation — the existing patterns
 (`[A-Z][A-Z0-9]*-[0-9]+`) are untouched by construction. The scheme generalizes
 025 §14.3's cross-corpus shorthand (`WL-SPEC-1`), which already reads as an
 instance of it. The type segment is also what `lode show <id>` dispatches on, with an
