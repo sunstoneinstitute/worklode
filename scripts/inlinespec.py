@@ -118,6 +118,21 @@ class Corpus:
         if not index.is_file():
             sys.exit(f"inlinespec: {index} missing -- run scripts/secindex.py")
         self.docs = cs.load(index)
+        # The corpus is whatever the index names, so a spec added without
+        # regenerating it would be absent from the views with nothing to show
+        # for it. Fail loudly instead: a silently incomplete corpus is the one
+        # defect these files exist to prevent.
+        missing = sorted(
+            p.relative_to(REPO).as_posix()
+            for p in (REPO / SPECS).glob("*.md")
+            if p.relative_to(REPO).as_posix() not in self.docs
+        )
+        if missing:
+            sys.exit(
+                "inlinespec: not in docs/specs/index.yaml: "
+                + ", ".join(missing)
+                + " -- run scripts/secindex.py"
+            )
         self.replaced = cs.edges(self.docs, "replaces", "isReplacedBy")
         self.amended = cs.edges(self.docs, "amends", "amendedBy")
         self.with_drafts = with_drafts

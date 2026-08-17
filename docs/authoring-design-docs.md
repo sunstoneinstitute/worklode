@@ -352,9 +352,22 @@ document-ingesting tool that takes URLs, for instance) gets the same view.
 
 **The views are generated, and are not the corpus.** `docs/specs/` remains the
 source of record: never edit a file under `inlined/`, never cite one as a
-source, and never amend one. Fix the spec and regenerate. Like `index.yaml`, no
-hook regenerates them — run the script yourself when the corpus changes and
-commit the result. `secfmt.py` and `secmeta.py` both skip the directory
-(`secfmt.generated`), because its files carry no frontmatter and their headings
-are one spec's numbering with borrowed text folded in; a walk that picked them
-up would report the generator's output as your defect.
+source, and never amend one. Fix the spec and regenerate.
+
+Unlike `index.yaml`, a pre-commit hook keeps them current: touching any file
+under `docs/specs/` regenerates every view and fails the commit, so you stage
+the result alongside the edit that caused it. It regenerates all of them and
+never only the files you touched, because a view is a function of the whole
+corpus — adding an `amends` to 031 changes 001's view without changing 001. CI
+runs the same script with `--check` on mixed PRs; docs-only PRs skip that
+workflow, so the hook is the real gate.
+
+The generator takes its corpus from `docs/specs/index.yaml`, so a spec that is
+not in the index would render as if it did not exist. Rather than quietly
+omitting it, the script exits naming the file and pointing at `secindex.py`.
+That is the one case where you have to run two scripts in order.
+
+`secfmt.py` and `secmeta.py` both skip the directory (`secfmt.generated`),
+because its files carry no frontmatter and their headings are one spec's
+numbering with borrowed text folded in; a walk that picked them up would report
+the generator's output as your defect.
