@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -785,6 +787,59 @@ func TestListTasksByRepoAndBranch(t *testing.T) {
 	rr = doReq(t, h, "GET", "/api/v1/tasks?repo=nope", token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("bad repo status = %d, want 422", rr.Code)
+	}
+}
+
+// TestListTasksUpdatedSince covers the incremental sync path the Obsidian
+// mirror polls with: a watermark narrows the list, and a watermark that is
+// not a timestamp is refused rather than silently ignored — an ignored one
+// would look like a working incremental sync while returning everything.
+func TestListTasksUpdatedSince(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Fix the thing", "priority": "high", "kind": "feature"})
+
+	ids := func(rr *httptest.ResponseRecorder) []string {
+		t.Helper()
+		var got struct {
+			Tasks []struct {
+				ID string `json:"id"`
+			} `json:"tasks"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode %s: %v", rr.Body.String(), err)
+		}
+		out := make([]string, 0, len(got.Tasks))
+		for _, task := range got.Tasks {
+			out = append(out, task.ID)
+		}
+		return out
+	}
+
+	past := url.QueryEscape(time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
+	rr := doReq(t, h, "GET", "/api/v1/tasks?updated_since="+past, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := ids(rr); len(got) != 1 {
+		t.Fatalf("updated_since=past: got %v, want the one task", got)
+	}
+
+	future := url.QueryEscape(time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	rr = doReq(t, h, "GET", "/api/v1/tasks?updated_since="+future, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := ids(rr); len(got) != 0 {
+		t.Fatalf("updated_since=future: got %v, want none", got)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks?updated_since=yesterday", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad updated_since status = %d, want 422", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "updated_since") {
+		t.Fatalf("bad updated_since body = %s, want it to name the parameter", rr.Body.String())
 	}
 }
 

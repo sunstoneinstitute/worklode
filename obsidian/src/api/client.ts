@@ -41,9 +41,18 @@ export class WorklodeClient {
     return this.get<{ projects: Project[] }>("/api/v1/projects").then((r) => r.projects);
   }
 
-  /** GET /api/v1/tasks?project=&detail=true */
-  listTasks(project: string): Promise<TaskListDetail[]> {
-    const path = `/api/v1/tasks?project=${encodeURIComponent(project)}&detail=true`;
+  /**
+   * GET /api/v1/tasks?project=&detail=true[&updated_since=]
+   *
+   * `updatedSince` is the incremental fetch: an RFC3339 instant narrowing the
+   * response to the tasks touched at or after it. The server compares with
+   * `>=`, so passing the highest `updated_at` already seen re-fetches that one
+   * row rather than risking a write that shared its timestamp. "" (or
+   * omitted) fetches every task.
+   */
+  listTasks(project: string, updatedSince?: string): Promise<TaskListDetail[]> {
+    let path = `/api/v1/tasks?project=${encodeURIComponent(project)}&detail=true`;
+    if (updatedSince) path += `&updated_since=${encodeURIComponent(updatedSince)}`;
     return this.get<{ tasks: TaskListDetail[] }>(path).then((r) => r.tasks);
   }
 

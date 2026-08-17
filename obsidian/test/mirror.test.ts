@@ -3,10 +3,12 @@ import {
   applyMirror,
   desiredNotes,
   desiredPath,
+  desiredTaskNotes,
   foreignNotes,
   isDocNotePath,
   isSafeMountRoot,
   isSafePathSegment,
+  isTaskNotePath,
   mountRootName,
   type VaultWriter,
 } from "../src/sync/mirror";
@@ -240,6 +242,54 @@ describe("isDocNotePath", () => {
   });
 });
 
+describe("isTaskNotePath", () => {
+  it("matches a task note and nothing else", async () => {
+    expect(isTaskNotePath("worklode/tasks/WL-1.md")).toBe(true);
+    expect(isTaskNotePath("worklode/docs/WL-SPEC-1.md")).toBe(false);
+    expect(isTaskNotePath("worklode/worklode.md")).toBe(false);
+    expect(isTaskNotePath("Worklode Vault.md")).toBe(false);
+    expect(isTaskNotePath("worklode/tasks/nested/WL-1.md")).toBe(false);
+    expect(isTaskNotePath("worklode/tasks/WL-1.png")).toBe(false);
+  });
+});
+
+// An incremental sync fetches only the tasks that changed, which is why it
+// renders task notes and nothing else: the project and index notes roll up
+// the whole task set, and rendering them from a delta would show wrong
+// counts and rewrite both notes on every tick.
+describe("desiredTaskNotes", () => {
+  it("renders only task notes", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+
+    const desired = await desiredTaskNotes([project], byProject);
+
+    expect(desired.notes.map((n) => n.path)).toEqual(["worklode/tasks/WL-1.md"]);
+    expect(desired.conflicts).toEqual([]);
+  });
+
+  it("renders the same task note the full sync would", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [], tasks: [fixtureTask()] }]]);
+
+    const full = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
+    const partial = await desiredTaskNotes([project], byProject);
+
+    const fullTask = full.notes.find((n) => n.path === "worklode/tasks/WL-1.md");
+    expect(partial.notes[0]).toEqual(fullTask);
+  });
+
+  it("drops a project whose id is unsafe and reports it", async () => {
+    const project = fixtureProject({ id: "../escape" });
+    const byProject = new Map([["../escape", { docs: [], tasks: [fixtureTask({ project: "../escape" })] }]]);
+
+    const desired = await desiredTaskNotes([project], byProject);
+
+    expect(desired.notes).toEqual([]);
+    expect(desired.conflicts).toHaveLength(1);
+  });
+});
+
 describe("applyMirror", () => {
   function fullScenario() {
     const project = fixtureProject();
@@ -415,6 +465,67 @@ describe("applyMirror", () => {
     expect(writer.removed).toEqual(["worklode/docs/WL-SPEC-1.md"]);
     expect(stats.removed).toBe(1);
     expect(await writer.list(ROOT)).not.toContain("worklode/docs/WL-SPEC-1.md");
+  });
+
+  // The whole point of the incremental path. "Not in the desired set" means
+  // "gone from the backbone" only for a sync that enumerated everything; an
+  // updated_since fetch answers "what changed", and a deleted task never
+  // appears in that answer. So it prunes nothing at all -- not the note of a
+  // task it simply did not ask about, and not the project, index and doc
+  // notes it does not render either.
+  it("deletes nothing when the sync only enumerated what changed", async () => {
+    const project = fixtureProject();
+    const stale = fixtureTask();
+    const changed = fixtureTask({ id: "WL-2", title: "Ship the thing", branch: "WL-2-ship-the-thing" });
+    const writer = new MapVaultWriter();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [stale, changed] }]]);
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    // Only WL-2 changed since the watermark; WL-1 may be untouched or gone
+    // from the backbone entirely, and this response cannot tell the mirror
+    // which.
+    const delta = new Map([["worklode", { docs: [], tasks: [fixtureTask({ id: "WL-2", title: "Ship it" })] }]]);
+    const stats = await applyMirror(writer, ROOT, await desiredTaskNotes([project], delta), {
+      pruneDocNotes: false,
+      pruneTaskNotes: false,
+      pruneOtherNotes: false,
+    });
+
+    expect(writer.removed).toEqual([]);
+    expect(stats.removed).toBe(0);
+    const remaining = await writer.list(ROOT);
+    expect(remaining).toContain("worklode/tasks/WL-1.md");
+    expect(remaining).toContain("worklode/docs/WL-SPEC-1.md");
+    expect(remaining).toContain("worklode/worklode.md");
+    expect(remaining).toContain(`${ROOT_NAME}.md`);
+  });
+
+  // The roll-up half: a delta cannot render the project note's counts or the
+  // index's project list correctly, so an incremental sync must not touch
+  // either. They stay as the last full sync left them -- stale until the next
+  // one, which is the cheaper wrong answer than deriving them from a delta.
+  it("leaves the project and index notes byte-identical on an incremental sync", async () => {
+    const project = fixtureProject();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
+    const writer = new MapVaultWriter();
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    const before = new Map(writer.files);
+    writer.written = [];
+
+    const delta = new Map([["worklode", { docs: [], tasks: [fixtureTask({ title: "Fix the other thing" })] }]]);
+    const stats = await applyMirror(writer, ROOT, await desiredTaskNotes([project], delta), {
+      pruneDocNotes: false,
+      pruneTaskNotes: false,
+      pruneOtherNotes: false,
+    });
+
+    expect(writer.written).toEqual(["worklode/tasks/WL-1.md"]);
+    expect(stats.written).toBe(1);
+    for (const path of [`${ROOT}/${ROOT_NAME}.md`, `${ROOT}/worklode/worklode.md`, `${ROOT}/worklode/docs/WL-SPEC-1.md`]) {
+      expect(writer.files.get(path)).toBe(before.get(path));
+    }
+    expect(await writer.read(ROOT, "worklode/tasks/WL-1.md")).toContain("Fix the other thing");
   });
 
   it("never deletes a non-.md file under root", async () => {

@@ -56,3 +56,5 @@ configMapGenerator:
       - migrations/0020_local_merge_source.down.sql
       - migrations/0021_event_log.up.sql
       - migrations/0021_event_log.down.sql
+      - migrations/0022_task_updated_at_index.up.sql
+      - migrations/0022_task_updated_at_index.down.sql
