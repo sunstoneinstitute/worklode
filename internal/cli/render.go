@@ -73,6 +73,41 @@ func Money(amount string) string {
 	return fmt.Sprintf("%d.%02d", units/100, units%100)
 }
 
+// sessionStatus renders an agent session's lifecycle state for `task show`:
+// "active" while running, "ended <ts>" once closed.
+func sessionStatus(sess model.AgentSession) string {
+	if sess.EndedAt != nil {
+		return "ended " + localTime(*sess.EndedAt)
+	}
+	return "active"
+}
+
+// sessionTokens renders an agent session's input/output token counts, or
+// "-" when neither has been reported yet (a session between claim and its
+// first heartbeat).
+func sessionTokens(sess model.AgentSession) string {
+	if sess.InputTokens == nil && sess.OutputTokens == nil {
+		return "-"
+	}
+	var in, out int64
+	if sess.InputTokens != nil {
+		in = *sess.InputTokens
+	}
+	if sess.OutputTokens != nil {
+		out = *sess.OutputTokens
+	}
+	return fmt.Sprintf("%s in / %s out", HumanTokens(in), HumanTokens(out))
+}
+
+// sessionCost renders an agent session's recorded spend, or "-" before any
+// cost has been reported.
+func sessionCost(sess model.AgentSession) string {
+	if sess.CostAmount == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%s %s", Money(*sess.CostAmount), sess.CostCurrency)
+}
+
 // TaskTable prints one row per task: id, priority, kind, state, project,
 // assignee (- when unassigned), title.
 func TaskTable(w io.Writer, tasks []model.Task) {
@@ -96,7 +131,8 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 }
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
-// holder (if any) — the `lode task show` view.
+// holder — worktree and agent sessions included when leased — the
+// `lode task show` view.
 func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)
@@ -127,6 +163,18 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	}
 	if t.Lease != nil {
 		fmt.Fprintf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, localTime(t.Lease.ExpiresAt))
+		fmt.Fprintf(w, "  worktree: %s\n", t.Lease.Worktree)
+	}
+	if len(t.AgentSessions) > 0 {
+		fmt.Fprintln(w, "\n  sessions:")
+		tw := newTabwriter(w)
+		fmt.Fprintln(tw, "    AGENT\tSESSION\tSTARTED\tSTATUS\tTOKENS\tCOST")
+		for _, sess := range t.AgentSessions {
+			fmt.Fprintf(tw, "    %s\t%s\t%s\t%s\t%s\t%s\n",
+				sess.Agent, sess.SessionID, localTime(sess.StartedAt),
+				sessionStatus(sess), sessionTokens(sess), sessionCost(sess))
+		}
+		tw.Flush()
 	}
 	if t.Body != "" {
 		fmt.Fprintln(w)

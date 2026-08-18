@@ -221,6 +221,47 @@ func TestAgentSessionNotFound(t *testing.T) {
 	}
 }
 
+// TestAgentSessionsForLease checks the list is scoped to one lease, ordered
+// oldest-started-first, and empty (not an error) for a lease with none.
+func TestAgentSessionsForLease(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/.worktrees/one")
+	other := leaseForTest(t, s, "host:/.worktrees/two")
+
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
+		t.Fatalf("touch sess-1: %v", err)
+	}
+	*now = now.Add(time.Minute)
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "codex", "", "sess-2", nil); err != nil {
+		t.Fatalf("touch sess-2: %v", err)
+	}
+	if _, err := s.TouchAgentSession(ctx, other.TaskID, "stig", "claude-code", "", "sess-3", nil); err != nil {
+		t.Fatalf("touch sess-3 on other lease: %v", err)
+	}
+
+	sessions, err := s.AgentSessionsForLease(ctx, lease.ID)
+	if err != nil {
+		t.Fatalf("AgentSessionsForLease: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("sessions: got %d, want 2", len(sessions))
+	}
+	if sessions[0].SessionID != "sess-1" || sessions[1].SessionID != "sess-2" {
+		t.Fatalf("session order: got %q then %q, want sess-1 then sess-2",
+			sessions[0].SessionID, sessions[1].SessionID)
+	}
+
+	empty := leaseForTest(t, s, "host:/.worktrees/three")
+	sessions, err = s.AgentSessionsForLease(ctx, empty.ID)
+	if err != nil {
+		t.Fatalf("AgentSessionsForLease on lease with none: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("sessions for lease with none: got %d, want 0", len(sessions))
+	}
+}
+
 func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
 	s, now := openLeaseStore(t)
 	ctx := t.Context()

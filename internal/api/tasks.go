@@ -197,6 +197,15 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
 		resp.Lease = &l
+		sessions, err := s.st.AgentSessionsForLease(r.Context(), lease.ID)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		resp.AgentSessions = make([]model.AgentSession, 0, len(sessions))
+		for i := range sessions {
+			resp.AgentSessions = append(resp.AgentSessions, toAgentSessionJSON(&sessions[i]))
+		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.mapStoreErr(w, err)
 		return

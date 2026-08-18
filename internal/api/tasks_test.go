@@ -180,6 +180,53 @@ func TestGetTask(t *testing.T) {
 	}
 }
 
+// TestGetTaskIncludesAgentSessions checks a leased task's sessions ride along
+// on the task-detail response, so `lode task show` can render them without a
+// second request.
+func TestGetTaskIncludesAgentSessions(t *testing.T) {
+	st, h, token := newTestServer(t)
+	id := claimedTask(t, st, h, token)
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
+		map[string]any{"agent": "claude-code", "agent_version": "2.0.1", "session_id": "sess-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("touch: got %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	sessions, ok := got["agent_sessions"].([]any)
+	if !ok || len(sessions) != 1 {
+		t.Fatalf("agent_sessions: got %v, want one session", got["agent_sessions"])
+	}
+	sess, ok := sessions[0].(map[string]any)
+	if !ok || sess["agent"] != "claude-code" || sess["session_id"] != "sess-1" {
+		t.Fatalf("unexpected session: %v", sess)
+	}
+}
+
+// TestGetTaskUnleasedHasNoAgentSessions checks a task with no active lease
+// carries no agent_sessions field at all, not an empty array.
+func TestGetTaskUnleasedHasNoAgentSessions(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Unclaimed", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if _, present := got["agent_sessions"]; present {
+		t.Fatalf("agent_sessions present on an unleased task: %v", got["agent_sessions"])
+	}
+}
+
 func TestListTasksFilters(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

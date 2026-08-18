@@ -153,6 +153,46 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 	}
 }
 
+// TestTaskDetailRenderLeaseShowsWorktree checks a leased task's worktree
+// identity is rendered, not just the holder.
+func TestTaskDetailRenderLeaseShowsWorktree(t *testing.T) {
+	var buf bytes.Buffer
+	TaskDetailRender(&buf, model.TaskDetail{
+		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
+			Kind: "feature", State: "in_progress"},
+		Lease: &model.Lease{ActorID: "stig", Worktree: "host:/.worktrees/wl-2"},
+	})
+	if got := buf.String(); !strings.Contains(got, "worktree: host:/.worktrees/wl-2") {
+		t.Fatalf("output has no worktree line:\n%s", got)
+	}
+}
+
+// TestTaskDetailRenderSessions checks each agent session on the lease renders
+// with its agent, session id, and status — ended sessions show when they
+// ended, running ones show as active.
+func TestTaskDetailRenderSessions(t *testing.T) {
+	var buf bytes.Buffer
+	ended := time.Date(2026, 8, 18, 15, 0, 0, 0, time.UTC)
+	in, out := int64(12300), int64(4100)
+	cost := "0.417"
+	TaskDetailRender(&buf, model.TaskDetail{
+		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
+			Kind: "feature", State: "in_progress"},
+		Lease: &model.Lease{ActorID: "stig", Worktree: "host:/.worktrees/wl-2"},
+		AgentSessions: []model.AgentSession{
+			{Agent: "claude-code", SessionID: "sess-1", EndedAt: &ended,
+				InputTokens: &in, OutputTokens: &out, CostAmount: &cost, CostCurrency: "USD"},
+			{Agent: "codex", SessionID: "sess-2"},
+		},
+	})
+	got := buf.String()
+	for _, want := range []string{"sessions:", "claude-code", "sess-1", "12.3k", "4.1k", "0.42", "codex", "sess-2", "active"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("session output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
 	TreeRender(&buf, []TreeNode{{
