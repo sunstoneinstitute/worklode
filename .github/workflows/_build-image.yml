@@ -7,6 +7,10 @@ on:
         description: Push the built image to ghcr.io
         type: boolean
         default: true
+      runs-on:
+        description: Runner label. 'ubuntu-latest' for a hosted PR, 'docker' for a trusted one — this job needs the Docker socket that label marks, see docs/self-hosted-runner.md.
+        type: string
+        default: ubuntu-latest
     outputs:
       image-tag:
         description: Git short SHA used as the image tag
@@ -22,7 +26,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 15
     outputs:
       image-tag: ${{ steps.image.outputs.tag }}

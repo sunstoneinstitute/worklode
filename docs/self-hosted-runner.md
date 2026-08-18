@@ -1,11 +1,12 @@
 # Self-hosted CI runner (hel01)
 
-`test` and `lint` in `pr-checks.yml` run on a self-hosted GitHub Actions
-runner on `hel01` when the triggering PR is trustworthy; every other job
-(`build-image`, `validate-kustomize`, `obsidian`) and every PR the gate
-doesn't trust stay on `ubuntu-latest`. The payoff is a warm, persistent
-`GOCACHE`/`GOMODCACHE` — no `actions/cache` round trip, no re-fetching
-`go.sum` on every run — plus 48 cores instead of a hosted runner's 4.
+`test`, `lint` and `build-image` in `pr-checks.yml` run on a self-hosted
+GitHub Actions runner on `hel01` when the triggering PR is trustworthy;
+`validate-kustomize`, `obsidian`, and every PR the gate doesn't trust stay on
+`ubuntu-latest`. The payoff is a warm, persistent `GOCACHE`/`GOMODCACHE` — no
+`actions/cache` round trip for Go, no re-fetching `go.sum` on every run —
+plus 48 cores and a persistent Docker build cache instead of a hosted
+runner's 4 cores and a from-scratch layer cache each time.
 
 ## Trust boundary
 
@@ -16,7 +17,8 @@ repo (`github.event.pull_request.head.repo.full_name ==
 github.repository`), independent of `run` (which the `can-be-tested` label
 or author association can also set true). **A fork PR never gets `trusted`,
 regardless of label or association** — it always runs on `ubuntu-latest`.
-`lint`/`test` route their `runs-on` input off `trusted`, not `run`.
+`lint`/`test`/`build-image` route their `runs-on` input off `trusted`, not
+`run`.
 
 Do not widen `trusted` to include forks from collaborators/members: hosted
 CI already accepts that risk for a throwaway VM per job; hel01 is not
@@ -27,13 +29,23 @@ below.
 ## Isolation
 
 The runner runs as a dedicated **system user, `ghrunner`** — no `sudo`, no
-`docker` group, no login shell used interactively, home `/home/ghrunner`
-mode `0700`. It cannot read `~stig`, cannot reach the Docker socket, and
-cannot escalate. Registered as a repo-level runner (not org-level) with
-labels `self-hosted, Linux, X64, hel01, gha-pgvector`. `lint` targets it via
-the bare `self-hosted` label; `test` targets `gha-pgvector` specifically —
-see "Postgres for `test`" below for why that label exists rather than
-`test` also using `self-hosted`.
+login shell used interactively, home `/home/ghrunner` mode `0700`. It cannot
+read `~stig` and cannot `sudo`.
+
+**It *is* in the `docker` group**, added specifically so `build-image` can
+reach the Docker socket. That is a materially weaker boundary than the rest
+of this setup: a user who can talk to the Docker socket can run a container
+that bind-mounts the host root and is, for practical purposes, root on
+hel01. Docker-group membership is root-equivalent — there is no
+Docker-socket ACL that stops short of that. Weigh that against `trusted`
+above before adding another job here: the whole isolation model now rests on
+`trusted` being right, not on `ghrunner` being unprivileged.
+
+Registered as a repo-level runner (not org-level) with labels `self-hosted,
+Linux, X64, hel01, gha-pgvector, docker`. `lint` targets the bare
+`self-hosted` label; `test` and `build-image` target `gha-pgvector` and
+`docker` respectively — see the sections below for why each label exists
+rather than every job sharing `self-hosted`.
 
 Installed as a systemd service:
 
@@ -44,7 +56,13 @@ systemctl status actions.runner.sunstoneinstitute-worklode.hel01.service
 Reinstall/reconfigure from `/home/ghrunner/actions-runner` (`config.sh`,
 `svc.sh`) per GitHub's own self-hosted runner docs; a fresh registration
 token comes from `gh api -X POST
-repos/sunstoneinstitute/worklode/actions/runners/registration-token`.
+repos/sunstoneinstitute/worklode/actions/runners/registration-token`. A
+group-membership change (like the docker group above) needs the service
+restarted — `usermod` alone doesn't affect an already-running process:
+
+```
+sudo systemctl restart actions.runner.sunstoneinstitute-worklode.hel01.service
+```
 
 ## Postgres for `test`
 
@@ -69,7 +87,13 @@ one instance across every self-hosted CI run is safe by the same
 convention local dev already relies on (see root `CLAUDE.md`).
 
 `_test.yml` takes the DSN as a `postgres-dsn` input rather than hardcoding
-`localhost:5432`; `pr-checks.yml` supplies the right one per `trusted`.
+`localhost:5432`; `pr-checks.yml` supplies the right one per `trusted`. The
+`e2e smoke test` step needs the same env var passed explicitly too — it has
+no `postgres-dsn`-aware default of its own, only a hardcoded
+`localhost:5432` fallback that happened to match the old `services:`
+container. That gap shipped in the first self-hosted run of this workflow
+and was caught immediately by CI going red; there is no other guard against
+it recurring in a future step that reads `TEST_POSTGRES_DSN`.
 
 The `gha-pgvector` runner label makes that dependency a scheduling
 constraint, not just a convention `test` happens to rely on: `runs-on:
@@ -82,17 +106,37 @@ be handed a `test` job it would immediately fail. Label it when its own
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-pgvector"
 ```
 
+## Docker for `build-image`
+
+`docker/setup-buildx-action` and `docker/build-push-action` need a reachable
+Docker daemon — there is no daemonless mode here, unlike the Postgres case
+above. That's the one job that actually requires the isolation trade-off in
+the *Isolation* section: `ghrunner` is in the `docker` group, and
+`build-image`'s `runs-on` targets the `docker` label rather than the bare
+`self-hosted` one, for the same "scheduling constraint, not convention"
+reason `gha-pgvector` exists — a future self-hosted runner without Docker
+access must never be handed this job.
+
+Sanity-checked with a real `docker buildx build` as `ghrunner` against this
+branch before wiring `pr-checks.yml` to it, matching what
+`docker/build-push-action` does under the hood.
+
+```
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=docker"
+```
+
 ## Extending self-hosted coverage
 
-`_test.yml` and `_lint.yml` both take a `runs-on` input (default
-`ubuntu-latest`) — any reusable workflow gains hel01 the same way, by
-threading that input through from its caller's `gate.trusted` output. Use
-`gha-pgvector` instead of `self-hosted` for a job that needs the Postgres
-sidecar (as `test` does); use the bare `self-hosted` label for one that
-doesn't (as `lint` does) — don't require `gha-pgvector` for a job that has
-no actual Postgres dependency, and don't let a job that does need it fall
-back to `self-hosted` alone. Do **not** add `services:` to a job that might
-run self-hosted: GitHub starts service containers unconditionally once a
-job declares them, which would require `ghrunner` to hold Docker access and
-undo the isolation above. Gate container provisioning with a step-level
-`if:` instead, as `_test.yml` does.
+`_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input
+(default `ubuntu-latest`) — any reusable workflow gains hel01 the same way,
+by threading that input through from its caller's `gate.trusted` output.
+Pick the label for what the job actually needs, not for convenience:
+`gha-pgvector` for Postgres, `docker` for the Docker socket, the bare
+`self-hosted` for neither (as `lint` uses). Don't require a label a job
+doesn't need, and don't let a job that does need one fall back to the bare
+`self-hosted` — either mistake breaks the point of tagging by requirement at
+all. Do **not** add `services:` to a job that might run self-hosted: GitHub
+starts service containers unconditionally once a job declares them, which
+would need `ghrunner` to reach the Docker socket outside of the `docker`
+label's own job. Gate container provisioning with a step-level `if:`
+instead, as `_test.yml` does.
