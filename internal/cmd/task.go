@@ -258,9 +258,7 @@ func newTaskSkillsCmd() *cobra.Command {
 					printRaw(cmd, raw)
 					return nil
 				}
-				var resp struct {
-					Skills []string `json:"skills"`
-				}
+				var resp model.TaskSkills
 				if err := json.Unmarshal(raw, &resp); err != nil {
 					return fmt.Errorf("decode skills: %w", err)
 				}
