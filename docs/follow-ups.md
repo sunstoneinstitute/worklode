@@ -363,3 +363,10 @@ one pass.
   corpus's one existing cross-project reference"; the fold dropped that key, so
   the corpus now has none and the unresolvable-reference example survives only
   in prose.
+- `[P4]` **`WL-SPEC-25#sec-9` is awkward to type in a shell** (025 §14.3,
+  026 §4.2): `#` starts a comment, so the shorthand needs quoting on every
+  `lode show` invocation. Accept `WL-SPEC-25:sec-9` — and its `WL-SPEC-25:9`
+  short form — as an alternate spelling that resolves identically, keeping `#`
+  canonical for prose and frontmatter. Touches `designdoc.ResolveRef` and the
+  shorthand fixtures (`testdata/shorthand.yaml`, exercised from both Go and
+  Python).
