@@ -45,12 +45,13 @@ func newHookCmd() *cobra.Command {
 				printHookEvents(cmd.OutOrStdout())
 				return nil
 			}
-			event, next, err := parseHookArgs(args)
+			event, hookArgs, next, err := parseHookArgs(args)
 			if err != nil {
 				return err
 			}
 			code := hookrun.Run(cmd.Context(), hookrun.Options{
 				Event:  event,
+				Args:   hookArgs,
 				Next:   next,
 				Stdin:  cmd.InOrStdin(),
 				Stdout: cmd.OutOrStdout(),
@@ -66,23 +67,26 @@ func newHookCmd() *cobra.Command {
 	}
 }
 
-// parseHookArgs splits `<event> [--next cmd arg...]`. Everything after the
-// literal "--next" is the downstream argv, taken verbatim.
-func parseHookArgs(args []string) (event string, next []string, err error) {
-	if len(args) == 0 {
-		return "", nil, errors.New("hook requires an event argument")
+// parseHookArgs splits `<event> [arg...] [--next cmd arg...]` three ways: the
+// event, the hook's own arguments, and the downstream argv. Everything after
+// the literal "--next" is the downstream argv, taken verbatim; everything
+// before it is the hook's own (git's positional arguments, for the hooks that
+// read them — commit-msg's message file is $1).
+func parseHookArgs(argv []string) (event string, args, next []string, err error) {
+	if len(argv) == 0 {
+		return "", nil, nil, errors.New("hook requires an event argument")
 	}
-	event = args[0]
-	for i, a := range args[1:] {
+	event = argv[0]
+	for i, a := range argv[1:] {
 		if a == "--next" {
-			next = args[1+i+1:]
+			next = argv[1+i+1:]
 			if len(next) == 0 {
-				return "", nil, errors.New("--next requires a command")
+				return "", nil, nil, errors.New("--next requires a command")
 			}
-			return event, next, nil
+			return event, argv[1 : 1+i], next, nil
 		}
 	}
-	return event, nil, nil
+	return event, argv[1:], nil, nil
 }
 
 // unboundTrigger labels an event nothing installs a binding for. It is not a

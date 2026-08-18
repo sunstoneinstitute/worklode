@@ -317,6 +317,26 @@ literal `WL-` matches `[A-Z][A-Z0-9]*-\d+` instead:
   `WL` were the project key, which is exactly what the label is not. Renamed
   outright, with no compatibility for the old spelling: nothing ever wrote a
   trailer, so no commit or PR body carries one.
+
+  **Amended:** the trailer now has a writer. `lode install` binds a `commit-msg`
+  git hook that stamps `Worklode-Task: <id>` into any commit made inside a task
+  worktree, resolving the id from `worklode.task-id` with no backbone call
+  (008 §9). Every other correlation signal is attached to something outside the
+  commit — a ref, a PR, a merge event — and is lost when the work is rebased,
+  cherry-picked, or squashed; the trailer rides along inside the commit object,
+  so it is the only one that survives, and the only one that still works after
+  the task branch is deleted.
+
+  `commit-msg` rather than `prepare-commit-msg`, which the hooks' timing
+  decides. Both run before git's empty-message check, so a hook that stamps
+  unconditionally turns "quit the editor without writing a message" from an
+  abort into a commit whose entire message is the trailer. The gate is to stamp
+  only a message that already has a body — and at `prepare-commit-msg` time an
+  interactive commit's body is always empty, because the author has not written
+  it yet. Stamping is also skipped while `MERGE_HEAD` is set (a merge message is
+  git's, not the author's) and left alone when a `Worklode-Task:` trailer is
+  already present, so amends and rebase replays are idempotent and a
+  cherry-picked commit keeps the attribution it arrived with.
 - `internal/store/ranking.go:167` — `numericTaskID`: parse the digits after the
   last `-` (`id[strings.LastIndex(id,"-")+1:]`) instead of `TrimPrefix(id,"WL-")`.
 
@@ -534,7 +554,9 @@ commits to tasks. Sources:
   is authoritative, and §2.5 restates it) rather than from a fixed prefix; the
   retired `wl/` prefix is no longer recognized.
 - PR correlation (existing head-ref / `Worklode-Task:` body mechanisms; the PR's
-  SHAs join this table).
+  SHAs join this table). **Amended:** commits also carry the trailer directly,
+  stamped by the `commit-msg` hook (§2.5), so this no longer depends on a PR
+  existing.
 - task-key references in commit messages on default-branch pushes (fallback
   for commits made directly on main).
 - `local_merge` — a merge observed in a developer's own clone and reported by

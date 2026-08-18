@@ -233,11 +233,13 @@ func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Worklode's hooks for this repo's VCS and coding agent",
-		Long: "Installs two integrations. The VCS side writes pre-commit, post-merge and post-commit " +
-			"hooks (into the repo's shared hooks directory, honoring core.hooksPath) that invoke " +
-			"`lode hook <event>`, chaining any hook already present on the same event, or — for " +
-			"pre-commit — the pre-commit framework. pre-commit keeps a working session's lease " +
-			"alive; post-merge and post-commit report a merge that lands on the default branch " +
+		Long: "Installs two integrations. The VCS side writes pre-commit, commit-msg, post-merge and " +
+			"post-commit hooks (into the repo's shared hooks directory, honoring core.hooksPath) " +
+			"that invoke `lode hook <event>`, chaining any hook already present on the same event, " +
+			"or — for pre-commit — the pre-commit framework. pre-commit keeps a working session's " +
+			"lease alive; commit-msg stamps a Worklode-Task trailer into commits made in a task " +
+			"worktree, so the commit says which task it belongs to even after a rebase or squash; " +
+			"post-merge and post-commit report a merge that lands on the default branch " +
 			"here, so a task advances without waiting for a GitHub webhook. The agent " +
 			"side writes Worklode's lifecycle hook bindings (session start/end, heartbeat, worktree " +
 			"enter) into the repo's Claude Code settings file. Use --no-vcs or --no-agent to skip " +
@@ -280,7 +282,7 @@ func newUninstallCmd() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove Worklode's hooks from this repo's VCS and coding agent",
 		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit, " +
-			"post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
+			"commit-msg, post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
 			"third-party hook it does not " +
 			"recognize untouched. The agent side removes every `lode hook` binding from the repo's " +
 			"Claude Code settings file, leaving all other settings — including third-party hooks on " +
