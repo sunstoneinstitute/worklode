@@ -197,7 +197,7 @@ func skillTable(w io.Writer, skills []Skill, width int) {
 
 	fmt.Fprintf(w, "%-*s  %s\n", name, "NAME", "DESCRIPTION")
 	for _, sk := range skills {
-		lines := wrapWords(sk.Description, desc)
+		lines := wrapSkillDesc(sk.Description, desc)
 		if len(lines) == 0 {
 			lines = []string{""}
 		}
@@ -215,11 +215,12 @@ func skillTable(w io.Writer, skills []Skill, width int) {
 	}
 }
 
-// wrapWords breaks s into lines of at most width columns, splitting on
+// wrapSkillDesc breaks s into lines of at most width columns, splitting on
 // whitespace only. A word longer than width gets a line of its own rather than
 // being cut: skill prose carries URLs and backticked identifiers that are
-// worse mangled than overlong.
-func wrapWords(s string, width int) []string {
+// worse mangled than overlong. The table's own wrapper (wrapWordsAt) hard-
+// splits instead, which is why the skill table does not share it.
+func wrapSkillDesc(s string, width int) []string {
 	var lines []string
 	var cur, curWidth = "", 0
 	for _, word := range strings.Fields(s) {
