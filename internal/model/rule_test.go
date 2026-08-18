@@ -1,6 +1,7 @@
 package model_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -8,6 +9,57 @@ import (
 	"strings"
 	"testing"
 )
+
+// scanned are the packages the ADR 036 rules are checked against, as paths
+// relative to internal/model. The map value says whether the package is held
+// to the strict rule (no json-tagged struct declared at all) or only to the
+// anonymous-shape rule — see the package comments below.
+var scanned = map[string]bool{
+	// internal/api encodes and internal/cli decodes the same bodies, so a
+	// json-tagged struct declared in either is a second declaration of a
+	// shape that can only be right once (ADR 036 §2).
+	"../api": true,
+	"../cli": true,
+	// internal/cmd's json-tagged types are `--json` stdout contracts, which
+	// cross no HTTP boundary and have one declaration by construction, so the
+	// strict rule does not apply to them. They must still be *named*: a
+	// contract you cannot grep for is one nobody reviews. HTTP bodies decoded
+	// here are covered by the same rules as everywhere else.
+	"../cmd": false,
+}
+
+// allowed lists the json-tagged structs that legitimately stay outside
+// internal/model in a strict package: transport internals that are serialized
+// into a cookie, a state parameter, or a local file rather than into an HTTP
+// body (ADR 036 §3). The value says where each one is serialized; a type that
+// has no such answer is a wire shape and belongs in internal/model. Keys are
+// package-scoped, so exempting internal/api's oauthState does not silently
+// exempt a same-named type in internal/cli. An entry no declaration matches
+// is reported as stale, the way router.go treats an unused route guard.
+var allowed = map[string]string{
+	"api.oauthState":  "internal/api/session.go — signed into the oauth-state cookie",
+	"api.cliIntent":   "internal/api/session.go — signed into the CLI-intent cookie",
+	"api.stateChange": "internal/api/web.go — decoded from a stored state_log row",
+	// internal/cli/remotecache.go — the four shapes of the on-disk cache at
+	// ~/.cache/worklode/remotes.json. Nothing sends or receives them.
+	"cli.remoteEntry": "internal/cli/remotecache.go — on-disk remote cache",
+	"cli.keyEntry":    "internal/cli/remotecache.go — on-disk remote cache",
+	"cli.serverCache": "internal/cli/remotecache.go — on-disk remote cache",
+	"cli.remoteCache": "internal/cli/remotecache.go — on-disk remote cache",
+}
+
+// bodyArg names the functions that hand a Go value to an HTTP body, and which
+// argument carries it. A map literal there is a wire shape nobody declared —
+// the loophole a struct-declaration check cannot see, since there is no
+// struct to find.
+//
+// What this does not see: a body assembled by a helper that returns a map, or
+// marshalled to bytes first. Those are deliberate work to arrange; the cases
+// here are what a handler reaches for by accident.
+var bodyArg = map[string]int{
+	"writeJSON": 2, // internal/api: writeJSON(w, code, body)
+	"do":        3, // internal/cli: (*Client).do(ctx, method, path, body)
+}
 
 // wireTagged reports whether any field of st carries a json tag.
 func wireTagged(st *ast.StructType) bool {
@@ -19,34 +71,20 @@ func wireTagged(st *ast.StructType) bool {
 	return false
 }
 
-// allowed lists the json-tagged structs that legitimately stay outside
-// internal/model: transport internals that are serialized into a cookie, a
-// state parameter, or a local file rather than into an HTTP body
-// (ADR 036 §3). Each entry names where it is serialized; a type that has no
-// such answer is a wire shape and belongs in internal/model.
-var allowed = map[string]bool{
-	// internal/api/session.go — signed into the oauth-state cookie.
-	"oauthState": true,
-	// internal/api/session.go — signed into the CLI-intent cookie.
-	"cliIntent": true,
-	// internal/cli/remotecache.go — the four shapes of the on-disk cache at
-	// ~/.cache/worklode/remotes.json. Nothing sends or receives them.
-	"remoteEntry": true,
-	"keyEntry":    true,
-	"serverCache": true,
-	"remoteCache": true,
-}
-
-// TestNoWireStructsOutsideModel enforces ADR 036 §2: a struct with json tags
-// in internal/api or internal/cli is a wire shape, and wire shapes have
-// exactly one declaration, in internal/model.
+// TestNoWireStructsOutsideModel enforces ADR 036 §2: a value that crosses the
+// HTTP boundary has exactly one declaration, in internal/model. It checks the
+// three ways a second one gets in — a named struct, an anonymous struct, and
+// a map literal used as a body.
 func TestNoWireStructsOutsideModel(t *testing.T) {
 	fset := token.NewFileSet()
-	for _, pkg := range []string{"../api", "../cli"} {
-		paths, err := filepath.Glob(filepath.Join(pkg, "*.go"))
+	seen := map[string]bool{}
+	for dir, strict := range scanned {
+		pkg := filepath.Base(dir)
+		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
-			t.Fatalf("glob %s: %v", pkg, err)
+			t.Fatalf("glob %s: %v", dir, err)
 		}
+		parsed := 0
 		for _, path := range paths {
 			if strings.HasSuffix(path, "_test.go") {
 				continue
@@ -55,19 +93,227 @@ func TestNoWireStructsOutsideModel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse %s: %v", path, err)
 			}
-			ast.Inspect(file, func(n ast.Node) bool {
-				ts, ok := n.(*ast.TypeSpec)
-				if !ok || allowed[ts.Name.Name] {
-					return true
-				}
-				st, ok := ts.Type.(*ast.StructType)
-				if ok && wireTagged(st) {
-					t.Errorf("%s: %s has json tags outside internal/model "+
-						"(ADR 036 §2) — move it, or add it to allowed with a reason",
-						filepath.Base(path), ts.Name.Name)
-				}
-				return true
-			})
+			parsed++
+			for _, msg := range checkFile(fset, pkg, strict, path, file, seen) {
+				t.Error(msg)
+			}
 		}
+		// Without this, renaming or splitting a package turns the guard green
+		// while it inspects nothing at all.
+		if parsed == 0 {
+			t.Errorf("%s: no files parsed — the guard checked nothing; "+
+				"did the package move? update scanned", dir)
+		}
+	}
+	for key, why := range allowed {
+		if !seen[key] {
+			t.Errorf("allowed[%q] (%s) matches no json-tagged declaration — "+
+				"drop the entry", key, why)
+		}
+	}
+}
+
+// checkFile returns one message per violation in file. It returns them
+// rather than failing directly so the guard itself can be tested against
+// known-bad source (TestGuardCatchesTheDodges) — a check nobody checks is how
+// the previous version came to inspect nothing.
+func checkFile(fset *token.FileSet, pkg string, strict bool, path string, file *ast.File, seen map[string]bool) []string {
+	return append(
+		checkStructs(fset, pkg, strict, path, file, seen),
+		checkBodies(fset, path, file)...)
+}
+
+// checkStructs reports json-tagged structs declared outside internal/model.
+// Anonymous ones are reported in every scanned package: deleting the type
+// name is the cheapest way to dodge a declaration check, and an undeclared
+// body is exactly what ADR 036 exists to prevent.
+func checkStructs(fset *token.FileSet, pkg string, strict bool, path string, file *ast.File, seen map[string]bool) (msgs []string) {
+	named := map[*ast.StructType]string{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if ts, ok := n.(*ast.TypeSpec); ok {
+			if st, ok := ts.Type.(*ast.StructType); ok {
+				named[st] = ts.Name.Name
+			}
+		}
+		return true
+	})
+	base := filepath.Base(path)
+	ast.Inspect(file, func(n ast.Node) bool {
+		st, ok := n.(*ast.StructType)
+		if !ok || !wireTagged(st) {
+			return true
+		}
+		name, isNamed := named[st]
+		if !isNamed {
+			if strict {
+				msgs = append(msgs, fmt.Sprintf(
+					"%s:%d: anonymous struct with json tags (ADR 036 §2) — "+
+						"a shape crossing the wire is declared once, in internal/model",
+					base, fset.Position(st.Pos()).Line))
+			} else {
+				msgs = append(msgs, fmt.Sprintf(
+					"%s:%d: anonymous struct with json tags — name it (a --json "+
+						"contract nobody can grep for is one nobody reviews), or use "+
+						"the internal/model type if it is an HTTP body",
+					base, fset.Position(st.Pos()).Line))
+			}
+			return true
+		}
+		key := pkg + "." + name
+		if _, ok := allowed[key]; ok {
+			seen[key] = true
+			// Exempt the whole type: a nested shape inside a cookie payload
+			// is serialized by the same non-HTTP path.
+			return false
+		}
+		if strict {
+			msgs = append(msgs, fmt.Sprintf(
+				"%s: %s has json tags outside internal/model (ADR 036 §2) — "+
+					"move it, or add %q to allowed with a reason", base, name, key))
+		}
+		return true
+	})
+	return msgs
+}
+
+// checkBodies reports map literals handed to an HTTP body argument, including
+// one built up across a few statements — the shape of the conditional error
+// body a handler writes by hand.
+func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []string) {
+	base := filepath.Base(path)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		mapLocal := map[string]bool{}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			as, ok := n.(*ast.AssignStmt)
+			if !ok {
+				return true
+			}
+			for i, rhs := range as.Rhs {
+				if !isMapLit(rhs) || i >= len(as.Lhs) {
+					continue
+				}
+				if id, ok := as.Lhs[i].(*ast.Ident); ok {
+					mapLocal[id.Name] = true
+				}
+			}
+			return true
+		})
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			var fname string
+			switch f := call.Fun.(type) {
+			case *ast.Ident:
+				fname = f.Name
+			case *ast.SelectorExpr:
+				fname = f.Sel.Name
+			}
+			i, ok := bodyArg[fname]
+			if !ok || i >= len(call.Args) {
+				return true
+			}
+			arg := call.Args[i]
+			id, isIdent := arg.(*ast.Ident)
+			if !isMapLit(arg) && !(isIdent && mapLocal[id.Name]) {
+				return true
+			}
+			msgs = append(msgs, fmt.Sprintf(
+				"%s:%d: %s is handed a map as its HTTP body (ADR 036 §2) — "+
+					"declare the shape in internal/model",
+				base, fset.Position(call.Pos()).Line, fname))
+			return true
+		})
+	}
+	return msgs
+}
+
+// isMapLit reports whether e is a map composite literal.
+func isMapLit(e ast.Expr) bool {
+	lit, ok := e.(*ast.CompositeLit)
+	if !ok {
+		return false
+	}
+	_, ok = lit.Type.(*ast.MapType)
+	return ok
+}
+
+// TestGuardCatchesTheDodges runs the checks over known-bad source: every way
+// of putting a wire shape outside internal/model must produce a finding, and
+// the shapes that legitimately stay put must not. Without this, a refactor
+// that quietly stops matching anything leaves a green test that checks
+// nothing — which is what happened to the first version of this guard.
+func TestGuardCatchesTheDodges(t *testing.T) {
+	cases := []struct {
+		name   string
+		pkg    string
+		strict bool
+		src    string
+		want   string // substring of the expected finding; "" means none
+	}{{
+		name: "named struct in a strict package", pkg: "api", strict: true,
+		src:  "type taskJSON struct {\n\tID string `json:\"id\"`\n}",
+		want: "has json tags outside internal/model",
+	}, {
+		name: "anonymous struct in a strict package", pkg: "api", strict: true,
+		src:  "func h() {\n\tvar req struct {\n\t\tDoneState string `json:\"done_state\"`\n\t}\n\t_ = req\n}",
+		want: "anonymous struct with json tags",
+	}, {
+		name: "anonymous struct in internal/cmd", pkg: "cmd", strict: false,
+		src:  "func h() {\n\tout := struct {\n\t\tOK bool `json:\"ok\"`\n\t}{}\n\t_ = out\n}",
+		want: "name it",
+	}, {
+		name: "named --json shape in internal/cmd", pkg: "cmd", strict: false,
+		src:  "type statusResult struct {\n\tOK bool `json:\"ok\"`\n}",
+		want: "",
+	}, {
+		name: "map literal written as a body", pkg: "api", strict: true,
+		src:  `func h() { writeJSON(w, 200, map[string]any{"status": "ok"}) }`,
+		want: "handed a map as its HTTP body",
+	}, {
+		name: "map body built up over statements", pkg: "api", strict: true,
+		src: "func h() {\n\tbody := map[string]any{\"error\": \"nope\"}\n" +
+			"\tbody[\"holder\"] = 1\n\twriteJSON(w, 409, body)\n}",
+		want: "handed a map as its HTTP body",
+	}, {
+		name: "map literal sent as a request body", pkg: "cli", strict: true,
+		src:  `func h() { c.do(ctx, "POST", "/api/v1/merges", map[string]any{"repo": r}) }`,
+		want: "handed a map as its HTTP body",
+	}, {
+		name: "model type written as a body", pkg: "api", strict: true,
+		src:  `func h() { writeJSON(w, 200, model.HealthResponse{Status: "ok"}) }`,
+		want: "",
+	}, {
+		name: "an allowed transport internal", pkg: "api", strict: true,
+		src:  "type oauthState struct {\n\tNonce string `json:\"nonce\"`\n}",
+		want: "",
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "bad.go", "package p\n"+tc.src, 0)
+			if err != nil {
+				t.Fatalf("parse case source: %v", err)
+			}
+			got := checkFile(fset, tc.pkg, tc.strict, "bad.go", file, map[string]bool{})
+			if tc.want == "" {
+				if len(got) > 0 {
+					t.Errorf("want no finding, got %v", got)
+				}
+				return
+			}
+			for _, msg := range got {
+				if strings.Contains(msg, tc.want) {
+					return
+				}
+			}
+			t.Errorf("want a finding containing %q, got %v", tc.want, got)
+		})
 	}
 }

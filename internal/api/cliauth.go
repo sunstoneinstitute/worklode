@@ -271,10 +271,10 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"token":      token,
-		"actor_id":   actorID,
-		"expires_at": exp.UTC().Format(time.RFC3339),
+	writeJSON(w, http.StatusCreated, model.MintedToken{
+		Token:     token,
+		ActorID:   actorID,
+		ExpiresAt: exp.UTC().Format(time.RFC3339),
 	})
 }
 

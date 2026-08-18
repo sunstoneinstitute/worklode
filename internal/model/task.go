@@ -82,6 +82,21 @@ type SetSkillsInput struct {
 	Skills []string `json:"skills"`
 }
 
+// TaskSkills is the response body of PUT /api/v1/tasks/{id}/skills: the
+// stored list read back after cleaning, not the raw request echoed.
+type TaskSkills struct {
+	Skills []string `json:"skills"`
+}
+
+// Edge is the response body of POST /api/v1/tasks/{id}/edges: the edge as
+// stored, with both endpoints resolved to task ids (EdgeInput names only one
+// of them).
+type Edge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Type string `json:"type"`
+}
+
 // DecomposeInput is the request body for POST /api/v1/tasks/{id}/decompose:
 // one draft child is created per title.
 type DecomposeInput struct {

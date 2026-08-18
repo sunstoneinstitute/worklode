@@ -8,6 +8,22 @@ type ClaimResponse struct {
 	Branch string `json:"branch"`
 }
 
+// ClaimHolder names the lease that made a claim conflict, when it was still
+// there to be read: the claim path looks it up best-effort, so a conflict can
+// legitimately answer without one.
+type ClaimHolder struct {
+	ActorID   string    `json:"actor_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ClaimConflictResponse is the 409 body of POST /api/v1/tasks/{id}/claim. It
+// is an ErrorResponse plus the holder, so a client that only reads "error"
+// sees the same shape it sees everywhere else.
+type ClaimConflictResponse struct {
+	Error  string       `json:"error"`
+	Holder *ClaimHolder `json:"holder,omitempty"`
+}
+
 // TaskListResponse is the response body of GET /api/v1/tasks.
 type TaskListResponse struct {
 	Tasks []Task `json:"tasks"`

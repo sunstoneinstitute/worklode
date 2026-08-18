@@ -481,7 +481,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"from": from, "to": to, "type": req.Type})
+	writeJSON(w, http.StatusCreated, model.Edge{From: from, To: to, Type: req.Type})
 }
 
 // removeEdge handles DELETE /api/v1/tasks/{id}/edges.
@@ -555,5 +555,5 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": t.Skills})
+	writeJSON(w, http.StatusOK, model.TaskSkills{Skills: t.Skills})
 }
