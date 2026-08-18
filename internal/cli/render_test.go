@@ -61,6 +61,74 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 	}
 }
 
+// TestSkillTableWraps checks the two things the skill list needs that a plain
+// tabwriter cannot give it: the description column wraps at the terminal width
+// instead of running off the edge, and its continuation lines line up under
+// the first one rather than under the name.
+func TestSkillTableWraps(t *testing.T) {
+	var buf bytes.Buffer
+	skillTable(&buf, []Skill{
+		{Name: "tdd", Description: "Red-green-refactor discipline for every feature and bugfix, applied before implementation code exists"},
+		{Name: "systematic-debugging", Description: "Short one"},
+	}, 60)
+	got := buf.String()
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	for _, l := range lines {
+		if len(l) > 60 {
+			t.Fatalf("line exceeds width 60 (%d): %q\n%s", len(l), l, got)
+		}
+	}
+	if !strings.HasPrefix(lines[0], "NAME") || !strings.Contains(lines[0], "DESCRIPTION") {
+		t.Fatalf("missing header row:\n%s", got)
+	}
+	// "systematic-debugging" is the widest name, so the description column
+	// starts two spaces past it, and every wrapped line starts there too.
+	indent := len("systematic-debugging") + 2
+	descCol := strings.Index(lines[1], "Red-green")
+	if descCol != indent {
+		t.Fatalf("description column starts at %d, want %d:\n%s", descCol, indent, got)
+	}
+	if len(lines) < 3 || strings.TrimSpace(lines[2]) == "" {
+		t.Fatalf("long description did not wrap onto a second line:\n%s", got)
+	}
+	if strings.Index(lines[2], strings.TrimSpace(lines[2])) != indent {
+		t.Fatalf("continuation line is not indented to the description column:\n%s", got)
+	}
+}
+
+// TestSkillTableWrapsLongWord checks a word wider than the description column
+// is emitted whole rather than dropped or split.
+func TestSkillTableWrapsLongWord(t *testing.T) {
+	var buf bytes.Buffer
+	long := strings.Repeat("x", 50)
+	skillTable(&buf, []Skill{{Name: "a", Description: "see " + long + " end"}}, 20)
+	got := buf.String()
+	if !strings.Contains(got, long) {
+		t.Fatalf("unbreakable word was lost:\n%s", got)
+	}
+	if !strings.Contains(got, "end") {
+		t.Fatalf("text after the unbreakable word was lost:\n%s", got)
+	}
+}
+
+// TestSkillTableLongNameKeepsColumn checks a name past the column cap takes a
+// row of its own instead of shoving its description out of alignment.
+func TestSkillTableLongNameKeepsColumn(t *testing.T) {
+	var buf bytes.Buffer
+	long := strings.Repeat("n", maxSkillNameWidth+8)
+	skillTable(&buf, []Skill{
+		{Name: "short", Description: "first"},
+		{Name: long, Description: "second"},
+	}, 80)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if lines[2] != long {
+		t.Fatalf("overlong name did not take its own row: %q\n%s", lines[2], buf.String())
+	}
+	if strings.Index(lines[1], "first") != strings.Index(lines[3], "second") {
+		t.Fatalf("descriptions are not in the same column:\n%s", buf.String())
+	}
+}
+
 func TestTaskDetailRenderHierarchy(t *testing.T) {
 	var buf bytes.Buffer
 	TaskDetailRender(&buf, TaskDetail{
