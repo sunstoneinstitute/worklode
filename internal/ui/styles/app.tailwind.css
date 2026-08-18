@@ -84,11 +84,13 @@ button{font-family:inherit;cursor:pointer}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
 .brand .mark{width:22px;height:22px;border-radius:6px;background:var(--accent);display:grid;place-items:center;flex:0 0 auto}
 .brand .mark svg{width:13px;height:13px;display:block}
-nav.global{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}
-nav.global::-webkit-scrollbar{display:none}
+/* nav.global lives in the left sidebar on global pages; the topbar carries
+ * no navigation. Below 880px it becomes a horizontal strip (later media
+ * query). */
+nav.global{display:flex;flex-direction:column;gap:1px}
 nav.global a{
-  padding:7px 11px;border-radius:7px;color:var(--ink-2);font-weight:500;font-size:13.5px;white-space:nowrap;
-  display:flex;align-items:center;gap:7px
+  padding:8px 10px;border-radius:8px;color:var(--ink-2);font-weight:500;
+  font-size:13.5px;display:flex;align-items:center;gap:10px
 }
 nav.global a:hover{background:var(--surface-2);text-decoration:none}
 nav.global a.active{color:var(--ink);background:var(--sunk);font-weight:600}

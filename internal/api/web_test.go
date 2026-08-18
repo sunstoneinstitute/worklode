@@ -22,15 +22,15 @@ func bodyContains(t *testing.T, body string, want ...string) {
 }
 
 // assertShell checks the structural markers every page rendered through the
-// Page shell component (layout.templ) must carry: the skip link, the one
-// primary nav landmark, the one main landmark, and the shared stylesheet —
+// Page shell component (layout.templ) must carry: the skip link, the
+// two-column shell frame, the one main landmark, and the shared stylesheet —
 // see docs/specs/032-project-cockpit.md §10.
 func assertShell(t *testing.T, body string) {
 	t.Helper()
 	for _, want := range []string{
 		`<html lang="en">`,
 		`href="#main-content"`,
-		`<nav aria-label="Primary"`,
+		`class="shell"`,
 		`<main id="main-content"`,
 		`href="/assets/app.css"`,
 	} {
@@ -88,6 +88,39 @@ func assertOrder(t *testing.T, body string, want ...string) {
 	}
 }
 
+// topbarRegion returns the <header class="topbar"> element's markup.
+func topbarRegion(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<header class="topbar">`)
+	if i < 0 {
+		t.Fatalf("body has no topbar:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</header>")
+	if j < 0 {
+		t.Fatalf("topbar not closed:\n%s", body)
+	}
+	return rest[:j]
+}
+
+// TestTopbarKeepsOnlyChrome checks the global destinations left the topbar
+// (brand, theme toggle, avatar only — no nav landmark, no links) and that
+// the seven destinations render in the sidebar column before the content.
+func TestTopbarKeepsOnlyChrome(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	header := topbarRegion(t, body)
+	for _, want := range []string{`class="brand"`, `id="theme"`, `class="avatar"`} {
+		if !strings.Contains(header, want) {
+			t.Errorf("topbar missing %q", want)
+		}
+	}
+	if strings.Contains(header, "<nav") || strings.Contains(header, "<a ") {
+		t.Errorf("topbar still carries navigation:\n%s", header)
+	}
+	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<div class="main">`)
+}
+
 // TestGlobalNavOrder checks the primary nav renders the seven destinations
 // in the exact order docs/specs/032-project-cockpit.md §2 requires: Home,
 // Intake, Projects, Work, Reviews, Deliveries, Knowledge.
@@ -109,6 +142,7 @@ func TestGlobalDestinations(t *testing.T) {
 			body := rr.Body.String()
 			assertShell(t, body)
 			assertOneAriaCurrent(t, body)
+			bodyContains(t, body, `<nav aria-label="Primary"`)
 		})
 	}
 }

@@ -1,10 +1,12 @@
 package ui
 
 // layout.templ is the application shell every page renders through: the
-// document head, skip link, the sticky top bar (brand + primary global nav +
-// theme toggle + avatar), and the <main id="main-content"> landmark each
-// page's content fills via { children... }. Styled with the prototype design
-// system (see internal/ui/styles/app.tailwind.css): .topbar, nav.global,
+// document head, skip link, the sticky top bar (brand + theme toggle +
+// avatar — no navigation), and the <main id="main-content"> landmark each
+// page's content fills via { children... }. Global pages wrap their content
+// in globalShell, which carries the primary nav in a left sidebar; project
+// pages use sidebar instead. Styled with the prototype design system (see
+// internal/ui/styles/app.tailwind.css): .topbar, nav.global, .shell,
 // .top-right/.iconbtn/.avatar. The self-hosted HTMX script tag is dormant
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
@@ -27,9 +29,6 @@ templ Page(p PageProps) {
 					</span>
 					worklode
 				</div>
-				<nav aria-label="Primary" class="global">
-					@globalNav(p.ActiveGlobal)
-				</nav>
 				<div class="top-right">
 					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
 						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
@@ -73,6 +72,31 @@ templ globalLink(href, label, key, active string) {
 			aria-current="page"
 		}
 	>{ label }</a>
+}
+
+// globalSidebar renders the left column global pages share: the Primary
+// nav landmark carrying the seven global destinations (moved here from the
+// topbar), marking the one matching active as the current page.
+templ globalSidebar(active string) {
+	<div class="sidebar">
+		<nav aria-label="Primary" class="global">
+			@globalNav(active)
+		</nav>
+	</div>
+}
+
+// globalShell wraps a global (non-project) page's content in the unified
+// two-column .shell frame: global sidebar left, content in .main > .canvas.
+// Project pages build their own .shell with sidebar() instead.
+templ globalShell(active string) {
+	<div class="shell">
+		@globalSidebar(active)
+		<div class="main">
+			<div class="canvas">
+				{ children... }
+			</div>
+		</div>
+	</div>
 }
 
 // sidebar renders the project-scoped left column shared by the cockpit and the

@@ -18,10 +18,12 @@ import (
 
 // PageProps carries the fields the Page shell needs on every page: the
 // document title and which primary-nav destination to mark aria-current.
-// ActiveGlobal is one of "home", "intake", "projects", "work", "reviews",
-// "deliveries", "knowledge"; it is left empty on project-scoped pages, whose
-// project-local nav carries the current-page marker instead. Every page sets
-// aria-current="page" exactly once, never on both navs.
+// ActiveGlobal drives globalShell's sidebar marking: one of "home", "intake",
+// "projects", "work", "reviews", "deliveries", "knowledge". It is left empty
+// on project-scoped pages, whose project-local nav carries the current-page
+// marker instead, and on pages with no current destination (the task page),
+// which mark nothing. Every page sets aria-current="page" exactly once,
+// never on both navs.
 type PageProps struct {
 	Title        string
 	ActiveGlobal string

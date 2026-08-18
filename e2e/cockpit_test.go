@@ -318,19 +318,18 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 }
 
 // assertOverviewSurface checks the rendered /projects/proj page in Operations
-// mode: two distinct navigation landmarks, one main landmark, the labelled
-// decision-rail aside, the mode-B canvas, an Active-work row distinguishing
-// Dana (owner) from Agent One (delegate), Observed status evidence, and the
-// highest-signal exception that links back to the blocking task with the
-// evidence it rests on (the "source" the blocked-state evidence traces to).
+// mode: one navigation landmark (the project's own left column carries no
+// Primary landmark — that lives in the global sidebar), one main landmark,
+// the labelled decision-rail aside, the mode-B canvas, an Active-work row
+// distinguishing Dana (owner) from Agent One (delegate), Observed status
+// evidence, and the highest-signal exception that links back to the blocking
+// task with the evidence it rests on (the "source" the blocked-state
+// evidence traces to).
 func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	t.Helper()
 
-	if got := strings.Count(body, "<nav aria-label="); got != 2 {
-		t.Fatalf("nav landmark count = %d, want 2 (Primary + Project):\n%s", got, body)
-	}
-	if !strings.Contains(body, `<nav aria-label="Primary"`) {
-		t.Fatalf("missing the primary global nav landmark:\n%s", body)
+	if got := strings.Count(body, "<nav aria-label="); got != 1 {
+		t.Fatalf("nav landmark count = %d, want 1 (Project):\n%s", got, body)
 	}
 	if !strings.Contains(body, `<nav aria-label="Project"`) {
 		t.Fatalf("missing the project-local nav landmark:\n%s", body)

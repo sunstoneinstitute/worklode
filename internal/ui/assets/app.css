@@ -396,24 +396,18 @@ button {
 }
 nav.global {
   display: flex;
-  gap: 2px;
-  overflow-x: auto;
-  flex: 1;
-  scrollbar-width: none;
-}
-nav.global::-webkit-scrollbar {
-  display: none;
+  flex-direction: column;
+  gap: 1px;
 }
 nav.global a {
-  padding: 7px 11px;
-  border-radius: 7px;
+  padding: 8px 10px;
+  border-radius: 8px;
   color: var(--ink-2);
   font-weight: 500;
   font-size: 13.5px;
-  white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 10px;
 }
 nav.global a:hover {
   background: var(--surface-2);

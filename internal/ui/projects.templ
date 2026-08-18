@@ -6,28 +6,26 @@ package ui
 
 templ Projects(v ProjectsView) {
 	@Page(v.Page) {
-		<div class="main">
-			<div class="canvas">
-				<h1>Projects</h1>
-				if len(v.Projects) == 0 {
-					<p class="muted">No projects yet.</p>
-				} else {
-					<section class="card">
-						<div class="bd">
-							<div class="wl">
-								for _, proj := range v.Projects {
-									<div class="wlrow">
-										<div class="tl">
-											<div class="t"><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></div>
-										</div>
-										<div class="rt"><span class="chip plain mono">{ proj.Key }</span></div>
+		@globalShell(v.Page.ActiveGlobal) {
+			<h1>Projects</h1>
+			if len(v.Projects) == 0 {
+				<p class="muted">No projects yet.</p>
+			} else {
+				<section class="card">
+					<div class="bd">
+						<div class="wl">
+							for _, proj := range v.Projects {
+								<div class="wlrow">
+									<div class="tl">
+										<div class="t"><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></div>
 									</div>
-								}
-							</div>
+									<div class="rt"><span class="chip plain mono">{ proj.Key }</span></div>
+								</div>
+							}
 						</div>
-					</section>
-				}
-			</div>
-		</div>
+					</div>
+				</section>
+			}
+		}
 	}
 }

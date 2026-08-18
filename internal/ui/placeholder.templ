@@ -23,14 +23,12 @@ templ Placeholder(v PlaceholderView) {
 				</div>
 			</div>
 		} else {
-			<div class="main">
-				<div class="canvas">
-					<section class="card pad">
-						<h1>{ v.Heading }</h1>
-						<p class="muted">{ v.Message }</p>
-					</section>
-				</div>
-			</div>
+			@globalShell(v.Page.ActiveGlobal) {
+				<section class="card pad">
+					<h1>{ v.Heading }</h1>
+					<p class="muted">{ v.Message }</p>
+				</section>
+			}
 		}
 	}
 }
