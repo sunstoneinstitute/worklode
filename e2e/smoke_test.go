@@ -260,8 +260,8 @@ func TestFullChain(t *testing.T) {
 	if ci == nil {
 		t.Fatalf("timeline after workflow_run has no ci entry: %v", entryTypes(tl.Timeline))
 	}
-	if ci["workflow"] != "CI" || ci["status"] != "completed" || ci["conclusion"] != "success" {
-		t.Fatalf("ci entry = %v, want workflow CI completed/success", ci)
+	if ci.Workflow != "CI" || ci.Status != "completed" || ci.Conclusion == nil || *ci.Conclusion != "success" {
+		t.Fatalf("ci entry = %+v, want workflow CI completed/success", ci)
 	}
 
 	// 4c. pull_request_review.submitted (approved).
@@ -464,20 +464,19 @@ func postRuntimeEvent(t *testing.T, baseURL, token string, payload any) {
 	}
 }
 
-func entryTypes(timeline []map[string]any) []string {
+func entryTypes(timeline []model.TimelineEntry) []string {
 	var types []string
 	for _, e := range timeline {
-		typ, _ := e["type"].(string)
-		types = append(types, typ)
+		types = append(types, e.Type)
 	}
 	return types
 }
 
 // findEntry returns the first timeline entry of the given type, or nil.
-func findEntry(timeline []map[string]any, typ string) map[string]any {
-	for _, e := range timeline {
-		if e["type"] == typ {
-			return e
+func findEntry(timeline []model.TimelineEntry, typ string) *model.TimelineEntry {
+	for i, e := range timeline {
+		if e.Type == typ {
+			return &timeline[i]
 		}
 	}
 	return nil
@@ -499,16 +498,11 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 	// Ascending by "at".
 	var prev time.Time
 	for i, e := range tl.Timeline {
-		atStr, _ := e["at"].(string)
-		ts, err := time.Parse(time.RFC3339, atStr)
-		if err != nil {
-			t.Fatalf("timeline entry %d: bad at %q: %v", i, atStr, err)
-		}
-		if ts.Before(prev) {
+		if e.At.Before(prev) {
 			t.Fatalf("timeline not ascending at entry %d (%s): %v < %v (types %v)",
-				i, types[i], ts, prev, types)
+				i, types[i], e.At, prev, types)
 		}
-		prev = ts
+		prev = e.At
 	}
 
 	// The chain types appear, in ascending order of first occurrence.
@@ -535,38 +529,49 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		t.Fatalf("timeline starts with %q, want state (types %v)", types[0], types)
 	}
 	if e := findEntry(tl.Timeline, "runtime"); e != nil {
-		t.Fatalf("timeline contains a runtime entry %v; the unlinked crashloop must not appear", e)
+		t.Fatalf("timeline contains a runtime entry %+v; the unlinked crashloop must not appear", e)
 	}
 
-	// Spot-check entry contents.
-	pr := findEntry(tl.Timeline, "pr")
-	if pr["repo"] != repo || pr["number"] != float64(42) || pr["state"] != "merged" {
-		t.Fatalf("pr entry = %v, want merged %s#42", pr, repo)
+	// Spot-check entry contents. firstIdx above already proved each type is
+	// present, so a nil here would be a bug in findEntry — but dereferencing
+	// on trust would replace the assertion's message with a nil panic.
+	must := func(typ string) *model.TimelineEntry {
+		e := findEntry(tl.Timeline, typ)
+		if e == nil {
+			t.Fatalf("timeline has no %q entry: %v", typ, types)
+		}
+		return e
 	}
-	review := findEntry(tl.Timeline, "review")
-	if review["reviewer"] != "reviewer-bob" || review["state"] != "approved" {
-		t.Fatalf("review entry = %v, want reviewer-bob approved", review)
+	pr := must("pr")
+	if pr.Repo != repo || pr.Number != 42 || pr.State != "merged" {
+		t.Fatalf("pr entry = %+v, want merged %s#42", pr, repo)
 	}
-	artifact := findEntry(tl.Timeline, "artifact")
-	if artifact["kind"] != "git_tag" || artifact["name"] != repo || artifact["version"] != "v1.0.0" {
-		t.Fatalf("artifact entry = %v, want git_tag %s v1.0.0", artifact, repo)
+	review := must("review")
+	if review.Reviewer != "reviewer-bob" || review.State != "approved" {
+		t.Fatalf("review entry = %+v, want reviewer-bob approved", review)
 	}
-	deployment := findEntry(tl.Timeline, "deployment")
-	if deployment["environment"] != "prod" || deployment["status"] != "deployed" ||
-		deployment["target_name"] != "flux-system/demo" {
-		t.Fatalf("deployment entry = %v, want prod/deployed on flux-system/demo", deployment)
+	artifact := must("artifact")
+	if artifact.Kind != "git_tag" || artifact.Name != repo || artifact.Version != "v1.0.0" {
+		t.Fatalf("artifact entry = %+v, want git_tag %s v1.0.0", artifact, repo)
+	}
+	deployment := must("deployment")
+	if deployment.Environment != "prod" || deployment.Status != "deployed" ||
+		deployment.TargetName != "flux-system/demo" {
+		t.Fatalf("deployment entry = %+v, want prod/deployed on flux-system/demo", deployment)
 	}
 
 	// The task's state chain ends at deployed_prod.
-	var lastState map[string]any
-	for _, e := range tl.Timeline {
-		if e["type"] == "state" {
-			lastState = e
+	var lastState *model.TimelineEntry
+	for i, e := range tl.Timeline {
+		if e.Type == "state" {
+			lastState = &tl.Timeline[i]
 		}
 	}
-	change, _ := lastState["change"].(map[string]any)
-	if change == nil || change["new"] != "deployed_prod" {
-		t.Fatalf("last state entry = %v, want change.new deployed_prod", lastState)
+	var change struct {
+		New string `json:"new"`
+	}
+	if lastState == nil || json.Unmarshal(lastState.Change, &change) != nil || change.New != "deployed_prod" {
+		t.Fatalf("last state entry = %+v, want change.new deployed_prod", lastState)
 	}
 }
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -449,55 +450,58 @@ func leaseLeft(expiresAt, now time.Time) string {
 
 // TimelineRender prints one line per entry: timestamp, type, and a
 // type-specific one-line summary.
-func TimelineRender(w io.Writer, entries []map[string]any) {
+func TimelineRender(w io.Writer, entries []model.TimelineEntry) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "TIME\tTYPE\tSUMMARY")
 	for _, e := range entries {
-		at, _ := e["at"].(string)
-		typ, _ := e["type"].(string)
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", at, typ, timelineSummary(typ, e))
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", localTime(e.At), e.Type, timelineSummary(e))
 	}
 	tw.Flush()
 }
 
 // timelineSummary builds a one-line, human-readable summary from a timeline
-// entry's type-specific fields. Field shapes mirror internal/api/timeline.go.
-func timelineSummary(typ string, e map[string]any) string {
-	str := func(k string) string {
-		v, _ := e[k].(string)
-		return v
-	}
-	num := func(k string) string {
-		v, ok := e[k].(float64)
-		if !ok {
+// entry's type-specific fields — see model.TimelineEntry for which fields
+// each type populates.
+func timelineSummary(e model.TimelineEntry) string {
+	switch e.Type {
+	case "state":
+		// The change payload is a stored state_log row, not a shape this API
+		// declares: "new" is a string for a field update and a list for the
+		// secrets ones, so it is read key by key rather than decoded into a
+		// struct (ADR 036 §3).
+		var change map[string]any
+		if json.Unmarshal(e.Change, &change) != nil {
 			return ""
 		}
-		return fmt.Sprintf("%.0f", v)
-	}
-	switch typ {
-	case "state":
-		if change, ok := e["change"].(map[string]any); ok {
-			field, _ := change["field"].(string)
-			old, _ := change["old"].(string)
-			nw, _ := change["new"].(string)
-			if old != "" {
-				return fmt.Sprintf("%s: %s -> %s", field, old, nw)
-			}
-			return fmt.Sprintf("%s: %s", field, nw)
+		field, _ := change["field"].(string)
+		old, _ := change["old"].(string)
+		nw, _ := change["new"].(string)
+		if old != "" {
+			return fmt.Sprintf("%s: %s -> %s", field, old, nw)
 		}
-		return ""
+		return fmt.Sprintf("%s: %s", field, nw)
 	case "pr":
-		return fmt.Sprintf("%s#%s %q (%s)", str("repo"), num("number"), str("title"), str("state"))
+		return fmt.Sprintf("%s#%d %q (%s)", e.Repo, e.Number, e.Title, e.State)
 	case "ci":
-		return fmt.Sprintf("%s %s: %s/%s", str("repo"), str("workflow"), str("status"), str("conclusion"))
+		conclusion := ""
+		if e.Conclusion != nil {
+			conclusion = *e.Conclusion
+		}
+		return fmt.Sprintf("%s %s: %s/%s", e.Repo, e.Workflow, e.Status, conclusion)
 	case "review":
-		return fmt.Sprintf("%s reviewed %s#%s: %s", str("reviewer"), str("repo"), num("number"), str("state"))
+		return fmt.Sprintf("%s reviewed %s#%d: %s", e.Reviewer, e.Repo, e.Number, e.State)
 	case "artifact":
-		return fmt.Sprintf("%s %s %s", str("kind"), str("name"), str("version"))
+		return fmt.Sprintf("%s %s %s", e.Kind, e.Name, e.Version)
 	case "deployment":
-		return fmt.Sprintf("%s/%s: %s", str("environment"), str("target_name"), str("status"))
+		return fmt.Sprintf("%s/%s: %s", e.Environment, e.TargetName, e.Status)
 	case "runtime":
-		return fmt.Sprintf("%s on %s: %s", str("kind"), str("workload"), str("message"))
+		return fmt.Sprintf("%s on %s: %s", e.Kind, e.Workload, e.Message)
+	case "landed":
+		return fmt.Sprintf("%s %s on main", e.Repo, e.SHA)
+	case "deployed":
+		return fmt.Sprintf("%s confirmed in %s", e.Repo, e.Environment)
+	case "released":
+		return fmt.Sprintf("%s %s", e.Repo, e.Tag)
 	default:
 		return ""
 	}

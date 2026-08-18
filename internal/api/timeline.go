@@ -5,20 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
-	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// timelineEntry pairs an entry's sort key with its wire object. Entries are
-// appended source-by-source (state, pr, ci, review, artifact, deployment,
-// runtime, delivery) and stably sorted by time, so equal timestamps keep that
-// order.
-type timelineEntry struct {
-	at  time.Time
-	obj map[string]any
-}
 
 // taskTimeline handles GET /api/v1/tasks/{id}/timeline: one ascending
 // time-ordered array merging the task's state changes, its linked PRs, CI
@@ -31,25 +21,26 @@ func (s *server) taskTimeline(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	timeline := make([]map[string]any, 0, len(entries))
-	for _, e := range entries {
-		timeline = append(timeline, e.obj)
-	}
-	writeJSON(w, http.StatusOK, model.TimelineResponse{Task: *t, Timeline: timeline})
+	writeJSON(w, http.StatusOK, model.TimelineResponse{Task: *t, Timeline: entries})
 }
 
 // assembleTimeline returns a task and its full timeline — state changes,
 // linked PRs, CI runs and reviews on those PRs, artifacts built from the
 // PRs' merge SHAs, deployments and runtime events referencing those
-// artifacts, and delivery milestones — ascending by time. Shared by the JSON
-// /api/v1/tasks/{id}/timeline handler and the GET /tasks/{id} web page.
-func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, []timelineEntry, error) {
+// artifacts, and delivery milestones — ascending by time. Entries are
+// appended source-by-source and then stably sorted, so equal timestamps keep
+// that order. Shared by the JSON /api/v1/tasks/{id}/timeline handler and the
+// GET /tasks/{id} web page.
+func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, []model.TimelineEntry, error) {
 	t, err := s.st.GetTask(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var entries []timelineEntry
+	// Non-nil, not `var entries []model.TimelineEntry`: this slice is the
+	// response body's "timeline", and a nil one marshals to null rather than
+	// the empty array a task with no history has to answer with.
+	entries := []model.TimelineEntry{}
 
 	se, err := s.stateEntries(ctx, id)
 	if err != nil {
@@ -99,83 +90,83 @@ func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, 
 	}
 	entries = append(entries, dle...)
 
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].At.Before(entries[j].At) })
 	return t, entries, nil
 }
 
-func (s *server) stateEntries(ctx context.Context, taskID string) ([]timelineEntry, error) {
+func (s *server) stateEntries(ctx context.Context, taskID string) ([]model.TimelineEntry, error) {
 	logs, err := s.st.StateLogForEntity(ctx, "task", taskID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]timelineEntry, 0, len(logs))
+	out := make([]model.TimelineEntry, 0, len(logs))
 	for _, l := range logs {
-		out = append(out, timelineEntry{at: l.At, obj: map[string]any{
-			"at":       l.At,
-			"type":     "state",
-			"change":   json.RawMessage(l.Change),
-			"event_id": l.EventID,
-		}})
+		out = append(out, model.TimelineEntry{
+			At:      l.At,
+			Type:    "state",
+			Change:  json.RawMessage(l.Change),
+			EventID: l.EventID,
+		})
 	}
 	return out, nil
 }
 
-func prEntries(prs []store.PullRequest) []timelineEntry {
-	out := make([]timelineEntry, 0, len(prs))
+func prEntries(prs []store.PullRequest) []model.TimelineEntry {
+	out := make([]model.TimelineEntry, 0, len(prs))
 	for _, pr := range prs {
-		out = append(out, timelineEntry{at: pr.OpenedAt, obj: map[string]any{
-			"at":        pr.OpenedAt,
-			"type":      "pr",
-			"repo":      pr.Repo,
-			"number":    pr.Number,
-			"title":     pr.Title,
-			"state":     pr.State,
-			"url":       pr.URL,
-			"merged_at": pr.MergedAt,
-		}})
+		out = append(out, model.TimelineEntry{
+			At:       pr.OpenedAt,
+			Type:     "pr",
+			Repo:     pr.Repo,
+			Number:   pr.Number,
+			Title:    pr.Title,
+			State:    pr.State,
+			URL:      pr.URL,
+			MergedAt: pr.MergedAt,
+		})
 	}
 	return out
 }
 
-func (s *server) ciEntries(ctx context.Context, prs []store.PullRequest) ([]timelineEntry, error) {
-	var out []timelineEntry
+func (s *server) ciEntries(ctx context.Context, prs []store.PullRequest) ([]model.TimelineEntry, error) {
+	var out []model.TimelineEntry
 	for _, pr := range prs {
 		runs, err := s.st.CIRunsForSHA(ctx, pr.Repo, pr.HeadSHA)
 		if err != nil {
 			return nil, err
 		}
 		for _, run := range runs {
-			out = append(out, timelineEntry{at: run.StartedAt, obj: map[string]any{
-				"at":           run.StartedAt,
-				"type":         "ci",
-				"repo":         run.Repo,
-				"workflow":     run.Workflow,
-				"status":       run.Status,
-				"conclusion":   run.Conclusion,
-				"url":          run.URL,
-				"completed_at": run.CompletedAt,
-			}})
+			out = append(out, model.TimelineEntry{
+				At:          run.StartedAt,
+				Type:        "ci",
+				Repo:        run.Repo,
+				Workflow:    run.Workflow,
+				Status:      run.Status,
+				Conclusion:  run.Conclusion,
+				URL:         run.URL,
+				CompletedAt: run.CompletedAt,
+			})
 		}
 	}
 	return out, nil
 }
 
-func (s *server) reviewEntries(ctx context.Context, prs []store.PullRequest) ([]timelineEntry, error) {
-	var out []timelineEntry
+func (s *server) reviewEntries(ctx context.Context, prs []store.PullRequest) ([]model.TimelineEntry, error) {
+	var out []model.TimelineEntry
 	for _, pr := range prs {
 		reviews, err := s.st.ReviewsForPR(ctx, pr.Repo, pr.Number)
 		if err != nil {
 			return nil, err
 		}
 		for _, rv := range reviews {
-			out = append(out, timelineEntry{at: rv.SubmittedAt, obj: map[string]any{
-				"at":       rv.SubmittedAt,
-				"type":     "review",
-				"repo":     rv.Repo,
-				"number":   rv.PRNumber,
-				"reviewer": rv.Reviewer,
-				"state":    rv.State,
-			}})
+			out = append(out, model.TimelineEntry{
+				At:       rv.SubmittedAt,
+				Type:     "review",
+				Repo:     rv.Repo,
+				Number:   rv.PRNumber,
+				Reviewer: rv.Reviewer,
+				State:    rv.State,
+			})
 		}
 	}
 	return out, nil
@@ -204,35 +195,35 @@ func (s *server) mergedArtifacts(ctx context.Context, prs []store.PullRequest) (
 	return out, nil
 }
 
-func artifactEntries(artifacts []store.Artifact) []timelineEntry {
-	out := make([]timelineEntry, 0, len(artifacts))
+func artifactEntries(artifacts []store.Artifact) []model.TimelineEntry {
+	out := make([]model.TimelineEntry, 0, len(artifacts))
 	for _, a := range artifacts {
-		out = append(out, timelineEntry{at: a.BuiltAt, obj: map[string]any{
-			"at":      a.BuiltAt,
-			"type":    "artifact",
-			"kind":    a.Kind,
-			"name":    a.Name,
-			"version": a.Version,
-		}})
+		out = append(out, model.TimelineEntry{
+			At:      a.BuiltAt,
+			Type:    "artifact",
+			Kind:    a.Kind,
+			Name:    a.Name,
+			Version: a.Version,
+		})
 	}
 	return out
 }
 
-func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifact) ([]timelineEntry, error) {
-	var out []timelineEntry
+func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifact) ([]model.TimelineEntry, error) {
+	var out []model.TimelineEntry
 	for _, a := range artifacts {
 		deployments, err := s.st.DeploymentsForArtifact(ctx, a.ID)
 		if err != nil {
 			return nil, err
 		}
 		for _, d := range deployments {
-			out = append(out, timelineEntry{at: d.LastUpdate, obj: map[string]any{
-				"at":          d.LastUpdate,
-				"type":        "deployment",
-				"environment": d.Environment,
-				"target_name": d.TargetName,
-				"status":      d.Status,
-			}})
+			out = append(out, model.TimelineEntry{
+				At:          d.LastUpdate,
+				Type:        "deployment",
+				Environment: d.Environment,
+				TargetName:  d.TargetName,
+				Status:      d.Status,
+			})
 		}
 	}
 	return out, nil
@@ -241,46 +232,46 @@ func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifa
 // deliveryEntries reports the task's delivery milestones: where its work
 // landed, which environments have confirmably received it, and the release
 // that shipped it — one set per repo the task landed commits in.
-func (s *server) deliveryEntries(ctx context.Context, taskID string) ([]timelineEntry, error) {
+func (s *server) deliveryEntries(ctx context.Context, taskID string) ([]model.TimelineEntry, error) {
 	facts, err := s.st.DeliveryFactsForTask(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
-	var out []timelineEntry
+	var out []model.TimelineEntry
 	for _, f := range facts {
-		out = append(out, timelineEntry{at: f.LandedAt, obj: map[string]any{
-			"at": f.LandedAt, "type": "landed", "repo": f.Repo, "sha": f.LandedSHA,
-		}})
+		out = append(out, model.TimelineEntry{
+			At: f.LandedAt, Type: "landed", Repo: f.Repo, SHA: f.LandedSHA,
+		})
 		for _, d := range f.Deployed {
-			out = append(out, timelineEntry{at: d.At, obj: map[string]any{
-				"at": d.At, "type": "deployed", "repo": f.Repo, "environment": d.Environment,
-			}})
+			out = append(out, model.TimelineEntry{
+				At: d.At, Type: "deployed", Repo: f.Repo, Environment: d.Environment,
+			})
 		}
 		if f.ReleaseTag != "" {
-			out = append(out, timelineEntry{at: f.ReleasedAt, obj: map[string]any{
-				"at": f.ReleasedAt, "type": "released", "repo": f.Repo, "tag": f.ReleaseTag,
-			}})
+			out = append(out, model.TimelineEntry{
+				At: f.ReleasedAt, Type: "released", Repo: f.Repo, Tag: f.ReleaseTag,
+			})
 		}
 	}
 	return out, nil
 }
 
-func (s *server) runtimeEntries(ctx context.Context, artifacts []store.Artifact) ([]timelineEntry, error) {
-	var out []timelineEntry
+func (s *server) runtimeEntries(ctx context.Context, artifacts []store.Artifact) ([]model.TimelineEntry, error) {
+	var out []model.TimelineEntry
 	for _, a := range artifacts {
 		events, err := s.st.RuntimeEventsForArtifact(ctx, a.ID)
 		if err != nil {
 			return nil, err
 		}
 		for _, re := range events {
-			out = append(out, timelineEntry{at: re.OccurredAt, obj: map[string]any{
-				"at":       re.OccurredAt,
-				"type":     "runtime",
-				"kind":     re.Kind,
-				"cluster":  re.Cluster,
-				"workload": re.Workload,
-				"message":  re.Message,
-			}})
+			out = append(out, model.TimelineEntry{
+				At:       re.OccurredAt,
+				Type:     "runtime",
+				Kind:     re.Kind,
+				Cluster:  re.Cluster,
+				Workload: re.Workload,
+				Message:  re.Message,
+			})
 		}
 	}
 	return out, nil
