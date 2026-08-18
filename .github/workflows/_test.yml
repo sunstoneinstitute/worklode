@@ -75,6 +75,8 @@ jobs:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
       - name: e2e smoke test
         run: go test -race -count=1 -tags e2e ./e2e/
+        env:
+          TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
       # Only main writes the cache, and only when go.sum changed (exact-key miss).
       - name: Save Go cache
         if: inputs.runs-on == 'ubuntu-latest' && github.ref == 'refs/heads/main' && steps.go-cache-restore.outputs.cache-hit != 'true'
