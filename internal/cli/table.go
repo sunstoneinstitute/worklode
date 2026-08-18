@@ -118,16 +118,76 @@ func (t *table) layout(width int) []int {
 	if width <= 0 {
 		return widths
 	}
+	natural := append([]int(nil), widths...)
 	over := total(widths) - width
 	for over > 0 {
 		i := widestShrinkable(t.cols, widths)
 		if i < 0 {
 			break // nothing left to give; the terminal will wrap
 		}
+		if t.cols[i].wrap == wrapChars {
+			next := stepBelow(charSteps(natural[i], t.cols[i].min), widths[i])
+			over -= widths[i] - next
+			widths[i] = next
+			continue
+		}
 		widths[i]--
 		over--
 	}
+	// A char column gives up a whole step at a time, which can free more than
+	// was needed; hand the surplus to the word columns rather than render the
+	// table narrower than the terminal.
+	for over < 0 {
+		i := neediestWordColumn(t.cols, widths, natural)
+		if i < 0 {
+			break
+		}
+		widths[i]++
+		over++
+	}
 	return widths
+}
+
+// charSteps are the widths a char-wrapped column may take, widest first: its
+// longest value laid out over one, two, three or four lines. A width between
+// two steps costs budget without saving a line — it only moves where the last
+// break falls, which is how a holder ends up spilling a few characters while
+// the title beside it holds the room that would have avoided the wrap. Steps
+// never go below the column's minimum.
+func charSteps(natural, min int) []int {
+	steps := make([]int, 0, 4)
+	for k := 1; k <= 4; k++ {
+		w := max((natural+k-1)/k, min)
+		if len(steps) == 0 || w < steps[len(steps)-1] {
+			steps = append(steps, w)
+		}
+	}
+	return steps
+}
+
+// stepBelow is the widest step narrower than w, or the narrowest step when w
+// is already at or below all of them.
+func stepBelow(steps []int, w int) int {
+	for _, s := range steps {
+		if s < w {
+			return s
+		}
+	}
+	return steps[len(steps)-1]
+}
+
+// neediestWordColumn returns the word-wrapped column furthest below its
+// natural width, or -1 when none can use another character. Char columns are
+// not grown back: an off-step width is the waste the steps exist to avoid.
+func neediestWordColumn(cols []column, widths, natural []int) int {
+	best, deficit := -1, 0
+	for i, c := range cols {
+		if c.wrap != wrapWords || natural[i]-widths[i] <= deficit {
+			continue
+		}
+		best, deficit = i, natural[i]-widths[i]
+	}
+	return best
 }
 
 // widestShrinkable returns the index of the widest column that may still lose
