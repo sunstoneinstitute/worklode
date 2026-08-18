@@ -2,10 +2,12 @@ package ui
 
 // layout.templ is the application shell every page renders through: the
 // document head, skip link, the sticky top bar (brand + theme toggle +
-// avatar — no navigation), and the <main id="main-content"> landmark each
-// page's content fills via { children... }. Global pages wrap their content
-// in globalShell, which carries the primary nav in a left sidebar; project
-// pages use sidebar instead. Styled with the prototype design system (see
+// avatar — no navigation), and the two-column .shell each page's content
+// fills via { children... }. Global pages wrap their content in globalShell,
+// project pages in projectShell; both put the page's one
+// <main id="main-content"> landmark in the content column, a sibling of the
+// sidebar, so "Skip to content" lands past every nav landmark (WCAG 2.4.1).
+// Styled with the prototype design system (see
 // internal/ui/styles/app.tailwind.css): .topbar, nav.global, .shell,
 // .top-right/.iconbtn/.avatar. The self-hosted HTMX script tag is dormant
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
@@ -36,9 +38,7 @@ templ Page(p PageProps) {
 					<div class="avatar" aria-hidden="true">SB</div>
 				</div>
 			</header>
-			<main id="main-content">
-				{ children... }
-			</main>
+			{ children... }
 			<script src="/assets/theme.js" defer></script>
 			<script src="/assets/htmx.min.js" defer></script>
 		</body>
@@ -86,16 +86,29 @@ templ globalSidebar(active string) {
 }
 
 // globalShell wraps a global (non-project) page's content in the unified
-// two-column .shell frame: global sidebar left, content in .main > .canvas.
-// Project pages build their own .shell with sidebar() instead.
+// two-column .shell frame: global sidebar left, content in the main landmark's
+// .canvas. Project pages use projectShell instead.
 templ globalShell(active string) {
 	<div class="shell">
 		@globalSidebar(active)
-		<div class="main">
+		<main id="main-content" class="main">
 			<div class="canvas">
 				{ children... }
 			</div>
-		</div>
+		</main>
+	</div>
+}
+
+// projectShell wraps a project page's content in the unified two-column
+// .shell frame: project sidebar left, content in the main landmark. Callers
+// supply the content column themselves — a plain .canvas, or the cockpit's
+// .mode grid of canvas plus decision rail.
+templ projectShell(p CockpitProject, active string) {
+	<div class="shell">
+		@sidebar(p, active)
+		<main id="main-content" class="main">
+			{ children... }
+		</main>
 	</div>
 }
 

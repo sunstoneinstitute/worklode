@@ -166,6 +166,9 @@
   .sticky {
     position: sticky;
   }
+  .grid {
+    display: grid;
+  }
   .inline {
     display: inline;
   }
@@ -683,10 +686,13 @@ nav.local a .cnt {
     align-items: baseline;
     gap: 10px;
     padding: 0 0 8px;
+    min-width: 0;
   }
   .proj-name {
     margin: 0;
     font-size: 16px;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 }
 .canvas {

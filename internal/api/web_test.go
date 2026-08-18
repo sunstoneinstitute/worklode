@@ -118,7 +118,7 @@ func TestTopbarKeepsOnlyChrome(t *testing.T) {
 	if strings.Contains(header, "<nav") || strings.Contains(header, "<a ") {
 		t.Errorf("topbar still carries navigation:\n%s", header)
 	}
-	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<div class="main">`)
+	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<main id="main-content"`)
 }
 
 // TestGlobalNavOrder checks the primary nav renders the seven destinations
@@ -267,10 +267,11 @@ func TestAppCSSContent(t *testing.T) {
 }
 
 // TestEveryPageRendersTheShell sweeps every web page and asserts the
-// unified frame: exactly one .shell grid, one main landmark, and — on every
-// page that names a current destination — exactly one aria-current="page".
-// The task page and the new-task form name none (their left column marks
-// nothing), so they assert zero.
+// unified frame: exactly one .shell grid, one main landmark, one nav landmark
+// carrying the page's own destinations (Primary on global pages, Project on
+// project pages), and — on every page that names a current destination —
+// exactly one aria-current="page". The task page and the new-task form name
+// none (their left column marks nothing), so they assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -280,17 +281,20 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 
 	pages := []struct {
 		path       string
+		nav        string // the one nav landmark's aria-label
 		hasCurrent bool
 	}{
-		{"/", true}, {"/intake", true}, {"/projects", true}, {"/work", true},
-		{"/reviews", true}, {"/deliveries", true}, {"/knowledge", true},
-		{"/projects/proj", true}, {"/projects/proj/crew", true},
-		{"/projects/proj/reviews", true}, {"/projects/proj/decisions", true},
-		{"/projects/proj/documents", true}, {"/projects/proj/activity", true},
-		{"/projects/proj/deliverables", true},
-		{"/projects/proj/deliverables/new", true},
-		{"/projects/proj/tasks/new", false},
-		{"/tasks/WL-1", false},
+		{"/", "Primary", true}, {"/intake", "Primary", true},
+		{"/projects", "Primary", true}, {"/work", "Primary", true},
+		{"/reviews", "Primary", true}, {"/deliveries", "Primary", true},
+		{"/knowledge", "Primary", true},
+		{"/projects/proj", "Project", true}, {"/projects/proj/crew", "Project", true},
+		{"/projects/proj/reviews", "Project", true}, {"/projects/proj/decisions", "Project", true},
+		{"/projects/proj/documents", "Project", true}, {"/projects/proj/activity", "Project", true},
+		{"/projects/proj/deliverables", "Project", true},
+		{"/projects/proj/deliverables/new", "Project", true},
+		{"/projects/proj/tasks/new", "Project", false},
+		{"/tasks/WL-1", "Primary", false},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -305,6 +309,10 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 			if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 				t.Errorf("main landmark count = %d, want 1", got)
 			}
+			if got := strings.Count(body, "<nav aria-label="); got != 1 {
+				t.Errorf("nav landmark count = %d, want 1 (%s)", got, page.nav)
+			}
+			bodyContains(t, body, `<nav aria-label="`+page.nav+`"`)
 			want := 0
 			if page.hasCurrent {
 				want = 1
