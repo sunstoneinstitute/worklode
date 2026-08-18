@@ -60,3 +60,5 @@ configMapGenerator:
       - migrations/0022_task_updated_at_index.down.sql
       - migrations/0024_task_secrets.up.sql
       - migrations/0024_task_secrets.down.sql
+      - migrations/0025_rename_spec_kind_to_design.up.sql
+      - migrations/0025_rename_spec_kind_to_design.down.sql
