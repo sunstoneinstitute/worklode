@@ -37,7 +37,10 @@ func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, 
 		return nil, nil, err
 	}
 
-	var entries []model.TimelineEntry
+	// Non-nil, not `var entries []model.TimelineEntry`: this slice is the
+	// response body's "timeline", and a nil one marshals to null rather than
+	// the empty array a task with no history has to answer with.
+	entries := []model.TimelineEntry{}
 
 	se, err := s.stateEntries(ctx, id)
 	if err != nil {
