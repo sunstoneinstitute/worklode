@@ -34,7 +34,10 @@ type TaskHierarchy struct {
 }
 
 // TaskDetail is the wire form of GET /api/v1/tasks/{id}: a Task plus its
-// blocked status, edges, hierarchy, and (when active) lease.
+// blocked status, edges, hierarchy, and (when active) lease. AgentSessions is
+// populated only alongside Lease — the sessions recorded against it — so a
+// `lode task show` never needs a second request to explain who is holding a
+// task and what they're running.
 type TaskDetail struct {
 	Task
 	Blocked bool `json:"blocked"`
@@ -42,8 +45,9 @@ type TaskDetail struct {
 		Out []TaskEdgeOut `json:"out"`
 		In  []TaskEdgeIn  `json:"in"`
 	} `json:"edges"`
-	Lease     *Lease        `json:"lease,omitempty"`
-	Hierarchy TaskHierarchy `json:"hierarchy"`
+	Lease         *Lease         `json:"lease,omitempty"`
+	AgentSessions []AgentSession `json:"agent_sessions,omitempty"`
+	Hierarchy     TaskHierarchy  `json:"hierarchy"`
 }
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task
