@@ -767,33 +767,19 @@ func (c *Client) DoneTask(ctx context.Context, id string) (model.Task, []byte, e
 	return c.taskAction(ctx, id, "done")
 }
 
-// MergeResult is what recording one task named in a merge report did:
-// "advanced", "duplicate", or "unknown_task".
-type MergeResult struct {
-	Task   string `json:"task"`
-	Result string `json:"result"`
-}
-
-// MergeReport is the response body of ReportMerge.
-type MergeReport struct {
-	Repo    string        `json:"repo"`
-	SHA     string        `json:"sha"`
-	Results []MergeResult `json:"results"`
-}
-
 // ReportMerge calls POST /api/v1/merges: tell the backbone that sha landed on
 // repo's default branch carrying the work of these tasks. repo may be any git
 // remote URL form; the server normalizes it.
-func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []string) (MergeReport, []byte, error) {
+func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []string) (model.MergeReport, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost, "/api/v1/merges", map[string]any{
 		"repo": repo, "sha": sha, "tasks": tasks,
 	})
 	if err != nil {
-		return MergeReport{}, nil, err
+		return model.MergeReport{}, nil, err
 	}
-	var out MergeReport
+	var out model.MergeReport
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return MergeReport{}, nil, fmt.Errorf("decode merge report: %w", err)
+		return model.MergeReport{}, nil, fmt.Errorf("decode merge report: %w", err)
 	}
 	return out, raw, nil
 }
@@ -1290,17 +1276,6 @@ func (c *Client) Timeline(ctx context.Context, taskID string) (model.TimelineRes
 
 // --- events (spec 025 §15/§18) ---------------------------------------------
 
-// Event is the wire form of one event log row, matching internal/api's
-// eventJSON.
-type Event struct {
-	ID         int64           `json:"id"`
-	Source     string          `json:"source"`
-	ExternalID string          `json:"external_id"`
-	Type       string          `json:"type"`
-	Payload    json.RawMessage `json:"payload"`
-	ReceivedAt time.Time       `json:"received_at"`
-}
-
 // EventListFilter narrows ListEvents. Zero-valued fields do not filter.
 type EventListFilter struct {
 	Type  string
@@ -1309,13 +1284,8 @@ type EventListFilter struct {
 	Limit int
 }
 
-// EventListResponse is the response body of ListEvents.
-type EventListResponse struct {
-	Events []Event `json:"events"`
-}
-
 // ListEvents calls GET /api/v1/events.
-func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (EventListResponse, []byte, error) {
+func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (model.EventListResponse, []byte, error) {
 	q := url.Values{}
 	if f.Type != "" {
 		q.Set("type", f.Type)
@@ -1331,11 +1301,11 @@ func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (EventListRe
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/events", q), nil)
 	if err != nil {
-		return EventListResponse{}, nil, err
+		return model.EventListResponse{}, nil, err
 	}
-	var resp EventListResponse
+	var resp model.EventListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return EventListResponse{}, nil, fmt.Errorf("decode event list: %w", err)
+		return model.EventListResponse{}, nil, fmt.Errorf("decode event list: %w", err)
 	}
 	return resp, raw, nil
 }
@@ -1374,7 +1344,7 @@ var ErrStreamEnded = errors.New("event stream closed by the server")
 // A dropped connection is returned, not retried: reconnecting means deciding
 // what to do about the gap, and the server already has the mechanism for that
 // (Last-Event-ID). docs/follow-ups.md records it.
-func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(Event) error) error {
+func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(model.Event) error) error {
 	q := url.Values{}
 	if f.Type != "" {
 		q.Set("type", f.Type)
@@ -1424,7 +1394,7 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 			if len(data) == 0 {
 				continue
 			}
-			var e Event
+			var e model.Event
 			if err := json.Unmarshal(data, &e); err != nil {
 				return fmt.Errorf("decode streamed event %q: %w", data, err)
 			}
@@ -1458,32 +1428,15 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 	return ErrStreamEnded
 }
 
-// EventSubscriberStatus is the wire form of one event_subscribers row plus
-// its derived lag and lock holder, matching internal/api's
-// eventSubscriberJSON.
-type EventSubscriberStatus struct {
-	Name            string    `json:"name"`
-	LastReadOffset  int64     `json:"last_read_offset"`
-	LastAckedOffset int64     `json:"last_acked_offset"`
-	Lag             int64     `json:"lag"`
-	HolderPID       int64     `json:"holder_pid"`
-	UpdatedAt       time.Time `json:"updated_at"`
-}
-
-// EventSubscriberListResponse is the response body of EventSubscribers.
-type EventSubscriberListResponse struct {
-	Subscribers []EventSubscriberStatus `json:"subscribers"`
-}
-
 // EventSubscribers calls GET /api/v1/event-subscribers.
-func (c *Client) EventSubscribers(ctx context.Context) (EventSubscriberListResponse, []byte, error) {
+func (c *Client) EventSubscribers(ctx context.Context) (model.EventSubscriberListResponse, []byte, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/api/v1/event-subscribers", nil)
 	if err != nil {
-		return EventSubscriberListResponse{}, nil, err
+		return model.EventSubscriberListResponse{}, nil, err
 	}
-	var resp EventSubscriberListResponse
+	var resp model.EventSubscriberListResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return EventSubscriberListResponse{}, nil, fmt.Errorf("decode event subscriber list: %w", err)
+		return model.EventSubscriberListResponse{}, nil, fmt.Errorf("decode event subscriber list: %w", err)
 	}
 	return resp, raw, nil
 }
@@ -1491,16 +1444,16 @@ func (c *Client) EventSubscribers(ctx context.Context) (EventSubscriberListRespo
 // SeekEventSubscriber calls POST /api/v1/event-subscribers/{name}/seek,
 // moving both of the subscriber's offsets to to — an admin correction of
 // consumer state (025 §18), safe only because handlers are idempotent.
-func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (EventSubscriberStatus, []byte, error) {
+func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (model.EventSubscriberStatus, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost,
 		"/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek",
 		map[string]any{"to": to})
 	if err != nil {
-		return EventSubscriberStatus{}, nil, err
+		return model.EventSubscriberStatus{}, nil, err
 	}
-	var st EventSubscriberStatus
+	var st model.EventSubscriberStatus
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return EventSubscriberStatus{}, nil, fmt.Errorf("decode event subscriber status: %w", err)
+		return model.EventSubscriberStatus{}, nil, fmt.Errorf("decode event subscriber status: %w", err)
 	}
 	return st, raw, nil
 }

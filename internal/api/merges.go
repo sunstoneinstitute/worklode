@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -22,22 +23,6 @@ const maxReportedMergeTasks = 100
 // output has whatever length that repo's core.abbrev produced.
 var shaPattern = regexp.MustCompile(`^[0-9a-f]{4,40}$`)
 
-// mergeReportRequest is the body of POST /api/v1/merges. Repo takes any git
-// remote URL form as well as owner/name — the client has a remote, not a
-// slug, and normalizing server-side keeps a normalization fix shippable
-// without a client upgrade.
-type mergeReportRequest struct {
-	Repo  string   `json:"repo"`
-	SHA   string   `json:"sha"`
-	Tasks []string `json:"tasks"`
-}
-
-// mergeResultJSON is what recording one reported task did.
-type mergeResultJSON struct {
-	Task   string `json:"task"`
-	Result string `json:"result"`
-}
-
 // reportMerge handles POST /api/v1/merges: the local reporter's half of
 // delivery. `lode hook post-merge` sees a merge land on the default branch in
 // someone's own clone and names the tasks whose branches it carries; this
@@ -51,7 +36,7 @@ type mergeResultJSON struct {
 // recorded, costs nothing, and answers "duplicate" — which is the healthy
 // steady state when both a webhook and a laptop report the same merge.
 func (s *server) reportMerge(w http.ResponseWriter, r *http.Request) {
-	var req mergeReportRequest
+	var req model.MergeReportRequest
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -98,12 +83,10 @@ func (s *server) reportMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make([]mergeResultJSON, 0, len(outcomes))
+	results := make([]model.MergeResult, 0, len(outcomes))
 	for _, o := range outcomes {
 		s.recordLocalMerge(o.Result)
-		results = append(results, mergeResultJSON{Task: o.TaskID, Result: o.Result})
+		results = append(results, model.MergeResult{Task: o.TaskID, Result: o.Result})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"repo": repo, "sha": sha, "results": results,
-	})
+	writeJSON(w, http.StatusOK, model.MergeReport{Repo: repo, SHA: sha, Results: results})
 }
