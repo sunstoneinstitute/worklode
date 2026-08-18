@@ -417,6 +417,32 @@ func endOpenAgentSessionsOnLease(tx *sql.Tx, now time.Time, leaseID int64) error
 	return nil
 }
 
+// AgentSessionsForLease returns every session recorded against leaseID,
+// oldest-started-first, or an empty slice for a lease with none.
+func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]AgentSession, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+agentSessionColumns+` FROM agent_sessions
+		  WHERE lease_id = $1 ORDER BY started_at`,
+		leaseID)
+	if err != nil {
+		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
+	}
+	defer rows.Close()
+
+	sessions := make([]AgentSession, 0)
+	for rows.Next() {
+		a, err := scanAgentSession(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan agent session for lease %d: %w", leaseID, err)
+		}
+		sessions = append(sessions, *a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
+	}
+	return sessions, nil
+}
+
 // AgentSession returns one session row by its natural key, or ErrNotFound.
 func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionID string) (*AgentSession, error) {
 	row := s.db.QueryRowContext(ctx,
