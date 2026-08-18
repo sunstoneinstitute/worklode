@@ -249,7 +249,7 @@ export default class WorklodePlugin extends Plugin {
       // A watermark is a position in one server's task history, read with one
       // token, against notes in one folder: a first run has none, and a
       // changed server, token or mount root invalidates the one it has.
-      const origin = syncOrigin(baseUrl, token, mountRoot);
+      const origin = await syncOrigin(baseUrl, token, mountRoot);
       const incremental = mode === "incremental" && this.state.watermark !== "" && this.state.origin === origin;
 
       const client = new WorklodeClient(baseUrl, token, obsidianHttp);

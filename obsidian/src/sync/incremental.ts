@@ -2,6 +2,8 @@
 // watermark still applies, and how far it has read. Pure functions, kept out
 // of main.ts so they are testable without an Obsidian runtime.
 
+import { computeEtag } from "../serialize/note";
+
 export type SyncMode = "full" | "incremental";
 
 /** Automatic ticks per full sync: the 5th tick is full, the four before it
@@ -23,10 +25,18 @@ export function syncModeForTick(tick: number): SyncMode {
  *  history, read with one token's visibility, against notes in one mount
  *  root: change any of the three and it says nothing about what the vault
  *  holds, so the plugin stores this beside it and falls back to a full sync
- *  when it no longer matches. JSON rather than concatenation, so two
- *  different settings cannot spell the same origin. */
-export function syncOrigin(baseUrl: string, token: string, mountRoot: string): string {
-  return JSON.stringify([baseUrl, token, mountRoot]);
+ *  when it no longer matches.
+ *
+ *  Hashed with computeEtag rather than stored as JSON: the origin has to
+ *  stay token-sensitive (a different token can see a different project set,
+ *  so reusing a watermark across tokens would silently skip newly-visible
+ *  tasks), but the plaintext token has no business sitting a second time in
+ *  data.json next to `settings.token` under a key nobody scanning for
+ *  secrets would think to check. computeEtag's canonical-JSON encoding of
+ *  the triple keeps the same "two different settings cannot spell the same
+ *  origin" guarantee the JSON encoding gave before. */
+export async function syncOrigin(baseUrl: string, token: string, mountRoot: string): Promise<string> {
+  return computeEtag([baseUrl, token, mountRoot]);
 }
 
 /** The highest `updated_at` across the current watermark and the tasks just
