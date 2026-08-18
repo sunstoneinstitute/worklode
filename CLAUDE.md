@@ -24,9 +24,23 @@ check it before filing something as new.
 
 ## Commands
 
+Prefer the `Makefile` targets over bare `go build`/`go test` — they build and
+test with `-trimpath`, matching what CI and the release Dockerfiles do, so a
+local pass means the same thing a CI pass does:
+
 ```bash
-go test ./internal/store -run TestClaim   # single test
-go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
+make build      # go build -trimpath -o bin/lode ./cmd/lode
+make install    # build and install lode to /usr/local/bin
+make test       # go test -trimpath -race -count=1 ./...
+make test-e2e   # e2e suite (build tag required, TEST_POSTGRES_DSN reachable)
+make vet        # go vet ./...
+```
+
+For anything a Makefile target doesn't cover — a single test, one package —
+fall back to `go test` directly and add `-trimpath` yourself to match CI:
+
+```bash
+go test -trimpath ./internal/store -run TestClaim   # single test
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ./scripts/inlinespec.py             # regenerate docs/specs/inlined/

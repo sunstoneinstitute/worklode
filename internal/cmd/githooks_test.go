@@ -5,23 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
-)
 
-// repoRoot returns this module's root, derived from this test file's own
-// location (internal/cmd/githooks_test.go) so it works regardless of
-// `go test`'s working directory.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "..")
-}
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
 
 // lodeBinary caches the built CLI for the whole package run. Go caches
 // compilation but never the link step, so each build costs seconds — and
@@ -46,7 +35,7 @@ func buildLodeBinary(t *testing.T) string {
 		}
 		bin := filepath.Join(dir, "lode")
 		build := exec.Command("go", "build", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
-		build.Dir = repoRoot(t)
+		build.Dir = store.ModuleRootForTests()
 		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		if lodeBinary.err == nil {
 			lodeBinary.path = bin
