@@ -8,6 +8,9 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/term"
 )
 
 // newTabwriter returns a tabwriter configured the same way for every table
@@ -168,6 +171,95 @@ func ProjectTable(w io.Writer, projects []Project) {
 	}
 	tw.Flush()
 }
+
+// Skill table layout. A skill description is a paragraph of trigger prose, not
+// a table cell — several run past 400 characters — so the description column
+// wraps to the terminal instead of overflowing it. The name column is capped
+// so one long skill name cannot squeeze the prose into a ribbon.
+const (
+	maxSkillNameWidth = 32
+	minSkillDescWidth = 24
+)
+
+// SkillTable prints one row per skill: name, then the description wrapped to
+// the terminal width with continuation lines aligned under the first.
+func SkillTable(w io.Writer, skills []Skill) {
+	skillTable(w, skills, tableWidth(w))
+}
+
+func skillTable(w io.Writer, skills []Skill, width int) {
+	name := len("NAME")
+	for _, sk := range skills {
+		name = max(name, utf8.RuneCountInString(sk.Name))
+	}
+	name = min(name, maxSkillNameWidth)
+	desc := max(width-name-2, minSkillDescWidth)
+
+	fmt.Fprintf(w, "%-*s  %s\n", name, "NAME", "DESCRIPTION")
+	for _, sk := range skills {
+		lines := wrapWords(sk.Description, desc)
+		if len(lines) == 0 {
+			lines = []string{""}
+		}
+		// A name past the cap would push its own description right and break
+		// the column; give it the row to itself instead.
+		if utf8.RuneCountInString(sk.Name) > name {
+			fmt.Fprintln(w, sk.Name)
+		} else {
+			fmt.Fprintf(w, "%-*s  %s\n", name, sk.Name, lines[0])
+			lines = lines[1:]
+		}
+		for _, l := range lines {
+			fmt.Fprintf(w, "%-*s  %s\n", name, "", l)
+		}
+	}
+}
+
+// wrapWords breaks s into lines of at most width columns, splitting on
+// whitespace only. A word longer than width gets a line of its own rather than
+// being cut: skill prose carries URLs and backticked identifiers that are
+// worse mangled than overlong.
+func wrapWords(s string, width int) []string {
+	var lines []string
+	var cur, curWidth = "", 0
+	for _, word := range strings.Fields(s) {
+		n := utf8.RuneCountInString(word)
+		switch {
+		case cur == "":
+			cur, curWidth = word, n
+		case curWidth+1+n <= width:
+			cur += " " + word
+			curWidth += 1 + n
+		default:
+			lines = append(lines, cur)
+			cur, curWidth = word, n
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
+}
+
+// tableWidth is the column count a wrapped table renders to: the terminal's
+// when w is one, else a conventional 80 so piped and captured output stays
+// stable.
+func tableWidth(w io.Writer) int {
+	fd, isTTY := terminalFd(w)
+	if !isTTY {
+		return defaultTableWidth
+	}
+	width, _, err := term.GetSize(fd)
+	if err != nil || width <= 0 {
+		return defaultTableWidth
+	}
+	return max(width, minTableWidth)
+}
+
+const (
+	defaultTableWidth = 80
+	minTableWidth     = 40
+)
 
 // BoardRender prints one section per project, one table per non-empty
 // bucket (in progress, in review, blocked, ready), and a trailing recent-

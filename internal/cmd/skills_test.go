@@ -176,8 +176,8 @@ func TestSkillsListTableAndJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skills list: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "tdd\tRed-green-refactor discipline\n") ||
-		!strings.Contains(out, "debugging\tSystematic debugging loop\n") {
+	if !strings.Contains(out, "tdd        Red-green-refactor discipline\n") ||
+		!strings.Contains(out, "debugging  Systematic debugging loop\n") {
 		t.Fatalf("skills list table output = %q", out)
 	}
 

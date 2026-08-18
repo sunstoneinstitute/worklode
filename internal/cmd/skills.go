@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 )
 
@@ -39,9 +40,7 @@ func newSkillsListCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			for _, sk := range skills {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\n", sk.Name, sk.Description)
-			}
+			cli.SkillTable(cmd.OutOrStdout(), skills)
 			return nil
 		},
 	}
