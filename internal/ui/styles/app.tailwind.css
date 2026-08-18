@@ -96,6 +96,12 @@ nav.global a:hover{background:var(--surface-2);text-decoration:none}
 nav.global a.active{color:var(--ink);background:var(--sunk);font-weight:600}
 nav.global a .cnt{font-size:11px;font-weight:600;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:0 6px;line-height:16px}
 nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:var(--warn-bg)}
+/* A project sidebar stacks both landmarks — Primary, then the back-link,
+ * project header and Project nav — so the global nav is ruled off from what
+ * follows. On a global page it is the sidebar's only child and draws no rule. */
+.sidebar nav.global:not(:only-child){
+  padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)
+}
 .top-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 
 /* prototype mode switch */
@@ -157,6 +163,8 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
     margin-top:0;border-top:0;padding-top:0}
   nav.global::-webkit-scrollbar,nav.local::-webkit-scrollbar{display:none}
   nav.global a,nav.local a{white-space:nowrap}
+  /* Two navs stacked in the strip: keep the rule between them, tighter. */
+  .sidebar nav.global:not(:only-child){padding-bottom:8px;margin-bottom:8px}
   /* min-width:0 stops the flex row and the name flooring at min-content, and
    * overflow-wrap breaks a long unbroken project name, so neither re-widens
    * the collapsed strip. */

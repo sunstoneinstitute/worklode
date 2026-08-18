@@ -73,6 +73,16 @@ func assertOneAriaCurrent(t *testing.T, body string) {
 	}
 }
 
+// navMarkers turns nav landmark labels into their opening-tag markers, for an
+// ordered assertion.
+func navMarkers(labels []string) []string {
+	markers := make([]string, len(labels))
+	for i, l := range labels {
+		markers[i] = `<nav aria-label="` + l + `"`
+	}
+	return markers
+}
+
 // assertOrder checks every string in want appears in body, in that order
 // (each search starts after the previous match).
 func assertOrder(t *testing.T, body string, want ...string) {
@@ -267,11 +277,12 @@ func TestAppCSSContent(t *testing.T) {
 }
 
 // TestEveryPageRendersTheShell sweeps every web page and asserts the
-// unified frame: exactly one .shell grid, one main landmark, one nav landmark
-// carrying the page's own destinations (Primary on global pages, Project on
-// project pages), and — on every page that names a current destination —
-// exactly one aria-current="page". The task page and the new-task form name
-// none (their left column marks nothing), so they assert zero.
+// unified frame: exactly one .shell grid, one main landmark, the page's exact
+// set of nav landmarks in render order (Primary alone on global pages,
+// Primary then Project on project pages), and — on every page that names a
+// current destination — exactly one aria-current="page". The task page and
+// the new-task form name none (their left column marks nothing), so they
+// assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -279,22 +290,24 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		"project": "proj", "title": "Swept task", "priority": "low", "kind": "chore",
 	})
 
+	global := []string{"Primary"}
+	project := []string{"Primary", "Project"}
 	pages := []struct {
 		path       string
-		nav        string // the one nav landmark's aria-label
+		navs       []string // every nav landmark's aria-label, in render order
 		hasCurrent bool
 	}{
-		{"/", "Primary", true}, {"/intake", "Primary", true},
-		{"/projects", "Primary", true}, {"/work", "Primary", true},
-		{"/reviews", "Primary", true}, {"/deliveries", "Primary", true},
-		{"/knowledge", "Primary", true},
-		{"/projects/proj", "Project", true}, {"/projects/proj/crew", "Project", true},
-		{"/projects/proj/reviews", "Project", true}, {"/projects/proj/decisions", "Project", true},
-		{"/projects/proj/documents", "Project", true}, {"/projects/proj/activity", "Project", true},
-		{"/projects/proj/deliverables", "Project", true},
-		{"/projects/proj/deliverables/new", "Project", true},
-		{"/projects/proj/tasks/new", "Project", false},
-		{"/tasks/WL-1", "Primary", false},
+		{"/", global, true}, {"/intake", global, true},
+		{"/projects", global, true}, {"/work", global, true},
+		{"/reviews", global, true}, {"/deliveries", global, true},
+		{"/knowledge", global, true},
+		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
+		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
+		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
+		{"/projects/proj/deliverables", project, true},
+		{"/projects/proj/deliverables/new", project, true},
+		{"/projects/proj/tasks/new", project, false},
+		{"/tasks/WL-1", global, false},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -309,10 +322,13 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 			if got := strings.Count(body, `<main id="main-content"`); got != 1 {
 				t.Errorf("main landmark count = %d, want 1", got)
 			}
-			if got := strings.Count(body, "<nav aria-label="); got != 1 {
-				t.Errorf("nav landmark count = %d, want 1 (%s)", got, page.nav)
+			if got := strings.Count(body, "<nav aria-label="); got != len(page.navs) {
+				t.Errorf("nav landmark count = %d, want %d (%v)", got, len(page.navs), page.navs)
 			}
-			bodyContains(t, body, `<nav aria-label="`+page.nav+`"`)
+			for _, label := range page.navs {
+				bodyContains(t, body, `<nav aria-label="`+label+`"`)
+			}
+			assertOrder(t, body, navMarkers(page.navs)...)
 			want := 0
 			if page.hasCurrent {
 				want = 1
