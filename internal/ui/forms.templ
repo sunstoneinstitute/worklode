@@ -14,29 +14,26 @@ package ui
 // the error region, and the surrounding <form>. The caller fills in the
 // fields.
 templ formCard(f FormShell, heading, lede, submit, sidebarActive string) {
-	<div class="shell">
-		@sidebar(f.Project, sidebarActive)
-		<div class="main">
-			<div class="canvas">
-				<section class="card pad form">
-					<h1>{ heading }</h1>
-					<p class="muted small">{ lede }</p>
-					<div aria-live="polite">
-						if f.Error != "" {
-							<p class="formerr" role="alert">{ f.Error }</p>
-						}
+	@projectShell(f.Project, sidebarActive) {
+		<div class="canvas">
+			<section class="card pad form">
+				<h1>{ heading }</h1>
+				<p class="muted small">{ lede }</p>
+				<div aria-live="polite">
+					if f.Error != "" {
+						<p class="formerr" role="alert">{ f.Error }</p>
+					}
+				</div>
+				<form method="post" action={ f.Action }>
+					{ children... }
+					<div class="btnrow">
+						<button type="submit" class="btn primary">{ submit }</button>
+						<a class="btn ghost" href={ f.CancelURL }>Cancel</a>
 					</div>
-					<form method="post" action={ f.Action }>
-						{ children... }
-						<div class="btnrow">
-							<button type="submit" class="btn primary">{ submit }</button>
-							<a class="btn ghost" href={ f.CancelURL }>Cancel</a>
-						</div>
-					</form>
-				</section>
-			</div>
+				</form>
+			</section>
 		</div>
-	</div>
+	}
 }
 
 // selectField renders one labelled <select>. Every option carries its own

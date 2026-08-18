@@ -11,26 +11,21 @@ templ Placeholder(v PlaceholderView) {
 	@Page(v.Page) {
 		if v.Project != nil {
 			<link rel="canonical" href={ v.CanonicalURL }/>
-			<div class="shell">
-				@sidebar(*v.Project, v.ActiveSection)
-				<div class="main">
-					<div class="canvas">
-						<section class="card pad">
-							<h1>{ v.Project.Name }: { v.Heading }</h1>
-							<p class="muted">{ v.Message }</p>
-						</section>
-					</div>
-				</div>
-			</div>
-		} else {
-			<div class="main">
+			@projectShell(*v.Project, v.ActiveSection) {
 				<div class="canvas">
 					<section class="card pad">
-						<h1>{ v.Heading }</h1>
+						<h1>{ v.Project.Name }: { v.Heading }</h1>
 						<p class="muted">{ v.Message }</p>
 					</section>
 				</div>
-			</div>
+			}
+		} else {
+			@globalShell(v.Page.ActiveGlobal) {
+				<section class="card pad">
+					<h1>{ v.Heading }</h1>
+					<p class="muted">{ v.Message }</p>
+				</section>
+			}
 		}
 	}
 }

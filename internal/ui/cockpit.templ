@@ -5,8 +5,8 @@ package ui
 // (docs/mockups/cockpit/index.html, mode B): the Operations canvas
 // (mode banner, Sunstone-Way stepper, pinned focus, active work) beside the
 // right decision rail (next decision, highest-signal exception, automation
-// boundary). The topbar + project sidebar come from the Page shell + sidebar
-// component; this file owns only the mode B body.
+// boundary). The topbar, project sidebar and main landmark come from the Page
+// shell + projectShell; this file owns only the mode B body.
 //
 // Honest empty states, never fabricated data: the pinned-focus card and the
 // next-decision card render only when their (currently always-nil) data is
@@ -20,61 +20,58 @@ package ui
 templ Cockpit(v CockpitView) {
 	@Page(v.Page) {
 		<link rel="canonical" href={ v.CanonicalURL }/>
-		<div class="shell">
-			@sidebar(v.Project, "overview")
-			<div class="main">
-				<section class="mode active" data-panel="B" data-mode={ v.ModeName } aria-label="Operations mode">
-					<div class="canvas">
-						<div class="mode-banner">
-							<span class="mode-name" style="background:var(--ok-bg);color:var(--ok)">
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
-								{ ModeLabel(v.ModeName) } <span class="tg">B</span>
-							</span>
-							<span class="sub">{ v.ModeBasis }</span>
-						</div>
-						@stageStepper()
-						if v.PinnedFocus != nil {
-							@pinnedFocus(v.PinnedFocus)
-						}
-						<section class="card" id="work" aria-labelledby="work-heading">
-							<div class="hd">
-								<h3 id="work-heading">Active work</h3>
-								<div class="meta">
-									<span class="muted">people &amp; delegated agents</span>
-									<a class="newlink" href={ v.NewTaskURL }>New task</a>
-								</div>
-							</div>
-							<div class="bd wl">
-								for _, item := range v.Work.InProgress {
-									@workRow(item)
-								}
-								for _, item := range v.Work.InReview {
-									@workRow(item)
-								}
-								for _, item := range v.Work.Ready {
-									@workRow(item)
-								}
-								for _, item := range v.Work.Blocked {
-									@workRow(item)
-								}
-								if v.Work.Len() == 0 {
-									<p class="muted small">No active work.</p>
-								}
-							</div>
-						</section>
+		@projectShell(v.Project, "overview") {
+			<section class="mode active" data-panel="B" data-mode={ v.ModeName } aria-label="Operations mode">
+				<div class="canvas">
+					<div class="mode-banner">
+						<span class="mode-name" style="background:var(--ok-bg);color:var(--ok)">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
+							{ ModeLabel(v.ModeName) } <span class="tg">B</span>
+						</span>
+						<span class="sub">{ v.ModeBasis }</span>
 					</div>
-					<aside class="rail" aria-label="Decisions and exceptions">
-						if v.NextDecision != nil {
-							@decisionCard(v.NextDecision)
-						}
-						if len(v.SecondaryConcerns) > 0 {
-							@exceptionCard(v.SecondaryConcerns[0])
-						}
-						@automationBoundary(v.CostTotals)
-					</aside>
-				</section>
-			</div>
-		</div>
+					@stageStepper()
+					if v.PinnedFocus != nil {
+						@pinnedFocus(v.PinnedFocus)
+					}
+					<section class="card" id="work" aria-labelledby="work-heading">
+						<div class="hd">
+							<h3 id="work-heading">Active work</h3>
+							<div class="meta">
+								<span class="muted">people &amp; delegated agents</span>
+								<a class="newlink" href={ v.NewTaskURL }>New task</a>
+							</div>
+						</div>
+						<div class="bd wl">
+							for _, item := range v.Work.InProgress {
+								@workRow(item)
+							}
+							for _, item := range v.Work.InReview {
+								@workRow(item)
+							}
+							for _, item := range v.Work.Ready {
+								@workRow(item)
+							}
+							for _, item := range v.Work.Blocked {
+								@workRow(item)
+							}
+							if v.Work.Len() == 0 {
+								<p class="muted small">No active work.</p>
+							}
+						</div>
+					</section>
+				</div>
+				<aside class="rail" aria-label="Decisions and exceptions">
+					if v.NextDecision != nil {
+						@decisionCard(v.NextDecision)
+					}
+					if len(v.SecondaryConcerns) > 0 {
+						@exceptionCard(v.SecondaryConcerns[0])
+					}
+					@automationBoundary(v.CostTotals)
+				</aside>
+			</section>
+		}
 	}
 }
 

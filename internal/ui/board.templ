@@ -9,33 +9,31 @@ import "github.com/sunstoneinstitute/worklode/internal/model"
 
 templ Board(v BoardView) {
 	@Page(v.Page) {
-		<div class="main">
-			<div class="canvas">
-				if v.IsHome {
-					<h1>Home</h1>
-					<h2>Current work</h2>
-				} else {
-					<h1>Work</h1>
-				}
-				<p class="muted small">Inbox: { v.InboxCount } new issue{ pluralSuffix(v.InboxCount) }</p>
-				for _, proj := range v.Projects {
-					@boardProject(proj)
-				}
-				if len(v.RecentFailures) > 0 {
-					<section class="card">
-						<div class="hd"><h3>Recent failures</h3></div>
-						<div class="bd">
-							<table>
-								<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
-								for _, f := range v.RecentFailures {
-									<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
-								}
-							</table>
-						</div>
-					</section>
-				}
-			</div>
-		</div>
+		@globalShell(v.Page.ActiveGlobal) {
+			if v.IsHome {
+				<h1>Home</h1>
+				<h2>Current work</h2>
+			} else {
+				<h1>Work</h1>
+			}
+			<p class="muted small">Inbox: { v.InboxCount } new issue{ pluralSuffix(v.InboxCount) }</p>
+			for _, proj := range v.Projects {
+				@boardProject(proj)
+			}
+			if len(v.RecentFailures) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Recent failures</h3></div>
+					<div class="bd">
+						<table>
+							<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
+							for _, f := range v.RecentFailures {
+								<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
+							}
+						</table>
+					</div>
+				</section>
+			}
+		}
 	}
 }
 

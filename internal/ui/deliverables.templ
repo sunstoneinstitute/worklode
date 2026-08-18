@@ -13,41 +13,38 @@ package ui
 templ Deliverables(v DeliverablesView) {
 	@Page(v.Page) {
 		<link rel="canonical" href={ v.CanonicalURL }/>
-		<div class="shell">
-			@sidebar(v.Project, "deliverables")
-			<div class="main">
-				<div class="canvas">
-					<section class="card">
-						<div class="hd">
-							<h3>Deliverables</h3>
-							<div class="meta">
-								<a class="newlink" href={ v.NewURL }>Declare a deliverable</a>
+		@projectShell(v.Project, "deliverables") {
+			<div class="canvas">
+				<section class="card">
+					<div class="hd">
+						<h3>Deliverables</h3>
+						<div class="meta">
+							<a class="newlink" href={ v.NewURL }>Declare a deliverable</a>
+						</div>
+					</div>
+					<div class="bd">
+						if len(v.Deliverables) == 0 {
+							<p class="muted">
+								No deliverable is declared for this project yet. A deliverable is
+								what the project ships &mdash; a dataset, an analysis, a report,
+								a story &mdash; and declaring one states the intent, not that it exists.
+							</p>
+						} else {
+							<div class="dod">
+								for _, d := range v.Deliverables {
+									@deliverableRow(d)
+								}
 							</div>
-						</div>
-						<div class="bd">
-							if len(v.Deliverables) == 0 {
-								<p class="muted">
-									No deliverable is declared for this project yet. A deliverable is
-									what the project ships &mdash; a dataset, an analysis, a report,
-									a story &mdash; and declaring one states the intent, not that it exists.
-								</p>
-							} else {
-								<div class="dod">
-									for _, d := range v.Deliverables {
-										@deliverableRow(d)
-									}
-								</div>
-							}
-						</div>
-					</section>
-					<p class="muted small">
-						Deliverable state is reported, never declared: the emitter and prober
-						paths that would say whether these are live are not built yet
-						(spec 029 §3.2), so this page shows what was declared and by whom.
-					</p>
-				</div>
+						}
+					</div>
+				</section>
+				<p class="muted small">
+					Deliverable state is reported, never declared: the emitter and prober
+					paths that would say whether these are live are not built yet
+					(spec 029 §3.2), so this page shows what was declared and by whom.
+				</p>
 			</div>
-		</div>
+		}
 	}
 }
 

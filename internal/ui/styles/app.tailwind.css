@@ -84,16 +84,24 @@ button{font-family:inherit;cursor:pointer}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
 .brand .mark{width:22px;height:22px;border-radius:6px;background:var(--accent);display:grid;place-items:center;flex:0 0 auto}
 .brand .mark svg{width:13px;height:13px;display:block}
-nav.global{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}
-nav.global::-webkit-scrollbar{display:none}
+/* nav.global lives in the left sidebar on global pages; the topbar carries
+ * no navigation. Below 880px it becomes a horizontal strip (later media
+ * query). */
+nav.global{display:flex;flex-direction:column;gap:1px}
 nav.global a{
-  padding:7px 11px;border-radius:7px;color:var(--ink-2);font-weight:500;font-size:13.5px;white-space:nowrap;
-  display:flex;align-items:center;gap:7px
+  padding:8px 10px;border-radius:8px;color:var(--ink-2);font-weight:500;
+  font-size:13.5px;display:flex;align-items:center;gap:10px
 }
 nav.global a:hover{background:var(--surface-2);text-decoration:none}
 nav.global a.active{color:var(--ink);background:var(--sunk);font-weight:600}
 nav.global a .cnt{font-size:11px;font-weight:600;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:0 6px;line-height:16px}
 nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:var(--warn-bg)}
+/* A project sidebar stacks both landmarks — Primary, then the back-link,
+ * project header and Project nav — so the global nav is ruled off from what
+ * follows. On a global page it is the sidebar's only child and draws no rule. */
+.sidebar nav.global:not(:only-child){
+  padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)
+}
 .top-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 
 /* prototype mode switch */
@@ -115,6 +123,10 @@ nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:v
 /* ---------- shell ---------- */
 .shell{display:grid;grid-template-columns:236px minmax(0,1fr);max-width:1440px;margin:0 auto;min-height:calc(100vh - 56px)}
 .sidebar{border-right:1px solid var(--line);padding:20px 14px;background:var(--surface)}
+.backlink{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
+  font-weight:600;color:var(--ink-2);padding:4px 8px;margin-bottom:6px;
+  border-radius:7px}
+.backlink:hover{background:var(--surface-2);text-decoration:none}
 .proj-head{padding:4px 8px 16px}
 .proj-kicker{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
@@ -136,6 +148,29 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .mode{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
 .mode.active{display:grid}
 @media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
+
+/* Below 880px the shell collapses to one column (spec 032 §10: reduced
+ * columns, not a squeezed grid): the sidebar — global or project — becomes
+ * a horizontal nav strip above the content. */
+@media (max-width:880px){
+  /* minmax(0,…) lets the single track shrink below the nav's intrinsic width,
+   * so the strip scrolls inside itself instead of widening the page; the
+   * explicit rows keep the shell's min-height on the content, not on the
+   * strip, which stretch would otherwise inflate. */
+  .shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .sidebar{border-right:0;border-bottom:1px solid var(--line);padding:10px 14px;min-width:0}
+  nav.global,nav.local{flex-direction:row;overflow-x:auto;scrollbar-width:none;
+    margin-top:0;border-top:0;padding-top:0}
+  nav.global::-webkit-scrollbar,nav.local::-webkit-scrollbar{display:none}
+  nav.global a,nav.local a{white-space:nowrap}
+  /* Two navs stacked in the strip: keep the rule between them, tighter. */
+  .sidebar nav.global:not(:only-child){padding-bottom:8px;margin-bottom:8px}
+  /* min-width:0 stops the flex row and the name flooring at min-content, and
+   * overflow-wrap breaks a long unbroken project name, so neither re-widens
+   * the collapsed strip. */
+  .proj-head{display:flex;align-items:baseline;gap:10px;padding:0 0 8px;min-width:0}
+  .proj-name{margin:0;font-size:16px;min-width:0;overflow-wrap:anywhere}
+}
 
 .canvas{min-width:0;display:flex;flex-direction:column;gap:16px}
 /* The CLI-code page (spec 001 §8.7) renders outside the app shell, so it needs
