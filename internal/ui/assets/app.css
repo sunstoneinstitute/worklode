@@ -653,6 +653,40 @@ nav.local a .cnt {
     order: -1;
   }
 }
+@media (max-width:880px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 14px;
+  }
+  nav.global,nav.local {
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+  nav.global::-webkit-scrollbar,nav.local::-webkit-scrollbar {
+    display: none;
+  }
+  nav.global a,nav.local a {
+    white-space: nowrap;
+  }
+  .proj-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 0 0 8px;
+  }
+  .proj-name {
+    margin: 0;
+    font-size: 16px;
+  }
+}
 .canvas {
   min-width: 0;
   display: flex;

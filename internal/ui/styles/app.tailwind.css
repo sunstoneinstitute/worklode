@@ -143,6 +143,20 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .mode.active{display:grid}
 @media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
 
+/* Below 880px the shell collapses to one column (spec 032 §10: reduced
+ * columns, not a squeezed grid): the sidebar — global or project — becomes
+ * a horizontal nav strip above the content. */
+@media (max-width:880px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{border-right:0;border-bottom:1px solid var(--line);padding:10px 14px}
+  nav.global,nav.local{flex-direction:row;overflow-x:auto;scrollbar-width:none;
+    margin-top:0;border-top:0;padding-top:0}
+  nav.global::-webkit-scrollbar,nav.local::-webkit-scrollbar{display:none}
+  nav.global a,nav.local a{white-space:nowrap}
+  .proj-head{display:flex;align-items:baseline;gap:10px;padding:0 0 8px}
+  .proj-name{margin:0;font-size:16px}
+}
+
 .canvas{min-width:0;display:flex;flex-direction:column;gap:16px}
 /* The CLI-code page (spec 001 §8.7) renders outside the app shell, so it needs
    its own centred column and a row that puts the code beside its copy button. */

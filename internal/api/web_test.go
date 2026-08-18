@@ -258,6 +258,7 @@ func TestAppCSSContent(t *testing.T) {
 		"#0E1937", "#F4F4F4", "#FAD604", "#266680", "#46C5DE",
 		"prefers-color-scheme:dark", ":focus-visible", "--ink:", "--accent:",
 		".topbar", "@media (max-width:1080px)",
+		"max-width:880px", ".backlink",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("stylesheet missing %q", want)
