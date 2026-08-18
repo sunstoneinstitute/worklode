@@ -330,3 +330,44 @@ will be once the open drafts land. It also names references that point at
 sections which do not exist. Pass a spec — `4`, `004`,
 `004-execution-backbone.md`, or the repo-relative path — to see just that
 document; supersession is still resolved against the whole corpus.
+
+## The consolidated views (`docs/specs/inlined/`)
+
+```bash
+./scripts/inlinespec.py           # regenerate docs/specs/inlined/
+./scripts/inlinespec.py --check   # report a stale or missing file (exit 1)
+```
+
+`currentspec.py` says *which* section still states the design;
+`inlinespec.py` renders the corpus it describes. For each spec it writes one
+file under `docs/specs/inlined/` holding that spec's text with every amendment
+and supersession that is in force folded in: an amended section keeps its text
+and gains the amending text beneath it, a replaced section keeps its heading
+and loses its body, and every borrowed block leads with `**[amending …]**` or
+`**[superseding …]**` naming the section it came from. Inlining is transitive,
+and only claims from documents that are already effective are folded in — a
+draft's proposal is listed as `pending`. This is spec 026 §3.2's `lode show
+--resolved` rendering, written to files so a reader who has no shell (a
+document-ingesting tool that takes URLs, for instance) gets the same view.
+
+**The views are generated, and are not the corpus.** `docs/specs/` remains the
+source of record: never edit a file under `inlined/`, never cite one as a
+source, and never amend one. Fix the spec and regenerate.
+
+Unlike `index.yaml`, a pre-commit hook keeps them current: touching any file
+under `docs/specs/` regenerates every view and fails the commit, so you stage
+the result alongside the edit that caused it. It regenerates all of them and
+never only the files you touched, because a view is a function of the whole
+corpus — adding an `amends` to 031 changes 001's view without changing 001. CI
+runs the same script with `--check` on mixed PRs; docs-only PRs skip that
+workflow, so the hook is the real gate.
+
+The generator takes its corpus from `docs/specs/index.yaml`, so a spec that is
+not in the index would render as if it did not exist. Rather than quietly
+omitting it, the script exits naming the file and pointing at `secindex.py`.
+That is the one case where you have to run two scripts in order.
+
+`secfmt.py` and `secmeta.py` both skip the directory (`secfmt.generated`),
+because its files carry no frontmatter and their headings are one spec's
+numbering with borrowed text folded in; a walk that picked them up would report
+the generator's output as your defect.
