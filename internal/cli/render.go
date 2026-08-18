@@ -496,6 +496,12 @@ func timelineSummary(e model.TimelineEntry) string {
 		return fmt.Sprintf("%s/%s: %s", e.Environment, e.TargetName, e.Status)
 	case "runtime":
 		return fmt.Sprintf("%s on %s: %s", e.Kind, e.Workload, e.Message)
+	case "landed":
+		return fmt.Sprintf("%s %s on main", e.Repo, e.SHA)
+	case "deployed":
+		return fmt.Sprintf("%s confirmed in %s", e.Repo, e.Environment)
+	case "released":
+		return fmt.Sprintf("%s %s", e.Repo, e.Tag)
 	default:
 		return ""
 	}
