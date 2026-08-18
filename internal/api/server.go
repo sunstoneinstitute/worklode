@@ -472,6 +472,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
 
 	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
+	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)
 	r.api("POST /api/v1/merges", s.reportMerge)
 
 	// Project, actor, and token management is admin-only (permProjectAdmin /
