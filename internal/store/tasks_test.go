@@ -764,7 +764,7 @@ func TestOpenBlockersPerRepoDoneState(t *testing.T) {
 
 	// ranking.go: readyCandidates, which renders blockedCondition into a
 	// different query again.
-	ready, err := s.readyCandidates(t.Context(), "horndb")
+	ready, err := s.readyCandidates(t.Context(), "horndb", "")
 	if err != nil {
 		t.Fatalf("readyCandidates: %v", err)
 	}
@@ -785,7 +785,7 @@ func TestOpenBlockersPerRepoDoneState(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("openBlockers after release = %+v, want none", got)
 	}
-	ready, err = s.readyCandidates(t.Context(), "horndb")
+	ready, err = s.readyCandidates(t.Context(), "horndb", "")
 	if err != nil {
 		t.Fatalf("readyCandidates after release: %v", err)
 	}
