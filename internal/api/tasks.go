@@ -10,12 +10,28 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
+
+// validSecretNames rejects the request early with a clean message; the store
+// re-checks (defense in depth for non-HTTP callers).
+func validSecretNames(names []string) bool {
+	for _, n := range names {
+		if !secrets.ValidName(n) {
+			return false
+		}
+	}
+	return true
+}
+
+// invalidSecretNameMsg is shared by every handler that gates on
+// validSecretNames, so the message cannot drift from the grammar.
+const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
 
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0017) and
 // wlc:TaskKind in ns/concept.ttl; all three carry the same six kinds.
@@ -55,6 +71,10 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Concern != "" && !store.ValidConcern(req.Concern) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
+		return
+	}
+	if !validSecretNames(req.Secrets) {
+		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
 	}
 	if _, err := s.st.GetProject(r.Context(), req.Project); err != nil {
@@ -108,6 +128,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				CreatedBy: actor.ID,
 				Draft:     req.Draft,
 				Skills:    req.Skills,
+				Secrets:   req.Secrets,
 			})
 			if err != nil {
 				return err
@@ -310,7 +331,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
-		req.NeedsDecomposition == nil && req.State == nil {
+		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
@@ -324,6 +345,10 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Concern != nil && *req.Concern != "" && *req.Concern != "none" && !store.ValidConcern(*req.Concern) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
+		return
+	}
+	if req.Secrets != nil && !validSecretNames(*req.Secrets) {
+		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
 	}
 	var stateFrom string
@@ -350,7 +375,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.updated", payload,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.NeedsDecomposition); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{
@@ -361,6 +386,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 				}
 				if err := store.LogChange(tx, "task", id, eventID,
 					map[string]string{"field": field, "new": *val}); err != nil {
+					return err
+				}
+			}
+			if req.Secrets != nil {
+				if err := store.LogChange(tx, "task", id, eventID,
+					map[string]any{"field": "secrets", "new": *req.Secrets}); err != nil {
 					return err
 				}
 			}

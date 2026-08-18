@@ -1178,7 +1178,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, needsDecomposition)
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition)
 		})
 	return err
 }
@@ -1496,5 +1496,69 @@ func TestListTasksByRepo(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("unmapped repo returned %+v, want none", got)
+	}
+}
+
+func TestTaskSecretsRoundTrip(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "secproj", "Secrets", "SE"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	var created *model.Task
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		task, err := CreateTask(tx, s.Now(), TaskInput{
+			ProjectID: "secproj", Title: "needs creds", Priority: "medium", Kind: "chore",
+			Secrets: []string{"KUBECONFIG_HZDEV", "OPENALEX_API_KEY"},
+		})
+		created = task
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	got, err := s.GetTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	want := []string{"KUBECONFIG_HZDEV", "OPENALEX_API_KEY"}
+	if !reflect.DeepEqual(got.Secrets, want) {
+		t.Fatalf("Secrets = %v; want %v", got.Secrets, want)
+	}
+
+	// Update replaces the whole list; empty clears.
+	next := []string{"GITHUB_TOKEN"}
+	err = s.Tx(ctx, func(tx *sql.Tx) error {
+		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil)
+	})
+	if err != nil {
+		t.Fatalf("update secrets: %v", err)
+	}
+	got, err = s.GetTask(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if !reflect.DeepEqual(got.Secrets, []string{"GITHUB_TOKEN"}) {
+		t.Fatalf("Secrets after update = %v; want [GITHUB_TOKEN]", got.Secrets)
+	}
+}
+
+func TestTaskSecretsRejectsBadName(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "secproj2", "Secrets2", "SF"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		_, err := CreateTask(tx, s.Now(), TaskInput{
+			ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
+			Secrets: []string{"op://Employee/x"},
+		})
+		return err
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("create with bad secret name: %v; want ErrInvalidInput", err)
 	}
 }

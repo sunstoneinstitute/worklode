@@ -117,6 +117,18 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
+	// --- secrets (spec 017) ---------------------------------------------------
+	// Metadata only — names, purposes and op:// references, never values —
+	// but vault and item names describe the org's secret topology, so the
+	// route is authenticated like any other.
+	"GET /api/v1/secrets/catalog": guarded(permSecretRead),
+	// permTaskClaim, not permSecretRead: reporting which names were
+	// materialized is a step of the claim ceremony, performed by the actor
+	// taking the lease, and it writes to the task's audit trail. It belongs
+	// with claim/renew/release/start/stop; permission to read the catalog
+	// should not imply permission to write task history.
+	"POST /api/v1/tasks/{id}/secrets-materialized": guarded(permTaskClaim),
+
 	// --- delivery ------------------------------------------------------------
 	// Reporting a merge advances tasks, so it needs the same permission the
 	// done/abandon endpoints do. The webhook reporter carries no actor and is

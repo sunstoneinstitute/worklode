@@ -24,6 +24,9 @@ type Task struct {
 	// LODE_BRANCH_TEMPLATE, which only the server knows, so a client matching
 	// local refs to tasks reads it rather than rendering one (008 §3.1).
 	Branch string `json:"branch"`
+	// Secrets is the task's declared org-catalog secret names (spec 017).
+	// Names only; nil and empty are equivalent, always [] on the wire.
+	Secrets []string `json:"secrets"`
 }
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
@@ -42,6 +45,9 @@ type CreateTaskInput struct {
 	// FollowUpTo, when set, records the task this one was spun out of in the
 	// same request instead of a separate edge call.
 	FollowUpTo string `json:"follow_up_to,omitempty"`
+	// Secrets declares the org-catalog secret names this task needs (spec
+	// 017). Names only; validated against internal/secrets.ValidName.
+	Secrets []string `json:"secrets,omitempty"`
 }
 
 // EditTaskInput carries the optional fields of a task edit (PATCH
@@ -55,6 +61,9 @@ type EditTaskInput struct {
 	Concern            *string `json:"concern"`
 	NeedsDecomposition *bool   `json:"needs_decomposition"`
 	State              *string `json:"state"`
+	// Secrets, when non-nil, replaces the task's declared secret names
+	// wholesale (spec 017).
+	Secrets *[]string `json:"secrets"`
 }
 
 // EdgeInput is the request body for adding or removing a task edge

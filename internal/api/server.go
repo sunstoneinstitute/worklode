@@ -78,6 +78,13 @@ type Config struct {
 	GitHubAppID         string // LODE_GITHUB_APP_ID
 	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
 
+	// SecretsCatalogPath (LODE_SECRETS_CATALOG_PATH) points at the org
+	// secrets catalog TOML (a mounted ConfigMap in the deployment). Empty
+	// disables the catalog endpoint (404). The file maps names to op:// refs
+	// — it holds no values, but vault/item names are mildly sensitive, so it
+	// is only ever served authenticated.
+	SecretsCatalogPath string
+
 	// SkillSources configures org skill source repos, comma-separated
 	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
 	// App to be configured. Unset: skill sync off.
@@ -463,6 +470,9 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+
+	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
+	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)
 	r.api("POST /api/v1/merges", s.reportMerge)
 
 	// Project, actor, and token management is admin-only (permProjectAdmin /
