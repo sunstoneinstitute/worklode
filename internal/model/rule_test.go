@@ -319,22 +319,35 @@ func checkUntypedMaps(fset *token.FileSet, path string, file *ast.File) (msgs []
 	return msgs
 }
 
-// containsAnyMap reports whether e is, or wraps, a map with an `any` value —
-// `map[string]any`, `[]map[string]any`, `*map[string]any`.
+// containsAnyMap reports whether e is, or wraps, a map whose value type is
+// `any` — `map[string]any`, `[]map[string]any`, `*map[string]any`,
+// `map[string][]any`. It does not see a map behind a named type
+// (`type payload map[string]any`); that is a declaration to review, not a
+// field type to read.
 func containsAnyMap(e ast.Expr) bool {
 	switch v := e.(type) {
 	case *ast.MapType:
-		if id, ok := v.Value.(*ast.Ident); ok && (id.Name == "any" || id.Name == "interface{}") {
-			return true
-		}
-		if it, ok := v.Value.(*ast.InterfaceType); ok && it.Methods.NumFields() == 0 {
-			return true
-		}
-		return containsAnyMap(v.Value)
+		return containsAny(v.Value) || containsAnyMap(v.Value)
 	case *ast.ArrayType:
 		return containsAnyMap(v.Elt)
 	case *ast.StarExpr:
 		return containsAnyMap(v.X)
+	}
+	return false
+}
+
+// containsAny reports whether e is `any` (or the `interface{}` it spells),
+// alone or under slices and pointers.
+func containsAny(e ast.Expr) bool {
+	switch v := e.(type) {
+	case *ast.Ident:
+		return v.Name == "any"
+	case *ast.InterfaceType:
+		return v.Methods.NumFields() == 0
+	case *ast.ArrayType:
+		return containsAny(v.Elt)
+	case *ast.StarExpr:
+		return containsAny(v.X)
 	}
 	return false
 }
@@ -352,9 +365,12 @@ func TestUntypedMapGuardCatchesTheDodges(t *testing.T) {
 		{"slice of maps", "type R struct {\n\tX []map[string]any `json:\"x\"`\n}", true},
 		{"pointer to map", "type R struct {\n\tX *map[string]any `json:\"x\"`\n}", true},
 		{"empty interface value", "type R struct {\n\tX map[string]interface{} `json:\"x\"`\n}", true},
+		{"map of slices of any", "type R struct {\n\tX map[string][]any `json:\"x\"`\n}", true},
+		{"map of maps", "type R struct {\n\tX map[string]map[string]any `json:\"x\"`\n}", true},
 		{"typed dictionary", "type R struct {\n\tX map[string]string `json:\"x\"`\n}", false},
+		{"map of a named type", "type R struct {\n\tX map[string]Entry `json:\"x\"`\n}", false},
 		{"raw payload", "type R struct {\n\tX json.RawMessage `json:\"x\"`\n}", false},
-		{"untagged internal map", "type R struct {\n\tX map[string]any\n}", false},
+		{"untagged field", "type R struct {\n\tX map[string]any\n}", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

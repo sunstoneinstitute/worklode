@@ -28,7 +28,7 @@ type TimelineResponse struct {
 //	released    Repo, Tag
 //
 // One flat struct rather than a per-type struct behind a payload object
-// (ADR 036 §8): the entries are flat on the wire, six of the fields are
+// (ADR 036 §8): the entries are flat on the wire, seven of the fields are
 // shared by two or more types, and Go has no sum type that would buy a
 // consumer exhaustiveness checking for the nesting it would cost. A consumer
 // switches on Type either way — the difference is only whether the fields it

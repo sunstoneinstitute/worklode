@@ -118,7 +118,7 @@ ADR governs only how many Go declarations that one meaning gets.
 
 `internal/model/rule_test.go` decides §2 mechanically, because a rule about
 how many declarations a shape gets is one nobody can hold in their head
-across a year of handlers. It reports three things:
+across a year of handlers. It reports four things:
 
 - a **named** json-tagged struct declared in `internal/api` or
   `internal/cli` — the original check;
@@ -140,7 +140,9 @@ across a year of handlers. It reports three things:
 How much of that a package is held to depends on who else declares its
 shapes:
 
-- `internal/api` and `internal/cli` get all three. Both ends are ours.
+- `internal/api` and `internal/cli` get all three of the rules that apply
+  to a scanned package. Both ends are ours. (The fourth rule is not about
+  them: it reads `internal/model`'s own declarations.)
 - `internal/cmd` gets the anonymous-shape rule only. Its json-tagged types
   are `--json` stdout contracts: they cross no HTTP boundary and have one
   declaration by construction, so §2's test does not select them. They must
@@ -156,9 +158,9 @@ carrying the reason (a cookie, a state parameter, an on-disk file — §3). An
 entry that matches no declaration is reported as stale, the way
 `internal/api/router.go` treats an unused route guard.
 
-The guard's own reach is checked rather than assumed: `TestGuardCatchesTheDodges`
-runs the checks over known-bad source so each rule is known to still match
-something, and a scanned package that parses no files is a failure, so
+The guard's own reach is checked rather than assumed:
+`TestGuardCatchesTheDodges` and `TestUntypedMapGuardCatchesTheDodges` run the
+checks over known-bad source so each rule is known to still match something, and a scanned package that parses no files is a failure, so
 renaming or splitting one cannot turn the guard green while it inspects
 nothing.
 
@@ -170,7 +172,7 @@ The timeline was this ADR's one deferred shape and is now typed.
 `model.TimelineEntry` is a flat union discriminated by `type`: `at` and
 `type` on every entry, the rest `omitempty` and populated per type. A per-type
 struct behind a `payload` object was the alternative and was not taken — the
-entries are flat on the wire, six fields are shared by two or more of the ten
+entries are flat on the wire, seven fields are shared by two or more of the ten
 types, and Go has no sum type that would buy a consumer exhaustiveness
 checking for the nesting it would cost. A consumer switches on `type` either
 way; the difference is only whether the fields it then reads are declared.
