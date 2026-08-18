@@ -370,3 +370,12 @@ one pass.
   canonical for prose and frontmatter. Touches `designdoc.ResolveRef` and the
   shorthand fixtures (`testdata/shorthand.yaml`, exercised from both Go and
   Python).
+- `[P4]` **`secrets_materialized` breaks the dotted event-type convention**
+  (spec 017): every other CLI-sourced event is `task.<verb>` —
+  `task.assigned`, `task.started`, `task.reworked` — and the claim ceremony's
+  event is the one underscore in the set. The spelling comes from the spec, so
+  it was kept rather than improvised away, but a subscriber filtering on the
+  `task.` prefix (025 §15) silently misses it. Renaming it to
+  `task.secrets_materialized` is a spec amendment plus a one-line change, and
+  is cheapest before part 2 of the task-secrets series ships a client that
+  emits it.
