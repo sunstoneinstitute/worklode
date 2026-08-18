@@ -444,6 +444,7 @@ docs/specs/036-one-model-across-packages.md:
     sec-5: "## 5. What this costs"
     sec-6: "## 6. Migration"
     sec-7: "## 7. Relationship to other documents"
+    sec-8: "## 8. Enforcement"
 docs/specs/037-vendored-design-skills.md:
   sections:
     sec-0: "## 0. Purpose & scope"

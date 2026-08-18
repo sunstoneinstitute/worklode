@@ -33,6 +33,15 @@ repos:
         language: script
         files: ^docs/specs/.*\.md$
         pass_filenames: false
+      # Rewrites like inlined-specs above. always_run: a commit that only
+      # deletes a document still invalidates the index, and pre-commit drops
+      # deleted paths from the file list, so `files:` alone would miss it.
+      - id: section-index
+        name: docs section index
+        entry: scripts/secindex.py
+        language: script
+        pass_filenames: false
+        always_run: true
       # Reports, never rewrites: a frontmatter value is a claim about the corpus,
       # so a wrong one is fixed by deciding what it should say. Runs over the
       # whole corpus because a reference breaks from the far end — deleting an

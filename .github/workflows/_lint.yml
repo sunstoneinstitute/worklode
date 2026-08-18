@@ -76,3 +76,6 @@ jobs:
         run: |
           python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
           ./scripts/inlinespec.py --check
+      # Checks rather than rewrites, same reason as consolidated spec views above.
+      - name: docs section index
+        run: ./scripts/secindex.py --check
