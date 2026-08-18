@@ -200,14 +200,18 @@ func resolveStatusFilter(statuses []string) []string {
 }
 
 func newTaskShowCmd() *cobra.Command {
+	var pager bool
 	cmd := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a task's details: body, edges, blocked status, and lease holder",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cleanupPager := withPager(cmd, pager)
+			defer cleanupPager()
 			return runTaskShow(cmd, args[0])
 		},
 	}
+	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	return cmd
 }
 

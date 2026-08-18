@@ -987,3 +987,11 @@ docs/plans/2026-08-18-motherlode-remix-research.md:
     task-5-extract-the-plugin-level-prompts-and-reconcile-the-set: "### Task 5 — Extract the plugin-level prompts and reconcile the set"
     task-6-fold-the-findings-back-into-spec-037: "### Task 6 — Fold the findings back into spec 037"
     verification: "## Verification"
+docs/plans/2026-08-19-show-pager-flag.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    file-structure: "## File Structure"
+    task-1-clipager-the-pager-subprocess-plumbing: "### Task 1: `cli.Pager` — the pager subprocess plumbing"
+    task-2-internalcmd-pager-wiring-helper: "### Task 2: `internal/cmd` pager wiring helper"
+    task-3-wire-pager-p-into-lode-show: "### Task 3: Wire `--pager`/`-p` into `lode show`"
+    task-4-wire-pager-p-into-lode-task-show: "### Task 4: Wire `--pager`/`-p` into `lode task show`"
