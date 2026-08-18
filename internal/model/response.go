@@ -11,3 +11,12 @@ type ErrorResponse struct {
 type HealthResponse struct {
 	Status string `json:"status"`
 }
+
+// WebhookAck is what a signed-webhook handler (internal/hooks) answers with:
+// "ok" when the delivery was recorded, "duplicate" when its delivery id had
+// already been seen, "ignored" for an event this instance does not act on.
+// The sender is GitHub or Flux, so this is the only half of a webhook
+// exchange worklode declares — the payloads are theirs.
+type WebhookAck struct {
+	Status string `json:"status"`
+}

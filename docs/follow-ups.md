@@ -379,3 +379,11 @@ one pass.
   `task.secrets_materialized` is a spec amendment plus a one-line change, and
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
+- `[P4]` **`model.TimelineResponse.Timeline` is a declared envelope around ten
+  undeclared shapes.** It is a `[]map[string]any` (`internal/model/taskdetail.go`)
+  whose entries are built by hand in `internal/api/timeline.go` — one map
+  literal per event kind — so ADR 036's problem survives inside a model type,
+  and 036 §8's guard cannot reach it (a map nested in a declared field is not
+  a body argument). Declaring a `TimelineEntry` per kind, or one shape with an
+  omitempty union, would close it; the cost is that the cockpit's timeline
+  rendering reads the map keys directly today. Found by the WL-64 review.

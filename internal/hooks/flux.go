@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -135,13 +136,13 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !inserted:
 		result = "ok"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "duplicate"})
 	case ignored:
 		result = "ignored"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ignored"})
 	default:
 		result = "ok"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
 	}
 }
 

@@ -122,29 +122,45 @@ across a year of handlers. It reports three things:
 
 - a **named** json-tagged struct declared in `internal/api` or
   `internal/cli` — the original check;
-- an **anonymous** json-tagged struct in either, or in `internal/cmd`.
+- an **anonymous** json-tagged struct in those packages or in `internal/cmd`.
   Deleting the type name is the cheapest way past a declaration check, and
   an undeclared body is exactly what this ADR forbids;
 - a **map handed to an HTTP body argument** — `writeJSON`'s third argument
-  or the CLI client's `do` body, including one assembled over several
-  statements. A map literal is a wire shape with no struct to find.
+  or the CLI client's `do` body, whether written inline, built up over
+  several statements, or made with `make`. A map body is a wire shape with
+  no struct to find.
 
-`internal/cmd` is held only to the anonymous-shape rule. Its json-tagged
-types are `--json` stdout contracts: they cross no HTTP boundary and have one
-declaration by construction, so §2's test does not select them. They must
-still be named — a contract nobody can grep for is one nobody reviews.
+How much of that a package is held to depends on who else declares its
+shapes:
+
+- `internal/api` and `internal/cli` get all three. Both ends are ours.
+- `internal/cmd` gets the anonymous-shape rule only. Its json-tagged types
+  are `--json` stdout contracts: they cross no HTTP boundary and have one
+  declaration by construction, so §2's test does not select them. They must
+  still be named — a contract nobody can grep for is one nobody reviews. The
+  consequence is deliberate: a *named* struct there that decodes an HTTP
+  response is not reported, and review is what catches it.
+- `internal/hooks` gets the body rule only. Its declared shapes are GitHub's
+  and Flux's inbound payloads — foreign schemas this ADR does not govern —
+  while what it answers with is ours.
 
 Exemptions live in the test's `allowed` map, keyed by package and type and
 carrying the reason (a cookie, a state parameter, an on-disk file — §3). An
 entry that matches no declaration is reported as stale, the way
 `internal/api/router.go` treats an unused route guard.
 
-Two failure modes of the guard itself are covered rather than assumed: it
-fails when a scanned package parses no files, so renaming or splitting one
-cannot turn it green while it inspects nothing, and `TestGuardCatchesTheDodges`
+The guard's own reach is checked rather than assumed: `TestGuardCatchesTheDodges`
 runs the checks over known-bad source so each rule is known to still match
-something.
+something, and a scanned package that parses no files is a failure, so
+renaming or splitting one cannot turn the guard green while it inspects
+nothing.
 
-What it does not see: a body assembled by a helper that returns a map, or
-marshalled to bytes before it reaches a body argument. Both take deliberate
-work to arrange; the cases above are what a handler reaches for by accident.
+What it does not see:
+
+- a **map nested inside a declared type** — `model.TimelineResponse.Timeline`
+  is a `[]map[string]any` whose ten entry shapes are built by hand in
+  `internal/api/timeline.go`. A declared envelope around undeclared shapes is
+  this ADR's problem in its original form, and the check cannot reach it;
+- a body assembled by a helper that returns a map, or marshalled to bytes
+  before it reaches a body argument. Both take deliberate work to arrange;
+  the cases above are what a handler reaches for by accident.
