@@ -29,5 +29,9 @@ sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';" >/dev/n
 psql "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable" \
   -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
 
+# --- lode Claude Code plugin, sourced from this checkout (not GitHub) ---
+claude plugin marketplace add "$(pwd)" --scope local
+claude plugin install lode@worklode --scope local -y
+
 lode login --server https://worklode.dev.sunstoneinstitute.ai
 lode install
