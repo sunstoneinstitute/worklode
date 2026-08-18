@@ -98,7 +98,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
+	writeJSON(w, code, model.ErrorResponse{Error: msg})
 }
 
 // validSignature reports whether header is a well-formed
@@ -225,16 +225,16 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !inserted:
 		result = "ok"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "duplicate"})
 	case skillPush:
 		result = "ok"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
 	case ignored:
 		result = "ignored"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ignored"})
 	default:
 		result = "ok"
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
 	}
 }
 
