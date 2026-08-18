@@ -2,13 +2,18 @@ name: lint
 
 on:
   workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label. 'ubuntu-latest' for a hosted PR, 'self-hosted' for a trusted one — see docs/self-hosted-runner.md.
+        type: string
+        default: ubuntu-latest
 
 permissions:
   contents: read
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -20,10 +25,14 @@ jobs:
           cache: false
       - name: Go cache paths
         id: go-cache
+        if: inputs.runs-on == 'ubuntu-latest'
         run: |
           echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      # Self-hosted skips this: GOCACHE/GOMODCACHE already persist on hel01's
+      # disk across runs (see docs/self-hosted-runner.md).
       - name: Restore Go cache
+        if: inputs.runs-on == 'ubuntu-latest'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
