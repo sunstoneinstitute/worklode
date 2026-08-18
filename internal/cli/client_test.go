@@ -2015,7 +2015,7 @@ func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
 // test itself committed. Once a query has observed an id the horizon can
 // only advance, so callers only need this for the first read against a
 // freshly recorded id.
-func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []cli.Event {
+func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -2144,9 +2144,9 @@ func TestClientStreamEvents(t *testing.T) {
 	defer cancel()
 
 	errEnough := errors.New("enough")
-	var got []cli.Event
+	var got []model.Event
 	err := c.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream", After: ids[0]},
-		func(e cli.Event) error {
+		func(e model.Event) error {
 			got = append(got, e)
 			if len(got) == 2 {
 				return errEnough
@@ -2176,7 +2176,7 @@ func TestClientStreamEvents(t *testing.T) {
 	}
 	wc := cli.NewClient(cli.Config{ServerURL: serverURL, Token: workerToken})
 	err = wc.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream"},
-		func(cli.Event) error { return errors.New("callback must not run") })
+		func(model.Event) error { return errors.New("callback must not run") })
 	var ce *cli.ClientError
 	if !errors.As(err, &ce) || ce.Status != http.StatusForbidden {
 		t.Fatalf("non-admin StreamEvents = %v, want a 403 ClientError", err)
@@ -2203,8 +2203,8 @@ func TestClientStreamEventsFraming(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := cli.NewClient(cli.Config{ServerURL: ts.URL, Token: "wl_" + strings.Repeat("a", 40)})
-	var got []cli.Event
-	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e cli.Event) error {
+	var got []model.Event
+	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e model.Event) error {
 		got = append(got, e)
 		return nil
 	})

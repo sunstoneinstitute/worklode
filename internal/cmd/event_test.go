@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -41,7 +42,7 @@ func (b *syncBuffer) String() string {
 // pollTailBacklog waits until the events recorded by a test are readable past
 // the cluster-wide commit horizon, the same accommodation as
 // internal/cli's pollClientEvents.
-func pollTailBacklog(t *testing.T, c *cli.Client, typ string, want int) []cli.Event {
+func pollTailBacklog(t *testing.T, c *cli.Client, typ string, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -146,7 +147,7 @@ func TestEventTailFollowJSON(t *testing.T) {
 		t.Fatalf("NDJSON lines = %d, want 2:\n%s", len(lines), out.String())
 	}
 	for i, line := range lines {
-		var e cli.Event
+		var e model.Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatalf("line %d is not one JSON event (%v): %s", i, err, line)
 		}
