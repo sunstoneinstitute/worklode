@@ -266,6 +266,56 @@ func TestAppCSSContent(t *testing.T) {
 	}
 }
 
+// TestEveryPageRendersTheShell sweeps every web page and asserts the
+// unified frame: exactly one .shell grid, one main landmark, and — on every
+// page that names a current destination — exactly one aria-current="page".
+// The task page and the new-task form name none (their left column marks
+// nothing), so they assert zero.
+func TestEveryPageRendersTheShell(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Swept task", "priority": "low", "kind": "chore",
+	})
+
+	pages := []struct {
+		path       string
+		hasCurrent bool
+	}{
+		{"/", true}, {"/intake", true}, {"/projects", true}, {"/work", true},
+		{"/reviews", true}, {"/deliveries", true}, {"/knowledge", true},
+		{"/projects/proj", true}, {"/projects/proj/crew", true},
+		{"/projects/proj/reviews", true}, {"/projects/proj/decisions", true},
+		{"/projects/proj/documents", true}, {"/projects/proj/activity", true},
+		{"/projects/proj/deliverables", true},
+		{"/projects/proj/deliverables/new", true},
+		{"/projects/proj/tasks/new", false},
+		{"/tasks/WL-1", false},
+	}
+	for _, page := range pages {
+		t.Run(page.path, func(t *testing.T) {
+			rr := doReq(t, h, "GET", page.path, "", nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			if got := strings.Count(body, `<div class="shell">`); got != 1 {
+				t.Errorf("shell count = %d, want 1", got)
+			}
+			if got := strings.Count(body, `<main id="main-content"`); got != 1 {
+				t.Errorf("main landmark count = %d, want 1", got)
+			}
+			want := 0
+			if page.hasCurrent {
+				want = 1
+			}
+			if got := strings.Count(body, `aria-current="page"`); got != want {
+				t.Errorf(`aria-current="page" count = %d, want %d`, got, want)
+			}
+		})
+	}
+}
+
 func TestProjectSections(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
