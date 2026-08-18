@@ -474,6 +474,11 @@ func TestTaskPage(t *testing.T) {
 		"Artifact",                   // timeline: artifact entry label
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
+	assertShell(t, body)
+	bodyContains(t, body, `<nav aria-label="Primary"`)
+	if got := strings.Count(body, `aria-current="page"`); got != 0 {
+		t.Errorf(`aria-current count = %d, want 0 (no destination is current on a task page)`, got)
+	}
 	// WL-1 is leased but has no assignee: the "Assigned to" paragraph must
 	// not render for it.
 	if strings.Contains(body, "Assigned to") {
