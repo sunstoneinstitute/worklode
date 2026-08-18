@@ -1,7 +1,7 @@
 {
   "name": "lode",
   "version": "0.2.0",
-  "description": "Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
+  "description": "Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. /lode:spec-coverage finds specs no plan covers and seeds a planning task for each. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
   "author": {
     "name": "Stig Bakken",
     "email": "stig@sunstone.institute"
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Lode",
     "shortDescription": "Worklode: worktree-bound task pickup for agents",
-    "longDescription": "Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
+    "longDescription": "Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. /lode:spec-coverage finds specs no plan covers and seeds a planning task for each. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo (Claude Code settings plus the git pre-commit heartbeat), so they stay versioned with the binary.",
     "developerName": "Stig Bakken",
     "category": "Productivity",
     "capabilities": [
