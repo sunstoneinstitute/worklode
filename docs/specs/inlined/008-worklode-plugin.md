@@ -347,8 +347,8 @@ separate opt-in step. What that means for in-flight work:
 **Mitigation:** deploy with `LODE_BRANCH_TEMPLATE=lode/{{ .id }}-{{ .slug }}`
 first (the pre-cutover shape), let every open task PR land or get migrated, then
 flip to the default template. Where that sequencing isn't practical, add a
-`WL-Task: <id>` line to an open PR's body — `store.TaskIDFromBody` still
-correlates on that marker regardless of branch shape, so it recovers
+`Worklode-Task: <id>` line to an open PR's body — `store.TaskIDFromBody` still
+correlates on that trailer regardless of branch shape, so it recovers
 correlation without renaming anything.
 
 A deployment that needs namespaced branches sets `LODE_BRANCH_TEMPLATE` to
@@ -397,6 +397,18 @@ branch, never the default one.
 | `PreToolUse` on `git commit` | `lode task renew` (commit-cadence heartbeat) | NOP when the session isn't on a Worklode task. |
 | `ExitWorktree` / `SessionEnd` | **Release** the worktree's lease **if idle** | In a Worklode worktree with a held lease. |
 
+**Amended:** a third guard shape joins the two above. The `commit-msg` hook stamps the
+`Worklode-Task:` trailer (004 §2.4) into a commit made inside a task worktree, so it is guarded like
+a lease-bearing hook — cwd one segment below the worktree base — but takes **no lease and makes no
+backbone call**: the id comes from `worklode.task-id` on disk (§5.2), because a commit must not wait
+on the network to get its trailer. It is `commit-msg` rather than `prepare-commit-msg` so the same
+"only stamp a message that already has a body" gate that preserves the empty-message abort still
+covers an interactive commit; 004 §2.4 records the reasoning.
+
+| Event | Action | Guard / condition |
+|---|---|---|
+| `commit-msg` | **Stamp** `Worklode-Task: <id>` into the commit message | In a Worklode worktree, no merge in progress, and the message has a body. NOP otherwise. |
+
 The git-side merge reporters, which run in the main clone and take no lease:
 
 | Event | Action | Guard / condition |
@@ -434,10 +446,15 @@ Notes:
 - **Daisy-chain, don't terminate.** Each hook takes `--next <cmd> [argv…]`; instead of `exit(0)` it
   `execve`s the next command, passing the hook payload through. This lets Worklode's hook compose with
   whatever hooks a repo already has rather than owning the event.
-- **`lode install`** wires the commit-cadence heartbeat and the merge reporters for
-  **editor-agnostic** use (plain `git`, not just Claude Code): `pre-commit`, `post-merge` and
-  `post-commit`. It **must coexist — chain existing hooks, never clobber them**: an existing hook on
-  any of those events is preserved as `<name>.pre-lode` and invoked via the `--next`/`execve` chain.
+- **`lode install`** wires the commit-cadence heartbeat, the trailer stamper and the merge reporters
+  for **editor-agnostic** use (plain `git`, not just Claude Code): `pre-commit`, `commit-msg`,
+  `post-merge` and `post-commit`. It **must coexist — chain existing hooks, never clobber them**: an
+  existing hook on any of those events is preserved as `<name>.pre-lode` and invoked via the
+  `--next`/`execve` chain.
+- **Git's own arguments.** `lode hook` reads the words between the event and `--next` as the hook's
+  own and passes everything after `--next` to the chained hook verbatim. A hook that needs git's
+  arguments — `commit-msg`, whose `$1` is the message file it exists to edit — therefore names `"$@"`
+  on both sides of `--next` when it chains, so neither half loses them.
 - **Sensible default:** if `.pre-commit-config.yaml` exists in the repo root, **always chain
   `pre-commit`** — Worklode's heartbeat runs, then `execve`s the `pre-commit` framework so its checks
   still run. That chain is for the `pre-commit` hook alone: the framework binary run bare executes
