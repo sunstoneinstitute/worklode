@@ -20,6 +20,7 @@ import (
 	"html"
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -306,51 +307,50 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// summarizeEntry renders one timeline entry (same map[string]any shape the
-// JSON timeline API emits, from timeline.go's stateEntries/prEntries/etc.)
-// as a human-readable row: a type label plus a one-line summary.
-func summarizeEntry(e timelineEntry) ui.TimelineRow {
-	typ, _ := e.obj["type"].(string)
-	row := ui.TimelineRow{At: e.at, Type: typ}
-	switch typ {
+// summarizeEntry renders one timeline entry as a human-readable row: a type
+// label plus a one-line summary. Which fields of the entry are populated
+// follows from its Type — see model.TimelineEntry.
+func summarizeEntry(e model.TimelineEntry) ui.TimelineRow {
+	row := ui.TimelineRow{At: e.At, Type: e.Type}
+	switch e.Type {
 	case "state":
 		row.Label = "State change"
-		row.Summary = summarizeStateChange(e.obj)
+		row.Summary = summarizeStateChange(e.Change)
 	case "pr":
 		row.Label = "Pull request"
-		row.Summary = fmt.Sprintf("%s#%d %q %s", strField(e.obj, "repo"), i64Field(e.obj, "number"), strField(e.obj, "title"), strField(e.obj, "state"))
-		row.URL = strField(e.obj, "url")
+		row.Summary = fmt.Sprintf("%s#%d %q %s", e.Repo, e.Number, e.Title, e.State)
+		row.URL = e.URL
 	case "ci":
 		row.Label = "CI run"
-		summary := fmt.Sprintf("%s: %s", strField(e.obj, "workflow"), strField(e.obj, "status"))
-		if c := strPtrField(e.obj, "conclusion"); c != "" {
-			summary += " (" + c + ")"
+		summary := fmt.Sprintf("%s: %s", e.Workflow, e.Status)
+		if e.Conclusion != nil && *e.Conclusion != "" {
+			summary += " (" + *e.Conclusion + ")"
 		}
 		row.Summary = summary
-		row.URL = strField(e.obj, "url")
+		row.URL = e.URL
 	case "review":
 		row.Label = "Review"
-		row.Summary = fmt.Sprintf("%s: %s", strField(e.obj, "reviewer"), strField(e.obj, "state"))
+		row.Summary = fmt.Sprintf("%s: %s", e.Reviewer, e.State)
 	case "artifact":
 		row.Label = "Artifact"
-		row.Summary = fmt.Sprintf("%s %s %s built", strField(e.obj, "kind"), strField(e.obj, "name"), strField(e.obj, "version"))
+		row.Summary = fmt.Sprintf("%s %s %s built", e.Kind, e.Name, e.Version)
 	case "deployment":
 		row.Label = "Deployment"
-		row.Summary = fmt.Sprintf("%s (%s): %s", strField(e.obj, "environment"), strField(e.obj, "target_name"), strField(e.obj, "status"))
+		row.Summary = fmt.Sprintf("%s (%s): %s", e.Environment, e.TargetName, e.Status)
 	case "runtime":
 		row.Label = "Runtime event"
-		row.Summary = fmt.Sprintf("%s on %s/%s: %s", strField(e.obj, "kind"), strField(e.obj, "cluster"), strField(e.obj, "workload"), strField(e.obj, "message"))
+		row.Summary = fmt.Sprintf("%s on %s/%s: %s", e.Kind, e.Cluster, e.Workload, e.Message)
 	case "landed":
 		row.Label = "Landed"
-		row.Summary = fmt.Sprintf("%s %s on main", strField(e.obj, "repo"), shortSHA(strField(e.obj, "sha")))
+		row.Summary = fmt.Sprintf("%s %s on main", e.Repo, shortSHA(e.SHA))
 	case "deployed":
 		row.Label = "Delivered"
-		row.Summary = fmt.Sprintf("%s confirmed in %s", strField(e.obj, "repo"), strField(e.obj, "environment"))
+		row.Summary = fmt.Sprintf("%s confirmed in %s", e.Repo, e.Environment)
 	case "released":
 		row.Label = "Released"
-		row.Summary = fmt.Sprintf("%s %s", strField(e.obj, "repo"), strField(e.obj, "tag"))
+		row.Summary = fmt.Sprintf("%s %s", e.Repo, e.Tag)
 	default:
-		row.Label = typ
+		row.Label = e.Type
 	}
 	return row
 }
@@ -367,11 +367,7 @@ type stateChange struct {
 // summarizeStateChange decodes a state-log "change" payload (written by
 // store.LogChange: {"field": ..., "old": ..., "new": ...}, "old" omitted for
 // a plain field update) into a one-line summary.
-func summarizeStateChange(obj map[string]any) string {
-	raw, ok := obj["change"].(json.RawMessage)
-	if !ok {
-		return ""
-	}
+func summarizeStateChange(raw json.RawMessage) string {
 	var change stateChange
 	if err := json.Unmarshal(raw, &change); err != nil {
 		return ""
@@ -388,21 +384,4 @@ func shortSHA(sha string) string {
 		return sha[:8]
 	}
 	return sha
-}
-
-func strField(m map[string]any, k string) string {
-	v, _ := m[k].(string)
-	return v
-}
-
-func strPtrField(m map[string]any, k string) string {
-	if v, ok := m[k].(*string); ok && v != nil {
-		return *v
-	}
-	return ""
-}
-
-func i64Field(m map[string]any, k string) int64 {
-	v, _ := m[k].(int64)
-	return v
 }
