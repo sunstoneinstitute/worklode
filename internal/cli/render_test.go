@@ -283,3 +283,65 @@ func TestEventStreamRow(t *testing.T) {
 		t.Errorf("source column not aligned across rows:\n%s", buf.String())
 	}
 }
+
+// TestBoardHolderShowsUsernameAndTimeLeft pins the HOLDER cell to
+// "stig (1h14m left)". Actor ids are Keycloak preferred_username values, which
+// in a realm that logs users in by email carry a domain the column has no room
+// for, and an absolute expiry timestamp makes the reader do the subtraction.
+func TestBoardHolderShowsUsernameAndTimeLeft(t *testing.T) {
+	var buf bytes.Buffer
+	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
+		ID: "proj", Name: "Proj",
+		InProgress: []BoardTask{{
+			Task: Task{ID: "WL-1", Title: "Work", Priority: "medium"},
+			Holder: &Holder{
+				ActorID:   "stig@sunstoneinstitute.ai",
+				ExpiresAt: time.Now().Add(74*time.Minute + 30*time.Second),
+			},
+		}},
+	}}})
+	got := buf.String()
+	if !strings.Contains(got, "stig (1h14m left)") {
+		t.Fatalf("holder cell is not %q:\n%s", "stig (1h14m left)", got)
+	}
+	if strings.Contains(got, "sunstoneinstitute.ai") {
+		t.Fatalf("the email domain is still in the holder cell:\n%s", got)
+	}
+}
+
+// TestLeaseLeft covers the boundaries of the remaining-lease rendering: a
+// sub-minute lease must not read as "0m left", and an expired one must say so
+// rather than counting backwards.
+func TestLeaseLeft(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		in   time.Duration
+		want string
+	}{
+		{2 * time.Hour, "2h0m left"},
+		{74*time.Minute + 30*time.Second, "1h14m left"},
+		{59 * time.Minute, "59m left"},
+		{30 * time.Second, "<1m left"},
+		{0, "expired"},
+		{-time.Hour, "expired"},
+	} {
+		if got := leaseLeft(now.Add(tc.in), now); got != tc.want {
+			t.Errorf("leaseLeft(+%s) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestActorName keeps the shortening conservative: only an email-shaped id
+// loses anything, and an id that is already a bare username is untouched.
+func TestActorName(t *testing.T) {
+	for in, want := range map[string]string{
+		"stig@sunstoneinstitute.ai": "stig",
+		"agent-1":                   "agent-1",
+		"@example.com":              "@example.com",
+		"":                          "",
+	} {
+		if got := actorName(in); got != want {
+			t.Errorf("actorName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

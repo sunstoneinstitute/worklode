@@ -333,10 +333,11 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 		titleColumn("TITLE"),
 		holderColumn("HOLDER"),
 	)
+	now := time.Now()
 	for _, t := range rows {
 		holder := "-"
 		if t.Holder != nil {
-			holder = fmt.Sprintf("%s (until %s)", t.Holder.ActorID, localTime(t.Holder.ExpiresAt))
+			holder = fmt.Sprintf("%s (%s)", actorName(t.Holder.ActorID), leaseLeft(t.Holder.ExpiresAt, now))
 		}
 		id := t.ID
 		if _, ok := pos[t.Parent]; ok {
@@ -345,6 +346,37 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 		tbl.add(id, t.Priority, t.Title, holder)
 	}
 	tbl.flush(w)
+}
+
+// actorName shortens an actor id for a table cell. Ids are Keycloak
+// preferred_username values, so in a realm that logs users in by email they
+// arrive as "stig@sunstoneinstitute.ai" and the domain is the same for
+// everyone on the board — noise in a column that has to fit beside a title.
+// Anything that is not email-shaped is left alone.
+func actorName(actorID string) string {
+	if local, _, ok := strings.Cut(actorID, "@"); ok && local != "" {
+		return local
+	}
+	return actorID
+}
+
+// leaseLeft renders how much of a lease is left, e.g. "1h14m left". The board
+// is read to decide whether a task is still being worked, which an absolute
+// expiry timestamp answers only after the reader does the subtraction. A lease
+// with seconds to go reads "<1m left" rather than "0m left", and one already
+// past its expiry says so instead of counting backwards.
+func leaseLeft(expiresAt, now time.Time) string {
+	d := expiresAt.Sub(now)
+	switch {
+	case d <= 0:
+		return "expired"
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh%dm left", int(d/time.Hour), int(d%time.Hour/time.Minute))
+	case d >= time.Minute:
+		return fmt.Sprintf("%dm left", int(d/time.Minute))
+	default:
+		return "<1m left"
+	}
 }
 
 // TimelineRender prints one line per entry: timestamp, type, and a

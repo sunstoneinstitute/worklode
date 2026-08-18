@@ -37,8 +37,8 @@ type column struct {
 }
 
 // Minimum widths for the two flexible column kinds. A title needs enough room
-// that word wrapping still produces readable lines; a holder ("actor (until
-// <time>)") is char-wrapped, and 16 keeps the actor id on the first line.
+// that word wrapping still produces readable lines; a holder ("stig (1h14m
+// left)") is char-wrapped, and 16 keeps the actor name on the first line.
 const (
 	minTitleWidth  = 20
 	minHolderWidth = 16
