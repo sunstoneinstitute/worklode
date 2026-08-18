@@ -22,6 +22,17 @@ repos:
         entry: scripts/secfmt.py -l -w
         language: script
         files: ^docs/specs/.*\.md$
+      # Rewrites like secfmt above. The views are a function of the *whole*
+      # corpus — an amendment added to one spec changes another spec's view — so
+      # this regenerates all of them whenever any spec changes, and never just
+      # the files this commit touched. Exits 1 after writing, so the author
+      # stages the regenerated views with the edit that caused them.
+      - id: inlined-specs
+        name: consolidated spec views
+        entry: scripts/inlinespec.py
+        language: script
+        files: ^docs/specs/.*\.md$
+        pass_filenames: false
       # Reports, never rewrites: a frontmatter value is a claim about the corpus,
       # so a wrong one is fixed by deciding what it should say. Runs over the
       # whole corpus because a reference breaks from the far end — deleting an

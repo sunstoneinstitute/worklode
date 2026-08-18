@@ -40,7 +40,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # importing secfmt must not litter scripts/
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from secfmt import split_front_matter  # noqa: E402
+from secfmt import generated, split_front_matter  # noqa: E402
 
 try:
     import yaml
@@ -387,7 +387,11 @@ def main():
     files = []
     for p in a.paths:
         p = Path(p)
-        files.extend(sorted(p.rglob("*.md")) if p.is_dir() else [p])
+        files.extend(
+            sorted(q for q in p.rglob("*.md") if not generated(q))
+            if p.is_dir()
+            else [p]
+        )
     files = [f for f in files if f.name != "index.yaml"]
 
     anchors, problems = {}, {}

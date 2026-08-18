@@ -52,6 +52,21 @@ import sys
 from pathlib import Path
 
 
+GENERATED_DIR = "inlined"
+
+
+def generated(path):
+    """True for a file under a generated view directory (docs/specs/inlined).
+
+    Those files are rendered from the corpus by scripts/inlinespec.py, not
+    written: they carry no frontmatter, and their headings are one spec's
+    numbering with borrowed text folded in. Neither this formatter nor
+    secmeta.py has anything to say about them, and a walk that picked them up
+    would report the generator's output as the author's defect.
+    """
+    return GENERATED_DIR in Path(path).parts
+
+
 def err(message):
     """Print a diagnostic to stderr, red when a terminal is there to read it."""
     if sys.stderr.isatty() and not os.environ.get("NO_COLOR"):
@@ -254,7 +269,7 @@ def collect(paths):
     for p in paths:
         p = Path(p)
         if p.is_dir():
-            out += sorted(q for q in p.rglob("*.md"))
+            out += sorted(q for q in p.rglob("*.md") if not generated(q))
         elif p.suffix == ".md":
             out.append(p)
     return out
