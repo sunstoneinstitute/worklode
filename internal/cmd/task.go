@@ -480,6 +480,7 @@ func newTaskClaimCmd() *cobra.Command {
 	var worktree string
 	var ttl time.Duration
 	var next, strictFocus, dryRun bool
+	var kind string
 	var scope scopeFlags
 	cmd := &cobra.Command{
 		Use:   "claim [id]",
@@ -539,7 +540,7 @@ func newTaskClaimCmd() *cobra.Command {
 			}
 
 			in := model.ClaimNextInput{
-				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree,
+				Project: sc.Project, Kind: kind, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree,
 			}
 			if ttl > 0 {
 				in.TTLSeconds = int(ttl.Seconds())
@@ -576,6 +577,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
 	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
+	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, spec, review, spike")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd
