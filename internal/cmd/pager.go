@@ -22,10 +22,16 @@ func withPager(cmd *cobra.Command, requested bool) func() {
 	if w == nil {
 		return func() {}
 	}
-	original := cmd.OutOrStdout()
 	cmd.SetOut(w)
 	return func() {
-		cmd.SetOut(original)
+		// nil clears cmd's own writer so OutOrStdout falls back to its
+		// parent's again — the same inheritance cmd had before this call.
+		// Restoring a *resolved* snapshot (cmd.OutOrStdout() as captured
+		// before SetOut) would instead pin that snapshot permanently onto
+		// cmd, breaking inheritance for any later caller that changes the
+		// parent's writer (e.g. a long-lived command tree reused across
+		// tests).
+		cmd.SetOut(nil)
 		cleanup()
 	}
 }
