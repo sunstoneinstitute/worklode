@@ -102,14 +102,19 @@ embeds it. Field names are wire names (`Project`, not `ProjectID`). Only three
 kinds of type stay package-local: `internal/ui` view types (page-shell state
 and pre-formatted strings, composing model types), `internal/store` scan
 plumbing, and `internal/api` transport internals (`Subject`, sessions, route
-guards). Anything else needs an amendment to 036, not a new struct. Every
-*named* wire struct has moved, and `internal/model/rule_test.go` fails the
-build on a json-tagged struct declared in `internal/api` or `internal/cli`;
-its `allowed` map grows only for a type serialized somewhere other than an
-HTTP body — with a comment saying where. `internal/model/deps_test.go` keeps
-the package a stdlib-only leaf. What the guard cannot see is a handler that
-builds its body as an anonymous struct or a `map[string]any`; a few remain,
-and they are the one way left to reintroduce the drift 036 exists to stop.
+guards). Anything else needs an amendment to 036, not a new struct.
+
+`internal/model/rule_test.go` decides this (036 §8). It fails the build on a
+json-tagged struct — named *or* anonymous — declared in `internal/api` or
+`internal/cli`, and on a map handed to an HTTP body argument (`writeJSON`'s
+third argument, the CLI client's `do` body), including one built up over
+several statements. `internal/cmd` is held only to the anonymous-shape rule:
+its json-tagged types are `--json` stdout contracts, which cross no HTTP
+boundary, but they must be named. The `allowed` map grows only for a type
+serialized somewhere other than an HTTP body — keyed by package, with the
+reason — and a stale entry is reported. What the guard still cannot see is a
+body assembled by a helper that returns a map, or marshalled to bytes first.
+`internal/model/deps_test.go` keeps the package a stdlib-only leaf.
 
 Every route is guarded through one table. `internal/api/router.go`'s
 `routeGuards` names the permission each route requires — or `open("why")` when

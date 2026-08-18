@@ -113,3 +113,38 @@ needs no amendment.
 
 Spec 004 §1 and §7 continue to own what a task *is* and how it is stored. This
 ADR governs only how many Go declarations that one meaning gets.
+
+## 8. Enforcement {#sec-8}
+
+`internal/model/rule_test.go` decides §2 mechanically, because a rule about
+how many declarations a shape gets is one nobody can hold in their head
+across a year of handlers. It reports three things:
+
+- a **named** json-tagged struct declared in `internal/api` or
+  `internal/cli` — the original check;
+- an **anonymous** json-tagged struct in either, or in `internal/cmd`.
+  Deleting the type name is the cheapest way past a declaration check, and
+  an undeclared body is exactly what this ADR forbids;
+- a **map handed to an HTTP body argument** — `writeJSON`'s third argument
+  or the CLI client's `do` body, including one assembled over several
+  statements. A map literal is a wire shape with no struct to find.
+
+`internal/cmd` is held only to the anonymous-shape rule. Its json-tagged
+types are `--json` stdout contracts: they cross no HTTP boundary and have one
+declaration by construction, so §2's test does not select them. They must
+still be named — a contract nobody can grep for is one nobody reviews.
+
+Exemptions live in the test's `allowed` map, keyed by package and type and
+carrying the reason (a cookie, a state parameter, an on-disk file — §3). An
+entry that matches no declaration is reported as stale, the way
+`internal/api/router.go` treats an unused route guard.
+
+Two failure modes of the guard itself are covered rather than assumed: it
+fails when a scanned package parses no files, so renaming or splitting one
+cannot turn it green while it inspects nothing, and `TestGuardCatchesTheDodges`
+runs the checks over known-bad source so each rule is known to still match
+something.
+
+What it does not see: a body assembled by a helper that returns a map, or
+marshalled to bytes before it reaches a body argument. Both take deliberate
+work to arrange; the cases above are what a handler reaches for by accident.
