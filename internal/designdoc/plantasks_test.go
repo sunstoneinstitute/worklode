@@ -481,26 +481,19 @@ Nothing here.
 // blocked as WL-70 on an unresolved decision about where the wl: vocabulary
 // lives. This test instead mirrors internal/api's validKinds
 // (internal/api/tasks.go), the live hand-kept mirror of the tasks.kind
-// CHECK constraint added by migration 0017 — the closest thing to a single
+// CHECK constraint added by migration 0025 — the closest thing to a single
 // source of truth that exists in the tree today. validKinds is unexported
 // and internal/api cannot be imported from here without a real dependency
 // (internal/api already imports internal/designdoc's sibling packages one
 // layer up the stack, so the reverse import would risk a cycle), so the
 // constraint is reproduced verbatim from its two sources instead of
-// imported: internal/api/tasks.go's validKinds map and migration 0017's own
+// imported: internal/api/tasks.go's validKinds map and migration 0025's own
 // CHECK list, which a repo-level test (TestTaskKindsAgreeAcrossSources)
 // already holds in sync with each other.
-//
-// One rename is not yet live: 025 renames the "spec" kind to "design"
-// (CLAUDE.md; docs/authoring-design-docs.md's plan-task-format table), but
-// that rename has not reached ns/concept.ttl, migration 0017 or validKinds —
-// tracked alongside WL-70. So the comparison below normalises "design" back
-// to "spec" before comparing, which still catches any other drift between
-// the plan-mintable subset and the live kind set.
 func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
-	// internal/api/tasks.go:20-25 (migration 0017's CHECK constraint mirror).
+	// internal/api/tasks.go:20-25 (migration 0025's CHECK constraint mirror).
 	liveKinds := map[string]bool{
-		"feature": true, "bug": true, "chore": true, "spec": true,
+		"feature": true, "bug": true, "chore": true, "design": true,
 		"review": true, "spike": true,
 	}
 	want := make([]string, 0, len(liveKinds))
@@ -514,14 +507,9 @@ func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
 
 	got := make([]string, len(planMintableKinds))
 	copy(got, planMintableKinds)
-	for i, k := range got {
-		if k == "design" { // pending rename, see comment above
-			got[i] = "spec"
-		}
-	}
 	sort.Strings(got)
 
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("planMintableKinds (normalised) = %v, want %v", got, want)
+		t.Errorf("planMintableKinds = %v, want %v", got, want)
 	}
 }

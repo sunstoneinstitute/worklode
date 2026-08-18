@@ -33,16 +33,16 @@ func validSecretNames(names []string) bool {
 // validSecretNames, so the message cannot drift from the grammar.
 const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
 
-// validKinds mirrors the tasks.kind CHECK constraint (migration 0017) and
+// validKinds mirrors the tasks.kind CHECK constraint (migration 0025) and
 // wlc:TaskKind in ns/concept.ttl; all three carry the same six kinds.
 var validKinds = map[string]bool{
-	"feature": true, "bug": true, "chore": true, "spec": true,
+	"feature": true, "bug": true, "chore": true, "design": true,
 	"review": true, "spike": true,
 }
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
 // message cannot drift from the map when a kind is added.
-const invalidKindMsg = "invalid kind: must be feature, bug, chore, spec, review, or spike"
+const invalidKindMsg = "invalid kind: must be feature, bug, chore, design, review, or spike"
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,

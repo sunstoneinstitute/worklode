@@ -45,7 +45,7 @@ const maxWebForm = 256 << 10
 
 // webTaskKinds are the kinds the new-task form offers, in menu order. It
 // mirrors validKinds exactly; a test holds the two together.
-var webTaskKinds = []string{"feature", "bug", "chore", "spec", "review", "spike"}
+var webTaskKinds = []string{"feature", "bug", "chore", "design", "review", "spike"}
 
 // webTaskPriorities are the priorities the new-task form offers, most urgent
 // first, mirroring validPriorities.
