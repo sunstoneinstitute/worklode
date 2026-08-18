@@ -363,6 +363,51 @@ func TestClaimNextSoftFocusNeverIdles(t *testing.T) {
 // labelled needs_decomposition is excluded from the ready set even when it
 // is the only ready task, so ClaimNext reports no claim rather than an
 // error.
+// TestClaimNextKindFilter pins WL-95: Kind narrows the candidate set before
+// ranking runs, the same way ProjectID does — a higher-ranked task of a
+// different kind must not shadow the top-ranked candidate of the requested
+// kind.
+func TestClaimNextKindFilter(t *testing.T) {
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+
+	feature := defaultTaskInput()
+	feature.Priority = "critical"
+	feature.Kind = "feature"
+	critFeature := createTask(t, s, claimNextTestNow, feature)
+
+	chore := defaultTaskInput()
+	chore.Priority = "low"
+	chore.Kind = "chore"
+	lowChore := createTask(t, s, claimNextTestNow, chore)
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{Kind: "chore", ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !res.Claimed || res.Task == nil || res.Task.ID != lowChore.ID {
+		t.Fatalf("ClaimNext kind=chore: got %+v, want claim of %s (not the higher-ranked %s feature)", res, lowChore.ID, critFeature.ID)
+	}
+	mustState(t, s, lowChore.ID, "in_progress")
+	mustState(t, s, critFeature.ID, "ready")
+}
+
+// TestClaimNextKindFilterNoMatch pins the empty-result shape: a kind filter
+// that matches nothing behaves like an empty ready set, not an error.
+func TestClaimNextKindFilterNoMatch(t *testing.T) {
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+	createTask(t, s, claimNextTestNow, defaultTaskInput()) // kind "feature"
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{Kind: "chore", ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if res.Claimed || res.Task != nil {
+		t.Fatalf("ClaimNext kind=chore with only a feature ready: got %+v, want Claimed:false Task:nil", res)
+	}
+}
+
 func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	s := openClaimNextStore(t)
 	ctx := t.Context()

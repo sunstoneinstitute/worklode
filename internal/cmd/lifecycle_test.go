@@ -430,6 +430,48 @@ func TestNextClaimsTopRankedWithNoID(t *testing.T) {
 	}
 }
 
+// TestNextKindFilter pins WL-95: --kind narrows the candidate set before
+// ranking runs, so a higher-ranked task of a different kind does not shadow
+// the top-ranked candidate of the requested kind.
+func TestNextKindFilter(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	if _, _, err := c.CreateTask(ctx, model.CreateTaskInput{
+		Project: "proj", Title: "Critical feature", Priority: "critical", Kind: "feature",
+	}); err != nil {
+		t.Fatalf("create feature task: %v", err)
+	}
+	chore, _, err := c.CreateTask(ctx, model.CreateTaskInput{
+		Project: "proj", Title: "Low chore", Priority: "low", Kind: "chore",
+	})
+	if err != nil {
+		t.Fatalf("create chore task: %v", err)
+	}
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "next", "--kind", "chore", "--json")
+	if err != nil {
+		t.Fatalf("lode next --kind chore: %v\noutput: %s", err, out)
+	}
+	var result struct {
+		Claimed bool   `json:"claimed"`
+		Branch  string `json:"branch"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if !result.Claimed {
+		t.Fatalf("claimed = false, want true")
+	}
+	wantBranch := chore.ID + "-low-chore"
+	if result.Branch != wantBranch {
+		t.Fatalf("branch = %q, want %q (the chore, not the higher-ranked feature)", result.Branch, wantBranch)
+	}
+}
+
 func TestNextNoReadyTask(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
