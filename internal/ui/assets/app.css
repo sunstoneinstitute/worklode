@@ -655,12 +655,14 @@ nav.local a .cnt {
 }
 @media (max-width:880px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0,1fr);
+    grid-template-rows: auto minmax(0,1fr);
   }
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
     padding: 10px 14px;
+    min-width: 0;
   }
   nav.global,nav.local {
     flex-direction: row;
