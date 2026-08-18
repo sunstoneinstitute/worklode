@@ -26,6 +26,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -587,7 +588,7 @@ func (s *server) syncOnce(ctx context.Context, reason string) {
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, model.HealthResponse{Status: "ok"})
 }
 
 // statusWriter captures the response status for logging and metrics.
@@ -701,7 +702,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
+	writeJSON(w, code, model.ErrorResponse{Error: msg})
 }
 
 // maxAPIBody caps /api/v1 request bodies at 1 MiB; larger bodies get 413.

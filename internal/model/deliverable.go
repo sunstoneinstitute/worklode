@@ -17,6 +17,12 @@ type Deliverable struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// DeliverableListResponse is the response body of GET
+// /api/v1/projects/{id}/deliverables.
+type DeliverableListResponse struct {
+	Deliverables []Deliverable `json:"deliverables"`
+}
+
 // CreateDeliverableInput is the request body for declaring a deliverable
 // (POST /api/v1/projects/{id}/deliverables).
 type CreateDeliverableInput struct {

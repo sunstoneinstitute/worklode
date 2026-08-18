@@ -272,17 +272,13 @@ func exchangeCLIToken(ctx context.Context, client *http.Client, tokenURL, code, 
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		msg := strings.TrimSpace(string(data))
-		var e map[string]string
-		if json.Unmarshal(data, &e) == nil && e["error"] != "" {
-			msg = e["error"]
+		var e model.ErrorResponse
+		if json.Unmarshal(data, &e) == nil && e.Error != "" {
+			msg = e.Error
 		}
 		return nil, &ClientError{Status: resp.StatusCode, Msg: msg}
 	}
-	var r struct {
-		Token     string `json:"token"`
-		ActorID   string `json:"actor_id"`
-		ExpiresAt string `json:"expires_at"`
-	}
+	var r model.MintedToken
 	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, fmt.Errorf("decode token response: %w", err)
 	}

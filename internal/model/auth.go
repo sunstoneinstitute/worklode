@@ -21,3 +21,20 @@ type CLITokenInput struct {
 	Code  string `json:"code"`
 	State string `json:"state"`
 }
+
+// MintedToken is the response body of both token exchanges (POST
+// /auth/cli/token and POST /auth/oidc/token): the freshly minted wl_ token,
+// who it belongs to, and when it expires. ExpiresAt is RFC 3339 text rather
+// than a time.Time because the CLI stores and prints it verbatim.
+type MintedToken struct {
+	Token     string `json:"token"`
+	ActorID   string `json:"actor_id"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// OIDCConfig is the response body of GET /auth/oidc/config: what a CLI needs
+// to run the auth-code flow itself.
+type OIDCConfig struct {
+	Issuer   string `json:"issuer"`
+	ClientID string `json:"client_id"`
+}

@@ -110,6 +110,18 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	return writeDocShow(cmd, resolved.Path, section, []byte(text))
 }
 
+// unresolvedResult is the --json shape of a tier-3 UnresolvedError.
+type unresolvedResult struct {
+	Unresolved string `json:"unresolved"`
+}
+
+// docShowResult is the --json shape of `lode doc show` (026 §3).
+type docShowResult struct {
+	Path    string `json:"path"`
+	Section string `json:"section"`
+	Content string `json:"content"`
+}
+
 // writeUnresolved prints a tier-3 UnresolvedError: the bare message on
 // stdout normally, or, under --json, {"unresolved": "<message>"} alone (no
 // path/section/content — there is no document to report them for). Either
@@ -119,9 +131,7 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 		fmt.Fprintln(cmd.OutOrStdout(), err.Error())
 		return nil
 	}
-	b, jerr := json.Marshal(struct {
-		Unresolved string `json:"unresolved"`
-	}{Unresolved: err.Error()})
+	b, jerr := json.Marshal(unresolvedResult{Unresolved: err.Error()})
 	if jerr != nil {
 		return fmt.Errorf("encode result: %w", jerr)
 	}
@@ -137,11 +147,9 @@ func writeDocShow(cmd *cobra.Command, path, section string, content []byte) erro
 		cmd.OutOrStdout().Write(content)
 		return nil
 	}
-	b, err := json.Marshal(struct {
-		Path    string `json:"path"`
-		Section string `json:"section"`
-		Content string `json:"content"`
-	}{Path: path, Section: section, Content: string(content)})
+	b, err := json.Marshal(docShowResult{
+		Path: path, Section: section, Content: string(content),
+	})
 	if err != nil {
 		return fmt.Errorf("encode result: %w", err)
 	}

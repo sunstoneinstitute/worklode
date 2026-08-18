@@ -301,12 +301,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 	}
 
 	if jsonOut(cmd) {
-		out := struct {
-			Claimed  bool            `json:"claimed"`
-			Worktree string          `json:"worktree"`
-			Branch   string          `json:"branch"`
-			Brief    json.RawMessage `json:"brief"`
-		}{Claimed: true, Worktree: dir, Branch: branch, Brief: json.RawMessage(briefRaw)}
+		out := nextResult{
+			Claimed: true, Worktree: dir, Branch: branch,
+			Brief: json.RawMessage(briefRaw),
+		}
 		b, err := json.Marshal(out)
 		if err != nil {
 			return fmt.Errorf("encode result: %w", err)
@@ -482,6 +480,15 @@ func newBlockCmd() *cobra.Command {
 	cmd.Flags().StringVar(&on, "on", "", "id of the blocking task (required)")
 	cmd.MarkFlagRequired("on")
 	return cmd
+}
+
+// nextResult is the --json shape of `lode next`. Brief is the brief response
+// forwarded verbatim, so the two never disagree about its shape.
+type nextResult struct {
+	Claimed  bool            `json:"claimed"`
+	Worktree string          `json:"worktree"`
+	Branch   string          `json:"branch"`
+	Brief    json.RawMessage `json:"brief"`
 }
 
 // statusResult is the --json shape of `lode status`.
