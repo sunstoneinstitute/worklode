@@ -4,7 +4,7 @@ requires:
 - 001-identity-and-authentication.md
 - 029-research-work-in-the-backbone.md
 ---
-# Spec 037 — Worklode prod in the admin cluster
+# Spec 039 — Worklode prod in the admin cluster
 
 ## 0. Purpose & scope {#sec-0}
 
