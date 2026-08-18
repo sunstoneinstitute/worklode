@@ -117,6 +117,12 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
+	// --- secrets (spec 017) ---------------------------------------------------
+	// Metadata only — names, purposes and op:// references, never values —
+	// but vault and item names describe the org's secret topology, so the
+	// route is authenticated like any other.
+	"GET /api/v1/secrets/catalog": guarded(permSecretRead),
+
 	// --- delivery ------------------------------------------------------------
 	// Reporting a merge advances tasks, so it needs the same permission the
 	// done/abandon endpoints do. The webhook reporter carries no actor and is
