@@ -85,6 +85,38 @@ func TestTableCharWrapsHolderUnderPressure(t *testing.T) {
 	}
 }
 
+// TestCharColumnTakesWholeSteps checks the rule that keeps a char-wrapped
+// column from spilling an orphan: it is only ever given its longest value
+// split over one, two, three or four lines. A width in between would break the
+// last line a few characters early while the title beside it holds the room
+// that would have avoided the wrap.
+func TestCharColumnTakesWholeSteps(t *testing.T) {
+	holder := "agent-1 (until 2026-08-16T12:00:00+02:00)" // 41 columns
+	tbl := boardLike("Word-wrap the title column so board rows never wrap the terminal, at length", holder)
+	steps := map[int]bool{41: true, 21: true, 16: true} // ceil(41/k), floored at the minimum
+	for width := 40; width <= 140; width++ {
+		got := tbl.layout(width)[3]
+		if !steps[got] {
+			t.Fatalf("at terminal width %d the holder column got %d columns, which is not one of %v",
+				width, got, steps)
+		}
+	}
+}
+
+// TestCharColumnStepFreesRoomForTheTitle checks that the width a step gives up
+// is handed to the title rather than left unused — a 120-column terminal must
+// render a 120-column table.
+func TestCharColumnStepFreesRoomForTheTitle(t *testing.T) {
+	var b strings.Builder
+	tbl := boardLike("Word-wrap the title column so board rows never wrap the terminal, at length",
+		"agent-1 (until 2026-08-16T12:00:00+02:00)")
+	tbl.render(&b, 100)
+	got := lines(b.String())
+	if w := widest(got); w != 100 {
+		t.Fatalf("widest line is %d columns, not the 100 available:\n%s", w, b.String())
+	}
+}
+
 func TestTableGivesUpBelowMinimums(t *testing.T) {
 	// Narrower than the fixed columns plus both minimums: the table must
 	// still render every cell rather than dropping or truncating anything.
