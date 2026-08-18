@@ -34,4 +34,5 @@ These files do that resolution once.
 - [`029-research-work-in-the-backbone.md`](029-research-work-in-the-backbone.md) — Spec 029 — Research work in the backbone: projects, milestones, deliverables, approvals (draft)
 - [`032-project-cockpit.md`](032-project-cockpit.md) — Spec 032 — Project cockpit (draft)
 - [`036-one-model-across-packages.md`](036-one-model-across-packages.md) — ADR 036 — One model across packages (draft)
+- [`037-vendored-design-skills.md`](037-vendored-design-skills.md) — Spec 037 — Vendored design skills (draft)
 - [`038-worklode-in-a-cloud-sandbox.md`](038-worklode-in-a-cloud-sandbox.md) — Spec 038 — Worklode in a cloud sandbox (draft)
