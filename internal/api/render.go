@@ -61,8 +61,9 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 }
 
 // timelineRows maps a task's timeline entries into rendered rows via
-// summarizeEntry (which stays in api because it reads api's timelineEntry).
-func timelineRows(entries []timelineEntry) []ui.TimelineRow {
+// summarizeEntry (which stays in api: internal/ui takes pre-formatted rows,
+// not the raw entries).
+func timelineRows(entries []model.TimelineEntry) []ui.TimelineRow {
 	out := make([]ui.TimelineRow, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, summarizeEntry(e))

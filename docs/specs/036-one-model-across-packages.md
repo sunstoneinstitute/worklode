@@ -128,7 +128,14 @@ across a year of handlers. It reports three things:
 - a **map handed to an HTTP body argument** — `writeJSON`'s third argument
   or the CLI client's `do` body, whether written inline, built up over
   several statements, or made with `make`. A map body is a wire shape with
-  no struct to find.
+  no struct to find;
+- a **json-tagged `map[...]any` field in `internal/model` itself**, directly
+  or under a slice or pointer. Moving a shape into `internal/model` and
+  leaving it a map satisfies every rule above while keeping this ADR's
+  problem intact: an envelope with a name around entries with none. Only
+  `any`-valued maps are reported — a `map[string]string` is a dictionary
+  whose shape is fully stated, and an opaque stored payload passing through
+  is `json.RawMessage` (§3), not a map.
 
 How much of that a package is held to depends on who else declares its
 shapes:
@@ -155,12 +162,19 @@ something, and a scanned package that parses no files is a failure, so
 renaming or splitting one cannot turn the guard green while it inspects
 nothing.
 
-What it does not see:
+What it does not see: a body assembled by a helper that returns a map, or
+marshalled to bytes before it reaches a body argument. Both take deliberate
+work to arrange; the cases above are what a handler reaches for by accident.
 
-- a **map nested inside a declared type** — `model.TimelineResponse.Timeline`
-  is a `[]map[string]any` whose ten entry shapes are built by hand in
-  `internal/api/timeline.go`. A declared envelope around undeclared shapes is
-  this ADR's problem in its original form, and the check cannot reach it;
-- a body assembled by a helper that returns a map, or marshalled to bytes
-  before it reaches a body argument. Both take deliberate work to arrange;
-  the cases above are what a handler reaches for by accident.
+The timeline was this ADR's one deferred shape and is now typed.
+`model.TimelineEntry` is a flat union discriminated by `type`: `at` and
+`type` on every entry, the rest `omitempty` and populated per type. A per-type
+struct behind a `payload` object was the alternative and was not taken — the
+entries are flat on the wire, six fields are shared by two or more of the ten
+types, and Go has no sum type that would buy a consumer exhaustiveness
+checking for the nesting it would cost. A consumer switches on `type` either
+way; the difference is only whether the fields it then reads are declared.
+`change` stays a `json.RawMessage`: it is a stored `state_log` payload passing
+through, and `LogChange` writes `{"field","old","new"}` for a field update but
+`{"field","names"}` for materialized secrets, so there is no one struct to
+decode it into (§3).

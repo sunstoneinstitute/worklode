@@ -254,6 +254,123 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 	return msgs
 }
 
+// TestModelDeclaresNoUntypedMaps closes the loophole the checks above cannot
+// see: a `map[string]any` nested inside a declared type. Moving a shape into
+// internal/model and leaving it a map satisfies every other rule here while
+// keeping exactly the problem ADR 036 exists to fix — an envelope with a name
+// around entries with none. `model.TimelineResponse.Timeline` was that for one
+// release; it is `[]TimelineEntry` now (§8).
+//
+// Only `any`-valued maps are reported. A `map[string]string` is a dictionary
+// whose shape is fully stated; a `map[string]any` is a shape nobody wrote down.
+func TestModelDeclaresNoUntypedMaps(t *testing.T) {
+	fset := token.NewFileSet()
+	paths, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	parsed := 0
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		parsed++
+		for _, msg := range checkUntypedMaps(fset, path, file) {
+			t.Error(msg)
+		}
+	}
+	if parsed == 0 {
+		t.Error("no files parsed — the guard checked nothing")
+	}
+}
+
+// checkUntypedMaps reports json-tagged fields whose type is, or contains, a
+// map with an `any` value.
+func checkUntypedMaps(fset *token.FileSet, path string, file *ast.File) (msgs []string) {
+	base := filepath.Base(path)
+	ast.Inspect(file, func(n ast.Node) bool {
+		st, ok := n.(*ast.StructType)
+		if !ok {
+			return true
+		}
+		for _, f := range st.Fields.List {
+			if f.Tag == nil || !strings.Contains(f.Tag.Value, `json:"`) {
+				continue
+			}
+			if !containsAnyMap(f.Type) {
+				continue
+			}
+			name := "field"
+			if len(f.Names) > 0 {
+				name = f.Names[0].Name
+			}
+			msgs = append(msgs, fmt.Sprintf(
+				"%s:%d: %s is a map[...]any on the wire (ADR 036 §8) — declare "+
+					"the entry shape as a struct, or json.RawMessage if it is an "+
+					"opaque stored payload passing through",
+				base, fset.Position(f.Pos()).Line, name))
+		}
+		return true
+	})
+	return msgs
+}
+
+// containsAnyMap reports whether e is, or wraps, a map with an `any` value —
+// `map[string]any`, `[]map[string]any`, `*map[string]any`.
+func containsAnyMap(e ast.Expr) bool {
+	switch v := e.(type) {
+	case *ast.MapType:
+		if id, ok := v.Value.(*ast.Ident); ok && (id.Name == "any" || id.Name == "interface{}") {
+			return true
+		}
+		if it, ok := v.Value.(*ast.InterfaceType); ok && it.Methods.NumFields() == 0 {
+			return true
+		}
+		return containsAnyMap(v.Value)
+	case *ast.ArrayType:
+		return containsAnyMap(v.Elt)
+	case *ast.StarExpr:
+		return containsAnyMap(v.X)
+	}
+	return false
+}
+
+// TestUntypedMapGuardCatchesTheDodges holds checkUntypedMaps to the same bar
+// as the checks above: each shape it claims to catch must actually produce a
+// finding, and the shapes that are fine must not.
+func TestUntypedMapGuardCatchesTheDodges(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{"map field", "type R struct {\n\tX map[string]any `json:\"x\"`\n}", true},
+		{"slice of maps", "type R struct {\n\tX []map[string]any `json:\"x\"`\n}", true},
+		{"pointer to map", "type R struct {\n\tX *map[string]any `json:\"x\"`\n}", true},
+		{"empty interface value", "type R struct {\n\tX map[string]interface{} `json:\"x\"`\n}", true},
+		{"typed dictionary", "type R struct {\n\tX map[string]string `json:\"x\"`\n}", false},
+		{"raw payload", "type R struct {\n\tX json.RawMessage `json:\"x\"`\n}", false},
+		{"untagged internal map", "type R struct {\n\tX map[string]any\n}", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "bad.go", "package model\n"+tc.src, 0)
+			if err != nil {
+				t.Fatalf("parse case source: %v", err)
+			}
+			got := checkUntypedMaps(fset, "bad.go", file)
+			if tc.want != (len(got) > 0) {
+				t.Errorf("finding = %v, want a finding: %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // isMapValue reports whether e builds a map: a composite literal or a make.
 func isMapValue(e ast.Expr) bool {
 	switch v := e.(type) {
