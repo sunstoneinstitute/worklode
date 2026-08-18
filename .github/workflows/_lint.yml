@@ -1,0 +1,85 @@
+name: lint
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: >-
+          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          PR, '["self-hosted","gha-buildcache"]' for a trusted one. This job
+          needs the persistent Go cache that label marks — see
+          docs/self-hosted-runner.md.
+        type: string
+        default: '["ubuntu-latest"]'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Go cache paths
+        id: go-cache
+        if: "!contains(inputs.runs-on, 'gha-buildcache')"
+        run: |
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      # gha-buildcache skips this: GOCACHE/GOMODCACHE already persist on that
+      # runner's disk across runs (see docs/self-hosted-runner.md).
+      - name: Restore Go cache
+        if: "!contains(inputs.runs-on, 'gha-buildcache')"
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.mod }}
+            ${{ steps.go-cache.outputs.build }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt needs to be run on:" >&2
+            echo "$out" >&2
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: migration numbers
+        run: ./scripts/check-migrations.sh --no-fix
+      # Only reached on mixed or `can-be-tested` PRs — docs-only PRs skip this
+      # workflow, so the pre-commit hook is the primary gate.
+      - name: codex marketplace mirrors claude
+        run: ./scripts/sync-codex-marketplace.py --check
+      - name: check generated web artifacts
+        run: |
+          ./scripts/fetch-tailwind.sh
+          ./scripts/check-generated.sh
+      - name: section numbers
+        run: |
+          out=$(./scripts/secfmt.py -l) || status=$?
+          if [ -n "$out" ]; then
+            echo "secfmt needs to be run on:" >&2
+            echo "$out" >&2
+          fi
+          exit "${status:-0}"
+      # Checks rather than rewrites here: CI has nothing to stage. The
+      # pre-commit hook is the primary gate (docs-only PRs skip this workflow);
+      # this catches a mixed PR whose author committed without hooks installed.
+      - name: consolidated spec views
+        run: |
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
+          ./scripts/inlinespec.py --check
+      # Checks rather than rewrites, same reason as consolidated spec views above.
+      - name: docs section index
+        run: ./scripts/secindex.py --check
