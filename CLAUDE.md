@@ -8,7 +8,17 @@ server (`lode serve`), CLI client, Kubernetes pod watcher (`lode watch`), and
 migrator (`lode migrate`) in one, backed by Postgres with an append-only event
 log for provenance. Design lives in `docs/specs/` (numbered, flat); start with
 `004-execution-backbone.md`; `docs/specs/index.yaml` is the generated map of
-every document's sections. Implementation plans
+every document's sections.
+
+**To read what a spec says, open `docs/specs/inlined/` — not `docs/specs/`.**
+Each file there is one spec with every in-force amendment and supersession
+already folded into the text, attributed to the section it came from. Reading
+004 in `docs/specs/` tells you what 004 said when it was written; four other
+specs have amended it since, and resolving that by hand costs four extra file
+reads and gets it wrong when a claim comes from a document that is not accepted
+yet. `docs/specs/` stays the corpus of record — **edit there, never in
+`inlined/`** — and a pre-commit hook regenerates the views, so they are never
+behind. Implementation plans
 live in `docs/plans/`; `docs/follow-ups.md` holds known non-blocking gaps —
 check it before filing something as new.
 
@@ -19,6 +29,7 @@ go test ./internal/store -run TestClaim   # single test
 go test -race -count=1 -tags e2e ./e2e/   # e2e suite (build tag required)
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
+./scripts/inlinespec.py             # regenerate docs/specs/inlined/
 ```
 
 Cockpit dev loop (`internal/api` and `internal/ui`'s templ + Tailwind build,
