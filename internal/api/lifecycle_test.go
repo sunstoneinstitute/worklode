@@ -554,6 +554,49 @@ func TestClaimNextDryRun(t *testing.T) {
 	}
 }
 
+// TestClaimNextKindFilter pins WL-95: kind narrows the candidate set before
+// ranking runs, so a higher-ranked task of a different kind does not shadow
+// the top-ranked candidate of the requested kind.
+func TestClaimNextKindFilter(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Critical feature", "priority": "critical", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Low chore", "priority": "low", "kind": "chore",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "kind": "chore", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	task, ok := got["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("task missing: %v", got)
+	}
+	if task["id"] != "WL-2" {
+		t.Fatalf("claimed task id = %v, want WL-2 (the low-priority chore, not the higher-ranked feature)", task["id"])
+	}
+}
+
+// TestClaimNextInvalidKind covers the 422 guard on an unrecognized kind.
+func TestClaimNextInvalidKind(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Needs a valid kind", "priority": "high", "kind": "feature"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "kind": "nonsense", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestReopen(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

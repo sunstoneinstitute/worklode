@@ -60,10 +60,10 @@ func prefixedTaskColumns(alias string) string {
 // readyCandidates returns every task eligible for pickup: state ready, no
 // child_of children, not needs_decomposition, unleased, and not blocked by an
 // open 'blocks' edge from a task that is not in a closed state. An empty
-// projectID matches every project. A task with children is excluded because
-// the worktree is the unit of Worklode work and a container has nothing to
-// check out (spec 004 §6.3).
-func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]model.Task, error) {
+// projectID matches every project; an empty kind matches every kind. A task
+// with children is excluded because the worktree is the unit of Worklode work
+// and a container has nothing to check out (spec 004 §6.3).
+func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+prefixedTaskColumns("t")+` FROM tasks t
 		WHERE t.state = 'ready'
@@ -71,10 +71,11 @@ func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]model.
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
 		  AND NOT t.needs_decomposition
 		  AND ($1 = '' OR t.project_id = $1)
+		  AND ($2 = '' OR t.kind = $2)
 		  AND NOT EXISTS (SELECT 1 FROM leases l
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
-		                  WHERE e.to_task = t.id AND `+blockedCondition+`)`, projectID)
+		                  WHERE e.to_task = t.id AND `+blockedCondition+`)`, projectID, kind)
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)
 	}
@@ -219,6 +220,7 @@ func rankTasks(in []rankInput, strictFocus bool) []model.Task {
 // ClaimNextOpts configures ClaimNext.
 type ClaimNextOpts struct {
 	ProjectID   string
+	Kind        string
 	StrictFocus bool
 	DryRun      bool
 	Worktree    string
@@ -244,7 +246,7 @@ type ClaimNextResult struct {
 // error: it returns Claimed=false, Task=nil. DryRun returns the top-ranked
 // candidate without writing anything (no lease, no state change).
 func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextResult, error) {
-	candidates, err := s.readyCandidates(ctx, opts.ProjectID)
+	candidates, err := s.readyCandidates(ctx, opts.ProjectID, opts.Kind)
 	if err != nil {
 		return nil, err
 	}

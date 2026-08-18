@@ -167,6 +167,7 @@ func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string)
 // newNextCmd builds `lode next`.
 func newNextCmd() *cobra.Command {
 	var scope scopeFlags
+	var kind string
 	var strictFocus bool
 	cmd := &cobra.Command{
 		Use:   "next [id]",
@@ -181,10 +182,11 @@ func newNextCmd() *cobra.Command {
 			if len(args) > 0 {
 				id = args[0]
 			}
-			return runNext(cmd, id, &scope, strictFocus)
+			return runNext(cmd, id, &scope, kind, strictFocus)
 		},
 	}
 	addScopeFlags(cmd, &scope, "restrict the pick to a project (only without an id)")
+	cmd.Flags().StringVar(&kind, "kind", "", "restrict the pick to a kind: feature, bug, chore, spec, review, spike (only without an id)")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
 }
@@ -200,7 +202,7 @@ func slugFromBranch(branch, id string) string {
 	return branch
 }
 
-func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool) error {
+func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, strictFocus bool) error {
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err
@@ -249,7 +251,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		if err != nil {
 			return err
 		}
-		resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
+		resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Project: sc.Project, Kind: kind, StrictFocus: strictFocus, Worktree: pending})
 		if err != nil {
 			return err
 		}

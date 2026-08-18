@@ -129,10 +129,15 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "worktree is required")
 		return
 	}
+	if req.Kind != "" && !validKinds[req.Kind] {
+		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+		return
+	}
 	actor := actorFrom(r)
 
 	res, err := s.st.ClaimNext(r.Context(), store.ClaimNextOpts{
 		ProjectID:   req.Project,
+		Kind:        req.Kind,
 		StrictFocus: req.StrictFocus,
 		DryRun:      req.DryRun,
 		Worktree:    req.Worktree,

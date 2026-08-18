@@ -607,7 +607,7 @@ func TestParentNeverInReadySet(t *testing.T) {
 	}
 	plain := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	got, err := s.readyCandidates(t.Context(), "")
+	got, err := s.readyCandidates(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("readyCandidates: %v", err)
 	}
