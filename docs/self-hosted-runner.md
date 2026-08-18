@@ -42,9 +42,10 @@ above before adding another job here: the whole isolation model now rests on
 `trusted` being right, not on `ghrunner` being unprivileged.
 
 Registered as a repo-level runner (not org-level) with labels `self-hosted,
-Linux, X64, hel01, gha-pgvector, docker`. `lint` targets the bare
-`self-hosted` label; `test` and `build-image` target `gha-pgvector` and
-`docker` respectively — see the sections below for why each label exists
+Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets the
+bare `self-hosted` label; `test` targets `gha-pgvector`; `build-image`
+targets both `docker` and `gha-buildcache` — see the sections below for why
+each label exists
 rather than every job sharing `self-hosted`.
 
 Installed as a systemd service:
@@ -125,18 +126,49 @@ branch before wiring `pr-checks.yml` to it, matching what
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=docker"
 ```
 
+`build-image` needs a *second*, independent fact from the same runner: a
+place to persist the Dockerfile's Go cache mounts (`/go/pkg/mod`,
+`/root/.cache/go-build`) between runs. `ubuntu-latest` gets a fresh VM every
+time, so it round-trips those through `actions/cache`'s network backend into
+`go-cache-mount/`, a directory relative to the checkout. hel01 doesn't need
+the round trip — but that directory can't just move to an absolute path on
+the same host and skip `actions/cache`, because `actions/checkout`'s clean
+step (`git clean -ffdx`) wipes anything untracked inside the checkout on
+every run, including a relative `go-cache-mount/`. It has to live outside
+the checkout entirely:
+
+```
+sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
+```
+
+`docker` and `gha-buildcache` are independent facts — a future runner could
+have Docker access set up before its cache directory exists, or vice versa —
+so `build-image`'s `runs-on` requires both labels rather than treating
+either as implied by the other:
+`runs-on: ["docker","gha-buildcache"]`. `_build-image.yml`'s `runs-on` input
+is therefore a JSON array (`fromJSON(inputs.runs-on)`), unlike `_test.yml`
+and `_lint.yml`'s single-label strings — the only reusable workflow here
+that schedules on more than one required label at once.
+
 ## Extending self-hosted coverage
 
 `_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input
-(default `ubuntu-latest`) — any reusable workflow gains hel01 the same way,
-by threading that input through from its caller's `gate.trusted` output.
-Pick the label for what the job actually needs, not for convenience:
-`gha-pgvector` for Postgres, `docker` for the Docker socket, the bare
-`self-hosted` for neither (as `lint` uses). Don't require a label a job
-doesn't need, and don't let a job that does need one fall back to the bare
-`self-hosted` — either mistake breaks the point of tagging by requirement at
+(default `ubuntu-latest` / `["ubuntu-latest"]`) — any reusable workflow gains
+hel01 the same way, by threading that input through from its caller's
+`gate.trusted` output. Pick the label for what the job actually needs, not
+for convenience: `gha-pgvector` for Postgres, `docker` for the Docker
+socket, `gha-buildcache` for a persistent cache-mount directory outside the
+checkout, the bare `self-hosted` for none of the above (as `lint` uses). If
+a job needs more than one, require all of them — don't let one imply
+another that happens to be true today. Don't require a label a job doesn't
+need, and don't let a job that does need one fall back to the bare
+`self-hosted` — any of these breaks the point of tagging by requirement at
 all. Do **not** add `services:` to a job that might run self-hosted: GitHub
 starts service containers unconditionally once a job declares them, which
 would need `ghrunner` to reach the Docker socket outside of the `docker`
 label's own job. Gate container provisioning with a step-level `if:`
-instead, as `_test.yml` does.
+instead, as `_test.yml` does. And do not assume a relative, workspace-local
+directory persists on self-hosted just because the runner itself does —
+`actions/checkout`'s clean step erases it every run; only a path outside the
+checkout, like `gha-buildcache`'s, actually survives.

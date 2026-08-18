@@ -8,9 +8,14 @@ on:
         type: boolean
         default: true
       runs-on:
-        description: Runner label. 'ubuntu-latest' for a hosted PR, 'docker' for a trusted one — this job needs the Docker socket that label marks, see docs/self-hosted-runner.md.
+        description: >-
+          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          PR, '["docker","gha-buildcache"]' for a trusted one. This job needs
+          both the Docker socket and a runner-provided build-cache directory,
+          two independent environment facts a future runner could have one
+          of without the other — see docs/self-hosted-runner.md.
         type: string
-        default: ubuntu-latest
+        default: '["ubuntu-latest"]'
     outputs:
       image-tag:
         description: Git short SHA used as the image tag
@@ -26,7 +31,7 @@ env:
 
 jobs:
   build:
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 15
     outputs:
       image-tag: ${{ steps.image.outputs.tag }}
@@ -70,14 +75,29 @@ jobs:
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         id: buildx
 
-      # Persist the Dockerfile's Go cache mounts across runs. buildkit-cache-dance
-      # extracts them into ./go-cache-mount, which actions/cache stores. Only
-      # push runs write (skip-extraction otherwise); non-push runs read the
-      # shared cache without poisoning it.
+      # Where buildkit-cache-dance extracts the Dockerfile's Go cache mounts
+      # to persist them across runs. `gha-buildcache` marks a runner with its
+      # own prepared, persistent directory outside the checkout (so
+      # actions/checkout's clean step never wipes it) — self-hosted reads and
+      # writes it directly with no network round trip. ubuntu-latest has no
+      # such directory (a fresh VM every run), so it stays relative to the
+      # workspace and goes through actions/cache instead.
+      - name: Cache-mount directory
+        id: cache-dir
+        run: |
+          if [ "${{ contains(inputs.runs-on, 'gha-buildcache') }}" = "true" ]; then
+            echo "path=$HOME/.cache/gha-buildcache" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=go-cache-mount" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only push runs write (skip-extraction otherwise); non-push runs read
+      # the shared cache without poisoning it.
       - name: Restore Go cache mounts
+        if: "!contains(inputs.runs-on, 'gha-buildcache')"
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: go-cache-mount
+          path: ${{ steps.cache-dir.outputs.path }}
           key: ${{ runner.os }}-docker-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-docker-go-
@@ -88,8 +108,8 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           cache-map: |
             {
-              "go-cache-mount/mod": "/go/pkg/mod",
-              "go-cache-mount/build": "/root/.cache/go-build"
+              "${{ steps.cache-dir.outputs.path }}/mod": "/go/pkg/mod",
+              "${{ steps.cache-dir.outputs.path }}/build": "/root/.cache/go-build"
             }
           skip-extraction: ${{ !inputs.push }}
 

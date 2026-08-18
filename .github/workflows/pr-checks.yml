@@ -154,11 +154,12 @@ jobs:
     uses: ./.github/workflows/_build-image.yml
     with:
       push: false
-      # `docker`, not the bare `self-hosted` lint uses: ghrunner holds Docker
-      # socket access only because this job needs it (see
-      # docs/self-hosted-runner.md) — that's a real environment requirement,
+      # `docker` + `gha-buildcache`, not the bare `self-hosted` lint uses:
+      # ghrunner holds Docker socket access, and its build-cache mount
+      # directory exists, only because this job needs them (see
+      # docs/self-hosted-runner.md) — two real environment requirements,
       # scheduled on, not a default.
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'docker' || 'ubuntu-latest' }}
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["docker","gha-buildcache"]' || '["ubuntu-latest"]' }}
 
   validate-kustomize:
     needs: gate
