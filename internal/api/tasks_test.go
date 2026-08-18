@@ -690,7 +690,7 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	kinds := []string{"feature", "bug", "chore", "spec", "review", "spike"}
+	kinds := []string{"feature", "bug", "chore", "design", "review", "spike"}
 	for _, k := range kinds {
 		t.Run(k, func(t *testing.T) {
 			rr := doReq(t, h, "POST", "/api/v1/tasks", token,

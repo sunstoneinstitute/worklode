@@ -123,7 +123,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read the task body from a file (\"-\" for stdin)")
 	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
-	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, spec, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
@@ -577,7 +577,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
 	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
-	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, spec, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd

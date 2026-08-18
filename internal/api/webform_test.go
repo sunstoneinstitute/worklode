@@ -49,7 +49,7 @@ func TestNewTaskFormRenders(t *testing.T) {
 	main := mainContent(t, body)
 	// The six kinds of 025 §10, all of which name a nature of work. Anything
 	// the form offers beyond them the API would reject on submit.
-	for _, kind := range []string{"feature", "bug", "chore", "spec", "review", "spike"} {
+	for _, kind := range []string{"feature", "bug", "chore", "design", "review", "spike"} {
 		if !strings.Contains(main, `value="`+kind+`"`) {
 			t.Errorf("the new-task form is missing kind %q", kind)
 		}

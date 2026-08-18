@@ -67,7 +67,7 @@ wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" ;
     skos:definition "Fix incorrect existing behaviour." .
 wlc:chore a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "chore" ;
     skos:definition "Maintenance with no behaviour change (deps, tooling, cleanup)." .
-wlc:spec a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spec" ;
+wlc:design a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "design" ;
     skos:definition "Write or revise a design document; the document it produced is reachable by prov:wasGeneratedBy." .
 wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review" ;
     skos:definition "Review/evaluate someone else's work." .
