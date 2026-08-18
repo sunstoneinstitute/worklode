@@ -1,0 +1,92 @@
+name: test
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: >-
+          Runner label(s) as a JSON array — '["ubuntu-latest"]' for a hosted
+          PR, '["gha-pgvector","gha-buildcache"]' for a trusted one. This job
+          needs both the always-on Postgres and the persistent Go cache
+          those labels mark — see docs/self-hosted-runner.md.
+        type: string
+        default: '["ubuntu-latest"]'
+      postgres-dsn:
+        description: TEST_POSTGRES_DSN. Ignored on ubuntu-latest, which always uses the ephemeral service container below.
+        type: string
+        default: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # `services:` starts unconditionally the moment a job declares it, so a
+      # job that might land on self-hosted can't have one — that would need
+      # ghrunner to hold Docker access, which docs/self-hosted-runner.md
+      # deliberately withholds. ubuntu-latest gets the same ephemeral
+      # container `services:` gave it, just started by hand; self-hosted
+      # skips this and reaches hel01's own always-on instance instead.
+      - name: Start ephemeral Postgres (ubuntu-latest only)
+        if: contains(inputs.runs-on, 'ubuntu-latest')
+        run: |
+          docker run -d --name pg-ci -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
+            --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 \
+            pgvector/pgvector:pg17
+          for i in $(seq 1 20); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' pg-ci)
+            [ "$status" = healthy ] && exit 0
+            sleep 2
+          done
+          echo "::error::pg-ci did not become healthy" >&2
+          exit 1
+      - name: Go cache paths
+        id: go-cache
+        if: contains(inputs.runs-on, 'ubuntu-latest')
+        run: |
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      # Restore on every run; only main writes the cache (see the save step below).
+      # PRs read the shared cache but cannot poison it. Self-hosted skips this
+      # entirely — GOCACHE/GOMODCACHE already persist on hel01's disk across
+      # runs, so there's nothing to fetch and nothing to overwrite it with.
+      - name: Restore Go cache
+        id: go-cache-restore
+        if: contains(inputs.runs-on, 'ubuntu-latest')
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.mod }}
+            ${{ steps.go-cache.outputs.build }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: go build
+        run: make build
+      - name: go test
+        run: make test
+        env:
+          TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+      - name: e2e smoke test
+        run: make test-e2e
+        env:
+          TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+      # Only main writes the cache, and only when go.sum changed (exact-key miss).
+      - name: Save Go cache
+        if: contains(inputs.runs-on, 'ubuntu-latest') && github.ref == 'refs/heads/main' && steps.go-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.mod }}
+            ${{ steps.go-cache.outputs.build }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
