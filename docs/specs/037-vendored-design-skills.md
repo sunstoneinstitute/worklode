@@ -1,0 +1,601 @@
+---
+status: draft
+requires:
+- 008-worklode-plugin.md
+- 016-org-wide-skills.md
+- 025-documents-in-the-backbone.md
+- 036-one-model-across-packages.md
+---
+# Spec 037 — Vendored design skills
+
+## 0. Purpose & scope {#sec-0}
+
+Worklode's agent-facing half ships slash commands that drive the CLI (008 §12)
+and judgment skills that shape how an agent works a task (008 §13). It ships
+nothing for the work *before* a task exists: deciding what to build,
+interrogating the decision, and writing it down. Two third-party plugins —
+`superpowers` and `mattpocock-skills`, both MIT, both in the official Claude
+marketplace — do that well and do it against files in a layout Worklode does
+not use.
+
+This spec adopts them by **vendoring**: their skills are copied into
+`plugins/lode/`, merged where both treat the same job, and edited to know
+Worklode's documents and the Sunstone Way. It covers the vendored tree and its
+drift check, the plugin-qualified skill identity the registry needs before two
+plugins can ship the same skill name, `lode install`'s version pinning and
+suppression list, and one end-to-end capability: a grilling session that reads
+Worklode design documents and lands its result in one.
+
+Out of scope: rewriting the design flow to author documents through the API.
+That needs a lode-first authoring path and an amendment to 025's git-first
+projection model, neither of which exists. §11 states the boundary.
+
+`docs/skill-integrations.md` is the design brief this spec is drawn from.
+
+## 1. Why vendoring rather than composition {#sec-1}
+
+A skill in another plugin cannot be patched. Four mechanisms exist to change
+how one behaves — compose a thin skill that delegates to it, suppress it with
+`skillOverrides`, inject context from a `SessionStart` hook, or copy it and
+edit it — and only the last reaches instructions baked into the upstream body.
+
+Composition fails on the specific skills that matter here. `writing-plans`
+carries its file layout inside its writing guidance, so a delegating overlay
+cannot reach the part that has to change. Composition also pays a per-session
+cost: an overlay that delegates loads both skill bodies to run one.
+
+Vendoring dissolves three problems at once. An unvendored skill is simply
+absent, so no `skillOverrides` capability is required for the flow itself.
+Version control moves to us — an upstream release cannot change how a repo
+plans work without an explicit bump. And where two upstream plugins treat the
+same job differently, we can merge them rather than ship both and let the model
+arbitrate at runtime.
+
+The cost is real and named here so it is not rediscovered: we own the merge on
+every upstream release, and every merge ruling in §3 is ours to maintain. §2.2
+keeps the edits stated and §2.3 keeps the drift visible; nothing makes it free.
+
+## 2. The vendored tree {#sec-2}
+
+### 2.1 Layout {#sec-2.1}
+
+Vendored skills live under `plugins/lode/skills/`, alongside the CLI-wrapper
+skills already there. They are ordinary skills with no marker distinguishing
+them at load time; provenance lives in metadata, not in the tree shape.
+
+Each vendored skill carries an `upstream` block in its `SKILL.md` frontmatter:
+
+```yaml
+upstream:
+  plugin: superpowers
+  version: 6.2.0
+  path: skills/writing-plans
+  merged-with:
+    - plugin: mattpocock-skills
+      version: 1.2.1
+      path: skills/engineering/to-spec
+```
+
+`plugin`, `version` and `path` name the revision the copy was taken from.
+`merged-with` lists every other upstream source folded into it, and is absent
+on a skill vendored from a single source. A skill written from scratch carries
+no `upstream` block, which is how the drift check tells the two apart.
+
+### 2.2 Transformation prompts {#sec-2.2}
+
+A vendored skill is not a frozen copy — it is an upstream body plus a stated
+set of changes. Recording only the result loses the changes: at the next
+upstream release nobody can tell which of our edits were deliberate and which
+were incidental, and the merge is redone from memory.
+
+So each vendored skill carries its transformation as a **prompt**, in a sibling
+`UPSTREAM.md`. The prompt says what to change and why, addressed to an agent
+holding the upstream sources:
+
+```markdown
+# Transformation — assay
+
+Merge `superpowers:brainstorming` with `mattpocock:grilling`, running
+grilling's design tree inside brainstorming's phased lifecycle.
+
+- Replace every `docs/superpowers/specs/` path with the corpus resolution
+  of 037 §6.1.
+- Keep grilling's numbered-frontier format verbatim; it is what §6.4 renders.
+- Add the destination contract of §6.2 to the opening.
+```
+
+Prompts compose in two layers. A **plugin-level** prompt holds what applies to
+every skill from that source — path rewrites, house style, the standing
+instruction that task state belongs to `lode` — and lives at
+`plugins/lode/skills/UPSTREAM-<plugin>.md`. A **skill-level** prompt holds what
+is specific to one skill. The effective transformation is the plugin prompt
+followed by the skill prompt.
+
+The payoff is that re-vendoring becomes a re-run rather than a re-derivation:
+given a new upstream version and the same prompts, an agent reproduces the
+vendored skill, and a human reviews a diff against the previous one instead of
+reconstructing intent. It also makes the edits reviewable on their own terms —
+a prompt is a much smaller thing to argue with than a merged skill body.
+
+### 2.3 The drift check {#sec-2.3}
+
+`scripts/check-vendored-skills.py` compares each vendored skill against the
+upstream revision its frontmatter names and reports what changed upstream since
+the copy was taken. It follows `scripts/sync-codex-marketplace.py`'s shape: a
+`--check` mode that reports and exits non-zero, suitable for CI and pre-commit,
+and a default mode that reports without failing.
+
+The check **reports and never rewrites**. Regeneration is a separate,
+explicitly invoked act: the check names the skill and the upstream diff, and
+re-running §2.2's prompts against the new upstream is a decision a human takes
+and reviews. Nothing rewrites a skill as a side effect of a commit hook, for
+the reason `secmeta.py` gives — a tool that silently fixes its own complaint
+teaches you to stop reading it.
+
+Upstream sources are read from the local plugin cache when present. When the
+named revision is not cached, the check reports the skill as unverifiable
+rather than failing: contributors without both plugins installed must still be
+able to commit.
+
+### 2.4 Licence and attribution {#sec-2.4}
+
+Both upstream plugins are MIT — superpowers © 2025 Jesse Vincent,
+mattpocock-skills © 2026 Matt Pocock. `plugins/lode/skills/LICENSES.md` carries
+both notices in full and lists which vendored skills derive from which source.
+The `upstream` frontmatter block is the machine-readable half of the same fact;
+the file is the half a licence audit reads.
+
+## 3. The skill set {#sec-3}
+
+### 3.1 Kept as-is {#sec-3.1}
+
+`handoff` and `domain-modeling` are vendored unchanged. Neither duplicates a
+superpowers skill or anything this repo ships, and both are useful without
+knowing about Worklode.
+
+`domain-modeling` is model-invocable and overlaps the remix of §3.2's
+writing-agent-instructions family. §12 records that as unsettled rather than
+resolving it by dropping a skill this spec has decided to keep.
+
+### 3.2 Remixed {#sec-3.2}
+
+Five families where both upstream plugins treat the same job. Each is vendored
+as **one** skill merging both treatments, not as two skills:
+
+| Remix | Produces | Sources |
+|---|---|---|
+| `assay` (design) | specs, ADRs | `superpowers:brainstorming` + `mattpocock:grilling` + `mattpocock:to-spec` |
+| `planning` | plans | `superpowers:writing-plans` + `mattpocock:to-tickets` |
+| `writing-for-agents` | skills, instruction files | `superpowers:writing-skills` + `mattpocock:writing-for-agents` |
+| `tdd` | — | `superpowers:test-driven-development` + `mattpocock:tdd` |
+| `debugging` | — | `superpowers:systematic-debugging` + `mattpocock:diagnosing-bugs` |
+
+**Design and Planning are separate skills** because they answer different
+questions against documents with different lifetimes. Design settles *what to
+build* and produces a spec — a durable statement that stays true after the code
+ships. Planning settles *how to build it* and produces a plan — an executable
+document spent once its tasks are minted (025 §2). Merging them would put a
+throwaway artifact and a permanent one behind one invocation, and it is exactly
+the boundary 025 draws and that spec 025's kind rename (`spec` → `design`)
+names. The interrogation techniques are shared, so the two skills share the
+question format and diverge on what they are driving toward.
+
+A merge is not a concatenation and not a winner-takes-all. `assay` is
+the worked example: superpowers contributes a phased lifecycle that ends in a
+written document, mattpocock contributes a breadth-first design tree with a
+numbered frontier and a recommended answer per question, and the merged skill
+runs the tree inside the lifecycle. Each remix states in its body which
+behaviour came from where, so a later upstream change can be judged against the
+part it touches.
+
+**The merges are designed before they are written.** How to remix each family
+is a research question, not a transcription: it needs both upstream bodies read
+side by side, a judgment about what each contributes, and a written proposal.
+That research is its own step, its output is the §2.2 prompt set, and it is
+reviewed and accepted before any vendored skill is written. §13.3 makes the
+gate an acceptance criterion; skipping it produces five skills nobody agreed
+to.
+
+**Two axes of customisation** apply to every remix:
+
+- *Worklode-aware.* The skill knows design documents are addressable
+  (`WL-SPEC-<n>`, 025 §14.3), that `lode show` renders a section, and that
+  tasks come from plan acceptance rather than from a checklist it maintains.
+- *Sunstone Way-aware.* The skill knows the seven stages and where the work
+  sits in them, so a brainstorm on a data-science project reaches for a Topic
+  Intake Brief and a Gate rather than a software design document.
+
+Only `assay` is specified end-to-end here (§6), because it is the one
+track this spec ships. The other four are vendored and merged; their
+Worklode-specific behaviour is thin, and the planning remix's document output
+is deliberately deferred to §11.
+
+**The design remix is called `assay`.** An assay establishes what a sample is
+actually worth by testing it rather than by looking at it, which is what this
+skill does to a proposal — and it is mining-native, so it sits in the same
+vocabulary as `lode` itself. The invocation is `/lode:assay`.
+
+The other four keep plain names — `planning`, `writing-for-agents`, `tdd`,
+`debugging` — because they have no joke to make and are found by description.
+The set as a whole is the **motherlode**: a lode is the vein, the motherlode is
+the one worth following, and that is also the claim a remix has to earn. It
+names the group in `LICENSES.md`, in the `UPSTREAM-*.md` prompts and in
+conversation, never an invocation.
+
+### 3.3 Not vendored {#sec-3.3}
+
+Everything else in both plugins, including the execution-loop skills
+(`executing-plans`, `subagent-driven-development`, `using-git-worktrees`,
+`finishing-a-development-branch`) whose branch and task-state ownership
+overlaps `lode next`/`done` and `working-under-worklode`. Deciding whether they
+are redundant or complementary needs the lode-first authoring path to exist
+first; until then they are neither vendored nor suppressed.
+
+## 4. Skill identity is plugin-qualified {#sec-4}
+
+### 4.1 The collision {#sec-4.1}
+
+The registry cannot hold two skills with the same name. `skills` declares
+`CONSTRAINT skills_name_unique UNIQUE (name)` (migration `0007_skills`), and
+`skillsync.buildUpsert` takes `name` from `SKILL.md` frontmatter — the bare
+name upstream skills declare. `skillsync` already warns `duplicate skill name`
+for a collision inside one source; across sources the constraint rejects the
+second writer. `GET /api/v1/skills/{name}` routes on the same bare name.
+
+So a vendored `brainstorming` and an upstream `brainstorming` cannot coexist in
+the registry, and the first sync to land wins arbitrarily. This blocks §3.2
+outright: every remix collides with the skill it was merged from.
+
+### 4.2 Qualified names {#sec-4.2}
+
+A skill's registry identity becomes `<plugin>:<name>` — `lode:brainstorming`,
+`superpowers:brainstorming` — matching how a harness already addresses it.
+`skillhash.ValidName` permits `:` (it rejects `/`, `\`, `.`, `..` and a leading
+dot), so the qualified form is storable and routable without relaxing the
+predicate.
+
+Four changes carry it:
+
+- **Derivation.** The qualifier is the **plugin manifest's** `name` — the
+  `.claude-plugin/plugin.json` nearest above the skill directory. It comes from
+  neither the source repo nor `SKILL.md` frontmatter.
+
+  Not the source repo, because a source is `owner/repo@ref:glob` and one repo
+  holds many plugins: the scanner's normal case is a glob like
+  `plugins/*/skills/*`, which is how this repo publishes `lode` and how a
+  marketplace repo publishes a dozen. Deriving from `source_repo` would give
+  every plugin in a marketplace the same qualifier, which is the collision
+  again under a longer name.
+
+  Not frontmatter, because the qualifier is a namespace claim: a `SKILL.md` that
+  could name its own plugin could claim another plugin's.
+
+  A repo of bare skills has no manifest above the skill dir. There the
+  qualifier is the source repo's last path segment, which keeps every synced
+  skill qualified without requiring plugin packaging.
+
+- **Scanner capture.** The manifest does not currently reach the syncer.
+  `skillsync`'s tarball walk drops every entry at or above skill-dir depth
+  (`len(parts) <= segs`), and `.claude-plugin/plugin.json` sits above every
+  skill dir by construction. The walk gains a second collection: manifests
+  encountered anywhere in the tree, keyed by their directory, matched to each
+  skill dir by longest prefix.
+
+  The manifest is **not** added to the skill archive. It is metadata about the
+  skill rather than part of it, and adding a file to the archive would change
+  every existing skill's `content_hash` — minting a spurious new version of
+  every skill in the registry on the first sync after this ships.
+
+- **Uniqueness.** `skills_name_unique` becomes unique on the qualified name. A
+  new migration adds the qualifier column, backfills existing rows from their
+  `source_repo`'s last segment, and only then adds the constraint; shipped
+  migrations are never edited. The backfill is a placeholder that the first
+  sync after deploy corrects — a manifest-derived qualifier needs the tarball,
+  which SQL does not have. Ordering the backfill before the constraint is what
+  keeps the migration runnable on a populated registry.
+
+- **Routing.** `GET /api/v1/skills/{name}` accepts a qualified name. A bare
+  name that matches exactly one skill still resolves, so existing pins and
+  `lode skills` invocations keep working; a bare name matching more than one is
+  an ambiguity error naming the candidates, in the shape
+  `designdoc.AmbiguousRefError` already uses for documents.
+
+### 4.3 Pins and briefs {#sec-4.3}
+
+Task skill pins (016 §3) and a plan's `skills:` key store whatever was written.
+Both resolve through §4.2's rules, so a bare pin keeps working until the name
+becomes ambiguous, at which point it reports rather than guessing. Pins are not
+rewritten by this change.
+
+## 5. `lode install` owns versions and suppression {#sec-5}
+
+### 5.1 Version pinning {#sec-5.1}
+
+`lode install` already writes per-repo hooks and settings (008 §17.2), so it is
+where a repo records which vendored revision it uses. The pin is the plugin
+version; the `upstream` frontmatter of §2.1 records what that version was
+derived from. A repo does not pin upstream plugins directly, and cannot: they
+are not its dependency once the skills are vendored.
+
+### 5.2 The suppression list {#sec-5.2}
+
+`lode install` writes `skillOverrides` entries into `.claude/settings.local.json`
+turning off the upstream skills the vendored set replaces. It does this
+**unconditionally** — whether or not either plugin is installed in that repo —
+so a user who installs one later does not silently acquire a second, unvendored
+copy of the flow. The alternative ordering depends on the user re-running `lode
+install` after every plugin change, which is not a property an install step can
+have.
+
+The list is:
+
+- **Every `superpowers` skill.** All are model-invocable, and
+  `using-superpowers` is injected at every `SessionStart` with an instruction
+  that any applicable skill must be invoked — a prior strong enough that
+  leaving any of them reachable undermines the vendored set.
+- **The model-invocable `mattpocock-skills` skills the remixes replace.** 15 of
+  its 36 skills carry no `disable-model-invocation`, and they include exactly
+  the overlaps: `grilling`, `tdd`, `diagnosing-bugs`, `writing-for-agents`,
+  `code-review`, `codebase-design`, `prototype`, `research`,
+  `resolving-merge-conflicts`, `wizard`. The explicit-invocation-only
+  remainder needs no entry, because it cannot fire on its own.
+
+`domain-modeling` is model-invocable and kept (§3.1), so it is deliberately
+**absent** from the list. That is the overlap §12 records.
+
+### 5.3 Location and idempotence {#sec-5.3}
+
+Suppression is written to `.claude/settings.local.json` rather than
+`.claude/settings.json`: it is machine-local state, and the committed file
+should not carry it. Writing is idempotent — entries this spec owns are
+reconciled on every run, and unrelated entries a user added are preserved.
+`lode install` reports what it turned off, because a silently disabled skill is
+indistinguishable from a broken one.
+
+## 6. Grilling over Worklode documents {#sec-6}
+
+`assay`'s Worklode-specific half, specified end to end because
+it is what this spec ships.
+
+### 6.1 Where facts come from {#sec-6.1}
+
+The interview finds facts itself rather than asking the user for anything it
+could look up. Against a Worklode project, three sources in order:
+
+1. **Local corpora.** The `spec_corpus` and `plan_corpus` directories from
+   `.worklode/config.toml` (025 §16.1). When the corpus is checked out, the
+   documents are files and nothing needs fetching.
+2. **`lode show <ref>`** for a section of a document the shorthand names —
+   `lode show WL-SPEC-25#sec-9` — which is cheaper than reading a whole spec to
+   answer one frontier question.
+3. **`.worklode/cache/docs/`** (§7) for a document belonging to a corpus this
+   checkout does not contain, such as another project's specs.
+
+### 6.2 The destination is named at invocation {#sec-6.2}
+
+A grilling session is started with its destination stated: a spec, a plan, a
+task body, or a loose idea with no home yet. The destination is part of the
+skill's contract rather than a question asked at the end, because it changes
+the interview — a session aimed at a plan asks about task boundaries and
+ordering, one aimed at a spec asks about invariants and acceptance.
+
+When the invocation does not name a destination, the skill asks for one before
+the first round of questions, and stops if it cannot get one.
+
+### 6.3 Write-back {#sec-6.3}
+
+When the frontier empties, the settled design tree is written to the named
+destination. Losing it to the transcript is the failure this replaces.
+
+Until the lode-first authoring path exists (§11), write-back targets what is
+writable today: a spec or plan destination produces a conforming file in the
+configured corpus — filename, frontmatter, and `{#sec-N}` anchors per
+`docs/authoring-design-docs.md`, so `secfmt.py` and `secmeta.py` accept it — and
+a task-body destination writes through the existing CLI. An idea destination
+writes a file the user names and nothing else interprets.
+
+The skill never accepts a document into the backbone and never syncs. It leaves
+a reviewable artifact in git; `lode doc sync` remains the only path to the
+store, on the terms 025 §16.2 already sets.
+
+### 6.4 Answering a round in crit {#sec-6.4}
+
+A grilling round asks the whole frontier at once — numbered questions, each
+with a recommended answer. In a terminal that is the wrong shape for the
+answering half: the questions scroll out of view while the answer is being
+typed, and there is no way to attach an answer to the question it belongs to
+except by repeating its number.
+
+The round is therefore rendered as a document and reviewed in `crit`. The
+mapping is direct:
+
+| Grilling | Crit |
+|---|---|
+| One round's frontier | One review round |
+| A numbered question | A block the reviewer comments on |
+| An answer | An inline comment anchored to that question |
+| Accepting the recommendation | Resolving with no comment |
+| Frontier empty | Review approved |
+
+The recommendation-by-default is what makes this worth the machinery. A round
+of twelve questions where nine recommendations are right costs three comments
+instead of twelve numbered answers, and each answer is anchored to its
+question, so neither side is matching numbers by hand.
+
+The skill writes the round to
+`.worklode/cache/grilling/<session>/round-<n>.md` — one section per question,
+carrying the question body and the recommended answer — opens `crit` on it, and
+blocks. When the review finishes, it reads the answers back, recomputes the
+frontier, and writes the next round to the same session directory. The session
+directory is the transcript of the interview and is what §6.3's write-back
+draws on.
+
+**Crit is optional.** It is a separate tool with its own install, so the skill
+detects it and falls back to asking the round in the terminal when it is
+absent. The fallback is the upstream behaviour, unchanged; nothing in the
+interview logic depends on which surface is in use.
+
+## 7. `lode doc fetch` {#sec-7}
+
+### 7.1 Command surface {#sec-7.1}
+
+```
+lode doc fetch <ref>...        # named documents
+lode doc fetch --all           # every document the backbone holds for the project
+```
+
+`<ref>` is the shorthand of 025 §14.3. Fetching is a client-side cache-fill and
+carries no permission beyond the `docs:read` the route already requires.
+
+### 7.2 Cache layout {#sec-7.2}
+
+Documents land as plain markdown at
+`.worklode/cache/docs/<KEY>-<TYPE>-<n>.md` — the rendered id is the filename,
+so a ref maps to a path without a lookup. The body is written verbatim,
+frontmatter included, so a cached document reads identically to a corpus one.
+
+`.worklode/cache/` is gitignored in its entirety. It is a cache: deleting it
+costs a refetch and nothing else. A sibling `<KEY>-<TYPE>-<n>.meta.json` records
+the version and fetch time backing §7.3.
+
+### 7.3 Conditional refetch {#sec-7.3}
+
+Refetching re-downloads a body only when it changed. Every editable storage
+object carries a monotonically increasing `version` (equivalently
+`generation`), already present on the doc row and returned by
+`GET /api/v1/docs/{id}`. The client sends the version it holds; the server
+answers with the document when it has moved and a not-modified response when it
+has not.
+
+The mechanism is defined on the object's version rather than on documents
+specifically, so task and plan bodies use the same path without a second
+design. The version field belongs in `internal/model` per ADR 036; it exists
+today as `store.Doc.Version` and `cli.Doc.Version`, which is the duplication
+036 retires rather than a shape to extend.
+
+## 8. Metrics {#sec-8}
+
+`internal/api` extends its doc metrics for the conditional path, so a cache
+that never hits is visible:
+
+- `worklode_doc_fetch_total{result}` — `modified`, `not_modified`, `not_found`.
+
+`internal/skillsync` gains one counter for §4's rollout, because an ambiguous
+bare name is a silent degradation otherwise:
+
+- `worklode_skill_name_ambiguous_total` — bare-name lookups matching more than
+  one qualified skill.
+
+Both follow 022's conventions: nil-safe struct in the owning package's
+`metrics.go`, registerer threaded from `serve.go`, bounded label values.
+
+## 9. Degradation {#sec-9}
+
+- **Neither upstream plugin installed.** The normal case. Vendored skills are
+  self-contained and depend on nothing external.
+- **An upstream plugin installed anyway.** §5.2's suppression covers it. A user
+  who edits `settings.local.json` to re-enable one gets both, which is their
+  choice and is reported by `lode install` on the next run.
+- **No backbone reachable.** Grilling falls back to local corpora and
+  `lode show`; `lode doc fetch` fails with the unreachable-server error the CLI
+  already renders, and a stale cache is used rather than discarded.
+- **No `spec_corpus` configured.** Grilling proceeds with no document facts and
+  says so rather than inventing a corpus path.
+- **Registry without qualified names.** A pre-§4 server rejects the second of
+  two same-named skills. `lode skills` reports the constraint violation as a
+  version mismatch rather than a sync failure.
+
+## 10. Testing {#sec-10}
+
+- The drift check on a vendored tree with a known-stale entry reports it and
+  exits non-zero under `--check`; on an uncached upstream revision it reports
+  unverifiable and exits zero.
+- Every vendored skill's `upstream` block parses and names a path that existed
+  in the declared upstream version.
+- `skillsync` derives the qualifier from the nearest plugin manifest: two
+  plugins under one `plugins/*/skills/*` source get distinct qualifiers, a
+  manifest-less repo falls back to the repo's last segment, and a `SKILL.md`
+  claiming a foreign qualifier in frontmatter does not get it.
+- Capturing manifests leaves `content_hash` unchanged for every existing
+  skill — the archive is byte-identical before and after.
+- Two plugins syncing `brainstorming` both land and are separately routable; a
+  bare-name GET resolves when unique and reports candidates when not.
+- `lode install` writes the suppression list into `settings.local.json` with
+  neither plugin present, preserves unrelated entries, and is idempotent across
+  runs.
+- `lode doc fetch` writes the rendered-id filename; a second fetch at an
+  unchanged version performs no body transfer; a bumped version rewrites.
+- Grilling write-back produces a corpus file that `secfmt.py` and `secmeta.py`
+  both accept.
+- A rendered grilling round carries one section per question with its
+  recommendation; answers read back from a crit review file map to the
+  questions they were anchored to, and a question resolved without a comment is
+  read as accepting the recommendation.
+- With `crit` absent, the round is asked in the terminal and the interview
+  reaches the same settled tree.
+
+## 11. Non-goals {#sec-11}
+
+**Authoring documents through the API.** The design brief settles that `lode`
+becomes the authoring surface and the git corpus goes away; 025 makes the
+backbone a projection of reviewed git, which is why `lode doc sync` refuses a
+dirty tree. Changing that needs an amendment and a write path, and every skill
+that would write through it is out of scope here. §6.3 writes files for exactly
+this reason, and the planning remix's document output waits.
+
+**The execution loop.** §3.3.
+
+**Retrieval-based skill routing.** Holding every skill description in context
+does not scale, and the replacement is hybrid retrieval — lexical and semantic
+paths fused with Reciprocal Rank Fusion, then reranked — which 016 §2's schema
+does not yet support: it has no full-text index, and its `embedding` column
+carries no dimension typmod, so it is an unindexed exact scan with no HNSW
+available until the dimension is fixed. That is its own spec.
+
+## 12. Open questions {#sec-12}
+
+1. **`domain-modeling` alongside the writing-for-agents remix.** Kept by §3.1,
+   suppressed by neither, and model-invocable, so both can fire on the same
+   trigger. Either the remix absorbs it or it earns a stated boundary.
+2. **What each remix actually says.** §3.2 fixes the pairings, the Design /
+   Planning split and the two customisation axes; the merged bodies are
+   unwritten, and the Sunstone Way axis has no draft. This is scheduled work
+   rather than an unknown — the research step and its review gate are §13.3 —
+   and it stays listed here because its *outcome* is genuinely open.
+3. **An eval harness for skill behaviour.** A remix claims to beat both
+   originals and nothing measures it. The same harness would serve the
+   retrieval question of §11.
+4. **Does the org registry distribute vendored skills, or only the plugin?**
+   016 is the org-wide discovery surface; a skill that only makes sense inside
+   a Worklode repo may belong in the plugin, the registry, or both.
+
+## 13. Acceptance criteria {#sec-13}
+
+1. `plugins/lode/skills/` holds the vendored set: `handoff` and
+   `domain-modeling` unchanged, and one merged skill per §3.2 row.
+2. Every vendored skill declares `upstream`, and `LICENSES.md` carries both MIT
+   notices with per-skill provenance.
+3. The remix research is written, reviewed and accepted before any vendored
+   skill body is: one document per §3.2 family stating what each source
+   contributes and what the merged skill does, whose accepted output is the
+   §2.2 prompt set.
+4. Every vendored skill has an `UPSTREAM.md`, plugin-level prompts exist for
+   both sources, and re-running the prompts against the pinned upstream
+   reproduces the committed skill.
+5. `scripts/check-vendored-skills.py --check` passes on a fresh tree, fails on
+   a stale entry, and never rewrites a skill.
+6. Two plugins can ship the same skill name: both sync, both route by qualified
+   name, and a bare name resolves when unique and reports candidates when not.
+7. `lode install` writes the §5.2 suppression list to
+   `.claude/settings.local.json` with neither upstream plugin installed,
+   preserves unrelated entries, is idempotent, and reports what it disabled.
+8. A grilling session started against a spec destination reads local corpus
+   documents, fetches a document from a corpus this checkout lacks, and writes
+   a corpus file the commit hooks accept.
+9. A grilling round is answerable in `crit` — one comment per question, an
+   unanswered question taking its recommendation — and falls back to terminal
+   rounds when `crit` is not installed.
+10. `lode doc fetch` fills `.worklode/cache/docs/`, and a refetch at an unchanged
+   version transfers no body.
+11. `worklode_doc_fetch_total` and `worklode_skill_name_ambiguous_total` are
+   registered and exercised by tests.
