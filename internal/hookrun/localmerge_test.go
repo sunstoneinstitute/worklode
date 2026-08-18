@@ -311,3 +311,129 @@ func TestDefaultBranch(t *testing.T) {
 		}
 	})
 }
+
+// TestLocalMergeReportsMultiCommitSquash is the case `git cherry` cannot see.
+// Squashing two commits into one matches neither of their patch ids, so only
+// hashing the branch's combined diff finds the work — and "Squash and merge"
+// on a branch with more than one commit is GitHub's default.
+func TestLocalMergeReportsMultiCommitSquash(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
+	})
+	r := newMergeRepo(t)
+	r.git("checkout", "-b", "WL-3-two-commits")
+	r.commit("a.txt", "a\n", "first")
+	r.commit("b.txt", "b\n", "second")
+	r.git("checkout", "main")
+	r.git("merge", "--squash", "WL-3-two-commits")
+	r.git("commit", "-m", "squash WL-3")
+
+	runGitHook(t, "post-commit", r.root)
+
+	if got := b.reported(t); len(got) != 1 || got[0] != "WL-3" {
+		t.Fatalf("reported %v, want [WL-3]", got)
+	}
+}
+
+// TestLocalMergeDoesNotReReportASquash: the squash probe matches only the
+// commits this event added, so the commit after a squash must not report it
+// again. The ancestry guard cannot do this job — a squashed branch is never
+// an ancestor of anything.
+func TestLocalMergeDoesNotReReportASquash(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
+	})
+	r := newMergeRepo(t)
+	r.git("checkout", "-b", "WL-3-two-commits")
+	r.commit("a.txt", "a\n", "first")
+	r.commit("b.txt", "b\n", "second")
+	r.git("checkout", "main")
+	r.git("merge", "--squash", "WL-3-two-commits")
+	r.git("commit", "-m", "squash WL-3")
+	runGitHook(t, "post-commit", r.root)
+
+	r.commit("unrelated.txt", "later\n", "an ordinary commit afterwards")
+	runGitHook(t, "post-commit", r.root)
+
+	if n := b.reportCount(); n != 1 {
+		t.Fatalf("reports = %d, want 1: the commit after a squash must not re-report it", n)
+	}
+}
+
+// TestLocalMergeIgnoresUnlandedBranchDuringSquash is the false-positive guard
+// on the new probe: a branch with its own unlanded work must not be dragged
+// in by somebody else's squash landing in the same commit range.
+func TestLocalMergeIgnoresUnlandedBranchDuringSquash(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
+		{"id": "WL-4", "branch": "WL-4-still-working", "state": "in_progress"},
+	})
+	r := newMergeRepo(t)
+	r.git("checkout", "-b", "WL-4-still-working")
+	r.commit("w.txt", "work in progress\n", "wip")
+	r.git("checkout", "main")
+	r.git("checkout", "-b", "WL-3-two-commits")
+	r.commit("a.txt", "a\n", "first")
+	r.commit("b.txt", "b\n", "second")
+	r.git("checkout", "main")
+	r.git("merge", "--squash", "WL-3-two-commits")
+	r.git("commit", "-m", "squash WL-3")
+
+	runGitHook(t, "post-commit", r.root)
+
+	got := b.reported(t)
+	if len(got) != 1 || got[0] != "WL-3" {
+		t.Fatalf("reported %v, want [WL-3] only — WL-4 is still unlanded", got)
+	}
+}
+
+// TestLocalMergeReportsSquashAfterMainMoved is the realistic GitHub flow: the
+// branch forked, main gained unrelated commits, and only then was the branch
+// squashed onto it. The branch's combined diff must be taken from where it
+// forked, not from main's tip.
+func TestLocalMergeReportsSquashAfterMainMoved(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-5", "branch": "WL-5-forked-early", "state": "in_review"},
+	})
+	r := newMergeRepo(t)
+	r.git("checkout", "-b", "WL-5-forked-early")
+	r.commit("a.txt", "a\n", "first")
+	r.commit("b.txt", "b\n", "second")
+	r.git("checkout", "main")
+	r.commit("other.txt", "someone else\n", "unrelated work on main")
+	r.git("merge", "--squash", "WL-5-forked-early")
+	r.git("commit", "-m", "squash WL-5")
+
+	runGitHook(t, "post-commit", r.root)
+
+	if got := b.reported(t); len(got) != 1 || got[0] != "WL-5" {
+		t.Fatalf("reported %v, want [WL-5]", got)
+	}
+}
+
+// TestLocalMergeReportsSquashArrivingWithOtherCommits: a squash merged on the
+// forge and then pulled arrives alongside whatever else landed, so the probe
+// must search the whole range this event added, not just its tip.
+func TestLocalMergeReportsSquashArrivingWithOtherCommits(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-6", "branch": "WL-6-arrives-in-a-batch", "state": "in_review"},
+	})
+	r := newMergeRepo(t)
+	r.git("checkout", "-b", "WL-6-arrives-in-a-batch")
+	r.commit("a.txt", "a\n", "first")
+	r.commit("b.txt", "b\n", "second")
+	// Stand in for the forge: squash the branch onto a line of work that then
+	// arrives on main as a batch of commits, the squash not at its tip.
+	r.git("checkout", "-b", "upstream", "main")
+	r.git("merge", "--squash", "WL-6-arrives-in-a-batch")
+	r.git("commit", "-m", "squash WL-6")
+	r.commit("after.txt", "and then some\n", "a later upstream commit")
+	r.git("checkout", "main")
+	r.git("merge", "--no-ff", "-m", "Merge upstream", "upstream")
+
+	runGitHook(t, "post-merge", r.root)
+
+	if got := b.reported(t); len(got) != 1 || got[0] != "WL-6" {
+		t.Fatalf("reported %v, want [WL-6]", got)
+	}
+}
