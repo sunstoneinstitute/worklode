@@ -1,0 +1,158 @@
+---
+status: draft
+requires:
+- 001-identity-and-authentication.md
+- 029-research-work-in-the-backbone.md
+---
+# Spec 039 — Worklode prod in the admin cluster
+
+## 0. Purpose & scope {#sec-0}
+
+Two facts about a worklode instance that live nowhere today: **where it runs**,
+and **which kind of instance it is**.
+
+- The production instance runs in the **admin cluster**. `hzdev` keeps the dev
+  instance. §2 states the rule and §1 the reason; §4 is the resulting prod
+  overlay.
+- The server knows whether it is a dev or a prod instance, from its own
+  configuration and not from the deployments it observes (§3).
+
+This spec governs worklode's own instances. It is not a general deployment
+spec and sets no precedent for other workloads; the repo has no deployment
+spec, and a future one subsumes §4 rather than restating it.
+
+## 1. The access surface {#sec-1}
+
+What reaching the worklode prod instance is worth:
+
+- **Every task, brief and event** for every project — the org's work in one
+  queryable place, including task bodies that quote incidents and
+  credentials-adjacent detail.
+- **Token minting.** An admin actor can mint worklode tokens (001 §2), and the
+  bootstrap token in the pod's environment is one.
+- **Encrypted GitHub user-to-server tokens** (001 §9.5) — AES-GCM at rest, but
+  the decryption key is in the same pod's environment, so pod access is key
+  access.
+- **The Postgres backing all of it**, in-cluster.
+
+Spec 029 adds participants, milestones, deliverables, and **approvals** — the
+record of who signed off on what. An approval store is a tampering target in a
+way a task list is not.
+
+None of this is reachable *outward*: worklode reads GitHub and Kubernetes and
+writes nothing privileged (§5). The surface is what reaching *worklode* is
+worth, and it is worth enough to make placement a cluster-level question rather
+than an ingress-annotation one.
+
+## 2. Where each instance runs {#sec-2}
+
+| Instance | Cluster | Overlay |
+|---|---|---|
+| prod | admin | `deploy/overlays/admin/` |
+| dev | hzdev | `deploy/overlays/hzdev/` |
+
+The admin cluster already holds the things whose compromise compromises
+everything else — Keycloak and its GitOps-managed realm config (001 §4). It is
+the cluster with the tightest access control and the narrowest set of people
+and pipelines that can change what runs there. §1 is why worklode prod belongs
+in that set.
+
+`hzprod` is where production *workloads* run. Its blast radius is meant to be
+one application; worklode's is the org. Co-locating the coordination layer with
+the things it coordinates also makes the observer share the fate of the
+observed — a bad property for the system you consult when hzprod is broken.
+
+Running **in** the admin cluster grants worklode no admin-cluster privilege.
+The GitHub App stays installed on selected repositories with the provisioning
+and admin-cluster repos deliberately excluded (001 §9.1), and its permission
+ceiling stays read-only on contents. Placement constrains who can reach
+worklode; it does not widen what worklode can reach. Changing the second is a
+change to 001, not a consequence of this section.
+
+## 3. Instance environment is not deployment environment {#sec-3}
+
+`LODE_CLUSTER_ENV_MAP` maps a cluster name to the environment of the
+deployments worklode **observes** (`env_deploys`, Flux webhooks). Both overlays
+already carry `admin=prod` in that map, and it means "deployments to the admin
+cluster are production deployments". It says nothing about where worklode
+itself runs, and it must not be repurposed to.
+
+The server carries a second, unrelated fact: **is this a dev instance or a prod
+instance?** A dev instance re-seeds and discards data all day; a prod instance
+holds the record. Behaviour that differs between them has nothing to key off
+today.
+
+| | |
+|---|---|
+| Env var | `LODE_INSTANCE_ENV` |
+| Values | `dev`, `prod` — nothing else; an unrecognised value fails startup |
+| Default | `prod` |
+| Set in | the overlay: `dev` in `hzdev`, `prod` in `admin`; `dev` in `docker-compose.yml` |
+
+The default is `prod` because the failure modes are asymmetric. A prod instance
+that silently believes it is dev drops decision records from the org's real
+data; a dev instance that believes it is prod asks for a justification nobody
+needed. Safety is the cheaper mistake, so the permissive setting is the one you
+have to write down.
+
+This section defines the field and its meaning only. What any behaviour does
+with it belongs to the spec introducing that behaviour — deletion requiring a
+justification on prod and not on dev is the first such case, and it owns its
+own semantics.
+
+## 4. The prod overlay {#sec-4}
+
+`deploy/overlays/admin/`, reconciled by the admin cluster, differing from
+`hzdev` in:
+
+- **Ingress host** `worklode.sunstoneinstitute.ai`, in both the TLS hosts and
+  the rule host. The public name follows the instance, not the cluster — dev is
+  already `worklode.dev.sunstoneinstitute.ai` rather than `worklode.hzdev…`.
+- **`LODE_PUBLIC_URL`** set to that host: login and webhook callbacks are
+  rendered from it.
+- **Secret store.** `secretStoreRef` names a `ClusterSecretStore`, which is
+  cluster-scoped, so it names the admin cluster's. The 1Password item and
+  property names are the same as hzdev's.
+- **`LODE_INSTANCE_ENV: prod`** (§3).
+- **OIDC client** `worklode-prod` against the same issuer.
+- **`LODE_WEB_OPEN` is never set**, on this overlay or any other reachable
+  instance. 001 §6 makes it the opt-in that serves the cockpit to anonymous
+  callers when no provider is configured; §1 is why this instance is the one
+  it must never be set on. Placement is not a substitute for the session gate.
+
+`LODE_CLUSTER_ENV_MAP` is identical in both overlays — it describes the
+clusters worklode watches, not the one it runs in (§3) — and the namespace
+carries `sunstone.institute/ghcr-pull` in both, which the admin cluster must
+honour as `hzprod` does.
+
+### 4.1 Cutover from hzprod {#sec-4.1}
+
+Transitional, and true only until it has happened. Moving the host re-points
+three registrations that name it: the GitHub App webhook URL and link callback
+(001 §9.1, §9.3), and the Keycloak `worklode-prod` client's redirect URIs
+(001 §4). The Postgres in `deploy/base/postgres.yaml` moves with the
+deployment, so the cutover carries a data migration.
+
+## 5. Non-goals {#sec-5}
+
+- **Outward privilege.** Worklode gains none here; widening is a change to
+  001 §9.1's ceiling and is argued there.
+- **Deletion semantics.** §3 defines the field; whether delete tombstones or
+  removes, and what a justification is, belong to the work that introduces it.
+- **Where other coordination services run.** This spec is about worklode.
+- **A deployment spec for the org.** See §0.
+
+## 6. Relationship to other documents {#sec-6}
+
+**001 §6 (web UI sessions).** An instance with §1's contents must not serve its
+web UI to whoever can reach the port. §6 now refuses to serve the web routes at
+all when no provider is configured, so the precondition holds by default and
+what remains is the `LODE_WEB_OPEN` opt-in — which §4 forbids on this instance.
+The two work in one direction only: the session gate is what makes the instance
+safe to run anywhere, and §2 narrows who can reach it. Placement never
+substitutes for the gate.
+
+**001 §9.1 (GitHub App scope).** Unchanged and load-bearing — see §2.
+
+**029.** Why this is worth settling now rather than after the next incident:
+approvals and deliverables raise what §1 is worth.
