@@ -55,8 +55,8 @@ views of the same facts, not separate products or permission boundaries.
 
 ## 2. Application and project navigation
 
-The global application navigation is a horizontal top bar with these primary
-destinations:
+The application presents a persistent global navigation region with these
+primary destinations:
 
 1. **Home** — personal work, decisions, supervised agents, and the Morning Brief;
 2. **Intake** — capture and the Discovery-to-Editorial-Evaluation pipeline;

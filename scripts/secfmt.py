@@ -321,6 +321,10 @@ def main():
     roots = a.paths or list(DEFAULT_ROOTS)
     files = collect(roots)
     if not files:
+        # A commit that touches only generated views leaves nothing to format;
+        # that is success, not a missing argument.
+        if a.paths and all(generated(p) for p in a.paths):
+            return 0
         err("secfmt: no markdown files found")
         return 2
 

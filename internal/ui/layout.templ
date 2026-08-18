@@ -1,10 +1,16 @@
 package ui
 
 // layout.templ is the application shell every page renders through: the
-// document head, skip link, the sticky top bar (brand + primary global nav +
-// theme toggle + avatar), and the <main id="main-content"> landmark each
-// page's content fills via { children... }. Styled with the prototype design
-// system (see internal/ui/styles/app.tailwind.css): .topbar, nav.global,
+// document head, skip link, the sticky top bar (brand + theme toggle +
+// avatar — no navigation), and the two-column .shell each page's content
+// fills via { children... }. Global pages wrap their content in globalShell,
+// project pages in projectShell; both sidebars open with the Primary nav
+// landmark, and the project one adds the Project landmark below it. Both put
+// the page's one <main id="main-content"> landmark in the content column, a
+// sibling of the sidebar, so "Skip to content" lands past every nav landmark
+// (WCAG 2.4.1).
+// Styled with the prototype design system (see
+// internal/ui/styles/app.tailwind.css): .topbar, nav.global, .shell,
 // .top-right/.iconbtn/.avatar. The self-hosted HTMX script tag is dormant
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
@@ -27,9 +33,6 @@ templ Page(p PageProps) {
 					</span>
 					worklode
 				</div>
-				<nav aria-label="Primary" class="global">
-					@globalNav(p.ActiveGlobal)
-				</nav>
 				<div class="top-right">
 					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
 						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
@@ -37,9 +40,7 @@ templ Page(p PageProps) {
 					<div class="avatar" aria-hidden="true">SB</div>
 				</div>
 			</header>
-			<main id="main-content">
-				{ children... }
-			</main>
+			{ children... }
 			<script src="/assets/theme.js" defer></script>
 			<script src="/assets/htmx.min.js" defer></script>
 		</body>
@@ -75,11 +76,61 @@ templ globalLink(href, label, key, active string) {
 	>{ label }</a>
 }
 
+// primaryNav is the Primary nav landmark carrying the seven global
+// destinations (moved here from the topbar). Every page renders it — global
+// pages as their sidebar's only block, project pages above the project
+// blocks — so global navigation is reachable everywhere (spec 032 §2).
+templ primaryNav(active string) {
+	<nav aria-label="Primary" class="global">
+		@globalNav(active)
+	</nav>
+}
+
+// globalSidebar renders the left column global pages share: the Primary nav
+// landmark alone, marking the one matching active as the current page.
+templ globalSidebar(active string) {
+	<div class="sidebar">
+		@primaryNav(active)
+	</div>
+}
+
+// globalShell wraps a global (non-project) page's content in the unified
+// two-column .shell frame: global sidebar left, content in the main landmark's
+// .canvas. Project pages use projectShell instead.
+templ globalShell(active string) {
+	<div class="shell">
+		@globalSidebar(active)
+		<main id="main-content" class="main">
+			<div class="canvas">
+				{ children... }
+			</div>
+		</main>
+	</div>
+}
+
+// projectShell wraps a project page's content in the unified two-column
+// .shell frame: project sidebar left, content in the main landmark. Callers
+// supply the content column themselves — a plain .canvas, or the cockpit's
+// .mode grid of canvas plus decision rail.
+templ projectShell(p CockpitProject, active string) {
+	<div class="shell">
+		@sidebar(p, active)
+		<main id="main-content" class="main">
+			{ children... }
+		</main>
+	</div>
+}
+
 // sidebar renders the project-scoped left column shared by the cockpit and the
-// project placeholder pages: the project header (name + key) and the
-// project-local nav, with active marking the current local destination.
+// project placeholder pages: the Primary nav landmark, then the back-link, the
+// project header (name + key) and the project-local nav, with active marking
+// the current local destination. The global nav is passed "" — on a project
+// page the single aria-current="page" belongs to the local destination — and
+// the two landmarks stay distinct, labelled and visually separated.
 templ sidebar(p CockpitProject, active string) {
 	<div class="sidebar">
+		@primaryNav("")
+		<a class="backlink" href="/projects">&larr; All projects</a>
 		<div class="proj-head">
 			<div class="proj-kicker"><span class="dot"></span> Project</div>
 			<h2 class="proj-name">{ p.Name }</h2>
