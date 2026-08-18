@@ -14,18 +14,25 @@ describe("syncModeForTick", () => {
 
 describe("syncOrigin", () => {
   it("changes with the server, the token, or the mount root", async () => {
-    const base = syncOrigin("https://lode.example.com", "wl_abc", "Worklode");
+    const base = await syncOrigin("https://lode.example.com", "wl_abc", "Worklode");
 
-    expect(syncOrigin("https://lode.example.com", "wl_abc", "Worklode")).toBe(base);
-    expect(syncOrigin("https://other.example.com", "wl_abc", "Worklode")).not.toBe(base);
-    expect(syncOrigin("https://lode.example.com", "wl_other", "Worklode")).not.toBe(base);
-    expect(syncOrigin("https://lode.example.com", "wl_abc", "Team/Worklode")).not.toBe(base);
+    expect(await syncOrigin("https://lode.example.com", "wl_abc", "Worklode")).toBe(base);
+    expect(await syncOrigin("https://other.example.com", "wl_abc", "Worklode")).not.toBe(base);
+    expect(await syncOrigin("https://lode.example.com", "wl_other", "Worklode")).not.toBe(base);
+    expect(await syncOrigin("https://lode.example.com", "wl_abc", "Team/Worklode")).not.toBe(base);
   });
 
   it("does not confuse two settings that concatenate to the same string", async () => {
-    expect(syncOrigin("https://lode.example.com", "wl_a", "bWorklode")).not.toBe(
-      syncOrigin("https://lode.example.com", "wl_ab", "Worklode"),
+    expect(await syncOrigin("https://lode.example.com", "wl_a", "bWorklode")).not.toBe(
+      await syncOrigin("https://lode.example.com", "wl_ab", "Worklode"),
     );
+  });
+
+  it("does not store the raw token", async () => {
+    const origin = await syncOrigin("https://lode.example.com", "wl_super_secret_token", "Worklode");
+
+    expect(origin).not.toContain("wl_super_secret_token");
+    expect(origin).toMatch(/^[0-9a-f]{16}$/);
   });
 });
 
