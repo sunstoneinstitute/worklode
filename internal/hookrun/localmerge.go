@@ -1,6 +1,7 @@
 package hookrun
 
 import (
+	"bytes"
 	"context"
 	"os/exec"
 	"strings"
@@ -20,6 +21,13 @@ var mergeCandidateStates = []string{"ready", "in_progress", "in_review"}
 // branches, not a project's worth — so reaching this cap means something is
 // wrong, and it is reported rather than silently truncated.
 const maxMergeCandidates = 100
+
+// maxSquashScan bounds how many commits one event hashes for the squash
+// probe. The window is what this single event added to the default branch —
+// one commit for a local squash, a day's work for a pull — so the cap only
+// bites on an unusually large fetch, where the report says so and delivery
+// falls back to the webhook.
+const maxSquashScan = 200
 
 // handleLocalMerge reports a merge that landed in this clone, so a task
 // advances even when nobody pushes to a repo whose GitHub App is wired up.
@@ -81,6 +89,7 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 	// project, and a branch that is gone cannot be probed anyway (a merge
 	// whose branch was already deleted falls back to the webhook).
 	local := localBranches(root)
+	probe := &mergeProbe{opts: opts, root: root, prev: prev}
 	var landed []string
 	for _, t := range resp.Tasks {
 		if t.Branch == "" || !local[t.Branch] {
@@ -91,7 +100,7 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 				maxMergeCandidates, head, maxMergeCandidates)
 			break
 		}
-		if landedNow(root, t.Branch, prev) {
+		if probe.landedNow(t.Branch) {
 			landed = append(landed, t.ID)
 		}
 	}
@@ -106,35 +115,53 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 	}
 }
 
+// mergeProbe answers "did this branch's work land in HEAD with this event?"
+// once per candidate branch, holding the one part of the answer that is
+// per-event rather than per-branch: the patch ids of the commits this event
+// added, computed lazily and at most once.
+type mergeProbe struct {
+	opts   Options
+	root   string
+	prev   string          // the commit HEAD was at before this event
+	landed map[string]bool // patch ids added by this event; see landedPatches
+	loaded bool
+}
+
 // landedNow reports whether branch's work is in HEAD now and was not in prev
 // (the commit this event built on).
 //
-// Two ways for work to arrive, ancestry first because it is the cheap and
-// common one; the patch-id walk runs only for a branch ancestry rejects:
+// Three ways for work to arrive, cheapest first; each runs only for a branch
+// the one before it rejected:
 //
 //   - branch is an ancestor of HEAD — a true merge or a fast-forward, SHAs
 //     intact.
-//   - `git cherry` finds no commit in branch that HEAD lacks — a squash,
-//     where the patches landed and the SHAs did not. It prints one line per
-//     commit, "+" for one with no equivalent upstream and "-" for one whose
-//     patch is already there, so "landed" means no "+" line, not no output.
-//
-// Rebase is deliberately out of scope: it neither preserves SHAs nor,
-// reliably, patch ids.
+//   - every commit in branch has a patch-equivalent commit in HEAD — commits
+//     replayed one for one, as a rebase or a run of cherry-picks does.
+//   - branch's combined diff is one of the commits this event added — a
+//     squash, where N commits collapsed into one and nothing matches
+//     commit-for-commit.
 //
 // The prev test is what keeps a freshly created, still-empty task branch from
 // being read as delivered. Such a branch points at a commit that was already
 // on the default branch, so every merge would otherwise report every idle
 // worktree's task as merged. Excluding what prev already contained also makes
 // the handler self-limiting: the commit after a merge does not re-report it.
-func landedNow(root, branch, prev string) bool {
-	if gitOK(root, "merge-base", "--is-ancestor", branch, prev) {
+func (p *mergeProbe) landedNow(branch string) bool {
+	if gitOK(p.root, "merge-base", "--is-ancestor", branch, p.prev) {
 		return false // already delivered before this event
 	}
-	if gitOK(root, "merge-base", "--is-ancestor", branch, "HEAD") {
+	if gitOK(p.root, "merge-base", "--is-ancestor", branch, "HEAD") {
 		return true
 	}
-	out, err := exec.Command("git", "-C", root, "cherry", "HEAD", branch).Output() //nolint:gosec // branch comes from the backbone
+	return p.replayLanded(branch) || p.squashLanded(branch)
+}
+
+// replayLanded reports whether every commit in branch has a patch-equivalent
+// commit already in HEAD. `git cherry` prints one line per commit, "+" for
+// one with no equivalent upstream and "-" for one whose patch is already
+// there, so "landed" means no "+" line, not no output.
+func (p *mergeProbe) replayLanded(branch string) bool {
+	out, err := exec.Command("git", "-C", p.root, "cherry", "HEAD", branch).Output() //nolint:gosec // branch comes from the backbone
 	if err != nil {
 		return false
 	}
@@ -144,6 +171,92 @@ func landedNow(root, branch, prev string) bool {
 		}
 	}
 	return true
+}
+
+// squashLanded reports whether branch's combined diff arrived as one of the
+// commits this event added — a squash merge.
+//
+// replayLanded cannot see this: it matches patch ids commit by commit, so
+// squashing more than one commit into one matches nothing and every commit
+// comes back "+". Hashing the branch's whole diff instead matches the squash
+// however many commits went into it — which is the common case, "Squash and
+// merge" on a branch with more than one commit being GitHub's default.
+//
+// Scoping the match to the commits this event added is what keeps it from
+// re-reporting: a squashed branch is never an ancestor of anything, so the
+// prev test above cannot retire it, but the squash commit sits in this
+// event's window exactly once.
+func (p *mergeProbe) squashLanded(branch string) bool {
+	base, ok := gitLine(p.root, "merge-base", p.prev, branch)
+	if !ok {
+		return false // unrelated history: no combined diff to speak of
+	}
+	ids := gitPatchIDs(p.root, nil, "diff-tree", "-p", "-r", "--no-renames", "--no-color", base, branch)
+	if len(ids) != 1 {
+		return false // an empty diff is not a delivery
+	}
+	return p.landedPatches()[ids[0]]
+}
+
+// landedPatches returns the patch ids of the commits this event added to the
+// default branch, computing them at most once per event. Merges are skipped:
+// they carry no diff of their own, and a squash is never one.
+func (p *mergeProbe) landedPatches() map[string]bool {
+	if p.loaded {
+		return p.landed
+	}
+	p.loaded = true
+	out, err := exec.Command("git", "-C", p.root, "rev-list", "--no-merges", p.prev+"..HEAD").Output() //nolint:gosec // fixed argv, local shas only
+	if err != nil {
+		return nil
+	}
+	revs := strings.Fields(string(out))
+	if len(revs) == 0 {
+		return nil // a merge commit alone adds no diff a squash could match
+	}
+	if len(revs) > maxSquashScan {
+		warn(p.opts, "squash probe reads the newest %d of the %d commits this event added; an older squash falls back to the webhook",
+			maxSquashScan, len(revs))
+		revs = revs[:maxSquashScan]
+	}
+	stdin := []byte(strings.Join(revs, "\n") + "\n")
+	p.landed = make(map[string]bool, len(revs))
+	for _, id := range gitPatchIDs(p.root, stdin, "diff-tree", "--stdin", "-p", "-r", "--no-renames", "--no-color") {
+		p.landed[id] = true
+	}
+	return p.landed
+}
+
+// gitPatchIDs runs a diff-producing git command and hashes its output with
+// `git patch-id`, the same normalizing hash `git cherry` compares — it
+// ignores whitespace, so a squash that reflows still matches. Rename
+// detection is forced off on both sides of every comparison so the answer
+// does not depend on the repo's diff config.
+//
+// It returns one id per patch, in order, and nothing at all for an empty
+// diff: patch-id prints a line only for a patch that changes something.
+func gitPatchIDs(root string, stdin []byte, args ...string) []string {
+	diff := exec.Command("git", append([]string{"-C", root}, args...)...) //nolint:gosec // fixed argv, caller-controlled refs only
+	diff.Stdin = bytes.NewReader(stdin)
+	patch, err := diff.Output()
+	if err != nil || len(patch) == 0 {
+		return nil
+	}
+	hash := exec.Command("git", "-C", root, "patch-id", "--stable")
+	hash.Stdin = bytes.NewReader(patch)
+	out, err := hash.Output()
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, line := range strings.Split(string(out), "\n") {
+		// Each line is "<patch id> <commit id>"; the commit id is zero for a
+		// diff fed in without its commit header.
+		if id, _, found := strings.Cut(strings.TrimSpace(line), " "); found && id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 // defaultBranch resolves the repo's default branch from origin/HEAD, the ref
