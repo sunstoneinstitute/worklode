@@ -500,3 +500,13 @@ docs/specs/038-worklode-in-a-cloud-sandbox.md:
     sec-7: "## 7. Out of scope"
     sec-8: "## 8. Open questions"
     sec-9: "## 9. Acceptance criteria"
+docs/specs/039-worklode-prod-in-the-admin-cluster.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. The access surface"
+    sec-2: "## 2. Where each instance runs"
+    sec-3: "## 3. Instance environment is not deployment environment"
+    sec-4: "## 4. The prod overlay"
+    sec-4.1: "### 4.1 Cutover from hzprod"
+    sec-5: "## 5. Non-goals"
+    sec-6: "## 6. Relationship to other documents"
