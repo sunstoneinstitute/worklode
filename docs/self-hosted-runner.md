@@ -43,10 +43,9 @@ above before adding another job here: the whole isolation model now rests on
 
 Registered as a repo-level runner (not org-level) with labels `self-hosted,
 Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets the
-bare `self-hosted` label; `test` targets `gha-pgvector`; `build-image`
-targets both `docker` and `gha-buildcache` — see the sections below for why
-each label exists
-rather than every job sharing `self-hosted`.
+bare `self-hosted` label; `test` targets `gha-pgvector` and `gha-buildcache`;
+`build-image` targets `docker` and `gha-buildcache` — see the sections below
+for why each label exists rather than every job sharing `self-hosted`.
 
 Installed as a systemd service:
 
@@ -97,15 +96,72 @@ and was caught immediately by CI going red; there is no other guard against
 it recurring in a future step that reads `TEST_POSTGRES_DSN`.
 
 The `gha-pgvector` runner label makes that dependency a scheduling
-constraint, not just a convention `test` happens to rely on: `runs-on:
-gha-pgvector` (rather than the bare `self-hosted` `lint` uses) means a
-second self-hosted runner added later — without this sidecar — can never
-be handed a `test` job it would immediately fail. Label it when its own
-`gha-ci-postgres` exists and is reachable, not before:
+constraint, not just a convention `test` happens to rely on: requiring it
+(rather than the bare `self-hosted` `lint` uses) means a second self-hosted
+runner added later — without this sidecar — can never be handed a `test`
+job it would immediately fail. Label it when its own `gha-ci-postgres`
+exists and is reachable, not before:
 
 ```
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-pgvector"
 ```
+
+`test` also requires `gha-buildcache`, covered next — Postgres reachability
+and cache-restore-skipping are two separate facts about hel01, and neither
+implies the other.
+
+## Persistent build caches (`gha-buildcache`)
+
+`gha-buildcache` asserts one general fact about a runner: **its local disk
+persists build-cache state across job runs**, so a job can skip the
+`actions/cache` round trip entirely rather than restore-on-every-run /
+save-only-on-main. Two jobs rely on it, for caches that live in different
+places:
+
+- **`test`** (and `lint`, informally — see the note below) uses Go's own
+  `GOCACHE`/`GOMODCACHE`, which `go env` resolves under `$HOME` by default.
+  Nothing needs preparing there; the caches just exist once anything has run
+  `go build`/`go test` on the box. `_test.yml` skips its `Restore`/`Save Go
+  cache` steps and the `Go cache paths` step whenever `gha-buildcache` isn't
+  in `runs-on`.
+- **`build-image`** needs a specific *prepared* directory instead, because
+  it doesn't get Go's defaults for free: `buildkit-cache-dance` extracts the
+  Dockerfile's `RUN --mount=type=cache` contents (`/go/pkg/mod`,
+  `/root/.cache/go-build`) into a host directory it's told about, and that
+  directory has to exist and be writable.
+
+```
+sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
+```
+
+**It has to be an absolute path outside the checkout**, not a directory
+relative to the workspace the way `ubuntu-latest` uses `go-cache-mount/`
+today. `actions/checkout`'s clean step (`git clean -ffdx`) wipes anything
+untracked inside the checkout on every run — a relative cache-mount
+directory would never survive to the next job. This isn't theoretical: the
+first self-hosted `build-image` run (before `gha-buildcache` existed) wrote
+its cache mount to the old relative path, and `buildkit-cache-dance`'s
+extraction step ran as root inside a container, leaving root-owned files
+under `go-cache-mount/` in the shared checkout. The *next* job on the
+runner — of any kind, since every job shares the one checkout at
+`_work/worklode/worklode` — failed at `actions/checkout` itself, unable to
+`unlink` those files as the unprivileged `ghrunner`. Recovery needed
+`sudo rm -rf` on the poisoned directory from outside the job entirely; nothing
+inside a job can clean up a mess a less-privileged user can't delete. A
+`gha-buildcache`-labeled directory can't have this failure mode, because
+nothing ever asks `actions/checkout` to clean it.
+
+`_test.yml` and `_build-image.yml`'s `runs-on` inputs are both JSON arrays
+(`fromJSON(inputs.runs-on)`) for this reason — each now requires more than
+one label at once (`gha-pgvector` + `gha-buildcache`, `docker` +
+`gha-buildcache`) — unlike `_lint.yml`'s single-label string.
+
+**Known asymmetry:** `lint` still skips its own Go-cache restore/save purely
+because `runs-on` isn't `ubuntu-latest`, the same implicit assumption this
+label exists to replace for `test`. It hasn't been converted to require
+`gha-buildcache` explicitly — do that the next time `lint` changes, using
+`test`'s conversion as the template.
 
 ## Docker for `build-image`
 
@@ -126,30 +182,10 @@ branch before wiring `pr-checks.yml` to it, matching what
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=docker"
 ```
 
-`build-image` needs a *second*, independent fact from the same runner: a
-place to persist the Dockerfile's Go cache mounts (`/go/pkg/mod`,
-`/root/.cache/go-build`) between runs. `ubuntu-latest` gets a fresh VM every
-time, so it round-trips those through `actions/cache`'s network backend into
-`go-cache-mount/`, a directory relative to the checkout. hel01 doesn't need
-the round trip — but that directory can't just move to an absolute path on
-the same host and skip `actions/cache`, because `actions/checkout`'s clean
-step (`git clean -ffdx`) wipes anything untracked inside the checkout on
-every run, including a relative `go-cache-mount/`. It has to live outside
-the checkout entirely:
-
-```
-sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
-gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
-```
-
 `docker` and `gha-buildcache` are independent facts — a future runner could
 have Docker access set up before its cache directory exists, or vice versa —
-so `build-image`'s `runs-on` requires both labels rather than treating
-either as implied by the other:
-`runs-on: ["docker","gha-buildcache"]`. `_build-image.yml`'s `runs-on` input
-is therefore a JSON array (`fromJSON(inputs.runs-on)`), unlike `_test.yml`
-and `_lint.yml`'s single-label strings — the only reusable workflow here
-that schedules on more than one required label at once.
+so `build-image`'s `runs-on` requires both rather than treating either as
+implied by the other: `runs-on: ["docker","gha-buildcache"]`.
 
 ## Extending self-hosted coverage
 
@@ -158,17 +194,18 @@ that schedules on more than one required label at once.
 hel01 the same way, by threading that input through from its caller's
 `gate.trusted` output. Pick the label for what the job actually needs, not
 for convenience: `gha-pgvector` for Postgres, `docker` for the Docker
-socket, `gha-buildcache` for a persistent cache-mount directory outside the
-checkout, the bare `self-hosted` for none of the above (as `lint` uses). If
-a job needs more than one, require all of them — don't let one imply
-another that happens to be true today. Don't require a label a job doesn't
-need, and don't let a job that does need one fall back to the bare
-`self-hosted` — any of these breaks the point of tagging by requirement at
-all. Do **not** add `services:` to a job that might run self-hosted: GitHub
-starts service containers unconditionally once a job declares them, which
-would need `ghrunner` to reach the Docker socket outside of the `docker`
-label's own job. Gate container provisioning with a step-level `if:`
-instead, as `_test.yml` does. And do not assume a relative, workspace-local
-directory persists on self-hosted just because the runner itself does —
-`actions/checkout`'s clean step erases it every run; only a path outside the
-checkout, like `gha-buildcache`'s, actually survives.
+socket, `gha-buildcache` for skipping a cache round trip, the bare
+`self-hosted` for none of the above (as `lint` uses today). If a job needs
+more than one, require all of them — don't let one imply another that
+happens to be true today. Don't require a label a job doesn't need, and
+don't let a job that does need one fall back to the bare `self-hosted` —
+any of these breaks the point of tagging by requirement at all. Do **not**
+add `services:` to a job that might run self-hosted: GitHub starts service
+containers unconditionally once a job declares them, which would need
+`ghrunner` to reach the Docker socket outside of the `docker` label's own
+job. Gate container provisioning with a step-level `if:` instead, as
+`_test.yml` does. And do not assume a relative, workspace-local directory
+persists on self-hosted just because the runner itself does —
+`actions/checkout`'s clean step erases it every run and, as the incident
+above shows, can fail outright if something wrote to it as root; only a
+path outside the checkout, like `gha-buildcache`'s, actually survives.
