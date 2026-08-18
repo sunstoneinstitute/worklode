@@ -532,20 +532,29 @@ func assertTimeline(t *testing.T, ctx context.Context, agent *cli.Client, taskID
 		t.Fatalf("timeline contains a runtime entry %+v; the unlinked crashloop must not appear", e)
 	}
 
-	// Spot-check entry contents.
-	pr := findEntry(tl.Timeline, "pr")
+	// Spot-check entry contents. firstIdx above already proved each type is
+	// present, so a nil here would be a bug in findEntry — but dereferencing
+	// on trust would replace the assertion's message with a nil panic.
+	must := func(typ string) *model.TimelineEntry {
+		e := findEntry(tl.Timeline, typ)
+		if e == nil {
+			t.Fatalf("timeline has no %q entry: %v", typ, types)
+		}
+		return e
+	}
+	pr := must("pr")
 	if pr.Repo != repo || pr.Number != 42 || pr.State != "merged" {
 		t.Fatalf("pr entry = %+v, want merged %s#42", pr, repo)
 	}
-	review := findEntry(tl.Timeline, "review")
+	review := must("review")
 	if review.Reviewer != "reviewer-bob" || review.State != "approved" {
 		t.Fatalf("review entry = %+v, want reviewer-bob approved", review)
 	}
-	artifact := findEntry(tl.Timeline, "artifact")
+	artifact := must("artifact")
 	if artifact.Kind != "git_tag" || artifact.Name != repo || artifact.Version != "v1.0.0" {
 		t.Fatalf("artifact entry = %+v, want git_tag %s v1.0.0", artifact, repo)
 	}
-	deployment := findEntry(tl.Timeline, "deployment")
+	deployment := must("deployment")
 	if deployment.Environment != "prod" || deployment.Status != "deployed" ||
 		deployment.TargetName != "flux-system/demo" {
 		t.Fatalf("deployment entry = %+v, want prod/deployed on flux-system/demo", deployment)
