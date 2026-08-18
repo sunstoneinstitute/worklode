@@ -1021,3 +1021,79 @@ func TestListTasksDetailMatchesGetTask(t *testing.T) {
 		t.Errorf("edges: list %+v, get %+v", row.Edges, single.Edges)
 	}
 }
+
+func TestTaskSecretsOverAPI(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
+		map[string]string{"id": "secapi", "name": "Sec", "key": "SA"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project": "secapi", "title": "creds", "priority": "medium", "kind": "chore",
+		"secrets": []string{"KUBECONFIG_HZDEV", "OPENALEX_API_KEY"},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create task: %d %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID      string   `json:"id"`
+		Secrets []string `json:"secrets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(created.Secrets) != 2 || created.Secrets[0] != "KUBECONFIG_HZDEV" {
+		t.Fatalf("secrets = %v; want the two declared names", created.Secrets)
+	}
+
+	// The brief shows the declaration (acceptance 1).
+	rec = doReq(t, h, http.MethodGet, "/api/v1/tasks/"+created.ID+"/brief", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("brief: %d %s", rec.Code, rec.Body.String())
+	}
+	var brief struct {
+		Task struct {
+			Secrets []string `json:"secrets"`
+		} `json:"task"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &brief); err != nil {
+		t.Fatalf("decode brief: %v", err)
+	}
+	if len(brief.Task.Secrets) != 2 {
+		t.Fatalf("brief secrets = %v; want 2 names", brief.Task.Secrets)
+	}
+
+	// PATCH replaces the list.
+	rec = doReq(t, h, http.MethodPatch, "/api/v1/tasks/"+created.ID, token,
+		map[string]any{"secrets": []string{"GITHUB_TOKEN"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", rec.Code, rec.Body.String())
+	}
+	var patched struct {
+		Secrets []string `json:"secrets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &patched); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(patched.Secrets) != 1 || patched.Secrets[0] != "GITHUB_TOKEN" {
+		t.Fatalf("patched secrets = %v; want [GITHUB_TOKEN]", patched.Secrets)
+	}
+}
+
+func TestTaskSecretsRejectsBadNames(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
+		map[string]string{"id": "secbad", "name": "SecBad", "key": "SB"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project": "secbad", "title": "bad", "priority": "medium", "kind": "chore",
+		"secrets": []string{"op://Employee/GitHub token/credential"},
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad secret name: %d %s; want 422", rec.Code, rec.Body.String())
+	}
+}
