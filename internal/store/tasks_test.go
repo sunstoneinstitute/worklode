@@ -1506,7 +1506,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	var created *Task
+	var created *model.Task
 	err := s.Tx(ctx, func(tx *sql.Tx) error {
 		task, err := CreateTask(tx, s.Now(), TaskInput{
 			ProjectID: "secproj", Title: "needs creds", Priority: "medium", Kind: "chore",

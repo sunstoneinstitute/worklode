@@ -6,17 +6,10 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// catalogEntryJSON is the wire form of one catalog entry.
-type catalogEntryJSON struct {
-	Name        string `json:"name"`
-	Ref         string `json:"ref"`
-	Description string `json:"description"`
-	Baseline    bool   `json:"baseline"`
-}
 
 // secretsCatalog handles GET /api/v1/secrets/catalog. Authenticated only —
 // the name → op:// map must not leak vault/item structure (spec 017), which
@@ -40,11 +33,9 @@ func (s *server) secretsCatalog(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	out := struct {
-		Secrets []catalogEntryJSON `json:"secrets"`
-	}{Secrets: make([]catalogEntryJSON, 0, len(cat.Entries))}
+	out := model.SecretCatalogResponse{Secrets: make([]model.SecretCatalogEntry, 0, len(cat.Entries))}
 	for _, e := range cat.Entries {
-		out.Secrets = append(out.Secrets, catalogEntryJSON{
+		out.Secrets = append(out.Secrets, model.SecretCatalogEntry{
 			Name: e.Name, Ref: e.Ref, Description: e.Description, Baseline: e.Baseline,
 		})
 	}
@@ -65,9 +56,7 @@ func (s *server) secretsCatalog(w http.ResponseWriter, r *http.Request) {
 // task's audit trail.
 func (s *server) secretsMaterialized(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req struct {
-		Names []string `json:"names"`
-	}
+	var req model.SecretsMaterializedInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
