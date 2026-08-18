@@ -63,18 +63,18 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	lease, err := s.st.Claim(r.Context(), id, actor.ID, req.Worktree,
 		time.Duration(req.TTLSeconds)*time.Second)
 	if errors.Is(err, store.ErrLeased) {
-		body := map[string]any{"error": "task already leased"}
+		body := model.ClaimConflictResponse{Error: "task already leased"}
 		// Best-effort holder info: if the lease vanished in the race window,
 		// the conflict answer still stands, just without a holder.
 		if holder, herr := s.st.ActiveLease(r.Context(), id); herr == nil {
-			body["holder"] = map[string]any{
-				"actor_id":   holder.ActorID,
-				"expires_at": holder.ExpiresAt,
+			body.Holder = &model.ClaimHolder{
+				ActorID:   holder.ActorID,
+				ExpiresAt: holder.ExpiresAt,
 			}
 		} else if errors.Is(herr, store.ErrNotFound) {
 			// The task itself has no active lease, so the conflict came from
 			// the claimant already holding a lease on this worktree.
-			body["error"] = "you already hold an active lease on another task from this worktree"
+			body.Error = "you already hold an active lease on another task from this worktree"
 		}
 		writeJSON(w, http.StatusConflict, body)
 		return

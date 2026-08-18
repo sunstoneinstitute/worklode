@@ -493,9 +493,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 
 	if resp.StatusCode >= 400 {
 		msg := strings.TrimSpace(string(data))
-		var errBody map[string]string
-		if json.Unmarshal(data, &errBody) == nil && errBody["error"] != "" {
-			msg = errBody["error"]
+		var errBody model.ErrorResponse
+		if json.Unmarshal(data, &errBody) == nil && errBody.Error != "" {
+			msg = errBody.Error
 		}
 		return nil, &ClientError{Status: resp.StatusCode, Msg: msg}
 	}
@@ -771,9 +771,8 @@ func (c *Client) DoneTask(ctx context.Context, id string) (model.Task, []byte, e
 // repo's default branch carrying the work of these tasks. repo may be any git
 // remote URL form; the server normalizes it.
 func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []string) (model.MergeReport, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/merges", map[string]any{
-		"repo": repo, "sha": sha, "tasks": tasks,
-	})
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/merges",
+		model.MergeReportRequest{Repo: repo, SHA: sha, Tasks: tasks})
 	if err != nil {
 		return model.MergeReport{}, nil, err
 	}
@@ -1142,7 +1141,7 @@ func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) (
 	}
 	return c.do(ctx, http.MethodPatch,
 		"/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name),
-		map[string]string{"done_state": doneState})
+		model.SetRepoDoneStateInput{DoneState: doneState})
 }
 
 // --- actors and tokens --------------------------------------------------
@@ -1374,9 +1373,9 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxAPIErrBody))
 		msg := strings.TrimSpace(string(body))
-		var errBody map[string]string
-		if json.Unmarshal(body, &errBody) == nil && errBody["error"] != "" {
-			msg = errBody["error"]
+		var errBody model.ErrorResponse
+		if json.Unmarshal(body, &errBody) == nil && errBody.Error != "" {
+			msg = errBody.Error
 		}
 		return &ClientError{Status: resp.StatusCode, Msg: msg}
 	}
@@ -1447,7 +1446,7 @@ func (c *Client) EventSubscribers(ctx context.Context) (model.EventSubscriberLis
 func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (model.EventSubscriberStatus, []byte, error) {
 	raw, err := c.do(ctx, http.MethodPost,
 		"/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek",
-		map[string]any{"to": to})
+		model.EventSubscriberSeekRequest{To: to})
 	if err != nil {
 		return model.EventSubscriberStatus{}, nil, err
 	}

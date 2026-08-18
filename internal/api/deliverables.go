@@ -111,7 +111,7 @@ func (s *server) listProjectDeliverables(w http.ResponseWriter, r *http.Request)
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"deliverables": items})
+	writeJSON(w, http.StatusOK, model.DeliverableListResponse{Deliverables: items})
 }
 
 // createDeliverable handles POST /api/v1/projects/{id}/deliverables.

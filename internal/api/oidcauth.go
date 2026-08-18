@@ -64,9 +64,9 @@ func (s *server) oidcConfig(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusNotFound, "oidc not configured")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"issuer":    s.oidc.Issuer(),
-		"client_id": s.oidc.ClientID(),
+	writeJSON(w, http.StatusOK, model.OIDCConfig{
+		Issuer:   s.oidc.Issuer(),
+		ClientID: s.oidc.ClientID(),
 	})
 }
 
@@ -121,9 +121,9 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"token":      token,
-		"actor_id":   actorID,
-		"expires_at": exp.UTC().Format(time.RFC3339),
+	writeJSON(w, http.StatusCreated, model.MintedToken{
+		Token:     token,
+		ActorID:   actorID,
+		ExpiresAt: exp.UTC().Format(time.RFC3339),
 	})
 }

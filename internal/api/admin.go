@@ -385,9 +385,7 @@ const doneStateErrMsg = "invalid done_state: must be merged, deployed_prod, or r
 // done_state is settable.
 func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 	repo := r.PathValue("owner") + "/" + r.PathValue("name")
-	var req struct {
-		DoneState string `json:"done_state"`
-	}
+	var req model.SetRepoDoneStateInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

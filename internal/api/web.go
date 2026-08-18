@@ -355,6 +355,15 @@ func summarizeEntry(e timelineEntry) ui.TimelineRow {
 	return row
 }
 
+// stateChange is the state_log "change" payload store.LogChange writes: a
+// stored row, not an HTTP body, which is why it is declared here rather than
+// in internal/model (ADR 036 §3).
+type stateChange struct {
+	Field string `json:"field"`
+	Old   string `json:"old"`
+	New   string `json:"new"`
+}
+
 // summarizeStateChange decodes a state-log "change" payload (written by
 // store.LogChange: {"field": ..., "old": ..., "new": ...}, "old" omitted for
 // a plain field update) into a one-line summary.
@@ -363,11 +372,7 @@ func summarizeStateChange(obj map[string]any) string {
 	if !ok {
 		return ""
 	}
-	var change struct {
-		Field string `json:"field"`
-		Old   string `json:"old"`
-		New   string `json:"new"`
-	}
+	var change stateChange
 	if err := json.Unmarshal(raw, &change); err != nil {
 		return ""
 	}

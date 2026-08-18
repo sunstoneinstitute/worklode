@@ -54,6 +54,13 @@ type AddRepoInput struct {
 	DoneState string `json:"done_state"`
 }
 
+// SetRepoDoneStateInput is the request body of PATCH
+// /api/v1/repos/{owner}/{name}. done_state is the only settable field on an
+// already-mapped repo, and it is required.
+type SetRepoDoneStateInput struct {
+	DoneState string `json:"done_state"`
+}
+
 // AddRepoResult is the response from AddRepo. Warnings are non-fatal setup
 // problems — the mapping was created regardless.
 type AddRepoResult struct {

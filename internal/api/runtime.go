@@ -73,8 +73,8 @@ func (s *server) createRuntimeEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !inserted {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
+		writeJSON(w, http.StatusOK, model.RuntimeEventAck{Status: "duplicate"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "status": "ok"})
+	writeJSON(w, http.StatusCreated, model.RuntimeEventAck{ID: id, Status: "ok"})
 }
