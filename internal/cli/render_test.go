@@ -362,7 +362,7 @@ func TestBoardBlockedAndReadyShowKind(t *testing.T) {
 			Task: model.Task{ID: "WL-1", Title: "Stuck", Priority: "medium", Kind: "bug"},
 		}},
 		Ready: []model.BoardTask{{
-			Task: model.Task{ID: "WL-2", Title: "Next", Priority: "medium", Kind: "spec"},
+			Task: model.Task{ID: "WL-2", Title: "Next", Priority: "medium", Kind: "design"},
 		}},
 	}}})
 	got := buf.String()
@@ -372,7 +372,7 @@ func TestBoardBlockedAndReadyShowKind(t *testing.T) {
 	if !strings.Contains(got, "KIND") {
 		t.Fatalf("blocked/ready sections should show a KIND column:\n%s", got)
 	}
-	if !strings.Contains(got, "bug") || !strings.Contains(got, "spec") {
+	if !strings.Contains(got, "bug") || !strings.Contains(got, "design") {
 		t.Fatalf("kind values not rendered:\n%s", got)
 	}
 }
