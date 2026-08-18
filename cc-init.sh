@@ -30,3 +30,4 @@ psql "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable" \
   -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
 
 lode login --server https://worklode.dev.sunstoneinstitute.ai
+lode install
