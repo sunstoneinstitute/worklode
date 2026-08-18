@@ -63,6 +63,11 @@ def generated(path):
     numbering with borrowed text folded in. Neither this formatter nor
     secmeta.py has anything to say about them, and a walk that picked them up
     would report the generator's output as the author's defect.
+
+    Named files are filtered too, not only walked directories. inlinespec
+    strips the {#sec-N} anchors from a view on purpose; a formatter that put
+    them back on the files pre-commit hands it would fight the generator that
+    runs after it, and no amount of re-staging would converge.
     """
     return GENERATED_DIR in Path(path).parts
 
@@ -270,7 +275,7 @@ def collect(paths):
         p = Path(p)
         if p.is_dir():
             out += sorted(q for q in p.rglob("*.md") if not generated(q))
-        elif p.suffix == ".md":
+        elif p.suffix == ".md" and not generated(p):
             out.append(p)
     return out
 

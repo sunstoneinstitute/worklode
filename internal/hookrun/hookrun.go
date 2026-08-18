@@ -95,7 +95,10 @@ type Payload struct {
 // package is testable; NewClient and Now default to the real config-backed
 // client and time.Now when nil.
 type Options struct {
-	Event  string
+	Event string
+	// Args is the triggering event's own positional arguments — git's, for
+	// the hooks that take any. commit-msg's $1 is the message file.
+	Args   []string
 	Next   []string // downstream command + argv after --next; nil ⇒ no chain
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -173,6 +176,7 @@ var events = []Event{
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
 	{"session-end", "Close the agent session and bill its tokens to the lease."},
 	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
+	{"commit-msg", "Stamp the Worklode-Task trailer into a commit made in a task worktree."},
 	{"post-merge", "Report a merge that landed on the default branch in this clone."},
 	{"post-commit", "Same, for the squash and conflict-resolution merges post-merge never sees."},
 	{"worktree-create", "Auto-resume the task's lease when its worktree is created."},
@@ -236,6 +240,10 @@ func dispatch(ctx context.Context, opts Options, p Payload, dir string, l worktr
 		handleSessionEnd(ctx, opts, p, dir, l)
 	case "pre-commit":
 		handlePreCommit(ctx, opts, dir, l)
+	case "commit-msg":
+		// No backbone call and no context: the task id is already on disk, and
+		// a commit must not wait on the network to get its trailer.
+		handleCommitMsg(opts, dir, l)
 	case "post-merge", "post-commit":
 		// No worktree lookup: these run in the main clone, where there is no
 		// lease to find. The guard is per-handler (HEAD must be the default

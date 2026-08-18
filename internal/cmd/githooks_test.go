@@ -555,17 +555,20 @@ func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
 
 // --- the merge-reporting hooks ------------------------------------------------
 
-// TestInstallGitHooksInstallsMergeHooks: post-merge and post-commit are what
-// make a local merge visible to the backbone, so install must write them
-// alongside pre-commit, and uninstall must take all three away.
-func TestInstallGitHooksInstallsMergeHooks(t *testing.T) {
+// TestInstallGitHooksInstallsEveryManagedHook: every hook in gitHooks is a
+// signal the backbone would otherwise miss — a lease that stops being renewed,
+// a merge nobody reports, a commit with no task on it — so install must write
+// all of them and uninstall must take all of them away. Derived from gitHooks
+// rather than restated, so adding one cannot leave this test behind.
+func TestInstallGitHooksInstallsEveryManagedHook(t *testing.T) {
 	root := initGitRepo(t)
 
 	hooksDir, chains, err := installGitHooks(root)
 	if err != nil {
 		t.Fatalf("installGitHooks: %v", err)
 	}
-	for _, hook := range []string{"pre-commit", "post-merge", "post-commit"} {
+	for _, h := range gitHooks {
+		hook := h.name
 		path := filepath.Join(hooksDir, hook)
 		content := readFile(t, path)
 		if !strings.Contains(content, "exec lode hook "+hook+" \"$@\"") {
@@ -583,7 +586,8 @@ func TestInstallGitHooksInstallsMergeHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstallGitHooks: %v", err)
 	}
-	for _, hook := range []string{"pre-commit", "post-merge", "post-commit"} {
+	for _, h := range gitHooks {
+		hook := h.name
 		if got := actionFor(t, removals, hook); got != hookActionRemoved {
 			t.Fatalf("%s uninstall action = %q, want %q", hook, got, hookActionRemoved)
 		}
@@ -655,5 +659,39 @@ func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
 	}
 	if got := readFile(t, postMergePath); got != thirdParty {
 		t.Fatalf("post-merge after uninstall = %q, want the original %q", got, thirdParty)
+	}
+}
+
+// TestChainedArgsHookForwardsGitArgsBothWays: `lode hook` reads the words
+// between the event and --next as its own and hands everything after --next to
+// the chained hook verbatim. An args hook chained to a third-party hook has to
+// name "$@" twice, or exactly one of the two sees git's arguments — and for
+// commit-msg those arguments are the message file it exists to edit.
+func TestChainedArgsHookForwardsGitArgsBothWays(t *testing.T) {
+	for _, h := range gitHooks {
+		script := renderHookScript(h, "/path/to/other-hook")
+		got := strings.Count(script, `"$@"`)
+		want := 1
+		if h.args {
+			want = 2
+		}
+		if got != want {
+			t.Errorf("chained %s script has %d \"$@\" (want %d):\n%s", h.name, got, want, script)
+		}
+		// Unchained, the trailing "$@" already reaches the handler, so an args
+		// hook needs no second copy.
+		if n := strings.Count(renderHookScript(h, ""), `"$@"`); n != 1 {
+			t.Errorf("unchained %s script has %d \"$@\" (want 1)", h.name, n)
+		}
+	}
+}
+
+// TestCommitMsgHookIsNotFrameworkChained: running the pre-commit binary bare
+// executes its pre-commit stage, which is not what commit-msg should fire.
+func TestCommitMsgHookIsNotFrameworkChained(t *testing.T) {
+	for _, h := range gitHooks {
+		if h.name == "commit-msg" && h.framework {
+			t.Fatal("commit-msg must not chain to the pre-commit framework")
+		}
 	}
 }

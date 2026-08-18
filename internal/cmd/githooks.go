@@ -24,18 +24,25 @@ const (
 // gitHook is one git lifecycle hook `lode install` manages. framework says
 // whether a .pre-commit-config.yaml at the repo root is a legitimate chain
 // target for it: the pre-commit binary run bare executes its pre-commit
-// stage, which is the wrong thing to fire from post-merge or post-commit.
+// stage, which is the wrong thing to fire from commit-msg, post-merge or
+// post-commit. args says the handler reads git's own positional arguments,
+// which changes where renderHookScript puts "$@".
 type gitHook struct {
 	name      string
 	framework bool
+	args      bool
 }
 
 // gitHooks is the managed set, in lifecycle order. post-merge and
 // post-commit are both bound to the same `lode hook` handler because git
 // splits the cases between them: `git merge` fires post-merge, while a squash
 // merge and a commit that resolves a merge fire only post-commit.
+//
+// commit-msg is the trailer stamper (004 §2.4). It reads git's $1, the
+// message file, so it is the one hook here with args set.
 var gitHooks = []gitHook{
 	{name: "pre-commit", framework: true},
+	{name: "commit-msg", args: true},
 	{name: "post-merge"},
 	{name: "post-commit"},
 }
@@ -124,7 +131,7 @@ func installGitHook(repoDir, hooksDir string, h gitHook) (chainedTo string, err 
 		chainedTo = ""
 	}
 
-	if err := os.WriteFile(hookPath, []byte(renderHookScript(h.name, chainedTo)), 0o755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(renderHookScript(h, chainedTo)), 0o755); err != nil {
 		return "", fmt.Errorf("write %s: %w", hookPath, err)
 	}
 	// os.WriteFile only applies the mode bits to a newly created file; force
@@ -222,17 +229,27 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// renderHookScript renders the body of the named hook. chainedTo == "" omits
-// the --next clause entirely. The chain target is single-quoted so a target
-// path containing spaces (common on macOS) is not word-split by /bin/sh before
-// lode runs, which would silently drop the chained hook.
-func renderHookScript(name, chainedTo string) string {
+// renderHookScript renders the body of one hook. chainedTo == "" omits the
+// --next clause entirely. The chain target is single-quoted so a target path
+// containing spaces (common on macOS) is not word-split by /bin/sh before lode
+// runs, which would silently drop the chained hook.
+//
+// Where "$@" lands decides who sees git's arguments. `lode hook` reads the
+// words between the event and --next as its own and passes everything after
+// --next to the chained hook verbatim, so an unchained script's trailing "$@"
+// already reaches the handler. A chained script has to name it twice for both
+// to see it, which only an args hook needs.
+func renderHookScript(h gitHook, chainedTo string) string {
 	const header = "#!/bin/sh\n" + hookMarker + " v1 — installed by `lode install`; do not edit.\n"
 	if chainedTo == "" {
-		return header + fmt.Sprintf(`exec lode hook %s "$@"`, name) + "\n"
+		return header + fmt.Sprintf(`exec lode hook %s "$@"`, h.name) + "\n"
 	}
-	return header + fmt.Sprintf(`exec lode hook %s --next %s "$@"`,
-		name, shellSingleQuote(chainedTo)) + "\n"
+	own := ""
+	if h.args {
+		own = ` "$@"`
+	}
+	return header + fmt.Sprintf(`exec lode hook %s%s --next %s "$@"`,
+		h.name, own, shellSingleQuote(chainedTo)) + "\n"
 }
 
 // shellSingleQuote wraps s in single quotes for safe use as one POSIX shell
