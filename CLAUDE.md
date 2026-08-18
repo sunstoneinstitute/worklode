@@ -153,9 +153,9 @@ public `/api/v1` HTTP API only — no store or server access. Read-only but for
 one opt-in return path (`writeBack`, default off): a task note's edited body,
 pushed with `PATCH /api/v1/tasks/{id}` on a full sync. The backbone wins any
 conflict and the local text is preserved as a conflict note. Its wire types
-(`obsidian/src/api/types.ts`) are hand-kept against the `internal/api`
-serializers that produce them — today's reference, until ADR 036 makes
-`internal/model` the one declaration they mirror.
+(`obsidian/src/api/types.ts`) are hand-kept against `internal/model`, now the
+one declaration they mirror (ADR 036); generating them from it instead of
+hand-mirroring is WL-76, not yet done.
 
 ## Specs, plans, tasks
 
