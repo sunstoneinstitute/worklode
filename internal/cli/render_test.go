@@ -311,6 +311,59 @@ func TestBoardHolderShowsUsernameAndTimeLeft(t *testing.T) {
 	}
 }
 
+// TestBoardBlockedAndReadyShowKind checks that blocked and ready rows, which
+// can never have a holder, show the task kind in that column instead — and
+// that the column header reads KIND rather than HOLDER for those buckets.
+func TestBoardBlockedAndReadyShowKind(t *testing.T) {
+	var buf bytes.Buffer
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
+		ID: "proj", Name: "Proj",
+		Blocked: []model.BoardTask{{
+			Task: model.Task{ID: "WL-1", Title: "Stuck", Priority: "medium", Kind: "bug"},
+		}},
+		Ready: []model.BoardTask{{
+			Task: model.Task{ID: "WL-2", Title: "Next", Priority: "medium", Kind: "spec"},
+		}},
+	}}})
+	got := buf.String()
+	if strings.Contains(got, "HOLDER") {
+		t.Fatalf("blocked/ready sections should not show a HOLDER column:\n%s", got)
+	}
+	if !strings.Contains(got, "KIND") {
+		t.Fatalf("blocked/ready sections should show a KIND column:\n%s", got)
+	}
+	if !strings.Contains(got, "bug") || !strings.Contains(got, "spec") {
+		t.Fatalf("kind values not rendered:\n%s", got)
+	}
+}
+
+// TestBoardInProgressShowsHolderAndKind checks that the IN PROGRESS bucket
+// carries both columns: HOLDER (who's on it) and KIND (what it is), with KIND
+// trailing HOLDER.
+func TestBoardInProgressShowsHolderAndKind(t *testing.T) {
+	var buf bytes.Buffer
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
+		ID: "proj", Name: "Proj",
+		InProgress: []model.BoardTask{{
+			Task: model.Task{ID: "WL-1", Title: "Work", Priority: "medium", Kind: "bug"},
+			Holder: &model.Holder{
+				ActorID:   "stig@sunstoneinstitute.ai",
+				ExpiresAt: time.Now().Add(74*time.Minute + 30*time.Second),
+			},
+		}},
+	}}})
+	got := buf.String()
+	if !strings.Contains(got, "HOLDER") || !strings.Contains(got, "KIND") {
+		t.Fatalf("in progress section should show both HOLDER and KIND columns:\n%s", got)
+	}
+	if strings.Index(got, "HOLDER") > strings.Index(got, "KIND") {
+		t.Fatalf("KIND header should trail HOLDER:\n%s", got)
+	}
+	if !strings.Contains(got, "stig (1h14m left)") || !strings.Contains(got, "bug") {
+		t.Fatalf("holder and kind values not rendered:\n%s", got)
+	}
+}
+
 // TestLeaseLeft covers the boundaries of the remaining-lease rendering: a
 // sub-minute lease must not read as "0m left", and an expired one must say so
 // rather than counting backwards.

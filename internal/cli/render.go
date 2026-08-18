@@ -328,24 +328,42 @@ func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
 		return ri < rj
 	})
 
+	// Blocked and ready tasks are never claimed, so a HOLDER column would be
+	// all dashes; show the task kind there instead. In progress tasks get
+	// both: HOLDER to see who's on it, KIND to see what it is.
+	hasHolders := label == "IN PROGRESS" || label == "IN REVIEW"
+	hasKind := label == "IN PROGRESS" || !hasHolders
 	fmt.Fprintf(w, "\n%s\n", label)
-	tbl := newTable(
-		column{header: "ID"},
-		column{header: "PRIORITY"},
+	cols := []column{
+		{header: "ID"},
+		{header: "PRIORITY"},
 		titleColumn("TITLE"),
-		holderColumn("HOLDER"),
-	)
+	}
+	if hasHolders {
+		cols = append(cols, holderColumn("HOLDER"))
+	}
+	if hasKind {
+		cols = append(cols, holderColumn("KIND"))
+	}
+	tbl := newTable(cols...)
 	now := time.Now()
 	for _, t := range rows {
-		holder := "-"
-		if t.Holder != nil {
-			holder = fmt.Sprintf("%s (%s)", actorName(t.Holder.ActorID), leaseLeft(t.Holder.ExpiresAt, now))
-		}
 		id := t.ID
 		if _, ok := pos[t.Parent]; ok {
 			id = "└ " + id
 		}
-		tbl.add(id, t.Priority, t.Title, holder)
+		row := []string{id, t.Priority, t.Title}
+		if hasHolders {
+			holder := "-"
+			if t.Holder != nil {
+				holder = fmt.Sprintf("%s (%s)", actorName(t.Holder.ActorID), leaseLeft(t.Holder.ExpiresAt, now))
+			}
+			row = append(row, holder)
+		}
+		if hasKind {
+			row = append(row, t.Kind)
+		}
+		tbl.add(row...)
 	}
 	tbl.flush(w)
 }
