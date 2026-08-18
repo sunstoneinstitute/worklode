@@ -579,6 +579,63 @@ func TestNextStampsTaskIDAcrossTwoWorktrees(t *testing.T) {
 	}
 }
 
+// TestNextMirrorsLocalClaudeHooksWhenRootOptedIn proves `lode next` treats a
+// developer's own `lode install` (local scope) as a standing choice: every
+// worktree it creates afterward gets the same Claude Code bindings, not just
+// the main checkout — settings.local.json is gitignored, so a linked
+// worktree's checkout would otherwise never see it (WL follow-up: local-scope
+// hooks did not propagate to worktrees).
+func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Mirror hooks")
+
+	root := initGitRepo(t)
+	if err := installClaudeHooks(filepath.Join(root, ".claude", "settings.local.json")); err != nil {
+		t.Fatalf("install claude hooks at root: %v", err)
+	}
+	t.Chdir(root)
+
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+
+	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-mirror-hooks")
+	data, err := os.ReadFile(filepath.Join(wtDir, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatalf("read worktree settings: %v", err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parse worktree settings: %v", err)
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	if _, ok := hooks["SessionStart"]; !ok {
+		t.Fatalf("worktree settings = %v, want a mirrored SessionStart binding", settings)
+	}
+}
+
+// TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn is the converse:
+// `lode next` must never opt a worktree into Claude Code hooks on its own —
+// only mirror a choice already made at root.
+func TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "No hooks")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+
+	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-no-hooks")
+	if _, err := os.Stat(filepath.Join(wtDir, ".claude", "settings.local.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no settings.local.json in worktree, stat err = %v", err)
+	}
+}
+
 // --- lode resume --------------------------------------------------------
 
 func TestResumeRenewsHeldLease(t *testing.T) {

@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 
 .superpowers/
+settings.local.json
+
