@@ -328,6 +328,9 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 	t.Helper()
 
+	if !strings.Contains(body, "All projects") {
+		t.Fatalf("missing the All-projects back-link:\n%s", body)
+	}
 	if got := strings.Count(body, "<nav aria-label="); got != 1 {
 		t.Fatalf("nav landmark count = %d, want 1 (Project):\n%s", got, body)
 	}

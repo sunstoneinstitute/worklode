@@ -682,6 +682,7 @@ func TestProjectPage(t *testing.T) {
 	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
 	// Documents, Activity.
 	assertOrder(t, body, ">Overview<", ">Crew<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
 	// must not render any of the retired/forbidden concepts. "Crew" and
 	// "Deliverable(s)" are now legitimate project-local nav labels (checked

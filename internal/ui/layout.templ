@@ -104,6 +104,7 @@ templ globalShell(active string) {
 // project-local nav, with active marking the current local destination.
 templ sidebar(p CockpitProject, active string) {
 	<div class="sidebar">
+		<a class="backlink" href="/projects">&larr; All projects</a>
 		<div class="proj-head">
 			<div class="proj-kicker"><span class="dot"></span> Project</div>
 			<h2 class="proj-name">{ p.Name }</h2>
