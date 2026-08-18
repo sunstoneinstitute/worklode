@@ -22,14 +22,28 @@ import (
 
 // runLodeCLI executes the real lode CLI entry point (internal/cmd.Execute,
 // the same function main.go calls) with args, as a real process boundary
-// would: it swaps os.Args and captures os.Stdout for the duration of the
-// call. Callers must already have set LODE_SERVER/LODE_TOKEN and t.Chdir'd
-// into the directory the command should run from.
+// would: it swaps os.Args, captures os.Stdout, and points os.Stdin at the
+// null device for the duration of the call. Callers must already have set
+// LODE_SERVER/LODE_TOKEN and t.Chdir'd into the directory the command should
+// run from.
+//
+// The stdin swap matters for `lode hook`, which reads its payload from
+// stdin: git gives a hook no payload, and a test binary's inherited stdin
+// may be anything at all.
 func runLodeCLI(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	oldArgs := os.Args
 	os.Args = append([]string{"lode"}, args...)
 	defer func() { os.Args = oldArgs }()
+
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+	defer devNull.Close()
+	oldStdin := os.Stdin
+	os.Stdin = devNull
+	defer func() { os.Stdin = oldStdin }()
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -48,40 +62,6 @@ func runLodeCLI(t *testing.T, args ...string) (string, error) {
 	w.Close()
 	os.Stdout = oldStdout
 	return <-done, runErr
-}
-
-// initE2EGitRepo creates a fresh git repo with one commit and returns its
-// path resolved to git's own notion of the toplevel (see the identical
-// comment in internal/cmd/lifecycle_test.go for why: macOS resolves the
-// TempDir's /var symlink through git but not through the raw string).
-func initE2EGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		// commit.gpgsign=false: the developer's global config may enable
-		// signing, which a temp-repo test commit must not depend on.
-		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init")
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
-
-	root, ok := worktree.Root(dir)
-	if !ok {
-		t.Fatalf("worktree.Root(%s): ok = false", dir)
-	}
-	return root
 }
 
 // TestNextEndToEnd drives `lode next <id>` through the real CLI entry point
