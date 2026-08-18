@@ -127,7 +127,11 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
+      # `gha-buildcache`, not the bare `self-hosted` build-image/test also
+      # moved off: this job's Go cache skip is a real environment
+      # requirement (see docs/self-hosted-runner.md), not implied by
+      # self-hosted alone.
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-latest"]' }}
 
   test:
     needs: gate

@@ -42,10 +42,11 @@ above before adding another job here: the whole isolation model now rests on
 `trusted` being right, not on `ghrunner` being unprivileged.
 
 Registered as a repo-level runner (not org-level) with labels `self-hosted,
-Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets the
-bare `self-hosted` label; `test` targets `gha-pgvector` and `gha-buildcache`;
-`build-image` targets `docker` and `gha-buildcache` — see the sections below
-for why each label exists rather than every job sharing `self-hosted`.
+Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets
+`self-hosted` and `gha-buildcache`; `test` targets `gha-pgvector` and
+`gha-buildcache`; `build-image` targets `docker` and `gha-buildcache` — see
+the sections below for why each label exists rather than every job sharing
+`self-hosted`.
 
 Installed as a systemd service:
 
@@ -97,10 +98,10 @@ it recurring in a future step that reads `TEST_POSTGRES_DSN`.
 
 The `gha-pgvector` runner label makes that dependency a scheduling
 constraint, not just a convention `test` happens to rely on: requiring it
-(rather than the bare `self-hosted` `lint` uses) means a second self-hosted
-runner added later — without this sidecar — can never be handed a `test`
-job it would immediately fail. Label it when its own `gha-ci-postgres`
-exists and is reachable, not before:
+(rather than leaving Postgres reachability implicit, the way `lint` doesn't
+need it at all) means a second self-hosted runner added later — without
+this sidecar — can never be handed a `test` job it would immediately fail.
+Label it when its own `gha-ci-postgres` exists and is reachable, not before:
 
 ```
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-pgvector"
@@ -115,14 +116,15 @@ implies the other.
 `gha-buildcache` asserts one general fact about a runner: **its local disk
 persists build-cache state across job runs**, so a job can skip the
 `actions/cache` round trip entirely rather than restore-on-every-run /
-save-only-on-main. Two jobs rely on it, for caches that live in different
-places:
+save-only-on-main. Three jobs rely on it, for caches that live in two
+different places:
 
-- **`test`** (and `lint`, informally — see the note below) uses Go's own
-  `GOCACHE`/`GOMODCACHE`, which `go env` resolves under `$HOME` by default.
-  Nothing needs preparing there; the caches just exist once anything has run
-  `go build`/`go test` on the box. `_test.yml` skips its `Restore`/`Save Go
-  cache` steps and the `Go cache paths` step whenever `gha-buildcache` isn't
+- **`test` and `lint`** use Go's own `GOCACHE`/`GOMODCACHE`, which `go env`
+  resolves under `$HOME` by default. Nothing needs preparing there; the
+  caches just exist once anything has run `go build`/`go test` on the box.
+  `_test.yml` and `_lint.yml` both skip their `Restore`/`Save Go cache` steps
+  (`lint` has no `Save` step — only `main` writes the cache, and only `test`
+  runs there) and the `Go cache paths` step whenever `gha-buildcache` isn't
   in `runs-on`.
 - **`build-image`** needs a specific *prepared* directory instead, because
   it doesn't get Go's defaults for free: `buildkit-cache-dance` extracts the
@@ -152,16 +154,12 @@ inside a job can clean up a mess a less-privileged user can't delete. A
 `gha-buildcache`-labeled directory can't have this failure mode, because
 nothing ever asks `actions/checkout` to clean it.
 
-`_test.yml` and `_build-image.yml`'s `runs-on` inputs are both JSON arrays
-(`fromJSON(inputs.runs-on)`) for this reason — each now requires more than
-one label at once (`gha-pgvector` + `gha-buildcache`, `docker` +
-`gha-buildcache`) — unlike `_lint.yml`'s single-label string.
-
-**Known asymmetry:** `lint` still skips its own Go-cache restore/save purely
-because `runs-on` isn't `ubuntu-latest`, the same implicit assumption this
-label exists to replace for `test`. It hasn't been converted to require
-`gha-buildcache` explicitly — do that the next time `lint` changes, using
-`test`'s conversion as the template.
+`_test.yml`, `_lint.yml` and `_build-image.yml`'s `runs-on` inputs are all
+JSON arrays (`fromJSON(inputs.runs-on)`) for this reason — `test` and
+`build-image` require more than one label at once (`gha-pgvector` +
+`gha-buildcache`, `docker` + `gha-buildcache`), and `lint` requires
+`self-hosted` + `gha-buildcache` explicitly rather than treating a persistent
+cache as implied by the bare `self-hosted` label.
 
 ## Docker for `build-image`
 
@@ -195,7 +193,7 @@ hel01 the same way, by threading that input through from its caller's
 `gate.trusted` output. Pick the label for what the job actually needs, not
 for convenience: `gha-pgvector` for Postgres, `docker` for the Docker
 socket, `gha-buildcache` for skipping a cache round trip, the bare
-`self-hosted` for none of the above (as `lint` uses today). If a job needs
+`self-hosted` for none of the above. If a job needs
 more than one, require all of them — don't let one imply another that
 happens to be true today. Don't require a label a job doesn't need, and
 don't let a job that does need one fall back to the bare `self-hosted` —
