@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: Runner label. 'ubuntu-latest' for a hosted PR, 'self-hosted' for a trusted one — see docs/self-hosted-runner.md.
+        description: Runner label. 'ubuntu-latest' for a hosted PR, 'gha-pgvector' for a trusted one — this job needs the always-on Postgres that label marks, see docs/self-hosted-runner.md.
         type: string
         default: ubuntu-latest
       postgres-dsn:

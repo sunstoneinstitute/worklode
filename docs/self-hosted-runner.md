@@ -30,9 +30,10 @@ The runner runs as a dedicated **system user, `ghrunner`** — no `sudo`, no
 `docker` group, no login shell used interactively, home `/home/ghrunner`
 mode `0700`. It cannot read `~stig`, cannot reach the Docker socket, and
 cannot escalate. Registered as a repo-level runner (not org-level) with
-labels `self-hosted, Linux, X64, hel01`; `runs-on: self-hosted` in a
-workflow matches it since `self-hosted` is implicit on every self-hosted
-runner and this is the only one in the repo today.
+labels `self-hosted, Linux, X64, hel01, gha-pgvector`. `lint` targets it via
+the bare `self-hosted` label; `test` targets `gha-pgvector` specifically —
+see "Postgres for `test`" below for why that label exists rather than
+`test` also using `self-hosted`.
 
 Installed as a systemd service:
 
@@ -70,13 +71,28 @@ convention local dev already relies on (see root `CLAUDE.md`).
 `_test.yml` takes the DSN as a `postgres-dsn` input rather than hardcoding
 `localhost:5432`; `pr-checks.yml` supplies the right one per `trusted`.
 
+The `gha-pgvector` runner label makes that dependency a scheduling
+constraint, not just a convention `test` happens to rely on: `runs-on:
+gha-pgvector` (rather than the bare `self-hosted` `lint` uses) means a
+second self-hosted runner added later — without this sidecar — can never
+be handed a `test` job it would immediately fail. Label it when its own
+`gha-ci-postgres` exists and is reachable, not before:
+
+```
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-pgvector"
+```
+
 ## Extending self-hosted coverage
 
 `_test.yml` and `_lint.yml` both take a `runs-on` input (default
 `ubuntu-latest`) — any reusable workflow gains hel01 the same way, by
-threading that input through from its caller's `gate.trusted` output. Do
-**not** add `services:` to a job that might run self-hosted: GitHub starts
-service containers unconditionally once a job declares them, which would
-require `ghrunner` to hold Docker access and undo the isolation above. Gate
-container provisioning with a step-level `if:` instead, as `_test.yml`
-does.
+threading that input through from its caller's `gate.trusted` output. Use
+`gha-pgvector` instead of `self-hosted` for a job that needs the Postgres
+sidecar (as `test` does); use the bare `self-hosted` label for one that
+doesn't (as `lint` does) — don't require `gha-pgvector` for a job that has
+no actual Postgres dependency, and don't let a job that does need it fall
+back to `self-hosted` alone. Do **not** add `services:` to a job that might
+run self-hosted: GitHub starts service containers unconditionally once a
+job declares them, which would require `ghrunner` to hold Docker access and
+undo the isolation above. Gate container provisioning with a step-level
+`if:` instead, as `_test.yml` does.

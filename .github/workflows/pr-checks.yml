@@ -134,7 +134,11 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_test.yml
     with:
-      runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
+      # `gha-pgvector`, not the bare `self-hosted` lint uses: reaching the
+      # always-on Postgres on hel01 (see docs/self-hosted-runner.md) is a
+      # real environment requirement of this job, not just a preference, so
+      # a self-hosted runner without that sidecar must not be scheduled here.
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && 'gha-pgvector' || 'ubuntu-latest' }}
       # hel01's own always-on container (see docs/self-hosted-runner.md);
       # `ubuntu-latest` keeps the ephemeral `services:` postgres below.
       postgres-dsn: ${{ needs.gate.outputs.trusted == 'true' && 'postgres://postgres:postgres@localhost:15432/postgres?sslmode=disable' || 'postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable' }}
