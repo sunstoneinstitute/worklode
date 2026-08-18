@@ -6,7 +6,7 @@ requires:
 - docs/specs/019-project-scoping.md
 - docs/specs/022-prometheus-metrics.md
 ---
-# Spec 039 — Corpus indexing and hybrid search
+# Spec 040 — Corpus indexing and hybrid search
 
 ## 0. Why {#sec-0}
 
