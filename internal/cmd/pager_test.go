@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -95,5 +96,52 @@ func TestWithPagerCleanupDoesNotPinStaleWriter(t *testing.T) {
 
 	if got := cmd.OutOrStdout(); got != io.Writer(&second) {
 		t.Fatalf("withPager's cleanup left a stale writer pinned on cmd: OutOrStdout() = %v, want the second buffer", got)
+	}
+}
+
+func TestShowPagerFlagWiresOutputThroughPager(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Paged output")
+	setupRepoConfig(t, "proj")
+
+	old := pagerFn
+	var pagerBuf bytes.Buffer
+	pagerFn = func(requested bool) (io.Writer, func()) {
+		if !requested {
+			t.Fatal("pagerFn called with requested=false; --pager was passed")
+		}
+		return &pagerBuf, func() {}
+	}
+	t.Cleanup(func() { pagerFn = old })
+
+	out, err := runLode(t, "show", task.ID, "--pager")
+	if err != nil {
+		t.Fatalf("lode show %s --pager: %v\noutput: %s", task.ID, err, out)
+	}
+	if out != "" {
+		t.Fatalf("stdout should be empty once paged, got %q", out)
+	}
+	if !strings.Contains(pagerBuf.String(), task.ID) {
+		t.Fatalf("pager buffer = %q; want it to contain the task id", pagerBuf.String())
+	}
+}
+
+func TestShowPagerFlagDeclinedLeavesOutputOnStdout(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Unpaged output")
+	setupRepoConfig(t, "proj")
+
+	old := pagerFn
+	pagerFn = func(bool) (io.Writer, func()) { return nil, func() {} }
+	t.Cleanup(func() { pagerFn = old })
+
+	out, err := runLode(t, "show", task.ID, "--pager")
+	if err != nil {
+		t.Fatalf("lode show %s --pager: %v\noutput: %s", task.ID, err, out)
+	}
+	if !strings.Contains(out, task.ID) {
+		t.Fatalf("stdout = %q; want it to contain the task id when pagerFn declines", out)
 	}
 }

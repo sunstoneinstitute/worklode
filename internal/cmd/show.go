@@ -105,6 +105,7 @@ var showOrdinalShape = map[string]*regexp.Regexp{
 
 func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
+	var pager bool
 	cmd := &cobra.Command{
 		Use:   "show [id]",
 		Short: "Show any entity by id or kind flag: a task, a design doc, a project",
@@ -124,6 +125,9 @@ narrows a spec or ADR render to one section (and its subsections) by
 anchor; -s 3 is shorthand for -s sec-3.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cleanupPager := withPager(cmd, pager)
+			defer cleanupPager()
+
 			flagValues := map[string]string{
 				"task": taskFlag, "spec": specFlag, "adr": adrFlag, "plan": planFlag,
 				"milestone": milestoneFlag, "project": projectFlag, "deliverable": deliverableFlag,
@@ -177,6 +181,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
+	cmd.Flags().BoolVarP(&pager, "pager", "p", false, "page output through $PAGER (falls back to less -R) when connected to a terminal")
 	return cmd
 }
 
