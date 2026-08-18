@@ -91,6 +91,15 @@ const (
 
 	permRuntimeWrite Permission = "runtime.write"
 
+	// permSecretRead covers reading the org secrets catalog: names, purposes
+	// and op:// references, never values. It is its own permission rather
+	// than a flavour of task.read because the two disclose different things —
+	// the catalog is the shape of the org's vault, and a policy that lets a
+	// reporting or read-only actor see the work without seeing the vault
+	// topology is one someone will plausibly want. Today's grant is the same
+	// set, so nothing changes; the seam is what is being added.
+	permSecretRead Permission = "secret.read"
+
 	permWebRead  Permission = "web.read"
 	permWebWrite Permission = "web.write"
 
@@ -150,6 +159,10 @@ var grants = map[Permission][]Role{
 	permInboxAdmin:  {RoleAdmin},
 
 	permRuntimeWrite: {RoleUser, RoleAdmin},
+
+	// Every authenticated actor, because every actor about to claim a task
+	// needs to know which secrets that task names and where they live.
+	permSecretRead: {RoleUser, RoleAdmin},
 
 	permWebRead:  {RoleUser, RoleAdmin},
 	permWebWrite: {RoleUser, RoleAdmin},
