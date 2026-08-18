@@ -29,6 +29,10 @@ func validSecretNames(names []string) bool {
 	return true
 }
 
+// invalidSecretNameMsg is shared by every handler that gates on
+// validSecretNames, so the message cannot drift from the grammar.
+const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
+
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0017) and
 // wlc:TaskKind in ns/concept.ttl; all three carry the same six kinds.
 var validKinds = map[string]bool{
@@ -70,7 +74,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validSecretNames(req.Secrets) {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid secret name: must match ^[A-Z][A-Z0-9_]*$")
+		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
 	}
 	if _, err := s.st.GetProject(r.Context(), req.Project); err != nil {
@@ -344,7 +348,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Secrets != nil && !validSecretNames(*req.Secrets) {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid secret name: must match ^[A-Z][A-Z0-9_]*$")
+		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
 	}
 	var stateFrom string
