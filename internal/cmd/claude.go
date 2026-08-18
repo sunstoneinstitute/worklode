@@ -147,6 +147,53 @@ func installClaudeHooks(path string) error {
 	return writeSettingsFile(path, settings)
 }
 
+// hasClaudeHooksInstalled reports whether path's settings file already
+// carries Worklode's Claude Code bindings, without writing anything back.
+func hasClaudeHooksInstalled(path string) (bool, error) {
+	settings, err := readSettingsFile(path)
+	if err != nil {
+		return false, err
+	}
+	_, present := stripLodeHooks(settingsHooks(settings))
+	return present, nil
+}
+
+// propagateClaudeHooksToWorktree mirrors root's local-scope Claude Code
+// bindings — and, if it is ours, the status line — into a freshly created
+// worktree at dir. Local scope is a developer's own opt-in file
+// (settings.local.json), and git does not track it, so a linked worktree's
+// own checkout never receives it the way it inherits committed settings.
+// This only ever mirrors a choice the developer already made at root: a repo
+// where `lode install` was never run locally is left alone, so `lode next`
+// never opts a worktree into Claude Code hooks on its own.
+func propagateClaudeHooksToWorktree(root, dir string) error {
+	rootPath, err := claudeSettingsPath(root, scopeLocal)
+	if err != nil {
+		return err
+	}
+	installed, err := hasClaudeHooksInstalled(rootPath)
+	if err != nil || !installed {
+		return err
+	}
+	dirPath, err := claudeSettingsPath(dir, scopeLocal)
+	if err != nil {
+		return err
+	}
+	if err := installClaudeHooks(dirPath); err != nil {
+		return err
+	}
+	rootSettings, err := readSettingsFile(rootPath)
+	if err != nil {
+		return err
+	}
+	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
+		if _, err := installStatusLine(dirPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // uninstallClaudeHooks removes Worklode's bindings from the settings file at
 // path, reporting hookActionNone or hookActionRemoved (the same vocabulary
 // uninstallGitHooks uses). A missing file, or one with no `lode hook` entries

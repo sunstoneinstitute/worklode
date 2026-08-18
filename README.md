@@ -401,6 +401,15 @@ a hook it does not recognize as its own, and the agent side only
 touches entries whose command starts with `lode hook`, so third-party hooks on
 the same events are left alone.
 
+`.claude/settings.local.json` is gitignored, so a linked worktree's own
+checkout never receives it via git the way it would a committed file. `lode
+next` mirrors it anyway when the local scope is already installed at the
+repo root: it writes the same bindings (and status line, if that's ours too)
+into the new worktree, so a developer who ran `lode install` once keeps
+Claude Code integration in every worktree. A repo where local scope was never
+installed is left alone — `lode next` mirrors an existing choice, it never
+makes one.
+
 Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
 cheap even in a fast conversation. Every hook stays inside the 2s backbone
 timeout and never fails the event that triggered it.

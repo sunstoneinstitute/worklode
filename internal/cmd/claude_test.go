@@ -194,6 +194,70 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	}
 }
 
+func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	if err := installClaudeHooks(rootPath); err != nil {
+		t.Fatalf("install at root: %v", err)
+	}
+	if _, err := installStatusLine(rootPath); err != nil {
+		t.Fatalf("install status line at root: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	settings := readSettings(t, dirPath)
+	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+		t.Fatalf("SessionStart in worktree = %v, want the mirrored binding", got)
+	}
+	sl, ok := settings["statusLine"]
+	if !ok || !isLodeStatusLine(sl) {
+		t.Fatalf("statusLine in worktree = %v, want the mirrored lode statusline", sl)
+	}
+}
+
+func TestPropagateClaudeHooksToWorktreeSkipsWhenRootNeverOptedIn(t *testing.T) {
+	root := t.TempDir()
+	dir := t.TempDir()
+
+	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	if _, err := os.Stat(dirPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no settings file to be written, stat err = %v", err)
+	}
+}
+
+func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	if err := installClaudeHooks(rootPath); err != nil {
+		t.Fatalf("install at root: %v", err)
+	}
+	rootSettings := readSettings(t, rootPath)
+	rootSettings["statusLine"] = map[string]any{"type": "command", "command": "my-own-statusline"}
+	if err := writeSettingsFile(rootPath, rootSettings); err != nil {
+		t.Fatalf("seed foreign status line: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	settings := readSettings(t, dirPath)
+	if _, ok := settings["statusLine"]; ok {
+		t.Fatalf("statusLine in worktree = %v, want none (root's is not ours)", settings["statusLine"])
+	}
+}
+
 func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
 	action, err := uninstallClaudeHooks(path)

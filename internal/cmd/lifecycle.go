@@ -279,6 +279,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: stamp task id in worktree git config: %v\n", err)
 	}
 
+	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: mirror Claude Code hooks into worktree: %v\n", err)
+	}
+
 	identity, err := worktree.Identity(dir)
 	if err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)
