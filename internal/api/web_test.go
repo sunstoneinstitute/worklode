@@ -22,15 +22,15 @@ func bodyContains(t *testing.T, body string, want ...string) {
 }
 
 // assertShell checks the structural markers every page rendered through the
-// Page shell component (layout.templ) must carry: the skip link, the one
-// primary nav landmark, the one main landmark, and the shared stylesheet —
+// Page shell component (layout.templ) must carry: the skip link, the
+// two-column shell frame, the one main landmark, and the shared stylesheet —
 // see docs/specs/032-project-cockpit.md §10.
 func assertShell(t *testing.T, body string) {
 	t.Helper()
 	for _, want := range []string{
 		`<html lang="en">`,
 		`href="#main-content"`,
-		`<nav aria-label="Primary"`,
+		`class="shell"`,
 		`<main id="main-content"`,
 		`href="/assets/app.css"`,
 	} {
@@ -73,6 +73,16 @@ func assertOneAriaCurrent(t *testing.T, body string) {
 	}
 }
 
+// navMarkers turns nav landmark labels into their opening-tag markers, for an
+// ordered assertion.
+func navMarkers(labels []string) []string {
+	markers := make([]string, len(labels))
+	for i, l := range labels {
+		markers[i] = `<nav aria-label="` + l + `"`
+	}
+	return markers
+}
+
 // assertOrder checks every string in want appears in body, in that order
 // (each search starts after the previous match).
 func assertOrder(t *testing.T, body string, want ...string) {
@@ -86,6 +96,39 @@ func assertOrder(t *testing.T, body string, want ...string) {
 		}
 		pos += idx + len(w)
 	}
+}
+
+// topbarRegion returns the <header class="topbar"> element's markup.
+func topbarRegion(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<header class="topbar">`)
+	if i < 0 {
+		t.Fatalf("body has no topbar:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</header>")
+	if j < 0 {
+		t.Fatalf("topbar not closed:\n%s", body)
+	}
+	return rest[:j]
+}
+
+// TestTopbarKeepsOnlyChrome checks the global destinations left the topbar
+// (brand, theme toggle, avatar only — no nav landmark, no links) and that
+// the seven destinations render in the sidebar column before the content.
+func TestTopbarKeepsOnlyChrome(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	header := topbarRegion(t, body)
+	for _, want := range []string{`class="brand"`, `id="theme"`, `class="avatar"`} {
+		if !strings.Contains(header, want) {
+			t.Errorf("topbar missing %q", want)
+		}
+	}
+	if strings.Contains(header, "<nav") || strings.Contains(header, "<a ") {
+		t.Errorf("topbar still carries navigation:\n%s", header)
+	}
+	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<main id="main-content"`)
 }
 
 // TestGlobalNavOrder checks the primary nav renders the seven destinations
@@ -109,6 +152,7 @@ func TestGlobalDestinations(t *testing.T) {
 			body := rr.Body.String()
 			assertShell(t, body)
 			assertOneAriaCurrent(t, body)
+			bodyContains(t, body, `<nav aria-label="Primary"`)
 		})
 	}
 }
@@ -224,10 +268,75 @@ func TestAppCSSContent(t *testing.T) {
 		"#0E1937", "#F4F4F4", "#FAD604", "#266680", "#46C5DE",
 		"prefers-color-scheme:dark", ":focus-visible", "--ink:", "--accent:",
 		".topbar", "@media (max-width:1080px)",
+		"max-width:880px", ".backlink",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("stylesheet missing %q", want)
 		}
+	}
+}
+
+// TestEveryPageRendersTheShell sweeps every web page and asserts the
+// unified frame: exactly one .shell grid, one main landmark, the page's exact
+// set of nav landmarks in render order (Primary alone on global pages,
+// Primary then Project on project pages), and — on every page that names a
+// current destination — exactly one aria-current="page". The task page and
+// the new-task form name none (their left column marks nothing), so they
+// assert zero.
+func TestEveryPageRendersTheShell(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Swept task", "priority": "low", "kind": "chore",
+	})
+
+	global := []string{"Primary"}
+	project := []string{"Primary", "Project"}
+	pages := []struct {
+		path       string
+		navs       []string // every nav landmark's aria-label, in render order
+		hasCurrent bool
+	}{
+		{"/", global, true}, {"/intake", global, true},
+		{"/projects", global, true}, {"/work", global, true},
+		{"/reviews", global, true}, {"/deliveries", global, true},
+		{"/knowledge", global, true},
+		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
+		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
+		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
+		{"/projects/proj/deliverables", project, true},
+		{"/projects/proj/deliverables/new", project, true},
+		{"/projects/proj/tasks/new", project, false},
+		{"/tasks/WL-1", global, false},
+	}
+	for _, page := range pages {
+		t.Run(page.path, func(t *testing.T) {
+			rr := doReq(t, h, "GET", page.path, "", nil)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			if got := strings.Count(body, `<div class="shell">`); got != 1 {
+				t.Errorf("shell count = %d, want 1", got)
+			}
+			if got := strings.Count(body, `<main id="main-content"`); got != 1 {
+				t.Errorf("main landmark count = %d, want 1", got)
+			}
+			if got := strings.Count(body, "<nav aria-label="); got != len(page.navs) {
+				t.Errorf("nav landmark count = %d, want %d (%v)", got, len(page.navs), page.navs)
+			}
+			for _, label := range page.navs {
+				bodyContains(t, body, `<nav aria-label="`+label+`"`)
+			}
+			assertOrder(t, body, navMarkers(page.navs)...)
+			want := 0
+			if page.hasCurrent {
+				want = 1
+			}
+			if got := strings.Count(body, `aria-current="page"`); got != want {
+				t.Errorf(`aria-current="page" count = %d, want %d`, got, want)
+			}
+		})
 	}
 }
 
@@ -440,6 +549,11 @@ func TestTaskPage(t *testing.T) {
 		"Artifact",                   // timeline: artifact entry label
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
+	assertShell(t, body)
+	bodyContains(t, body, `<nav aria-label="Primary"`)
+	if got := strings.Count(body, `aria-current="page"`); got != 0 {
+		t.Errorf(`aria-current count = %d, want 0 (no destination is current on a task page)`, got)
+	}
 	// WL-1 is leased but has no assignee: the "Assigned to" paragraph must
 	// not render for it.
 	if strings.Contains(body, "Assigned to") {
@@ -643,6 +757,7 @@ func TestProjectPage(t *testing.T) {
 	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
 	// Documents, Activity.
 	assertOrder(t, body, ">Overview<", ">Crew<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
 	// must not render any of the retired/forbidden concepts. "Crew" and
 	// "Deliverable(s)" are now legitimate project-local nav labels (checked

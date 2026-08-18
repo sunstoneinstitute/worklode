@@ -10,118 +10,116 @@ package ui
 
 templ Task(v TaskView) {
 	@Page(v.Page) {
-		<div class="main">
-			<div class="canvas">
-				<section class="card pad">
-					<h1>{ v.Task.ID }: { v.Task.Title }</h1>
-					<p>
-						if v.Blocked {
-							<span class="chip crit">blocked</span>
-						} else {
-							<span class={ "chip " + StateChip(v.Task.State) }>{ v.Task.State }</span>
-						}
-						<span class="chip plain">{ v.Task.Priority }</span>
-						<span class="chip plain">{ v.Task.Kind }</span>
-						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
-					</p>
-					<p class="muted small">Created { FmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { FmtTime(v.Task.UpdatedAt) }</p>
-					if v.Task.Assignee != "" {
-						<p class="muted small">Assigned to { v.Task.Assignee }</p>
+		@globalShell("") {
+			<section class="card pad">
+				<h1>{ v.Task.ID }: { v.Task.Title }</h1>
+				<p>
+					if v.Blocked {
+						<span class="chip crit">blocked</span>
+					} else {
+						<span class={ "chip " + StateChip(v.Task.State) }>{ v.Task.State }</span>
 					}
-					if v.Holder != nil {
-						<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { FmtTime(v.Holder.ExpiresAt) })</p>
+					<span class="chip plain">{ v.Task.Priority }</span>
+					<span class="chip plain">{ v.Task.Kind }</span>
+					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
+				</p>
+				<p class="muted small">Created { FmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { FmtTime(v.Task.UpdatedAt) }</p>
+				if v.Task.Assignee != "" {
+					<p class="muted small">Assigned to { v.Task.Assignee }</p>
+				}
+				if v.Holder != nil {
+					<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { FmtTime(v.Holder.ExpiresAt) })</p>
+				}
+			</section>
+
+			<section class="card">
+				<div class="hd"><h3>Body</h3></div>
+				<div class="bd"><pre>{ v.Task.Body }</pre></div>
+			</section>
+
+			<section class="card">
+				<div class="hd"><h3>Edges</h3></div>
+				<div class="bd">
+					<ul>
+						<li>Blocks:
+							if len(v.Blocks) == 0 {
+								<span class="muted">none</span>
+							} else {
+								for _, id := range v.Blocks {
+									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+								}
+							}
+						</li>
+						<li>Blocked by:
+							if len(v.BlockedBy) == 0 {
+								<span class="muted">none</span>
+							} else {
+								for _, id := range v.BlockedBy {
+									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+								}
+							}
+						</li>
+						<li>Parent:
+							if v.Parent == "" {
+								<span class="muted">none</span>
+							} else {
+								<a href={ "/tasks/" + v.Parent }>{ v.Parent }</a>
+							}
+						</li>
+						<li>Children:
+							if len(v.Children) == 0 {
+								<span class="muted">none</span>
+							} else {
+								for _, id := range v.Children {
+									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+								}
+								<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
+							}
+						</li>
+						<li>Follow-up to:
+							if v.FollowUpTo == "" {
+								<span class="muted">none</span>
+							} else {
+								<a href={ "/tasks/" + v.FollowUpTo }>{ v.FollowUpTo }</a>
+							}
+						</li>
+						<li>Follow-ups:
+							if len(v.FollowUps) == 0 {
+								<span class="muted">none</span>
+							} else {
+								for _, id := range v.FollowUps {
+									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+								}
+							}
+						</li>
+					</ul>
+				</div>
+			</section>
+
+			<section class="card">
+				<div class="hd"><h3>Timeline</h3></div>
+				<div class="bd">
+					if len(v.Timeline) == 0 {
+						<p class="muted">No timeline entries yet.</p>
+					} else {
+						<table>
+							<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
+							for _, row := range v.Timeline {
+								<tr>
+									<td class="mono">{ FmtTime(row.At) }</td>
+									<td>{ row.Label }</td>
+									<td>{ row.Summary }</td>
+									<td>
+										if row.URL != "" {
+											<a href={ row.URL } rel="noreferrer">Open source</a>
+										}
+									</td>
+								</tr>
+							}
+						</table>
 					}
-				</section>
-
-				<section class="card">
-					<div class="hd"><h3>Body</h3></div>
-					<div class="bd"><pre>{ v.Task.Body }</pre></div>
-				</section>
-
-				<section class="card">
-					<div class="hd"><h3>Edges</h3></div>
-					<div class="bd">
-						<ul>
-							<li>Blocks:
-								if len(v.Blocks) == 0 {
-									<span class="muted">none</span>
-								} else {
-									for _, id := range v.Blocks {
-										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-									}
-								}
-							</li>
-							<li>Blocked by:
-								if len(v.BlockedBy) == 0 {
-									<span class="muted">none</span>
-								} else {
-									for _, id := range v.BlockedBy {
-										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-									}
-								}
-							</li>
-							<li>Parent:
-								if v.Parent == "" {
-									<span class="muted">none</span>
-								} else {
-									<a href={ "/tasks/" + v.Parent }>{ v.Parent }</a>
-								}
-							</li>
-							<li>Children:
-								if len(v.Children) == 0 {
-									<span class="muted">none</span>
-								} else {
-									for _, id := range v.Children {
-										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-									}
-									<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
-								}
-							</li>
-							<li>Follow-up to:
-								if v.FollowUpTo == "" {
-									<span class="muted">none</span>
-								} else {
-									<a href={ "/tasks/" + v.FollowUpTo }>{ v.FollowUpTo }</a>
-								}
-							</li>
-							<li>Follow-ups:
-								if len(v.FollowUps) == 0 {
-									<span class="muted">none</span>
-								} else {
-									for _, id := range v.FollowUps {
-										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-									}
-								}
-							</li>
-						</ul>
-					</div>
-				</section>
-
-				<section class="card">
-					<div class="hd"><h3>Timeline</h3></div>
-					<div class="bd">
-						if len(v.Timeline) == 0 {
-							<p class="muted">No timeline entries yet.</p>
-						} else {
-							<table>
-								<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
-								for _, row := range v.Timeline {
-									<tr>
-										<td class="mono">{ FmtTime(row.At) }</td>
-										<td>{ row.Label }</td>
-										<td>{ row.Summary }</td>
-										<td>
-											if row.URL != "" {
-												<a href={ row.URL } rel="noreferrer">Open source</a>
-											}
-										</td>
-									</tr>
-								}
-							</table>
-						}
-					</div>
-				</section>
-			</div>
-		</div>
+				</div>
+			</section>
+		}
 	}
 }
