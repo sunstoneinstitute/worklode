@@ -181,7 +181,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
-	cmd.Flags().BoolVarP(&pager, "pager", "p", false, "page output through $PAGER (falls back to less -R) when connected to a terminal")
+	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	return cmd
 }
 

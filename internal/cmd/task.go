@@ -211,7 +211,7 @@ func newTaskShowCmd() *cobra.Command {
 			return runTaskShow(cmd, args[0])
 		},
 	}
-	cmd.Flags().BoolVarP(&pager, "pager", "p", false, "page output through $PAGER (falls back to less -R) when connected to a terminal")
+	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	return cmd
 }
 

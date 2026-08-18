@@ -6,6 +6,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
+// pagerFlagUsage is the --pager/-p flag's usage string, shared by every
+// command that registers it (show.go, task.go) so the wording can't drift.
+const pagerFlagUsage = "page output through $PAGER (falls back to less -R) when connected to a terminal"
+
 // pagerFn is cli.Pager, indirected through a package var so tests can stub
 // it out. cli.Pager touches the real os.Stdout and can exec a real external
 // process — a unit test must never do either: run from an interactive

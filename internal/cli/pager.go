@@ -27,7 +27,8 @@ func Pager(enabled bool) (io.Writer, func()) {
 	if !enabled {
 		return nil, func() {}
 	}
-	if _, isTTY := terminalFd(os.Stdout); !isTTY {
+	fd, isTTY := terminalFd(os.Stdout)
+	if !isTTY {
 		return nil, func() {}
 	}
 	w, cleanup, err := startPager(pagerArgv(), os.Stdout, os.Stderr)
@@ -35,18 +36,32 @@ func Pager(enabled bool) (io.Writer, func()) {
 		fmt.Fprintf(os.Stderr, "lode: pager unavailable (%v); printing directly\n", err)
 		return nil, func() {}
 	}
-	return w, cleanup
+	return pagerWriter{Writer: w, ttyFd: uintptr(fd)}, cleanup
 }
 
+// pagerWriter wraps a pager subprocess's stdin pipe so callers that
+// TTY-detect their writer (terminalFd, used by Markdown and the table/
+// render width-fitting) see the real terminal's fd instead of the pipe's.
+// The pipe itself is never a terminal, but everything written to it is
+// ultimately displayed on one via the pager — content should render (style,
+// word-wrap) exactly as it would writing directly to that terminal.
+type pagerWriter struct {
+	io.Writer
+	ttyFd uintptr
+}
+
+func (w pagerWriter) Fd() uintptr { return w.ttyFd }
+
 // pagerArgv is the pager command line: $PAGER's fields when set to a
-// non-blank value, else "less -R". -R lets less pass through the ANSI color
-// codes cli.Markdown's glamour rendering already emitted, instead of
-// showing them as literal escape sequences.
+// non-blank value, else "less -R". Content reaching the pager's stdin is
+// already ANSI-styled by cli.Markdown's glamour rendering (pagerWriter makes
+// the writer report the real terminal's fd, so Markdown styles and
+// word-wraps exactly as it would writing directly to that terminal); -R lets
+// less pass those escape codes through to the terminal instead of showing
+// them literally or stripping them.
 func pagerArgv() []string {
 	if p := strings.TrimSpace(os.Getenv("PAGER")); p != "" {
-		if fields := strings.Fields(p); len(fields) > 0 {
-			return fields
-		}
+		return strings.Fields(p)
 	}
 	return []string{"less", "-R"}
 }
