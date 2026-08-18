@@ -186,8 +186,8 @@ The model (spec 025; files under `docs/` are the transitional mirror until it
 is implemented):
 
 - A **spec** is a durable document. Writing or revising one is an ordinary
-  claimable task (`kind = 'spec'`; 025 §10 widens its meaning to any design
-  document — spec, ADR, or plan — but keeps the name) that closes on
+  claimable task (`kind = 'design'`, renamed from `spec` by 025 §10, which also
+  widens its meaning to any design document — spec, ADR, or plan) that closes on
   submission for review, not on document acceptance, which is a status
   transition on the document rather than a task state. "Is the spec
   implemented?" is a coverage query, never a task state — do not create

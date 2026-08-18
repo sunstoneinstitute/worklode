@@ -31,8 +31,8 @@ This also resolves three collisions found on the way:
 
 - `wl:Project` (006: "bounded, goal-oriented") contradicts the backbone's `projects`, which are
   unbounded umbrellas. The backbone wins (§13).
-- The `--kind spec` task was drifting toward "umbrella open while the spec is unimplemented",
-  which stores a coverage query as a row. Spec-kind tasks are authoring work only (§10).
+- The `--kind design` task was drifting toward "umbrella open while the spec is unimplemented",
+  which stores a coverage query as a row. Design-kind tasks are authoring work only (§10).
 - Plan documents carry `- [ ]` checkboxes — execution state, ticked in git — while tasks also
   track execution state. Two owners of one fact; the plan's task set ends it (§9.2).
 
@@ -147,7 +147,7 @@ None of this needs a third category. A **decision** is a task whose deliverable 
 decision, and the record is an ADR, which is a document. The task closes when the record exists; the
 record never closes.
 
-**Consequence for the authoring task.** §10 closes a `spec`-kind task "when its document is
+**Consequence for the authoring task.** §10 closes a `design`-kind task "when its document is
 accepted", which fuses two acts on two objects: the authoring work, and the acceptance §7 requires
 be deliberate and human. Fusing them makes a task's terminal state depend on an act performed on
 something other than the task, by someone other than whoever did the work — so the worker cannot
@@ -724,7 +724,7 @@ worth watching is the age of the unresolved set, not its size:
 ### 8.8 Tier routing on claim
 
 `claim --next --kind <list>` filters the ready set by task kind. Mechanical loops run
-`--kind feature,bug,chore`; high-tier loops run `--kind spec,spike,review`.
+`--kind feature,bug,chore`; high-tier loops run `--kind design,spike,review`.
 
 Without it the ladder is a circle: an escalated `spec` task is claimed by the same cheap loop
 that could not resolve it. The `lode:next` skill defaults the flag from the session's model
@@ -910,7 +910,7 @@ Two acts, three things, each owning one fact:
 
 | Entity | Owns | Created by |
 |---|---|---|
-| Authoring task (`kind = 'spec'`) | The work of writing the plan | whoever picks up the planning |
+| Authoring task (`kind = 'design'`) | The work of writing the plan | whoever picks up the planning |
 | Plan document | Content, editorial status, and the identity of the set | the authoring work |
 | Tasks + their `plan_doc` reference | Execution state | the accept transaction |
 
@@ -958,17 +958,19 @@ decomposed subtask alone; a plan- or spec-level parent would spend it again for 
 
 ```sql
 -- target CHECK; ships with the concept.ttl edit and regenerated code, atomically
-CHECK (kind IN ('feature','bug','chore','spec','review','spike'))
+CHECK (kind IN ('feature','bug','chore','design','review','spike'))
 ```
 
-- **`spec` is widened to every document kind:** *author or revise a Worklode document (spec,
-  ADR, or plan); the document produced is reachable via `prov:wasGeneratedBy`* (§12's
-  mechanism, unchanged). It keeps the name `spec` rather than becoming `design`, which reads
-  as both technical and visual work to the people using this tracker. A spec-kind task is
-  claimable, real work, and closes when its document is **submitted for review** — not when the
-  document is accepted, which is a status transition on the document and not a state the task
-  can reach (§2.2). It is never an umbrella held open against coverage: "is the spec
-  implemented?" is `lode doc coverage`, not a task state.
+- **`spec` is renamed `design` and widened to every document kind:** *author or revise a
+  Worklode document (spec, ADR, or plan); the document produced is reachable via
+  `prov:wasGeneratedBy`* (§12's mechanism, unchanged). The kind renames rather than keeping
+  `spec`, because "spec work" reads as narrower than the task actually covers — a design
+  document is still called a *spec* in `docs/specs/`, but the task kind and the document kind
+  are two different things, and only the task kind moves. A design-kind task is claimable,
+  real work, and closes when its document is **submitted for review** — not when the document
+  is accepted, which is a status transition on the document and not a state the task can reach
+  (§2.2). It is never an umbrella held open against coverage: "is the spec implemented?" is
+  `lode doc coverage`, not a task state.
 - **No kind is structural.** With no container row minted for a plan (§9.2), the only
   container is a decomposed parent, and its container-ness follows from having children rather
   than from a column. Task kinds therefore describe the nature of work throughout, and none is
@@ -1449,7 +1451,7 @@ Two rules, hardcoded in Go behind `Evaluate(event) → []Action`:
 | Event | Action | Guard |
 |---|---|---|
 | `wl:DocumentSubmitted` | mint `kind = 'review'`, state `ready`, referencing the document | no open review task references it |
-| `wl:DocumentAccepted` where the document is a spec | mint `kind = 'spec'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open spec task references it |
+| `wl:DocumentAccepted` where the document is a spec | mint `kind = 'design'`, state `ready` — *decide how to decompose this spec into plans, and write them* | no open design task references it |
 
 "Referencing the document" needs a column, and `plan_doc` (§9.2) is not it — that one says
 *this task was minted by that plan*, whereas a review or authoring task is *about* a document
@@ -1983,7 +1985,7 @@ Two further pieces of work follow from this spec without belonging to it:
     operator step.
 26. `lode doc submit` mints one `ready` review task and changes no document column; a second
     submit while that task is open mints nothing.
-27. Accepting a spec mints one `ready` spec task in the document's project, carrying
+27. Accepting a spec mints one `ready` design task in the document's project, carrying
     `prov:wasInformedBy` to the event; re-accepting while it is open mints nothing; re-accepting
     after it closes mints one more.
 28. Every domain event's `type` and payload properties come from the generated `ns/` set, and CI
@@ -1993,8 +1995,8 @@ Two further pieces of work follow from this spec without belonging to it:
 30. `worklode_event_subscriber_lag` rises when a subscriber is stopped and returns to zero when
     it resumes; the metrics of §15.7 are registered and tested, the sync endpoint's and the
     store operations' among them.
-31. A planning session that claims its spec task has its tokens reported by
-    `lode task cost <spec-task>`.
+31. A planning session that claims its design task has its tokens reported by
+    `lode task cost <design-task>`.
 32. `.worklode/config.toml` accepts `spec_corpus` and `plan_corpus`; the loader
     exposes them repo-scoped, and an unknown key still errors.
 33. `lode doc sync` on the default branch with a clean tree upserts every
