@@ -90,3 +90,102 @@ func TestSecretsCatalogUnconfigured(t *testing.T) {
 		t.Fatalf("unconfigured catalog: %d; want 404", rec.Code)
 	}
 }
+
+func TestSecretsMaterializedEvent(t *testing.T) {
+	st, h, token := newTestServer(t)
+	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
+		map[string]string{"id": "secevt", "name": "SecEvt", "key": "SV"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project": "secevt", "title": "t", "priority": "medium", "kind": "chore",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create task: %d %s", rec.Code, rec.Body.String())
+	}
+	var task struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &task); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	names := []string{"GITHUB_TOKEN", "KUBECONFIG_HZDEV", "OPENALEX_API_KEY"}
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks/"+task.ID+"/secrets-materialized",
+		token, map[string]any{"names": names})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("record: %d %s; want 204", rec.Code, rec.Body.String())
+	}
+
+	// The audit trail carries the names and nothing else (acceptance 3):
+	// no op:// refs, no values, in the state log attributed to the event.
+	logs, err := st.StateLogForEntity(context.Background(), "task", task.ID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	var found string
+	for _, l := range logs {
+		if strings.Contains(l.Change, "secrets_materialized") {
+			found = l.Change
+		}
+	}
+	if found == "" {
+		t.Fatal("no secrets_materialized state-log entry")
+	}
+	for _, n := range names {
+		if !strings.Contains(found, n) {
+			t.Fatalf("state log %q missing name %s", found, n)
+		}
+	}
+	if strings.Contains(found, "op://") {
+		t.Fatalf("state log leaked an op:// ref: %q", found)
+	}
+}
+
+func TestSecretsMaterializedRejectsNonNames(t *testing.T) {
+	st, h, token := newTestServer(t)
+	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
+		map[string]string{"id": "secrej", "name": "SecRej", "key": "SR"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project": "secrej", "title": "t", "priority": "medium", "kind": "chore",
+	})
+	var task struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &task); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, bad := range [][]string{
+		{},
+		{"op://Employee/x/y"},
+		{"a-value-not-a-name"},
+	} {
+		rec = doReq(t, h, http.MethodPost, "/api/v1/tasks/"+task.ID+"/secrets-materialized",
+			token, map[string]any{"names": bad})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("names %v: %d; want 422", bad, rec.Code)
+		}
+	}
+	// The rejection is the redaction guarantee: a rejected payload leaves no
+	// trace, so an op:// ref or a raw value can never reach the event log.
+	logs, err := st.StateLogForEntity(context.Background(), "task", task.ID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	for _, l := range logs {
+		if strings.Contains(l.Change, "secrets_materialized") ||
+			strings.Contains(l.Change, "op://") {
+			t.Fatalf("rejected payload reached the state log: %q", l.Change)
+		}
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks/NOPE-1/secrets-materialized",
+		token, map[string]any{"names": []string{"GITHUB_TOKEN"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown task: %d; want 404", rec.Code)
+	}
+}
