@@ -145,3 +145,31 @@ func TestShowPagerFlagDeclinedLeavesOutputOnStdout(t *testing.T) {
 		t.Fatalf("stdout = %q; want it to contain the task id when pagerFn declines", out)
 	}
 }
+
+func TestTaskShowPagerFlagWiresOutputThroughPager(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Paged task show output")
+	setupRepoConfig(t, "proj")
+
+	old := pagerFn
+	var pagerBuf bytes.Buffer
+	pagerFn = func(requested bool) (io.Writer, func()) {
+		if !requested {
+			t.Fatal("pagerFn called with requested=false; --pager was passed")
+		}
+		return &pagerBuf, func() {}
+	}
+	t.Cleanup(func() { pagerFn = old })
+
+	out, err := runLode(t, "task", "show", task.ID, "--pager")
+	if err != nil {
+		t.Fatalf("lode task show %s --pager: %v\noutput: %s", task.ID, err, out)
+	}
+	if out != "" {
+		t.Fatalf("stdout should be empty once paged, got %q", out)
+	}
+	if !strings.Contains(pagerBuf.String(), task.ID) {
+		t.Fatalf("pager buffer = %q; want it to contain the task id", pagerBuf.String())
+	}
+}
