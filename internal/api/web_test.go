@@ -278,11 +278,13 @@ func TestAppCSSContent(t *testing.T) {
 
 // TestEveryPageRendersTheShell sweeps every web page and asserts the
 // unified frame: exactly one .shell grid, one main landmark, the page's exact
-// set of nav landmarks in render order (Primary alone on global pages,
-// Primary then Project on project pages), and — on every page that names a
-// current destination — exactly one aria-current="page". The task page and
-// the new-task form name none (their left column marks nothing), so they
-// assert zero.
+// set of nav landmarks in render order followed by the main landmark
+// (Primary alone on global pages, Primary then Project on project pages,
+// content always after both — WL-51's WCAG 2.4.1 fix, pinned per page rather
+// than only on Home), no nav landmark nested inside main content, and — on
+// every page that names a current destination — exactly one
+// aria-current="page". The task page and the new-task form name none (their
+// left column marks nothing), so they assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -328,13 +330,16 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 			for _, label := range page.navs {
 				bodyContains(t, body, `<nav aria-label="`+label+`"`)
 			}
-			assertOrder(t, body, navMarkers(page.navs)...)
+			assertOrder(t, body, append(navMarkers(page.navs), `<main id="main-content"`)...)
 			want := 0
 			if page.hasCurrent {
 				want = 1
 			}
 			if got := strings.Count(body, `aria-current="page"`); got != want {
 				t.Errorf(`aria-current="page" count = %d, want %d`, got, want)
+			}
+			if main := mainContent(t, body); strings.Contains(main, "<nav") {
+				t.Errorf("main content still contains a nav landmark:\n%s", main)
 			}
 		})
 	}
