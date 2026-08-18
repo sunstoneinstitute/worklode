@@ -72,13 +72,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - name: go build
-        run: go build ./...
+        run: make build
       - name: go test
-        run: go test -race -count=1 ./...
+        run: make test
         env:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
       - name: e2e smoke test
-        run: go test -race -count=1 -tags e2e ./e2e/
+        run: make test-e2e
         env:
           TEST_POSTGRES_DSN: ${{ inputs.postgres-dsn }}
       # Only main writes the cache, and only when go.sum changed (exact-key miss).

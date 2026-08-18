@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"sync"
 	"testing"
@@ -126,13 +125,67 @@ func (s *Store) DBForTests() *sql.DB {
 	return s.db
 }
 
-// MigrationsDirForTests returns the absolute path to deploy/base/migrations,
-// resolved relative to this source file so it works no matter which
-// package's test binary calls it. Tests that need a migrated database call
-// Open then Migrate(store.MigrationsDirForTests()).
+// moduleRoot/moduleRootErr cache this module's root, captured once from
+// init() — before any test's TestMain or test body can os.Chdir elsewhere
+// (internal/cmd's TestMain does exactly that, to isolate CLI config
+// resolution). `go test` starts a package's test binary with that package's
+// source directory as cwd, and every package sharing one process shares one
+// initial cwd, so walking up from here to go.mod finds the module root no
+// matter which package's test binary calls ModuleRootForTests. This
+// deliberately does not use runtime.Caller, whose embedded file path is not
+// a real filesystem path under -trimpath.
+//
+// This file is not a _test.go file — other packages' external test files
+// import these helpers, which Go only allows from a package's regular
+// (non-test) source — so init() runs in the real `lode` binary too. Gated on
+// testing.Testing() and never panicking here (only lazily, in
+// ModuleRootForTests, which production code never calls), so a real `lode`
+// invocation outside a repo checkout is unaffected.
+var (
+	moduleRoot    string
+	moduleRootErr error
+)
+
+func init() {
+	if !testing.Testing() {
+		return
+	}
+	moduleRoot, moduleRootErr = findModuleRoot()
+}
+
+func findModuleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getwd: %w", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no go.mod found above initial cwd %s", dir)
+		}
+		dir = parent
+	}
+}
+
+// ModuleRootForTests returns this module's root directory. Other packages'
+// tests that need to run `go build`/`go run` against the repo (e.g. building
+// cmd/lode) should use this instead of their own runtime.Caller-based path,
+// which -trimpath breaks.
+func ModuleRootForTests() string {
+	if moduleRootErr != nil {
+		panic(fmt.Sprintf("ModuleRootForTests: %v", moduleRootErr))
+	}
+	return moduleRoot
+}
+
+// MigrationsDirForTests returns the absolute path to deploy/base/migrations.
+// Tests that need a migrated database call Open then
+// Migrate(store.MigrationsDirForTests()).
 func MigrationsDirForTests() string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(thisFile), "..", "..", "deploy", "base", "migrations")
+	return filepath.Join(ModuleRootForTests(), "deploy", "base", "migrations")
 }
 
 // Template-database machinery.
