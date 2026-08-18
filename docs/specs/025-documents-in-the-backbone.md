@@ -726,7 +726,7 @@ worth watching is the age of the unresolved set, not its size:
 ### 8.8 Tier routing on claim {#sec-8.8}
 
 `claim --next --kind <list>` filters the ready set by task kind. Mechanical loops run
-`--kind feature,bug,chore`; high-tier loops run `--kind design,spike,review`.
+`--kind feature,bug,chore`; high-tier loops run `--kind spec,spike,review`.
 
 Without it the ladder is a circle: an escalated `spec` task is claimed by the same cheap loop
 that could not resolve it. The `lode:next` skill defaults the flag from the session's model
