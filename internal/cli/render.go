@@ -439,7 +439,7 @@ func timelineSummary(typ string, e map[string]any) string {
 
 // EventTable prints one row per event, newest last (025 §18): id, received
 // time, source, type, external id. The `lode event tail` view.
-func EventTable(w io.Writer, events []Event) {
+func EventTable(w io.Writer, events []model.Event) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tRECEIVED\tSOURCE\tTYPE\tEXTERNAL_ID")
 	for _, e := range events {
@@ -460,14 +460,14 @@ func EventStreamHeader(w io.Writer) {
 }
 
 // EventStreamRow prints one streamed event in EventTable's column order.
-func EventStreamRow(w io.Writer, e Event) {
+func EventStreamRow(w io.Writer, e model.Event) {
 	fmt.Fprintf(w, eventStreamRowFmt, e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
 }
 
 // EventSubscriberTable prints one row per subscriber: name, offsets, lag,
 // lock holder pid (- when unheld), last updated. The `lode event
 // subscribers` view.
-func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
+func EventSubscriberTable(w io.Writer, subs []model.EventSubscriberStatus) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "NAME\tREAD\tACKED\tLAG\tHOLDER\tUPDATED")
 	for _, s := range subs {

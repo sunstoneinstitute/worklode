@@ -216,7 +216,7 @@ func TestHumanTokens(t *testing.T) {
 func TestEventTable(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	EventTable(&buf, []Event{
+	EventTable(&buf, []model.Event{
 		{ID: 1, Source: "github", ExternalID: "d1", Type: "push", ReceivedAt: at},
 		{ID: 2, Source: "cli", ExternalID: "c1", Type: "docs.synced", ReceivedAt: at.Add(time.Minute)},
 	})
@@ -232,7 +232,7 @@ func TestEventTable(t *testing.T) {
 func TestEventSubscriberTable(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	EventSubscriberTable(&buf, []EventSubscriberStatus{
+	EventSubscriberTable(&buf, []model.EventSubscriberStatus{
 		{Name: "doc-lifecycle", LastReadOffset: 10, LastAckedOffset: 8, Lag: 2, HolderPID: 4242, UpdatedAt: at},
 		{Name: "idle-sub", LastReadOffset: 0, LastAckedOffset: 0, Lag: 0, HolderPID: 0, UpdatedAt: at},
 	})
@@ -261,8 +261,8 @@ func TestEventStreamRow(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	EventStreamHeader(&buf)
-	EventStreamRow(&buf, Event{ID: 7, Source: "github", ExternalID: "d7", Type: "push", ReceivedAt: at})
-	EventStreamRow(&buf, Event{ID: 8, Source: "cli", ExternalID: "c8", Type: "docs.synced", ReceivedAt: at})
+	EventStreamRow(&buf, model.Event{ID: 7, Source: "github", ExternalID: "d7", Type: "push", ReceivedAt: at})
+	EventStreamRow(&buf, model.Event{ID: 8, Source: "cli", ExternalID: "c8", Type: "docs.synced", ReceivedAt: at})
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	if len(lines) != 3 {

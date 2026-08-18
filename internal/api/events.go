@@ -6,21 +6,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// eventJSON is the wire form of one event log row (spec 025 §15/§18).
-type eventJSON struct {
-	ID         int64           `json:"id"`
-	Source     string          `json:"source"`
-	ExternalID string          `json:"external_id"`
-	Type       string          `json:"type"`
-	Payload    json.RawMessage `json:"payload"`
-	ReceivedAt time.Time       `json:"received_at"`
-}
-
-func toEventJSON(e store.Event) eventJSON {
-	return eventJSON{
+func toEventJSON(e store.Event) model.Event {
+	return model.Event{
 		ID:         e.ID,
 		Source:     e.Source,
 		ExternalID: e.ExternalID,
@@ -30,19 +21,8 @@ func toEventJSON(e store.Event) eventJSON {
 	}
 }
 
-// eventSubscriberJSON is the wire form of one event_subscribers row plus its
-// derived lag and lock holder (spec 025 §18).
-type eventSubscriberJSON struct {
-	Name            string    `json:"name"`
-	LastReadOffset  int64     `json:"last_read_offset"`
-	LastAckedOffset int64     `json:"last_acked_offset"`
-	Lag             int64     `json:"lag"`
-	HolderPID       int64     `json:"holder_pid"`
-	UpdatedAt       time.Time `json:"updated_at"`
-}
-
-func toEventSubscriberJSON(st store.EventSubscriberStatus) eventSubscriberJSON {
-	return eventSubscriberJSON{
+func toEventSubscriberJSON(st store.EventSubscriberStatus) model.EventSubscriberStatus {
+	return model.EventSubscriberStatus{
 		Name:            st.Name,
 		LastReadOffset:  st.LastRead,
 		LastAckedOffset: st.LastAcked,
@@ -87,11 +67,11 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	out := make([]eventJSON, 0, len(events))
+	out := make([]model.Event, 0, len(events))
 	for _, e := range events {
 		out = append(out, toEventJSON(e))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": out})
+	writeJSON(w, http.StatusOK, model.EventListResponse{Events: out})
 }
 
 // listEventSubscribers handles GET /api/v1/event-subscribers. Any
@@ -102,17 +82,11 @@ func (s *server) listEventSubscribers(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	out := make([]eventSubscriberJSON, 0, len(statuses))
+	out := make([]model.EventSubscriberStatus, 0, len(statuses))
 	for _, st := range statuses {
 		out = append(out, toEventSubscriberJSON(st))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"subscribers": out})
-}
-
-// seekEventSubscriberRequest is the body of POST
-// /api/v1/event-subscribers/{name}/seek.
-type seekEventSubscriberRequest struct {
-	To int64 `json:"to"`
+	writeJSON(w, http.StatusOK, model.EventSubscriberListResponse{Subscribers: out})
 }
 
 // seekEventSubscriber handles POST /api/v1/event-subscribers/{name}/seek:
@@ -121,7 +95,7 @@ type seekEventSubscriberRequest struct {
 // nothing derives from subscriber offsets, and logging offset moves into the
 // log they index would be noise.
 func (s *server) seekEventSubscriber(w http.ResponseWriter, r *http.Request) {
-	var req seekEventSubscriberRequest
+	var req model.EventSubscriberSeekRequest
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
