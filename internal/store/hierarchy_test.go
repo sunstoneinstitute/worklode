@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestKindCheckRejectsUnknownKinds pins the tasks_kind_check constraint: it is
@@ -400,7 +402,7 @@ func TestDescendantDepthStopsAtCap(t *testing.T) {
 func TestChildProgress(t *testing.T) {
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
-	var kids []*Task
+	var kids []*model.Task
 	for i := 0; i < 3; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
 		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
@@ -419,7 +421,7 @@ func TestChildProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 0, Total: 3}); got != want {
+	if want := (model.TaskProgress{Closed: 0, Total: 3}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 
@@ -429,7 +431,7 @@ func TestChildProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 2, Total: 3}); got != want {
+	if want := (model.TaskProgress{Closed: 2, Total: 3}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 }
@@ -454,7 +456,7 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 0, Total: 1}); got != want {
+	if want := (model.TaskProgress{Closed: 0, Total: 1}); got != want {
 		t.Fatalf("progress with merged child in a release-gated repo = %+v, want %+v", got, want)
 	}
 
@@ -465,7 +467,7 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{Closed: 1, Total: 1}); got != want {
+	if want := (model.TaskProgress{Closed: 1, Total: 1}); got != want {
 		t.Fatalf("progress with released child = %+v, want %+v", got, want)
 	}
 }
@@ -477,7 +479,7 @@ func TestChildProgressNoChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChildProgress: %v", err)
 	}
-	if want := (HierarchyProgress{}); got != want {
+	if want := (model.TaskProgress{}); got != want {
 		t.Fatalf("progress = %+v, want %+v", got, want)
 	}
 }
@@ -581,7 +583,7 @@ func TestListTasksFilterParentAndHasChildren(t *testing.T) {
 	}
 }
 
-func taskIDs(tasks []Task) []string {
+func taskIDs(tasks []model.Task) []string {
 	out := make([]string, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, t.ID)
@@ -791,10 +793,10 @@ func TestResolveHierarchyPerRepoDoneState(t *testing.T) {
 }
 
 // parentWithChildren builds a task with n ready children and returns both.
-func parentWithChildren(t *testing.T, s *Store, n int) (*Task, []*Task) {
+func parentWithChildren(t *testing.T, s *Store, n int) (*model.Task, []*model.Task) {
 	t.Helper()
 	container := createTask(t, s, taskTestNow, containerInput())
-	var kids []*Task
+	var kids []*model.Task
 	for i := 0; i < n; i++ {
 		k := createTask(t, s, taskTestNow, defaultTaskInput())
 		if err := addEdge(t, s, k.ID, container.ID, "child_of"); err != nil {
@@ -974,9 +976,9 @@ func TestRollUpReopenRoutesThroughReady(t *testing.T) {
 }
 
 // decompose drives Decompose through RecordEvent.
-func decompose(t *testing.T, s *Store, id string, titles []string) ([]Task, error) {
+func decompose(t *testing.T, s *Store, id string, titles []string) ([]model.Task, error) {
 	t.Helper()
-	var kids []Task
+	var kids []model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.decomposed", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
@@ -1024,7 +1026,7 @@ func TestDecompose(t *testing.T) {
 		if k.State != "draft" {
 			t.Fatalf("child %s state = %s, want draft", k.ID, k.State)
 		}
-		if k.Priority != "high" || k.Concern != "security" || k.ProjectID != parent.ProjectID {
+		if k.Priority != "high" || k.Concern != "security" || k.Project != parent.Project {
 			t.Fatalf("child %s did not inherit project/priority/concern: %+v", k.ID, k)
 		}
 		if k.Kind != "bug" {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -200,11 +201,11 @@ func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskI
 	t.Helper()
 	ctx := context.Background()
 	if _, err := c.GetProject(ctx, "proj"); err != nil {
-		if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+		if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 			t.Fatalf("create project: %v", err)
 		}
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
@@ -1169,13 +1170,13 @@ type skillsBackbone struct {
 	archive map[string][]byte
 	fail    map[string]bool
 	hang    map[string]bool
-	brief   cli.Brief
+	brief   model.Brief
 
 	inFlight    int32 // atomic
 	maxInFlight int32 // atomic; high-water mark, so a test can assert the concurrency bound held
 }
 
-func newSkillsBackbone(t *testing.T, brief cli.Brief) *skillsBackbone {
+func newSkillsBackbone(t *testing.T, brief model.Brief) *skillsBackbone {
 	t.Helper()
 	b := &skillsBackbone{archive: map[string][]byte{}, fail: map[string]bool{}, hang: map[string]bool{}, brief: brief}
 
@@ -1391,13 +1392,13 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	diagContent := "# Diagnose\nSystematic debugging.\n"
 	diagArchive, diagHash := buildSkillArchive(t, diagContent)
 
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-1", Title: "Happy path", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{
 				{Name: "tdd", Description: "Red-green-refactor discipline", Hash: tddHash, Content: tddContent},
 			},
-			Matches: []cli.SkillMatch{
+			Matches: []model.SkillMatch{
 				{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.87},
 			},
 		},
@@ -1450,11 +1451,11 @@ func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
 	tddArchive, tddHash := buildSkillArchive(t, tddContent)
 	_, diagHash := buildSkillArchive(t, "# Diagnose\n") // archive itself is never served: forced 500
 
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
-			Matches: []cli.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-2", Title: "Archive failure", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{
+			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}},
+			Matches: []model.SkillMatch{{Name: "diagnose", Description: "Systematic debugging", Hash: diagHash, Score: 0.5}},
 		},
 	}
 	back := newSkillsBackbone(t, brief)
@@ -1493,7 +1494,7 @@ func TestSessionStartSkillsEmptySection(t *testing.T) {
 	root := initGitRepo(t)
 	wtDir := setupFakeWorktree(t, root, "PROJ-3", "empty")
 
-	brief := cli.Brief{Task: cli.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
+	brief := model.Brief{Task: model.Task{ID: "PROJ-3", Title: "No skills", State: "in_progress", Priority: "low"}}
 	newSkillsBackbone(t, brief)
 
 	stdout, _ := runSessionStart(t, wtDir, "s-empty")
@@ -1511,10 +1512,10 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 	wtDir := setupFakeWorktree(t, root, "PROJ-4", "nohash")
 
 	draftContent := "# Draft\n"
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-4", Title: "No hash", State: "in_progress", Priority: "low"},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{{Name: "draft-skill", Description: "d", Hash: "", Content: draftContent}},
 		},
 	}
 	newSkillsBackbone(t, brief)
@@ -1559,17 +1560,17 @@ func TestSessionStartSkillsFetchBudgetBounded(t *testing.T) {
 	wtDir := setupFakeWorktree(t, root, "PROJ-5", "budget")
 
 	_, tddHash := buildSkillArchive(t, "# TDD\n")
-	matches := make([]cli.SkillMatch, 0, 5)
+	matches := make([]model.SkillMatch, 0, 5)
 	for i := 0; i < 5; i++ {
 		name := fmt.Sprintf("match-%d", i)
 		_, hash := buildSkillArchive(t, "# "+name+"\n")
-		matches = append(matches, cli.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
+		matches = append(matches, model.SkillMatch{Name: name, Description: "d", Hash: hash, Score: 0.5})
 	}
 
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned:  []cli.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-5", Title: "Budget", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{
+			Pinned:  []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: "# TDD\n"}},
 			Matches: matches,
 		},
 	}
@@ -1627,10 +1628,10 @@ func TestSessionStartSkillsPinnedByteCapEmitsPointer(t *testing.T) {
 	smallArchive, smallHash := buildSkillArchive(t, small)
 	bigArchive, bigHash := buildSkillArchive(t, big)
 
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-6", Title: "Byte cap", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{
 				{Name: "small", Description: "d", Hash: smallHash, Content: small},
 				{Name: "big", Description: "d", Hash: bigHash, Content: big},
 			},
@@ -1670,10 +1671,10 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 	big := "# Big\n" + strings.Repeat("y", maxInlinedSkillBytes)
 	_, bigHash := buildSkillArchive(t, big)
 
-	brief := cli.Brief{
-		Task: cli.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
-		Skills: cli.SkillRecommendation{
-			Pinned: []cli.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
+	brief := model.Brief{
+		Task: model.Task{ID: "PROJ-7", Title: "Byte cap fetch failure", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{
+			Pinned: []model.PinnedSkill{{Name: "big", Description: "d", Hash: bigHash, Content: big}},
 		},
 	}
 	back := newSkillsBackbone(t, brief)
@@ -1812,14 +1813,14 @@ func TestSessionEndPostsTranscriptUsage(t *testing.T) {
 	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
 	body := rec.only(t)
-	var usage []cli.SessionUsageBucket
+	var usage []model.SessionUsageBucket
 	if err := json.Unmarshal(body["usage"], &usage); err != nil {
 		t.Fatalf("decode usage %s: %v", body["usage"], err)
 	}
-	want := []cli.SessionUsageBucket{{
+	want := []model.SessionUsageBucket{{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
-		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
-		CacheRead: 400, OutputTokens: 50,
+		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
+		CacheReadTokens: 400, OutputTokens: 50,
 	}}
 	if len(usage) != 1 || usage[0] != want[0] {
 		t.Fatalf("posted usage = %+v, want %+v", usage, want)
@@ -1844,14 +1845,14 @@ func TestHeartbeatPostsTranscriptUsage(t *testing.T) {
 
 	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
-	var usage []cli.SessionUsageBucket
+	var usage []model.SessionUsageBucket
 	if err := json.Unmarshal(rec.only(t)["usage"], &usage); err != nil {
 		t.Fatalf("decode usage: %v", err)
 	}
-	want := cli.SessionUsageBucket{
+	want := model.SessionUsageBucket{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
-		InputTokens: 100, CacheWrite5m: 200, CacheWrite1h: 300,
-		CacheRead: 400, OutputTokens: 50,
+		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
+		CacheReadTokens: 400, OutputTokens: 50,
 	}
 	if len(usage) != 1 || usage[0] != want {
 		t.Fatalf("posted usage = %+v, want %+v", usage, want)

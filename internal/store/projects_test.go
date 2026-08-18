@@ -8,6 +8,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestCreateAndGetProject(t *testing.T) {
@@ -379,7 +381,7 @@ func TestListRepos(t *testing.T) {
 		t.Fatalf("ListRepos: %v", err)
 	}
 	sort.Slice(got, func(i, j int) bool { return got[i].Repo < got[j].Repo })
-	want := []RepoMapping{
+	want := []model.RepoMapping{
 		{Repo: "sunstoneinstitute/horndb", DoneState: "released"},
 		{Repo: "sunstoneinstitute/horndb-docs", DoneState: "merged"},
 	}
@@ -456,7 +458,7 @@ func TestPerProjectTaskNumbering(t *testing.T) {
 	}
 
 	mk := func(project string) string {
-		var task *Task
+		var task *model.Task
 		_, _, err := s.RecordEvent(ctx, "cli", mustExtID(t), "task.created", []byte(`{}`),
 			func(tx *sql.Tx, eventID int64) error {
 				var e error

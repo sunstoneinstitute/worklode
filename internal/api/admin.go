@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -29,46 +30,23 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 // --- projects ---------------------------------------------------------
 
-// repoJSON is the wire form of a repo mapping: the repo and the terminal
-// delivery state that counts as fully delivered for it.
-type repoJSON struct {
-	Repo      string `json:"repo"`
-	DoneState string `json:"done_state"`
-}
-
-type projectJSON struct {
-	ID    string     `json:"id"`
-	Name  string     `json:"name"`
-	Key   string     `json:"key"`
-	Repos []repoJSON `json:"repos"`
-	Focus []string   `json:"focus"`
-}
-
-type createProjectRequest struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Key  string `json:"key"`
-}
-
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
 // focus slices to empty arrays so they serialize as [] rather than null.
-func toProjectJSON(p *store.Project, repos []store.RepoMapping) projectJSON {
-	rs := make([]repoJSON, 0, len(repos))
-	for _, m := range repos {
-		rs = append(rs, repoJSON{Repo: m.Repo, DoneState: m.DoneState})
-	}
+func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
+	rs := make([]model.RepoMapping, 0, len(repos))
+	rs = append(rs, repos...)
 	focus := p.Focus
 	if focus == nil {
 		focus = []string{}
 	}
-	return projectJSON{
+	return model.Project{
 		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 	}
 }
 
 // createProject handles POST /api/v1/projects.
 func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
-	var req createProjectRequest
+	var req model.CreateProjectInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -101,9 +79,7 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Projects []projectJSON `json:"projects"`
-	}{Projects: make([]projectJSON, 0, len(ps))}
+	resp := model.ProjectListResponse{Projects: make([]model.Project, 0, len(ps))}
 	for _, p := range ps {
 		repos, err := s.st.ListRepos(r.Context(), p.ID)
 		if err != nil {
@@ -115,18 +91,10 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// tokenCountsJSON is the per-class token breakdown, shared by the daily rows
-// and the window totals.
-type tokenCountsJSON struct {
-	InputTokens        int64 `json:"input_tokens"`
-	CacheWrite5mTokens int64 `json:"cache_write_5m_tokens"`
-	CacheWrite1hTokens int64 `json:"cache_write_1h_tokens"`
-	CacheReadTokens    int64 `json:"cache_read_tokens"`
-	OutputTokens       int64 `json:"output_tokens"`
-}
-
-func toTokenCountsJSON(t store.TokenCounts) tokenCountsJSON {
-	return tokenCountsJSON{
+// toTokenCountsJSON builds the wire form of a token breakdown, shared by the
+// daily rows and the window totals.
+func toTokenCountsJSON(t store.TokenCounts) model.TokenCounts {
+	return model.TokenCounts{
 		InputTokens:        t.Input,
 		CacheWrite5mTokens: t.CacheWrite5m,
 		CacheWrite1hTokens: t.CacheWrite1h,
@@ -135,63 +103,28 @@ func toTokenCountsJSON(t store.TokenCounts) tokenCountsJSON {
 	}
 }
 
-// projectDayCostJSON is one day of a project's accounted usage in one
-// currency. CostAmount is a decimal string for the same reason the agent
-// session endpoints use one: numeric(14,6) does not survive a float64.
-type projectDayCostJSON struct {
-	Day      string `json:"day"`
-	Currency string `json:"currency"`
-	tokenCountsJSON
-	CostAmount string `json:"cost_amount"`
-	// UnpricedTokens are tokens whose model had no rate on file, so
-	// CostAmount understates the bill by whatever they were worth.
-	UnpricedTokens int64 `json:"unpriced_tokens"`
-}
-
-// projectCostTotalJSON is the window total for one currency. Totals are per
-// currency because summing across them needs a dated conversion rate the
-// server does not own.
-type projectCostTotalJSON struct {
-	Currency string `json:"currency"`
-	tokenCountsJSON
-	CostAmount     string `json:"cost_amount"`
-	UnpricedTokens int64  `json:"unpriced_tokens"`
-}
-
-type projectCostJSON struct {
-	Days   []projectDayCostJSON   `json:"days"`
-	Totals []projectCostTotalJSON `json:"totals"`
-}
-
-// projectDetailJSON is a project plus its cost. The list-shape fields are
-// embedded so the two endpoints cannot drift apart.
-type projectDetailJSON struct {
-	projectJSON
-	Cost projectCostJSON `json:"cost"`
-}
-
 // toProjectCostJSON builds the wire form of a cost window, normalizing nil
 // slices to empty arrays so days and totals never serialize as null.
-func toProjectCostJSON(pc *store.ProjectCost) projectCostJSON {
-	out := projectCostJSON{
-		Days:   make([]projectDayCostJSON, 0, len(pc.Days)),
-		Totals: make([]projectCostTotalJSON, 0, len(pc.Totals)),
+func toProjectCostJSON(pc *store.ProjectCost) model.ProjectCost {
+	out := model.ProjectCost{
+		Days:   make([]model.CostDay, 0, len(pc.Days)),
+		Totals: make([]model.CostTotals, 0, len(pc.Totals)),
 	}
 	for _, d := range pc.Days {
-		out.Days = append(out.Days, projectDayCostJSON{
-			Day:             d.Day.Format(time.DateOnly),
-			Currency:        d.Currency,
-			tokenCountsJSON: toTokenCountsJSON(d.Tokens),
-			CostAmount:      d.Cost,
-			UnpricedTokens:  d.UnpricedTokens,
+		out.Days = append(out.Days, model.CostDay{
+			Day:            d.Day.Format(time.DateOnly),
+			Currency:       d.Currency,
+			TokenCounts:    toTokenCountsJSON(d.Tokens),
+			CostAmount:     d.Cost,
+			UnpricedTokens: d.UnpricedTokens,
 		})
 	}
 	for _, t := range pc.Totals {
-		out.Totals = append(out.Totals, projectCostTotalJSON{
-			Currency:        t.Currency,
-			tokenCountsJSON: toTokenCountsJSON(t.Tokens),
-			CostAmount:      t.Cost,
-			UnpricedTokens:  t.UnpricedTokens,
+		out.Totals = append(out.Totals, model.CostTotals{
+			Currency:       t.Currency,
+			TokenCounts:    toTokenCountsJSON(t.Tokens),
+			CostAmount:     t.Cost,
+			UnpricedTokens: t.UnpricedTokens,
 		})
 	}
 	return out
@@ -243,9 +176,9 @@ func (s *server) getProject(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, projectDetailJSON{
-		projectJSON: toProjectJSON(p, repos),
-		Cost:        toProjectCostJSON(cost),
+	writeJSON(w, http.StatusOK, model.ProjectDetail{
+		Project: toProjectJSON(p, repos),
+		Cost:    toProjectCostJSON(cost),
 	})
 }
 
@@ -272,21 +205,6 @@ func (s *server) resolveProjectByRemote(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
-// patchProjectRequest is the settable-field set of PATCH /api/v1/projects/{id}.
-// Every field is a pointer so an absent field (nil) is distinguished from one
-// present-but-empty (a clear): sending focus_note:"" clears the pinned-focus
-// card, decision_title:"" clears the next-decision card. focus_pinned_by,
-// decision_accountable, and decision_readiness are the companion fields of
-// their trigger (focus_note / decision_title) and are ignored without it.
-type patchProjectRequest struct {
-	Focus               *[]string `json:"focus"`
-	FocusNote           *string   `json:"focus_note"`
-	FocusPinnedBy       *string   `json:"focus_pinned_by"`
-	DecisionTitle       *string   `json:"decision_title"`
-	DecisionAccountable *string   `json:"decision_accountable"`
-	DecisionReadiness   *string   `json:"decision_readiness"`
-}
-
 // derefString returns *p, or "" when p is nil — for optional string body
 // fields that default to empty when the caller omits them.
 func derefString(p *string) string {
@@ -303,7 +221,7 @@ func derefString(p *string) string {
 // project mutations, since focus affects claim-next ordering for everyone.
 func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req patchProjectRequest
+	var req model.PatchProjectInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -348,16 +266,10 @@ func (s *server) patchProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toProjectJSON(p, repos))
 }
 
-type addRepoRequest struct {
-	Repo string `json:"repo"`
-	// DoneState is optional; empty leaves the mapping at the schema default.
-	DoneState string `json:"done_state"`
-}
-
 // addRepo handles POST /api/v1/projects/{id}/repos.
 func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req addRepoRequest
+	var req model.AddRepoInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -406,11 +318,9 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		}()
 		wg.Wait()
 	}
-	resp := map[string]any{"project_id": id, "repo": req.Repo, "done_state": doneState}
-	if len(warnings) > 0 {
-		resp["warnings"] = warnings
-	}
-	writeJSON(w, http.StatusCreated, resp)
+	writeJSON(w, http.StatusCreated, model.AddRepoResult{
+		ProjectID: id, Repo: req.Repo, DoneState: doneState, Warnings: warnings,
+	})
 }
 
 // subscriptionWarnings names the events the webhook handler routes that this
@@ -495,23 +405,9 @@ func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 
 // --- actors and tokens --------------------------------------------------
 
-type actorJSON struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
-type createActorRequest struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	Admin       bool   `json:"admin"`
-}
-
 // createActor handles POST /api/v1/actors.
 func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
-	var req createActorRequest
+	var req model.CreateActorInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -528,21 +424,16 @@ func (s *server) createActor(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, actorJSON{
+	writeJSON(w, http.StatusCreated, model.Actor{
 		ID: req.ID, Kind: req.Kind, DisplayName: req.DisplayName, Admin: req.Admin,
 	})
-}
-
-type createTokenRequest struct {
-	Description string  `json:"description"`
-	ExpiresAt   *string `json:"expires_at"`
 }
 
 // createToken handles POST /api/v1/actors/{id}/tokens. The plaintext token
 // is returned exactly once; only its hash is stored (see Store.CreateToken).
 func (s *server) createToken(w http.ResponseWriter, r *http.Request) {
 	actorID := r.PathValue("id")
-	var req createTokenRequest
+	var req model.CreateTokenInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -567,16 +458,12 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"token": plaintext})
-}
-
-type revokeTokenRequest struct {
-	Token string `json:"token"`
+	writeJSON(w, http.StatusCreated, model.TokenResponse{Token: plaintext})
 }
 
 // revokeToken handles DELETE /api/v1/tokens: revoke by plaintext or hash.
 func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
-	var req revokeTokenRequest
+	var req model.RevokeTokenInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -594,28 +481,6 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // --- inbox ---------------------------------------------------------------
 
-type issueJSON struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title"`
-	State             string   `json:"state"`
-	TriageState       string   `json:"triage_state"`
-	TaskID            string   `json:"task_id,omitempty"`
-	AppliesToVersions []string `json:"applies_to_versions,omitempty"`
-	URL               string   `json:"url"`
-}
-
-func toIssueJSON(is *store.Issue) issueJSON {
-	out := issueJSON{
-		Repo: is.Repo, Number: is.Number, Title: is.Title, State: is.State,
-		TriageState: is.TriageState, AppliesToVersions: is.AppliesToVersions, URL: is.URL,
-	}
-	if is.TaskID != nil {
-		out.TaskID = *is.TaskID
-	}
-	return out
-}
-
 // listInbox handles GET /api/v1/inbox?state=new&project=worklode.
 func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 	issues, err := s.st.ListIssues(r.Context(),
@@ -624,25 +489,11 @@ func (s *server) listInbox(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Issues []issueJSON `json:"issues"`
-	}{Issues: make([]issueJSON, 0, len(issues))}
-	for i := range issues {
-		resp.Issues = append(resp.Issues, toIssueJSON(&issues[i]))
+	resp := model.IssueListResponse{Issues: issues}
+	if resp.Issues == nil {
+		resp.Issues = []model.Issue{}
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-type promoteRequest struct {
-	Repo              string   `json:"repo"`
-	Number            int64    `json:"number"`
-	Title             string   `json:"title"`
-	Body              string   `json:"body"`
-	Priority          string   `json:"priority"`
-	Kind              string   `json:"kind"`
-	AppliesToVersions []string `json:"applies_to_versions"`
-	Draft             bool     `json:"draft"`
-	Parent            string   `json:"parent"`
 }
 
 // promoteInbox handles POST /api/v1/inbox/promote: turn an inbox issue into a
@@ -650,7 +501,7 @@ type promoteRequest struct {
 // rather than path segments. When title is empty it defaults to the issue's
 // own title, read inside the same transaction as the promotion.
 func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
-	var req promoteRequest
+	var req model.PromoteInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -695,7 +546,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := actorFrom(r)
 
-	var created *store.Task
+	var created *model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.promoted", payload,
 		func(tx *sql.Tx, _ int64) error {
 			title := req.Title
@@ -732,17 +583,12 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toTaskJSON(created))
-}
-
-type dismissRequest struct {
-	Repo   string `json:"repo"`
-	Number int64  `json:"number"`
+	writeJSON(w, http.StatusCreated, created)
 }
 
 // dismissInbox handles POST /api/v1/inbox/dismiss.
 func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
-	var req dismissRequest
+	var req model.DismissInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -773,16 +619,10 @@ func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type linkRequest struct {
-	Repo   string `json:"repo"`
-	Number int64  `json:"number"`
-	TaskID string `json:"task_id"`
-}
-
 // linkInbox handles POST /api/v1/inbox/link: mark an inbox issue as covered
 // by a task that already exists, instead of creating a new one.
 func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
-	var req linkRequest
+	var req model.LinkInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -826,50 +666,11 @@ func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
 
 // --- board ---------------------------------------------------------------
 
-type holderJSON struct {
-	ActorID   string    `json:"actor_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// boardTaskJSON is a board row. Parent is the task's parent when it has one,
-// so a board can group a parent's children under it without a lookup per task.
-type boardTaskJSON struct {
-	taskJSON
-	Parent string      `json:"parent,omitempty"`
-	Holder *holderJSON `json:"holder,omitempty"`
-}
-
-type boardProjectJSON struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
-	InProgress []boardTaskJSON `json:"in_progress"`
-	InReview   []boardTaskJSON `json:"in_review"`
-	Ready      []boardTaskJSON `json:"ready"`
-	Blocked    []boardTaskJSON `json:"blocked"`
-}
-
-type runtimeEventJSON struct {
-	ID         int64     `json:"id"`
-	Cluster    string    `json:"cluster"`
-	Kind       string    `json:"kind"`
-	Workload   string    `json:"workload"`
-	Image      string    `json:"image"`
-	Message    string    `json:"message"`
-	OccurredAt time.Time `json:"occurred_at"`
-}
-
-func toRuntimeEventJSON(re *store.RuntimeEvent) runtimeEventJSON {
-	return runtimeEventJSON{
+func toRuntimeEventJSON(re *store.RuntimeEvent) model.RuntimeEvent {
+	return model.RuntimeEvent{
 		ID: re.ID, Cluster: re.Cluster, Kind: re.Kind, Workload: re.Workload,
 		Image: re.Image, Message: re.Message, OccurredAt: re.OccurredAt,
 	}
-}
-
-// boardResponse is the JSON shape of GET /api/v1/board, and the data the web
-// board pages (GET / and GET /projects/{id}) render.
-type boardResponse struct {
-	Projects       []boardProjectJSON `json:"projects"`
-	RecentFailures []runtimeEventJSON `json:"recent_failures"`
 }
 
 // board handles GET /api/v1/board?project=: a read-only summary of each
@@ -903,7 +704,7 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 // non-nil (possibly empty) slice otherwise — that is how a CLI or other
 // caller tells "board scoped to one project" from "board with no recent
 // failures" apart.
-func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boardResponse, error) {
+func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*model.BoardResponse, error) {
 	var projects []store.Project
 	if projectFilter != "" {
 		p, err := s.st.GetProject(ctx, projectFilter)
@@ -928,27 +729,27 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 	// same order a per-project query would have produced.
 	byProject := make(map[string][]store.ProjectWorkFact, len(projects))
 	for _, f := range facts {
-		byProject[f.Task.ProjectID] = append(byProject[f.Task.ProjectID], f)
+		byProject[f.Task.Project] = append(byProject[f.Task.Project], f)
 	}
 
-	resp := &boardResponse{Projects: make([]boardProjectJSON, 0, len(projects))}
+	resp := &model.BoardResponse{Projects: make([]model.BoardProject, 0, len(projects))}
 
 	for _, p := range projects {
-		bp := boardProjectJSON{
+		bp := model.BoardProject{
 			ID: p.ID, Name: p.Name,
-			InProgress: []boardTaskJSON{}, InReview: []boardTaskJSON{},
-			Ready: []boardTaskJSON{}, Blocked: []boardTaskJSON{},
+			InProgress: []model.BoardTask{}, InReview: []model.BoardTask{},
+			Ready: []model.BoardTask{}, Blocked: []model.BoardTask{},
 		}
 		for _, f := range byProject[p.ID] {
 			t := f.Task
-			bt := boardTaskJSON{taskJSON: toTaskJSON(&t)}
+			bt := model.BoardTask{Task: t}
 			if f.Parent != nil {
 				bt.Parent = f.Parent.ID
 			}
 			switch {
 			case t.State == "in_progress":
 				if f.Lease != nil {
-					bt.Holder = &holderJSON{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
+					bt.Holder = &model.Holder{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
 				}
 				bp.InProgress = append(bp.InProgress, bt)
 			case t.State == "in_review":
@@ -967,7 +768,7 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*boar
 		if err != nil {
 			return nil, err
 		}
-		resp.RecentFailures = make([]runtimeEventJSON, 0, len(events))
+		resp.RecentFailures = make([]model.RuntimeEvent, 0, len(events))
 		for i := range events {
 			resp.RecentFailures = append(resp.RecentFailures, toRuntimeEventJSON(&events[i]))
 		}

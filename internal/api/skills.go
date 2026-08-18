@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -30,44 +31,15 @@ const (
 // corpus, so this is generous rather than tight.
 const skillSyncTimeout = 5 * time.Minute
 
-type skillJSON struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	SourceRepo  string `json:"source_repo"`
-	Hash        string `json:"hash"`
-	Deleted     bool   `json:"deleted"`
-}
-
-type skillMatchJSON struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Hash        string  `json:"hash"`
-	Score       float64 `json:"score"`
-}
-
-type pinnedSkillJSON struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Hash        string `json:"hash"`
-	Content     string `json:"content"`
-}
-
-type recommendationJSON struct {
-	Pinned   []pinnedSkillJSON `json:"pinned"`
-	Matches  []skillMatchJSON  `json:"matches"`
-	Warnings []string          `json:"warnings"`
-	Provider string            `json:"provider"`
-}
-
-func toSkillJSON(sk store.Skill) skillJSON {
-	return skillJSON{
+func toSkillJSON(sk store.Skill) model.Skill {
+	return model.Skill{
 		Name: sk.Name, Description: sk.Description, SourceRepo: sk.SourceRepo,
 		Hash: sk.ContentHash, Deleted: sk.Deleted,
 	}
 }
 
-func toPinnedSkillJSON(sk store.Skill) pinnedSkillJSON {
-	return pinnedSkillJSON{
+func toPinnedSkillJSON(sk store.Skill) model.PinnedSkill {
+	return model.PinnedSkill{
 		Name: sk.Name, Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
 	}
 }
@@ -78,11 +50,11 @@ func (s *server) listSkills(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	out := make([]skillJSON, 0, len(skills))
+	out := make([]model.Skill, 0, len(skills))
 	for _, sk := range skills {
 		out = append(out, toSkillJSON(sk))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": out})
+	writeJSON(w, http.StatusOK, model.SkillsListResponse{Skills: out})
 }
 
 func (s *server) getSkill(w http.ResponseWriter, r *http.Request) {
@@ -108,14 +80,8 @@ func (s *server) skillArchive(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-type recommendRequest struct {
-	TaskID string `json:"task_id"`
-	Text   string `json:"text"`
-	Limit  int    `json:"limit"`
-}
-
 func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
-	var req recommendRequest
+	var req model.RecommendInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -149,9 +115,9 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 // work. Matching itself is shared with the task brief via skillMatches: the
 // brief already has its pins resolved by store.Brief, so taskBrief calls
 // skillMatches directly instead of re-resolving them here.
-func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*recommendationJSON, error) {
-	rec := &recommendationJSON{
-		Pinned: []pinnedSkillJSON{}, Matches: []skillMatchJSON{}, Warnings: []string{},
+func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*model.SkillRecommendation, error) {
+	rec := &model.SkillRecommendation{
+		Pinned: []model.PinnedSkill{}, Matches: []model.SkillMatch{}, Warnings: []string{},
 		Provider: "none",
 	}
 
@@ -192,8 +158,8 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // matches plus a warning. Pins-only is a fully functional mode per spec 016,
 // and this path serves the task brief: an error here would stop anyone from
 // starting work.
-func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]skillMatchJSON, []string) {
-	matches := []skillMatchJSON{}
+func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
+	matches := []model.SkillMatch{}
 	switch {
 	case limit <= 0:
 		limit = defaultSkillLimit
@@ -220,22 +186,11 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 		if exclude[m.Name] || len(matches) >= limit {
 			continue
 		}
-		matches = append(matches, skillMatchJSON{
+		matches = append(matches, model.SkillMatch{
 			Name: m.Name, Description: m.Description, Hash: m.ContentHash, Score: m.Score,
 		})
 	}
 	return matches, nil
-}
-
-// syncResponse is skillsync.Summary plus, on a partial failure, the
-// per-source error messages — the counts are real work done and must not be
-// thrown away just because another source in the same request failed.
-type syncResponse struct {
-	Synced   int      `json:"synced"`
-	Changed  int      `json:"changed"`
-	Deleted  int      `json:"deleted"`
-	Embedded int      `json:"embedded"`
-	Errors   []string `json:"errors,omitempty"`
 }
 
 func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
@@ -279,13 +234,15 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		// Partial failure: real work happened alongside the failures, so it
 		// is reported rather than discarded.
-		writeJSON(w, http.StatusOK, syncResponse{
+		writeJSON(w, http.StatusOK, model.SkillSyncReport{
 			Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
 			Errors: joinedMessages(err),
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, sum)
+	writeJSON(w, http.StatusOK, model.SkillSyncReport{
+		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
+	})
 }
 
 // joinedMessages splits an errors.Join result back into its parts. SyncAll

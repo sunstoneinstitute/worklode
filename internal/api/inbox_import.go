@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -26,41 +27,13 @@ const importTimeout = 60 * time.Second
 
 var validImportStates = map[string]bool{"open": true, "closed": true, "all": true}
 
-type importRequest struct {
-	Repo       string     `json:"repo"`
-	State      string     `json:"state"`
-	IncludePRs bool       `json:"include_prs"`
-	Since      *time.Time `json:"since"`
-	DryRun     bool       `json:"dry_run"`
-}
-
-type importCounts struct {
-	New       int  `json:"new"`
-	Updated   int  `json:"updated"`
-	Truncated bool `json:"truncated"`
-}
-
-type importResponse struct {
-	Repo      string       `json:"repo"`
-	Issues    importCounts `json:"issues"`
-	PRs       importCounts `json:"prs"`
-	Truncated bool         `json:"truncated"`
-	DryRun    bool         `json:"dry_run"`
-	// NewestUpdatedAt is the latest issue updated_at fetched this run, set
-	// only when Issues.Truncated: it is the value that makes --since a resume
-	// cursor (see listQuery in internal/githubauth/list.go) rather than just
-	// a filter. It is issues-only because /pulls takes no since parameter, so
-	// a PR timestamp here would be a cursor into a stream that cannot resume.
-	NewestUpdatedAt *time.Time `json:"newest_updated_at,omitempty"`
-}
-
 // importInbox handles POST /api/v1/inbox/import. It fetches outside any
 // transaction, then applies every upsert inside one RecordEvent, so an import
 // is one event and one transaction — and re-running it is safe, because
 // UpsertIssue and UpsertPR never touch triage or correlation state that
 // triage already set.
 func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
-	var req importRequest
+	var req model.ImportInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -119,7 +92,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := importResponse{Repo: req.Repo, DryRun: req.DryRun}
+	resp := model.ImportResult{Repo: req.Repo, DryRun: req.DryRun}
 	resp.Issues.Truncated = issuesTruncated
 	resp.PRs.Truncated = prsTruncated
 	resp.Truncated = issuesTruncated || prsTruncated
@@ -184,7 +157,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			for _, is := range issues {
-				if err := store.UpsertIssue(tx, store.Issue{
+				if err := store.UpsertIssue(tx, model.Issue{
 					Repo:   req.Repo,
 					Number: is.Number,
 					Title:  is.Title,

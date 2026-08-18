@@ -5,12 +5,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestProjectTableShowsKey(t *testing.T) {
 	var b strings.Builder
-	ProjectTable(&b, []Project{{ID: "worklode", Name: "Worklode", Key: "WL",
-		Repos: []RepoMapping{{Repo: "a/b", DoneState: "released"}}}})
+	ProjectTable(&b, []model.Project{{ID: "worklode", Name: "Worklode", Key: "WL",
+		Repos: []model.RepoMapping{{Repo: "a/b", DoneState: "released"}}}})
 	out := b.String()
 	if !strings.Contains(out, "KEY") || !strings.Contains(out, "WL") {
 		t.Fatalf("ProjectTable output missing KEY/WL:\n%s", out)
@@ -28,14 +30,14 @@ func TestProjectTableShowsKey(t *testing.T) {
 // WL-4.
 func TestBoardSectionGroupsChildren(t *testing.T) {
 	var buf bytes.Buffer
-	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
 		ID: "proj", Name: "Proj",
-		Ready: []BoardTask{
-			{Task: Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
-			{Task: Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
-			{Task: Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
-			{Task: Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
-			{Task: Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
+		Ready: []model.BoardTask{
+			{Task: model.Task{ID: "WL-5", Title: "Urgent", Priority: "critical"}},
+			{Task: model.Task{ID: "WL-9", Title: "Child B", Priority: "medium"}, Parent: "WL-1"},
+			{Task: model.Task{ID: "WL-1", Title: "Container", Priority: "medium"}},
+			{Task: model.Task{ID: "WL-4", Title: "Child A", Priority: "medium"}, Parent: "WL-1"},
+			{Task: model.Task{ID: "WL-2", Title: "Orphan", Priority: "medium"}, Parent: "WL-7"},
 		},
 	}}})
 	got := buf.String()
@@ -67,7 +69,7 @@ func TestBoardSectionGroupsChildren(t *testing.T) {
 // the first one rather than under the name.
 func TestSkillTableWraps(t *testing.T) {
 	var buf bytes.Buffer
-	skillTable(&buf, []Skill{
+	skillTable(&buf, []model.Skill{
 		{Name: "tdd", Description: "Red-green-refactor discipline for every feature and bugfix, applied before implementation code exists"},
 		{Name: "systematic-debugging", Description: "Short one"},
 	}, 60)
@@ -101,7 +103,7 @@ func TestSkillTableWraps(t *testing.T) {
 func TestSkillTableWrapsLongWord(t *testing.T) {
 	var buf bytes.Buffer
 	long := strings.Repeat("x", 50)
-	skillTable(&buf, []Skill{{Name: "a", Description: "see " + long + " end"}}, 20)
+	skillTable(&buf, []model.Skill{{Name: "a", Description: "see " + long + " end"}}, 20)
 	got := buf.String()
 	if !strings.Contains(got, long) {
 		t.Fatalf("unbreakable word was lost:\n%s", got)
@@ -116,7 +118,7 @@ func TestSkillTableWrapsLongWord(t *testing.T) {
 func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 	var buf bytes.Buffer
 	long := strings.Repeat("n", maxSkillNameWidth+8)
-	skillTable(&buf, []Skill{
+	skillTable(&buf, []model.Skill{
 		{Name: "short", Description: "first"},
 		{Name: long, Description: "second"},
 	}, 80)
@@ -131,20 +133,20 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 
 func TestTaskDetailRenderHierarchy(t *testing.T) {
 	var buf bytes.Buffer
-	TaskDetailRender(&buf, TaskDetail{
-		Task: Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
+	TaskDetailRender(&buf, model.TaskDetail{
+		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "ready"},
-		Hierarchy: TaskHierarchy{Parent: &TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
+		Hierarchy: model.TaskHierarchy{Parent: &model.TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
 	})
 	if got := buf.String(); !strings.Contains(got, "parent:   WL-1") {
 		t.Fatalf("output has no parent line:\n%s", got)
 	}
 
 	buf.Reset()
-	TaskDetailRender(&buf, TaskDetail{
-		Task: Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
+	TaskDetailRender(&buf, model.TaskDetail{
+		Task: model.Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "in_progress"},
-		Hierarchy: TaskHierarchy{Progress: TaskProgress{Closed: 3, Total: 7}},
+		Hierarchy: model.TaskHierarchy{Progress: model.TaskProgress{Closed: 3, Total: 7}},
 	})
 	if got := buf.String(); !strings.Contains(got, "progress: 3/7") {
 		t.Fatalf("output has no progress line:\n%s", got)
@@ -154,9 +156,9 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
 	TreeRender(&buf, []TreeNode{{
-		Parent:   Task{ID: "WL-1", Title: "Container", State: "in_progress"},
-		Progress: TaskProgress{Closed: 1, Total: 2},
-		Children: []Task{
+		Parent:   model.Task{ID: "WL-1", Title: "Container", State: "in_progress"},
+		Progress: model.TaskProgress{Closed: 1, Total: 2},
+		Children: []model.Task{
 			{ID: "WL-2", Title: "Done piece", State: "merged"},
 			{ID: "WL-3", Title: "Open piece", State: "ready"},
 		},
@@ -214,7 +216,7 @@ func TestHumanTokens(t *testing.T) {
 func TestEventTable(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	EventTable(&buf, []Event{
+	EventTable(&buf, []model.Event{
 		{ID: 1, Source: "github", ExternalID: "d1", Type: "push", ReceivedAt: at},
 		{ID: 2, Source: "cli", ExternalID: "c1", Type: "docs.synced", ReceivedAt: at.Add(time.Minute)},
 	})
@@ -230,7 +232,7 @@ func TestEventTable(t *testing.T) {
 func TestEventSubscriberTable(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	EventSubscriberTable(&buf, []EventSubscriberStatus{
+	EventSubscriberTable(&buf, []model.EventSubscriberStatus{
 		{Name: "doc-lifecycle", LastReadOffset: 10, LastAckedOffset: 8, Lag: 2, HolderPID: 4242, UpdatedAt: at},
 		{Name: "idle-sub", LastReadOffset: 0, LastAckedOffset: 0, Lag: 0, HolderPID: 0, UpdatedAt: at},
 	})
@@ -259,8 +261,8 @@ func TestEventStreamRow(t *testing.T) {
 	var buf bytes.Buffer
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	EventStreamHeader(&buf)
-	EventStreamRow(&buf, Event{ID: 7, Source: "github", ExternalID: "d7", Type: "push", ReceivedAt: at})
-	EventStreamRow(&buf, Event{ID: 8, Source: "cli", ExternalID: "c8", Type: "docs.synced", ReceivedAt: at})
+	EventStreamRow(&buf, model.Event{ID: 7, Source: "github", ExternalID: "d7", Type: "push", ReceivedAt: at})
+	EventStreamRow(&buf, model.Event{ID: 8, Source: "cli", ExternalID: "c8", Type: "docs.synced", ReceivedAt: at})
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	if len(lines) != 3 {
@@ -290,11 +292,11 @@ func TestEventStreamRow(t *testing.T) {
 // for, and an absolute expiry timestamp makes the reader do the subtraction.
 func TestBoardHolderShowsUsernameAndTimeLeft(t *testing.T) {
 	var buf bytes.Buffer
-	BoardRender(&buf, BoardResponse{Projects: []BoardProject{{
+	BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{{
 		ID: "proj", Name: "Proj",
-		InProgress: []BoardTask{{
-			Task: Task{ID: "WL-1", Title: "Work", Priority: "medium"},
-			Holder: &Holder{
+		InProgress: []model.BoardTask{{
+			Task: model.Task{ID: "WL-1", Title: "Work", Priority: "medium"},
+			Holder: &model.Holder{
 				ActorID:   "stig@sunstoneinstitute.ai",
 				ExpiresAt: time.Now().Add(74*time.Minute + 30*time.Second),
 			},

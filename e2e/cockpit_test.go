@@ -19,6 +19,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -31,7 +32,7 @@ const cockpitRepo = "acme/app"
 //
 // internal/cli has no typed client for GET /projects/{id}/cockpit (it is
 // consumed by the web UI in-process, not by the CLI), so this test decodes
-// the same JSON shape cockpit.go's cockpitProjection emits directly.
+// the same JSON shape model.CockpitProjection emits directly.
 
 type cockpitActorJSON struct {
 	ID   string `json:"id"`
@@ -132,7 +133,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 
 	// 1. Project "proj", key "WL", mapped to acme/app.
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "proj", Name: "Proj", Key: "WL",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -143,7 +144,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 
 	// 2. A human actor (Dana) and an agent actor (Agent One), each with their
 	// own bearer token.
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "dana", Kind: "human", DisplayName: "Dana",
 	}); err != nil {
 		t.Fatalf("create actor dana: %v", err)
@@ -153,7 +154,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("create token for dana: %v", err)
 	}
 
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-one", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor agent-one: %v", err)
@@ -167,7 +168,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	// 3. One task, assigned to Dana, claimed by Agent One, moved to review by
 	// a signed pull_request.opened webhook delivery — never a direct store
 	// write.
-	task, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Ship the cockpit", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -196,13 +197,13 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 
 	// 4. A blocker and a dependent task, linked by a "blocks" edge (blocker
 	// blocks dependent).
-	blocker, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	blocker, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Blocker task", Priority: "medium", Kind: "chore",
 	})
 	if err != nil {
 		t.Fatalf("create blocker task: %v", err)
 	}
-	dependent, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	dependent, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Dependent task", Priority: "medium", Kind: "chore",
 	})
 	if err != nil {

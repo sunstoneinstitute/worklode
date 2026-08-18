@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // taskListIDs runs `lode task list` with the given extra args and returns the
@@ -22,7 +22,7 @@ func taskListIDs(t *testing.T, args ...string) []string {
 		t.Fatalf("lode task list: %v\noutput: %s", err, out)
 	}
 	var resp struct {
-		Tasks []cli.Task `json:"tasks"`
+		Tasks []model.Task `json:"tasks"`
 	}
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
@@ -278,7 +278,7 @@ func TestTaskStartStopSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task start: %v\noutput: %s", err, out)
 	}
-	var started cli.Task
+	var started model.Task
 	if err := json.Unmarshal([]byte(out), &started); err != nil {
 		t.Fatalf("decode task start output %q: %v", out, err)
 	}
@@ -291,7 +291,7 @@ func TestTaskStartStopSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task stop: %v\noutput: %s", err, out)
 	}
-	var stopped cli.Task
+	var stopped model.Task
 	if err := json.Unmarshal([]byte(out), &stopped); err != nil {
 		t.Fatalf("decode task stop output %q: %v", out, err)
 	}
@@ -307,7 +307,7 @@ func TestTaskStartStopSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task submit: %v\noutput: %s", err, out)
 	}
-	var submitted cli.Task
+	var submitted model.Task
 	if err := json.Unmarshal([]byte(out), &submitted); err != nil {
 		t.Fatalf("decode task submit output %q: %v", out, err)
 	}
@@ -384,7 +384,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	setupProject(t, c)
 	setupRepoConfig(t, "proj") // so a bare task number resolves
 
-	container, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	container, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Container", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -398,7 +398,7 @@ func TestTaskHierarchyCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task add --parent: %v\noutput: %s", err, out)
 	}
-	var child cli.Task
+	var child model.Task
 	if err := json.Unmarshal([]byte(out), &child); err != nil {
 		t.Fatalf("decode add output %q: %v", out, err)
 	}
@@ -471,7 +471,7 @@ func TestTaskFollowUpCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("task add --follow-up-to: %v\noutput: %s", err, out)
 	}
-	var followUp cli.Task
+	var followUp model.Task
 	if err := json.Unmarshal([]byte(out), &followUp); err != nil {
 		t.Fatalf("decode add output %q: %v", out, err)
 	}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -91,7 +92,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
 
-	p, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"})
+	p, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestClientProjectsAndRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
-	want := cli.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
+	want := model.RepoMapping{Repo: "acme/widgets", DoneState: "merged"}
 	if len(list.Projects) != 1 || len(list.Projects[0].Repos) != 1 || list.Projects[0].Repos[0] != want {
 		t.Fatalf("ListProjects result = %+v", list.Projects)
 	}
@@ -146,7 +147,7 @@ func TestClientActorsAndTokens(t *testing.T) {
 	st, c, baseURL := newTestServer(t)
 	ctx := context.Background()
 
-	a, _, err := c.CreateActor(ctx, cli.CreateActorInput{ID: "bob", Kind: "agent", DisplayName: "Bob"})
+	a, _, err := c.CreateActor(ctx, model.CreateActorInput{ID: "bob", Kind: "agent", DisplayName: "Bob"})
 	if err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
@@ -185,11 +186,11 @@ func TestClientActorsAndTokens(t *testing.T) {
 func TestClientTaskLifecycle(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug",
 	})
 	if err != nil {
@@ -298,7 +299,7 @@ func TestClientTaskLifecycle(t *testing.T) {
 	}
 
 	// Abandon a fresh task straight from ready.
-	abandonTarget, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Nope", Priority: "low", Kind: "chore"})
+	abandonTarget, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Nope", Priority: "low", Kind: "chore"})
 	if err != nil {
 		t.Fatalf("CreateTask (abandon target): %v", err)
 	}
@@ -314,10 +315,10 @@ func TestClientTaskLifecycle(t *testing.T) {
 func TestClientReadyAndRework(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Drafted", Priority: "medium", Kind: "feature", Draft: true,
 	})
 	if err != nil {
@@ -355,11 +356,11 @@ func TestClientReadyAndRework(t *testing.T) {
 func TestClientReopen(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
-	abandonTarget, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	abandonTarget, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Abandoned then reopened", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
@@ -385,14 +386,14 @@ func TestClientReopen(t *testing.T) {
 func TestClientBlockUnblock(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	blocker, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Blocker", Priority: "high", Kind: "feature"})
+	blocker, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Blocker", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask blocker: %v", err)
 	}
-	blockee, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Blockee", Priority: "high", Kind: "feature"})
+	blockee, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Blockee", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask blockee: %v", err)
 	}
@@ -427,14 +428,14 @@ func TestClientBlockUnblock(t *testing.T) {
 func TestClientFollowUpUnfollow(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	origin, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Origin", Priority: "high", Kind: "feature"})
+	origin, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Origin", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask origin: %v", err)
 	}
-	followUp, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Follow-up", Priority: "high", Kind: "feature"})
+	followUp, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Follow-up", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask followUp: %v", err)
 	}
@@ -476,10 +477,10 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 func TestClientBriefAndRebindWorktree(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug"})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -529,7 +530,7 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 func TestClientInboxFlow(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if _, _, err := c.AddRepo(ctx, "proj", "acme/widgets", ""); err != nil {
@@ -542,7 +543,7 @@ func TestClientInboxFlow(t *testing.T) {
 		t.Helper()
 		_, _, err := st.RecordEvent(ctx, "github", "issue-open-"+title, "issues.opened", nil,
 			func(tx *sql.Tx, _ int64) error {
-				return store.UpsertIssue(tx, store.Issue{
+				return store.UpsertIssue(tx, model.Issue{
 					Repo: "acme/widgets", Number: number, Title: title, State: "open",
 					URL: "https://github.com/acme/widgets/issues/1",
 				})
@@ -562,7 +563,7 @@ func TestClientInboxFlow(t *testing.T) {
 		t.Fatalf("ListIssues result = %+v", list.Issues)
 	}
 
-	task, _, err := c.PromoteIssue(ctx, cli.PromoteInput{
+	task, _, err := c.PromoteIssue(ctx, model.PromoteInput{
 		Repo: "acme/widgets", Number: 1, Priority: "high", Kind: "bug",
 		AppliesToVersions: []string{"v1.2"},
 	})
@@ -589,17 +590,17 @@ func TestClientInboxFlow(t *testing.T) {
 func TestClientClaimNextClaimed(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug", Concern: "security",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-claim-next"})
+	resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Worktree: "host:/wt-claim-next"})
 	if err != nil {
 		t.Fatalf("ClaimNext: %v", err)
 	}
@@ -617,11 +618,11 @@ func TestClientClaimNextClaimed(t *testing.T) {
 func TestClientClaimNextNoneReady(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
-	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-empty"})
+	resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Worktree: "host:/wt-empty"})
 	if err != nil {
 		t.Fatalf("ClaimNext with no ready tasks: err = %v, want nil (exit-0 contract)", err)
 	}
@@ -636,17 +637,17 @@ func TestClientClaimNextNoneReady(t *testing.T) {
 func TestClientClaimNextDryRun(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Dry run me", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{DryRun: true})
+	resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{DryRun: true})
 	if err != nil {
 		t.Fatalf("ClaimNext (dry-run): %v", err)
 	}
@@ -665,7 +666,7 @@ func TestClientClaimNextDryRun(t *testing.T) {
 
 	// The task must still be claimable: a real claim-next afterward still
 	// finds it (no lease was actually taken).
-	real, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Worktree: "host:/wt-after-dry-run"})
+	real, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Worktree: "host:/wt-after-dry-run"})
 	if err != nil {
 		t.Fatalf("ClaimNext (real, after dry-run): %v", err)
 	}
@@ -677,10 +678,10 @@ func TestClientClaimNextDryRun(t *testing.T) {
 func TestClientCreateTaskWithConcern(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Concerned", Priority: "medium", Kind: "feature", Concern: "usability",
 	})
 	if err != nil {
@@ -701,10 +702,10 @@ func TestClientCreateTaskWithConcern(t *testing.T) {
 func TestClientEditTask(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	created, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	created, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Editable", Priority: "low", Kind: "feature",
 	})
 	if err != nil {
@@ -714,7 +715,7 @@ func TestClientEditTask(t *testing.T) {
 	concern := "security"
 	priority := "critical"
 	needsDecomp := true
-	edited, _, err := c.EditTask(ctx, created.ID, cli.EditTaskInput{
+	edited, _, err := c.EditTask(ctx, created.ID, model.EditTaskInput{
 		Concern: &concern, Priority: &priority, NeedsDecomposition: &needsDecomp,
 	})
 	if err != nil {
@@ -737,7 +738,7 @@ func TestClientEditTask(t *testing.T) {
 
 	// Clear the concern with "none".
 	none := "none"
-	if _, _, err := c.EditTask(ctx, created.ID, cli.EditTaskInput{Concern: &none}); err != nil {
+	if _, _, err := c.EditTask(ctx, created.ID, model.EditTaskInput{Concern: &none}); err != nil {
 		t.Fatalf("EditTask clear concern: %v", err)
 	}
 	stored, err = st.GetTask(ctx, created.ID)
@@ -752,7 +753,7 @@ func TestClientEditTask(t *testing.T) {
 func TestClientProjectFocus(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -799,7 +800,7 @@ func TestClientProjectFocus(t *testing.T) {
 func TestClientProjectCuratedCards(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 
@@ -1484,10 +1485,10 @@ func TestClientAgentSession(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()
 
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "proj", Title: "Agent session task", Priority: "high", Kind: "bug",
 	})
 	if err != nil {
@@ -1515,13 +1516,13 @@ func TestClientAgentSession(t *testing.T) {
 	}
 
 	if err := c.EndAgentSession(ctx, task.ID,
-		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"}); err != nil {
+		model.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"}); err != nil {
 		t.Fatalf("EndAgentSession: %v", err)
 	}
 
 	// A session that was never reported cannot be ended.
 	err = c.EndAgentSession(ctx, task.ID,
-		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "never-seen"})
+		model.EndAgentSessionInput{Agent: "claude-code", SessionID: "never-seen"})
 	if err == nil {
 		t.Fatal("EndAgentSession on an unknown session id succeeded")
 	}
@@ -1529,7 +1530,7 @@ func TestClientAgentSession(t *testing.T) {
 	// Ending an already-ended session is also an error (guarded by
 	// ended_at IS NULL in the store).
 	err = c.EndAgentSession(ctx, task.ID,
-		cli.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"})
+		model.EndAgentSessionInput{Agent: "claude-code", SessionID: "sess-1"})
 	if err == nil {
 		t.Fatal("EndAgentSession on an already-ended session succeeded")
 	}
@@ -1554,7 +1555,7 @@ func TestClientSkillsList(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("Skills: raw body empty")
 	}
-	names := map[string]cli.Skill{}
+	names := map[string]model.Skill{}
 	for _, sk := range skills {
 		names[sk.Name] = sk
 	}
@@ -1707,7 +1708,7 @@ func TestImportInbox(t *testing.T) {
 	defer srv.Close()
 
 	c := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "t"})
-	got, _, err := c.ImportInbox(context.Background(), cli.ImportInput{
+	got, _, err := c.ImportInbox(context.Background(), model.ImportInput{
 		Repo: "acme/widgets", State: "open", IncludePRs: true, DryRun: true,
 	})
 	if err != nil {
@@ -1727,7 +1728,7 @@ func TestImportInbox(t *testing.T) {
 	}
 
 	since := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	if _, _, err := c.ImportInbox(context.Background(), cli.ImportInput{
+	if _, _, err := c.ImportInbox(context.Background(), model.ImportInput{
 		Repo: "acme/widgets", Since: &since,
 	}); err != nil {
 		t.Fatalf("ImportInbox with Since: %v", err)
@@ -1844,10 +1845,10 @@ func TestClientAssignmentFlow(t *testing.T) {
 	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("create actor bob: %v", err)
 	}
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: "Assign me", Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Assign me", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -2014,7 +2015,7 @@ func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
 // test itself committed. Once a query has observed an id the horizon can
 // only advance, so callers only need this for the first read against a
 // freshly recorded id.
-func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []cli.Event {
+func pollClientEvents(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -2143,9 +2144,9 @@ func TestClientStreamEvents(t *testing.T) {
 	defer cancel()
 
 	errEnough := errors.New("enough")
-	var got []cli.Event
+	var got []model.Event
 	err := c.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream", After: ids[0]},
-		func(e cli.Event) error {
+		func(e model.Event) error {
 			got = append(got, e)
 			if len(got) == 2 {
 				return errEnough
@@ -2175,7 +2176,7 @@ func TestClientStreamEvents(t *testing.T) {
 	}
 	wc := cli.NewClient(cli.Config{ServerURL: serverURL, Token: workerToken})
 	err = wc.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "cli.stream"},
-		func(cli.Event) error { return errors.New("callback must not run") })
+		func(model.Event) error { return errors.New("callback must not run") })
 	var ce *cli.ClientError
 	if !errors.As(err, &ce) || ce.Status != http.StatusForbidden {
 		t.Fatalf("non-admin StreamEvents = %v, want a 403 ClientError", err)
@@ -2202,8 +2203,8 @@ func TestClientStreamEventsFraming(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := cli.NewClient(cli.Config{ServerURL: ts.URL, Token: "wl_" + strings.Repeat("a", 40)})
-	var got []cli.Event
-	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e cli.Event) error {
+	var got []model.Event
+	err := c.StreamEvents(context.Background(), cli.EventStreamFilter{}, func(e model.Event) error {
 		got = append(got, e)
 		return nil
 	})

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // setupRepoConfig creates a fake $HOME containing a repo directory with a
@@ -53,13 +53,13 @@ func resetProjectFlag(t *testing.T, path ...string) {
 }
 
 // addTask runs `lode task add` and returns the created task.
-func addTask(t *testing.T, args ...string) cli.Task {
+func addTask(t *testing.T, args ...string) model.Task {
 	t.Helper()
 	out, err := runLode(t, append([]string{"task", "add", "--json"}, args...)...)
 	if err != nil {
 		t.Fatalf("lode task add: %v\noutput: %s", err, out)
 	}
-	var task cli.Task
+	var task model.Task
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
@@ -81,7 +81,7 @@ func TestTaskAddUsesCurrentProject(t *testing.T) {
 func TestTaskAddProjectFlagBeatsCurrentProject(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
 	setupRepoConfig(t, "proj")
@@ -98,11 +98,11 @@ func TestTaskListDefaultsToCurrentProject(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "other", Name: "Other", Key: "OTHR"}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
 	mine := createTestTask(t, c, "Mine")
-	theirs, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "other", Title: "Theirs", Priority: "high", Kind: "feature"})
+	theirs, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "other", Title: "Theirs", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task in other project: %v", err)
 	}

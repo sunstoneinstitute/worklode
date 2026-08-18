@@ -12,6 +12,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -22,7 +23,7 @@ import (
 // in another package's test binary sharing this Postgres instance can hold a
 // read back to fewer events than were actually committed, so "nothing yet"
 // must never be read as success.
-func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []cli.Event {
+func pollEventListE2E(t *testing.T, ctx context.Context, c *cli.Client, f cli.EventListFilter, want int) []model.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -65,7 +66,7 @@ func TestEventLog(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "demo", Name: "Demo", Key: "DEMO",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -73,7 +74,7 @@ func TestEventLog(t *testing.T) {
 	if _, _, err := admin.AddRepo(ctx, "demo", repo, ""); err != nil {
 		t.Fatalf("add repo: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-1", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -131,14 +132,14 @@ func TestEventLog(t *testing.T) {
 	defer cancelStream()
 	errGotIt := errors.New("got the second delivery")
 	type streamResult struct {
-		event cli.Event
+		event model.Event
 		err   error
 	}
 	resultCh := make(chan streamResult, 1)
 	go func() {
-		var got cli.Event
+		var got model.Event
 		err := admin.StreamEvents(streamCtx, cli.EventStreamFilter{Type: "push", After: firstID},
-			func(e cli.Event) error {
+			func(e model.Event) error {
 				got = e
 				return errGotIt
 			})
@@ -171,7 +172,7 @@ func TestEventLog(t *testing.T) {
 	// even if the refusal never came (which would itself be the bug).
 	refuseCtx, cancelRefuse := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelRefuse()
-	err = agent.StreamEvents(refuseCtx, cli.EventStreamFilter{Type: "push"}, func(cli.Event) error {
+	err = agent.StreamEvents(refuseCtx, cli.EventStreamFilter{Type: "push"}, func(model.Event) error {
 		return errors.New("callback must not run for a non-admin token")
 	})
 	if !isClientStatus(err, http.StatusForbidden) {

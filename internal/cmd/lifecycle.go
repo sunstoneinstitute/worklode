@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -248,7 +249,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, strictFocus bool)
 		if err != nil {
 			return err
 		}
-		resp, _, err := c.ClaimNext(ctx, cli.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
+		resp, _, err := c.ClaimNext(ctx, model.ClaimNextInput{Project: sc.Project, StrictFocus: strictFocus, Worktree: pending})
 		if err != nil {
 			return err
 		}
@@ -481,14 +482,14 @@ func newBlockCmd() *cobra.Command {
 
 // statusResult is the --json shape of `lode status`.
 type statusResult struct {
-	Worktree      string             `json:"worktree"`
-	Task          cli.Task           `json:"task"`
-	LeaseState    string             `json:"lease_state"` // held, expired, held_elsewhere, none
-	Lease         *cli.Lease         `json:"lease,omitempty"`
-	OpenBlockers  []cli.BriefBlocker `json:"open_blockers"`
-	SessionMarker bool               `json:"session_marker"`
-	Project       string             `json:"project,omitempty"`
-	ProjectSource string             `json:"project_source"`
+	Worktree      string               `json:"worktree"`
+	Task          model.Task           `json:"task"`
+	LeaseState    string               `json:"lease_state"` // held, expired, held_elsewhere, none
+	Lease         *model.Lease         `json:"lease,omitempty"`
+	OpenBlockers  []model.BriefBlocker `json:"open_blockers"`
+	SessionMarker bool                 `json:"session_marker"`
+	Project       string               `json:"project,omitempty"`
+	ProjectSource string               `json:"project_source"`
 }
 
 // orNone renders an empty scope as "-" rather than a blank column.
@@ -500,7 +501,7 @@ func orNone(s string) string {
 }
 
 // leaseState classifies lease relative to identity (this worktree) and now.
-func leaseState(lease *cli.Lease, identity string, now time.Time) string {
+func leaseState(lease *model.Lease, identity string, now time.Time) string {
 	switch {
 	case lease == nil:
 		return "none"

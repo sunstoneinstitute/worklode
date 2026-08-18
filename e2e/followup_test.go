@@ -10,6 +10,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -29,12 +30,12 @@ func TestFollowUpLoop(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "fllw", Name: "Follow", Key: "FLLW",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "agent-1", Kind: "agent", DisplayName: "Agent One",
 	}); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -47,13 +48,13 @@ func TestFollowUpLoop(t *testing.T) {
 
 	// 1-2. The origin task, then a follow-up filed against it in the same
 	// request that creates it.
-	origin, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	origin, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "fllw", Title: "Ship the thing", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
 		t.Fatalf("create origin: %v", err)
 	}
-	followUp, _, err := agent.CreateTask(ctx, cli.CreateTaskInput{
+	followUp, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
 		Project: "fllw", Title: "Loose end found while shipping", Priority: "medium",
 		Kind: "chore", FollowUpTo: origin.ID,
 	})

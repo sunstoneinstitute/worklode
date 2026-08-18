@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func newEventCmd() *cobra.Command {
@@ -72,7 +73,7 @@ func newEventTailCmd() *cobra.Command {
 // its own cursor is what closes the gap — the server's own default would
 // start at the head it sees now, which is not necessarily where this page
 // ended, and events landing in between would be lost.
-func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []cli.Event) error {
+func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []model.Event) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -82,9 +83,9 @@ func followEvents(cmd *cobra.Command, c *cli.Client, typ string, backlog []cli.E
 
 	// NDJSON under --json: a stream has no closing bracket, so one object per
 	// line is the only form a reader can consume incrementally.
-	emit := func(e cli.Event) error { cli.EventStreamRow(out, e); return nil }
+	emit := func(e model.Event) error { cli.EventStreamRow(out, e); return nil }
 	if asJSON {
-		emit = func(e cli.Event) error { return enc.Encode(e) }
+		emit = func(e model.Event) error { return enc.Encode(e) }
 	} else {
 		cli.EventStreamHeader(out)
 	}
@@ -155,7 +156,7 @@ func newEventSeekCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.EventSubscriberTable(cmd.OutOrStdout(), []cli.EventSubscriberStatus{status})
+			cli.EventSubscriberTable(cmd.OutOrStdout(), []model.EventSubscriberStatus{status})
 			fmt.Fprintln(cmd.ErrOrStderr(),
 				"warning: seeking backward replays events between the new offset and the old one — safe only because subscriber handlers are idempotent")
 			return nil

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 var inboxTestNow = time.Date(2026, 7, 19, 11, 0, 0, 0, time.UTC)
@@ -20,7 +22,7 @@ func openInboxStore(t *testing.T) *Store {
 
 // upsertIssue drives UpsertIssue through RecordEvent, source "github", the
 // way a webhook handler will use it.
-func upsertIssue(t *testing.T, s *Store, is Issue) error {
+func upsertIssue(t *testing.T, s *Store, is model.Issue) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "github", nextExt(t), "issues.opened", nil,
 		func(tx *sql.Tx, eventID int64) error {
@@ -30,9 +32,9 @@ func upsertIssue(t *testing.T, s *Store, is Issue) error {
 }
 
 // promoteIssue drives PromoteIssue through RecordEvent, source "cli".
-func promoteIssue(t *testing.T, s *Store, now time.Time, repo string, number int64, in TaskInput, versions []string) (*Task, error) {
+func promoteIssue(t *testing.T, s *Store, now time.Time, repo string, number int64, in TaskInput, versions []string) (*model.Task, error) {
 	t.Helper()
-	var task *Task
+	var task *model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "issue.promote", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
@@ -65,8 +67,8 @@ func linkIssue(t *testing.T, s *Store, repo string, number int64, taskID string)
 	return err
 }
 
-func defaultIssue() Issue {
-	return Issue{
+func defaultIssue() model.Issue {
+	return model.Issue{
 		Repo:   "sunstoneinstitute/demo",
 		Number: 1,
 		Title:  "something is broken",
@@ -97,8 +99,8 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 	if got.TriageState != "new" {
 		t.Fatalf("inserted issue triage_state: got %q, want new", got.TriageState)
 	}
-	if got.TaskID != nil {
-		t.Fatalf("inserted issue task_id: got %v, want nil", got.TaskID)
+	if got.TaskID != "" {
+		t.Fatalf("inserted issue task_id: got %v, want empty", got.TaskID)
 	}
 	if got.AppliesToVersions != nil {
 		t.Fatalf("inserted issue applies_to_versions: got %v, want nil", got.AppliesToVersions)
@@ -157,7 +159,7 @@ func TestUpsertIssueDoesNotClobberAfterPromote(t *testing.T) {
 	if got.TriageState != "promoted" {
 		t.Fatalf("triage_state after redelivery: got %q, want promoted", got.TriageState)
 	}
-	if got.TaskID == nil || *got.TaskID != task.ID {
+	if got.TaskID != task.ID {
 		t.Fatalf("task_id after redelivery: got %v, want %s", got.TaskID, task.ID)
 	}
 	if !reflect.DeepEqual(got.AppliesToVersions, []string{"v1.2.0"}) {
@@ -198,7 +200,7 @@ func TestPromoteIssue(t *testing.T) {
 	if gotIssue.TriageState != "promoted" {
 		t.Fatalf("issue triage_state: got %q, want promoted", gotIssue.TriageState)
 	}
-	if gotIssue.TaskID == nil || *gotIssue.TaskID != task.ID {
+	if gotIssue.TaskID != task.ID {
 		t.Fatalf("issue task_id: got %v, want %s", gotIssue.TaskID, task.ID)
 	}
 	if !reflect.DeepEqual(gotIssue.AppliesToVersions, []string{"v1.0.0", "v1.1.0"}) {
@@ -310,7 +312,7 @@ func TestLinkIssueAttachesExistingTask(t *testing.T) {
 	if got.TriageState != "promoted" {
 		t.Fatalf("triage_state = %q, want promoted", got.TriageState)
 	}
-	if got.TaskID == nil || *got.TaskID != taskID {
+	if got.TaskID != taskID {
 		t.Fatalf("task_id = %v, want %s", got.TaskID, taskID)
 	}
 }
@@ -393,7 +395,7 @@ func TestListIssuesFilter(t *testing.T) {
 	dismissedIssue := defaultIssue()
 	dismissedIssue.Number = 3
 
-	for _, is := range []Issue{newIssue, promotedIssue, dismissedIssue} {
+	for _, is := range []model.Issue{newIssue, promotedIssue, dismissedIssue} {
 		if err := upsertIssue(t, s, is); err != nil {
 			t.Fatalf("upsert issue #%d: %v", is.Number, err)
 		}
@@ -455,7 +457,7 @@ func TestListIssuesProjectFilter(t *testing.T) {
 		t.Fatalf("map beta repo: %v", err)
 	}
 
-	for _, is := range []Issue{
+	for _, is := range []model.Issue{
 		{Repo: "acme/alpha-app", Number: 1, Title: "alpha", State: "open", URL: "https://example.test/1"},
 		{Repo: "acme/beta-app", Number: 2, Title: "beta", State: "open", URL: "https://example.test/2"},
 		{Repo: "acme/unmapped", Number: 3, Title: "unmapped", State: "open", URL: "https://example.test/3"},

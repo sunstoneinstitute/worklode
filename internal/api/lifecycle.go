@@ -9,21 +9,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// leaseJSON is the wire form of a lease.
-type leaseJSON struct {
-	TaskID     string    `json:"task_id"`
-	ActorID    string    `json:"actor_id"`
-	Worktree   string    `json:"worktree"`
-	AcquiredAt time.Time `json:"acquired_at"`
-	RenewedAt  time.Time `json:"renewed_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
-}
-
-func toLeaseJSON(l *store.Lease) leaseJSON {
-	return leaseJSON{
+// toLeaseJSON converts a store.Lease (which additionally carries the
+// database primary key and released_at — see store.Lease's doc comment) to
+// its wire form, model.Lease.
+func toLeaseJSON(l *store.Lease) model.Lease {
+	return model.Lease{
 		TaskID:     l.TaskID,
 		ActorID:    l.ActorID,
 		Worktree:   l.Worktree,
@@ -49,18 +43,13 @@ func readOptionalJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	return nil
 }
 
-type claimRequest struct {
-	Worktree   string `json:"worktree"`
-	TTLSeconds int    `json:"ttl_seconds"`
-}
-
 // claimTask handles POST /api/v1/tasks/{id}/claim: lease the task to the
 // caller and move it ready -> in_progress, bound to the caller's worktree
 // identity (required). A 409 for an already-leased task carries the current
 // holder.
 func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req claimRequest
+	var req model.ClaimInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -100,56 +89,28 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"lease":  toLeaseJSON(lease),
-		"branch": store.BranchFor(t),
+	writeJSON(w, http.StatusOK, model.ClaimResponse{
+		Lease:  toLeaseJSON(lease),
+		Branch: store.BranchFor(t),
 	})
-}
-
-// leasePickJSON is the lease shard of a claim-next task pick.
-type leasePickJSON struct {
-	Worktree  string    `json:"worktree"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// taskPickJSON is the wire form of a claim-next candidate/claimed task: a
-// slimmer projection than taskJSON, matching the ranking-relevant fields
-// (spec 005) rather than the full task record.
-type taskPickJSON struct {
-	ID       string         `json:"id"`
-	Slug     string         `json:"slug"`
-	Branch   string         `json:"branch"`
-	Concern  string         `json:"concern"`
-	Priority string         `json:"priority"`
-	FanOut   int            `json:"fan_out"`
-	Project  string         `json:"project"`
-	Lease    *leasePickJSON `json:"lease,omitempty"`
 }
 
 // toTaskPickJSON builds a claim-next response task, including a lease shard
 // only when lease is non-nil (dry-run and no-ready-task responses have none).
-func (s *server) toTaskPickJSON(t *store.Task, fanOut int, lease *store.Lease) taskPickJSON {
-	pick := taskPickJSON{
+func (s *server) toTaskPickJSON(t *model.Task, fanOut int, lease *store.Lease) model.ClaimNextPick {
+	pick := model.ClaimNextPick{
 		ID:       t.ID,
 		Slug:     SlugifyTitle(t.Title),
 		Branch:   store.BranchFor(t),
 		Concern:  t.Concern,
 		Priority: t.Priority,
 		FanOut:   fanOut,
-		Project:  t.ProjectID,
+		Project:  t.Project,
 	}
 	if lease != nil {
-		pick.Lease = &leasePickJSON{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
+		pick.Lease = &model.ClaimNextPickLease{Worktree: lease.Worktree, ExpiresAt: lease.ExpiresAt}
 	}
 	return pick
-}
-
-type claimNextRequest struct {
-	Project     string `json:"project"`
-	StrictFocus bool   `json:"strict_focus"`
-	DryRun      bool   `json:"dry_run"`
-	Worktree    string `json:"worktree"`
-	TTLSeconds  int    `json:"ttl_seconds"`
 }
 
 // claimNext handles POST /api/v1/tasks/claim-next: rank the ready set (see
@@ -159,7 +120,7 @@ type claimNextRequest struct {
 // reason set), a dry-run hit (claimed=false, dry_run=true, task set, no
 // lease), or a real claim (claimed=true, task set with its new lease).
 func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
-	var req claimNextRequest
+	var req model.ClaimNextInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -184,31 +145,22 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !res.Claimed && res.Task == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"claimed": false, "reason": "no-ready-task"})
+		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, Reason: "no-ready-task"})
 		return
 	}
 	if req.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"claimed": false,
-			"dry_run": true,
-			"task":    s.toTaskPickJSON(res.Task, res.FanOut, nil),
-		})
+		pick := s.toTaskPickJSON(res.Task, res.FanOut, nil)
+		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, DryRun: true, Task: &pick})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"claimed": true,
-		"task":    s.toTaskPickJSON(res.Task, res.FanOut, res.Lease),
-	})
-}
-
-type renewRequest struct {
-	TTLSeconds int `json:"ttl_seconds"`
+	pick := s.toTaskPickJSON(res.Task, res.FanOut, res.Lease)
+	writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: true, Task: &pick})
 }
 
 // renewLease handles POST /api/v1/tasks/{id}/renew.
 func (s *server) renewLease(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req renewRequest
+	var req model.RenewInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -268,7 +220,7 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // doneTask handles POST /api/v1/tasks/{id}/done: current state -> merged,

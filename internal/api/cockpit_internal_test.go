@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -97,7 +98,7 @@ func TestMapWorkItemOwnerAndDelegate(t *testing.T) {
 		"agent-one": {ID: "agent-one", Kind: "agent", DisplayName: "Agent One"},
 	})
 	fact := store.ProjectWorkFact{
-		Task:  store.Task{ID: "WL-1", Title: "Ship it", State: "in_progress", Assignee: "dana"},
+		Task:  model.Task{ID: "WL-1", Title: "Ship it", State: "in_progress", Assignee: "dana"},
 		Lease: &store.Lease{ActorID: "agent-one"},
 	}
 
@@ -120,7 +121,7 @@ func TestMapWorkItemHumanLeaseIsNotDelegate(t *testing.T) {
 		"bob": {ID: "bob", Kind: "human", DisplayName: "Bob"},
 	})
 	fact := store.ProjectWorkFact{
-		Task:  store.Task{ID: "WL-1", Title: "Ship it", State: "in_progress"},
+		Task:  model.Task{ID: "WL-1", Title: "Ship it", State: "in_progress"},
 		Lease: &store.Lease{ActorID: "bob"},
 	}
 
@@ -140,7 +141,7 @@ func TestMapWorkItemMissingDisplayNameFallsBackToID(t *testing.T) {
 		"svc-1": {ID: "svc-1", Kind: "human", DisplayName: ""},
 	})
 	fact := store.ProjectWorkFact{
-		Task: store.Task{ID: "WL-1", Title: "Ship it", State: "ready", Assignee: "svc-1"},
+		Task: model.Task{ID: "WL-1", Title: "Ship it", State: "ready", Assignee: "svc-1"},
 	}
 
 	item, err := mapWorkItem(fact, false, resolve)
@@ -261,7 +262,7 @@ func TestBuildNextDecision(t *testing.T) {
 // owner nor delegate, and its evidence is declared (no backing event).
 func TestMapWorkItemNoAssigneeNoLease(t *testing.T) {
 	item, err := mapWorkItem(store.ProjectWorkFact{
-		Task: store.Task{ID: "WL-1", Title: "Untouched", State: "ready"},
+		Task: model.Task{ID: "WL-1", Title: "Untouched", State: "ready"},
 	}, false, stubActors(nil))
 	if err != nil {
 		t.Fatalf("mapWorkItem: %v", err)

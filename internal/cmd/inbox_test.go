@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestInboxPromoteResolvesBareParentNumber mirrors the --under handling
@@ -20,7 +20,7 @@ func TestInboxPromoteResolvesBareParentNumber(t *testing.T) {
 	mapProjectRepo(t, c, "proj", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1)
 
-	container, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	container, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Container", Priority: "high", Kind: "feature",
 	})
 	if err != nil {
@@ -34,7 +34,7 @@ func TestInboxPromoteResolvesBareParentNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inbox promote --parent %s: %v\noutput: %s", parentNumber, err, out)
 	}
-	var task cli.Task
+	var task model.Task
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}

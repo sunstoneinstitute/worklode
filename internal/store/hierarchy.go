@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // maxHierarchyDepth caps a child_of chain at two edges, now spanning task ->
@@ -167,25 +169,18 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 	return nil
 }
 
-// HierarchyProgress is a parent's derived roll-up: how many of its direct
-// children are closed, out of how many. It is computed on read and never
-// stored — there is no resolver, no migration, and no event-log noise behind
-// it.
-type HierarchyProgress struct {
-	Closed int
-	Total  int
-}
-
-// ChildProgress returns the closed/total counts over taskID's direct children.
-// A task with no children reports a zero value.
-func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProgress, error) {
-	var p HierarchyProgress
+// ChildProgress returns the closed/total counts over taskID's direct children:
+// a parent's derived roll-up, computed on read and never stored — there is no
+// resolver, no migration, and no event-log noise behind it. A task with no
+// children reports a zero value.
+func (s *Store) ChildProgress(ctx context.Context, taskID string) (model.TaskProgress, error) {
+	var p model.TaskProgress
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COUNT(*) FILTER (WHERE `+taskClosed("t")+`)
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
 		  WHERE e.to_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.Total, &p.Closed)
 	if err != nil {
-		return HierarchyProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
+		return model.TaskProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
 	}
 	return p, nil
 }
@@ -193,8 +188,8 @@ func (s *Store) ChildProgress(ctx context.Context, taskID string) (HierarchyProg
 // ParentOf returns taskID's parent, or nil when it has none. Only ID, Title,
 // and State are populated: one hop up is all any caller needs, and the full
 // ancestry is unbounded.
-func (s *Store) ParentOf(ctx context.Context, taskID string) (*Task, error) {
-	var p Task
+func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error) {
+	var p model.Task
 	err := s.db.QueryRowContext(ctx,
 		`SELECT t.id, t.title, t.state
 		   FROM task_edges e JOIN tasks t ON t.id = e.to_task
@@ -248,7 +243,7 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 // work someone is holding is a coordination bug), when it sits deep enough
 // that its children would exceed maxHierarchyDepth, and from the delivery
 // states a task with children can never occupy.
-func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]Task, error) {
+func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]model.Task, error) {
 	if len(titles) == 0 {
 		return nil, fmt.Errorf("decompose %s: at least one child title is required: %w",
 			parentID, ErrInvalidInput)
@@ -326,7 +321,7 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 		}
 	}
 
-	children := make([]Task, 0, len(trimmed))
+	children := make([]model.Task, 0, len(trimmed))
 	for _, title := range trimmed {
 		child, err := CreateTask(tx, now, TaskInput{
 			ProjectID: projectID,

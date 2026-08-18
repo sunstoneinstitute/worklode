@@ -5,14 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// assignRequest is the optional body of POST .../assign: an empty or missing
-// assignee defaults to the caller.
-type assignRequest struct {
-	Assignee string `json:"assignee"`
-}
 
 // assignTask handles POST /api/v1/tasks/{id}/assign: sets the task's
 // assignee to the request body's assignee, or the caller when omitted. This
@@ -20,7 +15,7 @@ type assignRequest struct {
 // change state.
 func (s *server) assignTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req assignRequest
+	var req model.AssignInput
 	if err := readOptionalJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -56,7 +51,7 @@ func (s *server) assignTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // unassignTask handles POST /api/v1/tasks/{id}/unassign: clears the task's
@@ -89,7 +84,7 @@ func (s *server) unassignTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // startTask handles POST /api/v1/tasks/{id}/start: moves a ready task to
@@ -125,7 +120,7 @@ func (s *server) startTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }
 
 // stopTask handles POST /api/v1/tasks/{id}/stop: moves an in_progress task
@@ -162,5 +157,5 @@ func (s *server) stopTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
+	writeJSON(w, http.StatusOK, t)
 }

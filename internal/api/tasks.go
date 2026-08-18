@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -31,72 +32,9 @@ var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,
 }
 
-// taskJSON is the wire form of a task: every store.Task field, so a client
-// reading JSON sees the same record the server holds. Concern is "" when the
-// task has none. Assignee is "" when the task is unassigned.
-//
-// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and is
-// the authority on branch names (008 §3.1), so a client that needs to match
-// local refs against tasks reads the name from here rather than rendering
-// one.
-type taskJSON struct {
-	ID                 string    `json:"id"`
-	Project            string    `json:"project"`
-	Title              string    `json:"title"`
-	Body               string    `json:"body"`
-	Priority           string    `json:"priority"`
-	Kind               string    `json:"kind"`
-	State              string    `json:"state"`
-	Concern            string    `json:"concern"`
-	NeedsDecomposition bool      `json:"needs_decomposition"`
-	CreatedBy          string    `json:"created_by"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	Skills             []string  `json:"skills"`
-	Assignee           string    `json:"assignee"`
-	Branch             string    `json:"branch"`
-}
-
-func toTaskJSON(t *store.Task) taskJSON {
-	skills := t.Skills
-	if skills == nil {
-		skills = []string{}
-	}
-	return taskJSON{
-		ID:                 t.ID,
-		Project:            t.ProjectID,
-		Title:              t.Title,
-		Body:               t.Body,
-		Priority:           t.Priority,
-		Kind:               t.Kind,
-		State:              t.State,
-		Concern:            t.Concern,
-		NeedsDecomposition: t.NeedsDecomposition,
-		CreatedBy:          t.CreatedBy,
-		CreatedAt:          t.CreatedAt,
-		UpdatedAt:          t.UpdatedAt,
-		Skills:             skills,
-		Assignee:           t.Assignee,
-		Branch:             store.BranchFor(t),
-	}
-}
-
-type createTaskRequest struct {
-	Project    string   `json:"project"`
-	Title      string   `json:"title"`
-	Body       string   `json:"body"`
-	Priority   string   `json:"priority"`
-	Kind       string   `json:"kind"`
-	Concern    string   `json:"concern"`
-	Draft      bool     `json:"draft"`
-	Parent     string   `json:"parent"`
-	FollowUpTo string   `json:"follow_up_to"`
-	Skills     []string `json:"skills"`
-}
-
 // createTask handles POST /api/v1/tasks.
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
-	var req createTaskRequest
+	var req model.CreateTaskInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -157,7 +95,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	actor := actorFrom(r)
 	now := s.st.Now()
 
-	var created *store.Task
+	var created *model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.created", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			t, err := store.CreateTask(tx, now, store.TaskInput{
@@ -193,71 +131,28 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toTaskJSON(created))
-}
-
-type edgeOut struct {
-	To   string `json:"to"`
-	Type string `json:"type"`
-}
-
-type edgeIn struct {
-	From string `json:"from"`
-	Type string `json:"type"`
-}
-
-// edgesToJSON converts a task's outgoing and incoming store edges to their
-// wire types, shared by getTask and listTasks' detail expansion so the two
-// projections cannot drift. Always returns non-nil slices, even for nil
-// input, so "edges" serializes as [] rather than null for an edgeless task.
-func edgesToJSON(out, in []store.Edge) ([]edgeOut, []edgeIn) {
-	outJSON := make([]edgeOut, 0, len(out))
-	for _, e := range out {
-		outJSON = append(outJSON, edgeOut{To: e.ToTask, Type: e.Type})
-	}
-	inJSON := make([]edgeIn, 0, len(in))
-	for _, e := range in {
-		inJSON = append(inJSON, edgeIn{From: e.FromTask, Type: e.Type})
-	}
-	return outJSON, inJSON
-}
-
-// parentRefJSON is the one-hop-up projection of a task's parent: enough to
-// render a breadcrumb without a second request.
-type parentRefJSON struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	State string `json:"state"`
-}
-
-// progressJSON is the derived child roll-up, closed of total direct children.
-// Computed on read, never stored.
-type progressJSON struct {
-	Closed int `json:"closed"`
-	Total  int `json:"total"`
-}
-
-// hierarchyJSON is the spec-004 hierarchy block on a task detail. parent is
-// null for a root task; progress is zeroed for a task with no children.
-type hierarchyJSON struct {
-	Parent   *parentRefJSON `json:"parent"`
-	Progress progressJSON   `json:"progress"`
-}
-
-type taskDetailJSON struct {
-	taskJSON
-	Blocked bool `json:"blocked"`
-	Edges   struct {
-		Out []edgeOut `json:"out"`
-		In  []edgeIn  `json:"in"`
-	} `json:"edges"`
-	Lease     *leaseJSON    `json:"lease,omitempty"`
-	Hierarchy hierarchyJSON `json:"hierarchy"`
+	writeJSON(w, http.StatusCreated, created)
 }
 
 // getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
 // the task has an active lease, so a CLI `show` can display the holder
 // without a second request.
+// edgesToJSON converts a task's outgoing and incoming store edges to their
+// wire types, shared by getTask and listTasks' detail expansion so the two
+// projections cannot drift. Always returns non-nil slices, even for nil
+// input, so "edges" serializes as [] rather than null for an edgeless task.
+func edgesToJSON(out, in []store.Edge) ([]model.TaskEdgeOut, []model.TaskEdgeIn) {
+	outJSON := make([]model.TaskEdgeOut, 0, len(out))
+	for _, e := range out {
+		outJSON = append(outJSON, model.TaskEdgeOut{To: e.ToTask, Type: e.Type})
+	}
+	inJSON := make([]model.TaskEdgeIn, 0, len(in))
+	for _, e := range in {
+		inJSON = append(inJSON, model.TaskEdgeIn{From: e.FromTask, Type: e.Type})
+	}
+	return outJSON, inJSON
+}
+
 func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := s.st.GetTask(r.Context(), id)
@@ -276,7 +171,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := taskDetailJSON{taskJSON: toTaskJSON(t), Blocked: blocked[id]}
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id]}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
@@ -296,25 +191,11 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp.Hierarchy.Progress = progressJSON{Closed: progress.Closed, Total: progress.Total}
+	resp.Hierarchy.Progress = progress
 	if parent != nil {
-		resp.Hierarchy.Parent = &parentRefJSON{ID: parent.ID, Title: parent.Title, State: parent.State}
+		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// taskListDetailJSON is one row of GET /api/v1/tasks?detail=true: the base
-// task plus the two field groups a list consumer cannot cheaply reconstruct.
-// It is not taskDetailJSON: hierarchy is derivable from the child_of edges
-// below, and lease is per-task ephemeral state that a cached list would
-// misreport. Both stay on GET /api/v1/tasks/{id}.
-type taskListDetailJSON struct {
-	taskJSON
-	Blocked bool `json:"blocked"`
-	Edges   struct {
-		Out []edgeOut `json:"out"`
-		In  []edgeIn  `json:"in"`
-	} `json:"edges"`
 }
 
 // listTasks handles
@@ -322,7 +203,7 @@ type taskListDetailJSON struct {
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
-// detail=true adds "blocked" and "edges" to each row (see taskListDetailJSON)
+// detail=true adds "blocked" and "edges" to each row (see model.TaskListDetail)
 // at the cost of two extra bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -373,12 +254,8 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("detail") != "true" {
-		resp := struct {
-			Tasks []taskJSON `json:"tasks"`
-		}{Tasks: make([]taskJSON, 0, len(tasks))}
-		for i := range tasks {
-			resp.Tasks = append(resp.Tasks, toTaskJSON(&tasks[i]))
-		}
+		resp := model.TaskListResponse{Tasks: make([]model.Task, 0, len(tasks))}
+		resp.Tasks = append(resp.Tasks, tasks...)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -398,25 +275,14 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := struct {
-		Tasks []taskListDetailJSON `json:"tasks"`
-	}{Tasks: make([]taskListDetailJSON, 0, len(tasks))}
+	resp := model.TaskListDetailResponse{Tasks: make([]model.TaskListDetail, 0, len(tasks))}
 	for i := range tasks {
-		row := taskListDetailJSON{taskJSON: toTaskJSON(&tasks[i]), Blocked: blocked[tasks[i].ID]}
+		row := model.TaskListDetail{Task: tasks[i], Blocked: blocked[tasks[i].ID]}
 		te := edges[tasks[i].ID]
 		row.Edges.Out, row.Edges.In = edgesToJSON(te.Out, te.In)
 		resp.Tasks = append(resp.Tasks, row)
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-type patchTaskRequest struct {
-	Title              *string `json:"title"`
-	Body               *string `json:"body"`
-	Priority           *string `json:"priority"`
-	Concern            *string `json:"concern"`
-	NeedsDecomposition *bool   `json:"needs_decomposition"`
-	State              *string `json:"state"`
 }
 
 // patchStateFrom maps the states PATCH may move a task into to the required
@@ -438,7 +304,7 @@ var patchStateFrom = map[string]string{
 // see patchStateFrom for the three transitions PATCH may perform.
 func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req patchTaskRequest
+	var req model.EditTaskInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -517,18 +383,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTaskJSON(t))
-}
-
-type edgeRequest struct {
-	To   *string `json:"to"`
-	From *string `json:"from"`
-	Type string  `json:"type"`
+	writeJSON(w, http.StatusOK, t)
 }
 
 // resolveEdge validates an edge request against the {id} path task and
 // returns the (from, to) endpoints. A written response means failure.
-func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to string, ok bool) {
+func resolveEdge(w http.ResponseWriter, id string, req model.EdgeInput) (from, to string, ok bool) {
 	if (req.To == nil) == (req.From == nil) {
 		writeErr(w, http.StatusUnprocessableEntity, "exactly one of to/from must be set")
 		return "", "", false
@@ -553,7 +413,7 @@ func resolveEdge(w http.ResponseWriter, id string, req edgeRequest) (from, to st
 // addEdge handles POST /api/v1/tasks/{id}/edges.
 func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req edgeRequest
+	var req model.EdgeInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -587,7 +447,7 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 // removeEdge handles DELETE /api/v1/tasks/{id}/edges.
 func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req edgeRequest
+	var req model.EdgeInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -618,16 +478,12 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type setSkillsRequest struct {
-	Skills []string `json:"skills"`
-}
-
 // setTaskSkills handles PUT /api/v1/tasks/{id}/skills: replaces the task's
 // pinned skill names, always surfaced in a recommendation regardless of
 // embedding similarity.
 func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req setSkillsRequest
+	var req model.SetSkillsInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return

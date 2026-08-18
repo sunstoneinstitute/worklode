@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // countTasks returns how many task rows exist. Promote creates a task before
@@ -22,7 +24,7 @@ func countTasks(t *testing.T, s *Store) int {
 }
 
 // getIssue returns the single stored issue.
-func getIssue(t *testing.T, s *Store) Issue {
+func getIssue(t *testing.T, s *Store) model.Issue {
 	t.Helper()
 	list, err := s.ListIssues(t.Context(), "", "")
 	if err != nil {
@@ -128,16 +130,16 @@ func TestTriageLostUpdate(t *testing.T) {
 			got := getIssue(t, s)
 			switch tc.winner {
 			case "dismiss":
-				if got.TriageState != "dismissed" || got.TaskID != nil {
+				if got.TriageState != "dismissed" || got.TaskID != "" {
 					t.Fatalf("after dismiss won: triage_state=%q task_id=%v", got.TriageState, got.TaskID)
 				}
 			case "link":
-				if got.TriageState != "promoted" || got.TaskID == nil || *got.TaskID != existing.ID {
+				if got.TriageState != "promoted" || got.TaskID != existing.ID {
 					t.Fatalf("after link won: triage_state=%q task_id=%v, want promoted/%s",
 						got.TriageState, got.TaskID, existing.ID)
 				}
 			case "promote":
-				if got.TriageState != "promoted" || got.TaskID == nil || *got.TaskID == existing.ID {
+				if got.TriageState != "promoted" || got.TaskID == existing.ID {
 					t.Fatalf("after promote won: triage_state=%q task_id=%v, want promoted with a new task",
 						got.TriageState, got.TaskID)
 				}
@@ -190,7 +192,7 @@ func TestPromoteIssueRace(t *testing.T) {
 		t.Fatalf("promotes: wins=%d losses=%d, want 1 and %d", wins.Load(), losses.Load(), n-1)
 	}
 	got := getIssue(t, s)
-	if got.TriageState != "promoted" || got.TaskID == nil {
+	if got.TriageState != "promoted" || got.TaskID == "" {
 		t.Fatalf("issue after race: triage_state=%q task_id=%v", got.TriageState, got.TaskID)
 	}
 	if n := countTasks(t, s); n != 1 {

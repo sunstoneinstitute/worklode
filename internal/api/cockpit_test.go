@@ -283,7 +283,7 @@ func TestProjectCockpitVariantQueryIgnored(t *testing.T) {
 	}
 }
 
-// cockpitWorkItemDecode is the JSON shape of one cockpitWorkItem, shared by
+// cockpitWorkItemDecode is the JSON shape of one model.CockpitWorkItem, shared by
 // the owner/delegate/evidence tests below.
 type cockpitWorkItemDecode struct {
 	ID      string `json:"id"`

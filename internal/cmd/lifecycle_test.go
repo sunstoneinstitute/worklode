@@ -18,6 +18,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -140,10 +141,10 @@ func moveToReview(t *testing.T, st *store.Store, taskID string) {
 	}
 }
 
-func createTestTask(t *testing.T, c *cli.Client, title string) cli.Task {
+func createTestTask(t *testing.T, c *cli.Client, title string) model.Task {
 	t.Helper()
 	ctx := context.Background()
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: title, Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("create task %q: %v", title, err)
 	}
@@ -152,7 +153,7 @@ func createTestTask(t *testing.T, c *cli.Client, title string) cli.Task {
 
 func setupProject(t *testing.T, c *cli.Client) {
 	t.Helper()
-	if _, _, err := c.CreateProject(context.Background(), cli.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "proj", Name: "Project", Key: "PROJ"}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 }
@@ -982,7 +983,7 @@ func TestTaskBriefCmd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode task brief: %v\noutput: %s", err, out)
 	}
-	var b cli.Brief
+	var b model.Brief
 	if err := json.Unmarshal([]byte(out), &b); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
@@ -1005,7 +1006,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	setupProject(t, c)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 
-	task, _, err := c.CreateTask(context.Background(), cli.CreateTaskInput{
+	task, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
 		Project: "proj", Title: "Brief with skills", Priority: "high", Kind: "feature",
 		Skills: []string{"tdd", "ghost"},
 	})
@@ -1017,7 +1018,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode task brief: %v\noutput: %s", err, out)
 	}
-	var b cli.Brief
+	var b model.Brief
 	if err := json.Unmarshal([]byte(out), &b); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
@@ -1044,12 +1045,12 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 // --- printBrief -------------------------------------------------------
 
 func TestPrintBriefRendersSkillsSection(t *testing.T) {
-	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+	b := model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
-		Skills: cli.SkillRecommendation{
-			Pinned:   []cli.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
-			Matches:  []cli.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
+		Skills: model.SkillRecommendation{
+			Pinned:   []model.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
+			Matches:  []model.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
 			Warnings: []string{"pinned skill not found: ghost"},
 			Provider: "openai-compatible",
 		},
@@ -1079,10 +1080,10 @@ func TestPrintBriefRendersSkillsSection(t *testing.T) {
 // misspelled every pin would otherwise see nothing, which is the one case the
 // warnings exist for.
 func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
-	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+	b := model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
-		Skills: cli.SkillRecommendation{
+		Skills: model.SkillRecommendation{
 			Warnings: []string{"pinned skill not found: ghost"},
 			Provider: "openai-compatible",
 		},
@@ -1099,10 +1100,10 @@ func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
 }
 
 func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
-	b := cli.Brief{
-		Task:   cli.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+	b := model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
 		Branch: "WL-1-t",
-		Skills: cli.SkillRecommendation{Provider: "none"},
+		Skills: model.SkillRecommendation{Provider: "none"},
 	}
 	buf := &bytes.Buffer{}
 	cmd := &cobra.Command{}

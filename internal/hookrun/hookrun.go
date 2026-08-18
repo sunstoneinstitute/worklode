@@ -31,6 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/transcript"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -356,7 +357,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 
 	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if err := c.EndAgentSession(ectx, taskID, cli.EndAgentSessionInput{
+	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
 		Agent: agentName(), SessionID: sessionID, Usage: usage,
 	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)
@@ -373,7 +374,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 // No failure here is fatal — a missing path, an unreadable file, or an empty
 // result all yield nil, which leaves the backbone's stored usage untouched and
 // still lets the session end.
-func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageBucket {
+func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsageBucket {
 	if transcriptPath == "" {
 		return nil
 	}
@@ -382,17 +383,17 @@ func sessionUsage(opts Options, transcriptPath, root string) []cli.SessionUsageB
 		warn(opts, "parse transcript %s: %v", transcriptPath, err)
 		return nil
 	}
-	out := make([]cli.SessionUsageBucket, 0, len(buckets))
+	out := make([]model.SessionUsageBucket, 0, len(buckets))
 	for _, b := range buckets {
-		out = append(out, cli.SessionUsageBucket{
-			Day:          b.Day.Format(time.DateOnly),
-			Model:        b.Model,
-			Speed:        b.Speed,
-			InputTokens:  b.Usage.Input,
-			CacheWrite5m: b.Usage.CacheWrite5m,
-			CacheWrite1h: b.Usage.CacheWrite1h,
-			CacheRead:    b.Usage.CacheRead,
-			OutputTokens: b.Usage.Output,
+		out = append(out, model.SessionUsageBucket{
+			Day:                b.Day.Format(time.DateOnly),
+			Model:              b.Model,
+			Speed:              b.Speed,
+			InputTokens:        b.Usage.Input,
+			CacheWrite5mTokens: b.Usage.CacheWrite5m,
+			CacheWrite1hTokens: b.Usage.CacheWrite1h,
+			CacheReadTokens:    b.Usage.CacheRead,
+			OutputTokens:       b.Usage.Output,
 		})
 	}
 	if len(out) == 0 {
@@ -451,7 +452,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 // warnings: the pinned content is already inline in the brief, and
 // recommended skills degrade to an install hint. Returns name -> local path
 // for the ones that are present.
-func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief) map[string]string {
+func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brief) map[string]string {
 	root, err := skillstore.Root()
 	if err != nil {
 		warn(opts, "skill store: %v", err)
@@ -503,7 +504,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b cli.Brief)
 // still-held lease that is within the renew window, and otherwise re-acquire
 // (renew if still nominally ours, re-claim if the sweeper took it). A lease
 // held elsewhere, or any backbone error, is a warning only.
-func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, identity string, lease *cli.Lease) {
+func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, identity string, lease *model.Lease) {
 	now := opts.now()
 	if lease != nil && lease.Worktree == identity && lease.ExpiresAt.After(now) {
 		if lease.ExpiresAt.Sub(now) >= leaseRenewWindow {
@@ -888,7 +889,7 @@ func emitAdditionalContext(w io.Writer, text string) {
 // injecting as session context. skillPaths is name -> local dir for skills
 // ensureSkills managed to fetch; a skill missing from it either had no hash
 // (pinned) or failed to fetch (falls back to an install hint).
-func compactBrief(b cli.Brief, skillPaths map[string]string) string {
+func compactBrief(b model.Brief, skillPaths map[string]string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s: %s [%s, %s]", b.Task.ID, b.Task.Title, b.Task.State, b.Task.Priority)
 	if b.Branch != "" {

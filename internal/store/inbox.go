@@ -8,27 +8,15 @@ import (
 	"fmt"
 	"strings"
 	"time"
-)
 
-// Issue is one GitHub issue tracked in the inbox: an unfiltered feed of
-// issues.opened/closed webhooks, triaged by a human into either a task
-// (promoted) or nothing (dismissed).
-type Issue struct {
-	Repo              string
-	Number            int64
-	Title             string
-	State             string
-	TriageState       string
-	TaskID            *string
-	AppliesToVersions []string
-	URL               string
-}
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
 
 // UpsertIssue inserts a new inbox row, or on redelivery updates only
 // title/state/url. It never touches triage_state, task_id, or
 // applies_to_versions — those are set once, by triage (PromoteIssue /
 // DismissIssue), and a later webhook replay must not clobber them.
-func UpsertIssue(tx *sql.Tx, is Issue) error {
+func UpsertIssue(tx *sql.Tx, is model.Issue) error {
 	_, err := tx.Exec(
 		`INSERT INTO issues (repo, number, title, state, url)
 		 VALUES ($1, $2, $3, $4, $5)
@@ -73,7 +61,7 @@ func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 // recording appliesToVersions (marshalled to JSON). The issue must currently
 // be triage_state='new' — anything else (already promoted, dismissed, or no
 // such issue) is an error.
-func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*Task, error) {
+func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*model.Task, error) {
 	var triageState string
 	err := tx.QueryRow(
 		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
@@ -213,8 +201,8 @@ func IssueTitle(tx *sql.Tx, repo string, number int64) (string, error) {
 	return title.String, nil
 }
 
-func scanIssue(row rowScanner) (*Issue, error) {
-	var is Issue
+func scanIssue(row rowScanner) (*model.Issue, error) {
+	var is model.Issue
 	var title, state, taskID, appliesToVersions, url sql.NullString
 	if err := row.Scan(&is.Repo, &is.Number, &title, &state, &is.TriageState,
 		&taskID, &appliesToVersions, &url); err != nil {
@@ -223,9 +211,7 @@ func scanIssue(row rowScanner) (*Issue, error) {
 	is.Title = title.String
 	is.State = state.String
 	is.URL = url.String
-	if taskID.Valid {
-		is.TaskID = &taskID.String
-	}
+	is.TaskID = taskID.String
 	if appliesToVersions.Valid {
 		if err := json.Unmarshal([]byte(appliesToVersions.String), &is.AppliesToVersions); err != nil {
 			return nil, fmt.Errorf("unmarshal applies_to_versions for issue %s#%d: %w", is.Repo, is.Number, err)
@@ -238,7 +224,7 @@ func scanIssue(row rowScanner) (*Issue, error) {
 // triageState or projectID disables that filter; a projectID with no mapped
 // repos yields no issues. Issues carry a repo, and project_repos maps a repo
 // to at most one project, so the project filter is a join.
-func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) ([]Issue, error) {
+func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) ([]model.Issue, error) {
 	q := `SELECT i.repo, i.number, i.title, i.state, i.triage_state, i.task_id,
 	             i.applies_to_versions, i.url
 	      FROM issues i`
@@ -263,7 +249,7 @@ func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) (
 	}
 	defer rows.Close()
 
-	var out []Issue
+	var out []model.Issue
 	for rows.Next() {
 		is, err := scanIssue(rows)
 		if err != nil {

@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/term"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // newTabwriter returns a tabwriter configured the same way for every table
@@ -73,7 +75,7 @@ func Money(amount string) string {
 
 // TaskTable prints one row per task: id, priority, kind, state, project,
 // assignee (- when unassigned), title.
-func TaskTable(w io.Writer, tasks []Task) {
+func TaskTable(w io.Writer, tasks []model.Task) {
 	tbl := newTable(
 		column{header: "ID"},
 		column{header: "PRIORITY"},
@@ -95,7 +97,7 @@ func TaskTable(w io.Writer, tasks []Task) {
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
 // holder (if any) — the `lode task show` view.
-func TaskDetailRender(w io.Writer, t TaskDetail) {
+func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
@@ -143,7 +145,7 @@ func TaskDetailRender(w io.Writer, t TaskDetail) {
 
 // IssueTable prints one row per inbox issue: repo, number, triage state,
 // state, title.
-func IssueTable(w io.Writer, issues []Issue) {
+func IssueTable(w io.Writer, issues []model.Issue) {
 	tbl := newTable(
 		column{header: "REPO"},
 		column{header: "#"},
@@ -159,7 +161,7 @@ func IssueTable(w io.Writer, issues []Issue) {
 
 // ProjectTable prints one row per project: id, key, name, repos. Each repo is
 // rendered as "owner/name (done_state)".
-func ProjectTable(w io.Writer, projects []Project) {
+func ProjectTable(w io.Writer, projects []model.Project) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tKEY\tNAME\tREPOS")
 	for _, p := range projects {
@@ -183,11 +185,11 @@ const (
 
 // SkillTable prints one row per skill: name, then the description wrapped to
 // the terminal width with continuation lines aligned under the first.
-func SkillTable(w io.Writer, skills []Skill) {
+func SkillTable(w io.Writer, skills []model.Skill) {
 	skillTable(w, skills, tableWidth(w))
 }
 
-func skillTable(w io.Writer, skills []Skill, width int) {
+func skillTable(w io.Writer, skills []model.Skill, width int) {
 	name := len("NAME")
 	for _, sk := range skills {
 		name = max(name, utf8.RuneCountInString(sk.Name))
@@ -265,7 +267,7 @@ const (
 // BoardRender prints one section per project, one table per non-empty
 // bucket (in progress, in review, blocked, ready), and a trailing recent-
 // failures section when present.
-func BoardRender(w io.Writer, board BoardResponse) {
+func BoardRender(w io.Writer, board model.BoardResponse) {
 	for i, p := range board.Projects {
 		if i > 0 {
 			fmt.Fprintln(w)
@@ -297,7 +299,7 @@ func BoardRender(w io.Writer, board BoardResponse) {
 	}
 }
 
-func boardSection(w io.Writer, label string, tasks []BoardTask) {
+func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -309,13 +311,13 @@ func boardSection(w io.Writer, label string, tasks []BoardTask) {
 	// anything else at its own (rank 0), so grouping keeps a parent and its
 	// children adjacent without disturbing the server's priority ordering. A
 	// child whose parent is in another bucket keeps its own position.
-	anchor := func(t BoardTask) (int, int) {
+	anchor := func(t model.BoardTask) (int, int) {
 		if p, ok := pos[t.Parent]; ok {
 			return p, 1
 		}
 		return pos[t.ID], 0
 	}
-	rows := make([]BoardTask, len(tasks))
+	rows := make([]model.BoardTask, len(tasks))
 	copy(rows, tasks)
 	sort.SliceStable(rows, func(i, j int) bool {
 		ai, ri := anchor(rows[i])
@@ -437,7 +439,7 @@ func timelineSummary(typ string, e map[string]any) string {
 
 // EventTable prints one row per event, newest last (025 §18): id, received
 // time, source, type, external id. The `lode event tail` view.
-func EventTable(w io.Writer, events []Event) {
+func EventTable(w io.Writer, events []model.Event) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tRECEIVED\tSOURCE\tTYPE\tEXTERNAL_ID")
 	for _, e := range events {
@@ -458,14 +460,14 @@ func EventStreamHeader(w io.Writer) {
 }
 
 // EventStreamRow prints one streamed event in EventTable's column order.
-func EventStreamRow(w io.Writer, e Event) {
+func EventStreamRow(w io.Writer, e model.Event) {
 	fmt.Fprintf(w, eventStreamRowFmt, e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
 }
 
 // EventSubscriberTable prints one row per subscriber: name, offsets, lag,
 // lock holder pid (- when unheld), last updated. The `lode event
 // subscribers` view.
-func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
+func EventSubscriberTable(w io.Writer, subs []model.EventSubscriberStatus) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "NAME\tREAD\tACKED\tLAG\tHOLDER\tUPDATED")
 	for _, s := range subs {
@@ -482,9 +484,9 @@ func EventSubscriberTable(w io.Writer, subs []EventSubscriberStatus) {
 // TreeNode is one parent and its direct children, with the parent's derived
 // progress — the unit `lode task tree` renders.
 type TreeNode struct {
-	Parent   Task
-	Progress TaskProgress
-	Children []Task
+	Parent   model.Task
+	Progress model.TaskProgress
+	Children []model.Task
 }
 
 // TreeRender prints each parent with its progress, then its children indented

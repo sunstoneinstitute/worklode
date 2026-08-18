@@ -16,6 +16,11 @@ import (
 // Actor is a human, an autonomous agent, or a service account that can act
 // against the store (create tasks, claim leases, etc.). Admin actors may
 // additionally manage projects, actors, and tokens.
+//
+// Actor is deliberately not model.Actor: ExpectedGitHubLogin is an auth
+// bookkeeping field this package needs internally (matching a Keycloak
+// login) that never crosses the wire, so it stays outside the four fields
+// model.Actor declares (ADR 036 §3, "store scan plumbing").
 type Actor struct {
 	ID          string
 	Kind        string

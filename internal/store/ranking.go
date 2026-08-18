@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // BlockingFanOut returns, for every task that blocks at least one other task,
@@ -61,7 +63,7 @@ func prefixedTaskColumns(alias string) string {
 // projectID matches every project. A task with children is excluded because
 // the worktree is the unit of Worklode work and a container has nothing to
 // check out (spec 004 §6.3).
-func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, error) {
+func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+prefixedTaskColumns("t")+` FROM tasks t
 		WHERE t.state = 'ready'
@@ -78,7 +80,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID string) ([]Task, 
 	}
 	defer rows.Close()
 
-	var out []Task
+	var out []model.Task
 	for rows.Next() {
 		t, err := scanTask(rows)
 		if err != nil {
@@ -129,7 +131,7 @@ func (s *Store) projectFocusMap(ctx context.Context, projectIDs []string) (map[s
 // (a claim-next call spanning multiple projects uses each task's own
 // project), and fan-out is precomputed by BlockingFanOut.
 type rankInput struct {
-	Task   Task
+	Task   model.Task
 	Focus  []string // the task's project focus
 	FanOut int
 }
@@ -181,7 +183,7 @@ func numericTaskID(id string) int {
 //
 // tiebreak: created_at asc, then numeric id asc. The sort is stable and its
 // inputs are pure, so identical input always yields identical output.
-func rankTasks(in []rankInput, strictFocus bool) []Task {
+func rankTasks(in []rankInput, strictFocus bool) []model.Task {
 	ranked := make([]rankInput, len(in))
 	copy(ranked, in)
 	sort.SliceStable(ranked, func(i, j int) bool {
@@ -207,7 +209,7 @@ func rankTasks(in []rankInput, strictFocus bool) []Task {
 		}
 		return numericTaskID(a.Task.ID) < numericTaskID(b.Task.ID)
 	})
-	out := make([]Task, len(ranked))
+	out := make([]model.Task, len(ranked))
 	for i, r := range ranked {
 		out[i] = r.Task
 	}
@@ -229,7 +231,7 @@ type ClaimNextOpts struct {
 // claimed (DryRun, or Claimed). Lease is nil unless a real claim succeeded.
 type ClaimNextResult struct {
 	Claimed bool
-	Task    *Task
+	Task    *model.Task
 	FanOut  int
 	Lease   *Lease
 }
@@ -262,9 +264,9 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 	var projectIDs []string
 	seen := map[string]bool{}
 	for _, t := range candidates {
-		if !seen[t.ProjectID] {
-			seen[t.ProjectID] = true
-			projectIDs = append(projectIDs, t.ProjectID)
+		if !seen[t.Project] {
+			seen[t.Project] = true
+			projectIDs = append(projectIDs, t.Project)
 		}
 	}
 	focusByProject, err := s.projectFocusMap(ctx, projectIDs)
@@ -276,7 +278,7 @@ func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextRe
 	for i, t := range candidates {
 		rin[i] = rankInput{
 			Task:   t,
-			Focus:  focusByProject[t.ProjectID],
+			Focus:  focusByProject[t.Project],
 			FanOut: fanOut[t.ID],
 		}
 	}

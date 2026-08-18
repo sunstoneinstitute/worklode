@@ -12,6 +12,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -38,7 +39,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	defer srv.Close()
 
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
-	if _, _, err := admin.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "human", Name: "Human", Key: "HUM",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -47,7 +48,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	// Two human actors, each with their own token minted through the public
 	// admin API — the negative case needs the second actor's identity to
 	// come from a real credential, not a borrowed one.
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "alice", Kind: "human", DisplayName: "Alice",
 	}); err != nil {
 		t.Fatalf("create actor alice: %v", err)
@@ -58,7 +59,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	}
 	alice := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: aliceTok.Token})
 
-	if _, _, err := admin.CreateActor(ctx, cli.CreateActorInput{
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "bob", Kind: "human", DisplayName: "Bob",
 	}); err != nil {
 		t.Fatalf("create actor bob: %v", err)
@@ -71,7 +72,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 
 	// --- Positive case: the full human lifecycle -------------------------
 
-	task, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "human", Title: "Write the onboarding doc", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
@@ -126,7 +127,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 
 	// --- Negative case: a second actor cannot start someone else's task --
 
-	other, _, err := admin.CreateTask(ctx, cli.CreateTaskInput{
+	other, _, err := admin.CreateTask(ctx, model.CreateTaskInput{
 		Project: "human", Title: "Rotate the deploy keys", Priority: "medium", Kind: "chore",
 	})
 	if err != nil {
@@ -178,13 +179,13 @@ func TestHumanAssignLifecycle(t *testing.T) {
 // failing the test if the project, bucket, or task is not found there. This
 // guards against asserting on the wrong row when other tasks share the
 // board.
-func boardRowFor(t *testing.T, ctx context.Context, c *cli.Client, projectID, bucket, taskID string) cli.BoardTask {
+func boardRowFor(t *testing.T, ctx context.Context, c *cli.Client, projectID, bucket, taskID string) model.BoardTask {
 	t.Helper()
 	board, _, err := c.Board(ctx, projectID)
 	if err != nil {
 		t.Fatalf("board: %v", err)
 	}
-	var proj *cli.BoardProject
+	var proj *model.BoardProject
 	for i := range board.Projects {
 		if board.Projects[i].ID == projectID {
 			proj = &board.Projects[i]
@@ -193,7 +194,7 @@ func boardRowFor(t *testing.T, ctx context.Context, c *cli.Client, projectID, bu
 	if proj == nil {
 		t.Fatalf("board has no project %q: %+v", projectID, board.Projects)
 	}
-	var bucketTasks []cli.BoardTask
+	var bucketTasks []model.BoardTask
 	switch bucket {
 	case "in_progress":
 		bucketTasks = proj.InProgress
@@ -212,5 +213,5 @@ func boardRowFor(t *testing.T, ctx context.Context, c *cli.Client, projectID, bu
 		}
 	}
 	t.Fatalf("board bucket %q in project %q has no task %s: %+v", bucket, projectID, taskID, bucketTasks)
-	return cli.BoardTask{}
+	return model.BoardTask{}
 }

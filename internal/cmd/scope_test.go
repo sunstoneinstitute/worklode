@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -166,15 +167,15 @@ func mapProjectRepo(t *testing.T, c *cli.Client, project, repo string) {
 
 // createOtherProjectTask creates a task in a second project, so scoping has
 // something to exclude.
-func createOtherProjectTask(t *testing.T, c *cli.Client) cli.Task {
+func createOtherProjectTask(t *testing.T, c *cli.Client) model.Task {
 	t.Helper()
 	ctx := context.Background()
-	if _, _, err := c.CreateProject(ctx, cli.CreateProjectInput{
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{
 		ID: "other", Name: "Other", Key: "OT",
 	}); err != nil {
 		t.Fatalf("create other project: %v", err)
 	}
-	task, _, err := c.CreateTask(ctx, cli.CreateTaskInput{
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{
 		Project: "other", Title: "in another project", Priority: "medium", Kind: "feature",
 	})
 	if err != nil {
@@ -367,7 +368,7 @@ func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
 	_, _, err := st.RecordEvent(context.Background(), "github",
 		fmt.Sprintf("%s-%s-%d", t.Name(), repo, number), "issues.opened", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.UpsertIssue(tx, store.Issue{
+			return store.UpsertIssue(tx, model.Issue{
 				Repo: repo, Number: number, Title: "issue", State: "open",
 				URL: "https://example.test/x",
 			})

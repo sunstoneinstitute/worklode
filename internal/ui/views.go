@@ -2,17 +2,18 @@ package ui
 
 // views.go defines the presentation view types the templ components render,
 // plus the small presentation helpers (chip-variant mapping, pluralization)
-// they call. These types are ui's own vocabulary: internal/api maps its DTOs
-// (boardResponse, cockpitProjection, ...) into them in render.go, so the
-// dependency only ever points api -> ui. View types may embed internal/store
-// types (ui may import store) but never reference api's DTOs.
+// they call. These types are ui's own vocabulary: internal/api maps
+// internal/model values (model.BoardResponse, model.CockpitProjection, ...)
+// into them in render.go, so the dependency only ever points api -> ui. View
+// types may embed internal/model types (ui may import model) but never
+// reference api's DTOs (ADR 036 §3).
 
 import (
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // PageProps carries the fields the Page shell needs on every page: the
@@ -39,31 +40,16 @@ type BoardView struct {
 	RecentFailures []BoardFailure
 }
 
-// BoardProject is one project's four state buckets on the board.
+// BoardProject is one project's four state buckets on the board. Each row
+// embeds model.BoardTask directly; the template reads its Task fields
+// (ID/Title/Priority/State/Assignee) plus Holder.
 type BoardProject struct {
 	ID         string
 	Name       string
-	InProgress []BoardItem
-	InReview   []BoardItem
-	Ready      []BoardItem
-	Blocked    []BoardItem
-}
-
-// BoardItem is one task row on the board. Holder is the active lease holder
-// (nil when none); Assignee is the owning actor id ("" when unassigned).
-type BoardItem struct {
-	ID       string
-	Title    string
-	Priority string
-	State    string
-	Assignee string
-	Holder   *BoardHolder
-}
-
-// BoardHolder is the lease holder shown on an in-progress board row.
-type BoardHolder struct {
-	ActorID   string
-	ExpiresAt time.Time
+	InProgress []model.BoardTask
+	InReview   []model.BoardTask
+	Ready      []model.BoardTask
+	Blocked    []model.BoardTask
 }
 
 // BoardFailure is one recent runtime failure on the org-wide board.
@@ -77,29 +63,29 @@ type BoardFailure struct {
 
 // --- projects portfolio -----------------------------------------------------
 
-// ProjectsView is the cross-project portfolio. It embeds store.Project rows
-// directly (ui may import store); the template reads ID/Name/Key.
+// ProjectsView is the cross-project portfolio. It embeds model.Project rows
+// directly; the template reads ID/Name/Key.
 type ProjectsView struct {
 	Page     PageProps
-	Projects []store.Project
+	Projects []model.Project
 }
 
 // --- task -------------------------------------------------------------------
 
-// TaskView is one task's detail page. Task/Holder/Progress embed store types
-// directly; the edge lists are task ids.
+// TaskView is one task's detail page. Task/Holder/Progress embed
+// internal/model types directly; the edge lists are task ids.
 type TaskView struct {
 	Page       PageProps
-	Task       store.Task
+	Task       model.Task
 	Blocked    bool
-	Holder     *store.Lease
+	Holder     *model.Lease
 	Blocks     []string
 	BlockedBy  []string
 	Parent     string
 	Children   []string
 	FollowUpTo string
 	FollowUps  []string
-	Progress   store.HierarchyProgress
+	Progress   model.TaskProgress
 	Timeline   []TimelineRow
 }
 
@@ -137,7 +123,7 @@ type PlaceholderView struct {
 
 // CockpitView is the project cockpit page (project overview), rendered in the
 // prototype's Operations mode (docs/mockups/cockpit/index.html, mode B). It
-// mirrors the shape of api's cockpitProjection, flattened for rendering.
+// mirrors the shape of model.CockpitProjection, flattened for rendering.
 // PinnedFocus, NextDecision, and RankingFocus stay nil/empty until the stores
 // that back them exist; each panel is omitted honestly when its data is
 // absent rather than rendering an invented placeholder.

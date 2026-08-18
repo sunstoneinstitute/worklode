@@ -13,6 +13,12 @@ import (
 // outlives many sessions (restarts, /clear, next-day resumption), and a single
 // session can span several leases when it moves between worktrees — so the
 // natural key is (lease_id, agent, external_session_id), not the lease alone.
+//
+// AgentSession is deliberately not model.AgentSession: ID is the database
+// primary key this package needs internally (row updates) that never crosses
+// the wire, so it stays outside the eleven fields model.AgentSession declares
+// (ADR 036 §3, "store scan plumbing"). api.toAgentSessionJSON is the one
+// conversion point from this type to model.AgentSession.
 type AgentSession struct {
 	ID           int64
 	LeaseID      int64

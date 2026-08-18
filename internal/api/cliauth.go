@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
@@ -250,15 +251,10 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
 }
 
-type cliTokenRequest struct {
-	Code  string `json:"code"`
-	State string `json:"state"`
-}
-
 // cliToken handles POST /auth/cli/token: redeem a one-time code (proof the
 // browser login completed) for a 30-day wl_ token.
 func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
-	var req cliTokenRequest
+	var req model.CLITokenInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
@@ -292,9 +288,9 @@ func (s *server) wellKnownLogin(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"authorize_url": base + "/auth/cli/login",
-		"token_url":     base + "/auth/cli/token",
-		"providers":     []string{"keycloak"},
+	writeJSON(w, http.StatusOK, model.LoginDiscovery{
+		AuthorizeURL: base + "/auth/cli/login",
+		TokenURL:     base + "/auth/cli/token",
+		Providers:    []string{"keycloak"},
 	})
 }

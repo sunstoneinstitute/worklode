@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -101,7 +102,7 @@ func newTaskAddCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
 			}
-			t, raw, err := c.CreateTask(cmd.Context(), cli.CreateTaskInput{
+			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
 			})
@@ -112,7 +113,7 @@ func newTaskAddCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -300,7 +301,7 @@ func newTaskEditCmd() *cobra.Command {
 		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var in cli.EditTaskInput
+			var in model.EditTaskInput
 			if cmd.Flags().Changed("title") {
 				in.Title = &title
 			}
@@ -345,7 +346,7 @@ func newTaskEditCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -398,7 +399,7 @@ func newTaskReadyCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -427,7 +428,7 @@ func newTaskReopenCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -456,7 +457,7 @@ func newTaskReworkCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -539,9 +540,13 @@ func newTaskClaimCmd() *cobra.Command {
 				return err
 			}
 
-			resp, raw, err := c.ClaimNext(cmd.Context(), cli.ClaimNextInput{
-				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree, TTL: ttl,
-			})
+			in := model.ClaimNextInput{
+				Project: sc.Project, StrictFocus: strictFocus, DryRun: dryRun, Worktree: worktree,
+			}
+			if ttl > 0 {
+				in.TTLSeconds = int(ttl.Seconds())
+			}
+			resp, raw, err := c.ClaimNext(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
@@ -662,7 +667,7 @@ func newTaskAssignCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -692,7 +697,7 @@ func newTaskUnassignCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -721,7 +726,7 @@ func newTaskStartCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -750,7 +755,7 @@ func newTaskStopCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -779,7 +784,7 @@ func newTaskSubmitCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -809,7 +814,7 @@ func newTaskDoneCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -839,7 +844,7 @@ func newTaskAbandonCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.TaskTable(cmd.OutOrStdout(), []cli.Task{t})
+			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
 			return nil
 		},
 	}
@@ -913,7 +918,7 @@ func newTaskBriefCmd() *cobra.Command {
 
 // printBrief renders a Brief as a readable summary, shared by `lode task
 // brief` and `lode next`.
-func printBrief(cmd *cobra.Command, b cli.Brief) {
+func printBrief(cmd *cobra.Command, b model.Brief) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s: %s\n", b.Task.ID, b.Task.Title)
 	fmt.Fprintf(out, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
@@ -1159,8 +1164,8 @@ func newTaskTreeCmd() *cobra.Command {
 
 			// Each parent and its progress, before its children are fetched.
 			type parentNode struct {
-				task     cli.Task
-				progress cli.TaskProgress
+				task     model.Task
+				progress model.TaskProgress
 			}
 			var parents []parentNode
 			if len(args) == 1 {

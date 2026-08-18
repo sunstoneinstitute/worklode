@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -352,7 +353,7 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("recommend: %d %s", rr.Code, rr.Body)
 	}
-	var resp recommendationJSON
+	var resp model.SkillRecommendation
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -560,7 +561,7 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("sync: %d %s", rr.Code, rr.Body)
 	}
-	var resp syncResponse
+	var resp model.SkillSyncReport
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
