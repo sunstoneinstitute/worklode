@@ -10,22 +10,37 @@ import (
 	"testing"
 )
 
-// scanned are the packages the ADR 036 rules are checked against, as paths
-// relative to internal/model. The map value says whether the package is held
-// to the strict rule (no json-tagged struct declared at all) or only to the
-// anonymous-shape rule — see the package comments below.
-var scanned = map[string]bool{
-	// internal/api encodes and internal/cli decodes the same bodies, so a
-	// json-tagged struct declared in either is a second declaration of a
-	// shape that can only be right once (ADR 036 §2).
-	"../api": true,
-	"../cli": true,
-	// internal/cmd's json-tagged types are `--json` stdout contracts, which
-	// cross no HTTP boundary and have one declaration by construction, so the
-	// strict rule does not apply to them. They must still be *named*: a
-	// contract you cannot grep for is one nobody reviews. HTTP bodies decoded
-	// here are covered by the same rules as everywhere else.
-	"../cmd": false,
+// mode says how much of the ADR 036 rule set a scanned package is held to.
+type mode int
+
+const (
+	// modeWire: no json-tagged struct may be declared here at all. Both ends
+	// of these bodies are ours — internal/api encodes what internal/cli
+	// decodes — so a declaration here is a second declaration of a shape that
+	// can only be right once (§2).
+	modeWire mode = iota
+	// modeNamed: named json-tagged declarations are fine, anonymous ones are
+	// not. internal/cmd's json-tagged types are `--json` stdout contracts:
+	// they cross no HTTP boundary and have one declaration by construction,
+	// so §2's test does not select them. They must still be named — a
+	// contract nobody can grep for is one nobody reviews. The consequence is
+	// deliberate: a *named* struct here that decodes an HTTP response is not
+	// reported, and review is what catches it.
+	modeNamed
+	// modeBodies: struct declarations are out of scope, only outbound bodies
+	// are checked. internal/hooks' json-tagged types are GitHub's and Flux's
+	// inbound payload shapes — foreign schemas worklode does not own and
+	// internal/model does not model. What it answers with is ours.
+	modeBodies
+)
+
+// scanned are the packages the rules are checked against, as paths relative
+// to internal/model.
+var scanned = map[string]mode{
+	"../api":   modeWire,
+	"../cli":   modeWire,
+	"../cmd":   modeNamed,
+	"../hooks": modeBodies,
 }
 
 // allowed lists the json-tagged structs that legitimately stay outside
@@ -78,7 +93,7 @@ func wireTagged(st *ast.StructType) bool {
 func TestNoWireStructsOutsideModel(t *testing.T) {
 	fset := token.NewFileSet()
 	seen := map[string]bool{}
-	for dir, strict := range scanned {
+	for dir, m := range scanned {
 		pkg := filepath.Base(dir)
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
@@ -94,7 +109,7 @@ func TestNoWireStructsOutsideModel(t *testing.T) {
 				t.Fatalf("parse %s: %v", path, err)
 			}
 			parsed++
-			for _, msg := range checkFile(fset, pkg, strict, path, file, seen) {
+			for _, msg := range checkFile(fset, pkg, m, path, file, seen) {
 				t.Error(msg)
 			}
 		}
@@ -117,10 +132,12 @@ func TestNoWireStructsOutsideModel(t *testing.T) {
 // rather than failing directly so the guard itself can be tested against
 // known-bad source (TestGuardCatchesTheDodges) — a check nobody checks is how
 // the previous version came to inspect nothing.
-func checkFile(fset *token.FileSet, pkg string, strict bool, path string, file *ast.File, seen map[string]bool) []string {
-	return append(
-		checkStructs(fset, pkg, strict, path, file, seen),
-		checkBodies(fset, path, file)...)
+func checkFile(fset *token.FileSet, pkg string, m mode, path string, file *ast.File, seen map[string]bool) []string {
+	var msgs []string
+	if m != modeBodies {
+		msgs = checkStructs(fset, pkg, m == modeWire, path, file, seen)
+	}
+	return append(msgs, checkBodies(fset, path, file)...)
 }
 
 // checkStructs reports json-tagged structs declared outside internal/model.
@@ -168,8 +185,12 @@ func checkStructs(fset *token.FileSet, pkg string, strict bool, path string, fil
 		}
 		if strict {
 			msgs = append(msgs, fmt.Sprintf(
-				"%s: %s has json tags outside internal/model (ADR 036 §2) — "+
-					"move it, or add %q to allowed with a reason", base, name, key))
+				"%s:%d: %s has json tags outside internal/model (ADR 036 §2) — "+
+					"move it, or add %q to allowed with a reason",
+				base, fset.Position(st.Pos()).Line, name, key))
+			// One finding per type: a nested anonymous struct inside a type
+			// already reported adds noise, not information.
+			return false
 		}
 		return true
 	})
@@ -193,7 +214,7 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 				return true
 			}
 			for i, rhs := range as.Rhs {
-				if !isMapLit(rhs) || i >= len(as.Lhs) {
+				if !isMapValue(rhs) || i >= len(as.Lhs) {
 					continue
 				}
 				if id, ok := as.Lhs[i].(*ast.Ident); ok {
@@ -220,7 +241,7 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 			}
 			arg := call.Args[i]
 			id, isIdent := arg.(*ast.Ident)
-			if !isMapLit(arg) && !(isIdent && mapLocal[id.Name]) {
+			if !isMapValue(arg) && !(isIdent && mapLocal[id.Name]) {
 				return true
 			}
 			msgs = append(msgs, fmt.Sprintf(
@@ -233,14 +254,21 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 	return msgs
 }
 
-// isMapLit reports whether e is a map composite literal.
-func isMapLit(e ast.Expr) bool {
-	lit, ok := e.(*ast.CompositeLit)
-	if !ok {
-		return false
+// isMapValue reports whether e builds a map: a composite literal or a make.
+func isMapValue(e ast.Expr) bool {
+	switch v := e.(type) {
+	case *ast.CompositeLit:
+		_, ok := v.Type.(*ast.MapType)
+		return ok
+	case *ast.CallExpr:
+		id, ok := v.Fun.(*ast.Ident)
+		if !ok || id.Name != "make" || len(v.Args) == 0 {
+			return false
+		}
+		_, ok = v.Args[0].(*ast.MapType)
+		return ok
 	}
-	_, ok = lit.Type.(*ast.MapType)
-	return ok
+	return false
 }
 
 // TestGuardCatchesTheDodges runs the checks over known-bad source: every way
@@ -250,48 +278,66 @@ func isMapLit(e ast.Expr) bool {
 // nothing — which is what happened to the first version of this guard.
 func TestGuardCatchesTheDodges(t *testing.T) {
 	cases := []struct {
-		name   string
-		pkg    string
-		strict bool
-		src    string
-		want   string // substring of the expected finding; "" means none
+		name string
+		pkg  string
+		mode mode
+		src  string
+		want string // substring of the expected finding; "" means none
 	}{{
-		name: "named struct in a strict package", pkg: "api", strict: true,
+		name: "named struct in a strict package", pkg: "api", mode: modeWire,
 		src:  "type taskJSON struct {\n\tID string `json:\"id\"`\n}",
 		want: "has json tags outside internal/model",
 	}, {
-		name: "anonymous struct in a strict package", pkg: "api", strict: true,
+		name: "anonymous struct in a strict package", pkg: "api", mode: modeWire,
 		src:  "func h() {\n\tvar req struct {\n\t\tDoneState string `json:\"done_state\"`\n\t}\n\t_ = req\n}",
 		want: "anonymous struct with json tags",
 	}, {
-		name: "anonymous struct in internal/cmd", pkg: "cmd", strict: false,
+		name: "anonymous struct in internal/cmd", pkg: "cmd", mode: modeNamed,
 		src:  "func h() {\n\tout := struct {\n\t\tOK bool `json:\"ok\"`\n\t}{}\n\t_ = out\n}",
 		want: "name it",
 	}, {
-		name: "named --json shape in internal/cmd", pkg: "cmd", strict: false,
+		name: "named --json shape in internal/cmd", pkg: "cmd", mode: modeNamed,
 		src:  "type statusResult struct {\n\tOK bool `json:\"ok\"`\n}",
 		want: "",
 	}, {
-		name: "map literal written as a body", pkg: "api", strict: true,
+		name: "map literal written as a body", pkg: "api", mode: modeWire,
 		src:  `func h() { writeJSON(w, 200, map[string]any{"status": "ok"}) }`,
 		want: "handed a map as its HTTP body",
 	}, {
-		name: "map body built up over statements", pkg: "api", strict: true,
+		name: "map body built up over statements", pkg: "api", mode: modeWire,
 		src: "func h() {\n\tbody := map[string]any{\"error\": \"nope\"}\n" +
 			"\tbody[\"holder\"] = 1\n\twriteJSON(w, 409, body)\n}",
 		want: "handed a map as its HTTP body",
 	}, {
-		name: "map literal sent as a request body", pkg: "cli", strict: true,
+		name: "map body from make", pkg: "api", mode: modeWire,
+		src: "func h() {\n\tbody := make(map[string]any)\n" +
+			"\tbody[\"error\"] = \"nope\"\n\twriteJSON(w, 500, body)\n}",
+		want: "handed a map as its HTTP body",
+	}, {
+		name: "map literal sent as a request body", pkg: "cli", mode: modeWire,
 		src:  `func h() { c.do(ctx, "POST", "/api/v1/merges", map[string]any{"repo": r}) }`,
 		want: "handed a map as its HTTP body",
 	}, {
-		name: "model type written as a body", pkg: "api", strict: true,
+		name: "model type written as a body", pkg: "api", mode: modeWire,
 		src:  `func h() { writeJSON(w, 200, model.HealthResponse{Status: "ok"}) }`,
 		want: "",
 	}, {
-		name: "an allowed transport internal", pkg: "api", strict: true,
+		name: "an allowed transport internal", pkg: "api", mode: modeWire,
 		src:  "type oauthState struct {\n\tNonce string `json:\"nonce\"`\n}",
 		want: "",
+	}, {
+		// allowed is keyed by package: api's exemption is not cli's.
+		name: "an allowed name declared in another package", pkg: "cli", mode: modeWire,
+		src:  "type oauthState struct {\n\tNonce string `json:\"nonce\"`\n}",
+		want: "has json tags outside internal/model",
+	}, {
+		name: "a foreign inbound payload in internal/hooks", pkg: "hooks", mode: modeBodies,
+		src:  "type pushEvent struct {\n\tRef string `json:\"ref\"`\n}",
+		want: "",
+	}, {
+		name: "a map body answered by internal/hooks", pkg: "hooks", mode: modeBodies,
+		src:  `func h() { writeJSON(w, 200, map[string]string{"status": "ok"}) }`,
+		want: "handed a map as its HTTP body",
 	}}
 
 	for _, tc := range cases {
@@ -301,7 +347,7 @@ func TestGuardCatchesTheDodges(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse case source: %v", err)
 			}
-			got := checkFile(fset, tc.pkg, tc.strict, "bad.go", file, map[string]bool{})
+			got := checkFile(fset, tc.pkg, tc.mode, "bad.go", file, map[string]bool{})
 			if tc.want == "" {
 				if len(got) > 0 {
 					t.Errorf("want no finding, got %v", got)
