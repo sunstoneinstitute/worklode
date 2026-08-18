@@ -369,7 +369,7 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	task := createTask(t, s, claimNextTestNow, defaultTaskInput())
 
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, boolPtr(true))
+		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, nil, boolPtr(true))
 	}); err != nil {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}

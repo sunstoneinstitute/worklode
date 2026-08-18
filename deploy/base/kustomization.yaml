@@ -58,3 +58,5 @@ configMapGenerator:
       - migrations/0021_event_log.down.sql
       - migrations/0022_task_updated_at_index.up.sql
       - migrations/0022_task_updated_at_index.down.sql
+      - migrations/0024_task_secrets.up.sql
+      - migrations/0024_task_secrets.down.sql

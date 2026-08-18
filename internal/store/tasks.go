@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
 
 // TaskInput carries the fields for creating a new task. Draft creates the
@@ -25,6 +26,7 @@ type TaskInput struct {
 	Priority  string
 	Kind      string
 	Concern   string
+	Secrets   []string
 	CreatedBy string
 	Draft     bool
 	Skills    []string
@@ -148,10 +150,18 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*model.Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal task %s skills: %w", id, err)
 	}
+	secretsVal, err := secretsJSON(in.Secrets)
+	if err != nil {
+		return nil, err
+	}
+	secretNames := in.Secrets
+	if secretNames == nil {
+		secretNames = []string{}
+	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts, string(skillsJSON),
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts, string(skillsJSON), string(secretsVal),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -169,6 +179,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*model.Task, error) {
 		CreatedAt: ts,
 		UpdatedAt: ts,
 		Skills:    skills,
+		Secrets:   secretNames,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -256,13 +267,28 @@ func ValidConcern(s string) bool {
 	return validConcerns[s]
 }
 
+// secretsJSON marshals a secret-name list for the tasks.secrets jsonb column,
+// validating every name. nil marshals as [].
+func secretsJSON(names []string) ([]byte, error) {
+	for _, n := range names {
+		if !secrets.ValidName(n) {
+			return nil, fmt.Errorf("invalid secret name %q: %w", n, ErrInvalidInput)
+		}
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return json.Marshal(names)
+}
+
 // UpdateTaskFields updates the non-nil fields of a task inside the given
 // transaction and bumps updated_at. Returns ErrNotFound if the task does not
 // exist. A nil field is left unchanged; all-nil is a no-op (existence is
 // still checked). concern follows special clearing rules: "" or "none" clears
 // it to NULL; any other value must be a valid concern. A blank title is
 // rejected, mirroring CreateTask: every task keeps a title for its whole life.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, needsDecomposition *bool) error {
+// secretNames, when non-nil, replaces the whole tasks.secrets list.
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool) error {
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -294,6 +320,13 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 			set("concern", sql.NullString{String: *concern, Valid: true})
 		}
 	}
+	if secretNames != nil {
+		val, err := secretsJSON(*secretNames)
+		if err != nil {
+			return err
+		}
+		set("secrets", val)
+	}
 	if needsDecomposition != nil {
 		set("needs_decomposition", *needsDecomposition)
 	}
@@ -316,12 +349,12 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	return nil
 }
 
-// taskColumns is the SELECT list scanTask expects, in order. skills is last
-// so positional scans elsewhere are unaffected by its addition. The column is
-// "jsonb NOT NULL DEFAULT '[]'" (see migration 0007), so a bare cast is
-// enough — no coalesce needed, and prefixedTaskColumns below requires each
-// entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text`
+// taskColumns is the SELECT list scanTask expects, in order. skills and
+// secrets are last so positional scans elsewhere are unaffected by their
+// addition. Both columns are "jsonb NOT NULL DEFAULT '[]'" (see migrations
+// 0007 and 0024), so a bare cast is enough — no coalesce needed, and
+// prefixedTaskColumns below requires each entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -330,9 +363,9 @@ type rowScanner interface {
 func scanTask(row rowScanner) (*model.Task, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
-	var skillsJSON string
+	var skillsJSON, secretsCol string
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol); err != nil {
 		return nil, err
 	}
 	t.Body = body.String
@@ -346,6 +379,12 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	}
 	if t.Skills == nil {
 		t.Skills = []string{}
+	}
+	if err := json.Unmarshal([]byte(secretsCol), &t.Secrets); err != nil {
+		return nil, fmt.Errorf("unmarshal task %s secrets: %w", t.ID, err)
+	}
+	if t.Secrets == nil {
+		t.Secrets = []string{}
 	}
 	// Branch is derived, not stored: the server owns LODE_BRANCH_TEMPLATE and
 	// is the authority on branch names (008 §3.1). Filling it here means every

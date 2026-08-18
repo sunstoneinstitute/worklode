@@ -174,7 +174,7 @@ SELECT e.to_task, b.id, b.title, b.state
 func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
-	var skillsJSON string
+	var skillsJSON, secretsCol string
 
 	var parentID, parentTitle, parentState sql.NullString
 
@@ -189,7 +189,7 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	if err := row.Scan(
 		&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy,
-		&t.CreatedAt, &t.UpdatedAt, &skillsJSON,
+		&t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol,
 		&parentID, &parentTitle, &parentState,
 		&leaseID, &leaseTaskID, &leaseActorID, &leaseWorktree,
 		&leaseAcquiredAt, &leaseRenewedAt, &leaseExpiresAt, &leaseReleasedAt,
@@ -209,6 +209,12 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	}
 	if t.Skills == nil {
 		t.Skills = []string{}
+	}
+	if err := json.Unmarshal([]byte(secretsCol), &t.Secrets); err != nil {
+		return nil, fmt.Errorf("unmarshal task %s secrets: %w", t.ID, err)
+	}
+	if t.Secrets == nil {
+		t.Secrets = []string{}
 	}
 
 	f := &ProjectWorkFact{Task: t}

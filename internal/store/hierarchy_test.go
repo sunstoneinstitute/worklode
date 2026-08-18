@@ -999,7 +999,7 @@ func TestDecompose(t *testing.T) {
 	flag := true
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.updated", nil,
 		func(tx *sql.Tx, _ int64) error {
-			return UpdateTaskFields(tx, taskTestNow, parent.ID, nil, nil, nil, nil, &flag)
+			return UpdateTaskFields(tx, taskTestNow, parent.ID, nil, nil, nil, nil, nil, &flag)
 		}); err != nil {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
