@@ -797,8 +797,8 @@ these Project graphs.)
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
 | Task node + `wl:concern`/`wl:priority`/`wl:taskState`/`wl:taskKind` + `dct:title`/`created`/`modified` + `prov:wasAssociatedWith` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
-| `wl:affects` (Task→Component) | 2 | backbone | v1 | yes | task edit / ingest |
-| `wl:produces` (Task→Deliverable) | 2 | backbone | v1 | yes | task edit |
+| `wl:affects` (Task→Component) | 2 | backbone | **v2** — blocked on source | — | — |
+| `wl:produces` (Task→Deliverable) | 2 | backbone | **v2** — blocked on source | — | — |
 | `dct:isPartOf` (child_of mirror) | 2 | backbone | v1 | yes | task lifecycle |
 | `wl:dependsOn` / `wl:blocks` (Task↔Task, transitive) | 2 | backbone | v1 | yes | task edit / block |
 | `wl:followUpTo` (Task→Task) | 2 | backbone | v1 | yes | task create with `--follow-up-to` |
@@ -812,6 +812,15 @@ these Project graphs.)
 
 `wl:implements` has no row: Component→Section claims are not projected from the backbone at all,
 they are derived by `observed/repo-implements` from `.worklode/implements.yaml` (025 §11, 026 §6.2).
+
+**`wl:produces` and `wl:affects` moved out of v1** (both originally listed v1 above). The backbone
+stores neither relation — Deliverables are rows (spec 029) with no task→deliverable edge, and
+Components have no backbone representation at all — and projecting a predicate with no source
+would fabricate facts, so the v1 projector deliberately emits neither. Each row returns to the
+projection when its backbone source exists: a task→deliverable edge (029-adjacent schema and
+API/CLI surface) for `wl:produces`, a backbone Component representation for `wl:affects`. Until
+then the only live `wl:affects` emission is 007 §2.3's observed-layer deriver (PR changed paths ×
+manifest, into `observed/pr-affects`), a derived fact outside this table's scope.
 
 Task execution-state is projected as a **literal** (e.g. `wl:taskState "in_progress"`) mirroring
 the backbone enum; it is not modelled as `wl:status` and does not fork the backbone state machine
