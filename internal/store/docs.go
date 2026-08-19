@@ -113,6 +113,16 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy), ts,
 	).Scan(&id)
 	if err != nil {
+		// The two unique indexes are the identity rules of 025 §5, so a
+		// caller sees one sentinel rather than having to decode pgconn.
+		if isUniqueViolationOn(err, "docs_project_slug") {
+			return nil, fmt.Errorf("project %s already has a doc slugged %s: %w",
+				in.Project, in.Slug, ErrDocExists)
+		}
+		if isUniqueViolationOn(err, "docs_project_kind_number") {
+			return nil, fmt.Errorf("project %s already has %s %d: %w",
+				in.Project, in.Kind, in.Number, ErrDocExists)
+		}
 		return nil, fmt.Errorf("insert doc %s/%s: %w", in.Project, in.Slug, err)
 	}
 
@@ -173,9 +183,14 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 
 	// The frontmatter is part of the body, so title and issued are rederived
 	// from it here for the same reason CreateDoc derives them: the body is
-	// what states them.
+	// what states them. issued only ever moves forward, though — a plan stays
+	// mutable at accepted (025 §9), and a body edit that drops the key must
+	// not erase the acceptance date, which is a lifecycle fact rather than a
+	// property of the text.
 	if _, err := tx.Exec(
-		`UPDATE docs SET body = $2, title = $3, issued = $4::date, updated_at = $5 WHERE id = $1`,
+		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
+		                 updated_at = $5
+		  WHERE id = $1`,
 		id, body, title, nullText(parsed.issued), ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
@@ -317,42 +332,61 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 	return out, nil
 }
 
-// docEdgeRef is one frontmatter reference before resolution. Ref is verbatim,
-// fragment included; FromAnchor is "" for a document-level edge.
+// docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
+// fragment included; fromAnchor is "" for a document-level edge.
 type docEdgeRef struct {
 	fromAnchor string
 	typ        string
 	ref        string
 }
 
+// docEdgeRow is one edge after resolution — exactly the tuple
+// doc_edges_unique keys, so equality here is the collision the index would
+// report. toDoc is 0 and toExternal non-empty for an unresolved reference.
+type docEdgeRow struct {
+	fromAnchor string
+	typ        string
+	toDoc      int64
+	toAnchor   string
+	toExternal string
+}
+
 // rebuildEdges replaces a document's outbound edges from its frontmatter. It
-// deletes and re-inserts, so doc_edges_unique is satisfied across calls; the
-// dedupe in frontmatterEdges keeps one frontmatter from colliding with
-// itself.
+// deletes and re-inserts, so doc_edges_unique is satisfied across calls.
+//
+// Within one frontmatter it dedupes on the *resolved* row rather than on the
+// reference: two spellings of one target ("004-x.md" and
+// "docs/specs/004-x.md", or a filename and its <KEY>-SPEC-<n> shorthand) are
+// one edge, and inserting both would abort a legal document on a raw unique
+// violation.
 func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
+	seen := map[docEdgeRow]bool{}
 	for _, e := range frontmatterEdges(fm) {
 		base, fragment := cutFragment(e.ref)
 		toDoc, resolved, err := resolveDocRef(tx, project, base)
 		if err != nil {
 			return err
 		}
-		var toDocArg sql.NullInt64
-		var toAnchor, toExternal sql.NullString
+		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
-			toDocArg = sql.NullInt64{Int64: toDoc, Valid: true}
-			toAnchor = nullText(fragment)
+			row.toDoc, row.toAnchor = toDoc, fragment
 		} else {
 			// Unresolvable: the whole reference is kept verbatim, fragment
 			// included, since nothing here can say what its anchor names.
-			toExternal = sql.NullString{String: e.ref, Valid: true}
+			row.toExternal = e.ref
 		}
+		if seen[row] {
+			continue
+		}
+		seen[row] = true
 		if _, err := tx.Exec(
 			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc, to_anchor, to_external)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			docID, nullText(e.fromAnchor), e.typ, toDocArg, toAnchor, toExternal,
+			docID, nullText(row.fromAnchor), row.typ, nullID(row.toDoc),
+			nullText(row.toAnchor), nullText(row.toExternal),
 		); err != nil {
 			return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, docID, e.ref, err)
 		}
@@ -360,28 +394,36 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 	return nil
 }
 
-// frontmatterEdges reads the acting-direction relations out of fm, deduped and
-// in a deterministic order.
+// frontmatterEdges reads the acting-direction relations out of fm, in a
+// deterministic order. rebuildEdges dedupes what comes back, on the resolved
+// row rather than on the reference text.
 //
 // The inverse spellings (isRequiredBy, amendedBy, isReplacedBy) are skipped:
 // one row read backward is the inverse (025 §14), so writing them too would
 // double every edge and let the two directions disagree.
+//
+// An empty reference is dropped rather than written as an empty to_external —
+// a coverage entry qualified with a level but no `spec:`, say, names no
+// target at all.
 func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	if fm == nil {
 		return nil
 	}
 	var out []docEdgeRef
+	add := func(anchor, typ, ref string) {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			out = append(out, docEdgeRef{fromAnchor: anchor, typ: typ, ref: ref})
+		}
+	}
 	// covers reads the retired `implements` spelling too (026 §5.1); the
 	// implements edge type stays reserved for components.
 	for _, entry := range fm.CoverageEntries() {
-		out = append(out, docEdgeRef{typ: "covers", ref: entry.Spec})
+		add("", "covers", entry.Spec)
 	}
 	for _, ref := range fm.Requires {
-		out = append(out, docEdgeRef{typ: "requires", ref: ref})
+		add("", "requires", ref)
 	}
-	if fm.WasDerivedFrom != "" {
-		out = append(out, docEdgeRef{typ: "wasDerivedFrom", ref: fm.WasDerivedFrom})
-	}
+	add("", "wasDerivedFrom", fm.WasDerivedFrom)
 	for _, m := range []struct {
 		typ string
 		src designdoc.AnchorMap
@@ -399,32 +441,19 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 				anchor = strings.TrimPrefix(k, "#")
 			}
 			for _, ref := range m.src[k] {
-				out = append(out, docEdgeRef{fromAnchor: anchor, typ: m.typ, ref: ref})
+				add(anchor, m.typ, ref)
 			}
 		}
-	}
-	return dedupeEdgeRefs(out)
-}
-
-// dedupeEdgeRefs drops repeats of the same (from_anchor, type, ref), keeping
-// first-seen order — a frontmatter that names one target twice must not
-// collide with itself on doc_edges_unique.
-func dedupeEdgeRefs(in []docEdgeRef) []docEdgeRef {
-	seen := make(map[docEdgeRef]bool, len(in))
-	out := in[:0]
-	for _, e := range in {
-		if seen[e] {
-			continue
-		}
-		seen[e] = true
-		out = append(out, e)
 	}
 	return out
 }
 
-// docNumberPrefix reads a corpus filename's leading number, ignoring
-// zero-padding ("004-execution-backbone" -> 4).
-var docNumberPrefix = regexp.MustCompile(`^(\d+)(?:-|$)`)
+// docBareNumber is a reference that is nothing but a corpus number, with or
+// without zero-padding ("25", "025"). Deliberately anchored end-to-end: a
+// number-*prefixed* reference is a filename, and "025-documents-2.md" that
+// matched no slug means the document is not here — resolving it to spec 025
+// on the shared prefix would write a wrong edge rather than a missing one.
+var docBareNumber = regexp.MustCompile(`^(\d+)$`)
 
 // docShorthand is 025 §14.3's <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-25".
 var docShorthand = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
@@ -435,10 +464,9 @@ var docShorthand = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
 // to_external (025 §14.3).
 //
 // Three forms are tried, in order: the slug, 025 §14.3's <KEY>-<TYPE>-<n>
-// shorthand against this project's key, and a corpus filename's leading
-// number. The number form must match exactly one spec or ADR — a project can
-// hold a spec 25 and an ADR 25, and a reference that cannot say which
-// resolves to neither.
+// shorthand against this project's key, and a bare corpus number. The number
+// form must match exactly one spec or ADR — a project can hold a spec 25 and
+// an ADR 25, and a reference that cannot say which resolves to neither.
 func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	base = strings.TrimSuffix(path.Base(base), ".md")
 	if base == "" || base == "." || base == "NO-SPEC" {
@@ -473,7 +501,7 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 		return 0, false, nil
 	}
 
-	if m := docNumberPrefix.FindStringSubmatch(base); m != nil {
+	if m := docBareNumber.FindStringSubmatch(base); m != nil {
 		n, convErr := strconv.Atoi(m[1])
 		if convErr != nil {
 			return 0, false, nil
@@ -622,4 +650,9 @@ func (s *Store) RecordDocEvent(
 // are the same thing.
 func nullText(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// nullID maps 0 to NULL, for the nullable doc_edges.to_doc reference.
+func nullID(id int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: id, Valid: id != 0}
 }

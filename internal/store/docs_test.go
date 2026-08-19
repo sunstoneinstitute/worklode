@@ -731,3 +731,199 @@ func TestDocMetricsNilSafe(t *testing.T) {
 	m.docOp("create", nil)
 	m.docOp("update", errors.New("boom"))
 }
+
+// TestDocCreateDedupesEdgesByResolvedTarget: two spellings of one target in
+// one frontmatter are one edge. Deduping on the reference text would let both
+// through and abort a legal document on doc_edges_unique.
+func TestDocCreateDedupesEdgesByResolvedTarget(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	// Four spellings of one target: bare filename, a path to it, the bare
+	// corpus number, and 025 §14.3's shorthand.
+	body := `---
+status: draft
+requires:
+  - 025-documents-in-the-backbone.md#sec-5
+  - docs/specs/025-documents-in-the-backbone.md#sec-5
+  - "025"
+  - P1-SPEC-25
+---
+
+# Requiring plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "requiring-plan", Body: body, CreatedBy: "stig",
+	})
+
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{
+		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-5"},
+		{Type: "requires", ToDoc: spec.ID},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestDocCreateSkipsEmptyRefs: a coverage entry qualified with a level but no
+// spec names no target, so it writes no edge — never one with to_external ”.
+func TestDocCreateSkipsEmptyRefs(t *testing.T) {
+	s := openDocStore(t)
+	body := "---\nstatus: draft\ncovers:\n  - coverage: partial\n---\n\n# Plan\n"
+
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "empty-covers", Body: body, CreatedBy: "stig",
+	})
+	if edges := docEdges(t, s, plan.ID); len(edges) != 0 {
+		t.Fatalf("edges = %+v, want none", edges)
+	}
+}
+
+// TestDocCreateDuplicateIsErrDocExists: both unique indexes map onto one
+// sentinel, so the API can answer 409 without decoding pgconn.
+func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
+	s := openDocStore(t)
+	base := DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	}
+	mustCreateDoc(t, s, base)
+
+	sameSlug := base
+	sameSlug.Number = 26
+	if _, err := createDoc(t, s, sameSlug); !errors.Is(err, ErrDocExists) {
+		t.Fatalf("duplicate slug err = %v, want ErrDocExists", err)
+	}
+
+	sameNumber := base
+	sameNumber.Slug = "025-y"
+	if _, err := createDoc(t, s, sameNumber); !errors.Is(err, ErrDocExists) {
+		t.Fatalf("duplicate (kind, number) err = %v, want ErrDocExists", err)
+	}
+}
+
+// TestDocUpdateBodyKeepsIssued: issued is a lifecycle fact. A plan stays
+// mutable at accepted (025 §9), so a body edit that drops the frontmatter key
+// must not erase the acceptance date.
+func TestDocUpdateBodyKeepsIssued(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-plan", CreatedBy: "stig", Status: "accepted",
+		Body: "---\nstatus: accepted\nissued: 2026-08-01\n---\n\n# A plan\n",
+	})
+	if doc.Issued != "2026-08-01" {
+		t.Fatalf("issued = %q, want 2026-08-01", doc.Issued)
+	}
+
+	updated, err := updateDocBody(t, s, doc.ID,
+		"---\nstatus: accepted\n---\n\n# A plan\n\nmore tasks\n")
+	if err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+	if updated.Issued != "2026-08-01" {
+		t.Errorf("issued = %q after a body edit that omits it, want it kept", updated.Issued)
+	}
+}
+
+// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form:
+// resolution is same-project only, so a reference naming another project's
+// key is external even when this project holds that number.
+func TestDocResolveRefShorthand(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+requires:
+  - P1-SPEC-25#sec-2
+  - ZZ-SPEC-25
+  - P1-ADR-25
+---
+
+# Referring plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "referring", Body: body, CreatedBy: "stig",
+	})
+
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{
+		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-2"},
+		// This project's key is P1, so ZZ- names a corpus we cannot reach;
+		// P1-ADR-25 names a kind this project has no 25 of.
+		{Type: "requires", ToExternal: "P1-ADR-25"},
+		{Type: "requires", ToExternal: "ZZ-SPEC-25"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestDocResolveRefBareNumberAmbiguous: a project may hold a spec 25 and an
+// ADR 25. A bare number cannot say which, so it resolves to neither.
+func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-spec", Body: specBody, CreatedBy: "stig",
+	})
+
+	// While 25 names only the spec, the bare number resolves.
+	unambiguous := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nrequires: \"025\"\n---\n\n# A\n",
+	})
+	if edges := docEdges(t, s, unambiguous.ID); len(edges) != 1 || edges[0].ToDoc != spec.ID {
+		t.Fatalf("edges = %+v, want one resolving to the spec", edges)
+	}
+
+	// Add an ADR 25 and the same reference becomes ambiguous.
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 25, Slug: "025-adr", Body: specBody, CreatedBy: "stig",
+	})
+	ambiguous := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nrequires: \"025\"\n---\n\n# B\n",
+	})
+	want := model.DocEdge{Type: "requires", ToExternal: "025"}
+	if edges := docEdges(t, s, ambiguous.ID); len(edges) != 1 || edges[0] != want {
+		t.Fatalf("edges = %+v, want %+v", edges, want)
+	}
+}
+
+// TestDocResolveRefNumberPrefixIsNotANumber: a number-prefixed filename that
+// matches no slug is a miss, not spec 025. Resolving on the shared prefix
+// would turn "025-…-2.md" into an edge to spec 025 — a wrong edge is worse
+// than an unresolved one.
+func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := "---\nstatus: draft\n" +
+		"requires: 025-documents-in-the-backbone-2.md\n---\n\n# Plan\n"
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a", Body: body, CreatedBy: "stig",
+	})
+
+	want := model.DocEdge{Type: "requires", ToExternal: "025-documents-in-the-backbone-2.md"}
+	if edges := docEdges(t, s, plan.ID); len(edges) != 1 || edges[0] != want {
+		t.Fatalf("edges = %+v, want %+v", edges, want)
+	}
+}
