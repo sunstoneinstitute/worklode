@@ -191,7 +191,8 @@ type WorkRow struct {
 	EvidenceSummary  string
 }
 
-// CockpitConcern is one secondary concern (an open blocker) on the cockpit.
+// CockpitConcern is one secondary concern on the cockpit: what holds a ready
+// task — an open blocker task or an unfinished blocking plan.
 type CockpitConcern struct {
 	Title           string
 	URL             string

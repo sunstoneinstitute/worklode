@@ -214,6 +214,36 @@ func DocTable(w io.Writer, docs []model.Doc) {
 	tbl.flush(w)
 }
 
+// DocPlanningTable prints the `lode doc list --needs-planning` view: one row
+// per accepted spec, with the gap ratio 026 §2.1 shows and the anchors no
+// accepted plan undertakes. gaps is keyed by document id, so a document
+// without one renders as no gap rather than misaligning the table.
+func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap) {
+	byDoc := make(map[int64]model.DocPlanningGap, len(gaps))
+	for _, g := range gaps {
+		byDoc[g.Doc] = g
+	}
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "NUMBER"},
+		column{header: "SLUG"},
+		titleColumn("TITLE"),
+		column{header: "GAPS"},
+		column{header: "UNPLANNED"},
+	)
+	for _, d := range docs {
+		g := byDoc[d.ID]
+		number := "-"
+		if d.Number != 0 {
+			number = strconv.Itoa(d.Number)
+		}
+		tbl.add(strconv.FormatInt(d.ID, 10), number, d.Slug, d.Title,
+			fmt.Sprintf("%d/%d", len(g.Unplanned), g.Sections),
+			strings.Join(g.Unplanned, " "))
+	}
+	tbl.flush(w)
+}
+
 // DocDetailRender prints one document: its metadata, body, sections, and
 // edges both ways — the `lode doc get` view.
 func DocDetailRender(w io.Writer, d model.DocDetail) {

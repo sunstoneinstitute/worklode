@@ -325,7 +325,7 @@ func workRows(items []model.CockpitWorkItem) []ui.WorkRow {
 	return out
 }
 
-// cockpitConcerns maps the secondary concerns (open blockers).
+// cockpitConcerns maps the secondary concerns (what holds a ready task).
 func cockpitConcerns(items []model.SecondaryConcern) []ui.CockpitConcern {
 	out := make([]ui.CockpitConcern, 0, len(items))
 	for _, c := range items {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -219,6 +220,49 @@ func TestTaskListStatusFiltering(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTaskListFilterByPlan: `task list --plan <ref>` resolves the ref (a
+// plan doc id or slug, 025 §9.2) via resolveDocID and returns exactly its
+// minted task set; an unmatched ref is an error, not an empty list.
+func TestTaskListFilterByPlan(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupRepoConfig(t, "proj")
+	setupProject(t, c)
+	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
+
+	plan, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "mint-plan", Body: docPlanMintBody,
+	})
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	accepted, _, err := c.AcceptDoc(context.Background(), plan.ID)
+	if err != nil {
+		t.Fatalf("accept plan: %v", err)
+	}
+	if len(accepted.Tasks) != 2 {
+		t.Fatalf("minted %d tasks, want 2", len(accepted.Tasks))
+	}
+	createTestTask(t, c, "Ordinary task")
+
+	byID := taskListIDs(t, "--plan", strconv.FormatInt(plan.ID, 10))
+	bySlug := taskListIDs(t, "--plan", "mint-plan")
+	if len(byID) != 2 {
+		t.Fatalf("--plan by id: got %v, want 2 tasks", byID)
+	}
+	if len(bySlug) != 2 {
+		t.Fatalf("--plan by slug: got %v, want 2 tasks", bySlug)
+	}
+	for i := range byID {
+		if byID[i] != bySlug[i] {
+			t.Fatalf("--plan by id/slug disagree: %v vs %v", byID, bySlug)
+		}
+	}
+
+	if _, err := runLode(t, "task", "list", "--plan", "no-such-plan"); err == nil {
+		t.Fatalf("--plan unmatched ref: want an error, got none")
 	}
 }
 

@@ -284,3 +284,71 @@ func TestListProjectWorkFactsReleasedLeaseAbsent(t *testing.T) {
 		t.Errorf("Lease = %#v, want nil after Release", f.Lease)
 	}
 }
+
+// TestListProjectWorkFactsPlanBlocked: a task held by a plan-to-plan ordering
+// edge (025 §9.3) is blocked on the cockpit too, and names the blocking plan's
+// open tasks — the ready set, Claim and the board must not disagree about what
+// is pickable.
+func TestListProjectWorkFactsPlanBlocked(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+
+	facts, err := s.ListProjectWorkFacts(t.Context(), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := factFor(t, facts, blocked[0])
+	if !dep.Blocked() {
+		t.Errorf("Blocked() = false for %s, which Claim refuses (plan A holds it)", blocked[0])
+	}
+	if len(dep.OpenBlockers) != 1 || dep.OpenBlockers[0].ID != blockers[0] {
+		t.Errorf("OpenBlockers = %#v, want plan A's open task %s", dep.OpenBlockers, blockers[0])
+	}
+	if len(dep.BlockingPlans) != 1 || dep.BlockingPlans[0].Slug != "plan-a" {
+		t.Errorf("BlockingPlans = %#v, want plan-a", dep.BlockingPlans)
+	}
+	if b := factFor(t, facts, blockers[0]); b.Blocked() {
+		t.Errorf("Blocked() = true for %s, the blocking plan's own task", blockers[0])
+	}
+
+	walkTo(t, s, blockers[0], "merged")
+
+	facts, err = s.ListProjectWorkFacts(t.Context(), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dep = factFor(t, facts, blocked[0]); dep.Blocked() {
+		t.Errorf("Blocked() = true after plan A's set closed: %#v / %#v", dep.OpenBlockers, dep.BlockingPlans)
+	}
+}
+
+// TestListProjectWorkFactsBlockedByDraftPlan: a blocking plan still draft has
+// an unminted task set, so it holds with no task to name. The fact carries the
+// blocking plan itself, so Blocked() still agrees with Claim.
+func TestListProjectWorkFactsBlockedByDraftPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-c",
+		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+	})
+
+	facts, err := s.ListProjectWorkFacts(t.Context(), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := factFor(t, facts, blocked[0])
+	if len(dep.OpenBlockers) != 0 {
+		t.Errorf("OpenBlockers = %#v, want none: a draft plan has minted no task", dep.OpenBlockers)
+	}
+	if len(dep.BlockingPlans) != 1 || dep.BlockingPlans[0].Slug != "plan-c" ||
+		dep.BlockingPlans[0].Status != "draft" {
+		t.Errorf("BlockingPlans = %#v, want draft plan-c", dep.BlockingPlans)
+	}
+	if !dep.Blocked() {
+		t.Errorf("Blocked() = false for %s, which Claim refuses (draft plan C holds it)", blocked[0])
+	}
+}

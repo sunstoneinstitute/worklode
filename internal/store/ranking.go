@@ -58,8 +58,9 @@ func prefixedTaskColumns(alias string) string {
 }
 
 // readyCandidates returns every task eligible for pickup: state ready, no
-// child_of children, not needs_decomposition, unleased, and not blocked by an
-// open 'blocks' edge from a task that is not in a closed state. An empty
+// child_of children, not needs_decomposition, unleased, not blocked by an
+// open 'blocks' edge from a task that is not in a closed state, and not held
+// by a plan-to-plan ordering edge (planBlockedCondition, 025 §9.3). An empty
 // projectID matches every project; an empty kind matches every kind. A task
 // with children is excluded because the worktree is the unit of Worklode work
 // and a container has nothing to check out (spec 004 §6.3).
@@ -75,7 +76,8 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND NOT EXISTS (SELECT 1 FROM leases l
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
-		                  WHERE e.to_task = t.id AND `+blockedCondition+`)`, projectID, kind)
+		                  WHERE e.to_task = t.id AND `+blockedCondition+`)
+		  AND NOT (`+planBlockedCondition+`)`, projectID, kind)
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)
 	}

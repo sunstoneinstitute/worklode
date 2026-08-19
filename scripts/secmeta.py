@@ -75,11 +75,14 @@ PLAN_COVERAGE = {"covers", "implements"}
 COVERAGE_KEYS = {"spec", "coverage", "fullCoverageWith"}
 COVERAGE_LEVELS = ("full", "partial", "none")
 CLOSED_LEVELS = {"full", "none"}
-LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE
+# `blocks`/`blockedBy` order whole plan documents (025 §5, §9.3) -- the
+# ordering edge that replaces a container row above a plan's tasks.
+PLAN_ORDERING = {"blocks", "blockedBy"}
+LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE | PLAN_ORDERING
 MAP_REFS = {"amends", "amendedBy", "replaces", "isReplacedBy"}
 PLAIN = {"status", "issued", "task", "kind"}
 SPEC_ONLY = {"wasDerivedFrom"}
-PLAN_ONLY = PLAN_COVERAGE
+PLAN_ONLY = PLAN_COVERAGE | PLAN_ORDERING
 KNOWN = SCALAR_REFS | LIST_REFS | MAP_REFS | PLAIN
 
 

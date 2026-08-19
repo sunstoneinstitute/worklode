@@ -1072,6 +1072,74 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 	}
 }
 
+// TestListTasksFilterByPlanDoc: TaskFilter.PlanDoc narrows to exactly the
+// tasks minted from one plan document — the query that is the plan's task
+// set (025 §9.2, §1). A task with no plan_doc is unaffected either way.
+func TestListTasksFilterByPlanDoc(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+	seedDocsProject(t, s)
+
+	planA, err := insertDoc(t, s, "plan", nil, "plan-a")
+	if err != nil {
+		t.Fatalf("insert plan a: %v", err)
+	}
+	planB, err := insertDoc(t, s, "plan", nil, "plan-b")
+	if err != nil {
+		t.Fatalf("insert plan b: %v", err)
+	}
+
+	inA1 := defaultTaskInput()
+	inA1.PlanDoc = planA
+	a1 := createTask(t, s, taskTestNow, inA1)
+
+	inA2 := defaultTaskInput()
+	inA2.PlanDoc = planA
+	a2 := createTask(t, s, taskTestNow, inA2)
+
+	inB := defaultTaskInput()
+	inB.PlanDoc = planB
+	b1 := createTask(t, s, taskTestNow, inB)
+
+	unplanned := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	idsOf := func(tasks []model.Task) []string {
+		var ids []string
+		for _, task := range tasks {
+			ids = append(ids, task.ID)
+		}
+		return ids
+	}
+	sortedIDs := func(ids ...string) []string {
+		slices.Sort(ids)
+		return ids
+	}
+
+	gotA, err := s.ListTasks(ctx, TaskFilter{PlanDoc: planA})
+	if err != nil {
+		t.Fatalf("ListTasks plan_doc=A: %v", err)
+	}
+	if got := sortedIDs(idsOf(gotA)...); !reflect.DeepEqual(got, sortedIDs(a1.ID, a2.ID)) {
+		t.Fatalf("ListTasks plan_doc=A: got %v, want [%s %s]", got, a1.ID, a2.ID)
+	}
+
+	gotB, err := s.ListTasks(ctx, TaskFilter{PlanDoc: planB})
+	if err != nil {
+		t.Fatalf("ListTasks plan_doc=B: %v", err)
+	}
+	if got := idsOf(gotB); !reflect.DeepEqual(got, []string{b1.ID}) {
+		t.Fatalf("ListTasks plan_doc=B: got %v, want [%s]", got, b1.ID)
+	}
+
+	all, err := s.ListTasks(ctx, TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks unfiltered: %v", err)
+	}
+	if got := sortedIDs(idsOf(all)...); !reflect.DeepEqual(got, sortedIDs(a1.ID, a2.ID, b1.ID, unplanned.ID)) {
+		t.Fatalf("ListTasks unfiltered: got %v, want all four tasks", got)
+	}
+}
+
 // TestListTasksFilterByUpdatedSince covers the incremental sync path: a
 // client (the Obsidian mirror) re-asks for what changed since the highest
 // updated_at it has seen, and gets that boundary row back with it.

@@ -30,6 +30,10 @@ type TaskInput struct {
 	CreatedBy string
 	Draft     bool
 	Skills    []string
+	// PlanDoc is the plan document this task was minted from (0 = none).
+	// Written only by AcceptDoc's plan branch (025 §9.2) — no other caller
+	// sets it.
+	PlanDoc int64
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -54,6 +58,9 @@ type TaskFilter struct {
 	// the incremental fetch a polling mirror makes with the highest
 	// updated_at it has already seen. The zero value does not filter.
 	UpdatedSince time.Time
+	// PlanDoc narrows to the tasks minted from this plan document (0 = none)
+	// — the query that is the plan's task set (025 §9.2, §1).
+	PlanDoc int64
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -160,9 +167,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts, string(skillsJSON), string(secretsVal),
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
+		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -185,6 +193,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		UpdatedAt: ts,
 		Skills:    skills,
 		Secrets:   secretNames,
+		PlanDoc:   in.PlanDoc,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -354,12 +363,14 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	return nil
 }
 
-// taskColumns is the SELECT list scanTask expects, in order. skills and
-// secrets are last so positional scans elsewhere are unaffected by their
-// addition. Both columns are "jsonb NOT NULL DEFAULT '[]'" (see migrations
-// 0007 and 0024), so a bare cast is enough — no coalesce needed, and
-// prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text`
+// taskColumns is the SELECT list scanTask expects, in order. skills,
+// secrets and plan_doc are last so positional scans elsewhere are unaffected
+// by their addition. skills and secrets are "jsonb NOT NULL DEFAULT '[]'"
+// (see migrations 0007 and 0024), so a bare cast is enough — no coalesce
+// needed; plan_doc is a nullable bigint (migration 0027), scanned into
+// sql.NullInt64. prefixedTaskColumns below requires each entry to be
+// comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -369,9 +380,13 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
+	var planDoc sql.NullInt64
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc); err != nil {
 		return nil, err
+	}
+	if planDoc.Valid {
+		t.PlanDoc = planDoc.Int64
 	}
 	t.Body = body.String
 	t.Concern = concern.String
@@ -523,6 +538,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if f.Kind != "" {
 		args = append(args, f.Kind)
 		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+	}
+	if f.PlanDoc != 0 {
+		args = append(args, f.PlanDoc)
+		conds = append(conds, fmt.Sprintf(`plan_doc = $%d`, len(args)))
 	}
 	if f.Assignee != "" {
 		args = append(args, f.Assignee)
@@ -893,11 +912,46 @@ var blockedCondition = `e.type = 'blocks'
 	             WHERE b.id = e.from_task
 	               AND NOT ` + taskClosed("b") + `)`
 
+// planUnfinished renders "the plan document aliased as alias still has work
+// outstanding" (025 §9.3): any open task in its set, or a set not yet minted
+// because the document is still draft (§7's literal sentence would read that
+// empty set as finished; §10 calls an unminted set unfinished).
+//
+// "Open" is taskClosed's complement, so this and blockedCondition cannot drift
+// on what closed means. It binds `bt` on top of the aliases taskClosed binds.
+// Every surface that reports plan-to-plan blocking renders this one predicate
+// — planBlockedCondition for the gate, the blocking-plan queries for the
+// cockpit and the brief — so no surface can disagree with Claim.
+func planUnfinished(alias string) string {
+	return `(` + alias + `.status = 'draft'
+	     OR EXISTS (SELECT 1 FROM tasks bt
+	                WHERE bt.plan_doc = ` + alias + `.id
+	                  AND NOT ` + taskClosed("bt") + `))`
+}
+
+// planBlockedCondition holds a task while its plan is ordered after another
+// plan whose work is unfinished (025 §9.3): a document-level blocks edge
+// between the two plan documents, evaluated over the blocking plan through
+// planUnfinished.
+//
+// It binds `de` and `bd` on top of the aliases planUnfinished binds; the
+// enclosing query must alias the task row as `t`.
+var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
+	 SELECT 1 FROM doc_edges de
+	  JOIN docs bd ON bd.id = de.from_doc
+	  WHERE de.type = 'blocks' AND de.to_doc = t.plan_doc
+	    AND ` + planUnfinished("bd") + `)`
+
 // BlockedTaskIDs returns the ids of tasks that have at least one open
-// 'blocks' edge pointing at them (the blocker is not in a closed state).
+// 'blocks' edge pointing at them (the blocker is not in a closed state), plus
+// the tasks a plan-to-plan ordering edge holds. It answers the same question
+// IsBlocked answers per task, so the two must name the same set: a task shown
+// as pickable that Claim then refuses is worse than no badge at all.
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition)
+		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition+`
+		 UNION
+		 SELECT t.id FROM tasks t WHERE `+planBlockedCondition)
 	if err != nil {
 		return nil, fmt.Errorf("blocked task ids: %w", err)
 	}
@@ -917,13 +971,19 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	return out, nil
 }
 
-// IsBlocked reports whether taskID has an open 'blocks' edge pointing at it.
-// It runs inside the given transaction so lease claims can check it
-// atomically.
+// IsBlocked reports whether taskID has an open 'blocks' edge pointing at it,
+// or sits in a plan another plan is ordered before (planBlockedCondition). It
+// runs inside the given transaction so lease claims can check it atomically.
+//
+// The plan arm reads the task row through a one-row subquery because the
+// condition is written against a `t`-aliased row — the same text
+// readyCandidates renders, so the claim path and the ready set cannot
+// disagree about what is pickable.
 func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 	var blocked bool
 	err := tx.QueryRow(
-		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)`,
+		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)
+		     OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND `+planBlockedCondition+`)`,
 		taskID,
 	).Scan(&blocked)
 	if err != nil {

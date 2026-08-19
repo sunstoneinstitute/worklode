@@ -934,6 +934,13 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 		}
 		fmt.Fprintf(&sb, "\nopen blockers: %s", strings.Join(names, ", "))
 	}
+	if len(b.BlockingPlans) > 0 {
+		slugs := make([]string, 0, len(b.BlockingPlans))
+		for _, p := range b.BlockingPlans {
+			slugs = append(slugs, p.Slug)
+		}
+		fmt.Fprintf(&sb, "\nblocking plans: %s", strings.Join(slugs, ", "))
+	}
 	if len(b.Skills.Pinned)+len(b.Skills.Matches) > 0 {
 		fmt.Fprintf(&sb, "\n## Skills\n")
 		var inlined int     // running total of bytes inlined so far, across ALL pins
