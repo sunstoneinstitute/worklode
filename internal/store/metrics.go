@@ -32,6 +32,7 @@ type storeMetrics struct {
 	releases         *prometheus.CounterVec
 	expiries         prometheus.Counter
 	projectWorkReads *prometheus.CounterVec
+	docOps           *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -56,8 +57,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_project_work_reads_total",
 			Help: "ListProjectWorkFacts reads by outcome.",
 		}, []string{"outcome"}),
+		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_doc_operations_total",
+			Help: "Design-document mutations by op (create|update|accept|revise) and outcome.",
+		}, []string{"op", "outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads, m.docOps)
 	return m
 }
 
@@ -97,6 +102,16 @@ func (m *storeMetrics) projectWorkRead(err error) {
 		return
 	}
 	m.projectWorkReads.WithLabelValues(outcome(err)).Inc()
+}
+
+// docOp records one document mutation by op and outcome. op is the caller's
+// fixed verb (create|update|accept|revise), never a doc id or project — those
+// are unbounded.
+func (m *storeMetrics) docOp(op string, err error) {
+	if m == nil {
+		return
+	}
+	m.docOps.WithLabelValues(op, outcome(err)).Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the

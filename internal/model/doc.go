@@ -1,0 +1,48 @@
+package model
+
+import "time"
+
+// Doc is a backbone design document (025 §5): a spec, an ADR, or a plan.
+// Number is 0 for plans, which carry no corpus number (025 §14.3); Issued is
+// "" until the document is accepted; Assignee defaults to the creator and is
+// what the accept gate checks.
+type Doc struct {
+	ID        int64     `json:"id"`
+	Project   string    `json:"project"`
+	Kind      string    `json:"kind"`   // spec | adr | plan
+	Number    int       `json:"number"` // 0 for plans
+	Slug      string    `json:"slug"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"` // the full markdown, frontmatter included
+	Status    string    `json:"status"`
+	Version   int       `json:"version"`
+	Issued    string    `json:"issued"` // YYYY-MM-DD, "" when unset
+	Assignee  string    `json:"assignee"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// DocSection is one addressable section of a spec or ADR (025 §3). Plans have
+// none. Anchor is the identity and is frozen once Published; LastRevisedIn is
+// the document version whose accept last changed the section (025 §4.4).
+type DocSection struct {
+	Anchor        string `json:"anchor"`
+	Number        string `json:"number"` // "4.1a", "" for an unnumbered heading
+	Heading       string `json:"heading"`
+	Depth         int    `json:"depth"`
+	Position      int    `json:"position"` // 0-based document order
+	LastRevisedIn int    `json:"last_revised_in"`
+	Published     bool   `json:"published"`
+}
+
+// DocEdge is one typed link out of a document (025 §14). Exactly one of ToDoc
+// and ToExternal is set: ToExternal carries a reference this backbone cannot
+// resolve. FromAnchor and ToAnchor are "" for a document-level edge.
+type DocEdge struct {
+	Type       string `json:"type"`
+	FromAnchor string `json:"from_anchor"`
+	ToDoc      int64  `json:"to_doc"`
+	ToAnchor   string `json:"to_anchor"`
+	ToExternal string `json:"to_external"`
+}
