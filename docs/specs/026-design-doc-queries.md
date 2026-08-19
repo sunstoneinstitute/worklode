@@ -88,8 +88,10 @@ backbone `docs` tables, graph projection.
 | What amends or replaces a section | `amends`/`amendedBy`/`replaces`/`isReplacedBy` maps | `doc_edges` |
 | Whether a claim is in force yet | `status` of the *claiming* document (§3.1) | `docs.status` |
 
-Only the third needs the server, and it uses the existing task API. Everything else is local
-file reading and answers offline.
+The "After 025" column is now the present tense: 025 shipped the `docs` tables, and WL-147
+moved reference resolution off the git tree onto them. Every query here needs the server —
+the corpus is one of the things it serves — and only the third needs anything beyond it, the
+existing task API.
 
 **This spec is a stated exception to the metrics rule** (022; `CLAUDE.md`), which requires
 `worklode_*` metrics of any change adding an HTTP endpoint, background loop, outbound call, or
