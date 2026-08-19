@@ -51,6 +51,9 @@ func TestDecideRoles(t *testing.T) {
 		{"user may write tasks", userSubject(), permTaskWrite, true, "allowed"},
 		{"user may not manage projects", userSubject(), permProjectAdmin, false, "no_role"},
 		{"user may not mint tokens", userSubject(), permActorAdmin, false, "no_role"},
+		{"user may author documents", userSubject(), permDocWrite, true, "allowed"},
+		{"user may not import a corpus", userSubject(), permDocImport, false, "no_role"},
+		{"admin may import a corpus", adminSubject(), permDocImport, true, "allowed"},
 		{"admin may write tasks", adminSubject(), permTaskWrite, true, "allowed"},
 		{"admin may manage projects", adminSubject(), permProjectAdmin, true, "allowed"},
 		{"anonymous may not read", Subject{Via: authNone}, permTaskRead, false, "unauthenticated"},
@@ -90,7 +93,9 @@ func TestOpenSubjectIsNeverAdmin(t *testing.T) {
 // carries. It is derived from the policy rather than written per route, so
 // this is what keeps every admin route saying the same thing.
 func TestAdminOnlyDenialWording(t *testing.T) {
-	for _, perm := range []Permission{permProjectAdmin, permActorAdmin, permSkillAdmin, permInboxAdmin} {
+	for _, perm := range []Permission{
+		permProjectAdmin, permActorAdmin, permSkillAdmin, permInboxAdmin, permDocImport,
+	} {
 		d := Decide(Request{Subject: userSubject(), Permission: perm})
 		if got := denialMessage(d); got != "admin required" {
 			t.Errorf("%s denial message = %q, want %q", perm, got, "admin required")

@@ -37,10 +37,13 @@ outright once it is fixed over annotating it as resolved.
   mismatch rather than picking a winner (part-4 ruling 15: choosing is a
   design act, not a transcription), so it needs a spec amendment: either the
   reader grows table support, or the gate becomes the presence of the corpus
-  keys. `lode doc sync` has since shipped on the scalar side
-  (`internal/cli/client.go`'s flat parser, `internal/cmd/doc.go` citing §16.1),
-  so the code has already chosen and 025 §5/§10 contradict it; the
-  unimplemented `doc pull`/`push` still reference the block.
+  keys. `lode doc sync` has since been retired unshipped (`f11af04`,
+  2026-08-17), withdrawing 025 §16 and §5.1 with it, so nothing reads a
+  `[doc_sync]` block at all; the scalar `spec_corpus`/`plan_corpus` keys
+  survive only as `lode show --spec/--adr`'s corpus locator
+  (`internal/cli/client.go`'s flat parser). The contradiction is now confined
+  to 025 §5/§10's text, and the corpus cutover (025 §12) removes its subject
+  rather than reconciling it.
 - `[P2]` **Per-artifact delivery tracking** (004 §5.3, already deferred there): a
   repo shipping two images plus a CLI binary has one `done_state`. The
   `registry_package` handler mints every image as an artifact, but delivery is
@@ -257,11 +260,13 @@ outright once it is fixed over annotating it as resolved.
   content-negotiate — pick a serving strategy deliberately. Specs 006 §14,
   006 §13.2 item 3, 025 §17 and the `ns/ontology.ttl` header still record the
   rdf-registry approach and need amending.
-- `[gated]` **Design-doc sync normalizes frontmatter YAML timestamps to RFC3339**
-  (spec 025): `internal/designdoc/corpus.go`'s `frontmatterJSON` re-encodes
-  `issued: 2026-01-01` as `"2026-01-01T00:00:00Z"` in the stored JSON —
-  deterministic and idempotency-safe, but not byte-faithful to the source
-  file. Preserving the original lexical form is deliberately deferred.
+- `[P4]` **`internal/designdoc/corpus.go`'s sync loader is dead code.**
+  `LoadSyncCorpus`, `CorpusDoc`, `SectionMeta`, `EdgeMeta` and
+  `frontmatterJSON` served the retired git→backbone sync (`f11af04`) and now
+  have no caller outside `corpus_test.go`; `lode doc import` walks the corpus
+  itself. Deleting them also retires the RFC3339-timestamp caveat this entry
+  used to record, since nothing re-encodes frontmatter as JSON any more.
+  `Title` and the unexported helpers stay — the importer uses them.
 - `[gated]` **`app.css` is un-minified**: the Tailwind build ships readable output so the
   contract test can assert readable strings; minify once that test asserts on
   something other than raw CSS text.
@@ -324,10 +329,10 @@ Design items landed in spec 025. These are the mechanical leftovers.
   but cheap to tighten to "task exists".
 - `[gated]` **`lode show --spec/--adr/<id>` shipped as the cat-mode slice of 026 §3
   only (2026-08-07).** `--resolved` / `--with-drafts` consolidation (026
-  §3.1–§3.2) remains unimplemented. `lode doc sync` and `lode doc list` now
-  exist (spec 025); `lode doc sections`, `--strict-refs`, and the 026 §2
-  planning-status flags (`--needs-planning` / `--needs-execution`) remain
-  unimplemented.
+  §3.1–§3.2) remains unimplemented. `lode doc list` now exists (spec 025),
+  carrying the 026 §2 planning-status flags (`--needs-planning` /
+  `--needs-execution`); `lode doc sync` was retired unshipped (`f11af04`).
+  `lode doc sections` and `--strict-refs` remain unimplemented.
 - `[P4]` **025 (draft; §18 and elsewhere) still spells the command `lode doc show`;
   026 §3 implements the same command spelled `lode show` (2026-08-07).**
   `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`

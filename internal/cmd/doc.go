@@ -74,6 +74,7 @@ func newDocCmd() *cobra.Command {
 		newDocAcceptCmd(),
 		newDocReviseCmd(),
 		newDocAnchorsCmd(),
+		newDocImportCmd(),
 	)
 	return cmd
 }
