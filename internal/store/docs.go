@@ -851,15 +851,27 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 	return nil
 }
 
-// checkPlanOrdering enforces that a blocks edge runs between two plan
-// documents (025 §5): it orders plan against plan, and planBlockedCondition
-// reads it as the blocking plan's whole task set. An unresolved reference is
-// refused too — nothing here can say it names a plan, and a to_external
-// ordering edge would gate nothing while looking like it did.
+// checkPlanOrdering enforces that a blocks edge runs between two *distinct*
+// plan documents (025 §5): it orders plan against plan, and
+// planBlockedCondition reads it as the blocking plan's whole task set. An
+// unresolved reference is refused too — nothing here can say it names a plan,
+// and a to_external ordering edge would gate nothing while looking like it
+// did.
+//
+// A plan naming its own slug resolves to itself (resolveDocRef matches within
+// the project), which would wedge that plan's task set forever: with
+// from_doc = to_doc its own open tasks block themselves, and while it is draft
+// the unminted-set arm blocks too. Cycles through two or more plans are
+// reachable the same way and are not detected here (WL-144).
 func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolved bool) error {
 	if !resolved {
 		return fmt.Errorf(
 			"blocks edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
+			docID, ref, ErrInvalidInput)
+	}
+	if toDoc == docID {
+		return fmt.Errorf(
+			"blocks edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
 			docID, ref, ErrInvalidInput)
 	}
 	for _, end := range []struct {

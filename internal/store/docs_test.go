@@ -2228,6 +2228,25 @@ func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
 	}
 }
 
+// TestDocEdgesRejectSelfBlockingPlan: a plan whose `blocks` names its own slug
+// resolves to itself and would wedge its own task set forever — every task of
+// the plan would block itself, and while the plan is draft the unminted-set
+// arm blocks too. It is refused at write time (025 §5).
+func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "self-blocker", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblocks: self-blocker\n---\n\n# Plan\n",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "cannot block itself") {
+		t.Fatalf("createDoc = %v, want it to say a plan cannot block itself", err)
+	}
+}
+
 // --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
 
 // planCoveringBody renders a plan whose frontmatter covers refs and whose
