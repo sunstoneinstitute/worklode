@@ -3,6 +3,11 @@
 Non-blocking items from the v1 review rounds. Import these as tracker tasks
 once an instance is running (dogfooding); until then this file is the list.
 
+That migration has started: **file new follow-ups as tracker tasks**
+(`lode task add --follow-up-to <the task that surfaced it>`), not here. The
+task-secrets items went first (WL-102, WL-103, WL-104). What remains below is
+the backlog still to be imported.
+
 Each item carries a priority tag (assessed 2026-08-14):
 
 - `[P0]` exposure or silent wrongness — schedule now
@@ -379,28 +384,3 @@ one pass.
   `task.secrets_materialized` is a spec amendment plus a one-line change, and
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
-
-- `[P1]` **go-keyring's macOS backend caps a secret at roughly 3 KB, and spec
-  017's own worked example exceeds it.** `keyring_darwin.go` builds the whole
-  `security add-generic-password` invocation as one command string and returns
-  `ErrSetDataTooBig` past 4096 bytes, after base64 inflates the value by 4/3.
-  `KUBECONFIG_HZDEV` — the catalog example the spec and all three plans use —
-  is routinely 3–6 KB, so `lode secrets pack` will fail for it on macOS, which
-  017 §2 names as the primary platform. The plan's design call #1 (go-keyring
-  in place of the spec's ssh-agent-encrypted file) did not account for this.
-  Needs a chunking scheme, a large-value fallback, or a revisit of that design
-  call before the part-3 ceremony makes the path load-bearing.
-- `[P2]` **`.worklode/` is not in `.gitignore`.** Part 3 writes
-  `.worklode/secrets.env` into the worktree at ceremony time; until the
-  directory is ignored it shows up as untracked and can be swept into an agent
-  commit. The file holds `op://` references only, never values, so this is
-  hygiene rather than exposure — but it should land before part 3 does.
-- `[P2]` **`secrets.ValidName` admits loader-sensitive names.** The grammar is
-  `^[A-Z][A-Z0-9_]*$` (017 §2), which accepts `PATH`, `LD_PRELOAD`, `DYLD_*`,
-  `IFS` and `BASH_ENV`; `lode secrets exec` injects whatever the manifest holds
-  into the child environment. Today the only thing standing between those names
-  and a child process is that the catalog is an admin-controlled ConfigMap, so
-  this is defence in depth rather than a live hole. A deny-list belongs next to
-  the grammar, but it changes a contract the server validates against too
-  (`internal/api/tasks.go`, `internal/store/tasks.go`), so it is a spec
-  amendment rather than a local edit.

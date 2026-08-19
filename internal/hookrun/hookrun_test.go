@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,26 +19,42 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/go-keyring"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// TestMain sets a package-wide default LODE_SKILLS_DIR before any test runs,
-// so isolation from a developer's real ~/.worklode/skills is structural
-// rather than resting on "no other test's brief happens to carry skills".
-// Individual skills tests still set their own via t.Setenv (scoped and
-// auto-restored); this is the backstop for any that forget.
+// TestMain isolates the package from the developer's real machine before any
+// test runs: a temp LODE_SKILLS_DIR (so no brief can reach ~/.worklode/skills)
+// and a temp HOME plus a mock keyring (so no worktree-remove can reach a real
+// keychain). Isolation is structural here rather than resting on "no test
+// happens to carry skills" or "no test id happens to be live": worktree-remove
+// purges from ~/.cache/worklode/secrets/<id>.json and the OS keystore, and the
+// ids these tests use (WL-1..WL-4) are exactly the ones a developer's own
+// tasks have. Individual tests still set their own (scoped and auto-restored);
+// this is the backstop for any that forget.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "worklode-skills-test-*")
+	dir, err := os.MkdirTemp("", "worklode-hookrun-test-*")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "TestMain: create temp skills dir:", err)
+		fmt.Fprintln(os.Stderr, "TestMain: create temp dir:", err)
 		os.Exit(1)
 	}
-	os.Setenv("LODE_SKILLS_DIR", dir)
+	home, skills := filepath.Join(dir, "home"), filepath.Join(dir, "skills")
+	for _, d := range []string{home, skills} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			fmt.Fprintln(os.Stderr, "TestMain: create", d, err)
+			os.Exit(1)
+		}
+	}
+	os.Setenv("LODE_SKILLS_DIR", skills)
+	os.Setenv("HOME", home)
+	keyring.MockInit()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -798,6 +815,151 @@ func TestWorktreeRemoveReleasesLease(t *testing.T) {
 	}
 	if detail.Lease != nil {
 		t.Fatalf("lease after worktree-remove = %+v, want nil", detail.Lease)
+	}
+}
+
+// TestWorktreeRemovePurgesSecrets exercises the real-server path: a
+// worktree-remove that also successfully releases the lease must purge the
+// task's materialized secrets (spec 017: materialized lifetime equals
+// worktree lifetime).
+func TestWorktreeRemovePurgesSecrets(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Purge me")
+
+	if err := secrets.Put(taskID, "A_TOKEN", "v"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Materialized: []string{"A_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
+	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "worktree-remove",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	}
+	if !rec.hitAny("/release") {
+		t.Fatalf("release endpoint was not hit; paths: %v", rec.paths)
+	}
+	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err == nil {
+		t.Fatal("secret survived worktree removal")
+	}
+	if _, ok := secrets.LoadManifest(taskID); ok {
+		t.Fatal("manifest survived worktree removal")
+	}
+}
+
+// TestWorktreeRemovePurgesSecretsRegardlessOfBackbone proves the purge is
+// unconditional on the backbone call's outcome: hooks never fail the event,
+// and the local purge must happen even when there is no reachable backbone
+// at all. Uses addWorktree (no real server needed) rather than
+// setupLeasedWorktree so the worktree path parses under the layout
+// (exactly one level below the base) without requiring a claim.
+func TestWorktreeRemovePurgesSecretsRegardlessOfBackbone(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+
+	const taskID = "WL-3"
+	if err := secrets.Put(taskID, "A_TOKEN", "v"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Materialized: []string{"A_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, taskID, "fix")
+
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
+	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:  "worktree-remove",
+		Stdin:  bytes.NewReader(payload),
+		Stdout: &stdout,
+		Stderr: &stderr,
+		// No backbone: the release call will warn, but the local purge must
+		// have happened regardless.
+		NewClient: func() (*cli.Client, error) { return nil, errors.New("no config") },
+	})
+	if code != 0 {
+		t.Fatalf("hook exit = %d; hooks never fail the event", code)
+	}
+	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err == nil {
+		t.Fatal("secret survived worktree removal")
+	}
+	if _, ok := secrets.LoadManifest(taskID); ok {
+		t.Fatal("manifest survived worktree removal")
+	}
+}
+
+// TestWorktreeExitKeepsSecrets is the converse of the two above, and the
+// reason purgeSecrets is bound to removal rather than to a session leaving.
+// A session that exits a worktree still holds that task's lease and can come
+// back (spec 012 §4: one session working several tasks in sequence); spec 017
+// §3 purges on exit only for a lease that is gone. Purging here would cost a
+// fresh consent and a fresh Touch ID on return — unobtainable in the
+// non-interactive session that is the common case.
+func TestWorktreeExitKeepsSecrets(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+
+	const taskID = "WL-4"
+	if err := secrets.Put(taskID, "A_TOKEN", "v"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Materialized: []string{"A_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, taskID, "hop")
+	if err := writeSessionMarker(wtDir, "sess-1", time.Now()); err != nil {
+		t.Fatalf("write session marker: %v", err)
+	}
+
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
+	payload := payloadJSON(t, Payload{Cwd: root, SessionID: "sess-1", ToolInput: toolInput})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:     "worktree-exit",
+		Stdin:     bytes.NewReader(payload),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		NewClient: func() (*cli.Client, error) { return nil, errors.New("no config") },
+	})
+	if code != 0 {
+		t.Fatalf("hook exit = %d; hooks never fail the event", code)
+	}
+	// Positive control: without it, "the secrets survived" would also be true
+	// of a handler that returned at its first guard. The deliberately-failing
+	// NewClient proves endSession was reached, and the marker removal proves
+	// the handler ran to its end.
+	if !strings.Contains(stderr.String(), "load config") {
+		t.Fatalf("handler did not reach the backbone call; stderr: %q", stderr.String())
+	}
+	if _, ok := markerSessionID(wtDir); ok {
+		t.Fatal("session marker survived worktree-exit")
+	}
+	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err != nil {
+		t.Fatalf("leaving the worktree purged a still-leased task's secrets: %v", err)
+	}
+	if _, ok := secrets.LoadManifest(taskID); !ok {
+		t.Fatal("leaving the worktree removed a still-leased task's manifest")
 	}
 }
 
