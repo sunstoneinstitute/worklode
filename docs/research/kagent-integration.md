@@ -413,14 +413,24 @@ Four things make it a different proposition from kagent:
   immutable after creation, plus an upgrade advisory for a warm-start race in
   v0.5.0–v0.5.1. Beta backed by a SIG is not the same thing as an API worth
   writing into a spec today.
-- **The isolation needs cluster support.** Without a gVisor or Kata
-  `RuntimeClass` installed, what you have is a pod-lifecycle controller.
-  Whether `hzdev` and the admin cluster (039) offer one is unverified.
+- **The isolation is not available to us, and would be a separate project.**
+  Neither `hzdev` nor the admin cluster (039) runs a gVisor or Kata
+  `RuntimeClass` today — operator-confirmed, 2026-08-19. So adopting
+  agent-sandbox as things stand buys pod lifecycle management and nothing
+  else; the isolation it is chiefly known for arrives only if someone installs
+  and then operates a second container runtime. That is a real cost to weigh
+  separately, not a switch the controller flips. It also means the feature is
+  not a blocker for evaluating the rest: a proof of concept runs fine on
+  `runc`, and warm pools and hibernate/resume — the parts worklode would
+  actually use — do not depend on it.
 
 **Synthesis: right shape, wrong seam, too early — but it is the project to
 watch, and kagent is not.** If worklode ever provisions long-lived sandboxes
 rather than dispatching short-lived workers, this is the first thing to
-evaluate, against a plain `Job` as the baseline it has to beat.
+evaluate, against a plain `Job` as the baseline it has to beat. Note what that
+comparison is really about: with no `RuntimeClass` in either cluster, the case
+for agent-sandbox over a `Job` rests entirely on warm-pool cold starts and
+hibernate/resume, not on isolation.
 
 ### 5.2 Actions Runner Controller — prior art, not a dependency
 
@@ -498,10 +508,11 @@ Follow-up 3 in §4.3 changes accordingly: watch agent-sandbox, not Substrate.
   numbers and dates were verified independently against the release feed, the
   per-release API changes were not. Treat §5.1's breaking-change list as
   indicative of churn rather than as a migration checklist.
-- **Whether our clusters can deliver agent-sandbox's isolation is unknown.**
-  No check was made for a gVisor or Kata `RuntimeClass` in the admin cluster
-  or `hzdev` (039). Without one, its headline feature is unavailable — this is
-  the first thing to establish if §5.4's trigger ever fires.
+- ~~Whether our clusters can deliver agent-sandbox's isolation is unknown.~~
+  **Resolved 2026-08-19:** neither cluster runs a gVisor or Kata
+  `RuntimeClass`. What is still unknown is the cost and appetite for
+  installing and operating one — see §5.1, where this now sits as a finding
+  rather than a gap.
 - **agent-sandbox has no named adopters.** The announcement cites ADK and
   LangChain as integration points, not as users, and no production reference
   was found. Its scale claims — tens of thousands of parallel sandboxes — are
