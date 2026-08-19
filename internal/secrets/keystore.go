@@ -30,11 +30,25 @@ func checkItem(taskID, name string) error {
 
 // Put stores one secret value for a task. The value comes from the op-run
 // child environment (see `lode secrets pack`) and goes nowhere else.
+//
+// OS keystores cap an item's size — macOS at roughly 2.9 KB of raw value
+// (security(1) rejects an add-generic-password command over 4096 bytes, and
+// go-keyring base64s the value first), Windows at 2560. A value over the cap
+// is a catalog-modelling error rather than a keystore bug: an asset that big
+// is a credential wrapped in non-secret scaffolding, and only the credential
+// belongs here. Say so, because the backend's own error says only "data
+// passed to Set was too big".
 func Put(taskID, name, value string) error {
 	if err := checkItem(taskID, name); err != nil {
 		return err
 	}
 	if err := keyring.Set(Service(taskID), name, value); err != nil {
+		if errors.Is(err, keyring.ErrSetDataTooBig) {
+			return fmt.Errorf("keystore set %s for %s: the value is %d bytes and this OS "+
+				"keystore caps an item at ~2.5-3 KB; split the catalog entry so only the "+
+				"credential is a secret and the non-secret remainder ships as a plaintext "+
+				"template: %w", name, taskID, len(value), err)
+		}
 		return fmt.Errorf("keystore set %s for %s: %w", name, taskID, err)
 	}
 	return nil
