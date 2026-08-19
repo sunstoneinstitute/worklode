@@ -86,4 +86,20 @@ func TestDirtyProjects(t *testing.T) {
 	if part >= through {
 		t.Fatalf("limited through = %d; want < %d (only one row covered)", part, through)
 	}
+
+	// Resuming from part must still surface the not-yet-read work (beta):
+	// a batch boundary must never silently skip unprojected changes.
+	rest, _, err := s.DirtyProjects(ctx, part, 100)
+	if err != nil {
+		t.Fatalf("resume from part: %v", err)
+	}
+	found := false
+	for _, p := range rest {
+		if p == "beta" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("resume from part = %v; want beta still present", rest)
+	}
 }
