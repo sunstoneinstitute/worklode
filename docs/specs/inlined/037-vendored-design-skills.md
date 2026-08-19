@@ -24,7 +24,7 @@ marketplace — do that well and do it against files in a layout Worklode does
 not use.
 
 This spec adopts them by **vendoring**: their skills are copied into
-`plugins/lode/`, merged where both treat the same job, and edited to know
+`plugins/claude/lode/`, merged where both treat the same job, and edited to know
 Worklode's documents and the Sunstone Way. It covers the vendored tree and its
 drift check, the plugin-qualified skill identity the registry needs before two
 plugins can ship the same skill name, `lode install`'s version pinning and
@@ -64,7 +64,7 @@ keeps the edits stated and §2.3 keeps the drift visible; nothing makes it free.
 
 ### 2.1 Layout
 
-Vendored skills live under `plugins/lode/skills/`, alongside the CLI-wrapper
+Vendored skills live under `plugins/claude/lode/skills/`, alongside the CLI-wrapper
 skills already there. They are ordinary skills with no marker distinguishing
 them at load time; provenance lives in metadata, not in the tree shape.
 
@@ -112,7 +112,7 @@ grilling's design tree inside brainstorming's phased lifecycle.
 Prompts compose in two layers. A **plugin-level** prompt holds what applies to
 every skill from that source — path rewrites, house style, the standing
 instruction that task state belongs to `lode` — and lives at
-`plugins/lode/skills/UPSTREAM-<plugin>.md`. A **skill-level** prompt holds what
+`plugins/claude/lode/skills/UPSTREAM-<plugin>.md`. A **skill-level** prompt holds what
 is specific to one skill. The effective transformation is the plugin prompt
 followed by the skill prompt.
 
@@ -145,7 +145,7 @@ able to commit.
 ### 2.4 Licence and attribution
 
 Both upstream plugins are MIT — superpowers © 2025 Jesse Vincent,
-mattpocock-skills © 2026 Matt Pocock. `plugins/lode/skills/LICENSES.md` carries
+mattpocock-skills © 2026 Matt Pocock. `plugins/claude/lode/skills/LICENSES.md` carries
 both notices in full and lists which vendored skills derive from which source.
 The `upstream` frontmatter block is the machine-readable half of the same fact;
 the file is the half a licence audit reads.
@@ -576,7 +576,7 @@ available until the dimension is fixed. That is its own spec.
 
 ## 13. Acceptance criteria
 
-1. `plugins/lode/skills/` holds the vendored set: `handoff` and
+1. `plugins/claude/lode/skills/` holds the vendored set: `handoff` and
    `domain-modeling` unchanged, and one merged skill per §3.2 row.
 2. Every vendored skill declares `upstream`, and `LICENSES.md` carries both MIT
    notices with per-skill provenance.

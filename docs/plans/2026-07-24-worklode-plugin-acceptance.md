@@ -14,7 +14,7 @@ Prereqs for the human steps:
 - `lode` CLI on PATH (`go install ./cmd/lode`) and pointed at the server
   (`~/.config/worklode/config.toml` with `server`/`token`).
 - The `lode` plugin installed from the Sunstone marketplace
-  (`sunstoneinstitute/claude-plugins`, `plugins/lode/`); `lode` on PATH so the
+  (`sunstoneinstitute/claude-plugins`, `plugins/claude/lode/`); `lode` on PATH so the
   hook shim is live.
 
 ## 1 — `/lode:next` binds a worktree + lease + brief; plain checkout untouched (human)

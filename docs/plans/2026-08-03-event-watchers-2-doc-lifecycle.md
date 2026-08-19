@@ -91,7 +91,7 @@ prometheus/client_golang.
 | `internal/watcher/metrics.go` (+ test) (new) | `worklode_watcher_actions_total{rule,outcome}` |
 | `internal/cmd/doc.go`, `internal/cli/client.go` | `lode doc submit` |
 | `e2e/doc_lifecycle_test.go` (new) | §9's e2e: submit/accept via HTTP only |
-| claude-plugins `plugins/lode/skills/…` | §7: the planning skill claims its task |
+| claude-plugins `plugins/claude/lode/skills/…` | §7: the planning skill claims its task |
 
 ---
 
@@ -570,7 +570,7 @@ blockedBy: [ ]
 **Files (in `~/git/sunstone/claude-plugins`, branch + PR):**
 - Modify or create: the lode plugin's planning/decomposition skill
 
-**Reality check first:** no `plugins/lode/` exists in claude-plugins today,
+**Reality check first:** no `plugins/claude/lode/` exists in claude-plugins today,
 and 025 §18's guided-flow skills (authoring, review, decomposition) are
 future work of 025's orbit. Do not build them here. The §7 deliverable is
 one rule wherever the planning ceremony lives at execution time:
@@ -582,7 +582,7 @@ one rule wherever the planning ceremony lives at execution time:
   `agent_sessions → leases → tasks`, 012 §4; pre-claim exploration stays
   unattributed by design).
 - If none exists: create the minimal skill —
-  `plugins/lode/skills/plan-spec/SKILL.md` (mirror an existing plugin's
+  `plugins/claude/lode/skills/plan-spec/SKILL.md` (mirror an existing plugin's
   manifest conventions; register in the marketplace file as its
   neighbours do) whose body is: claim the design task first, then follow
   `superpowers:writing-plans` against the accepted spec, then

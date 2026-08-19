@@ -464,7 +464,7 @@ lode project show --project wl --days 7
 lode project show --days 0        # all history
 ```
 
-The Claude Code plugin (`lode` plugin, `plugins/lode/` in the
+The Claude Code plugin (`lode` plugin, `plugins/claude/lode/` in the
 `sunstoneinstitute/claude-plugins` repo, installable from the Sunstone
 plugins marketplace) provides a `/lode:*` slash-command flow for agents
 picking up work:

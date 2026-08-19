@@ -8,7 +8,7 @@ covers: docs/specs/008-worklode-plugin.md
 
 **Goal:** Implement `docs/specs/008-worklode-plugin.md`: the worktree-bound pickup lifecycle (`lode next`/`resume`/`done`/`block`/`status`), `lode task brief`, compiled `lode hook` handlers with `--next` daisy-chaining, `lode install-git-hooks`, and the `lode` Claude Code plugin (slash-command skills, `working-under-worklode` skill, `lode-worker` agent, hooks.json).
 
-**Architecture:** Two repos. Go machinery lands in **worklode** (`~/git/sunstone/worklode`): new `internal/worktree` package (worktree naming/parse/identity), `lode hook <event>` subcommands (the compiled hook binary *is* the CLI), lifecycle commands, and a `brief` endpoint + lease-rebind endpoint server-side. The Claude Code plugin lands in **claude-plugins** (`~/git/sunstone/claude-plugins`) as `plugins/lode/` — thin skills invoking `lode … --json`, hooks.json wiring editor events to `lode hook …` via a guard script. Hooks are NOPs outside a `wt/<id>-<slug>` worktree.
+**Architecture:** Two repos. Go machinery lands in **worklode** (`~/git/sunstone/worklode`): new `internal/worktree` package (worktree naming/parse/identity), `lode hook <event>` subcommands (the compiled hook binary *is* the CLI), lifecycle commands, and a `brief` endpoint + lease-rebind endpoint server-side. The Claude Code plugin lands in **claude-plugins** (`~/git/sunstone/claude-plugins`) as `plugins/claude/lode/` — thin skills invoking `lode … --json`, hooks.json wiring editor events to `lode hook …` via a guard script. Hooks are NOPs outside a `wt/<id>-<slug>` worktree.
 
 **Tech Stack:** Go (worklode repo), Claude Code plugin format (skills/agents/hooks.json). Requires plans 004 and 005 merged.
 
@@ -16,7 +16,7 @@ covers: docs/specs/008-worklode-plugin.md
 - Hook events: `SessionStart`, `SessionEnd`, `PreToolUse`, `WorktreeCreate`, `WorktreeRemove` exist. **`EnterWorktree`/`ExitWorktree` do NOT exist** — the spec's EnterWorktree auto-resume maps to `SessionStart` (fires in the session's cwd) + `WorktreeCreate`; ExitWorktree release maps to `WorktreeRemove` + `SessionEnd`.
 - `PreToolUse` matchers filter tool *name* only; filtering on `git commit` uses `"matcher": "Bash"` plus `"if": "Bash(git commit *)"` (permission-rule syntax).
 - Hooks receive JSON on stdin (`cwd`, `session_id`, `hook_event_name`, `tool_input` for PreToolUse); a `SessionStart` hook injects context by printing `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}` and exiting 0.
-- Plugin layout: `plugins/lode/.claude-plugin/plugin.json` (manifest only), `skills/<name>/SKILL.md` (invoked as `/lode:<name>`), `agents/*.md`, `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` available in hook commands.
+- Plugin layout: `plugins/claude/lode/.claude-plugin/plugin.json` (manifest only), `skills/<name>/SKILL.md` (invoked as `/lode:<name>`), `agents/*.md`, `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` available in hook commands.
 - Skill dynamic context: `` !`command` `` runs before the model sees the skill; `$ARGUMENTS`/`$1` substitution; `disable-model-invocation: true` for user-only commands.
 
 **Settled decisions:**
@@ -194,7 +194,7 @@ Work on a branch; this repo reviews via PR. **First look at one existing plugin 
 ### Task B1: Plugin skeleton + hooks
 
 **Files:**
-- Create: `plugins/lode/.claude-plugin/plugin.json`:
+- Create: `plugins/claude/lode/.claude-plugin/plugin.json`:
 
 ```json
 {
@@ -205,7 +205,7 @@ Work on a branch; this repo reviews via PR. **First look at one existing plugin 
 }
 ```
 
-- Create: `plugins/lode/hooks/hooks.json`:
+- Create: `plugins/claude/lode/hooks/hooks.json`:
 
 ```json
 {
@@ -229,7 +229,7 @@ Work on a branch; this repo reviews via PR. **First look at one existing plugin 
 }
 ```
 
-- Create: `plugins/lode/scripts/hook.sh` (0755):
+- Create: `plugins/claude/lode/scripts/hook.sh` (0755):
 
 ```sh
 #!/bin/sh
@@ -249,7 +249,7 @@ exec lode hook "$1"
 Six thin skills, all `disable-model-invocation: true` (user-invoked commands), each delegating judgment to `working-under-worklode` and mechanics to `lode … --json`.
 
 **Files:**
-- Create: `plugins/lode/skills/next/SKILL.md`:
+- Create: `plugins/claude/lode/skills/next/SKILL.md`:
 
 ```markdown
 ---
@@ -271,8 +271,8 @@ the brief is insufficient, say so: the task likely needs decomposition.
 Load the working-under-worklode skill before starting.
 ```
 
-- Create: `plugins/lode/skills/resume/SKILL.md` — same shape around `` !`lode resume $ARGUMENTS --json` `` ("re-acquire this worktree's task; report what state it was in; continue from the brief").
-- Create: `plugins/lode/skills/done/SKILL.md`:
+- Create: `plugins/claude/lode/skills/resume/SKILL.md` — same shape around `` !`lode resume $ARGUMENTS --json` `` ("re-acquire this worktree's task; report what state it was in; continue from the brief").
+- Create: `plugins/claude/lode/skills/done/SKILL.md`:
 
 ```markdown
 ---
@@ -290,8 +290,8 @@ Then run `lode done --json`, report the result, and surface the printed
 worktree-cleanup instruction to the user.
 ```
 
-- Create: `plugins/lode/skills/block/SKILL.md` — verify a real blocker exists (working-under-worklode judgment), then `lode block --on <id> --json`; if the blocker task doesn't exist yet, create it first with `lode task add` and use its id.
-- Create: `plugins/lode/skills/status/SKILL.md` — `` !`lode status --json` `` , read-only report of task/lease/heartbeat; never mutates.
+- Create: `plugins/claude/lode/skills/block/SKILL.md` — verify a real blocker exists (working-under-worklode judgment), then `lode block --on <id> --json`; if the blocker task doesn't exist yet, create it first with `lode task add` and use its id.
+- Create: `plugins/claude/lode/skills/status/SKILL.md` — `` !`lode status --json` `` , read-only report of task/lease/heartbeat; never mutates.
 
 **Steps:**
 
@@ -301,7 +301,7 @@ worktree-cleanup instruction to the user.
 ### Task B3: `working-under-worklode` skill + `lode-worker` agent
 
 **Files:**
-- Create: `plugins/lode/skills/working-under-worklode/SKILL.md` — judgment only (spec §Skills). Content contract:
+- Create: `plugins/claude/lode/skills/working-under-worklode/SKILL.md` — judgment only (spec §Skills). Content contract:
 
 ```markdown
 ---
@@ -341,7 +341,7 @@ is a signal the task needs decomposition — set it with
 rather than spelunking the repo to reverse-engineer intent.
 ```
 
-- Create: `plugins/lode/agents/lode-worker.md`:
+- Create: `plugins/claude/lode/agents/lode-worker.md`:
 
 ```markdown
 ---

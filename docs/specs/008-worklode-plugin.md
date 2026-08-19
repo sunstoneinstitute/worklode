@@ -6,6 +6,11 @@ requires:
 - docs/specs/012-agent-sessions.md
 - docs/specs/016-org-wide-skills.md
 - docs/specs/022-prometheus-metrics.md
+amendedBy:
+  "#sec-17.4":
+    - 041-pi-agent-integration.md#sec-2
+  "#sec-17.5":
+    - 041-pi-agent-integration.md#sec-4
 ---
 # Spec 008 — Worklode plugin & agent harness integration
 
@@ -740,6 +745,10 @@ standalone.
 
 ### 17.4 Hook delivery {#sec-17.4}
 
+> **Amended by spec 041 §2.** Pi is delivered as a project-local Pi package,
+> rather than an installer-generated global extension shim. Its extension is
+> still the adapter that maps Pi events to the same `lode hook` commands.
+
 Five harnesses take a shell command, so the compiled binary is the integration and the adapter is
 a table. Two do not:
 
@@ -770,6 +779,9 @@ including the ones with no session hooks at all. **A harness with no usable even
 gets the git heartbeat**, which is the coverage floor §9 already accepts.
 
 ### 17.5 Status line {#sec-17.5}
+
+> **Amended by spec 041 §4.** Pi's footer status is owned by its extension and
+> is not a `lode statusline` command binding.
 
 `lode statusline` reads the status-line JSON on stdin and prints one line: the current task key and
 title, lease state, heartbeat freshness, and context/cost from the payload itself. Installed by

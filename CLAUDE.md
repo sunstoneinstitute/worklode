@@ -220,11 +220,11 @@ subtree worth rebuilding.
 
 ## The lode plugin
 
-`plugins/lode/` is the agent-facing half of this repo: the `/lode:*` task
+`plugins/claude/lode/` is the agent-facing half of this repo: the `/lode:*` task
 pickup surface and the `lode-worker` agent. It lives here so it versions with
 the binary it drives — the lifecycle hooks it used to carry now ship with the
 CLI (`lode install`). There is no `commands/` directory: every `/lode:*` entry
-point is a skill under `plugins/lode/skills/`. `next`, `resume`, `done`,
+point is a skill under `plugins/claude/lode/skills/`. `next`, `resume`, `done`,
 `block` and `status` set `disable-model-invocation: true`, so they are
 reachable only as the slash commands `/lode:next` and friends;
 `working-under-worklode` stays model-invocable — it is the done/block/release

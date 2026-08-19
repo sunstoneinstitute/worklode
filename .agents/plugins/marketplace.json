@@ -8,7 +8,7 @@
       "name": "lode",
       "source": {
         "source": "local",
-        "path": "./plugins/lode"
+        "path": "./plugins/claude/lode"
       },
       "policy": {
         "installation": "AVAILABLE",

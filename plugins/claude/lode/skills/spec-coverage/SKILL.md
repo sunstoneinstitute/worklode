@@ -8,7 +8,7 @@ allowed-tools: Bash(lode *) Bash(git *) Bash(python3 *)
 
 Invocation arguments: $ARGUMENTS
 
-Run `python3 plugins/lode/skills/spec-coverage/find_gaps.py` from the repo
+Run `python3 plugins/claude/lode/skills/spec-coverage/find_gaps.py` from the repo
 root. It prints one JSON object per line for every spec under `docs/specs/`
 that no plan under `docs/plans/` covers — a spec is "covered" the moment any
 plan's `covers:` frontmatter names it, at any section, at any level (`full`,
