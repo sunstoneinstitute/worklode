@@ -120,6 +120,12 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 // warning — a brief must never break because a skill was withdrawn or
 // misspelled upstream.
 //
+// Dedupe is on the resolved skill, not the pin: the fallback lets two pins
+// ("tdd" and "superpowers:tdd") name one registry row, and inlining that
+// skill's content twice would just inflate the brief. Warnings stay per pin —
+// each names the spelling the task author wrote, and a pin resolving to a
+// skill another pin already brought in is not an error to report.
+//
 // The brief and POST /api/v1/skills/recommend both go through here, so the
 // two agree on the warning text without hand-copying it.
 func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
@@ -161,6 +167,7 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 
 	var pinned []Skill
 	var warnings []string
+	seen := make(map[string]bool, len(names))
 	for _, name := range names {
 		sk, ok := found[name]
 		if !ok {
@@ -175,6 +182,10 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 		if sk.Deleted {
 			warnings = append(warnings, "pinned skill removed from its source repo: "+name)
 		}
+		if seen[sk.Name] {
+			continue
+		}
+		seen[sk.Name] = true
 		pinned = append(pinned, sk)
 	}
 	return pinned, warnings, nil

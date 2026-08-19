@@ -194,6 +194,50 @@ func TestResolvePinsAfterColonFallback(t *testing.T) {
 	}
 }
 
+// TestResolvePinsDedupesOnResolvedName: two spellings of one pin — bare and
+// plugin-qualified — resolve to the same registry row through the after-colon
+// fallback and must yield that skill once, not twice with its whole content
+// duplicated in the brief.
+func TestResolvePinsDedupesOnResolvedName(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"tdd", "superpowers:tdd"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "tdd" {
+		t.Fatalf("pinned = %+v, want one tdd entry", pinned)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none: a duplicate resolution is not an error", warnings)
+	}
+}
+
+// TestResolvePinsDedupesTwoQualifiedPins: the same after-colon fallback maps
+// two differently-qualified pins onto one registry row.
+func TestResolvePinsDedupesTwoQualifiedPins(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("x", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"a:x", "b:x"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "x" {
+		t.Fatalf("pinned = %+v, want one x entry", pinned)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", warnings)
+	}
+}
+
 // TestResolvePinsExactBeatsFallback: a pin that matches a qualified registry
 // name exactly resolves to it directly and never consults the fallback.
 func TestResolvePinsExactBeatsFallback(t *testing.T) {
