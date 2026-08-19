@@ -659,8 +659,6 @@ nav.local a .cnt {
   }
   .rail {
     order: -1;
-    position: static;
-    top: auto;
   }
 }
 @media (max-width:880px) {
@@ -1171,6 +1169,12 @@ nav.local a .cnt {
   gap: 14px;
   position: sticky;
   top: 78px;
+}
+@media (max-width:1080px) {
+  .rail {
+    position: static;
+    top: auto;
+  }
 }
 .decision {
   background: var(--surface);
