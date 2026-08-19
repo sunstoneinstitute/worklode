@@ -181,13 +181,15 @@ func TestCreateDoc(t *testing.T) {
 	}
 }
 
-// TestCreateDocRejectsStatus: status is import-only. The field is declared so
-// the refusal can name it rather than silently dropping it.
+// TestCreateDocRejectsStatus: status is the corpus importer's field, and an
+// ordinary actor holds no doc.import. The field is declared so the refusal can
+// name it rather than silently dropping it.
 func TestCreateDocRejectsStatus(t *testing.T) {
-	st, h, token := newTestServer(t)
+	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
+	bobToken := docActor(t, st, "bob")
 
-	rr := doReq(t, h, "POST", "/api/v1/docs", token, map[string]any{
+	rr := doReq(t, h, "POST", "/api/v1/docs", bobToken, map[string]any{
 		"project": "proj", "kind": "spec", "number": 25,
 		"slug": "025-x", "body": docSpecBody, "status": "accepted",
 	})
@@ -196,6 +198,113 @@ func TestCreateDocRejectsStatus(t *testing.T) {
 	}
 	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "status") {
 		t.Errorf("error = %q, want it to name the status field", msg)
+	}
+}
+
+// TestCreateDocAtAcceptedForAnImporter: an admin holds doc.import, so a stated
+// status is honoured — and creating a spec accepted must establish everything
+// the accept gate would have, its anchors published at version 1.
+func TestCreateDocAtAcceptedForAnImporter(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	got := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: docSpecBody, Status: "accepted",
+	})
+	if got.Status != "accepted" {
+		t.Fatalf("status = %q, want accepted", got.Status)
+	}
+	rr := doReq(t, h, "GET", docPath(got.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if len(detail.Sections) != 2 {
+		t.Fatalf("sections = %+v, want the two anchored headings", detail.Sections)
+	}
+	for _, sec := range detail.Sections {
+		if !sec.Published {
+			t.Errorf("#%s is unpublished; a spec created accepted has its anchors frozen", sec.Anchor)
+		}
+		if sec.LastRevisedIn != 1 {
+			t.Errorf("#%s last_revised_in = %d, want 1: history is not reconstructed",
+				sec.Anchor, sec.LastRevisedIn)
+		}
+	}
+
+	// The value is checked too: the importer may state a status, not invent one.
+	rr = doReq(t, h, "POST", "/api/v1/docs", token, map[string]any{
+		"project": "proj", "kind": "spec", "number": 26,
+		"slug": "026-x", "body": docSpecBody, "status": "proposed",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown status = %d, want 422, body %s", rr.Code, rr.Body.String())
+	}
+	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "superseded") {
+		t.Errorf("error = %q, want it to name the three statuses", msg)
+	}
+}
+
+// TestReplaceDocEdges is the corpus import's second pass: a reference that
+// resolved to nothing at create time becomes a real edge once its target
+// exists, and nothing else about the document moves.
+func TestReplaceDocEdges(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	// The plan covers a spec that does not exist yet, so the reference is kept
+	// verbatim — the state the import's first pass leaves behind.
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
+	})
+	rr := doReq(t, h, "GET", docPath(plan.ID, ""), token, nil)
+	var before model.DocDetail
+	decodeInto(t, rr, &before)
+	if len(before.Edges) != 1 || before.Edges[0].ToExternal == "" {
+		t.Fatalf("edges before = %+v, want one unresolved covers edge", before.Edges)
+	}
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
+	})
+
+	rr = doReq(t, h, "PUT", docPath(plan.ID, "/edges"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var after model.DocDetail
+	decodeInto(t, rr, &after)
+	if len(after.Edges) != 1 {
+		t.Fatalf("edges after = %+v, want the one covers edge", after.Edges)
+	}
+	got := after.Edges[0]
+	if got.ToDoc != spec.ID || got.ToAnchor != "sec-1" || got.ToExternal != "" {
+		t.Errorf("edge = %+v, want it resolved to doc %d #sec-1", got, spec.ID)
+	}
+	for _, c := range []struct{ name, got, want string }{
+		{"body", after.Body, before.Body},
+		{"status", after.Status, before.Status},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want it untouched (%q)", c.name, c.got, c.want)
+		}
+	}
+	if after.Version != before.Version {
+		t.Errorf("version = %d, want it untouched (%d): the source is unchanged",
+			after.Version, before.Version)
+	}
+	if !after.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Errorf("updated_at moved to %s from %s; re-resolution authors nothing",
+			after.UpdatedAt, before.UpdatedAt)
+	}
+
+	// Import authority, not authoring authority.
+	bobToken := docActor(t, st, "bob")
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/edges"), bobToken, nil); rr.Code != http.StatusForbidden {
+		t.Errorf("non-admin status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "PUT", "/api/v1/docs/4711/edges", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown id status = %d, want 404", rr.Code)
 	}
 }
 

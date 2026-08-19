@@ -76,10 +76,11 @@ type DocEdge struct {
 // for a plan, which carries no corpus number (025 §14.3); Assignee defaults to
 // the caller, who is then the only actor that can accept the document.
 //
-// Status is declared but refused: it exists so the field a corpus importer
-// would set is named on the wire and rejected with a message, rather than
-// silently ignored. A document is created as a draft and accepted through
-// POST /api/v1/docs/{id}/accept.
+// Status is the corpus importer's field: a caller holding doc.import (admin)
+// may state draft, accepted or superseded and have it honoured, because
+// imported history predates the accept gate it would otherwise pass through.
+// Every other caller is refused with a 422 naming the field — a document is
+// created as a draft and accepted through POST /api/v1/docs/{id}/accept.
 type CreateDocInput struct {
 	Project  string `json:"project"`
 	Kind     string `json:"kind"` // spec | adr | plan

@@ -90,6 +90,12 @@ const (
 	// set, so nothing changes; the seam is what is being added.
 	permDocRead  Permission = "doc.read"
 	permDocWrite Permission = "doc.write"
+	// permDocImport is the corpus importer's authority (025 §12). It asserts
+	// facts the ordinary lifecycle establishes — a status set directly instead
+	// of through the accept gate, an edge set replaced wholesale — so it is an
+	// instance-administration act rather than ordinary authoring, and is
+	// separated from doc.write for exactly that reason.
+	permDocImport Permission = "doc.import"
 
 	permActorAdmin Permission = "actor.admin"
 
@@ -163,6 +169,9 @@ var grants = map[Permission][]Role{
 	// the document's assignee, checked in the store.
 	permDocRead:  {RoleUser, RoleAdmin},
 	permDocWrite: {RoleUser, RoleAdmin},
+	// Admin-only: importing a corpus states statuses and edge sets directly,
+	// which is instance administration, not authoring.
+	permDocImport: {RoleAdmin},
 
 	// Admin-only for a reason worth keeping written down: any bearer token
 	// could otherwise mint further tokens, which is privilege escalation.

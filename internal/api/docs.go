@@ -29,10 +29,23 @@ import (
 // this is here so a typo is a named 422 rather than a generic one.
 var validDocKinds = map[string]bool{"spec": true, "adr": true, "plan": true}
 
+// validDocStatuses mirrors the docs.status CHECK constraint. Only the corpus
+// importer may state one (see createDoc); the store re-checks.
+var validDocStatuses = map[string]bool{"draft": true, "accepted": true, "superseded": true}
+
 // invalidDocKindMsg is what createDoc — today the only handler that gates on
 // validDocKinds — answers with. It is a constant so a second write path names
 // the kinds the same way this one does.
 const invalidDocKindMsg = "invalid kind: must be spec, adr, or plan"
+
+// invalidDocStatusMsg names the three statuses a corpus import may assert.
+const invalidDocStatusMsg = "invalid status: must be draft, accepted, or superseded"
+
+// importOnlyStatusMsg is the refusal every caller without doc.import gets for
+// a non-empty status. The field is declared on the wire so the refusal can
+// name it rather than silently dropping it.
+const importOnlyStatusMsg = "status is import-only: a document is created as a draft and accepted " +
+	"with POST /api/v1/docs/{id}/accept"
 
 // docSource is the events.source every /api/v1 document mutation is recorded
 // under. The CHECK on events.source admits no "doc" value and should not: the
@@ -62,11 +75,18 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	req.Project = strings.TrimSpace(req.Project)
 	req.Slug = strings.TrimSpace(req.Slug)
 	req.Assignee = strings.TrimSpace(req.Assignee)
+	req.Status = strings.TrimSpace(req.Status)
+	// A stated status bypasses the accept gate, so it needs the importer's
+	// authority. Without it the field stays refused exactly as before.
 	if req.Status != "" {
-		writeErr(w, http.StatusUnprocessableEntity,
-			"status is import-only: a document is created as a draft and accepted "+
-				"with POST /api/v1/docs/{id}/accept")
-		return
+		if d := Decide(Request{Subject: subjectFrom(r), Permission: permDocImport}); !d.Allowed {
+			writeErr(w, http.StatusUnprocessableEntity, importOnlyStatusMsg)
+			return
+		}
+		if !validDocStatuses[req.Status] {
+			writeErr(w, http.StatusUnprocessableEntity, invalidDocStatusMsg)
+			return
+		}
 	}
 	if !validDocKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidDocKindMsg)
@@ -114,6 +134,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Assignee:  req.Assignee,
 				CreatedBy: actor.ID,
+				Status:    req.Status,
 			}, eventID)
 			if err != nil {
 				return err
@@ -334,6 +355,36 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// replaceDocEdges handles PUT /api/v1/docs/{id}/edges: pass 2 of a corpus
+// import. It re-resolves the document's frontmatter references against the
+// documents that exist now, turning the to_external placeholders an earlier
+// pass left behind — the corpus references forward as well as backward, so a
+// create-time resolution cannot see the whole of it — into real to_doc edges.
+//
+// It carries no request body: the document's own stored body is the source,
+// and nothing else about the document changes. The response is the same
+// DocDetail GET serves, so the caller reads back the edge set it asked for.
+func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	now := s.st.Now()
+	err := s.recordDocEvent(w, r, "edges", "doc.edges_rebuilt", id, nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.ReplaceDocEdges(tx, now, id, eventID)
+		})
+	if err != nil {
+		return
+	}
+	detail, err := s.docDetail(r, id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, detail)
 }
 
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
