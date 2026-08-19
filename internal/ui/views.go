@@ -246,6 +246,63 @@ type DeliverableRow struct {
 	CreatedAt   time.Time
 }
 
+// --- documents ---------------------------------------------------------------
+
+// DocsView is the document corpus index (GET /docs): every spec, ADR and plan
+// the backbone holds (025 §5). Read-only — a document's body is an artifact
+// authored in a file and submitted through the API, not typed into a page.
+type DocsView struct {
+	Page PageProps
+	Docs []DocRow
+}
+
+// DocRow is one document in the index: the stored row, its page URL, and the
+// corpus reference pre-formatted for display ("spec 025"; a plan carries no
+// number, so its reference is its kind alone).
+type DocRow struct {
+	Doc model.Doc
+	URL string
+	Ref string
+}
+
+// DocView is one document's page (GET /docs/{id}): the stored row, its
+// sections with their accept-time state, its edges in both directions, and
+// the open candidate revision when one exists (nil otherwise).
+type DocView struct {
+	Page     PageProps
+	Doc      model.Doc
+	Ref      string
+	Sections []model.DocSection
+	Edges    []DocEdgeRow
+	EdgesIn  []DocEdgeRow
+	Revision *model.DocRevision
+}
+
+// DocEdgeRow is one typed link with its far end resolved for rendering.
+// Anchor is the anchor in the document being read that the edge attaches to
+// ("" for a document-level edge); Label names the other end; URL links to it
+// and is "" for a cross-corpus reference this backbone cannot resolve, which
+// is rendered as text rather than as a dead link.
+type DocEdgeRow struct {
+	Type   string
+	Anchor string
+	Label  string
+	URL    string
+}
+
+// DocStatusChip returns the .chip variant class for a document status
+// (025 §7's draft -> accepted -> superseded ladder).
+func DocStatusChip(status string) string {
+	switch status {
+	case "accepted":
+		return "ok"
+	case "superseded":
+		return "plain"
+	default:
+		return "info"
+	}
+}
+
 // --- creation forms ---------------------------------------------------------
 
 // FormOption is one choice in a form's <select>, pre-selected when Selected.

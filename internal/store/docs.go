@@ -1005,6 +1005,109 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	return out, nil
 }
 
+// ListDocSections returns a document's sections in document order. A plan
+// carries none (025 §9), which is an empty result rather than an error.
+func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT anchor, coalesce(number,''), heading, depth, position, last_revised_in, published
+		   FROM doc_sections WHERE doc_id = $1 ORDER BY position`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
+	}
+	defer rows.Close()
+	var out []model.DocSection
+	for rows.Next() {
+		var sec model.DocSection
+		if err := rows.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
+			&sec.Position, &sec.LastRevisedIn, &sec.Published); err != nil {
+			return nil, fmt.Errorf("scan section of doc %d: %w", docID, err)
+		}
+		out = append(out, sec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
+	}
+	return out, nil
+}
+
+// docEdgeInverse names the reading of each edge type from the far end (025
+// §14): one row carries both directions, so an inbound edge is the stored row
+// relabelled rather than a second row that could disagree. Every type in the
+// doc_edges CHECK has an entry; ListDocEdges refuses a type that does not,
+// because emitting the forward name would state the relation backwards.
+var docEdgeInverse = map[string]string{
+	"covers":         "isCoveredBy",
+	"implements":     "isImplementedBy",
+	"amends":         "amendedBy",
+	"replaces":       "isReplacedBy",
+	"requires":       "isRequiredBy",
+	"wasDerivedFrom": "hadDerivation",
+	"blocks":         "blockedBy",
+}
+
+// ListDocEdges returns a document's edges in both directions: out are the
+// edges its own frontmatter declares, in are the edges other documents point
+// at it with, each read backward — the type carries its inverse spelling and
+// ToDoc names the other end, so a caller can link to it. For an inbound edge
+// FromAnchor is the anchor in docID the edge lands on and ToAnchor the anchor
+// it left from; an inbound edge never has ToExternal, since an unresolved
+// reference names no row here.
+//
+// Both lists are fully ordered, so a caller may compare them as sequences.
+func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.DocEdge, err error) {
+	outRows, err := s.db.QueryContext(ctx,
+		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc,0),
+		        coalesce(to_anchor,''), coalesce(to_external,'')
+		   FROM doc_edges WHERE from_doc = $1
+		  ORDER BY type, coalesce(from_anchor,''), coalesce(to_doc,0),
+		           coalesce(to_anchor,''), coalesce(to_external,'')`, docID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list edges out of doc %d: %w", docID, err)
+	}
+	out, err = scanDocEdges(outRows)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list edges out of doc %d: %w", docID, err)
+	}
+
+	// from_doc and to_anchor swap into the reader's frame: the row is read
+	// from docID's end, so what the writer called its target anchor is the
+	// anchor here, and its source anchor is the far one.
+	inRows, err := s.db.QueryContext(ctx,
+		`SELECT type, coalesce(to_anchor,''), from_doc, coalesce(from_anchor,''), ''
+		   FROM doc_edges WHERE to_doc = $1
+		  ORDER BY type, coalesce(to_anchor,''), from_doc, coalesce(from_anchor,'')`, docID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)
+	}
+	in, err = scanDocEdges(inRows)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)
+	}
+	for i := range in {
+		inverse, ok := docEdgeInverse[in[i].Type]
+		if !ok {
+			return nil, nil, fmt.Errorf(
+				"internal: doc edge type %q has no declared inverse (store.docEdgeInverse)", in[i].Type)
+		}
+		in[i].Type = inverse
+	}
+	return out, in, nil
+}
+
+// scanDocEdges drains a query selecting the five DocEdge columns in order.
+func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
+	defer rows.Close()
+	var out []model.DocEdge
+	for rows.Next() {
+		var e model.DocEdge
+		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
 // create|update|accept|revise.

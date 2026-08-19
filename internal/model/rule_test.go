@@ -52,9 +52,10 @@ var scanned = map[string]mode{
 // exempt a same-named type in internal/cli. An entry no declaration matches
 // is reported as stale, the way router.go treats an unused route guard.
 var allowed = map[string]string{
-	"api.oauthState":  "internal/api/session.go — signed into the oauth-state cookie",
-	"api.cliIntent":   "internal/api/session.go — signed into the CLI-intent cookie",
-	"api.stateChange": "internal/api/web.go — decoded from a stored state_log row",
+	"api.oauthState":      "internal/api/session.go — signed into the oauth-state cookie",
+	"api.cliIntent":       "internal/api/session.go — signed into the CLI-intent cookie",
+	"api.stateChange":     "internal/api/web.go — decoded from a stored state_log row",
+	"api.docEventPayload": "internal/api/docs.go — serialized into the event log's payload column",
 	// internal/cli/remotecache.go — the four shapes of the on-disk cache at
 	// ~/.cache/worklode/remotes.json. Nothing sends or receives them.
 	"cli.remoteEntry": "internal/cli/remotecache.go — on-disk remote cache",

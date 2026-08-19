@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -121,7 +122,8 @@ func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc,0),
 		        coalesce(to_anchor,''), coalesce(to_external,'')
 		   FROM doc_edges WHERE from_doc = $1
-		  ORDER BY type, from_anchor NULLS FIRST, to_doc NULLS LAST, to_external NULLS LAST`, docID)
+		  ORDER BY type, from_anchor NULLS FIRST, to_doc NULLS LAST,
+		           to_anchor NULLS FIRST, to_external NULLS LAST`, docID)
 	if err != nil {
 		t.Fatalf("read doc_edges: %v", err)
 	}
@@ -761,8 +763,8 @@ requires:
 
 	got := docEdges(t, s, plan.ID)
 	want := []model.DocEdge{
-		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-5"},
 		{Type: "requires", ToDoc: spec.ID},
+		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-5"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
@@ -1591,5 +1593,139 @@ func TestDocAcceptRevisionSupersedesReplacedDoc(t *testing.T) {
 	}
 	if got.Status != "superseded" {
 		t.Errorf("replaced doc status = %q, want superseded", got.Status)
+	}
+}
+
+// TestDocListSections: the reader the detail endpoint serves returns a spec's
+// sections in document order, and nothing at all for a plan (025 §9).
+func TestDocListSections(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan",
+		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
+	})
+
+	got, err := s.ListDocSections(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatalf("ListDocSections: %v", err)
+	}
+	want := []model.DocSection{
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 1},
+		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("sections = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("section %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	if got, err := s.ListDocSections(t.Context(), plan.ID); err != nil || len(got) != 0 {
+		t.Fatalf("plan sections = %+v, %v; want none", got, err)
+	}
+}
+
+// TestDocListEdgesBothDirections: the same row is read forward out of the
+// document that declared it and backward into the document it names, where it
+// carries its inverse spelling and points back at the other end (025 §14).
+func TestDocListEdgesBothDirections(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan",
+		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
+	})
+
+	out, in, err := s.ListDocEdges(t.Context(), plan.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(plan): %v", err)
+	}
+	// Ordered by the stored columns with NULL coalesced away, so an
+	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
+	wantOut := []model.DocEdge{
+		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
+		{Type: "wasDerivedFrom", ToDoc: spec.ID},
+	}
+	if len(out) != len(wantOut) {
+		t.Fatalf("plan edges out = %+v, want %+v", out, wantOut)
+	}
+	for i := range wantOut {
+		if out[i] != wantOut[i] {
+			t.Errorf("plan edge out %d = %+v, want %+v", i, out[i], wantOut[i])
+		}
+	}
+	if len(in) != 0 {
+		t.Errorf("plan edges in = %+v, want none", in)
+	}
+
+	out, in, err = s.ListDocEdges(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(spec): %v", err)
+	}
+	if len(out) != 1 || out[0] != (model.DocEdge{Type: "requires", ToExternal: "004-execution-backbone.md#sec-6"}) {
+		t.Fatalf("spec edges out = %+v, want one external requires", out)
+	}
+	// The covers edge lands on the spec's #sec-5, so from the spec's end that
+	// is the near anchor and the plan is the far end.
+	wantIn := []model.DocEdge{
+		{Type: "isCoveredBy", FromAnchor: "sec-5", ToDoc: plan.ID},
+		{Type: "hadDerivation", ToDoc: plan.ID},
+	}
+	if len(in) != len(wantIn) {
+		t.Fatalf("spec edges in = %+v, want %+v", in, wantIn)
+	}
+	for i := range wantIn {
+		if in[i] != wantIn[i] {
+			t.Errorf("spec edge in %d = %+v, want %+v", i, in[i], wantIn[i])
+		}
+	}
+}
+
+// TestDocListEdgesInverseCoversEveryType: every type the doc_edges CHECK
+// admits must have an inverse, or reading a document's inbound edges states
+// the relation backwards. One edge of each type, read from the far end.
+func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
+	s := openDocStore(t)
+	from := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-from", Body: specBody, CreatedBy: "stig",
+	})
+	to := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-to", Body: specBody, CreatedBy: "stig",
+	})
+
+	types := []string{"covers", "implements", "amends", "replaces", "requires", "wasDerivedFrom", "blocks"}
+	for _, typ := range types {
+		if _, err := s.db.ExecContext(t.Context(),
+			`INSERT INTO doc_edges (from_doc, type, to_doc) VALUES ($1, $2, $3)`,
+			from.ID, typ, to.ID); err != nil {
+			t.Fatalf("insert %s edge: %v", typ, err)
+		}
+	}
+
+	_, in, err := s.ListDocEdges(t.Context(), to.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges: %v", err)
+	}
+	if len(in) != len(types) {
+		t.Fatalf("inbound edges = %+v, want %d", in, len(types))
+	}
+	for _, e := range in {
+		if e.ToDoc != from.ID {
+			t.Errorf("inbound %s points at %d, want the other end %d", e.Type, e.ToDoc, from.ID)
+		}
+		if slices.Contains(types, e.Type) {
+			t.Errorf("inbound edge kept its forward spelling %q", e.Type)
+		}
 	}
 }

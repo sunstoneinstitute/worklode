@@ -985,6 +985,129 @@ func (c *Client) ImportInbox(ctx context.Context, in model.ImportInput) (model.I
 
 // --- docs ---------------------------------------------------------------
 
+// CreateDoc calls POST /api/v1/docs. The whole markdown artifact goes in
+// in.Body, frontmatter included: the server parses it, so the body is the
+// authority for the document's title, issued date, sections and edges.
+func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.Doc, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, "/api/v1/docs", in)
+	if err != nil {
+		return model.Doc{}, nil, err
+	}
+	var d model.Doc
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return model.Doc{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
+}
+
+// DocListFilter narrows ListDocs. Zero-valued fields do not filter.
+type DocListFilter struct {
+	Project string
+	Kind    string // spec | adr | plan
+	Status  string // draft | accepted | superseded
+}
+
+// ListDocs calls GET /api/v1/docs.
+func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListResponse, []byte, error) {
+	q := url.Values{}
+	for key, value := range map[string]string{
+		"project": f.Project, "kind": f.Kind, "status": f.Status,
+	} {
+		if value != "" {
+			q.Set(key, value)
+		}
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)
+	if err != nil {
+		return model.DocListResponse{}, nil, err
+	}
+	var resp model.DocListResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return model.DocListResponse{}, nil, fmt.Errorf("decode doc list: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// GetDoc calls GET /api/v1/docs/{id}: the document plus its sections, its
+// edges in both directions, and its open candidate revision if it has one.
+func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, docPath(id, ""), nil)
+	if err != nil {
+		return model.DocDetail{}, nil, err
+	}
+	var d model.DocDetail
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return model.DocDetail{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
+}
+
+// UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the
+// server allows on a draft and on a plan at any status. An accepted spec or
+// ADR is revised instead (see ReviseDoc).
+func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), model.UpdateDocBodyInput{Body: body})
+}
+
+// AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
+// may accept it (025 §7); anyone else gets 403.
+func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/accept"), nil)
+}
+
+// ReviseDoc calls POST /api/v1/docs/{id}/revise, opening the one candidate
+// revision an accepted spec or ADR may carry, and returns it.
+func (c *Client) ReviseDoc(ctx context.Context, id int64) (model.DocRevision, []byte, error) {
+	return c.docRevisionWrite(ctx, http.MethodPost, docPath(id, "/revise"), nil)
+}
+
+// UpdateDocRevision calls PUT /api/v1/docs/{id}/revision, replacing the open
+// candidate's body.
+func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (model.DocRevision, []byte, error) {
+	return c.docRevisionWrite(ctx, http.MethodPut, docPath(id, "/revision"),
+		model.UpdateDocBodyInput{Body: body})
+}
+
+// AcceptDocRevision calls POST /api/v1/docs/{id}/revision/accept, landing the
+// open candidate as the document's next version. A candidate that breaks the
+// 025 §6 anchor rules is refused with the violations named.
+func (c *Client) AcceptDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/revision/accept"), nil)
+}
+
+// docPath builds a document endpoint path.
+func docPath(id int64, suffix string) string {
+	return "/api/v1/docs/" + strconv.FormatInt(id, 10) + suffix
+}
+
+// docWrite is the shared decode for the document endpoints answering with the
+// document itself.
+func (c *Client) docWrite(ctx context.Context, method, path string, body any) (model.Doc, []byte, error) {
+	raw, err := c.do(ctx, method, path, body)
+	if err != nil {
+		return model.Doc{}, nil, err
+	}
+	var d model.Doc
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return model.Doc{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
+}
+
+// docRevisionWrite is the same for the two endpoints answering with the open
+// candidate revision.
+func (c *Client) docRevisionWrite(ctx context.Context, method, path string, body any) (model.DocRevision, []byte, error) {
+	raw, err := c.do(ctx, method, path, body)
+	if err != nil {
+		return model.DocRevision{}, nil, err
+	}
+	var rev model.DocRevision
+	if err := json.Unmarshal(raw, &rev); err != nil {
+		return model.DocRevision{}, nil, fmt.Errorf("decode doc revision: %w", err)
+	}
+	return rev, raw, nil
+}
+
 // --- projects ---------------------------------------------------------
 
 // CreateProject calls POST /api/v1/projects.

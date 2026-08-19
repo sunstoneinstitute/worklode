@@ -51,10 +51,57 @@ type DocRevision struct {
 // DocEdge is one typed link out of a document (025 §14). Exactly one of ToDoc
 // and ToExternal is set: ToExternal carries a reference this backbone cannot
 // resolve. FromAnchor and ToAnchor are "" for a document-level edge.
+//
+// One row carries both directions, so an *inbound* edge is the same row read
+// backward: Type is the inverse spelling ("amends" read backward is
+// "amendedBy"), ToDoc names the document the edge came from, FromAnchor is the
+// anchor in the document being read, and ToAnchor the anchor at the other end.
 type DocEdge struct {
 	Type       string `json:"type"`
 	FromAnchor string `json:"from_anchor"`
 	ToDoc      int64  `json:"to_doc"`
 	ToAnchor   string `json:"to_anchor"`
 	ToExternal string `json:"to_external"`
+}
+
+// CreateDocInput is the request body for POST /api/v1/docs. Number is omitted
+// for a plan, which carries no corpus number (025 §14.3); Assignee defaults to
+// the caller, who is then the only actor that can accept the document.
+//
+// Status is declared but refused: it exists so the field a corpus importer
+// would set is named on the wire and rejected with a message, rather than
+// silently ignored. A document is created as a draft and accepted through
+// POST /api/v1/docs/{id}/accept.
+type CreateDocInput struct {
+	Project  string `json:"project"`
+	Kind     string `json:"kind"` // spec | adr | plan
+	Number   int    `json:"number,omitempty"`
+	Slug     string `json:"slug"`
+	Body     string `json:"body"`
+	Assignee string `json:"assignee,omitempty"`
+	Status   string `json:"status,omitempty"`
+}
+
+// UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and
+// PUT /api/v1/docs/{id}/revision: the whole markdown source, frontmatter
+// included, since the body is the authority for title, issued and edges.
+type UpdateDocBodyInput struct {
+	Body string `json:"body"`
+}
+
+// DocDetail is the wire form of GET /api/v1/docs/{id}: the document plus the
+// rows derived from its body. Sections is empty for a plan (025 §9); Edges
+// leaves the document and EdgesIn points at it, each carrying its inverse
+// type. Revision is the open candidate revision, null when none is open.
+type DocDetail struct {
+	Doc
+	Sections []DocSection `json:"sections"`
+	Edges    []DocEdge    `json:"edges"`
+	EdgesIn  []DocEdge    `json:"edges_in"`
+	Revision *DocRevision `json:"revision"`
+}
+
+// DocListResponse is the response body of GET /api/v1/docs.
+type DocListResponse struct {
+	Docs []Doc `json:"docs"`
 }
