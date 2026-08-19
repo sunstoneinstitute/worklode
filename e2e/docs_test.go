@@ -4,9 +4,11 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,7 +65,9 @@ Model body, revised.
 `
 
 // planSourceBody is a plan doc: no corpus number, no anchored sections
-// (025 §9).
+// (025 §9). It deliberately declares no `## Tasks` section, so accepting it
+// is refused — a plan mints its tasks on accept and one that would mint
+// nothing breaks the accepted ⟺ tasks-exist invariant (025 §9.2).
 const planSourceBody = `---
 status: draft
 ---
@@ -73,6 +77,62 @@ status: draft
 ## Task 1
 
 Do the thing.
+`
+
+// planAlphaBody is the earlier of the two ordered plans: one task, and a
+// document-level `blocks` edge holding plan-beta's whole set until this
+// plan's set closes (025 §5, §9.3).
+const planAlphaBody = `---
+status: draft
+blocks:
+  - plan-beta
+---
+
+# Alpha Plan
+
+## Tasks
+
+### Task 1 — Land the groundwork
+
+` + "```yaml" + `
+kind: chore
+priority: low
+` + "```" + `
+
+Groundwork prose.
+`
+
+// planBetaBody is the plan under test: two task definitions, the second
+// declaring skills and an intra-plan blockedBy on the first (025 §9.1).
+const planBetaBody = `---
+status: draft
+---
+
+# Beta Plan
+
+## Tasks
+
+### Task 1 — Build the widget
+
+` + "```yaml" + `
+kind: feature
+priority: high
+` + "```" + `
+
+Widget prose.
+
+### Task 2 — Test the widget
+
+` + "```yaml" + `
+kind: bug
+priority: critical
+skills:
+  - superpowers:test-driven-development
+  - superpowers:verification-before-completion
+blockedBy: [1]
+` + "```" + `
+
+Test prose.
 `
 
 // findDocSection returns the section with the given anchor, or nil.
@@ -248,9 +308,11 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("sec-1a published = false, want true (accept publishes every current anchor)")
 	}
 
-	// 7. The plan half: a plan carries no number and no anchors, its body is
-	// freely editable at any status, and accepting it is still stubbed out
-	// (025 §9.2 — acceptance must mint the plan's tasks, not built yet).
+	// 7. The plan half: a plan carries no number and no anchors, and its body
+	// is freely editable at any status. Accepting this one is refused because
+	// it declares no `## Tasks` section — plan acceptance mints the plan's
+	// tasks (025 §9.2), and a plan that would mint nothing is not acceptable.
+	// TestPlanAcceptanceMintsTasks drives the accepting path.
 	plan, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
 		Project: "docs", Kind: "plan", Slug: "test-plan",
 		Body: planSourceBody, Assignee: "actor-a",
@@ -266,10 +328,329 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("edit plan body while draft: %v", err)
 	}
 	if _, _, err := actorA.AcceptDoc(ctx, plan.ID); err == nil {
-		t.Fatal("accept plan: want the 422 stub, got nil")
-	} else if status := clientErrStatus(t, err); status != http.StatusUnprocessableEntity {
-		t.Fatalf("accept plan: status = %d, want 422 (err %v)", status, err)
+		t.Fatal("accept taskless plan: want an error, got nil")
+	} else {
+		if status := clientErrStatus(t, err); status != http.StatusUnprocessableEntity {
+			t.Fatalf("accept taskless plan: status = %d, want 422 (err %v)", status, err)
+		}
+		if !strings.Contains(err.Error(), "plan defines no tasks") {
+			t.Fatalf("accept taskless plan: err = %v, want it to name the missing task set", err)
+		}
 	}
+}
+
+// hasDocEdge reports whether edges holds one of typ pointing at doc.
+func hasDocEdge(edges []model.DocEdge, typ string, doc int64) bool {
+	return slices.ContainsFunc(edges, func(e model.DocEdge) bool {
+		return e.Type == typ && e.ToDoc == doc
+	})
+}
+
+// assertNoChildEdges fails if the task has a parent or any child_of edge in
+// either direction: plan acceptance mints a flat set with no row above it
+// (025 §9.2).
+func assertNoChildEdges(ctx context.Context, t *testing.T, c *cli.Client, id string) {
+	t.Helper()
+	d, _, err := c.GetTask(ctx, id)
+	if err != nil {
+		t.Fatalf("get task %s: %v", id, err)
+	}
+	if d.Hierarchy.Parent != nil {
+		t.Fatalf("task %s parent = %+v, want none", id, d.Hierarchy.Parent)
+	}
+	for _, e := range d.Edges.Out {
+		if e.Type == "child_of" {
+			t.Fatalf("task %s has a child_of edge to %s, want none", id, e.To)
+		}
+	}
+	for _, e := range d.Edges.In {
+		if e.Type == "child_of" {
+			t.Fatalf("task %s has a child_of edge from %s, want none", id, e.From)
+		}
+	}
+}
+
+// assertBlocked checks a task's derived blocked flag, the same predicate the
+// claim path enforces (store.IsBlocked).
+func assertBlocked(ctx context.Context, t *testing.T, c *cli.Client, id string, want bool, why string) {
+	t.Helper()
+	d, _, err := c.GetTask(ctx, id)
+	if err != nil {
+		t.Fatalf("get task %s: %v", id, err)
+	}
+	if d.Blocked != want {
+		t.Fatalf("task %s blocked = %v, want %v (%s)", id, d.Blocked, want, why)
+	}
+}
+
+// assertNeedsExecution runs `lode doc list --needs-execution --json` through
+// the real CLI entry point and compares the ids it lists with want.
+// LODE_SERVER and LODE_TOKEN must already point at the server under test.
+func assertNeedsExecution(t *testing.T, project string, want ...int64) {
+	t.Helper()
+	out, err := runLodeCLI(t, "doc", "list", "--project", project, "--needs-execution", "--json")
+	if err != nil {
+		t.Fatalf("lode doc list --needs-execution: %v\noutput: %s", err, out)
+	}
+	var resp model.DocListResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode `lode doc list --needs-execution --json` output %q: %v", out, err)
+	}
+	got := make([]int64, 0, len(resp.Docs))
+	for _, d := range resp.Docs {
+		got = append(got, d.ID)
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("lode doc list --needs-execution = %v, want %v", got, want)
+	}
+}
+
+// TestPlanAcceptanceMintsTasks drives 025 §9 end to end through the public
+// surfaces: two plan documents ordered by a frontmatter `blocks` edge, the
+// second declaring two tasks with an intra-plan blockedBy. It proves that
+// accepting a plan mints exactly its declared task set and nothing above it,
+// that both gates — plan-to-plan and task-to-task — hold before they release,
+// and that `lode doc list --needs-execution` tracks the set closing.
+func TestPlanAcceptanceMintsTasks(t *testing.T) {
+	ctx := context.Background()
+
+	st := store.OpenTestStore(t)
+	handler, _, err := api.NewServer(st, api.Config{BootstrapToken: bootstrapToken})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
+	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
+		ID: "plans", Name: "Plan Acceptance", Key: "PLN",
+	}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
+		ID: "planner", Kind: "agent", DisplayName: "Planner",
+	}); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	tok, _, err := admin.CreateToken(ctx, "planner", "e2e plan acceptance", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	planner := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: tok.Token})
+
+	// The --needs-execution assertions go through the real CLI, which reads
+	// the server and token from the environment; an empty cwd keeps any
+	// repo-local .worklode config out of the resolution.
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", tok.Token)
+	t.Chdir(t.TempDir())
+
+	// 1. Both plans, beta first: alpha's `blocks: [plan-beta]` names a
+	// document that must already resolve to a plan in this project, so the
+	// ordering edge can only be authored once its target exists.
+	beta, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
+		Project: "plans", Kind: "plan", Slug: "plan-beta",
+		Body: planBetaBody, Assignee: "planner",
+	})
+	if err != nil {
+		t.Fatalf("create plan-beta: %v", err)
+	}
+	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
+		Project: "plans", Kind: "plan", Slug: "plan-alpha",
+		Body: planAlphaBody, Assignee: "planner",
+	})
+	if err != nil {
+		t.Fatalf("create plan-alpha: %v", err)
+	}
+
+	// 2. The frontmatter wrote one doc_edges row, readable from both ends:
+	// blocks leaving alpha, blockedBy arriving at beta (025 §14).
+	alphaDoc, _, err := planner.GetDoc(ctx, alpha.ID)
+	if err != nil {
+		t.Fatalf("get plan-alpha: %v", err)
+	}
+	if !hasDocEdge(alphaDoc.Edges, "blocks", beta.ID) {
+		t.Fatalf("plan-alpha edges = %+v, want a blocks edge to doc %d", alphaDoc.Edges, beta.ID)
+	}
+	betaDoc, _, err := planner.GetDoc(ctx, beta.ID)
+	if err != nil {
+		t.Fatalf("get plan-beta: %v", err)
+	}
+	if !hasDocEdge(betaDoc.EdgesIn, "blockedBy", alpha.ID) {
+		t.Fatalf("plan-beta inbound edges = %+v, want a blockedBy edge from doc %d", betaDoc.EdgesIn, alpha.ID)
+	}
+
+	// 3. Accept alpha: one draft task, minted in the accept transaction.
+	alphaAccepted, _, err := planner.AcceptDoc(ctx, alpha.ID)
+	if err != nil {
+		t.Fatalf("accept plan-alpha: %v", err)
+	}
+	if alphaAccepted.Status != "accepted" {
+		t.Fatalf("plan-alpha status = %q, want accepted", alphaAccepted.Status)
+	}
+	if len(alphaAccepted.Tasks) != 1 {
+		t.Fatalf("plan-alpha minted %d tasks, want 1: %+v", len(alphaAccepted.Tasks), alphaAccepted.Tasks)
+	}
+	alphaTask := alphaAccepted.Tasks[0]
+	if alphaTask.PlanDoc != alpha.ID || alphaTask.State != "draft" || alphaTask.Kind != "chore" {
+		t.Fatalf("plan-alpha task = %+v, want a draft chore carrying plan_doc %d", alphaTask, alpha.ID)
+	}
+
+	// 4. Accept beta: two draft tasks, in definition order, each carrying its
+	// declared metadata.
+	betaAccepted, _, err := planner.AcceptDoc(ctx, beta.ID)
+	if err != nil {
+		t.Fatalf("accept plan-beta: %v", err)
+	}
+	if len(betaAccepted.Tasks) != 2 {
+		t.Fatalf("plan-beta minted %d tasks, want 2: %+v", len(betaAccepted.Tasks), betaAccepted.Tasks)
+	}
+	first, second := betaAccepted.Tasks[0], betaAccepted.Tasks[1]
+	for _, want := range []struct {
+		task                  model.Task
+		title, kind, priority string
+		skills                []string
+	}{
+		{first, "Build the widget", "feature", "high", nil},
+		{second, "Test the widget", "bug", "critical", []string{
+			"superpowers:test-driven-development",
+			"superpowers:verification-before-completion",
+		}},
+	} {
+		got := want.task
+		if got.State != "draft" {
+			t.Fatalf("minted task %s state = %q, want draft (025 §9.2)", got.ID, got.State)
+		}
+		if got.PlanDoc != beta.ID {
+			t.Fatalf("minted task %s plan_doc = %d, want %d", got.ID, got.PlanDoc, beta.ID)
+		}
+		if got.Title != want.title || got.Kind != want.kind || got.Priority != want.priority {
+			t.Fatalf("minted task %s = %q/%s/%s, want %q/%s/%s",
+				got.ID, got.Title, got.Kind, got.Priority, want.title, want.kind, want.priority)
+		}
+		// slices.Equal treats the store's guaranteed empty slice and a nil
+		// want as equal, which is what "no skills declared" means here.
+		if !slices.Equal(got.Skills, want.skills) {
+			t.Fatalf("minted task %s skills = %v, want %v", got.ID, got.Skills, want.skills)
+		}
+	}
+
+	// 5. The intra-plan blockedBy became a task-to-task blocks edge.
+	secondDetail, _, err := planner.GetTask(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("get task %s: %v", second.ID, err)
+	}
+	if !slices.ContainsFunc(secondDetail.Edges.In, func(e model.TaskEdgeIn) bool {
+		return e.Type == "blocks" && e.From == first.ID
+	}) {
+		t.Fatalf("task %s inbound edges = %+v, want a blocks edge from %s",
+			second.ID, secondDetail.Edges.In, first.ID)
+	}
+
+	// 6. Nothing else was created: exactly the three declared tasks, no
+	// container above them, no child_of anywhere.
+	all, _, err := planner.ListTasks(ctx, cli.TaskListFilter{Project: "plans"})
+	if err != nil {
+		t.Fatalf("list tasks: %v", err)
+	}
+	gotIDs := make([]string, 0, len(all.Tasks))
+	for _, task := range all.Tasks {
+		gotIDs = append(gotIDs, task.ID)
+	}
+	slices.Sort(gotIDs)
+	wantIDs := []string{alphaTask.ID, first.ID, second.ID}
+	slices.Sort(wantIDs)
+	if !slices.Equal(gotIDs, wantIDs) {
+		t.Fatalf("project tasks = %v, want exactly the minted set %v", gotIDs, wantIDs)
+	}
+	containers, _, err := planner.ListTasks(ctx, cli.TaskListFilter{Project: "plans", HasChildren: true})
+	if err != nil {
+		t.Fatalf("list container tasks: %v", err)
+	}
+	if len(containers.Tasks) != 0 {
+		t.Fatalf("container tasks = %+v, want none (a plan mints no row above its set)", containers.Tasks)
+	}
+	for _, id := range wantIDs {
+		assertNoChildEdges(ctx, t, planner, id)
+	}
+
+	// Both plans are accepted with open sets, so both need execution.
+	assertNeedsExecution(t, "plans", alpha.ID, beta.ID)
+
+	// 7. Ready the whole set. Beta's tasks are ready and unleased, and would
+	// be pickable but for the plan-to-plan edge.
+	for _, id := range []string{alphaTask.ID, first.ID, second.ID} {
+		if _, _, err := planner.ReadyTask(ctx, id); err != nil {
+			t.Fatalf("ready task %s: %v", id, err)
+		}
+	}
+	assertBlocked(ctx, t, planner, first.ID, true, "plan-alpha's set is still open")
+	assertBlocked(ctx, t, planner, second.ID, true, "plan-alpha's set is still open")
+
+	// 8. claim --next hands out alpha's task, then finds nothing: beta's two
+	// ready tasks are held by the plan-to-plan gate, not merely unreached.
+	pick, _, err := planner.ClaimNext(ctx, model.ClaimNextInput{Project: "plans", Worktree: "h:/.worktrees/0"})
+	if err != nil {
+		t.Fatalf("claim-next #1: %v", err)
+	}
+	if !pick.Claimed || pick.Task == nil || pick.Task.ID != alphaTask.ID {
+		t.Fatalf("claim-next #1 = %+v, want %s", pick, alphaTask.ID)
+	}
+	held, _, err := planner.ClaimNext(ctx, model.ClaimNextInput{Project: "plans", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("claim-next while gated: %v", err)
+	}
+	if held.Claimed || held.Task != nil {
+		t.Fatalf("claim-next while gated = %+v, want nothing: plan-beta's set is held by plan-alpha", held)
+	}
+
+	// 9. Close alpha's set. The plan gate releases; the intra-plan edge does
+	// not, so only beta's task 1 becomes pickable.
+	if done, _, err := planner.DoneTask(ctx, alphaTask.ID); err != nil {
+		t.Fatalf("done task %s: %v", alphaTask.ID, err)
+	} else if done.State != "merged" {
+		t.Fatalf("task %s state = %q, want merged", alphaTask.ID, done.State)
+	}
+	assertBlocked(ctx, t, planner, first.ID, false, "plan-alpha's set has closed")
+	assertBlocked(ctx, t, planner, second.ID, true, "task 1 of plan-beta is still open")
+	assertNeedsExecution(t, "plans", beta.ID)
+
+	pick, _, err = planner.ClaimNext(ctx, model.ClaimNextInput{Project: "plans", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("claim-next #2: %v", err)
+	}
+	if !pick.Claimed || pick.Task == nil || pick.Task.ID != first.ID {
+		t.Fatalf("claim-next #2 = %+v, want %s (task 2 is edge-blocked)", pick, first.ID)
+	}
+	held, _, err = planner.ClaimNext(ctx, model.ClaimNextInput{Project: "plans", Worktree: "h:/.worktrees/2"})
+	if err != nil {
+		t.Fatalf("claim-next while task 2 is blocked: %v", err)
+	}
+	if held.Claimed || held.Task != nil {
+		t.Fatalf("claim-next while task 2 is blocked = %+v, want nothing", held)
+	}
+
+	// 10. Close beta's set, one task at a time; the plan stays in
+	// --needs-execution until the last task closes.
+	if _, _, err := planner.DoneTask(ctx, first.ID); err != nil {
+		t.Fatalf("done task %s: %v", first.ID, err)
+	}
+	assertNeedsExecution(t, "plans", beta.ID)
+
+	pick, _, err = planner.ClaimNext(ctx, model.ClaimNextInput{Project: "plans", Worktree: "h:/.worktrees/2"})
+	if err != nil {
+		t.Fatalf("claim-next #3: %v", err)
+	}
+	if !pick.Claimed || pick.Task == nil || pick.Task.ID != second.ID {
+		t.Fatalf("claim-next #3 = %+v, want %s", pick, second.ID)
+	}
+	if _, _, err := planner.DoneTask(ctx, second.ID); err != nil {
+		t.Fatalf("done task %s: %v", second.ID, err)
+	}
+	assertNeedsExecution(t, "plans")
 }
 
 // TestDocOperationsMetricOnMetrics proves worklode_doc_operations_total is
