@@ -109,7 +109,7 @@ func TestDeploymentTriples(t *testing.T) {
 	}
 }
 
-// deployments.artifact_id is null in practice today (006 §11.1, Open Q5):
+// deployments.artifact_id is null in practice today (006 §11.1, §15 question 11):
 // the prov:used edge is specified but must simply be absent, not invented.
 func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	d := store.Deployment{

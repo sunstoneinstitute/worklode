@@ -83,7 +83,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
 
 // DeploymentTriples projects one deployments row. artifact is the row
 // deployments.artifact_id resolves to, nil when unset — null in practice
-// today (006 §11.1, Open Q5), so prov:used is simply absent.
+// today (006 §11.1, §15 question 11), so prov:used is simply absent.
 func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
 	s := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
 	ts := []Triple{
