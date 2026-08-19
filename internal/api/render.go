@@ -151,7 +151,11 @@ func docsView(docs []model.Doc) ui.DocsView {
 		Page: ui.PageProps{Title: "worklode: documents"},
 		Docs: make([]ui.DocRow, 0, len(docs)),
 	}
-	for _, d := range docs {
+	// Bodies are dropped for the same reason the JSON list drops them: the
+	// index renders none of the markdown, and carrying every document's
+	// source into the page would make it the heaviest response the cockpit
+	// serves.
+	for _, d := range withoutDocBodies(docs) {
 		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: docPageURL(d.ID), Ref: docRef(d)})
 	}
 	return v

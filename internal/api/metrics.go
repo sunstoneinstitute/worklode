@@ -126,6 +126,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, destination := range []string{
 		"home", "intake", "projects", "work", "reviews", "deliveries", "knowledge",
 		"project_section", "asset", "deliverables", "deliverable_new", "task_new",
+		"docs",
 	} {
 		for _, outcome := range []string{"ok", "not_found", "error", "rejected"} {
 			s.navigations.WithLabelValues(destination, outcome)

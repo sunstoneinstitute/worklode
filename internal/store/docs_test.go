@@ -115,15 +115,17 @@ func docSections(t *testing.T, s *Store, docID int64) []model.DocSection {
 	return out
 }
 
-// docEdges reads a document's outbound edges in a stable order.
+// docEdges reads a document's outbound edges in ListDocEdges' order — the
+// same expression, so these tests exercise the order production serves rather
+// than a second one that could disagree about where a NULL sorts.
 func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 	t.Helper()
 	rows, err := s.db.QueryContext(t.Context(),
 		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc,0),
 		        coalesce(to_anchor,''), coalesce(to_external,'')
 		   FROM doc_edges WHERE from_doc = $1
-		  ORDER BY type, from_anchor NULLS FIRST, to_doc NULLS LAST,
-		           to_anchor NULLS FIRST, to_external NULLS LAST`, docID)
+		  ORDER BY type, coalesce(from_anchor,''), coalesce(to_doc,0),
+		           coalesce(to_anchor,''), coalesce(to_external,'')`, docID)
 	if err != nil {
 		t.Fatalf("read doc_edges: %v", err)
 	}
@@ -371,9 +373,10 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 	})
 
 	got := docEdges(t, s, plan.ID)
+	// Unresolved before resolved within a type: to_doc NULL coalesces to 0.
 	want := []model.DocEdge{
-		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
 	if len(got) != len(want) {
@@ -859,12 +862,13 @@ requires:
 	})
 
 	got := docEdges(t, s, plan.ID)
+	// Unresolved references (to_doc NULL, coalesced to 0) sort ahead of the
+	// resolved one. This project's key is P1, so ZZ- names a corpus we cannot
+	// reach; P1-ADR-25 names a kind this project has no 25 of.
 	want := []model.DocEdge{
-		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-2"},
-		// This project's key is P1, so ZZ- names a corpus we cannot reach;
-		// P1-ADR-25 names a kind this project has no 25 of.
 		{Type: "requires", ToExternal: "P1-ADR-25"},
 		{Type: "requires", ToExternal: "ZZ-SPEC-25"},
+		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-2"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("edges = %+v, want %+v", got, want)

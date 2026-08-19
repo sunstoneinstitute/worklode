@@ -27,8 +27,9 @@ import (
 // this is here so a typo is a named 422 rather than a generic one.
 var validDocKinds = map[string]bool{"spec": true, "adr": true, "plan": true}
 
-// invalidDocKindMsg is shared by every handler that gates on validDocKinds,
-// so the message cannot drift from the map.
+// invalidDocKindMsg is what createDoc — today the only handler that gates on
+// validDocKinds — answers with. It is a constant so a second write path names
+// the kinds the same way this one does.
 const invalidDocKindMsg = "invalid kind: must be spec, adr, or plan"
 
 // docSource is the events.source every /api/v1 document mutation is recorded
@@ -125,7 +126,21 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, model.DocListResponse{Docs: docs})
+	writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+}
+
+// withoutDocBodies blanks the markdown source on a list projection. A corpus
+// is tens of documents of tens of kilobytes each, and no list consumer reads
+// the text — the one endpoint that serves a body is GET /api/v1/docs/{id},
+// which serves one. Without this, the route most likely to be polled is also
+// the largest response the server sends.
+func withoutDocBodies(docs []model.Doc) []model.Doc {
+	out := make([]model.Doc, len(docs))
+	for i, d := range docs {
+		d.Body = ""
+		out[i] = d
+	}
+	return out
 }
 
 // docFilterFrom reads the three list selectors off the query string. An
@@ -320,10 +335,18 @@ func (s *server) recordDocEvent(
 		s.mapStoreErr(w, err)
 		return err
 	}
-	// The payload records what the caller asked for against which document,
-	// which for the bodyless verbs is the id alone. It is a stored event row,
-	// not an HTTP body, so it is not an ADR 036 shape.
-	payload, err := json.Marshal(docEventPayload{Doc: id, Request: req})
+	// The payload records who asked for what against which document. The
+	// actor matters most here: events carries no actor column, and acceptance
+	// is an assignee-gated deliberate act (025 §7), so this is the only place
+	// the log says who performed it. A wrapper rather than the request alone,
+	// because the five bodyless verbs would otherwise record a bare null and
+	// lose the subject. It is an event row and not an HTTP body, so no
+	// internal/model declaration is owed (ADR 036 §3).
+	payload, err := json.Marshal(map[string]any{
+		"doc":     id,
+		"actor":   actorFrom(r).ID,
+		"request": req,
+	})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return err
@@ -333,15 +356,6 @@ func (s *server) recordDocEvent(
 		return err
 	}
 	return nil
-}
-
-// docEventPayload is what a document mutation records in the event log: the
-// document it acted on and the request that asked for it (null for the verbs
-// that carry no body). It is serialized into events.payload, never into an
-// HTTP response, which is why it is declared here (ADR 036 §3).
-type docEventPayload struct {
-	Doc     int64 `json:"doc"`
-	Request any   `json:"request"`
 }
 
 // writeDocRevision answers with a document's open candidate revision, read

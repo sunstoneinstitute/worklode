@@ -192,31 +192,39 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
+	// msg is asserted, not just the status: the first two are refused by the
+	// handler's own pre-checks ahead of the transaction, and the store would
+	// answer 422 for them too — so a status-only assertion would pass with the
+	// pre-checks deleted and the better message lost.
 	cases := map[string]struct {
 		in   model.CreateDocInput
 		code int
+		msg  string
 	}{
 		"unknown kind": {model.CreateDocInput{
 			Project: "proj", Kind: "memo", Number: 1, Slug: "s", Body: docSpecBody,
-		}, http.StatusUnprocessableEntity},
+		}, http.StatusUnprocessableEntity, "must be spec, adr, or plan"},
 		"missing slug": {model.CreateDocInput{
 			Project: "proj", Kind: "spec", Number: 1, Body: docSpecBody,
-		}, http.StatusUnprocessableEntity},
+		}, http.StatusUnprocessableEntity, "slug is required"},
 		"spec without a number": {model.CreateDocInput{
 			Project: "proj", Kind: "spec", Slug: "s", Body: docSpecBody,
-		}, http.StatusUnprocessableEntity},
+		}, http.StatusUnprocessableEntity, "corpus number"},
 		"plan with a number": {model.CreateDocInput{
 			Project: "proj", Kind: "plan", Number: 3, Slug: "s", Body: docPlanBody,
-		}, http.StatusUnprocessableEntity},
+		}, http.StatusUnprocessableEntity, "carries no number"},
 		"unknown project": {model.CreateDocInput{
 			Project: "nope", Kind: "spec", Number: 1, Slug: "s", Body: docSpecBody,
-		}, http.StatusNotFound},
+		}, http.StatusNotFound, "not found"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			rr := doReq(t, h, "POST", "/api/v1/docs", token, tc.in)
 			if rr.Code != tc.code {
 				t.Fatalf("status = %d, want %d, body %s", rr.Code, tc.code, rr.Body.String())
+			}
+			if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, tc.msg) {
+				t.Errorf("error = %q, want it to contain %q", msg, tc.msg)
 			}
 		})
 	}
@@ -291,6 +299,47 @@ func TestListDocs(t *testing.T) {
 				t.Errorf("slugs = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestListDocsOmitsBodies: a corpus is many documents of many kilobytes each
+// and no list consumer reads the markdown, so the list projection carries none
+// of it. GET /api/v1/docs/{id} is where a body comes from.
+func TestListDocsOmitsBodies(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/docs", token, nil)
+	var resp model.DocListResponse
+	decodeInto(t, rr, &resp)
+	if len(resp.Docs) != 1 {
+		t.Fatalf("docs = %+v, want one", resp.Docs)
+	}
+	if resp.Docs[0].Body != "" {
+		t.Errorf("list body = %q, want it omitted", resp.Docs[0].Body)
+	}
+	// Everything else a list row needs is still there.
+	if resp.Docs[0].Title == "" || resp.Docs[0].Slug != "025-x" {
+		t.Errorf("list row = %+v, want the identifying fields kept", resp.Docs[0])
+	}
+	if strings.Contains(rr.Body.String(), "Scope body.") {
+		t.Error("list response carries markdown from a document body")
+	}
+
+	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.Body != docSpecBody {
+		t.Errorf("detail body = %q, want the whole source", detail.Body)
+	}
+
+	// The index page renders no markdown either.
+	page := doReq(t, h, "GET", "/docs", "", nil)
+	if strings.Contains(page.Body.String(), "Scope body.") {
+		t.Error("/docs carries markdown from a document body")
 	}
 }
 

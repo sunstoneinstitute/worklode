@@ -48,14 +48,22 @@ type DocRevision struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// DocEdge is one typed link out of a document (025 §14). Exactly one of ToDoc
-// and ToExternal is set: ToExternal carries a reference this backbone cannot
-// resolve. FromAnchor and ToAnchor are "" for a document-level edge.
+// DocEdge is one typed link between documents (025 §14), always stated from
+// the point of view of the document being read: FromAnchor is the near end,
+// ToDoc and ToAnchor the far end — in DocDetail's Edges and EdgesIn alike. An
+// anchor is "" when that end of the edge is the whole document rather than one
+// of its sections.
 //
-// One row carries both directions, so an *inbound* edge is the same row read
-// backward: Type is the inverse spelling ("amends" read backward is
-// "amendedBy"), ToDoc names the document the edge came from, FromAnchor is the
-// anchor in the document being read, and ToAnchor the anchor at the other end.
+// One stored row carries both directions, so an edge in EdgesIn is that row
+// read backward: near and far ends swap, and Type is the inverse spelling —
+// covers/isCoveredBy, implements/isImplementedBy, amends/amendedBy,
+// replaces/isReplacedBy, requires/isRequiredBy, wasDerivedFrom/hadDerivation,
+// blocks/blockedBy.
+//
+// ToExternal is outbound-only: it carries a reference this backbone cannot
+// resolve, which by definition names no document that could point back. In
+// Edges exactly one of ToDoc and ToExternal is set; in EdgesIn ToDoc always
+// is and ToExternal is always "".
 type DocEdge struct {
 	Type       string `json:"type"`
 	FromAnchor string `json:"from_anchor"`
