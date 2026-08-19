@@ -659,6 +659,8 @@ nav.local a .cnt {
   }
   .rail {
     order: -1;
+    position: static;
+    top: auto;
   }
 }
 @media (max-width:880px) {
