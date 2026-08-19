@@ -1,6 +1,6 @@
 ---
 status: accepted
-task: WL-6
+task: WL-29
 covers: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 2/3 (spec 007): server-side derivers — Implementation Plan
@@ -38,9 +38,14 @@ full series scope, sibling-plan prerequisites, prior-art map, design calls,
 and what is owned elsewhere.
 
 **Prerequisites (landed by part 1):** the `internal/derive` runner
-(`derive.Run` — hash short-circuit + atomic GSP PUT into one `observed/*`
-graph; `Result`), `iri.DeclaredGraph`/`ObservedGraph`/`Repo`,
-`graph.Client.Replace`, and derivers 1–2 with `lode derive`.
+(`derive.Run` — hash short-circuit + one atomic `graphserver.PutGraph` into
+one `observed/*` graph; `Result`), `iri.DeclaredGraph`/`ObservedGraph`/
+`Repo`, and derivers 1–2 with `lode derive`. From outside the series:
+`internal/graphserver` (landed), the runtime row→triple functions in
+`internal/graphproj` (`2026-07-30-runtime-layer.md`), and
+`internal/kg/manifest` from
+`2026-08-19-component-boundary-manifest.md` (WL-109's resolution),
+consumed by Task 9.
 
 Design calls this plan inherits (recorded in part 1, restated because they
 shape Tasks 8–9):
@@ -60,8 +65,9 @@ shape Tasks 8–9):
 - **No migration.** The deriver no-op short circuit stores the input hash as
   a triple inside the deriver's own graph; nothing here touches Postgres
   schema.
-- **Serialization:** N-Triples via `graphproj.Render` for every deriver; GSP
-  PUT with `Content-Type: application/n-triples`.
+- **Serialization:** N-Triples via `graphproj.Document` for every deriver;
+  one whole-graph `graphserver.PutGraph` per source (`text/turtle` on the
+  wire — N-Triples is a Turtle subset).
 
 ## File Structure
 
@@ -320,7 +326,8 @@ the existing column lists exactly.)
 `internal/store/delivery.go`:
 
 ```go
-// ReleaseFrontier row for the deploy deriver's wl:covers projection.
+// ReleaseFrontier row for the deploy deriver's wl:cutFrom projection
+// (spelled wl:covers until 026 §6.1 took that name for Plan→Section).
 type ReleaseFrontierRow struct {
 	Repo string
 	Tag  string
@@ -489,9 +496,9 @@ func DeployTriples(ctx context.Context, s *store.Store) ([]byte, error) {
 		return nil, fmt.Errorf("deploy deriver: %w", err)
 	}
 	for _, f := range frontiers {
-		ts = append(ts, graphproj.ReleaseCoversTriples(f.Repo, f.Tag, f.SHA)...)
+		ts = append(ts, graphproj.ReleaseCutFromTriples(f.Repo, f.Tag, f.SHA)...)
 	}
-	return graphproj.Render(ts), nil
+	return graphproj.Document(ts), nil
 }
 ```
 
@@ -660,7 +667,7 @@ func PRAffectsTriples(ctx context.Context, prs []store.PRRef, rr RepoReader) (do
 		}
 		for _, f := range files {
 			if c, ok := m.Match(f); ok {
-				ts = append(ts, graphproj.Triple{S: iri.Task(pr.TaskID), P: wlAffects, O: c.IRI})
+				ts = append(ts, graphproj.Triple{S: iri.Task(pr.TaskID), P: wlAffects, O: graphproj.IRIRef(c.IRI)})
 			}
 		}
 	}
@@ -668,7 +675,7 @@ func PRAffectsTriples(ctx context.Context, prs []store.PRRef, rr RepoReader) (do
 		skippedRepos = append(skippedRepos, r)
 	}
 	sort.Strings(skippedRepos)
-	return graphproj.Render(ts), skippedRepos, nil
+	return graphproj.Document(ts), skippedRepos, nil
 }
 ```
 
