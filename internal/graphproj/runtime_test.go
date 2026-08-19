@@ -23,7 +23,7 @@ func testArtifact() store.Artifact {
 }
 
 func TestArtifactTriples(t *testing.T) {
-	got := string(Document(ArtifactTriples(testArtifact(), func(string) bool { return true })))
+	got := string(Document(ArtifactTriples(testArtifact(), func(string, string) bool { return true })))
 	want := []string{
 		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Artifact> .`,
 		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/ontology#artifactKind> <https://worklode.io/ns/concept/docker_image> .`,
@@ -45,7 +45,7 @@ func TestArtifactTriples(t *testing.T) {
 
 // AC3: re-projecting an unchanged row is a byte-identical no-op.
 func TestArtifactProjectionIsIdempotent(t *testing.T) {
-	known := func(string) bool { return true }
+	known := func(string, string) bool { return true }
 	first := Document(ArtifactTriples(testArtifact(), known))
 	second := Document(ArtifactTriples(testArtifact(), known))
 	if !bytes.Equal(first, second) {
@@ -60,7 +60,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 	a.Kind = "git_tag"
 	a.Name = "sunstoneinstitute/worklode"
 	a.SourceSHA = "main" // UI-created release: branch name, not a sha
-	got := string(Document(ArtifactTriples(a, func(string) bool { return false })))
+	got := string(Document(ArtifactTriples(a, func(string, string) bool { return false })))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatalf("branch-name source_sha minted a commit edge:\n%s", got)
 	}
@@ -73,7 +73,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 func TestArtifactWithoutRepoProjectsNoCommitEdge(t *testing.T) {
 	a := testArtifact()
 	a.Repo = ""
-	got := string(Document(ArtifactTriples(a, func(string) bool { return true })))
+	got := string(Document(ArtifactTriples(a, func(string, string) bool { return true })))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatal("artifact without a repo projected a commit edge")
 	}
@@ -109,8 +109,9 @@ func TestDeploymentTriples(t *testing.T) {
 	}
 }
 
-// deployments.artifact_id is null in practice today (006 §11.1, §15 question 11):
-// the prov:used edge is specified but must simply be absent, not invented.
+// deployments.artifact_id is null whenever nothing resolved it (006 §11.1,
+// §15 question 11): the prov:used edge is specified but must simply be
+// absent, not invented.
 func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	d := store.Deployment{
 		Environment: "dev", TargetKind: "manual", TargetName: "x",
@@ -165,6 +166,37 @@ func TestReleaseCutFromTriples(t *testing.T) {
 	want := `<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4> <https://worklode.io/ns/ontology#cutFrom> <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .` + "\n"
 	if got != want {
 		t.Fatalf("ReleaseCutFromTriples = %q; want %q", got, want)
+	}
+}
+
+// AC8, second half: the wl:cutFrom edge must land on nodes the other two
+// functions actually project, or it dangles and wl:cutFromShape's sh:class
+// constraints fail. The three functions host-qualify independently, so this
+// pins their agreement rather than trusting three hand-written IRI strings to
+// keep lining up.
+func TestCutFromEdgeLandsOnProjectedNodes(t *testing.T) {
+	const repo, tag, sha = "sunstoneinstitute/worklode", "v0.4", "a16c2a7"
+
+	// The subject is the git_tag artifact row applyRelease writes for this
+	// release: Name is the bare full_name, Version the tag.
+	release := store.Artifact{Kind: "git_tag", Name: repo, Version: tag, Repo: repo, SourceSHA: sha}
+
+	edge := ReleaseCutFromTriples(repo, tag, sha)
+	if len(edge) != 1 {
+		t.Fatalf("ReleaseCutFromTriples returned %d triples; want 1", len(edge))
+	}
+
+	artifact := ArtifactTriples(release, func(string, string) bool { return true })
+	if edge[0].S != artifact[0].S {
+		t.Errorf("cutFrom subject %q is not the artifact ArtifactTriples projects (%q)", edge[0].S, artifact[0].S)
+	}
+
+	commit := CommitTriples(GitHubHost, repo, sha)
+	if len(commit) == 0 {
+		t.Fatal("CommitTriples projected nothing for a well-formed repo")
+	}
+	if edge[0].O != IRIRef(commit[0].S) {
+		t.Errorf("cutFrom object %v is not the commit CommitTriples projects (%q)", edge[0].O, commit[0].S)
 	}
 }
 

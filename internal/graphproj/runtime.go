@@ -25,13 +25,17 @@ const (
 	ProvWasDerivedFrom  = "http://www.w3.org/ns/prov#wasDerivedFrom"
 )
 
-// CommitKnown reports whether sha names a known main_commits row for the
-// artifact's repo (store.MainIDForSHA != nil, in the caller's transaction).
-type CommitKnown func(sha string) bool
+// CommitKnown reports whether sha names a known main_commits row for repo
+// (store.MainIDForSHA != nil, in the caller's transaction). It takes the repo
+// rather than closing over one because main_commits is UNIQUE (repo, sha):
+// a sha alone is not a key, so a batch projecting artifacts across repos
+// would otherwise pass the guard on repo A's sha while minting the IRI from
+// repo B.
+type CommitKnown func(repo, sha string) bool
 
-// splitRepo splits a GitHub "owner/name" full_name into its two parts, as
-// internal/kg/iri.Commit wants them. The backbone always stores repos in
-// this form; ok is false only for malformed input.
+// splitRepo splits a GitHub "owner/name" full_name at its first slash, as
+// internal/kg/iri.Commit wants it. The backbone always stores repos in this
+// form; ok is false when there is no slash, or nothing on either side of it.
 func splitRepo(full string) (owner, name string, ok bool) {
 	i := strings.IndexByte(full, '/')
 	if i <= 0 || i == len(full)-1 {
@@ -72,7 +76,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
 	if !a.BuiltAt.IsZero() {
 		ts = append(ts, Triple{S: s, P: ProvGeneratedAtTime, O: Typed(xsdTime(a.BuiltAt), XSDDateTime)})
 	}
-	if a.Repo != "" && a.SourceSHA != "" && known != nil && known(a.SourceSHA) {
+	if a.Repo != "" && a.SourceSHA != "" && known != nil && known(a.Repo, a.SourceSHA) {
 		if owner, repo, ok := splitRepo(a.Repo); ok {
 			ts = append(ts, Triple{S: s, P: ProvWasDerivedFrom,
 				O: IRIRef(iri.Commit(GitHubHost, owner, repo, a.SourceSHA))})
@@ -82,8 +86,16 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
 }
 
 // DeploymentTriples projects one deployments row. artifact is the row
-// deployments.artifact_id resolves to, nil when unset — null in practice
-// today (006 §11.1, §15 question 11), so prov:used is simply absent.
+// deployments.artifact_id resolves to, nil when unset, in which case prov:used
+// is simply absent rather than invented (006 §11.1, §15 question 11 — the
+// column stayed null until registry_package ingest began minting docker_image
+// artifacts, and stays null for any repo whose GitHub App lacks the
+// subscription).
+//
+// wl:toEnvironment is emitted unguarded: deployments.environment is plain
+// NOT NULL text with no CHECK (0001_baseline.up.sql), so the dev/prod closure
+// wl:EnvironmentShape asserts rests on store.NormalizeEnvironment alone. A row
+// that escaped it projects an edge to an untyped node.
 func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
 	s := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
 	ts := []Triple{
@@ -103,7 +115,9 @@ func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
 }
 
 // EnvironmentTriples projects the fixed instance set {dev, prod} — static,
-// matching the SHACL closure and store.NormalizeEnvironment.
+// matching wl:EnvironmentShape's closure and store.NormalizeEnvironment. It is
+// the only place that closure is honoured by construction; see
+// DeploymentTriples for where it is merely assumed.
 func EnvironmentTriples() []Triple {
 	var ts []Triple
 	for _, name := range []string{"dev", "prod"} {

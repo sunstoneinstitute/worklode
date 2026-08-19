@@ -692,8 +692,9 @@ Oxigraph-gated tests for real with `docker compose up -d oxigraph`.
 
 - [x] **Step 2: Acceptance-criteria walkthrough**
 
-Confirm each criterion (spec 015's nine, folded into 006) maps to green
-evidence:
+Confirm each criterion maps to green evidence. **The numbering below is spec
+015's nine, which is off by one from 006 §16's ten** — 015's AC8 is 006 §16
+criterion 9. Read them as 015's throughout:
 1 (layer tags) and 2 (no foreign imports) → the Task 2 diff over `ns/`,
 which already carries the terms with their tags — the old graph-side pytest
 assertions died with the rdf-registry harness ·
@@ -701,9 +702,12 @@ assertions died with the rdf-registry harness ·
 4, 5, 7 → the vocabulary and shapes exist in `ns/` (Tasks 2–3); no in-repo
 SHACL/owlrl runner exercises them against instance data (Task 4) ·
 6 → the four node shapes in `ns/shapes.ttl` (Task 3) ·
-8 → `TestReleaseCutFromTriples`, `TestBranchNameProjectsNoCommitEdge` ·
-9 → `TestMalformedRepoOmitsEdges` plus construction: no function above
-emits a Build or RuntimeEvent instance anywhere.
+8 → `TestReleaseCutFromTriples`, `TestBranchNameProjectsNoCommitEdge`,
+`TestCutFromEdgeLandsOnProjectedNodes` (the edge lands on nodes the other two
+functions project, so it cannot dangle) ·
+9 → **by construction, with no test**: no function above emits a Build or
+RuntimeEvent instance anywhere. Nothing asserts their absence, because a test
+that no code path exists is a test of the reader, not the code.
 
 - [x] **Step 3: Report the deliberate leftovers**
 
@@ -722,7 +726,18 @@ against instance data (no harness here), and serving `ns/` under
   spelled as this plan expects. `ns/` was not modified.
 - Task 5: `internal/kg/iri/iri_test.go`'s `TestGrammar` already carries all
   four §10.1 runtime examples verbatim; nothing appended.
-- Task 7 landed verbatim — no deviation from the plan's code.
+- Task 7 landed verbatim, then took three review-driven changes:
+  - **`CommitKnown` is `func(repo, sha string) bool`**, not `func(sha string)
+    bool`. The plan's own doc comment scoped the guard to "the artifact's
+    repo", which a one-argument signature cannot deliver: `main_commits` is
+    `UNIQUE (repo, sha)`, so a batch spanning repos would pass the guard on
+    repo A's sha while minting the IRI from repo B. There are no callers yet,
+    so the fix was free now and would not have been later.
+  - **`TestCutFromEdgeLandsOnProjectedNodes` added.** The plan's three
+    cutFrom/artifact/commit tests each hardcoded their own IRI string and only
+    happened to agree; nothing failed if one function's host-qualification
+    changed alone.
+  - **Comments corrected on two stale facts** (below).
 - The `riot`, Oxigraph and Postgres gates are not runnable in the execution
   environment (no `riot` binary, no docker socket, no local Postgres), so
   `make test` passed with the Postgres-backed packages skipping and the
@@ -732,3 +747,19 @@ against instance data (no harness here), and serving `ns/` under
   image-publish ingest gap **11** and the RuntimeEvent natural key **7**
   (Q1 and Q5 are resolved questions about something else). Corrected here and
   in `internal/graphproj/runtime.go`.
+- **Spec 006 §11.1 is out of date and this plan inherited it.** It says
+  "Nothing creates `docker_image`, `pypi` or `binary` rows" and that
+  `deployments.artifact_id` is "null in practice", but `applyRegistryPackage`
+  (`internal/hooks/github.go`) has since minted `docker_image` artifacts from
+  `registry_package` webhooks, which `FindArtifactByImage` resolves. The
+  projection is right either way — a nil artifact emits no `prov:used` — but
+  the comments no longer repeat the stale claim, and §15 question 11 is
+  narrower than "no image ingest exists". Amending 006 §11.1 is out of scope
+  here; filed as a follow-up. The remaining half of that gap (the GitHub App
+  needs `Packages: read` and a `registry_package` subscription) is already in
+  `docs/follow-ups.md`.
+- Not changed, recorded as known: `deployments.environment` has no CHECK
+  constraint, so `wl:EnvironmentShape`'s dev/prod closure rests on
+  `store.NormalizeEnvironment` alone; `splitRepo` splits at the first slash,
+  so a three-part repo string would yield a five-segment commit IRI rather
+  than being rejected. Both are documented at their call sites.
