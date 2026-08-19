@@ -406,6 +406,23 @@ wl:taskState a owl:DatatypeProperty, owl:FunctionalProperty ;
         transitions between them live in internal/store/tasks.go and are not modelled at all.
         shapes.ttl enumerates the values, so widening the CHECK means widening that shape.""" .
 
+wl:priority a owl:DatatypeProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range xsd:string ;
+    rdfs:comment """Projected literal mirror of the backbone priority enum: critical, high, medium,
+        low. Deliberately NOT a SKOS scheme — the backbone owns the enum (006 Open Q3). The legal
+        values are the tasks.priority CHECK constraint (migration 0001_baseline).""" .
+
+wl:concern a owl:DatatypeProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range xsd:string ;
+    rdfs:comment """Projected literal mirror of the backbone concern enum: completeness,
+        performance, usability, security; absent when the task has none. Deliberately NOT a SKOS
+        scheme — the backbone owns the enum (006 Open Q3). The legal values are the tasks.concern
+        CHECK constraint (migration 0002_prioritization).""" .
+
 wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;

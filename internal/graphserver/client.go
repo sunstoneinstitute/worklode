@@ -10,8 +10,8 @@
 //
 // This client covers PUT/GET/DELETE; POST (merge) is deliberately
 // unimplemented. There is no SPARQL Update endpoint: writes replace or merge
-// whole named graphs. IRIs are opaque strings here; minting is owned
-// elsewhere (internal/kg/iri once the platform-graph-design plan lands).
+// whole named graphs. IRIs are opaque strings here; minting is owned by
+// internal/kg/iri.
 package graphserver
 
 import (
