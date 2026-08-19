@@ -146,13 +146,12 @@ func newDocListCmd() *cobra.Command {
 
 // newDocGetCmd reads back one document: body, sections, and edges. It is
 // named "get" rather than "show" deliberately: 026 §3 consolidated document
-// *reading* into `lode show` (its --spec/--adr/--kind flags and typed-id
-// dispatch), and internal/cmd/show_test.go's TestDocHasNoShowVerb pins that
-// `lode doc` must never grow a "show" child command again. This verb serves
-// the same read `lode doc`'s write verbs need to be usable standalone, without
-// colliding with that name — `lode show`'s own dispatch is part 3's job to
-// extend to the backbone store's numeric ids (026 §3's "the change is the
-// data source and nothing else").
+// reading into `lode show`, and internal/cmd/show_test.go's
+// TestDocHasNoShowVerb pins that `lode doc` must never grow a "show" child.
+// `lode doc`'s write verbs need a read to be usable on their own, and `lode
+// show` cannot reach a backbone document yet — its resolver is
+// filesystem-based (026 §0). Extending it is part 3's job, tracked as
+// WL-129.
 func newDocGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <id>",
