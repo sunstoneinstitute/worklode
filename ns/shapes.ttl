@@ -36,8 +36,8 @@
 #
 # Concept membership is checked as `skos:inScheme <scheme>` rather than an
 # sh:in list of concepts, so growing a scheme never means editing this file.
-# wl:taskState and wl:Environment are the two exceptions: neither has a
-# scheme, and both mirror a closed set elsewhere.
+# wl:taskState, wl:priority, wl:concern and wl:Environment are the exceptions:
+# none has a scheme, and each mirrors a closed set elsewhere.
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +175,23 @@ wl:TaskShape a sh:NodeShape ;
         sh:in ( "draft" "ready" "in_progress" "in_review" "merged"
                 "deployed_dev" "deployed_prod" "released" "abandoned" ) ;
         sh:message "A Task mirrors exactly one backbone state literal from the tasks.state CHECK set." ;
+    ] ;
+    # Mirrors the tasks.priority CHECK constraint (migration 0001_baseline); widen both together.
+    sh:property [
+        sh:path wl:priority ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "critical" "high" "medium" "low" ) ;
+        sh:message "A Task carries exactly one wl:priority from the tasks.priority CHECK set." ;
+    ] ;
+    # Mirrors the tasks.concern CHECK constraint (migration 0002_prioritization); widen both together.
+    sh:property [
+        sh:path wl:concern ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "completeness" "performance" "usability" "security" ) ;
+        sh:message "A Task's wl:concern, when present, is drawn from the tasks.concern CHECK set." ;
     ] ;
     sh:property [
         sh:path wl:followUpTo ;

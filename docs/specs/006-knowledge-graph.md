@@ -294,6 +294,16 @@ wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;  # Task → wlc:TaskK
     rdfs:domain wl:Task ; rdfs:range skos:Concept ;
     rdfs:comment "Kind of task (feature/bug/chore/design/review/spike); see wlc:TaskKind." .
 
+wl:priority a owl:DatatypeProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range xsd:string ;
+    rdfs:comment "Projected literal mirror of the backbone priority enum (spec 005): critical/high/medium/low. Deliberately not a SKOS scheme — the backbone owns the enum (Open Q3)." .
+
+wl:concern a owl:DatatypeProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ; rdfs:range xsd:string ;
+    rdfs:comment "Projected literal mirror of the backbone concern enum (spec 005); absent when the task has none." .
+
 # Type-homogeneous Task→Task closure (ADR-0004 rule): transitive, so `?t wl:dependsOn+ ?x`
 # gives reachability at query time in Oxigraph (no reasoner) and CI/owlrl proves the closure.
 wl:dependsOn a owl:ObjectProperty, owl:TransitiveProperty ;   # Task → Task
@@ -709,6 +719,8 @@ carrying a git branch or version:
 | Task | `id/task/<taskid>` (backbone id, ULID/opaque) | `…/id/task/01H8XZ7K…` |
 | Deliverable | `id/deliverable/<slug>` | `…/id/deliverable/worklode-graph-live` |
 | Issue / PR | `id/{issue,pr}/<host>/<org>/<repo>/<number>` | `…/id/pr/github.com/sunstoneinstitute/worklode/42` |
+| Project | `id/project/<project-id>` (backbone project id) | `…/id/project/worklode` |
+| Agent | `id/agent/<actor-id>` (`foaf:`/`prov:` Agent) | `…/id/agent/github.com/stigsb` |
 | Artifact, Build, Commit, Deployment / Environment | natural-key grammar — `id/deployment/<…>` , `id/environment/<name>` and the rest in §10.1 | `…/id/environment/prod` |
 
 A design document additionally carries an immutable **versioned sibling** IRI (`…/doc/<slug>/v3`),
@@ -720,6 +732,9 @@ fixed graph-server branch (project is a *property*, not a branch — §13.2 item
 
 Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
+
+A Project's projection named graph is `…/graph/project/<project-id>` — the family §11 anchors
+and `e2e/graphserver_test.go` already exercises.
 
 ---
 
@@ -763,12 +778,15 @@ the backbone.
 stream and writes projected quads to `graph-server` over GSP (§13.2 items 2, 4, 5), on the
 fixed work-graph branch, authenticating via Keycloak client-credentials (`dataplatform-svc`).
 Projection named graphs are **anchored per Project** (open question 4): a Task's quads live in the
-named graph of the one Project it `wl:inProject`. Because a graph holds many tasks, the projector
-maintains a task by a **per-subject replace** — `DELETE` the task IRI's existing quads then
-`INSERT` the new ones, scoped to that Project graph — rather than a whole-graph `PUT`. **Keyed by
-subject IRI** → idempotent per (task, graph). A single projector + per-branch write lock makes
-If-Match CAS unnecessary for v1 (§13.3 item 6). (The declared/&lt;doc&gt; and observed/&lt;source&gt;
-graph families of spec 007 are orthogonal to these Project graphs.)
+named graph of the one Project it `wl:inProject`. graph-server exposes no SPARQL Update — its
+writes replace or merge whole named graphs (`internal/graphserver/client.go`) — so a per-subject
+`DELETE`/`INSERT` cannot run against the system of record. Instead the projector recomputes
+**every task of a dirty Project from the backbone** and replaces that Project's named graph
+wholesale via GSP **`PUT`**: deterministic rendering makes an unchanged re-projection
+byte-identical, so the write is idempotent per project graph; a single projector plus
+graph-server's per-branch lock keeps If-Match CAS a should-have (§13.3 item 6). (The
+declared/&lt;doc&gt; and observed/&lt;source&gt; graph families of spec 007 are orthogonal to
+these Project graphs.)
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
@@ -986,8 +1004,9 @@ is deferred pending the Hetzner prod cluster) and the rdf-registry base-URL over
    backbone-owned state machine (004).
 4. ~~Named-graph granularity~~ — **RESOLVED.** Projection named graphs are anchored on
    **Projects** (`wl:Project`, the backbone's `projects` table). Every Task is `wl:inProject`
-   exactly one Project and its quads live in that graph; the projector maintains a task by a
-   per-subject `DELETE`/`INSERT` within it (§11). Separate from the declared/&lt;doc&gt; and
+   exactly one Project and its quads live in that graph; graph-server exposes no SPARQL Update, so
+   the projector maintains a Project's graph by recomputing every task of that Project and
+   replacing the graph wholesale via GSP `PUT` (§11). Separate from the declared/&lt;doc&gt; and
    observed/&lt;source&gt; graph families (spec 007).
 5. ~~RDF-1.2 publish blocker~~ — **RESOLVED:** rdf-registry publishes 1.2 alongside 1.1
    (`.1-2.ttl` files), so triple-term annotations ship natively; no interim workaround needed.
