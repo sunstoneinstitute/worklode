@@ -80,6 +80,17 @@ const (
 	permDeliverableRead  Permission = "deliverable.read"
 	permDeliverableWrite Permission = "deliverable.write"
 
+	// permDocRead and permDocWrite cover the backbone's design documents (spec
+	// 025 §5): specs, ADRs and plans. Their own capability rather than a
+	// flavour of task.read/task.write, because a document is a different
+	// object with a different lifecycle — authoring and accepting the corpus
+	// is not the same authority as filing and closing work, and a policy that
+	// lets an agent work the tracker without letting it edit the specs that
+	// govern it is one someone will plausibly want. Today's grant is the same
+	// set, so nothing changes; the seam is what is being added.
+	permDocRead  Permission = "doc.read"
+	permDocWrite Permission = "doc.write"
+
 	permActorAdmin Permission = "actor.admin"
 
 	permSkillRead  Permission = "skill.read"
@@ -146,6 +157,12 @@ var grants = map[Permission][]Role{
 	// definition of done is one someone will plausibly want.
 	permDeliverableRead:  {RoleUser, RoleAdmin},
 	permDeliverableWrite: {RoleUser, RoleAdmin},
+
+	// Authoring the corpus is open to every authenticated actor; who may
+	// *accept* a document is not a role question at all — 025 §7 gates it on
+	// the document's assignee, checked in the store.
+	permDocRead:  {RoleUser, RoleAdmin},
+	permDocWrite: {RoleUser, RoleAdmin},
 
 	// Admin-only for a reason worth keeping written down: any bearer token
 	// could otherwise mint further tokens, which is privilege escalation.
