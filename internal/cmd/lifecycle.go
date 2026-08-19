@@ -302,6 +302,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		return fmt.Errorf("fetch brief for %s: %w", taskID, err)
 	}
 
+	// Spec 017: consent + materialization while the operator is present.
+	// Never fails the claim; writes to stderr only.
+	runSecretsCeremony(ctx, cmd, c, taskID, dir, brief.Task.Secrets)
+
 	if jsonOut(cmd) {
 		out := nextResult{
 			Claimed: true, Worktree: dir, Branch: branch,
@@ -392,6 +396,9 @@ func runResume(cmd *cobra.Command, dir string) error {
 	brief, raw, err := c.Brief(ctx, taskID)
 	if err != nil {
 		return err
+	}
+	if !secretsSatisfied(taskID, brief.Task.Secrets) {
+		runSecretsCeremony(ctx, cmd, c, taskID, root, brief.Task.Secrets)
 	}
 	if jsonOut(cmd) {
 		printRaw(cmd, raw)
