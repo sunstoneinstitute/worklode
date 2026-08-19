@@ -74,10 +74,11 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 		}
 	}
 
-	if err := p.st.SetProjectionCheckpoint(ctx, through); err != nil {
-		return 0, fmt.Errorf("projector: %w", err)
+	if through != cp {
+		if err := p.st.SetProjectionCheckpoint(ctx, through); err != nil {
+			return 0, fmt.Errorf("projector: %w", err)
+		}
 	}
-	p.m.recordProjects(len(projects))
 	return len(projects), nil
 }
 
@@ -118,6 +119,7 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	if _, err := p.gc.PutGraph(ctx, Branch, iri.ProjectGraph(id), doc); err != nil {
 		return fmt.Errorf("put graph for project %s: %w", id, err)
 	}
+	p.m.recordProject()
 	return nil
 }
 
