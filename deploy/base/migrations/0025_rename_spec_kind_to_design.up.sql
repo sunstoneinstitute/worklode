@@ -8,10 +8,13 @@
 --
 -- Existing spec-kind rows are migrated in place: no task becomes
 -- unrepresentable, and its history (events, edges) is untouched by a value
--- rename on one column.
+-- rename on one column. Order matters on a database that holds spec-kind
+-- rows: the constraint has to be gone while the rows are renamed, since the
+-- old one rejects 'design' and the new one rejects 'spec'.
+
+ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;
 
 UPDATE tasks SET kind = 'design' WHERE kind = 'spec';
 
-ALTER TABLE tasks DROP CONSTRAINT tasks_kind_check;
 ALTER TABLE tasks ADD CONSTRAINT tasks_kind_check
     CHECK (kind IN ('feature','bug','chore','design','review','spike'));
