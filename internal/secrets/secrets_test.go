@@ -58,6 +58,60 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 }
 
+// TestManifestRejectsTraversingTaskID: the task id becomes a path segment, so
+// an id carrying ".." would let `lode secrets purge --task ../../x` unlink and
+// SaveManifest write outside the secrets directory.
+func TestManifestRejectsTraversingTaskID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	victim := filepath.Join(home, "victim.json")
+	if err := os.WriteFile(victim, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write victim: %v", err)
+	}
+
+	for _, id := range []string{"../../victim", "..", "WL-7/../../victim", "", "wl-7"} {
+		if err := RemoveManifest(id); err == nil {
+			t.Errorf("RemoveManifest(%q) = nil; want a rejection", id)
+		}
+		if err := SaveManifest(Manifest{Task: id}); err == nil {
+			t.Errorf("SaveManifest(%q) = nil; want a rejection", id)
+		}
+		if _, ok := LoadManifest(id); ok {
+			t.Errorf("LoadManifest(%q) = ok; want a rejection", id)
+		}
+		if _, err := PurgeTask(id); err == nil {
+			t.Errorf("PurgeTask(%q) = nil; want a rejection", id)
+		}
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("file outside the secrets directory was touched: %v", err)
+	}
+}
+
+// TestKeystoreRejectsMalformedNames: the keystore is a client-side writer of
+// secret names, held to the same grammar the server gates on.
+func TestKeystoreRejectsMalformedNames(t *testing.T) {
+	keyring.MockInit()
+
+	for _, name := range []string{"A_TOKEN=INJECTED", "lowercase", "", "WITH SPACE"} {
+		if err := Put("WL-7", name, "v"); err == nil {
+			t.Errorf("Put(%q) = nil; want a rejection", name)
+		}
+		if _, err := Fetch("WL-7", name); err == nil {
+			t.Errorf("Fetch(%q) = nil; want a rejection", name)
+		}
+		if err := Del("WL-7", name); err == nil {
+			t.Errorf("Del(%q) = nil; want a rejection", name)
+		}
+	}
+	// A bad task id is refused on the same paths, so no keystore item can be
+	// written under a service name the manifest could never name back.
+	if err := Put("../x", "A_TOKEN", "v"); err == nil {
+		t.Error("Put with a traversing task id = nil; want a rejection")
+	}
+}
+
 func TestPurgeTask(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("HOME", t.TempDir())

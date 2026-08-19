@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -19,8 +20,13 @@ type Manifest struct {
 	At           time.Time `json:"at"`
 }
 
-// manifestPath returns ~/.cache/worklode/secrets/<taskID>.json.
+// manifestPath returns ~/.cache/worklode/secrets/<taskID>.json. The id is
+// validated first: it is a path segment, so an id carrying ".." would let the
+// callers read, write, and unlink outside the secrets directory.
 func manifestPath(taskID string) (string, error) {
+	if !ValidTaskID(taskID) {
+		return "", fmt.Errorf("invalid task id %q", taskID)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("find home directory: %w", err)
@@ -51,6 +57,11 @@ func SaveManifest(m Manifest) error {
 	path, err := manifestPath(m.Task)
 	if err != nil {
 		return err
+	}
+	for _, n := range slices.Concat(m.Materialized, m.Declined) {
+		if !ValidName(n) {
+			return fmt.Errorf("invalid secret name %q", n)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create manifest directory: %w", err)

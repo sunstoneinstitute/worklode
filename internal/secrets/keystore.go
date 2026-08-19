@@ -15,9 +15,25 @@ func Service(taskID string) string { return "worklode:" + taskID }
 // ErrNotStored reports a secret name with no keystore item.
 var ErrNotStored = errors.New("secret not in keystore")
 
+// checkItem gates the keystore coordinates. The name reaches an exec child's
+// environment as NAME=value, so a malformed one is an injection, and the task
+// id scopes every item — both are validated before any keystore call.
+func checkItem(taskID, name string) error {
+	if !ValidTaskID(taskID) {
+		return fmt.Errorf("invalid task id %q", taskID)
+	}
+	if !ValidName(name) {
+		return fmt.Errorf("invalid secret name %q", name)
+	}
+	return nil
+}
+
 // Put stores one secret value for a task. The value comes from the op-run
 // child environment (see `lode secrets pack`) and goes nowhere else.
 func Put(taskID, name, value string) error {
+	if err := checkItem(taskID, name); err != nil {
+		return err
+	}
 	if err := keyring.Set(Service(taskID), name, value); err != nil {
 		return fmt.Errorf("keystore set %s for %s: %w", name, taskID, err)
 	}
@@ -26,6 +42,9 @@ func Put(taskID, name, value string) error {
 
 // Fetch reads one secret value for a task. A missing item is ErrNotStored.
 func Fetch(taskID, name string) (string, error) {
+	if err := checkItem(taskID, name); err != nil {
+		return "", err
+	}
 	v, err := keyring.Get(Service(taskID), name)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return "", fmt.Errorf("%s for %s: %w", name, taskID, ErrNotStored)
@@ -39,6 +58,9 @@ func Fetch(taskID, name string) (string, error) {
 // Del removes one secret item; a missing item is a no-op so purge paths are
 // idempotent.
 func Del(taskID, name string) error {
+	if err := checkItem(taskID, name); err != nil {
+		return err
+	}
 	err := keyring.Delete(Service(taskID), name)
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return fmt.Errorf("keystore delete %s for %s: %w", name, taskID, err)
@@ -51,6 +73,9 @@ func Del(taskID, name string) error {
 // enumeration API, so the manifest is the authority on what to remove; no
 // manifest means nothing to purge.
 func PurgeTask(taskID string) ([]string, error) {
+	if !ValidTaskID(taskID) {
+		return nil, fmt.Errorf("invalid task id %q", taskID)
+	}
 	m, ok := LoadManifest(taskID)
 	if !ok {
 		return nil, nil

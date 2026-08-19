@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -55,7 +56,9 @@ func newSecretsCatalogCmd() *cobra.Command {
 				}
 				fmt.Fprintf(out, "%s %-28s %s\n", marker, e.Name, e.Description)
 			}
-			fmt.Fprintln(out, "\n* = baseline: packed for every task, no per-task declaration needed")
+			if len(resp.Secrets) > 0 {
+				fmt.Fprintln(out, "\n* = baseline: packed for every task, no per-task declaration needed")
+			}
 			return nil
 		},
 	}
@@ -91,11 +94,11 @@ func newSecretsStatusCmd() *cobra.Command {
 			}
 			state := func(name string) string {
 				switch {
-				case contains(m.Declined, name):
+				case slices.Contains(m.Declined, name):
 					return "declined"
-				case contains(m.Materialized, name) && inKeystore(name):
+				case slices.Contains(m.Materialized, name) && inKeystore(name):
 					return "materialized"
-				case contains(m.Materialized, name):
+				case slices.Contains(m.Materialized, name):
 					return "missing from keystore"
 				default:
 					return "unmaterialized"
@@ -108,7 +111,7 @@ func newSecretsStatusCmd() *cobra.Command {
 				fmt.Fprintf(out, "  %-28s %s (declared)\n", name, state(name))
 			}
 			for _, name := range m.Materialized {
-				if !contains(brief.Task.Secrets, name) {
+				if !slices.Contains(brief.Task.Secrets, name) {
 					fmt.Fprintf(out, "  %-28s %s (baseline)\n", name, state(name))
 				}
 			}
@@ -166,9 +169,17 @@ func newSecretsPackCmd() *cobra.Command {
 		Short:  "Internal: write op-run-resolved env values into the OS keystore",
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			names := splitNames(namesCSV)
+			names, declined := splitNames(namesCSV), splitNames(declinedCSV)
 			if taskID == "" || len(names) == 0 {
 				return errors.New("--task and --names are required")
+			}
+			// The ceremony hook builds these lists, but pack is the last gate
+			// before a name becomes a keystore item and, later, an assignment
+			// in an exec child's environment.
+			for _, n := range slices.Concat(names, declined) {
+				if !secrets.ValidName(n) {
+					return fmt.Errorf("invalid secret name %q", n)
+				}
 			}
 			var missing []string
 			for _, n := range names {
@@ -185,8 +196,22 @@ func newSecretsPackCmd() *cobra.Command {
 					return err
 				}
 			}
+			// A re-run after the declaration narrowed (spec 017 §3,
+			// re-materialization) replaces the manifest wholesale, and the
+			// manifest is the only authority purge has — keyring cannot
+			// enumerate. Drop the dropped names' items now or they outlive
+			// the worktree with no way to reach them.
+			if prev, ok := secrets.LoadManifest(taskID); ok {
+				for _, n := range prev.Materialized {
+					if !slices.Contains(names, n) {
+						if err := secrets.Del(taskID, n); err != nil {
+							return err
+						}
+					}
+				}
+			}
 			if err := secrets.SaveManifest(secrets.Manifest{
-				Task: taskID, Materialized: names, Declined: splitNames(declinedCSV),
+				Task: taskID, Materialized: names, Declined: declined,
 				At: time.Now().UTC(),
 			}); err != nil {
 				return err
@@ -206,7 +231,7 @@ func newSecretsPackCmd() *cobra.Command {
 var execFn = syscall.Exec
 
 func newSecretsExecCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "exec [--] <command> [args...]",
 		Short: "Run a command with the bound task's materialized secrets in its environment",
 		Long: "Resolves the task from the wt/<id>-<slug> worktree guard, reads that task's " +
@@ -227,22 +252,42 @@ func newSecretsExecCmd() *cobra.Command {
 			if !ok || len(m.Materialized) == 0 {
 				return fmt.Errorf("no secrets materialized for %s; `lode resume` runs the ceremony", taskID)
 			}
-			env := os.Environ()
+			injected := make([]string, 0, len(m.Materialized))
 			for _, name := range m.Materialized {
 				v, err := secrets.Fetch(taskID, name)
 				if err != nil {
 					return fmt.Errorf("secret %s is not in the keystore — do not retry or "+
-						"work around; `lode block` with reason missing-secret: %s", name, name)
+						"work around; `lode block` with reason missing-secret", name)
 				}
-				env = append(env, name+"="+v)
+				injected = append(injected, name+"="+v)
 			}
 			bin, err := exec.LookPath(args[0])
 			if err != nil {
 				return err
 			}
-			return execFn(bin, args, env)
+			return execFn(bin, args, childEnv(os.Environ(), m.Materialized, injected))
 		},
 	}
+	// The wrapped command's flags are its own: without this, cobra claims
+	// `lode secrets exec kubectl get pods -n foo`'s -n and fails.
+	cmd.Flags().SetInterspersed(false)
+	return cmd
+}
+
+// childEnv returns parent with every assignment to one of names stripped,
+// then injected appended. execve keeps duplicate entries and getenv returns
+// the first, so appending alone would hand the child the operator's ambient
+// value instead of the task's (spec 017 §4: "not the operator's shell
+// environment").
+func childEnv(parent, names, injected []string) []string {
+	out := make([]string, 0, len(parent)+len(injected))
+	for _, kv := range parent {
+		if k, _, ok := strings.Cut(kv, "="); ok && slices.Contains(names, k) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, injected...)
 }
 
 // splitNames splits a comma-separated name list, dropping empties.
@@ -254,13 +299,4 @@ func splitNames(csv string) []string {
 		}
 	}
 	return out
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
