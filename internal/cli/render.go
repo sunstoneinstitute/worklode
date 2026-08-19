@@ -215,7 +215,7 @@ func DocTable(w io.Writer, docs []model.Doc) {
 }
 
 // DocDetailRender prints one document: its metadata, body, sections, and
-// edges both ways — the `lode doc show` view.
+// edges both ways — the `lode doc get` view.
 func DocDetailRender(w io.Writer, d model.DocDetail) {
 	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
 	fmt.Fprintf(w, "  project:  %s\n", d.Project)

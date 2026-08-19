@@ -86,12 +86,19 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	payload, err := json.Marshal(req)
+	actor := actorFrom(r)
+	// Same {doc, actor, request} shape recordDocEvent emits, built inline
+	// because the id does not exist until CreateDoc runs: doc is 0 for a
+	// create, and the created row is the event's own consequence.
+	payload, err := json.Marshal(map[string]any{
+		"doc":     0,
+		"actor":   actor.ID,
+		"request": req,
+	})
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
-	actor := actorFrom(r)
 	now := s.st.Now()
 
 	var created *model.Doc

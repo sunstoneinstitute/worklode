@@ -64,6 +64,10 @@ type DocFilter struct {
 // Title comes from the body's H1, falling back to the slug; issued comes from
 // the frontmatter. A parse failure, a malformed issued date, or (on a spec or
 // ADR) an anchor defect is ErrInvalidInput.
+//
+// Status is the corpus importer's affordance. Creating a spec or ADR straight
+// at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
+// depth gate runs here too, and the sections land published.
 func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Doc, error) {
 	if !validDocKinds[in.Kind] {
 		return nil, fmt.Errorf("doc kind %q: %w", in.Kind, ErrInvalidInput)
@@ -89,6 +93,19 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err != nil {
 		return nil, err
 	}
+	// Created accepted: run AcceptDoc's first-accept gate. There is no accepted
+	// version to diff against, so only TooDeep can fire — Removed and
+	// Renumbered come back empty by construction. Plans skip it: they carry no
+	// sections and no anchors (025 §9).
+	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
+	if acceptedAtCreate {
+		diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
+		if v := diff.Violations(); len(v) > 0 {
+			return nil, fmt.Errorf("doc %s/%s cannot be created accepted: %s: %w",
+				in.Project, in.Slug, strings.Join(v, "; "), ErrInvalidInput)
+		}
+	}
+
 	title, ok := designdoc.Title(parsed.doc)
 	if !ok {
 		title = in.Slug
@@ -128,6 +145,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 
 	if err := rebuildSections(tx, id, in.Kind, parsed.doc, 1); err != nil {
 		return nil, err
+	}
+	if acceptedAtCreate {
+		if _, err := tx.Exec(
+			`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
+			return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+		}
 	}
 	if err := rebuildEdges(tx, id, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
@@ -846,9 +869,13 @@ var docShorthand = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
 // shorthand against this project's key, and a bare corpus number. The number
 // form must match exactly one spec or ADR — a project can hold a spec 25 and
 // an ADR 25, and a reference that cannot say which resolves to neither.
+//
+// 026 §4.3's NO-SPEC sentinel needs no case of its own: it matches none of the
+// three forms, so it falls through to to_external, which is where a
+// `covers: NO-SPEC` declaration belongs.
 func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	base = strings.TrimSuffix(path.Base(base), ".md")
-	if base == "" || base == "." || base == "NO-SPEC" {
+	if base == "" || base == "." {
 		return 0, false, nil
 	}
 

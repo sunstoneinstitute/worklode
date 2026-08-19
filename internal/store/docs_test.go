@@ -500,6 +500,49 @@ func TestDocCreateDefaultsAssigneeToCreator(t *testing.T) {
 	}
 }
 
+// TestDocCreateAcceptedPublishesSections: the importer's Status field must
+// leave the same state AcceptDoc would, or an imported document would be
+// accepted with every anchor unpublished.
+func TestDocCreateAcceptedPublishesSections(t *testing.T) {
+	s := openDocStore(t)
+
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-imported",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	if doc.Status != "accepted" {
+		t.Fatalf("status = %q, want accepted", doc.Status)
+	}
+	secs := docSections(t, s, doc.ID)
+	if len(secs) == 0 {
+		t.Fatal("no sections written")
+	}
+	for _, sec := range secs {
+		if !sec.Published {
+			t.Errorf("section #%s is unpublished", sec.Anchor)
+		}
+	}
+}
+
+// TestDocCreateAcceptedRejectsTooDeepAnchor: the 025 §6.1 depth gate runs at
+// publication, so creating straight at accepted must run it too.
+func TestDocCreateAcceptedRejectsTooDeepAnchor(t *testing.T) {
+	s := openDocStore(t)
+	deep := "---\nstatus: accepted\nissued: 2026-08-01\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
+		"### 1.1 Sub {#sec-1.1}\n\nb\n\n#### 1.1.1 Deeper {#sec-1.1.1}\n\nc\n"
+
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-deep",
+		Body: deep, CreatedBy: "stig", Status: "accepted",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "sec-1.1.1") {
+		t.Errorf("err = %v, want it to name the offending anchor", err)
+	}
+}
+
 // TestDocCreateRejectsAnchorDefects: a spec whose anchors are ambiguous or
 // disagree with their numbers is unaddressable, so it never lands.
 func TestDocCreateRejectsAnchorDefects(t *testing.T) {

@@ -285,8 +285,9 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// docsPage handles GET /docs: the whole document corpus (spec 025 §5), newest
-// corpus order first. Read-only, like the document page below.
+// docsPage handles GET /docs: the whole document corpus (spec 025 §5), in
+// ListDocs's corpus order — project, kind, number (plans last), slug.
+// Read-only, like the document page below.
 func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 	docs, err := s.st.ListDocs(r.Context(), docFilterFrom(r))
 	if err != nil {
