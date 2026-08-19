@@ -1106,15 +1106,21 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 	}
 }
 
-// TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips its
-// target in the same transaction (025 §3.3).
+// TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
+// accepted target in the same transaction (025 §3.3), and leaves a draft one
+// alone — 025 §7's ladder runs draft -> accepted -> superseded, and a draft
+// jumped straight to superseded would be reachable by no verb here.
 func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
 		CreatedBy: "stig", Status: "accepted",
 	})
-	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n" +
+	unaccepted := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 7, Slug: "007-draft", Body: specBody,
+		CreatedBy: "stig",
+	})
+	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n    - 007-draft.md\n---\n\n" +
 		"# New\n\n## 1. Scope {#sec-1}\n\na\n"
 	newDoc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
@@ -1136,6 +1142,22 @@ func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 	}
 	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
 		t.Fatalf("state log = %+v, want a superseded entry on the replaced doc", entries)
+	}
+
+	stillDraft, err := s.GetDoc(t.Context(), unaccepted.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillDraft.Status != "draft" {
+		t.Errorf("draft target status = %q, want it left as draft", stillDraft.Status)
+	}
+	// Nothing moved, so nothing is logged.
+	entries, err = s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(unaccepted.ID, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("state log = %+v, want only the create entry", entries)
 	}
 }
 
@@ -1301,6 +1323,36 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 	}
 }
 
+// setDocStatus forces a document's status, standing in for the states only
+// another act — a supersession, a corpus import — can produce.
+func setDocStatus(t *testing.T, s *Store, id int64, status string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(t.Context(),
+		`UPDATE docs SET status = $2 WHERE id = $1`, id, status); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestDocUpdateRevisionOnSupersededDoc: a document superseded since the
+// revision opened has nothing left to land, and says so at the edit rather
+// than at the accept gate.
+func TestDocUpdateRevisionOnSupersededDoc(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	setDocStatus(t, s, doc.ID, "superseded")
+
+	err := updateRevision(t, s, doc.ID, revisedSpecBody)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "superseded") {
+		t.Errorf("err = %v, want it to name the status", err)
+	}
+}
+
 // TestDocAcceptRevisionRejectsRemovedPublishedAnchor: the one invariant that
 // survives into draft (025 §7.2) — an anchor the accepted version published
 // may not disappear.
@@ -1329,17 +1381,17 @@ func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 }
 
 // TestDocAcceptRevisionRejectsRenumber: anchors are immutable, so an accepted
-// section is never renumbered (025 §6 rule 3).
+// section is never renumbered (025 §6 rule 3). Renumbering while keeping the
+// anchor — "## 3. … {#sec-2}" — is a lintAnchors defect and never reaches the
+// diff, so the renumber arrives here the other way: the anchor moves with the
+// number and sec-2 reads as removed. Its twin below covers the form that does
+// reach rule 3.
 func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("ReviseDoc: %v", err)
 	}
-	// sec-2 renumbered to 3 — lintAnchors would reject "## 3. … {#sec-2}", so
-	// the renumber arrives the only way it can: with the anchor dropped and a
-	// new one taking its place. sec-2 then reads as removed, which is the same
-	// rule seen from the other side.
 	renumbered := strings.Replace(revisedSpecBody, "## 2. Model {#sec-2}", "## 3. Model {#sec-3}", 1)
 	if err := updateRevision(t, s, doc.ID, renumbered); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
@@ -1351,6 +1403,29 @@ func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "sec-2") {
 		t.Errorf("err = %v, want it to name sec-2", err)
+	}
+}
+
+// TestDocAcceptRevisionRejectsDroppedNumber: dropping a section's number while
+// keeping its anchor passes lintAnchors — which only compares a number it has
+// — and so reaches rule 3 as an actual renumber, "2" to "".
+func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	unnumbered := strings.Replace(specBody, "## 2. Model {#sec-2}", "## Model {#sec-2}", 1)
+	if err := updateRevision(t, s, doc.ID, unnumbered); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	_, err := acceptRevision(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), `sec-2: renumbered from "2" to ""`) {
+		t.Errorf("err = %v, want the rule 3 violation naming both numbers", err)
 	}
 }
 
@@ -1458,6 +1533,30 @@ func TestDocAcceptRevisionWithoutOpenRevision(t *testing.T) {
 
 	if _, err := acceptRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocAcceptRevisionWrongStatus: only an accepted document has a revision
+// to land. Both other statuses are refused, whatever left a candidate row
+// behind.
+func TestDocAcceptRevisionWrongStatus(t *testing.T) {
+	for _, status := range []string{"draft", "superseded"} {
+		t.Run(status, func(t *testing.T) {
+			s := openDocStore(t)
+			doc := mustAcceptedSpec(t, s, "025-x")
+			if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+				t.Fatalf("ReviseDoc: %v", err)
+			}
+			setDocStatus(t, s, doc.ID, status)
+
+			_, err := acceptRevision(t, s, doc.ID, "stig")
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("err = %v, want ErrInvalidInput", err)
+			}
+			if !strings.Contains(err.Error(), status) {
+				t.Errorf("err = %v, want it to name the status", err)
+			}
+		})
 	}
 }
 

@@ -225,9 +225,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err != nil {
 		return nil, err
 	}
-	if d.status != "draft" {
-		return nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
-	}
+	// Assignee first, matching AcceptRevision: standing to touch the document
+	// does not depend on its state, and checking state first would disclose it
+	// to an actor who has none.
 	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
 		return nil, err
 	}
@@ -235,6 +235,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		return nil, fmt.Errorf(
 			"doc %d is a plan: accepting one mints its tasks in the same transaction (025 §9.2), which is not built yet: %w",
 			id, ErrInvalidInput)
+	}
+	if d.status != "draft" {
+		return nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
 	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
@@ -304,10 +307,18 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 // UpdateRevision replaces the body of a document's open candidate revision.
 // The body is parsed and linted here so a malformed candidate is refused at
 // the edit rather than at the accept gate. ErrNotFound if no revision is open.
+//
+// The document's status is rechecked, not only its revision: a document
+// superseded since the revision opened has nothing left to land, and saying so
+// at the edit beats a confusing refusal at the accept gate.
 func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
 		return err
+	}
+	if d.status != "accepted" {
+		return fmt.Errorf("doc %d is %s: only an accepted document has a revision to edit: %w",
+			id, d.status, ErrInvalidInput)
 	}
 	if _, err := parseDocBody(d.kind, body); err != nil {
 		return err
@@ -518,10 +529,16 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 	return nil
 }
 
-// supersedeReplacedDocs flips every document a document-level replaces edge
-// names to superseded, in the accepting transaction. Section-scoped replaces
-// edges flip nothing — section-level supersession stays derived (025 §3.3) —
-// and an edge resolving to to_external names no row here.
+// supersedeReplacedDocs flips every accepted document a document-level
+// replaces edge names to superseded, in the accepting transaction.
+// Section-scoped replaces edges flip nothing — section-level supersession
+// stays derived (025 §3.3) — and an edge resolving to to_external names no
+// row here.
+//
+// Only an accepted target moves: 025 §7's ladder is draft -> accepted ->
+// superseded, and a draft pushed straight to superseded would be unreachable
+// by every verb here — editable by none, acceptable by none, revisable by
+// none. A draft target is therefore left alone, and logs nothing.
 func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
 	rows, err := tx.Query(
 		`SELECT DISTINCT to_doc FROM doc_edges
@@ -547,7 +564,7 @@ func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error
 	for _, target := range targets {
 		res, err := tx.Exec(
 			`UPDATE docs SET status = 'superseded', updated_at = $2
-			  WHERE id = $1 AND status <> 'superseded'`, target, ts)
+			  WHERE id = $1 AND status = 'accepted'`, target, ts)
 		if err != nil {
 			return fmt.Errorf("supersede doc %d: %w", target, err)
 		}

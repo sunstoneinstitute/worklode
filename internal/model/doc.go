@@ -4,8 +4,9 @@ import "time"
 
 // Doc is a backbone design document (025 §5): a spec, an ADR, or a plan.
 // Number is 0 for plans, which carry no corpus number (025 §14.3); Issued is
-// "" until the document is accepted; Assignee defaults to the creator and is
-// what the accept gate checks.
+// the frontmatter's ISO date of first publication (dct:issued, 025 §14) and is
+// "" when unset, the body being the authority for it as for Title; Assignee
+// defaults to the creator and is what the accept gate checks.
 type Doc struct {
 	ID        int64     `json:"id"`
 	Project   string    `json:"project"`
