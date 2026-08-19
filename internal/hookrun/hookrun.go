@@ -368,6 +368,13 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 // purgeSecrets removes a task's materialized secrets when its worktree goes
 // away — materialized lifetime equals worktree lifetime (spec 017). Local
 // only, so it runs BEFORE any backbone call and regardless of their outcome.
+//
+// Bound to worktree removal, not to a session leaving. A session that exits a
+// worktree (spec 012 §4: `ExitWorktree`, one session working several tasks in
+// sequence) still holds that task's lease and can come back, and 017 §3 purges
+// on exit only for a lease that is *gone*. Purging on every exit would cost a
+// fresh consent and a fresh Touch ID on return — impossible in the
+// non-interactive session that is the common case.
 func purgeSecrets(opts Options, taskID string) {
 	names, err := secrets.PurgeTask(taskID)
 	if err != nil {
@@ -836,7 +843,6 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
-	purgeSecrets(opts, taskID)
 	sessionID := p.SessionID
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)

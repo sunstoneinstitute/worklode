@@ -893,6 +893,50 @@ func TestWorktreeRemovePurgesSecretsRegardlessOfBackbone(t *testing.T) {
 	}
 }
 
+// TestWorktreeExitKeepsSecrets is the converse of the two above, and the
+// reason purgeSecrets is bound to removal rather than to a session leaving.
+// A session that exits a worktree still holds that task's lease and can come
+// back (spec 012 §4: one session working several tasks in sequence); spec 017
+// §3 purges on exit only for a lease that is gone. Purging here would cost a
+// fresh consent and a fresh Touch ID on return — unobtainable in the
+// non-interactive session that is the common case.
+func TestWorktreeExitKeepsSecrets(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+
+	const taskID = "WL-4"
+	if err := secrets.Put(taskID, "A_TOKEN", "v"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Materialized: []string{"A_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, taskID, "hop")
+
+	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
+	payload := payloadJSON(t, Payload{Cwd: root, SessionID: "sess-1", ToolInput: toolInput})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:     "worktree-exit",
+		Stdin:     bytes.NewReader(payload),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		NewClient: func() (*cli.Client, error) { return nil, errors.New("no config") },
+	})
+	if code != 0 {
+		t.Fatalf("hook exit = %d; hooks never fail the event", code)
+	}
+	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err != nil {
+		t.Fatalf("leaving the worktree purged a still-leased task's secrets: %v", err)
+	}
+	if _, ok := secrets.LoadManifest(taskID); !ok {
+		t.Fatal("leaving the worktree removed a still-leased task's manifest")
+	}
+}
+
 // --- worktree-create auto-resumes an abandoned worktree ---------------------
 
 func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
