@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -257,5 +259,54 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatal("accept plan: want the 422 stub, got nil")
 	} else if status := clientErrStatus(t, err); status != http.StatusUnprocessableEntity {
 		t.Fatalf("accept plan: status = %d, want 422 (err %v)", status, err)
+	}
+}
+
+// TestDocOperationsMetricOnMetrics proves worklode_doc_operations_total is
+// visible on the admin /metrics endpoint after a real document mutation
+// through the public API — the wiring serve.go relies on
+// (store.WithMetrics(reg) -> the same registry -> the admin listener's
+// /metrics), not just that the counter increments into an in-process
+// registry nobody scrapes, which the store unit test already covers.
+func TestDocOperationsMetricOnMetrics(t *testing.T) {
+	ctx := context.Background()
+
+	reg := prometheus.NewRegistry()
+	st := store.OpenTestStore(t, store.WithMetrics(reg))
+	main, admin, err := api.NewServer(st, api.Config{
+		BootstrapToken: bootstrapToken,
+		WebOpen:        true,
+		Metrics:        reg,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv := httptest.NewServer(main)
+	defer srv.Close()
+
+	adminClient := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
+	if _, _, err := adminClient.CreateProject(ctx, model.CreateProjectInput{
+		ID: "docs-metrics", Name: "Docs Metrics", Key: "DOCM",
+	}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, _, err := adminClient.CreateDoc(ctx, model.CreateDocInput{
+		Project: "docs-metrics", Kind: "plan", Slug: "metrics-plan", Body: planSourceBody,
+	}); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	admin.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /metrics: status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "worklode_doc_operations_total") {
+		t.Fatalf("/metrics missing worklode_doc_operations_total:\n%s", body)
+	}
+	if want := `worklode_doc_operations_total{op="create",outcome="ok"}`; !strings.Contains(body, want) {
+		t.Fatalf("/metrics missing %s; body:\n%s", want, body)
 	}
 }
