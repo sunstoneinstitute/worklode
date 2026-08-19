@@ -386,3 +386,38 @@ one pass.
   `task.secrets_materialized` is a spec amendment plus a one-line change, and
   is cheapest before part 2 of the task-secrets series ships a client that
   emits it.
+
+## From knowledge-graph plan part 1 (2026-08-19)
+
+- `[gated]` **The Oxigraph integration tests never run on the common CI path.**
+  `_test.yml` starts its ephemeral Oxigraph under `if: contains(inputs.runs-on,
+  'ubuntu-latest')`, but `pr-checks.yml` routes *trusted* PRs to the
+  `gha-pgvector`/`gha-buildcache` self-hosted runners, which have no usable
+  Docker socket — so a team PR, the majority path, skips the branch's only
+  triple-store proof (`internal/graphproj/oxigraph_test.go`: the `ns/` parse
+  gate, the project-graph replace round-trip and the `dependsOn+` path) and
+  only a fork PR exercises it. This follows the plan and the Docker-less-runner
+  constraint, so it is not a defect. The fix is symmetrical with Postgres: an
+  always-on Oxigraph container beside hel01's Postgres
+  (`docs/self-hosted-runner.md`), with `TEST_SPARQL_URL` set on the
+  self-hosted branch of `_test.yml` the way `postgres-dsn` already is. Worth
+  doing when the graph gets a second consumer — part 2's projector, or a CI
+  SHACL gate over projected graphs.
+- `[gated]` **Cross-project edges project dangling, untyped IRIs** — owned by
+  **WL-110 / knowledge-graph part 2 (the projector plan)**, which must decide
+  before it writes real graphs. A `blocks`/`child_of`/`follow_up_to` edge that
+  crosses projects lands `A wl:blocks B` in P1's named graph and `B
+  wl:dependsOn A` in P2's; neither graph holds both ends, so each carries an
+  object IRI with no `rdf:type` beside it. Per-graph SHACL validation then
+  fails: `wl:followUpTo`'s `sh:class wl:Task` (`ns/shapes.ttl`) is unsatisfied
+  by a foreign end. Two candidate answers — emit a bare `rdf:type wl:Task` stub
+  for out-of-graph ends, or scope validation to the union of the project graphs
+  — and the choice is the projector's, not the renderer's.
+- `[gated]` **Nothing structurally forces a project graph to contain its
+  Project node** — same owner, **WL-110 / knowledge-graph part 2**.
+  `TaskTriples` is subject-complete per task, so `wl:inProject`'s `sh:class
+  wl:Project` is satisfiable only if the caller also appends `ProjectTriples`
+  to the document; `TestDependsOnPath` builds a graph that looks valid and
+  omits it. A `ProjectGraphDocument(p, tasks...)` assembler in part 2 would
+  make the Project node part of the document's construction rather than a
+  convention each call site has to remember.
