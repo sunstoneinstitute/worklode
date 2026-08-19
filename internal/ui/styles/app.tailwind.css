@@ -147,10 +147,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .main{padding:22px 26px 60px;min-width:0}
 .mode{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
 .mode.active{display:grid}
-/* Rail's sticky offset assumes it sits beside scrolling content; once the
- * grid collapses to one column it sits above the content instead, so a stuck
- * sticky rail paints over the work list below it. */
-@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1;position:static;top:auto}}
+@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
 
 /* Below 880px the shell collapses to one column (spec 032 §10: reduced
  * columns, not a squeezed grid): the sidebar — global or project — becomes
@@ -276,6 +273,12 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 
 /* ---------- right decision rail ---------- */
 .rail{display:flex;flex-direction:column;gap:14px;position:sticky;top:78px}
+/* Sticky assumes the rail sits beside scrolling content. At the same 1080px
+ * breakpoint that collapses .mode to one column the rail sits above the work
+ * list instead, where a stuck rail paints over it. This override must stay
+ * *after* the rule above: a media query adds no specificity, so an override
+ * placed earlier in the file loses to the later unconditional declaration. */
+@media(max-width:1080px){.rail{position:static;top:auto}}
 .decision{background:var(--surface);border:1px solid var(--accent-line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .decision .dh{padding:11px 16px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
 .decision .db{padding:15px 16px;display:flex;flex-direction:column;gap:12px}
