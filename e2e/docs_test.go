@@ -226,16 +226,26 @@ func TestDocLifecycle(t *testing.T) {
 	if detail.Version != 2 {
 		t.Fatalf("doc version after revision accept = %d, want 2", detail.Version)
 	}
+	if len(detail.Sections) != 3 {
+		t.Fatalf("sections after revision accept = %+v, want exactly 3 (sec-1, sec-1a, sec-2)", detail.Sections)
+	}
 	sec1 = findDocSection(detail.Sections, "sec-1")
+	sec1a := findDocSection(detail.Sections, "sec-1a")
 	sec2 = findDocSection(detail.Sections, "sec-2")
-	if sec1 == nil || sec2 == nil {
-		t.Fatalf("sections after revision accept = %+v, want sec-1 and sec-2", detail.Sections)
+	if sec1 == nil || sec1a == nil || sec2 == nil {
+		t.Fatalf("sections after revision accept = %+v, want sec-1, sec-1a and sec-2", detail.Sections)
 	}
 	if sec1.LastRevisedIn != 1 {
 		t.Fatalf("sec-1 last_revised_in = %d, want 1 (untouched by the revision)", sec1.LastRevisedIn)
 	}
 	if sec2.LastRevisedIn != 2 {
 		t.Fatalf("sec-2 last_revised_in = %d, want 2 (its body was edited)", sec2.LastRevisedIn)
+	}
+	if sec1a.LastRevisedIn != 2 {
+		t.Fatalf("sec-1a last_revised_in = %d, want 2 (introduced in this revision)", sec1a.LastRevisedIn)
+	}
+	if !sec1a.Published {
+		t.Fatalf("sec-1a published = false, want true (accept publishes every current anchor)")
 	}
 
 	// 7. The plan half: a plan carries no number and no anchors, its body is
