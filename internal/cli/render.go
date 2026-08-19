@@ -192,6 +192,87 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	}
 }
 
+// DocTable prints one row per document: id, kind, number, slug, title,
+// status, version. Number is "-" for a plan, which carries none (025 §14.3).
+func DocTable(w io.Writer, docs []model.Doc) {
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "KIND"},
+		column{header: "NUMBER"},
+		column{header: "SLUG"},
+		titleColumn("TITLE"),
+		column{header: "STATUS"},
+		column{header: "VERSION"},
+	)
+	for _, d := range docs {
+		number := "-"
+		if d.Number != 0 {
+			number = strconv.Itoa(d.Number)
+		}
+		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, number, d.Slug, d.Title, d.Status, strconv.Itoa(d.Version))
+	}
+	tbl.flush(w)
+}
+
+// DocDetailRender prints one document: its metadata, body, sections, and
+// edges both ways — the `lode doc show` view.
+func DocDetailRender(w io.Writer, d model.DocDetail) {
+	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
+	fmt.Fprintf(w, "  project:  %s\n", d.Project)
+	fmt.Fprintf(w, "  kind:     %s\n", d.Kind)
+	if d.Number != 0 {
+		fmt.Fprintf(w, "  number:   %d\n", d.Number)
+	}
+	fmt.Fprintf(w, "  slug:     %s\n", d.Slug)
+	fmt.Fprintf(w, "  status:   %s\n", d.Status)
+	fmt.Fprintf(w, "  version:  %d\n", d.Version)
+	if d.Issued != "" {
+		fmt.Fprintf(w, "  issued:   %s\n", d.Issued)
+	}
+	assignee := d.Assignee
+	if assignee == "" {
+		assignee = "-"
+	}
+	fmt.Fprintf(w, "  assignee: %s\n", assignee)
+	if d.Revision != nil {
+		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, localTime(d.Revision.CreatedAt))
+	}
+	if len(d.Sections) > 0 {
+		fmt.Fprintln(w, "\n  sections:")
+		tw := newTabwriter(w)
+		fmt.Fprintln(tw, "    ANCHOR\tNUMBER\tHEADING")
+		for _, s := range d.Sections {
+			fmt.Fprintf(tw, "    %s\t%s\t%s\n", s.Anchor, s.Number, s.Heading)
+		}
+		tw.Flush()
+	}
+	if d.Body != "" {
+		fmt.Fprintln(w)
+		Markdown(w, d.Body)
+	}
+	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
+		fmt.Fprintln(w, "\nedges:")
+		for _, e := range d.Edges {
+			fmt.Fprintf(w, "  %d %s %s\n", d.ID, e.Type, docEdgeTarget(e))
+		}
+		for _, e := range d.EdgesIn {
+			fmt.Fprintf(w, "  %d %s %d\n", e.ToDoc, e.Type, d.ID)
+		}
+	}
+}
+
+// docEdgeTarget renders one outbound edge's far end: a document id and
+// optional anchor, or the external reference an unresolved edge carries.
+func docEdgeTarget(e model.DocEdge) string {
+	if e.ToDoc != 0 {
+		if e.ToAnchor != "" {
+			return strconv.FormatInt(e.ToDoc, 10) + "#" + e.ToAnchor
+		}
+		return strconv.FormatInt(e.ToDoc, 10)
+	}
+	return e.ToExternal
+}
+
 // IssueTable prints one row per inbox issue: repo, number, triage state,
 // state, title.
 func IssueTable(w io.Writer, issues []model.Issue) {
