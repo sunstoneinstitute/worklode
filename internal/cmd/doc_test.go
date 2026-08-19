@@ -380,3 +380,206 @@ func TestDocLifecycle(t *testing.T) {
 		t.Errorf("doc revise --accept: body = %q, want %q", landed.Body, revisedBody)
 	}
 }
+
+// --- list selectors (026 §2) --------------------------------------------
+
+// TestDocListSelectorConflicts: each derived selector implies a kind and a
+// status, so a contradicting filter is refused locally, before any round trip
+// (026 §2.1). The server refuses the same combinations; this just spares the
+// request.
+func TestDocListSelectorConflicts(t *testing.T) {
+	for name, c := range map[string]struct {
+		args []string
+		want string
+	}{
+		"both selectors":           {[]string{"--needs-planning", "--needs-execution"}, "none of the others can be"},
+		"planning with draft":      {[]string{"--needs-planning", "--status", "draft"}, "accepted"},
+		"planning with plan kind":  {[]string{"--needs-planning", "--kind", "plan"}, "spec"},
+		"execution with draft":     {[]string{"--needs-execution", "--status", "draft"}, "accepted"},
+		"execution with spec kind": {[]string{"--needs-execution", "--kind", "spec"}, "plan"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := newDocListCmd()
+			cmd.SetArgs(c.args)
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("err = %v; want it to mention %q", err, c.want)
+			}
+		})
+	}
+}
+
+// docSpecTwoSections is a spec with two anchored sections, so a plan covering
+// one leaves exactly one planning gap.
+const docSpecTwoSections = `---
+status: draft
+---
+
+# A spec
+
+## 1. Scope {#sec-1}
+
+Scope body.
+
+## 2. Model {#sec-2}
+
+Model body.
+`
+
+// docPlanCoveringSec1 is a mintable plan whose covers edge names sec-1 of the
+// spec above.
+const docPlanCoveringSec1 = `---
+status: draft
+covers:
+  - my-spec#sec-1
+---
+
+# Part one
+
+## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do it.
+`
+
+// TestDocListNeedsPlanningAndExecution: both selectors reach the server and
+// render — the spec with its gap anchors, the plan with its open task.
+func TestDocListNeedsPlanningAndExecution(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	specFile := writeDocFile(t, docSpecTwoSections)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
+		t.Fatalf("doc new spec: %v", err)
+	}
+	if _, err := runLode(t, "doc", "accept", "my-spec"); err != nil {
+		t.Fatalf("doc accept spec: %v", err)
+	}
+	planFile := writeDocFile(t, docPlanCoveringSec1)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+		"--slug", "part-one", "--file", planFile); err != nil {
+		t.Fatalf("doc new plan: %v", err)
+	}
+	if _, err := runLode(t, "doc", "accept", "part-one"); err != nil {
+		t.Fatalf("doc accept plan: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "list", "--project", "proj", "--needs-planning")
+	if err != nil {
+		t.Fatalf("doc list --needs-planning: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2") {
+		t.Errorf("needs-planning output = %q, want the spec and its unplanned anchor", out)
+	}
+	if strings.Contains(out, "sec-1") {
+		t.Errorf("needs-planning output = %q, want sec-1 omitted: an accepted plan covers it", out)
+	}
+
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--needs-planning", "--json")
+	if err != nil {
+		t.Fatalf("doc list --needs-planning --json: %v\noutput: %s", err, out)
+	}
+	var resp model.DocListResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode doc list %q: %v", out, err)
+	}
+	if len(resp.Docs) != 1 || len(resp.PlanningGaps) != 1 {
+		t.Fatalf("json = %+v, want one doc and one gap", resp)
+	}
+	if resp.PlanningGaps[0].Sections != 2 ||
+		!strings.Contains(strings.Join(resp.PlanningGaps[0].Unplanned, " "), "sec-2") {
+		t.Errorf("gap = %+v, want 2 sections with sec-2 unplanned", resp.PlanningGaps[0])
+	}
+
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--needs-execution")
+	if err != nil {
+		t.Fatalf("doc list --needs-execution: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "part-one") {
+		t.Errorf("needs-execution output = %q, want the accepted plan", out)
+	}
+}
+
+// --- lode doc anchors (the local pre-accept lint, 025 §18) ---------------
+
+func TestDocAnchors(t *testing.T) {
+	cases := map[string]struct {
+		body     string
+		wantErr  bool
+		contains []string
+	}{
+		"clean spec": {
+			body:     docSpecTwoSections,
+			contains: []string{"no problems"},
+		},
+		"duplicate anchor": {
+			body:    "# T\n\n## A {#sec-1}\n\nx\n\n## B {#sec-1}\n\ny\n",
+			wantErr: true, contains: []string{"#sec-1 is claimed by both"},
+		},
+		"anchor disagrees with number": {
+			body:    "# T\n\n## 1. A {#sec-9}\n\nx\n",
+			wantErr: true, contains: []string{"numbered 1 but anchored #sec-9"},
+		},
+		"section too deep": {
+			body: "# T\n\n## 1. A {#sec-1}\n\nx\n\n### 1.1 B {#sec-1.1}\n\ny\n" +
+				"\n#### 1.1.1 C {#sec-1.1.1}\n\nz\n\n##### 1.1.1.1 D {#sec-1.1.1.1}\n\nw\n",
+			wantErr: true, contains: []string{"sec-1.1.1.1", "depth"},
+		},
+		"every finding is reported": {
+			body:    "# T\n\n## 1. A {#sec-9}\n\nx\n\n## B {#sec-2}\n\ny\n\n## C {#sec-2}\n\nz\n",
+			wantErr: true, contains: []string{"numbered 1 but anchored #sec-9", "#sec-2 is claimed by both"},
+		},
+		"well-formed plan": {
+			body:     docPlanCoveringSec1,
+			contains: []string{"no problems"},
+		},
+		"plan with an unparseable task": {
+			body: "---\nstatus: draft\ncovers: NO-SPEC\n---\n\n# P\n\n## Tasks\n\n" +
+				"### Task 1 — No fence\n\nprose only\n",
+			wantErr: true, contains: []string{"task 1", "kind is required"},
+		},
+		// A spec is not a plan, so its "## Tasks" section is prose: the
+		// plan-task check is skipped rather than guessed at.
+		"tasks section in a non-plan is not linted as a plan": {
+			body:     "# T\n\n## Tasks\n\n### Not a task heading\n\nprose\n",
+			contains: []string{"no problems"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			file := writeDocFile(t, tc.body)
+			cmd := newDocAnchorsCmd()
+			out := &strings.Builder{}
+			cmd.SetArgs([]string{file})
+			cmd.SetOut(out)
+			cmd.SetErr(out)
+			err := cmd.Execute()
+			if tc.wantErr != (err != nil) {
+				t.Fatalf("err = %v, wantErr = %v\noutput: %s", err, tc.wantErr, out)
+			}
+			for _, want := range tc.contains {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("output = %q, want it to contain %q", out.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestDocAnchorsMissingFile(t *testing.T) {
+	cmd := newDocAnchorsCmd()
+	cmd.SetArgs([]string{filepath.Join(t.TempDir(), "nope.md")})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("err = nil, want the read to fail")
+	}
+}

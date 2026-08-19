@@ -109,9 +109,24 @@ type DocDetail struct {
 	Revision *DocRevision `json:"revision"`
 }
 
-// DocListResponse is the response body of GET /api/v1/docs.
+// DocPlanningGap names the sections of one accepted spec that no accepted
+// plan undertakes (026 §2.1). It is keyed by document id rather than
+// embedding the document, so GET /api/v1/docs answers with one listing shape
+// whatever selector produced it.
+//
+// Sections is the spec's current section count, so a caller can render the
+// "2/9" ratio 026 §2.1 shows without a second request.
+type DocPlanningGap struct {
+	Doc       int64    `json:"doc"`
+	Sections  int      `json:"sections"`
+	Unplanned []string `json:"unplanned"` // anchors, in document order
+}
+
+// DocListResponse is the response body of GET /api/v1/docs. PlanningGaps is
+// populated only for ?needs_planning=true, one entry per document in Docs.
 type DocListResponse struct {
-	Docs []Doc `json:"docs"`
+	Docs         []Doc            `json:"docs"`
+	PlanningGaps []DocPlanningGap `json:"planning_gaps,omitempty"`
 }
 
 // AcceptDocResponse is the response body of POST /api/v1/docs/{id}/accept.

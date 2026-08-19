@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -704,37 +705,16 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 			return parsedDoc{}, fmt.Errorf("frontmatter issued %q is not YYYY-MM-DD: %w", issued, ErrInvalidInput)
 		}
 	}
+	// Plans carry no anchors (025 §9), so the lint applies to specs and ADRs
+	// only. designdoc.LintAnchors is the one implementation; `lode doc
+	// anchors` reports its findings as a pre-accept lint, and here any finding
+	// refuses the write.
 	if kind != "plan" {
-		if err := lintAnchors(doc); err != nil {
-			return parsedDoc{}, err
+		if v := designdoc.LintAnchors(doc); len(v) > 0 {
+			return parsedDoc{}, fmt.Errorf("%s: %w", strings.Join(v, "; "), ErrInvalidInput)
 		}
 	}
 	return parsedDoc{doc: doc, issued: issued}, nil
-}
-
-// lintAnchors rejects the two anchor defects that make a section
-// unaddressable: two headings claiming one anchor, and an anchor that
-// disagrees with its heading number. secfmt.py writes the anchor as
-// "sec-<number>", so the number is the anchor and a disagreement means one of
-// them is a typo. Headings are named rather than line-numbered — the parser
-// yields no line numbers, and the heading text locates the defect.
-func lintAnchors(doc *designdoc.Document) error {
-	seen := map[string]string{}
-	for _, sec := range doc.Sections {
-		if sec.Anchor == "" {
-			continue
-		}
-		if prev, dup := seen[sec.Anchor]; dup {
-			return fmt.Errorf("anchor #%s is claimed by both %q and %q: %w",
-				sec.Anchor, prev, sec.Title, ErrInvalidInput)
-		}
-		seen[sec.Anchor] = sec.Title
-		if sec.Number != "" && sec.Anchor != "sec-"+sec.Number {
-			return fmt.Errorf("heading %q is numbered %s but anchored #%s: %w",
-				sec.Title, sec.Number, sec.Anchor, ErrInvalidInput)
-		}
-	}
-	return nil
 }
 
 // priorSection is the accept-time state rebuildSections carries forward.
@@ -1137,6 +1117,138 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 		return nil, fmt.Errorf("list docs: %w", err)
 	}
 	return out, nil
+}
+
+// NeedsPlanning returns the accepted specs that have at least one section no
+// accepted plan undertakes, each with the anchors that made it a gap (026
+// §2.1). project narrows the answer; "" answers over every project.
+//
+// A section counts as planned when some accepted plan carries a `covers` edge
+// naming both the spec and that exact anchor. Three consequences are
+// deliberate:
+//
+//   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
+//     say which present section it undertakes and would silently claim future
+//     ones (026 §2.1), so it never appears in the planned set.
+//   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
+//     §4.3), so it falls out of the join without a case of its own.
+//   - Only accepted documents on both ends participate: a draft spec is not
+//     yet owed planning, and a draft plan has not yet undertaken work.
+//
+// Coverage here is two-valued — an edge to the anchor means planned. 026 §2.1
+// specifies a three-valued `coverage: full|partial|none` relation with
+// `fullCoverageWith` closure checking, which doc_edges cannot express: it has
+// no coverage-level column, so `rebuildEdges` writes the level away. Closing
+// that gap needs a schema change and is filed in docs/follow-ups.md.
+func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`WITH planned AS (
+		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
+		       FROM doc_edges e
+		       JOIN docs p ON p.id = e.from_doc
+		      WHERE e.type = 'covers'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		        AND p.kind = 'plan' AND p.status = 'accepted'
+		 )
+		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
+		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
+		                 FILTER (WHERE pl.anchor IS NULL), '[]')::text
+		   FROM docs d
+		   JOIN doc_sections sec ON sec.doc_id = d.id
+		   LEFT JOIN planned pl ON pl.doc_id = sec.doc_id AND pl.anchor = sec.anchor
+		  WHERE d.kind = 'spec' AND d.status = 'accepted'
+		    AND ($1 = '' OR d.project_id = $1)
+		  GROUP BY d.id
+		 HAVING count(*) FILTER (WHERE pl.anchor IS NULL) > 0
+		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)
+	}
+	defer rows.Close()
+
+	var docs []model.Doc
+	var gaps []model.DocPlanningGap
+	for rows.Next() {
+		var gap model.DocPlanningGap
+		var unplannedJSON string
+		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &unplannedJSON}})
+		if err != nil {
+			return nil, nil, fmt.Errorf("scan spec needing planning: %w", err)
+		}
+		if err := json.Unmarshal([]byte(unplannedJSON), &gap.Unplanned); err != nil {
+			return nil, nil, fmt.Errorf("decode unplanned anchors of doc %d: %w", d.ID, err)
+		}
+		gap.Doc = d.ID
+		docs = append(docs, *d)
+		gaps = append(gaps, gap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)
+	}
+	return docs, gaps, nil
+}
+
+// NeedsExecution returns the accepted plans whose task set holds at least one
+// task that is not closed. project narrows the answer; "" answers over every
+// project. "Closed" is taskClosed's notion, shared with the ready set and the
+// blocks predicate, so the three cannot drift on what done means.
+//
+// This departs from 025 §18's "unminted or unfinished" deliberately, as the
+// 2026-08-03 plan-acceptance plan records: through the accept path an
+// accepted-but-unminted plan cannot exist, and the only accepted plans with no
+// task set are the importer's *spent* plans, which must not be reported as
+// pending work. The ordering need §18's "unminted" arm served is covered by
+// the plan-to-plan blocks predicate (planBlockedCondition).
+func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+qualifiedDocColumns("d")+`
+		   FROM docs d
+		  WHERE d.kind = 'plan' AND d.status = 'accepted'
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND EXISTS (SELECT 1 FROM tasks t
+		                 WHERE t.plan_doc = d.id AND NOT `+taskClosed("t")+`)
+		  ORDER BY d.project_id, d.slug`, project)
+	if err != nil {
+		return nil, fmt.Errorf("list plans needing execution: %w", err)
+	}
+	defer rows.Close()
+
+	var out []model.Doc
+	for rows.Next() {
+		d, err := scanDoc(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan plan needing execution: %w", err)
+		}
+		out = append(out, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list plans needing execution: %w", err)
+	}
+	return out, nil
+}
+
+// appendScan lets scanDoc read a row that carries extra trailing columns: it
+// forwards the document's own destinations and appends the caller's. Without
+// it every query that joins something onto docs would need its own copy of
+// the fourteen-column scan.
+type appendScan struct {
+	rowScanner
+	extra []any
+}
+
+func (a appendScan) Scan(dest ...any) error {
+	return a.rowScanner.Scan(append(dest, a.extra...)...)
+}
+
+// qualifiedDocColumns renders docColumns with every name prefixed by alias,
+// for queries that join docs against a table carrying a column of the same
+// name (doc_sections.number).
+func qualifiedDocColumns(alias string) string {
+	cols := strings.Split(docColumns, ", ")
+	for i, c := range cols {
+		cols[i] = alias + "." + c
+	}
+	return strings.Join(cols, ", ")
 }
 
 // ListDocSections returns a document's sections in document order. A plan

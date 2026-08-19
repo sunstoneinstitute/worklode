@@ -2227,3 +2227,282 @@ func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
 		})
 	}
 }
+
+// --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
+
+// planCoveringBody renders a plan whose frontmatter covers refs and whose
+// ## Tasks section holds one definition, so the plan can be accepted.
+func planCoveringBody(refs ...string) string {
+	var b strings.Builder
+	b.WriteString("---\nstatus: draft\n")
+	if len(refs) > 0 {
+		b.WriteString("covers:\n")
+		for _, ref := range refs {
+			b.WriteString("  - " + ref + "\n")
+		}
+	}
+	b.WriteString("---\n\n# A covering plan\n\n## Tasks\n\n### Task 1 — Only task\n\n")
+	b.WriteString("```yaml\nkind: chore\n```\n\nDo it.\n")
+	return b.String()
+}
+
+// coveringPlan creates a plan covering refs, accepting it when accept is set.
+func coveringPlan(t *testing.T, s *Store, slug string, accept bool, refs ...string) *model.Doc {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: slug, Body: planCoveringBody(refs...), CreatedBy: "stig",
+	})
+	if !accept {
+		return doc
+	}
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan %s: %v", slug, err)
+	}
+	return accepted
+}
+
+// needsPlanning runs the query and returns the one gap it expects, failing
+// the test when the result does not name exactly the given specs.
+func needsPlanningSlugs(t *testing.T, s *Store, project string) ([]string, []model.DocPlanningGap) {
+	t.Helper()
+	docs, gaps, err := s.NeedsPlanning(t.Context(), project)
+	if err != nil {
+		t.Fatalf("NeedsPlanning: %v", err)
+	}
+	slugs := make([]string, len(docs))
+	for i, d := range docs {
+		slugs[i] = d.Slug
+	}
+	return slugs, gaps
+}
+
+// TestDocNeedsPlanningReportsUncoveredSections: an accepted spec is listed
+// with exactly the anchors no accepted plan's covers edge names, in document
+// order, alongside its total section count.
+func TestDocNeedsPlanningReportsUncoveredSections(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x#sec-1")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if !slices.Equal(slugs, []string{"025-x"}) {
+		t.Fatalf("needs planning = %v, want [025-x]", slugs)
+	}
+	if len(gaps) != 1 {
+		t.Fatalf("gaps = %v, want one entry", gaps)
+	}
+	got := gaps[0]
+	if got.Doc != spec.ID {
+		t.Errorf("gap doc = %d, want %d", got.Doc, spec.ID)
+	}
+	if got.Sections != 3 {
+		t.Errorf("gap sections = %d, want 3", got.Sections)
+	}
+	if !slices.Equal(got.Unplanned, []string{"sec-2", "sec-2.1"}) {
+		t.Errorf("unplanned = %v, want [sec-2 sec-2.1]", got.Unplanned)
+	}
+}
+
+// TestDocNeedsPlanningFullyCoveredSpecOmitted: every section named by some
+// accepted plan takes the spec out of the set, and two plans naming the same
+// section is legal and unremarked (026 §2.1).
+func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x#sec-1", "025-x#sec-2")
+	coveringPlan(t, s, "plan-b", true, "025-x#sec-2", "025-x#sec-2.1")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(slugs) != 0 || len(gaps) != 0 {
+		t.Fatalf("needs planning = %v / %v, want empty", slugs, gaps)
+	}
+}
+
+// TestDocNeedsPlanningDraftSpecNotOwedPlanning: 026 §2.1 — a draft spec is not
+// yet a planning gap.
+func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	slugs, _ := needsPlanningSlugs(t, s, "p1")
+	if len(slugs) != 0 {
+		t.Fatalf("needs planning = %v, want empty for a draft spec", slugs)
+	}
+}
+
+// TestDocNeedsPlanningDraftPlanDoesNotCover: 026 §2.1 — a draft plan has not
+// yet undertaken work, so its covers edges discharge nothing.
+func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", false, "025-x#sec-1", "025-x#sec-2", "025-x#sec-2.1")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningWholeDocumentEdgeCoversNothing: a covers edge with no
+// fragment names no section, so it discharges none (026 §2.1 — it cannot say
+// which present section it undertakes and would silently claim future ones).
+func TestDocNeedsPlanningWholeDocumentEdgeCoversNothing(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningNoSpecSentinelCoversNothing: `covers: NO-SPEC` resolves
+// to no document (026 §4.3), so it lands in to_external and contributes
+// nothing — no special case needed. The plan itself is never a planning gap.
+func TestDocNeedsPlanningNoSpecSentinelCoversNothing(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "NO-SPEC")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if !slices.Equal(slugs, []string{"025-x"}) {
+		t.Fatalf("needs planning = %v, want the spec alone", slugs)
+	}
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningScopesToProject: an empty project answers over every
+// project; a named one narrows to it.
+func TestDocNeedsPlanningScopesToProject(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+	mustAcceptedSpec(t, s, "025-x")
+	other := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 25, Slug: "025-y", Body: specBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, other.ID, "stig"); err != nil {
+		t.Fatalf("accept p2 spec: %v", err)
+	}
+
+	all, _ := needsPlanningSlugs(t, s, "")
+	if !slices.Equal(all, []string{"025-x", "025-y"}) {
+		t.Fatalf("unscoped needs planning = %v, want both specs", all)
+	}
+	scoped, _ := needsPlanningSlugs(t, s, "p2")
+	if !slices.Equal(scoped, []string{"025-y"}) {
+		t.Fatalf("p2 needs planning = %v, want [025-y]", scoped)
+	}
+}
+
+// needsExecutionSlugs runs the query and returns the matching plans' slugs.
+func needsExecutionSlugs(t *testing.T, s *Store, project string) []string {
+	t.Helper()
+	docs, err := s.NeedsExecution(t.Context(), project)
+	if err != nil {
+		t.Fatalf("NeedsExecution: %v", err)
+	}
+	slugs := make([]string, len(docs))
+	for i, d := range docs {
+		slugs[i] = d.Slug
+	}
+	return slugs
+}
+
+// TestDocNeedsExecutionOpenTask: an accepted plan with any non-closed task in
+// its set is pending work.
+func TestDocNeedsExecutionOpenTask(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	if got := needsExecutionSlugs(t, s, "p1"); !slices.Equal(got, []string{"mint-plan"}) {
+		t.Fatalf("needs execution = %v, want [mint-plan]", got)
+	}
+}
+
+// TestDocNeedsExecutionAllTasksClosed: once every task in the set is closed —
+// delivered or abandoned, taskClosed's notion — the plan drops out.
+func TestDocNeedsExecutionAllTasksClosed(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	for i, task := range minted {
+		if err := transition(t, s, taskTestNow, task.ID, "draft", "ready"); err != nil {
+			t.Fatalf("ready %s: %v", task.ID, err)
+		}
+		if i == 0 {
+			walkTo(t, s, task.ID, "abandoned")
+			continue
+		}
+		walkTo(t, s, task.ID, "merged")
+	}
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty once every task is closed", got)
+	}
+}
+
+// TestDocNeedsExecutionDraftPlanOmitted: a draft plan has undertaken nothing.
+func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty for a draft plan", got)
+	}
+}
+
+// TestDocNeedsExecutionUnmintedAcceptedPlanOmitted: the only accepted plans
+// with no task set are the importer's spent plans, which are not pending work
+// — the deliberate departure from 025 §18's "unminted or unfinished".
+func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "spent-plan", Status: "accepted", CreatedBy: "stig",
+		Body: "---\nstatus: accepted\n---\n\n# A spent plan\n\nAll done long ago.\n",
+	})
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty for an unminted accepted plan", got)
+	}
+}
+
+// TestDocNeedsExecutionScopesToProjectAndKind: accepted specs never appear,
+// and a project narrows the set.
+func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	if got := needsExecutionSlugs(t, s, ""); !slices.Equal(got, []string{"mint-plan"}) {
+		t.Fatalf("needs execution = %v, want the plan alone", got)
+	}
+	if got := needsExecutionSlugs(t, s, "p2"); len(got) != 0 {
+		t.Fatalf("needs execution in p2 = %v, want empty", got)
+	}
+}

@@ -1007,10 +1007,16 @@ func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.
 }
 
 // DocListFilter narrows ListDocs. Zero-valued fields do not filter.
+//
+// NeedsPlanning and NeedsExecution are 026 §2's derived selectors, not plain
+// filters: each implies a kind and a status, and the server refuses a Kind or
+// Status that contradicts it, or both selectors at once.
 type DocListFilter struct {
-	Project string
-	Kind    string // spec | adr | plan
-	Status  string // draft | accepted | superseded
+	Project        string
+	Kind           string // spec | adr | plan
+	Status         string // draft | accepted | superseded
+	NeedsPlanning  bool
+	NeedsExecution bool
 }
 
 // ListDocs calls GET /api/v1/docs.
@@ -1021,6 +1027,13 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	} {
 		if value != "" {
 			q.Set(key, value)
+		}
+	}
+	for key, on := range map[string]bool{
+		"needs_planning": f.NeedsPlanning, "needs_execution": f.NeedsExecution,
+	} {
+		if on {
+			q.Set(key, "true")
 		}
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)

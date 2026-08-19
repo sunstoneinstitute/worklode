@@ -765,3 +765,137 @@ func TestDocPage(t *testing.T) {
 
 // docPageURL is the cockpit page path for a document id.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
+
+// --- list selectors (026 §2) --------------------------------------------
+
+// docPlanCoveringSec1Body is a mintable plan whose covers edge names sec-1 of
+// docSpecBody's spec, so accepting it discharges exactly that section.
+const docPlanCoveringSec1Body = `---
+status: draft
+covers:
+  - 025-documents-in-the-backbone.md#sec-1
+---
+
+# Part one
+
+## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do it.
+`
+
+// acceptDocViaAPI accepts a document and fails unless it lands.
+func acceptDocViaAPI(t *testing.T, h http.Handler, token string, id int64) {
+	t.Helper()
+	rr := doReq(t, h, "POST", docPath(id, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept doc %d status = %d, body %s", id, rr.Code, rr.Body.String())
+	}
+}
+
+// listDocs performs GET /api/v1/docs with the given query and fails unless it
+// answers 200.
+func listDocs(t *testing.T, h http.Handler, token, query string) model.DocListResponse {
+	t.Helper()
+	rr := doReq(t, h, "GET", "/api/v1/docs?"+query, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list docs ?%s status = %d, body %s", query, rr.Code, rr.Body.String())
+	}
+	var resp model.DocListResponse
+	decodeInto(t, rr, &resp)
+	return resp
+}
+
+// TestListDocsNeedsPlanning: the selector answers accepted specs with an
+// uncovered section, and carries the gap detail alongside the documents.
+func TestListDocsNeedsPlanning(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "part-one", Body: docPlanCoveringSec1Body,
+	})
+	acceptDocViaAPI(t, h, token, plan.ID)
+
+	resp := listDocs(t, h, token, "needs_planning=true")
+	if len(resp.Docs) != 1 || resp.Docs[0].ID != spec.ID {
+		t.Fatalf("docs = %+v, want the spec alone", resp.Docs)
+	}
+	if len(resp.PlanningGaps) != 1 {
+		t.Fatalf("planning_gaps = %+v, want one entry", resp.PlanningGaps)
+	}
+	gap := resp.PlanningGaps[0]
+	if gap.Doc != spec.ID || gap.Sections != 2 || len(gap.Unplanned) != 1 || gap.Unplanned[0] != "sec-2" {
+		t.Fatalf("gap = %+v, want doc %d, 2 sections, [sec-2] unplanned", gap, spec.ID)
+	}
+	// The listing stays body-free, like every other doc list response.
+	if resp.Docs[0].Body != "" {
+		t.Errorf("docs[0].body = %q, want it blanked on a list", resp.Docs[0].Body)
+	}
+}
+
+// TestListDocsNeedsExecution: the selector answers accepted plans with an open
+// task, and carries no planning-gap detail.
+func TestListDocsNeedsExecution(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "part-one", Body: docPlanCoveringSec1Body,
+	})
+	acceptDocViaAPI(t, h, token, plan.ID)
+
+	resp := listDocs(t, h, token, "needs_execution=true")
+	if len(resp.Docs) != 1 || resp.Docs[0].ID != plan.ID {
+		t.Fatalf("docs = %+v, want the plan alone", resp.Docs)
+	}
+	if resp.PlanningGaps != nil {
+		t.Errorf("planning_gaps = %+v, want it omitted for needs_execution", resp.PlanningGaps)
+	}
+}
+
+// TestListDocsSelectorConflicts: each derived selector implies a kind and a
+// status, so a contradicting filter is refused rather than answered with an
+// empty list, which would read as "nothing to plan" (026 §2.1).
+func TestListDocsSelectorConflicts(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	for name, c := range map[string]struct{ query, want string }{
+		"both selectors":           {"needs_planning=true&needs_execution=true", "disjoint"},
+		"planning with draft":      {"needs_planning=true&status=draft", "accepted"},
+		"planning with plan kind":  {"needs_planning=true&kind=plan", "spec"},
+		"execution with draft":     {"needs_execution=true&status=draft", "accepted"},
+		"execution with spec kind": {"needs_execution=true&kind=spec", "plan"},
+		"unparseable selector":     {"needs_planning=maybe", "needs_planning"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rr := doReq(t, h, "GET", "/api/v1/docs?"+c.query, token, nil)
+			if rr.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+			}
+			msg, _ := decodeMap(t, rr)["error"].(string)
+			if !strings.Contains(msg, c.want) {
+				t.Errorf("error = %q, want it to mention %q", msg, c.want)
+			}
+		})
+	}
+}
+
+// TestListDocsSelectorRedundantFiltersAllowed: the implied kind and status may
+// be restated — only a contradiction is an error.
+func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+
+	resp := listDocs(t, h, token, "needs_planning=true&kind=spec&status=accepted&project=proj")
+	if len(resp.Docs) != 1 || resp.Docs[0].ID != spec.ID {
+		t.Fatalf("docs = %+v, want the spec alone", resp.Docs)
+	}
+}
