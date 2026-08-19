@@ -122,16 +122,17 @@ def generated_files() -> dict[Path, str]:
         if name in seen:
             raise ValueError(f"duplicate plugin name {name!r}")
         seen.add(name)
-        plugin_root = ROOT / "plugins" / name
+        plugin_source = require_string(raw_entry, "source", context=f"plugin {name!r}")
+        plugin_root = ROOT / plugin_source
         if not plugin_root.is_dir():
-            raise ValueError(f"plugin directory does not exist: plugins/{name}")
+            raise ValueError(f"plugin directory does not exist: {plugin_source}")
 
         manifest = codex_manifest(raw_entry, plugin_root)
         files[plugin_root / ".codex-plugin" / "plugin.json"] = encode(manifest)
         codex_entries.append(
             {
                 "name": name,
-                "source": {"source": "local", "path": f"./plugins/{name}"},
+                "source": {"source": "local", "path": plugin_source},
                 "policy": {
                     "installation": "AVAILABLE",
                     "authentication": "ON_INSTALL",
@@ -164,7 +165,7 @@ def main() -> int:
     expected_paths = set(files)
     stale = sorted(
         path
-        for path in ROOT.glob("plugins/*/.codex-plugin/plugin.json")
+        for path in ROOT.glob("plugins/**/.codex-plugin/plugin.json")
         if path not in expected_paths
     )
     drift: list[Path] = []

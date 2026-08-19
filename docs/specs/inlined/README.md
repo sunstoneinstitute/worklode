@@ -38,3 +38,4 @@ These files do that resolution once.
 - [`038-worklode-in-a-cloud-sandbox.md`](038-worklode-in-a-cloud-sandbox.md) — Spec 038 — Worklode in a cloud sandbox (draft)
 - [`039-worklode-prod-in-the-admin-cluster.md`](039-worklode-prod-in-the-admin-cluster.md) — Spec 039 — Worklode prod in the admin cluster (draft)
 - [`040-corpus-indexing-and-hybrid-search.md`](040-corpus-indexing-and-hybrid-search.md) — Spec 040 — Corpus indexing and hybrid search (draft)
+- [`041-pi-agent-integration.md`](041-pi-agent-integration.md) — Spec 041 — Pi agent integration (draft)

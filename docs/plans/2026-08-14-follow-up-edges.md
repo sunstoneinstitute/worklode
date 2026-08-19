@@ -919,7 +919,7 @@ The specific claims this plan has to be able to back:
 
 - **The `lode` plugin does not know about the verb yet.** The point of the edge
   is that an agent that finds a loose end mid-task files it against the task it
-  came from. Making that happen means teaching `plugins/lode/` — the
+  came from. Making that happen means teaching `plugins/claude/lode/` — the
   `lode-worker` agent and the `/lode:*` commands — to reach for
   `--follow-up-to`. That is a separate change to a separate surface.
 - **`docs/follow-ups.md` stays where it is.** Migrating this repo's own

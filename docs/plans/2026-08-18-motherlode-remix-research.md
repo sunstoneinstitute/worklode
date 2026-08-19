@@ -53,7 +53,7 @@ what every family shares into the two plugin-level prompts.
 - **Every document ends in a crit review** (`crit docs/research/<file>.md`) and
   is not done until Stig approves it. This is the §13.3 gate; a task that
   writes the document but skips the review has not finished.
-- Do not edit `plugins/lode/skills/` in this plan. The prompts live in the
+- Do not edit `plugins/claude/lode/skills/` in this plan. The prompts live in the
   research documents until 037's implementation plan installs them.
 
 ## Non-goals
@@ -282,5 +282,5 @@ This plan is done when:
    result matches its research document.
 4. Spec 037 reflects the accepted findings, with §12.1 and §12.2 closed or
    restated, and its checks pass.
-5. `plugins/lode/skills/` is untouched — the prompts are ready to install, and
+5. `plugins/claude/lode/skills/` is untouched — the prompts are ready to install, and
    installing them is 037's implementation plan.

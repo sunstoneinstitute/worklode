@@ -277,7 +277,7 @@ lifecycle `lode next`/`done` already owns.
 
 ## 6. Delivery shape
 
-**One plugin: `lode`.** The vendored skills join `plugins/lode/`, which already
+**One plugin: `lode`.** The vendored skills join `plugins/claude/lode/`, which already
 ships in this repo's marketplace, already versions with the binary, and already
 carries `working-under-worklode`. Users installing `lode@worklode` get the CLI
 wrappers and the design flow together.

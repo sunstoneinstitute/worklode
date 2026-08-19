@@ -539,3 +539,13 @@ docs/specs/040-corpus-indexing-and-hybrid-search.md:
     sec-11: "## 11. Degraded operation"
     sec-12: "## 12. Open questions"
     sec-13: "## 13. Acceptance"
+docs/specs/041-pi-agent-integration.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Package boundary and installation"
+    sec-2: "## 2. Extension adapter"
+    sec-3: "## 3. Lifecycle mapping"
+    sec-4: "## 4. Commands, skills, and status"
+    sec-5: "## 5. Discovery criteria"
+    sec-6: "## 6. Testing and acceptance criteria"
+    sec-7: "## 7. Dependencies and sources"
