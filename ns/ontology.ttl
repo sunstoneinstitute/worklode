@@ -340,7 +340,8 @@ wl:produces a owl:ObjectProperty ;
     rdfs:range wl:Deliverable ;
     rdfs:comment """The work that makes a Deliverable exist. Shared wl:implements until 026 §6.2
         separated them: a task does not implement a section — it produces the deliverable, and the
-        component is what implements. Authored on the task (006's projection table: task edit).
+        component is what implements. Authored on the task; its backbone projection is deferred
+        to v2 until a task→deliverable edge exists in the backbone (006 §11).
         006 §3 also ranged this edge over Component and admitted Issue and PullRequest as
         subjects; 026 §6.2 drops all three. wl:affects already carries the component half, and an
         issue or a pull request reaches a deliverable only through the task it is bound to —
