@@ -884,7 +884,9 @@ func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolve
 //
 // The inverse spellings (isRequiredBy, blockedBy, amendedBy, isReplacedBy) are
 // skipped: one row read backward is the inverse (025 §14), so writing them too
-// would double every edge and let the two directions disagree.
+// would double every edge and let the two directions disagree. For plan
+// ordering that means only the blocking plan can declare it — `blockedBy:`
+// parses and writes nothing (WL-143).
 //
 // An empty reference is dropped rather than written as an empty to_external —
 // a coverage entry qualified with a level but no `spec:`, say, names no
@@ -908,7 +910,9 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 		add("", "requires", ref)
 	}
 	// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge
-	// that would otherwise need a container row to attach to.
+	// that would otherwise need a container row to attach to. ns/ontology.ttl
+	// still declares wl:blocks Task-to-Task; mirroring the document-level edge
+	// there is WL-142.
 	for _, ref := range fm.Blocks {
 		add("", "blocks", ref)
 	}
@@ -1139,7 +1143,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 // specifies a three-valued `coverage: full|partial|none` relation with
 // `fullCoverageWith` closure checking, which doc_edges cannot express: it has
 // no coverage-level column, so `rebuildEdges` writes the level away. Closing
-// that gap needs a schema change and is filed in docs/follow-ups.md.
+// that gap needs a schema change and is tracked as WL-141.
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH planned AS (

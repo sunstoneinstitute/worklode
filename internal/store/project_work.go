@@ -1,9 +1,10 @@
 // project_work.go provides a single bulk, UI-neutral read of everything the
 // project cockpit and the legacy board need about a project's tasks: the
-// task itself, its parent (if any), its open blockers, its active lease (if
-// any), and the most recent state-change event (if any). It replaces the
-// per-task ListTasks + BlockedTaskIDs + ParentMap + ActiveLease assembly
-// those two callers used to do themselves, with one round trip.
+// task itself, its parent (if any), what holds it (open blocker tasks and
+// unfinished blocking plans), its active lease (if any), and the most recent
+// state-change event (if any). It replaces the per-task ListTasks +
+// BlockedTaskIDs + ParentMap + ActiveLease assembly those two callers used to
+// do themselves, with one round trip.
 //
 // The types here carry only declared facts — no product language (mode,
 // health, readiness). Mapping facts into the cockpit's product-facing shape
@@ -38,10 +39,10 @@ type TaskRef struct {
 }
 
 // ProjectWorkFact is one task's full read-side state: the task itself, its
-// parent (nil if it has none), its open blockers (never nil — an empty
-// slice when there are none), its active lease (nil if unleased), and the
-// newest state-change event recorded against it (nil for a task that has
-// never transitioned).
+// parent (nil if it has none), its open blockers (never nil — an empty slice
+// when there are none), the plans holding it, its active lease (nil if
+// unleased), and the newest state-change event recorded against it (nil for a
+// task that has never transitioned).
 type ProjectWorkFact struct {
 	Task         model.Task
 	Parent       *TaskRef
@@ -114,8 +115,8 @@ SELECT `+prefixedTaskColumns("t")+`,
 	}
 	defer rows.Close()
 
-	// facts is keyed by task id so the OpenBlockers pass below can attach to
-	// the right fact by id; ordered preserves the query's own ordering for
+	// facts is keyed by task id so the two passes below can attach to the
+	// right fact by id; ordered preserves the query's own ordering for
 	// the returned slice.
 	facts := make(map[string]*ProjectWorkFact)
 	var ordered []*ProjectWorkFact

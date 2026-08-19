@@ -10,9 +10,10 @@ import (
 )
 
 // Brief is the bounded payload an agent needs to start work on a task: the
-// task row, its conventional branch, the open blockers still pointing at it,
-// and the active lease (nil when the task is unleased). It is deliberately
-// bounded — no unbounded lists — so a brief is one cheap, predictable read;
+// task row, its conventional branch, what holds it (open blocker tasks and
+// unfinished blocking plans), and the active lease (nil when the task is
+// unleased). It is deliberately bounded — no unbounded lists — so a brief is
+// one cheap, predictable read;
 // pinned SKILL.md bodies are the one deliberate exception, budget-bounded by
 // the pin list the task author wrote.
 //
@@ -53,8 +54,8 @@ type BriefOptions struct {
 	Skills bool
 }
 
-// Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, its parent, any active lease, and — when opts.Skills is set — its
+// Brief assembles the brief for taskID: the task row, its branch, what holds
+// it, its parent, any active lease, and — when opts.Skills is set — its
 // pinned skills. Returns ErrNotFound if the task does not exist. It runs a
 // bounded, fixed number of queries — one more only when pins are asked for and
 // the task has some — and never returns unbounded lists.

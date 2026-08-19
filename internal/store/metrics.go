@@ -120,9 +120,8 @@ func (m *storeMetrics) docOp(op string, err error) {
 }
 
 // planTasksMinted adds n to worklode_doc_plan_tasks_minted_total, the tasks
-// minted by one plan accept. n <= 0 records nothing — a successful plan
-// accept always mints at least one task (PlanTasks refuses an empty set),
-// but the guard keeps this symmetric with expire.
+// minted by one plan accept. n <= 0 records nothing; a successful plan accept
+// always mints at least one task (PlanTasks refuses an empty set).
 func (m *storeMetrics) planTasksMinted(n int) {
 	if m == nil || n <= 0 {
 		return
