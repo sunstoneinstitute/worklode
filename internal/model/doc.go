@@ -36,6 +36,17 @@ type DocSection struct {
 	Published     bool   `json:"published"`
 }
 
+// DocRevision is a document's open candidate revision (025 §7.2): a copy of
+// the accepted body being edited against a stable document identity. At most
+// one exists per document, and the accepted version stays authoritative until
+// it lands.
+type DocRevision struct {
+	Doc       int64     `json:"doc"`
+	Body      string    `json:"body"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // DocEdge is one typed link out of a document (025 §14). Exactly one of ToDoc
 // and ToExternal is set: ToExternal carries a reference this backbone cannot
 // resolve. FromAnchor and ToAnchor are "" for a document-level edge.

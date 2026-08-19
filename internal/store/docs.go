@@ -208,6 +208,368 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	return getDocTx(tx, id)
 }
 
+// AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
+// assignee. It freezes the document's published anchor set and flips the
+// target of every document-level replaces edge to superseded, in the same
+// transaction.
+//
+// The depth limit is evaluated at publication (025 §6 rule 6), so a first
+// accept still rejects an anchored heading below designdoc.DepthLimit even
+// though rules 1-3 exempt drafts.
+//
+// A plan is refused: plan acceptance must mint the plan's tasks in the same
+// transaction (025 §9.2), and that half is not built yet — an accepted plan
+// without its tasks would break the invariant by construction.
+func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if d.status != "draft" {
+		return nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
+	}
+	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
+		return nil, err
+	}
+	if d.kind == "plan" {
+		return nil, fmt.Errorf(
+			"doc %d is a plan: accepting one mints its tasks in the same transaction (025 §9.2), which is not built yet: %w",
+			id, ErrInvalidInput)
+	}
+
+	parsed, err := parseDocBody(d.kind, d.body)
+	if err != nil {
+		return nil, err
+	}
+	// No accepted version to diff against, so the comparison runs against an
+	// empty document: Removed and Renumbered come back empty by construction
+	// and TooDeep carries the one rule a first accept still enforces.
+	diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
+	if v := diff.Violations(); len(v) > 0 {
+		return nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
+	}
+
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
+		return nil, fmt.Errorf("accept doc %d: %w", id, err)
+	}
+	if _, err := tx.Exec(
+		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+	}
+	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+		return nil, err
+	}
+	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
+}
+
+// ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
+// of the current body to edit while the accepted version stays authoritative
+// (025 §7.2). One candidate at a time.
+//
+// Plans are edited in place with UpdateDocBody (025 §9) and drafts are edited
+// in place because there is nothing to revise against; both are
+// ErrInvalidInput.
+func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) error {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return err
+	}
+	if d.kind == "plan" {
+		return fmt.Errorf("doc %d is a plan: plans are edited in place (025 §9): %w", id, ErrInvalidInput)
+	}
+	if d.status != "accepted" {
+		return fmt.Errorf("doc %d is %s: only an accepted document is revised (025 §7.2): %w",
+			id, d.status, ErrInvalidInput)
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO doc_revisions (doc_id, body, created_by, created_at) VALUES ($1, $2, $3, $4)`,
+		id, d.body, nullText(actorID), now.UTC().Truncate(time.Second),
+	); err != nil {
+		if isUniqueViolation(err) {
+			return fmt.Errorf("doc %d already has an open revision: %w", id, ErrRevisionExists)
+		}
+		return fmt.Errorf("open revision of doc %d: %w", id, err)
+	}
+	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "revision", "new": "open"})
+}
+
+// UpdateRevision replaces the body of a document's open candidate revision.
+// The body is parsed and linted here so a malformed candidate is refused at
+// the edit rather than at the accept gate. ErrNotFound if no revision is open.
+func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID int64) error {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return err
+	}
+	if _, err := parseDocBody(d.kind, body); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE doc_revisions SET body = $2 WHERE doc_id = $1`, id, body)
+	if err != nil {
+		return fmt.Errorf("update revision of doc %d: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("update revision of doc %d: %w", id, err)
+	} else if n == 0 {
+		return fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	}
+	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "revision", "new": "updated"})
+}
+
+// AcceptRevision lands a document's open candidate revision: it runs the
+// 025 §6 constraint check against the accepted version and, when clean, swaps
+// the body, bumps the version, rebuilds sections and edges, stamps
+// last_revised_in on exactly the changed anchors, publishes every anchor the
+// new version carries, applies any new document-level replaces edges, and
+// consumes the candidate — one transaction, assignee-gated like AcceptDoc.
+//
+// The append-only rule protects the anchors the accepted version *published*
+// (025 §7.2), so a never-published row that disappears is legal; renumbering
+// and excess depth are violations regardless.
+func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
+		return nil, err
+	}
+	if d.kind == "plan" {
+		return nil, fmt.Errorf("doc %d is a plan: plans are edited in place (025 §9): %w", id, ErrInvalidInput)
+	}
+	if d.status != "accepted" {
+		return nil, fmt.Errorf("doc %d is %s: only an accepted document has a revision to land: %w",
+			id, d.status, ErrInvalidInput)
+	}
+
+	var candidateBody string
+	err = tx.QueryRow(
+		`SELECT body FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, id).Scan(&candidateBody)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load revision of doc %d: %w", id, err)
+	}
+
+	accepted, err := parseDocBody(d.kind, d.body)
+	if err != nil {
+		return nil, fmt.Errorf("parse the accepted body of doc %d: %w", id, err)
+	}
+	candidate, err := parseDocBody(d.kind, candidateBody)
+	if err != nil {
+		return nil, err
+	}
+
+	prior, err := priorSections(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	diff := designdoc.CompareSections(accepted.doc, candidate.doc, designdoc.DepthLimit)
+	// Removed is filtered down to the published anchors before Violations
+	// renders it, so the text stays in one place and an unpublished removal
+	// raises nothing.
+	removed := diff.Removed[:0:0]
+	for _, anchor := range diff.Removed {
+		if prior[anchor].published {
+			removed = append(removed, anchor)
+		}
+	}
+	diff.Removed = removed
+	if v := diff.Violations(); len(v) > 0 {
+		return nil, fmt.Errorf("revision of doc %d cannot be accepted: %s: %w",
+			id, strings.Join(v, "; "), ErrInvalidInput)
+	}
+
+	version := d.version + 1
+	title, ok := designdoc.Title(candidate.doc)
+	if !ok {
+		title = d.slug
+	}
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
+		                 version = $5, updated_at = $6
+		  WHERE id = $1`,
+		id, candidateBody, title, nullText(candidate.issued), version, ts,
+	); err != nil {
+		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
+	}
+	if err := rebuildSections(tx, id, d.kind, candidate.doc, version); err != nil {
+		return nil, err
+	}
+	if err := rebuildEdges(tx, id, d.project, candidate.doc.Frontmatter); err != nil {
+		return nil, err
+	}
+
+	// The diff gate is what keeps a published anchor from being dropped; this
+	// checks that it did. A failure here is a bug in the gate, not bad input,
+	// so it carries no sentinel.
+	after, err := priorSections(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	for anchor, p := range prior {
+		if _, still := after[anchor]; p.published && !still {
+			return nil, fmt.Errorf(
+				"internal: doc %d lost published anchor #%s in the section rebuild", id, anchor)
+		}
+	}
+
+	// 025 §6 rule 5: last_revised_in moves on exactly the sections whose
+	// content changed. Touching it elsewhere invalidates valid claims.
+	for _, anchor := range diff.Changed {
+		if _, err := tx.Exec(
+			`UPDATE doc_sections SET last_revised_in = $3 WHERE doc_id = $1 AND anchor = $2`,
+			id, anchor, version,
+		); err != nil {
+			return nil, fmt.Errorf("stamp last_revised_in on #%s of doc %d: %w", anchor, id, err)
+		}
+	}
+	if _, err := tx.Exec(
+		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+	}
+	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("consume revision of doc %d: %w", id, err)
+	}
+	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+		return nil, err
+	}
+	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{
+			"field": "version",
+			"old":   strconv.Itoa(d.version),
+			"new":   strconv.Itoa(version),
+		}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
+}
+
+// GetDocRevision returns a document's open candidate revision, or ErrNotFound
+// when none is open.
+func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevision, error) {
+	var r model.DocRevision
+	var createdBy sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT doc_id, body, created_by, created_at FROM doc_revisions WHERE doc_id = $1`, id,
+	).Scan(&r.Doc, &r.Body, &createdBy, &r.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get revision of doc %d: %w", id, err)
+	}
+	r.CreatedBy = createdBy.String
+	r.CreatedAt = r.CreatedAt.UTC()
+	return &r, nil
+}
+
+// lockedDoc is the row the lifecycle writers read and lock before deciding.
+type lockedDoc struct {
+	kind     string
+	status   string
+	project  string
+	slug     string
+	body     string
+	assignee string
+	version  int
+}
+
+// lockDoc reads a document FOR UPDATE, so two accepts of one document
+// serialise rather than racing.
+func lockDoc(tx *sql.Tx, id int64) (lockedDoc, error) {
+	var d lockedDoc
+	var assignee sql.NullString
+	err := tx.QueryRow(
+		`SELECT kind, status, project_id, slug, body, assignee, version
+		   FROM docs WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&d.kind, &d.status, &d.project, &d.slug, &d.body, &assignee, &d.version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return lockedDoc{}, fmt.Errorf("doc %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return lockedDoc{}, fmt.Errorf("load doc %d: %w", id, err)
+	}
+	d.assignee = assignee.String
+	return d, nil
+}
+
+// checkDocAssignee enforces 025 §7's accept gate: acceptance is the assignee's
+// deliberate act. A document with no assignee can be accepted by nobody, which
+// is why CreateDoc defaults it to the creator.
+func checkDocAssignee(id int64, assignee, actorID string) error {
+	if assignee == "" {
+		return fmt.Errorf("doc %d has no assignee to accept it: %w", id, ErrForbidden)
+	}
+	if assignee != actorID {
+		return fmt.Errorf("doc %d is assigned to %s, not %s: %w", id, assignee, actorID, ErrForbidden)
+	}
+	return nil
+}
+
+// supersedeReplacedDocs flips every document a document-level replaces edge
+// names to superseded, in the accepting transaction. Section-scoped replaces
+// edges flip nothing — section-level supersession stays derived (025 §3.3) —
+// and an edge resolving to to_external names no row here.
+func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
+	rows, err := tx.Query(
+		`SELECT DISTINCT to_doc FROM doc_edges
+		  WHERE from_doc = $1 AND type = 'replaces'
+		    AND from_anchor IS NULL AND to_doc IS NOT NULL AND to_doc <> $1
+		  ORDER BY to_doc`, docID)
+	if err != nil {
+		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
+	}
+	defer rows.Close()
+	var targets []int64
+	for rows.Next() {
+		var target int64
+		if err := rows.Scan(&target); err != nil {
+			return fmt.Errorf("scan replaces edge of doc %d: %w", docID, err)
+		}
+		targets = append(targets, target)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
+	}
+
+	for _, target := range targets {
+		res, err := tx.Exec(
+			`UPDATE docs SET status = 'superseded', updated_at = $2
+			  WHERE id = $1 AND status <> 'superseded'`, target, ts)
+		if err != nil {
+			return fmt.Errorf("supersede doc %d: %w", target, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("supersede doc %d: %w", target, err)
+		}
+		if n == 0 {
+			continue
+		}
+		if err := LogChange(tx, docEntityKind, strconv.FormatInt(target, 10), eventID,
+			map[string]string{
+				"field":       "status",
+				"new":         "superseded",
+				"replaced_by": strconv.FormatInt(docID, 10),
+			}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // parsedDoc is a body parsed and validated once, for the fields both write
 // paths derive from it.
 type parsedDoc struct {

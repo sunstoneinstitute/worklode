@@ -927,3 +927,570 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 		t.Fatalf("edges = %+v, want %+v", edges, want)
 	}
 }
+
+// --- editorial lifecycle (025 §6, §7) ---------------------------------------
+
+// acceptDoc runs AcceptDoc through RecordDocEvent, the way the API will.
+func acceptDoc(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
+	t.Helper()
+	var out *model.Doc
+	_, _, err := s.RecordDocEvent(t.Context(), "accept", "cli",
+		fmt.Sprintf("doc-accept-%d", docEventSeq.Add(1)), "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = AcceptDoc(tx, s.Now(), id, actor, eventID)
+			return err
+		})
+	return out, err
+}
+
+// reviseDoc runs ReviseDoc through RecordDocEvent.
+func reviseDoc(t *testing.T, s *Store, id int64, actor string) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "revise", "cli",
+		fmt.Sprintf("doc-revise-%d", docEventSeq.Add(1)), "doc.revise", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ReviseDoc(tx, s.Now(), id, actor, eventID)
+		})
+	return err
+}
+
+// updateRevision runs UpdateRevision through RecordDocEvent.
+func updateRevision(t *testing.T, s *Store, id int64, body string) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "revise", "cli",
+		fmt.Sprintf("doc-revision-edit-%d", docEventSeq.Add(1)), "doc.revision.update", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return UpdateRevision(tx, s.Now(), id, body, eventID)
+		})
+	return err
+}
+
+// acceptRevision runs AcceptRevision through RecordDocEvent.
+func acceptRevision(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
+	t.Helper()
+	var out *model.Doc
+	_, _, err := s.RecordDocEvent(t.Context(), "accept", "cli",
+		fmt.Sprintf("doc-accept-revision-%d", docEventSeq.Add(1)), "doc.revision.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = AcceptRevision(tx, s.Now(), id, actor, eventID)
+			return err
+		})
+	return out, err
+}
+
+// mustAcceptedSpec creates a draft spec and accepts it, the starting state
+// every revision test needs.
+func mustAcceptedSpec(t *testing.T, s *Store, slug string) *model.Doc {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: slug, Body: specBody, CreatedBy: "stig",
+	})
+	accepted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc(%s): %v", slug, err)
+	}
+	return accepted
+}
+
+// revisedSpecBody is specBody with sec-2's body edited and a letter-suffix
+// insert added: exactly one Changed anchor and one Added one (025 §3, §6).
+const revisedSpecBody = `---
+status: accepted
+issued: 2026-08-01
+requires: 004-execution-backbone.md#sec-6
+---
+
+# Documents in the backbone
+
+Intro prose.
+
+## 1. Scope {#sec-1}
+
+Scope body.
+
+## 2. Model {#sec-2}
+
+Model body, revised.
+
+### 2.1 Detail {#sec-2.1}
+
+Detail body.
+
+## 2a. Inserted {#sec-2a}
+
+Inserted body.
+`
+
+// TestDocAcceptDraftSpec: the assignee's accept flips the status, freezes the
+// published anchor set, and lands in the state log.
+func TestDocAcceptDraftSpec(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	accepted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+	if accepted.Version != 1 {
+		t.Errorf("version = %d, want 1", accepted.Version)
+	}
+	for _, sec := range docSections(t, s, doc.ID) {
+		if !sec.Published {
+			t.Errorf("section %s not published", sec.Anchor)
+		}
+		if sec.LastRevisedIn != 1 {
+			t.Errorf("section %s last_revised_in = %d, want 1", sec.Anchor, sec.LastRevisedIn)
+		}
+	}
+
+	entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(doc.ID, 10))
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"accepted"`) {
+		t.Fatalf("state log = %+v, want a second, accepted entry", entries)
+	}
+}
+
+// TestDocAcceptWrongActorForbidden: acceptance is the assignee's act (025 §7).
+func TestDocAcceptWrongActorForbidden(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	_, err := acceptDoc(t, s, doc.ID, "ada")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+	if !strings.Contains(err.Error(), "stig") {
+		t.Errorf("err = %v, want it to name the assignee", err)
+	}
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Status != "draft" {
+		t.Fatalf("doc = %+v, %v; want it still draft", got, err)
+	}
+}
+
+// TestDocAcceptAlreadyAccepted: accept is a draft-only transition.
+func TestDocAcceptAlreadyAccepted(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocAcceptPlanRejected: plan acceptance mints the plan's tasks in the
+// same transaction (025 §9.2), which part 3 supplies — an accepted plan with
+// no tasks must never exist, so the stub refuses.
+func TestDocAcceptPlanRejected(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody, CreatedBy: "stig",
+	})
+
+	_, err := acceptDoc(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "task") {
+		t.Errorf("err = %v, want it to name task minting", err)
+	}
+}
+
+// TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips its
+// target in the same transaction (025 §3.3).
+func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n" +
+		"# New\n\n## 1. Scope {#sec-1}\n\na\n"
+	newDoc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
+	})
+
+	if _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	got, err := s.GetDoc(t.Context(), old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "superseded" {
+		t.Errorf("replaced doc status = %q, want superseded", got.Status)
+	}
+	entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(old.ID, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
+		t.Fatalf("state log = %+v, want a superseded entry on the replaced doc", entries)
+	}
+}
+
+// TestDocAcceptSectionScopedReplacesDoesNotSupersede: section-level
+// supersession stays derived (025 §3.3), so it flips no document.
+func TestDocAcceptSectionScopedReplacesDoesNotSupersede(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	body := "---\nstatus: draft\nreplaces:\n  \"#sec-1\":\n    - 006-old.md#sec-2\n---\n\n" +
+		"# New\n\n## 1. Scope {#sec-1}\n\na\n"
+	newDoc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
+	})
+
+	if _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	got, err := s.GetDoc(t.Context(), old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "accepted" {
+		t.Errorf("replaced doc status = %q, want it untouched", got.Status)
+	}
+}
+
+// TestDocAcceptRejectsTooDeepAnchor: the depth limit is evaluated at
+// publication (025 §6 rule 6), so a first accept enforces it too.
+func TestDocAcceptRejectsTooDeepAnchor(t *testing.T) {
+	s := openDocStore(t)
+	deep := "---\nstatus: draft\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
+		"### 1.1 Sub {#sec-1.1}\n\nb\n\n#### 1.1.1 Deeper {#sec-1.1.1}\n\nc\n"
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-deep", Body: deep, CreatedBy: "stig",
+	})
+
+	_, err := acceptDoc(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "sec-1.1.1") {
+		t.Errorf("err = %v, want it to name the offending anchor", err)
+	}
+}
+
+// TestDocAcceptAllowsAnchorAtTheDepthLimit: level 3 is addressable; only
+// deeper headings are content within their nearest anchored ancestor.
+func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
+	s := openDocStore(t)
+	body := "---\nstatus: draft\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
+		"### 1.1 Sub {#sec-1.1}\n\nb\n"
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-ok", Body: body, CreatedBy: "stig",
+	})
+
+	if _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+}
+
+// TestDocAcceptNotFound covers the unknown-id path.
+func TestDocAcceptNotFound(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := acceptDoc(t, s, 9999, "stig"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocReviseOpensOneCandidate: a revision copies the accepted body to edit,
+// and a second open revision is refused (025 §7.2, one candidate per doc).
+func TestDocReviseOpensOneCandidate(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	rev, err := s.GetDocRevision(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatalf("GetDocRevision: %v", err)
+	}
+	if rev.Body != specBody {
+		t.Error("candidate body is not a copy of the accepted body")
+	}
+	if rev.CreatedBy != "ada" {
+		t.Errorf("created_by = %q, want ada", rev.CreatedBy)
+	}
+
+	if err := reviseDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrRevisionExists) {
+		t.Fatalf("second ReviseDoc err = %v, want ErrRevisionExists", err)
+	}
+}
+
+// TestDocRevisePlanRejected: plans are edited in place (025 §9), never revised.
+func TestDocRevisePlanRejected(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+
+	err := reviseDoc(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "in place") {
+		t.Errorf("err = %v, want it to say plans are edited in place", err)
+	}
+}
+
+// TestDocReviseDraftRejected: a draft is edited in place — there is no
+// accepted version to revise against.
+func TestDocReviseDraftRejected(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	if err := reviseDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocUpdateRevision: the candidate body is editable, and a malformed one
+// is refused before it can reach the accept gate.
+func TestDocUpdateRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	rev, err := s.GetDocRevision(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.Body != revisedSpecBody {
+		t.Error("candidate body not swapped")
+	}
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Body != specBody {
+		t.Fatal("the accepted body must stay authoritative throughout (025 §7.2)")
+	}
+
+	bad := "---\nstatus: draft\n---\n\n# T\n\n## 1. A {#sec-1}\n\na\n\n## 2. B {#sec-1}\n\nb\n"
+	if err := updateRevision(t, s, doc.ID, bad); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput on a duplicate anchor", err)
+	}
+}
+
+// TestDocUpdateRevisionWithoutOpenRevision: nothing to edit is ErrNotFound.
+func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocAcceptRevisionRejectsRemovedPublishedAnchor: the one invariant that
+// survives into draft (025 §7.2) — an anchor the accepted version published
+// may not disappear.
+func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	shortened := "---\nstatus: accepted\n---\n\n# Documents in the backbone\n\n" +
+		"## 1. Scope {#sec-1}\n\nScope body.\n\n## 2. Model {#sec-2}\n\nModel body.\n"
+	if err := updateRevision(t, s, doc.ID, shortened); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	_, err := acceptRevision(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "sec-2.1") || !strings.Contains(err.Error(), "append-only") {
+		t.Errorf("err = %v, want the SectionDiff violation naming sec-2.1", err)
+	}
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Version != 1 {
+		t.Fatalf("doc = %+v, %v; want the accepted version untouched", got, err)
+	}
+}
+
+// TestDocAcceptRevisionRejectsRenumber: anchors are immutable, so an accepted
+// section is never renumbered (025 §6 rule 3).
+func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	// sec-2 renumbered to 3 — lintAnchors would reject "## 3. … {#sec-2}", so
+	// the renumber arrives the only way it can: with the anchor dropped and a
+	// new one taking its place. sec-2 then reads as removed, which is the same
+	// rule seen from the other side.
+	renumbered := strings.Replace(revisedSpecBody, "## 2. Model {#sec-2}", "## 3. Model {#sec-3}", 1)
+	if err := updateRevision(t, s, doc.ID, renumbered); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	_, err := acceptRevision(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "sec-2") {
+		t.Errorf("err = %v, want it to name sec-2", err)
+	}
+}
+
+// TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval: the append-only gate
+// protects anchors the accepted version published (025 §7.2), not every row.
+// An unpublished anchor on an accepted document is what a corpus import
+// leaves behind, and dropping one is legal.
+func TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if _, err := s.db.ExecContext(t.Context(),
+		`UPDATE doc_sections SET published = false WHERE doc_id = $1 AND anchor = 'sec-2.1'`,
+		doc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	shortened := "---\nstatus: accepted\n---\n\n# Documents in the backbone\n\n" +
+		"## 1. Scope {#sec-1}\n\nScope body.\n\n## 2. Model {#sec-2}\n\nModel body.\n"
+	if err := updateRevision(t, s, doc.ID, shortened); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	updated, err := acceptRevision(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Errorf("version = %d, want 2", updated.Version)
+	}
+	if secs := docSections(t, s, doc.ID); len(secs) != 2 {
+		t.Errorf("sections = %+v, want sec-2.1 gone", secs)
+	}
+}
+
+// TestDocAcceptRevision: the clean path — body swapped, version bumped,
+// last_revised_in stamped on exactly the changed anchor, the insert published
+// from this version, and the candidate row consumed.
+func TestDocAcceptRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	updated, err := acceptRevision(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	if updated.Body != revisedSpecBody {
+		t.Error("body not swapped")
+	}
+	if updated.Version != 2 {
+		t.Errorf("version = %d, want 2", updated.Version)
+	}
+	if updated.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", updated.Status)
+	}
+
+	want := map[string]int{"sec-1": 1, "sec-2": 2, "sec-2.1": 1, "sec-2a": 2}
+	secs := docSections(t, s, doc.ID)
+	if len(secs) != len(want) {
+		t.Fatalf("sections = %+v, want %d", secs, len(want))
+	}
+	for _, sec := range secs {
+		if !sec.Published {
+			t.Errorf("section %s not published", sec.Anchor)
+		}
+		if sec.LastRevisedIn != want[sec.Anchor] {
+			t.Errorf("section %s last_revised_in = %d, want %d",
+				sec.Anchor, sec.LastRevisedIn, want[sec.Anchor])
+		}
+	}
+
+	if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetDocRevision err = %v, want the candidate consumed", err)
+	}
+}
+
+// TestDocAcceptRevisionWrongActorForbidden: the revision accept is gated like
+// the first one.
+func TestDocAcceptRevisionWrongActorForbidden(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+
+	if _, err := acceptRevision(t, s, doc.ID, "ada"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+}
+
+// TestDocAcceptRevisionWithoutOpenRevision: nothing to accept is ErrNotFound.
+func TestDocAcceptRevisionWithoutOpenRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocAcceptRevisionSupersedesReplacedDoc: a replaces edge added by the
+// revision takes effect when the revision lands, not before.
+func TestDocAcceptRevisionSupersedesReplacedDoc(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	withReplaces := strings.Replace(revisedSpecBody,
+		"requires: 004-execution-backbone.md#sec-6",
+		"requires: 004-execution-backbone.md#sec-6\nreplaces:\n  \".\":\n    - 006-old.md", 1)
+	if err := updateRevision(t, s, doc.ID, withReplaces); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if got, err := s.GetDoc(t.Context(), old.ID); err != nil || got.Status != "accepted" {
+		t.Fatalf("doc = %+v, %v; want the target untouched until the revision lands", got, err)
+	}
+
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	got, err := s.GetDoc(t.Context(), old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "superseded" {
+		t.Errorf("replaced doc status = %q, want superseded", got.Status)
+	}
+}
