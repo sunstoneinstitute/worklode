@@ -19,10 +19,9 @@ covers:
 missing vocabulary terms, the task→triples mapping, and deterministic Turtle
 rendering — is built and proven against Oxigraph in tests, with no backbone
 polling or server coupling yet. Part 2
-(`2026-07-30-knowledge-graph-2-projector.md`, executed by WL-26) wires it to
-the backbone; part 2 is being rewritten onto this part's decisions under
-WL-110 and must not be executed before that rewrite lands. Task numbers
-restart at 1 in each part (`docs/authoring-design-docs.md`).
+(`2026-07-30-knowledge-graph-2-projector.md`, executed by WL-26, rewritten
+onto this part's decisions under WL-110) wires it to the backbone. Task
+numbers restart at 1 in each part (`docs/authoring-design-docs.md`).
 
 **Rewritten 2026-08-19 (WL-108).** The version accepted 2026-07-31 (`7a61bc6`)
 became unexecutable: `ns/*.ttl` became the vocabulary home (`d2267f3`) and the

@@ -1,106 +1,236 @@
 ---
 status: accepted
-task: WL-9
-covers: docs/specs/006-knowledge-graph.md
+task: WL-26
+covers:
+  - spec: docs/specs/006-knowledge-graph.md#sec-11
+    coverage: partial
+  - spec: docs/specs/006-knowledge-graph.md#sec-16
+    coverage: partial
 ---
 # Knowledge graph 2/2 (spec 006): the backbone→graph projector — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Series:** Part 2 of 2. Task numbering is global across the series: this plan
-holds Tasks 7–11; `2026-07-30-knowledge-graph-1-graph-foundations.md` (Tasks
-1–6) must be merged first. See part 1's header for the series-wide context —
-the phase-1 scope of spec 006, what is deferred to later plans, the amendments
-honored, and the full file-structure tables.
+**Series:** Part 2 of 2. Part 1
+(`2026-07-30-knowledge-graph-1-graph-foundations.md`, executed by WL-25,
+merged) built the graph side: `internal/kg/iri`, the `wl:priority`/`wl:concern`
+declarations, `internal/graphproj` (row→triples→deterministic Turtle) and the
+Oxigraph test harness. This part wires it to the backbone. Task numbers restart
+at 1 (`docs/authoring-design-docs.md`).
 
-**Goal:** Wire the graph layer built in part 1 to the backbone: complete the
-`state_log` outbox so every task mutation is observable, checkpoint the
-projection, and run a projector loop under `lode serve` that mirrors each dirty
-task into its Workstream named graph. Ends with backbone tasks mirrored into
-the graph in production.
+**Rewritten 2026-08-19 (WL-110).** The version accepted 2026-07-31 (`7a61bc6`)
+became unexecutable: it targeted `internal/graph` — a SPARQL-Update client that
+was never built, against an endpoint graph-server does not have — and the
+Workstream graphs that `70d2139` retired (025 acceptance criterion 20). Part
+1's rewrite (WL-108, `52f5960`) settled the replacements this plan now builds
+on: the write unit is the **whole project graph**, rendered by
+`internal/graphproj` and `PUT` by `internal/graphserver`; membership is
+`wl:inProject` in `iri.ProjectGraph(<project-id>)`; the mapping consumes
+`internal/model` types (ADR 036). The corpus fold (`e9065b5`) also renumbered
+the acceptance criteria the old plan cited — "criteria 4 and 10b" are gone; the
+projector criterion in the folded spec is §16 criterion 1.
 
-**Architecture:** `internal/projector` polls the existing `state_log` outbox
-for dirty task IDs, re-renders each task with part 1's `internal/graph` and
-pushes a per-subject-replace SPARQL update, advancing a checkpoint stored in a
-new `graph_projection` table. `lode serve` starts the loop as a background
-goroutine when `LODE_GRAPH_URL` is set.
+**Goal:** Every task mutation becomes observable in the `state_log` outbox, a
+checkpointed projector loop under `lode serve` re-renders each dirty project's
+graph from the backbone and replaces it in graph-server, and the full slice —
+lifecycle event → idempotent projection → SPARQL read-back including
+`wl:dependsOn+` reachability — is proven against Oxigraph.
 
-**Tech Stack:** Go 1.26, cobra CLI, PostgreSQL via `database/sql`,
-standard-library testing, SPARQL 1.1 Protocol over `net/http`, Oxigraph
-(docker) as the test endpoint.
+**Architecture:** `internal/projector` polls `state_log` for dirty **projects**
+(a task event dirties its project's graph), re-renders each dirty project —
+Project node plus every task row, via part 1's `graphproj.ProjectTriples` /
+`TaskTriples` / `Document` — and replaces that project's named graph wholesale
+with `graphserver.Client.PutGraph` on the fixed `main` branch (006 §11 as
+amended by part 1; graph-server has no SPARQL Update endpoint). The watermark
+lives in a new single-row `graph_projection` table. `lode serve` runs the loop
+as a background goroutine when `LODE_GRAPHSERVER_URL` is set.
 
-**Spec:** `docs/specs/006-knowledge-graph.md` (acceptance criteria 4 and 10b).
+**Tech Stack:** Go 1.26, PostgreSQL via `database/sql`, standard-library
+testing, `internal/graphserver` (GSP over `net/http`), Oxigraph (docker) as the
+test endpoint via `internal/graphproj/graphtest`.
 
-**Prerequisites (landed by part 1):** `internal/kg/iri` (the IRI grammar,
-including `WorkstreamGraph`), `internal/graph` (`Triple`, `InsertData` /
-`ReplaceSubject` rendering, `TaskTriples`, the SPARQL `Client`, and the
-`graphtest` Oxigraph harness), the `rdf/wl/*.ttl` vocabulary sources, and the
-compose `oxigraph` service plus its CI wiring.
+**Spec:** `docs/specs/006-knowledge-graph.md` — read it via
+`docs/specs/inlined/006-knowledge-graph.md`.
 
-Design calls this plan inherits (recorded in part 1, restated because they
-shape Tasks 9–11):
+---
 
-- **Projected literal predicates.** `wl:taskState` (functional), `wl:priority`
-  (functional) and `wl:concern` are projection-only mirrors of backbone enums;
-  the projector writes them and the graph never forks them (Open Q3).
-- **Workstream IRIs.** `id/workstream/<project-id>` for the instance,
-  `https://worklode.io/ns/graph/workstream/<project-id>` for its projection
-  named graph — the graph the projector replaces into.
-- **One workstream per task in v1.** The backbone gives a task exactly one
-  `project_id` and no way to move it, so the projector writes each task to
-  exactly one Workstream graph. Multi-workstream membership (acceptance
-  criterion 8) is real in the vocabulary and proven at the graph layer in part
-  1's Task 6; the projector grows multi-graph fan-out when the backbone grows
-  multi-workstream membership.
+## Already built — do not recreate
 
-## File Structure
+- **The mapping and rendering.** `internal/graphproj`: `TaskTriples` /
+  `ProjectTriples` (model types in, subject-complete triples out) and
+  `Document` (deterministic Turtle — the idempotence lever: an unchanged
+  re-render is byte-identical). Do not re-derive the predicate table; part 1's
+  Task 4 fixed it.
+- **The client.** `internal/graphserver`: branch-scoped GSP
+  `PutGraph`/`GetGraph`/`DeleteGraph`, SPARQL `Select`, Keycloak
+  client-credentials via `FromEnv` (`LODE_GRAPHSERVER_URL` + the three
+  `LODE_GRAPHSERVER_*` auth vars). Proven against the real graph-server by
+  `e2e/graphserver_test.go`. This plan gives it its first production caller.
+- **The test harness.** `internal/graphproj/graphtest` (test-only Oxigraph
+  loader: `Endpoint`, `PutGraph`, `Select`), the compose `oxigraph` service,
+  and the CI wiring (`TEST_SPARQL_URL`). The old plan's own `graphtest`
+  package was never built and must not be.
+- **Most of the outbox.** `state_log` rows are already written, with an
+  `eventID`, by `Transition`, assignment (`internal/store/assign.go`), field
+  edits (`internal/api/tasks.go` PATCH), secrets, and decompose. The gap is
+  exactly `CreateTask`, `AddEdge`, `RemoveEdge` (Task 1).
+
+## Design calls
+
+1. **The write unit is the whole project graph.** graph-server exposes no
+   SPARQL Update (`internal/graphserver/client.go` package doc), so the old
+   plan's per-subject `DELETE`/`INSERT` cannot run against the system of
+   record. The projector recomputes every task of a dirty project from the
+   backbone — which stays the source of truth; there is no read-modify-write
+   of graph state — and `PutGraph`s the full graph to the fixed `main` branch
+   (006 §13.2 item 5). Deterministic rendering makes an unchanged
+   re-projection byte-identical, so a re-PUT after a crash or duplicated
+   batch is a no-op replace.
+2. **Dirty tracking is per project, over `state_log`.** `DirtyProjects` scans
+   `state_log` past the watermark and joins `tasks.project_id`: any task
+   event dirties its project; an edge change dirties both endpoints' projects
+   because Task 1 logs both endpoints (edges may cross projects —
+   `internal/store/tasks.go` allows it by design, and each side's triples
+   live in its own project graph).
+3. **Not an eventbus subscriber.** `internal/eventbus` (spec 025 §15) now
+   exists and looks like the natural consumer, but it is the wrong tool here:
+   its handler is strictly per-event, so a burst of edits would trigger one
+   graph render per event with no way to coalesce a batch into one PUT per
+   dirty project; and the `events` payloads are heterogeneous — `task.created`
+   carries the request body, which has no task id — so mapping event→project
+   would mean parsing every payload shape. `state_log` is the entity-grained
+   outbox (`entity_kind`, `entity_id`, `event_id` FK for provenance), which is
+   exactly the dirtiness signal. The projector keeps its own watermark
+   (`graph_projection`) over `state_log` ids. The single-consumer lock the
+   eventbus offers is not needed while one `lode serve` replica runs the loop
+   — the same standing assumption the lease sweeper makes, and the reason 006
+   §13.3 keeps If-Match CAS a should-have (tracked in `docs/follow-ups.md`).
+4. **Every task row projects, in every state.** Draft and abandoned tasks are
+   projected with their state literal — the graph answers "what was
+   abandoned"; filtering would silently fork the backbone's row set. A task
+   leaves the graph only when its row leaves the backbone, and no delete path
+   exists today; if one ever does, the whole-graph render drops the task
+   automatically on the project's next projection.
+5. **`wl:produces` is scoped out, with the spec row flagged.** 006 §11's v1
+   table projects `wl:produces` (Task→Deliverable) and `wl:affects`
+   (Task→Component), but the backbone stores neither relation: deliverables
+   are rows (spec 029) with no task edge, components have no backbone
+   representation at all. Part 1's mapping deliberately omits them (emitting
+   a predicate without a source is fabrication), so the projector cannot
+   write them, and adding a task→deliverable edge is 029-adjacent schema and
+   surface design that this plan does not smuggle in. The spec-vs-backbone
+   decision is filed as WL-116; the §11 rows stay unsatisfiable until their
+   backbone sources exist. `wl:mirrors` and
+   `wl:requiresSkill` are out for the same reason (part 1, "Deliberately not
+   in this part").
+6. **Project-node staleness is accepted for v1.** The dirty scan sees task
+   events only, so a project rename re-projects on that project's next task
+   event, not immediately (project edits write no `state_log` row today).
+   Project names change rarely and nothing consumes the Project node's
+   `dct:title` graph-side yet; the fix, whenever a consumer appears, is a
+   `LogChange` on the project-edit paths plus widening the dirty scan.
+7. **Coverage is declared per section of the folded spec.** §11 stays
+   `partial` even with part 1's claim: the projector half of the
+   task-projection mechanism lands here, but the `produces`/`affects`/
+   `mirrors` rows (design call 5) and §11.1's runtime projection (the
+   runtime-layer plan, WL-27) remain. §16 is `partial`: criterion 1's
+   projector path (authenticate → `PUT` → SPARQL read-back) becomes real
+   worklode code proven against Oxigraph here and against dev graph-server by
+   `e2e/graphserver_test.go`, while prod remains blocked on §13.2 item 1 and
+   the other nine criteria belong to the vocabulary/runtime plans.
+
+## Deliberately not in this plan
+
+- **`wl:produces`, `wl:affects`, `wl:mirrors`, `wl:requiresSkill`** — design
+  call 5.
+- **Runtime projection (006 §11.1)** — the runtime-layer plan (WL-27, after
+  WL-111's sweep).
+- **A compose graph-server / e2e projector journey.** The projector's e2e
+  proof against real graph-server needs the compose graph-server service
+  tracked in `docs/follow-ups.md` ("Compose gets its own graph-server");
+  until it exists, Oxigraph (Task 5) plus `e2e/graphserver_test.go` cover the
+  two halves separately.
+- **If-Match CAS on writes** — 006 §13.3 item 6, tracked in
+  `docs/follow-ups.md`; single-writer for v1.
+- **Backfill/replay tooling.** A full re-projection is `UPDATE
+  graph_projection SET last_state_log_id = 0` (or any watermark rewind) — the
+  loop re-renders every project with `state_log` history; document it, build
+  nothing.
+
+---
+
+## File structure
 
 **New files**
 
 | Path | Responsibility |
 |---|---|
-| `deploy/base/migrations/0008_graph_projection.up.sql` | `graph_projection` checkpoint table |
-| `deploy/base/migrations/0008_graph_projection.down.sql` | drop it |
-| `internal/store/projection.go` | checkpoint get/set + `DirtyTaskIDs` over `state_log` |
-| `internal/store/projection_test.go` | checkpoint round-trip, dirty scan, dedupe, limit |
+| `deploy/base/migrations/NNNN_graph_projection.up.sql` | watermark table + `state_log (entity_kind, id)` index |
+| `deploy/base/migrations/NNNN_graph_projection.down.sql` | drop both |
 | `internal/store/outbox_test.go` | create/edge mutations write `state_log` rows |
-| `internal/projector/projector.go` | the poll loop: dirty tasks → per-subject replace → advance checkpoint |
-| `internal/projector/projector_test.go` | real store + fake SPARQL endpoint; idempotence; edge fan-out; error retry |
-| `internal/projector/e2e_oxigraph_test.go` | full slice vs. Oxigraph incl. `wl:dependsOn+` property path (criterion 10b) |
+| `internal/store/projection.go` | checkpoint get/set + `DirtyProjects` over `state_log` |
+| `internal/store/projection_test.go` | checkpoint round-trip; dirty scan, dedupe, limit, cross-project edge |
+| `internal/projector/projector.go` | render dirty projects → `PutGraph`, advance checkpoint |
+| `internal/projector/projector_test.go` | real store + fake graph-server; idempotence; two-project edge fan-out; error retry |
+| `internal/projector/metrics.go` | spec 022 instruments (nil-safe) |
+| `internal/projector/metrics_test.go` | counters move as RunOnce runs |
+| `internal/projector/oxigraph_test.go` | full slice vs. Oxigraph incl. `wl:dependsOn+` and abandoned-task projection |
 
-Migration id `0008` is provisional: ids are assigned sequentially at execution
-time by the migration-id script, with `0008` the current next-free (0001–0005
-on main; 0006/0007 claimed by in-flight worktrees).
+`NNNN` is the next free migration number at execution time (0026 as of this
+rewrite; `./scripts/check-migrations.sh` renumbers on collision). List both
+files in `deploy/base/kustomization.yaml`.
 
 **Modified files**
 
 | Path | Change |
 |---|---|
-| `internal/store/tasks.go:96-148` | `CreateTask` gains `eventID` and writes a `state_log` row |
-| `internal/store/tasks.go:402-506` | `AddEdge`/`RemoveEdge` gain `eventID` and log both endpoints |
-| `internal/api/tasks.go:112-129` | pass `eventID` to `CreateTask` |
-| `internal/api/tasks.go:385-388, 424-427` | pass `eventID` to `AddEdge`/`RemoveEdge` |
-| `internal/cmd/serve.go` | `graphProjectorFromEnv` + background projection loop |
-| `README.md` | "Knowledge graph projection" section (env vars, compose service) |
+| `internal/store/tasks.go` | `CreateTask`/`AddEdge`/`RemoveEdge` gain `eventID` and write `state_log` rows |
+| `internal/store/inbox.go` | `PromoteIssue` gains `eventID`, passes it to `CreateTask` |
+| `internal/store/hierarchy.go` | decompose's `CreateTask`/`AddEdge` calls pass the `eventID` already in scope |
+| `internal/api/tasks.go` | create (+ parent/follow-up edges), `addEdge`, `removeEdge` pass `eventID` |
+| `internal/api/webform.go` | web create passes `eventID` |
+| `internal/api/admin.go` | promote (+ parent edge) passes `eventID` |
+| `internal/cmd/serve.go` | `graphProjector` helper + background loop next to the sweeper |
+| `internal/cmd/serve_test.go` | env gating: unset → disabled, set → projector, broken → boot error |
+| `README.md` | "Knowledge graph projection" section |
 
 **Test commands**
 
-- Postgres-backed (skip if unreachable outside CI):
-  `docker compose up -d postgres && go test ./internal/store/... ./internal/api/... ./internal/projector/...`
-- Everything: `docker compose up -d postgres oxigraph && go test ./...`
+- Postgres-backed:
+  `docker compose up -d postgres && go test -trimpath ./internal/store/... ./internal/api/... ./internal/projector/...`
+- Full slice: `docker compose up -d postgres oxigraph && go test -trimpath ./internal/projector/...`
+- Everything: `make test`
+
+**Global constraints** (once, per the repo's standing rules): the new
+background loop and outbound call carry `worklode_*` metrics with tests and
+bounded labels — never a project or task id as a label value (Task 4); the
+migration is a new numbered pair listed in `deploy/base/kustomization.yaml`,
+never an edit to a shipped one; store tests need Postgres (a skipped test
+proved nothing); every task leaves `make test` green.
 
 ---
 
-## Task 7: Complete the task outbox
+## Tasks
 
-Task state transitions already write `state_log` rows
-(`internal/store/tasks.go:154-179`); creates and edge changes do not, so a
-`state_log`-driven projector would miss them. Close the gap at the store
-layer so the invariant is "every task mutation writes its own outbox row".
+### Task 1 — Complete the task outbox
+
+```yaml
+kind: feature
+priority: high
+skills:
+  - superpowers:test-driven-development
+blockedBy: [ ]
+```
+
+Task transitions, assignments and field edits already write `state_log` rows;
+creates and edge changes do not, so a `state_log`-driven projector would miss
+them. Close the gap at the store layer so the invariant is "every task
+mutation writes its own outbox row".
 
 **Files:**
 - Modify: `internal/store/tasks.go` (`CreateTask`, `AddEdge`, `RemoveEdge` gain `eventID`)
-- Modify: `internal/api/tasks.go:112-129` (create), `:385-388` (add edge), `:424-427` (remove edge)
+- Modify: `internal/store/inbox.go` (`PromoteIssue` gains `eventID`), `internal/store/hierarchy.go` (decompose call sites)
+- Modify: `internal/api/tasks.go`, `internal/api/webform.go`, `internal/api/admin.go` (pass `eventID`)
 - Test: `internal/store/outbox_test.go` (create)
 
 - [ ] **Step 1: Write the failing test**
@@ -112,26 +242,30 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// outboxStore returns a migrated store with one project.
+// outboxStore returns a migrated store with two projects.
 func outboxStore(t *testing.T) *Store {
 	t.Helper()
 	s := OpenTestStore(t)
-	if err := s.CreateProject(t.Context(), "worklode", "Worklode", "WL"); err != nil {
-		t.Fatalf("create project: %v", err)
+	for _, p := range [][3]string{{"alpha", "Alpha", "AL"}, {"beta", "Beta", "BE"}} {
+		if err := s.CreateProject(t.Context(), p[0], p[1], p[2]); err != nil {
+			t.Fatalf("create project %s: %v", p[0], err)
+		}
 	}
 	return s
 }
 
 // makeTask creates a ready task through the event log, as the API does.
-func makeTask(t *testing.T, s *Store, extID, title string) *Task {
+func makeTask(t *testing.T, s *Store, extID, project, title string) *model.Task {
 	t.Helper()
-	var created *Task
+	var created *model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", extID, "task.created", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			task, err := CreateTask(tx, time.Now().UTC(), TaskInput{
-				ProjectID: "worklode", Title: title, Priority: "medium", Kind: "feature",
+				ProjectID: project, Title: title, Priority: "medium", Kind: "feature",
 			}, eventID)
 			if err != nil {
 				return err
@@ -147,7 +281,7 @@ func makeTask(t *testing.T, s *Store, extID, title string) *Task {
 
 func TestCreateTaskWritesStateLog(t *testing.T) {
 	s := outboxStore(t)
-	task := makeTask(t, s, "e1", "outbox on create")
+	task := makeTask(t, s, "e1", "alpha", "outbox on create")
 
 	entries, err := s.StateLogForEntity(t.Context(), "task", task.ID)
 	if err != nil {
@@ -160,8 +294,8 @@ func TestCreateTaskWritesStateLog(t *testing.T) {
 
 func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
 	s := outboxStore(t)
-	a := makeTask(t, s, "e2", "blocker")
-	b := makeTask(t, s, "e3", "blocked")
+	a := makeTask(t, s, "e2", "alpha", "blocker")
+	b := makeTask(t, s, "e3", "alpha", "blocked")
 
 	_, _, err := s.RecordEvent(t.Context(), "cli", "e4", "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
@@ -199,27 +333,30 @@ func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/store/ -run 'TestCreateTaskWritesStateLog|TestEdgeChanges'`
+Run: `go test -trimpath ./internal/store/ -run 'TestCreateTaskWritesStateLog|TestEdgeChanges'`
 Expected: FAIL — compile error: `CreateTask`/`AddEdge`/`RemoveEdge` do not take an `eventID`
 
 - [ ] **Step 3: Extend the store functions**
 
 In `internal/store/tasks.go`:
 
-1. Change the `CreateTask` signature to
-   `func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*Task, error)`
-   and, immediately after the successful `INSERT INTO tasks`, add:
+1. `CreateTask` becomes
+   `func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.Task, error)`
+   and, immediately after the successful `INSERT INTO tasks`, appends the
+   row (edit style — no `old` on a create):
 
 ```go
 	if err := LogChange(tx, "task", id, eventID,
-		map[string]string{"field": "state", "old": "", "new": state}); err != nil {
+		map[string]string{"field": "state", "new": state}); err != nil {
 		return nil, err
 	}
 ```
 
-2. Change `AddEdge` to
+2. `AddEdge` becomes
    `func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error`
-   and, after the successful edge insert (and cycle check), add:
+   and, after the successful edge insert (and cycle check), logs **both
+   endpoints** — this is what lets the projector dirty both projects of a
+   cross-project edge:
 
 ```go
 	change := map[string]string{"field": "edge", "op": "add", "type": typ,
@@ -232,31 +369,38 @@ In `internal/store/tasks.go`:
 	}
 ```
 
-3. Change `RemoveEdge` to
+3. `RemoveEdge` becomes
    `func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string, eventID int64) error`
    with the same two `LogChange` calls (`"op": "remove"`) after the delete.
 
-Update the doc comments of all three to mention the appended `state_log` row
-(mirror `Transition`'s comment style at `internal/store/tasks.go:149-153`).
+Update the three doc comments to mention the appended `state_log` row
+(mirror `Transition`'s comment style). In `internal/store/inbox.go`,
+`PromoteIssue` gains a trailing `eventID int64` parameter and passes it to
+`CreateTask`. In `internal/store/hierarchy.go`, decompose's `CreateTask` and
+`AddEdge` calls pass the `eventID` already in scope.
 
 - [ ] **Step 4: Update the API call sites**
 
-In `internal/api/tasks.go`:
-- create (line ~114): `store.CreateTask(tx, s.st.Now(), store.TaskInput{…}, eventID)`
-- `addEdge` (line ~386): change the apply callback parameter `_ int64` to
-  `eventID int64` and call `store.AddEdge(tx, s.st.Now(), from, to, req.Type, eventID)`
-- `removeEdge` (line ~425): likewise,
-  `store.RemoveEdge(tx, from, to, req.Type, eventID)`
+All of them already sit inside a `RecordEvent` apply callback, so the id is
+at hand:
+
+- `internal/api/tasks.go` create: `store.CreateTask(tx, now, store.TaskInput{…}, eventID)`,
+  and the two conditional `store.AddEdge(tx, now, t.ID, …, eventID)` calls
+  (parent, follow-up) below it
+- `internal/api/tasks.go` `addEdge`/`removeEdge`: change the callback
+  parameter `_ int64` to `eventID int64` and pass it through
+- `internal/api/webform.go` create: pass `eventID`
+- `internal/api/admin.go` promote: `store.PromoteIssue(tx, …, eventID)` and
+  the parent `store.AddEdge(…, eventID)`
 
 - [ ] **Step 5: Fix remaining callers and run everything**
 
-Run: `go build ./... && go test ./internal/store/... ./internal/api/...`
-Expected: a handful of test files fail to compile (e.g.
-`internal/store/tasks_test.go`, `internal/store/projects_test.go`). Every
-call site already sits inside a `RecordEvent` apply callback — pass that
-callback's `eventID` through. Then: PASS. Tests that assert exact
-`state_log` contents for a task may now see one extra "created" entry;
-update their expectations, do not weaken the new invariant.
+Run: `go build ./... && go test -trimpath ./internal/store/... ./internal/api/...`
+Expected: test files that call the old signatures fail to compile; every
+call site sits inside a `RecordEvent` apply callback — pass that callback's
+`eventID` through. Then: PASS. Tests asserting exact `state_log` contents
+may now see one extra "created" entry; update their expectations, do not
+weaken the new invariant.
 
 - [ ] **Step 6: Commit**
 
@@ -267,11 +411,18 @@ git commit -m "Write a state_log row for every task mutation"
 
 ---
 
-## Task 8: The projection checkpoint
+### Task 2 — The projection checkpoint and dirty-project scan
+
+```yaml
+kind: feature
+priority: high
+skills:
+  - superpowers:test-driven-development
+blockedBy: [1]
+```
 
 **Files:**
-- Create: `deploy/base/migrations/0008_graph_projection.up.sql`
-- Create: `deploy/base/migrations/0008_graph_projection.down.sql`
+- Create: `deploy/base/migrations/NNNN_graph_projection.up.sql` / `.down.sql` (next free `NNNN`; list both in `deploy/base/kustomization.yaml`)
 - Create: `internal/store/projection.go`
 - Test: `internal/store/projection_test.go`
 
@@ -302,48 +453,66 @@ func TestProjectionCheckpointRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDirtyTaskIDs(t *testing.T) {
-	s := outboxStore(t) // from outbox_test.go
+func TestDirtyProjects(t *testing.T) {
+	s := outboxStore(t) // from outbox_test.go: projects alpha and beta
 	ctx := t.Context()
-	a := makeTask(t, s, "d1", "first")
-	b := makeTask(t, s, "d2", "second")
+	a := makeTask(t, s, "d1", "alpha", "first")
+	makeTask(t, s, "d2", "beta", "second")
 
-	ids, through, err := s.DirtyTaskIDs(ctx, 0, 100)
+	projects, through, err := s.DirtyProjects(ctx, 0, 100)
 	if err != nil {
 		t.Fatalf("dirty: %v", err)
 	}
-	if len(ids) != 2 || ids[0] != a.ID || ids[1] != b.ID {
-		t.Fatalf("ids = %v; want [%s %s] in first-touched order", ids, a.ID, b.ID)
+	if len(projects) != 2 || projects[0] != "alpha" || projects[1] != "beta" {
+		t.Fatalf("projects = %v; want [alpha beta] in first-touched order", projects)
 	}
 	if through == 0 {
 		t.Fatal("through = 0; must advance past the scanned rows")
 	}
 
 	// Nothing new after the watermark.
-	ids, again, err := s.DirtyTaskIDs(ctx, through, 100)
-	if err != nil || len(ids) != 0 || again != through {
-		t.Fatalf("after watermark: ids=%v through=%d err=%v; want none, unchanged", ids, again, err)
+	projects, again, err := s.DirtyProjects(ctx, through, 100)
+	if err != nil || len(projects) != 0 || again != through {
+		t.Fatalf("after watermark: projects=%v through=%d err=%v; want none, unchanged", projects, again, err)
 	}
 
-	// A transition dirties only its task, and repeat changes dedupe.
+	// Repeat changes to one project dedupe to one entry.
 	for i, move := range [][2]string{{"ready", "in_progress"}, {"in_progress", "ready"}} {
 		_, _, err = s.RecordEvent(ctx, "cli", "d-move-"+move[1], "task.transition", nil,
 			func(tx *sql.Tx, eventID int64) error {
-				return Transition(tx, time.Now().UTC(), b.ID, move[0], move[1], eventID)
+				return Transition(tx, time.Now().UTC(), a.ID, move[0], move[1], eventID)
 			})
 		if err != nil {
 			t.Fatalf("transition %d: %v", i, err)
 		}
 	}
-	ids, _, err = s.DirtyTaskIDs(ctx, through, 100)
-	if err != nil || len(ids) != 1 || ids[0] != b.ID {
-		t.Fatalf("dirty after transitions = %v, %v; want just [%s]", ids, err, b.ID)
+	projects, _, err = s.DirtyProjects(ctx, through, 100)
+	if err != nil || len(projects) != 1 || projects[0] != "alpha" {
+		t.Fatalf("dirty after transitions = %v, %v; want just [alpha]", projects, err)
+	}
+
+	// A cross-project edge dirties both projects (Task 1 logs both endpoints).
+	c := makeTask(t, s, "d3", "beta", "cross blocker")
+	_, edgeFrom, err := s.DirtyProjects(ctx, 0, 1000)
+	if err != nil {
+		t.Fatalf("watermark before edge: %v", err)
+	}
+	_, _, err = s.RecordEvent(ctx, "cli", "d-edge", "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, time.Now().UTC(), c.ID, a.ID, "blocks", eventID)
+		})
+	if err != nil {
+		t.Fatalf("add edge: %v", err)
+	}
+	projects, _, err = s.DirtyProjects(ctx, edgeFrom, 100)
+	if err != nil || len(projects) != 2 {
+		t.Fatalf("dirty after cross-project edge = %v, %v; want both projects", projects, err)
 	}
 
 	// The limit bounds the scan, and through only covers what was read.
-	ids, part, err := s.DirtyTaskIDs(ctx, 0, 1)
-	if err != nil || len(ids) != 1 || ids[0] != a.ID {
-		t.Fatalf("limited scan = %v, %v; want just [%s]", ids, err, a.ID)
+	projects, part, err := s.DirtyProjects(ctx, 0, 1)
+	if err != nil || len(projects) != 1 || projects[0] != "alpha" {
+		t.Fatalf("limited scan = %v, %v; want just [alpha]", projects, err)
 	}
 	if part >= through {
 		t.Fatalf("limited through = %d; want < %d (only one row covered)", part, through)
@@ -353,127 +522,100 @@ func TestDirtyTaskIDs(t *testing.T) {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/store/ -run 'TestProjectionCheckpoint|TestDirtyTaskIDs'`
+Run: `go test -trimpath ./internal/store/ -run 'TestProjectionCheckpoint|TestDirtyProjects'`
 Expected: FAIL — `undefined: (*Store).ProjectionCheckpoint`
 
 - [ ] **Step 3: Write the migration**
 
-`deploy/base/migrations/0008_graph_projection.up.sql`:
+`NNNN_graph_projection.up.sql`:
 
 ```sql
--- Watermark for the backbone→knowledge-graph projector (spec 006
--- §Projection). One row; last_state_log_id is the state_log id through
--- which tasks have been projected. Numbered 0008 because 0006/0007 are
--- claimed by in-flight branches (task hierarchy, org-wide skills);
--- golang-migrate accepts gaps.
+-- Watermark for the backbone→knowledge-graph projector (spec 006 §11): one
+-- row; last_state_log_id is the state_log id through which task changes have
+-- been projected. The index serves DirtyProjects' (entity_kind, id > $1)
+-- scan, so non-task rows are never touched.
 CREATE TABLE graph_projection (
     id                integer PRIMARY KEY CHECK (id = 1),
     last_state_log_id bigint  NOT NULL DEFAULT 0
 );
 INSERT INTO graph_projection (id, last_state_log_id) VALUES (1, 0);
+
+CREATE INDEX state_log_kind_id ON state_log (entity_kind, id);
 ```
 
-`deploy/base/migrations/0008_graph_projection.down.sql`:
+`NNNN_graph_projection.down.sql`:
 
 ```sql
+DROP INDEX state_log_kind_id;
 DROP TABLE graph_projection;
 ```
 
+Add both filenames to `deploy/base/kustomization.yaml`.
+
 - [ ] **Step 4: Write the store methods**
 
-`internal/store/projection.go`:
+`internal/store/projection.go`: `ProjectionCheckpoint(ctx) (int64, error)`
+and `SetProjectionCheckpoint(ctx, id) error` over the single row, and:
 
 ```go
-package store
-
-import (
-	"context"
-	"fmt"
-)
-
-// ProjectionCheckpoint returns the state_log id up to which tasks have been
-// projected into the knowledge graph (spec 006 §Projection).
-func (s *Store) ProjectionCheckpoint(ctx context.Context) (int64, error) {
-	var id int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT last_state_log_id FROM graph_projection WHERE id = 1`).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("projection checkpoint: %w", err)
-	}
-	return id, nil
-}
-
-// SetProjectionCheckpoint advances the projection watermark.
-func (s *Store) SetProjectionCheckpoint(ctx context.Context, id int64) error {
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE graph_projection SET last_state_log_id = $1 WHERE id = 1`, id); err != nil {
-		return fmt.Errorf("set projection checkpoint: %w", err)
-	}
-	return nil
-}
-
-// DirtyTaskIDs returns the distinct task ids with state_log activity after
-// the given watermark, in first-touched order, and the last state_log id
-// the scan covered (== after when there was nothing). limit bounds the
-// number of log rows read, so one projection batch is bounded even after a
-// long outage.
+// DirtyProjects returns the distinct project ids whose tasks have state_log
+// activity after the given watermark, in first-touched order, and the last
+// state_log id the scan covered (== after when there was nothing). limit
+// bounds the number of log rows read, so one projection batch is bounded
+// even after a long outage.
 //
-// state_log ids are assigned at insert time, so a slow transaction can in
-// principle commit a lower id after a higher one was already projected.
-// With a single API server and short ingest transactions the window is
-// negligible for v1; lode reconcile (spec 013) is the backstop.
-func (s *Store) DirtyTaskIDs(ctx context.Context, after int64, limit int) (ids []string, through int64, err error) {
+// The LEFT JOIN keeps the watermark advancing even over a log row whose
+// task no longer resolves (no delete path exists today; this is a guard,
+// not a feature). state_log ids are assigned at insert time, so a slow
+// transaction can in principle commit a lower id after a higher one was
+// already projected; with a single API server and short transactions the
+// window is negligible for v1, and a watermark rewind re-renders everything.
+func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (projects []string, through int64, err error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, entity_id FROM state_log
-		 WHERE entity_kind = 'task' AND id > $1 ORDER BY id LIMIT $2`,
+		`SELECT sl.id, t.project_id
+		   FROM state_log sl LEFT JOIN tasks t ON t.id = sl.entity_id
+		  WHERE sl.entity_kind = 'task' AND sl.id > $1
+		  ORDER BY sl.id LIMIT $2`,
 		after, limit)
-	if err != nil {
-		return nil, 0, fmt.Errorf("dirty task ids: %w", err)
-	}
-	defer rows.Close()
-
-	through = after
-	seen := map[string]bool{}
-	for rows.Next() {
-		var logID int64
-		var taskID string
-		if err := rows.Scan(&logID, &taskID); err != nil {
-			return nil, 0, fmt.Errorf("scan state log: %w", err)
-		}
-		through = logID
-		if !seen[taskID] {
-			seen[taskID] = true
-			ids = append(ids, taskID)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("dirty task ids: %w", err)
-	}
-	return ids, through, nil
+	// … scan; through = last id seen; skip NULL project_ids; dedupe with a
+	// seen map preserving first-touched order.
 }
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `go test ./internal/store/...`
+Run: `go test -trimpath ./internal/store/...`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add deploy/base/migrations/0008_graph_projection.up.sql \
-        deploy/base/migrations/0008_graph_projection.down.sql \
+git add deploy/base/migrations deploy/base/kustomization.yaml \
         internal/store/projection.go internal/store/projection_test.go
 git commit -m "Track the graph-projection watermark over state_log"
 ```
 
 ---
 
-## Task 9: The projector
+### Task 3 — The projector
+
+```yaml
+kind: feature
+priority: high
+skills:
+  - superpowers:test-driven-development
+blockedBy: [1, 2]
+```
 
 **Files:**
 - Create: `internal/projector/projector.go`
 - Test: `internal/projector/projector_test.go`
+
+The fake graph-server is an `httptest.Server` implementing the one surface
+the projector uses: `PUT /branches/main/graphs?graph=<iri>` (201 on first
+sight of a graph, 204 after, 500 when told to fail), recording bodies per
+graph IRI. The real client (`graphserver.New(srv.URL, nil)`) talks to it, so
+the tests exercise the production wire path.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -490,25 +632,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// fakeSPARQL records /update bodies and can be told to fail.
-type fakeSPARQL struct {
-	mu      sync.Mutex
-	fail    bool
-	updates []string
+// fakeGraphServer records PUT bodies per graph IRI and can be told to fail.
+type fakeGraphServer struct {
+	mu   sync.Mutex
+	fail bool
+	puts map[string][]string // graph IRI → bodies, in arrival order
 }
 
-func (f *fakeSPARQL) handler() http.Handler {
+func (f *fakeGraphServer) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/update" {
-			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+		if r.Method != http.MethodPut || r.URL.Path != "/branches/main/graphs" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 			return
 		}
+		g := r.URL.Query().Get("graph")
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -516,93 +659,111 @@ func (f *fakeSPARQL) handler() http.Handler {
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return
 		}
-		f.updates = append(f.updates, string(body))
-		w.WriteHeader(http.StatusNoContent)
+		if f.puts == nil {
+			f.puts = map[string][]string{}
+		}
+		status := http.StatusNoContent
+		if len(f.puts[g]) == 0 {
+			status = http.StatusCreated
+		}
+		f.puts[g] = append(f.puts[g], string(body))
+		w.WriteHeader(status)
 	})
 }
 
-func (f *fakeSPARQL) all() string {
+func (f *fakeGraphServer) last(graph string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return strings.Join(f.updates, "\n---\n")
+	if b := f.puts[graph]; len(b) > 0 {
+		return b[len(b)-1]
+	}
+	return ""
 }
 
-func newProjector(t *testing.T) (*store.Store, *projector.Projector, *fakeSPARQL) {
+func (f *fakeGraphServer) count(graph string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.puts[graph])
+}
+
+func newProjector(t *testing.T) (*store.Store, *projector.Projector, *fakeGraphServer) {
 	t.Helper()
 	s := store.OpenTestStore(t)
-	if err := s.CreateProject(t.Context(), "worklode", "Worklode", "WL"); err != nil {
-		t.Fatalf("create project: %v", err)
+	for _, p := range [][3]string{{"alpha", "Alpha", "AL"}, {"beta", "Beta", "BE"}} {
+		if err := s.CreateProject(t.Context(), p[0], p[1], p[2]); err != nil {
+			t.Fatalf("create project %s: %v", p[0], err)
+		}
 	}
-	f := &fakeSPARQL{}
+	f := &fakeGraphServer{}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
-	return s, projector.New(s, graph.NewClient(srv.URL, nil), 100), f
+	return s, projector.New(s, graphserver.New(srv.URL, nil), nil, 100), f
 }
 
 // createTask creates a ready task through the outbox, as the API does.
-func createTask(t *testing.T, s *store.Store, extID, title string) *store.Task {
+func createTask(t *testing.T, s *store.Store, extID, project, title string) string {
 	t.Helper()
-	var created *store.Task
+	var id string
 	_, _, err := s.RecordEvent(t.Context(), "cli", extID, "task.created", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			task, err := store.CreateTask(tx, time.Now().UTC(), store.TaskInput{
-				ProjectID: "worklode", Title: title, Priority: "medium", Kind: "feature",
+				ProjectID: project, Title: title, Priority: "medium", Kind: "feature",
 			}, eventID)
 			if err != nil {
 				return err
 			}
-			created = task
+			id = task.ID
 			return nil
 		})
 	if err != nil {
 		t.Fatalf("create task %q: %v", title, err)
 	}
-	return created
+	return id
 }
 
 func TestRunOnceProjectsCreatedTask(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
-	task := createTask(t, s, "p1", "wire the projector")
+	id := createTask(t, s, "p1", "alpha", "wire the projector")
 
 	n, err := p.RunOnce(ctx)
 	if err != nil || n != 1 {
-		t.Fatalf("RunOnce = %d, %v; want 1, nil", n, err)
+		t.Fatalf("RunOnce = %d, %v; want 1 project, nil", n, err)
 	}
-	u := f.all()
+	doc := f.last(iri.ProjectGraph("alpha"))
 	for _, want := range []string{
-		"DELETE WHERE { GRAPH <" + iri.WorkstreamGraph("worklode") + "> { <" +
-			iri.Task(task.ID) + "> ?p ?o } }",
-		"<" + iri.Task(task.ID) + "> <" + graph.RDFType + "> <" + iri.Term("Task") + ">",
-		`"ready"`,
-		"<" + iri.Concept("feature") + ">",
+		"<" + iri.Task(id) + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Task") + ">",
+		"<" + iri.Task(id) + "> <" + iri.Term("taskState") + "> \"ready\"",
+		"<" + iri.Task(id) + "> <" + iri.Term("taskKind") + "> <" + iri.Concept("feature") + ">",
+		"<" + iri.Task(id) + "> <" + iri.Term("inProject") + "> <" + iri.Project("alpha") + ">",
+		"<" + iri.Project("alpha") + "> <http://purl.org/dc/terms/title> \"Alpha\"",
 	} {
-		if !strings.Contains(u, want) {
-			t.Errorf("update missing %q\n%s", want, u)
+		if !strings.Contains(doc, want) {
+			t.Errorf("project graph missing %q\n%s", want, doc)
 		}
 	}
 
-	// Checkpoint advanced: a second run is a no-op.
+	// Checkpoint advanced: a second run is a no-op with no new PUT.
 	if n, err := p.RunOnce(ctx); err != nil || n != 0 {
 		t.Fatalf("second RunOnce = %d, %v; want 0, nil", n, err)
 	}
-	if got := len(strings.Split(f.all(), "\n---\n")); got != 1 {
-		t.Fatalf("updates after idempotent rerun = %d; want 1", got)
+	if got := f.count(iri.ProjectGraph("alpha")); got != 1 {
+		t.Fatalf("PUTs after idempotent rerun = %d; want 1", got)
 	}
 }
 
-func TestRunOnceProjectsBothEdgeEndpoints(t *testing.T) {
+func TestCrossProjectEdgeProjectsBothGraphs(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
-	a := createTask(t, s, "p2", "blocker")
-	b := createTask(t, s, "p3", "blocked")
+	a := createTask(t, s, "p2", "alpha", "blocker")
+	b := createTask(t, s, "p3", "beta", "blocked")
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("drain creates: %v", err)
 	}
 
 	_, _, err := s.RecordEvent(ctx, "cli", "p4", "task.edge_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.AddEdge(tx, time.Now().UTC(), a.ID, b.ID, "blocks", eventID)
+			return store.AddEdge(tx, time.Now().UTC(), a, b, "blocks", eventID)
 		})
 	if err != nil {
 		t.Fatalf("add edge: %v", err)
@@ -610,21 +771,22 @@ func TestRunOnceProjectsBothEdgeEndpoints(t *testing.T) {
 
 	n, err := p.RunOnce(ctx)
 	if err != nil || n != 2 {
-		t.Fatalf("RunOnce after edge = %d, %v; want both endpoints", n, err)
+		t.Fatalf("RunOnce after edge = %d, %v; want both projects", n, err)
 	}
-	u := f.all()
-	if !strings.Contains(u, "<"+iri.Task(a.ID)+"> <"+iri.Term("blocks")+"> <"+iri.Task(b.ID)+">") {
-		t.Errorf("missing %s wl:blocks %s\n%s", a.ID, b.ID, u)
+	if doc := f.last(iri.ProjectGraph("alpha")); !strings.Contains(doc,
+		"<"+iri.Task(a)+"> <"+iri.Term("blocks")+"> <"+iri.Task(b)+">") {
+		t.Errorf("alpha graph missing wl:blocks\n%s", doc)
 	}
-	if !strings.Contains(u, "<"+iri.Task(b.ID)+"> <"+iri.Term("dependsOn")+"> <"+iri.Task(a.ID)+">") {
-		t.Errorf("missing %s wl:dependsOn %s\n%s", b.ID, a.ID, u)
+	if doc := f.last(iri.ProjectGraph("beta")); !strings.Contains(doc,
+		"<"+iri.Task(b)+"> <"+iri.Term("dependsOn")+"> <"+iri.Task(a)+">") {
+		t.Errorf("beta graph missing wl:dependsOn\n%s", doc)
 	}
 }
 
 func TestRunOnceLeavesCheckpointOnError(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
-	createTask(t, s, "p5", "unlucky")
+	createTask(t, s, "p5", "alpha", "unlucky")
 
 	f.fail = true
 	if _, err := p.RunOnce(ctx); err == nil {
@@ -643,381 +805,220 @@ func TestRunOnceLeavesCheckpointOnError(t *testing.T) {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/projector/...`
+Run: `go test -trimpath ./internal/projector/...`
 Expected: FAIL — `no required module provides package .../internal/projector`
 
 - [ ] **Step 3: Write the implementation**
 
+`internal/projector/projector.go` — package doc cites 006 §11 (authority
+stays split; Task is the bridge, projected read-only; design facts are never
+projected) and the whole-project-graph mechanism:
+
 ```go
-// Package projector mirrors backbone execution facts into the knowledge
-// graph (spec 006 §Projection). Authority stays split (D2/D3): the backbone
-// owns execution facts and Task is the bridge (D11), projected read-only;
-// design facts are authored graph-side and never projected.
-package projector
+// Branch is the fixed graph-server branch the work graph lives on
+// (spec 006 §13.2 item 5).
+const Branch = "main"
 
-import (
-	"context"
-	"errors"
-	"fmt"
-
-	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
-	"github.com/sunstoneinstitute/worklode/internal/store"
-)
-
-// Projector consumes the state_log outbox and maintains each dirty task by
-// a per-subject replace in its Workstream named graph - idempotent per
-// (task, graph), so re-running after a crash or a duplicated batch is safe.
+// Projector re-renders dirty projects from the backbone and replaces their
+// named graphs — idempotent per project graph: deterministic rendering
+// (graphproj.Document) makes an unchanged re-projection byte-identical, so
+// re-running after a crash or duplicated batch is safe.
 type Projector struct {
 	st    *store.Store
-	gc    *graph.Client
+	gc    *graphserver.Client
+	m     *Metrics // nil-safe; Task 4
 	batch int
 }
 
 // New returns a projector reading at most batch state_log rows per run.
-func New(st *store.Store, gc *graph.Client, batch int) *Projector {
-	return &Projector{st: st, gc: gc, batch: batch}
-}
+func New(st *store.Store, gc *graphserver.Client, m *Metrics, batch int) *Projector
 
-// RunOnce projects every task dirtied since the checkpoint, then advances
-// the checkpoint. It returns how many tasks were (re-)projected. On error
-// the checkpoint is left untouched so the next run retries the same batch.
-func (p *Projector) RunOnce(ctx context.Context) (int, error) {
-	cp, err := p.st.ProjectionCheckpoint(ctx)
-	if err != nil {
-		return 0, err
-	}
-	ids, through, err := p.st.DirtyTaskIDs(ctx, cp, p.batch)
-	if err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	for i, id := range ids {
-		if err := p.projectTask(ctx, id); err != nil {
-			return i, fmt.Errorf("project %s: %w", id, err)
-		}
-	}
-	if err := p.st.SetProjectionCheckpoint(ctx, through); err != nil {
-		return len(ids), err
-	}
-	return len(ids), nil
-}
-
-// projectTask replaces the task's triples in its Workstream graph with a
-// fresh projection of the current row - never the event delta - which is
-// what makes replay safe: any event only marks the task dirty.
-func (p *Projector) projectTask(ctx context.Context, id string) error {
-	t, err := p.st.GetTask(ctx, id)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil // tasks are never deleted; guard anyway
-	}
-	if err != nil {
-		return err
-	}
-	out, in, err := p.st.ListEdges(ctx, id)
-	if err != nil {
-		return err
-	}
-	update := graph.ReplaceSubject(
-		iri.WorkstreamGraph(t.ProjectID), iri.Task(t.ID),
-		graph.TaskTriples(*t, out, in))
-	return p.gc.Update(ctx, update)
-}
+// RunOnce projects every project dirtied since the checkpoint, then
+// advances the checkpoint. It returns how many project graphs were
+// (re-)written. On error the checkpoint is left untouched so the next run
+// retries the same batch.
+func (p *Projector) RunOnce(ctx context.Context) (int, error)
 ```
+
+`RunOnce`: `ProjectionCheckpoint` → `DirtyProjects(cp, batch)` → for each
+project id, render and `PutGraph(ctx, Branch, iri.ProjectGraph(id), doc)` →
+`SetProjectionCheckpoint(through)`. Rendering one project: `GetProject`
+(skip on `store.ErrNotFound` — a guard, no delete path exists),
+`ListTasks(store.TaskFilter{Project: id})` (no state filter — design call
+4), `ListEdgesForTasks(ids)`, then `graphproj.ProjectTriples` on a
+`model.Project{ID, Name}` built from the store row plus `graphproj.TaskTriples`
+per task with the `store.Edge` slices converted to `model.Edge`
+(`FromTask`→`From`, `ToTask`→`To`), all through `graphproj.Document`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `go test ./internal/projector/...`
-Expected: PASS (3 tests; skipped without Postgres)
+Run: `go test -trimpath ./internal/projector/...`
+Expected: PASS (skipped without Postgres)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add internal/projector
-git commit -m "Project dirty tasks into their Workstream named graphs"
+git commit -m "Project dirty projects into their named graphs"
 ```
 
 ---
 
-## Task 10: The full slice against Oxigraph
+### Task 4 — Projector metrics
 
-Proves acceptance criterion 4 (backbone lifecycle event → idempotent
-projection → SPARQL read-back) and criterion 10b (`wl:dependsOn+`
-reachability with no reasoner).
-
-**Files:**
-- Test: `internal/projector/e2e_oxigraph_test.go` (create)
-
-- [ ] **Step 1: Write the test**
-
-```go
-package projector_test
-
-import (
-	"crypto/rand"
-	"database/sql"
-	"encoding/hex"
-	"fmt"
-	"testing"
-	"time"
-
-	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
-	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
-	"github.com/sunstoneinstitute/worklode/internal/projector"
-	"github.com/sunstoneinstitute/worklode/internal/store"
-)
-
-func TestProjectorEndToEnd(t *testing.T) {
-	base := graphtest.Endpoint(t)
-	s := store.OpenTestStore(t)
-	ctx := t.Context()
-
-	// Unique project id: the Workstream graph IRI derives from it, which
-	// isolates this run in the shared Oxigraph instance.
-	buf := make([]byte, 4)
-	if _, err := rand.Read(buf); err != nil {
-		t.Fatalf("random project id: %v", err)
-	}
-	proj := "kg-" + hex.EncodeToString(buf)
-	if err := s.CreateProject(ctx, proj, "KG e2e", "KG"); err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	mk := func(ext, title string) *store.Task {
-		t.Helper()
-		var created *store.Task
-		_, _, err := s.RecordEvent(ctx, "cli", ext, "task.created", nil,
-			func(tx *sql.Tx, eventID int64) error {
-				task, err := store.CreateTask(tx, time.Now().UTC(), store.TaskInput{
-					ProjectID: proj, Title: title, Priority: "medium", Kind: "feature",
-				}, eventID)
-				if err != nil {
-					return err
-				}
-				created = task
-				return nil
-			})
-		if err != nil {
-			t.Fatalf("create %q: %v", title, err)
-		}
-		return created
-	}
-	a, b, c := mk("g1", "foundation"), mk("g2", "middle"), mk("g3", "tip")
-	for i, e := range []struct{ from, to string }{{a.ID, b.ID}, {b.ID, c.ID}} {
-		_, _, err := s.RecordEvent(ctx, "cli", fmt.Sprintf("g-edge-%d", i), "task.edge_added", nil,
-			func(tx *sql.Tx, eventID int64) error {
-				return store.AddEdge(tx, time.Now().UTC(), e.from, e.to, "blocks", eventID)
-			})
-		if err != nil {
-			t.Fatalf("edge %d: %v", i, err)
-		}
-	}
-
-	p := projector.New(s, graph.NewClient(base, nil), 100)
-	if n, err := p.RunOnce(ctx); err != nil || n != 3 {
-		t.Fatalf("RunOnce = %d, %v; want 3 projected tasks", n, err)
-	}
-
-	gc := graph.NewClient(base, nil)
-	g := iri.WorkstreamGraph(proj)
-
-	state := func(id string) []map[string]string {
-		t.Helper()
-		rows, err := gc.Select(ctx, fmt.Sprintf(
-			"SELECT ?s WHERE { GRAPH <%s> { <%s> <%s> ?s } }",
-			g, iri.Task(id), iri.Term("taskState")))
-		if err != nil {
-			t.Fatalf("state query %s: %v", id, err)
-		}
-		return rows
-	}
-	if rows := state(a.ID); len(rows) != 1 || rows[0]["s"] != "ready" {
-		t.Fatalf("projected state of %s = %v; want ready", a.ID, rows)
-	}
-
-	// Criterion 10b: transitive reachability as a property path, no
-	// reasoner. c dependsOn b dependsOn a, so dependsOn+ joins c to a.
-	ok, err := gc.Ask(ctx, fmt.Sprintf(
-		"ASK { GRAPH <%s> { <%s> <%s>+ <%s> } }",
-		g, iri.Task(c.ID), iri.Term("dependsOn"), iri.Task(a.ID)))
-	if err != nil || !ok {
-		t.Fatalf("dependsOn+ reachability = %v, %v; want true", ok, err)
-	}
-
-	// A lifecycle event re-projects: exactly one state literal, the new one.
-	_, _, err = s.RecordEvent(ctx, "cli", "g-claim", "task.transition", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			return store.Transition(tx, time.Now().UTC(), a.ID, "ready", "in_progress", eventID)
-		})
-	if err != nil {
-		t.Fatalf("transition: %v", err)
-	}
-	if n, err := p.RunOnce(ctx); err != nil || n != 1 {
-		t.Fatalf("RunOnce after transition = %d, %v; want 1", n, err)
-	}
-	if rows := state(a.ID); len(rows) != 1 || rows[0]["s"] != "in_progress" {
-		t.Fatalf("re-projected state = %v; want exactly one in_progress literal", rows)
-	}
-}
+```yaml
+kind: feature
+priority: high
+blockedBy: [3]
 ```
 
-- [ ] **Step 2: Run it**
+Spec 022: the projector is a background loop making outbound calls, so it
+carries instruments in its owning package — nil-safe struct in
+`internal/projector/metrics.go`, `prometheus.Registerer` threaded from
+`serve.go` (Task 6), bounded label values, `worklode_` prefix. Follow
+`internal/eventbus/metrics.go` as the pattern.
 
-Run: `docker compose up -d postgres oxigraph && go test ./internal/projector/ -run TestProjectorEndToEnd -v`
-Expected: PASS (skips if either service is down and CI is unset)
+**Files:**
+- Create: `internal/projector/metrics.go`
+- Test: `internal/projector/metrics_test.go`
 
-- [ ] **Step 3: Run the whole tree**
+- [ ] **Step 1: Write the failing test** — using
+  `prometheus.NewRegistry()` + `testutil.ToFloat64`: a successful `RunOnce`
+  over one dirty project increments `runs_total{result="ok"}` and
+  `projects_total` by 1; a failing endpoint increments
+  `runs_total{result="error"}` and leaves `projects_total` unchanged; a
+  `nil` `*Metrics` records nothing and panics nowhere (the Task 3 tests
+  already pass nil — they must stay green)
+- [ ] **Step 2: Run** `go test -trimpath ./internal/projector/ -run TestMetrics` — FAIL
+- [ ] **Step 3: Implement** — `Metrics` with
+  `worklode_graph_projection_runs_total{result}` (CounterVec, both series
+  pre-initialised so alert expressions see 0),
+  `worklode_graph_projection_projects_total` (Counter: project graphs
+  written), and `worklode_graph_projection_duration_seconds` (Histogram,
+  buckets `{0.01, 0.1, 1, 10}`, one observation per run);
+  `NewMetrics(reg prometheus.Registerer) *Metrics`; nil-receiver-safe
+  recording methods called from `RunOnce`. No project or task id ever
+  becomes a label value
+- [ ] **Step 4: Run the package tests** — PASS
+- [ ] **Step 5: Commit**
 
-Run: `go test ./...`
-Expected: PASS
+---
 
+### Task 5 — The full slice against Oxigraph
+
+```yaml
+kind: feature
+priority: high
+blockedBy: [3]
+```
+
+Proves the projector half of §16 criterion 1 (lifecycle event → idempotent
+projection → SPARQL read-back) plus the §3 transitive-property promise
+(`wl:dependsOn+`, query-time, no reasoner) and design call 4 (abandoned
+tasks stay projected). Oxigraph stands in as the conformant store; the real
+graph-server wire path is covered by Task 3's fake and by
+`e2e/graphserver_test.go`. The bridge is a small translating proxy: an
+`httptest.Server` that accepts the client's
+`PUT /branches/main/graphs?graph=<iri>` and forwards method, body and
+`Content-Type` to Oxigraph's `PUT /store?graph=<iri>`, copying the status
+back — so the projector runs unmodified against `graphserver.New(proxy.URL, nil)`.
+
+**Files:**
+- Test: `internal/projector/oxigraph_test.go` (create)
+
+- [ ] **Step 1: Write the test** — `TestProjectorEndToEnd`:
+  1. `graphtest.Endpoint(t)` (skips without Oxigraph), the translating
+     proxy, `store.OpenTestStore(t)`, and a **unique project id**
+     (`"kg-" + hex` — the graph IRI derives from it, isolating the run in a
+     shared Oxigraph; register a `t.Cleanup` that DELETEs
+     `/store?graph=<iri.ProjectGraph(proj)>`)
+  2. Seed tasks `a`, `b`, `c` and edges `a blocks b`, `b blocks c` through
+     `RecordEvent` as in Task 3's helpers; `RunOnce` → 1 project graph
+  3. Read back with `graphtest.Select` against `iri.ProjectGraph(proj)`:
+     `a`'s `wl:taskState` binds exactly one solution, `"ready"`; the
+     property path `<c> <wl:dependsOn>+ <a>` binds (criterion 1's read-back
+     + §3 transitivity); a `GROUP BY`/`COUNT` query shows exactly one
+     `wl:inProject` per projected task (025 acceptance criterion 20's shape)
+  4. Transition `a` `ready → in_progress`, `RunOnce` → 1; re-query: exactly
+     one state literal and it is `"in_progress"` (whole-graph replace leaves
+     no stale literal behind)
+  5. Transition `c` `ready → abandoned`, `RunOnce` → 1; re-query: `c` is
+     still present with `wl:taskState "abandoned"` (design call 4)
+- [ ] **Step 2: Run it** —
+  `docker compose up -d postgres oxigraph && go test -trimpath ./internal/projector/ -run TestProjectorEndToEnd -v`
+  — PASS (skips if either service is down and the CI/TEST_SPARQL_URL pair is
+  unset, per `graphtest.Endpoint`'s contract)
+- [ ] **Step 3: Run the whole tree** — `make test` — PASS
 - [ ] **Step 4: Commit**
 
-```bash
-git add internal/projector/e2e_oxigraph_test.go
-git commit -m "Prove the projection slice end to end against Oxigraph"
-```
-
 ---
 
-## Task 11: Run the projector under `lode serve`, document it
+### Task 6 — Run the projector under `lode serve`, document it
+
+```yaml
+kind: feature
+priority: high
+blockedBy: [3, 4]
+```
 
 **Files:**
-- Modify: `internal/cmd/serve.go` (env config + background loop, next to the sweeper at `internal/cmd/serve.go:91-108`)
+- Modify: `internal/cmd/serve.go` (env gating + background loop, next to the lease sweeper)
 - Test: `internal/cmd/serve_test.go` (add)
 - Modify: `README.md`
 
-- [ ] **Step 1: Write the failing test**
-
-Append to `internal/cmd/serve_test.go` (same package as the existing serve
-tests):
+- [ ] **Step 1: Write the failing test** — in `internal/cmd/serve_test.go`,
+  `TestGraphProjector`: with `t.Setenv("LODE_GRAPHSERVER_URL", "")` the
+  helper returns `(nil, nil)` (projection disabled); with
+  `t.Setenv("LODE_GRAPHSERVER_URL", "http://localhost:9999")` it returns a
+  non-nil projector; with the URL set and
+  `LODE_GRAPHSERVER_TOKEN_URL` set but the client id/secret empty it
+  returns an error (a half-configured endpoint fails the boot rather than
+  silently disabling — `graphserver.FromEnv`'s contract). Pass
+  `prometheus.NewRegistry()` and a nil store; construction touches neither
+- [ ] **Step 2: Run** `go test -trimpath ./internal/cmd/ -run TestGraphProjector` —
+  FAIL — `undefined: graphProjector`
+- [ ] **Step 3: Write the wiring** — in `internal/cmd/serve.go`:
 
 ```go
-func TestGraphProjectorFromEnv(t *testing.T) {
-	t.Setenv("LODE_GRAPH_URL", "")
-	t.Setenv("LODE_GRAPH_TOKEN_URL", "")
-	if p := graphProjectorFromEnv(context.Background(), nil); p != nil {
-		t.Fatal("projector enabled without LODE_GRAPH_URL")
+// graphProjector builds the knowledge-graph projector when
+// LODE_GRAPHSERVER_URL is set (spec 006 §11): the same LODE_GRAPHSERVER_*
+// variables graphserver.FromEnv documents, so serve and every other caller
+// share one configuration surface. Unset means projection is disabled;
+// set-but-broken fails the boot.
+func graphProjector(reg prometheus.Registerer, st *store.Store) (*projector.Projector, error) {
+	if os.Getenv("LODE_GRAPHSERVER_URL") == "" {
+		return nil, nil
 	}
-
-	t.Setenv("LODE_GRAPH_URL", "http://localhost:7878")
-	if p := graphProjectorFromEnv(context.Background(), nil); p == nil {
-		t.Fatal("projector nil with LODE_GRAPH_URL set")
+	gc, err := graphserver.FromEnv()
+	if err != nil {
+		return nil, err
 	}
+	return projector.New(st, gc, projector.NewMetrics(reg), 200), nil
 }
 ```
 
-Add `"context"` to that file's imports if absent.
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `go test ./internal/cmd/ -run TestGraphProjectorFromEnv`
-Expected: FAIL — `undefined: graphProjectorFromEnv`
-
-- [ ] **Step 3: Write the wiring**
-
-In `internal/cmd/serve.go`, add:
-
-```go
-// graphProjectorFromEnv builds the knowledge-graph projector when
-// LODE_GRAPH_URL (the SPARQL endpoint base) is set. LODE_GRAPH_TOKEN_URL
-// plus LODE_GRAPH_CLIENT_ID/LODE_GRAPH_CLIENT_SECRET switch the client to
-// Keycloak client-credentials auth (spec 009 item 4); without them the
-// endpoint is called unauthenticated (dev Oxigraph).
-func graphProjectorFromEnv(ctx context.Context, st *store.Store) *projector.Projector {
-	base := os.Getenv("LODE_GRAPH_URL")
-	if base == "" {
-		return nil
-	}
-	var src oauth2.TokenSource
-	if tokenURL := os.Getenv("LODE_GRAPH_TOKEN_URL"); tokenURL != "" {
-		cfg := clientcredentials.Config{
-			ClientID:     os.Getenv("LODE_GRAPH_CLIENT_ID"),
-			ClientSecret: os.Getenv("LODE_GRAPH_CLIENT_SECRET"),
-			TokenURL:     tokenURL,
-		}
-		src = cfg.TokenSource(ctx)
-	}
-	return projector.New(st, graph.NewClient(base, src), 200)
-}
-```
-
-with these imports added to the file's import block:
-
-```go
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
-
-	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/projector"
-```
-
-Then, in the serve `RunE`, directly after the sweeper goroutine
-(`internal/cmd/serve.go:91-108`), add:
-
-```go
-			// Background graph projection: mirror dirty tasks into the
-			// knowledge graph every 10s (spec 006 §Projection). A single
-			// projector plus the per-branch write lock on graph-server
-			// makes CAS unnecessary for v1 (spec 009 item 6).
-			if p := graphProjectorFromEnv(ctx, st); p != nil {
-				go func() {
-					ticker := time.NewTicker(10 * time.Second)
-					defer ticker.Stop()
-					for {
-						select {
-						case <-ctx.Done():
-							return
-						case <-ticker.C:
-							if n, err := p.RunOnce(ctx); err != nil {
-								slog.Error("graph projection", "err", err)
-							} else if n > 0 {
-								slog.Info("projected tasks", "count", n)
-							}
-						}
-					}
-				}()
-			}
-```
-
-- [ ] **Step 4: Run the tests**
-
-Run: `go build ./... && go test ./internal/cmd/...`
-Expected: PASS
-
-- [ ] **Step 5: Document it**
-
-Add a section to `README.md` (after the existing server configuration
-material):
-
-```markdown
-## Knowledge graph projection
-
-When `LODE_GRAPH_URL` is set, `lode serve` mirrors every task into the
-Worklode knowledge graph (spec 006): a background projector follows the
-`state_log` outbox and replaces each dirty task's triples in its Workstream
-named graph over SPARQL Update, checkpointed in `graph_projection`.
-
-- `LODE_GRAPH_URL` — SPARQL endpoint base exposing `/query`, `/update`,
-  `/store` (data-platform graph-server in prod; the compose `oxigraph`
-  service locally).
-- `LODE_GRAPH_TOKEN_URL`, `LODE_GRAPH_CLIENT_ID`,
-  `LODE_GRAPH_CLIENT_SECRET` — optional Keycloak client-credentials for the
-  endpoint; unset means unauthenticated (dev only).
-
-The `wl:` vocabulary sources live under `rdf/wl/` and are staged for the
-rdf-registry PR. Integration tests run against the compose `oxigraph`
-service (`docker compose up -d oxigraph`) and skip when it is not running.
-```
-
-- [ ] **Step 6: Run everything once more**
-
-Run: `docker compose up -d postgres oxigraph && go test ./...`
-Expected: PASS
-
+  Then in the serve `RunE`, directly after the sweeper goroutine: build it
+  (returning the error fails the boot) and, when non-nil, start a goroutine
+  in the sweeper's exact shape — 10 s `time.Ticker`, `ctx.Done()` exit,
+  `context.Canceled` treated as shutdown, `slog.Error("graph projection", …)`
+  on failure and `slog.Info("projected project graphs", "count", n)` when
+  `n > 0`. A comment cites 006 §11 and the single-projector assumption
+  (§13.3 item 6: per-branch lock now, If-Match CAS before any second writer)
+- [ ] **Step 4: Run the tests** — `go build ./... && go test -trimpath ./internal/cmd/...` — PASS
+- [ ] **Step 5: Document it** — add a "Knowledge graph projection" section to
+  `README.md` after the existing server-configuration material: when
+  `LODE_GRAPHSERVER_URL` is set, `lode serve` mirrors every project's tasks
+  into the knowledge graph (spec 006) — a background projector follows the
+  `state_log` outbox and replaces each dirty project's named graph
+  (`https://worklode.io/ns/graph/project/<id>`) on graph-server's `main`
+  branch, checkpointed in `graph_projection`; name the four
+  `LODE_GRAPHSERVER_*` variables (base URL required; the three Keycloak
+  client-credentials variables together or not at all); note that a
+  watermark rewind (`UPDATE graph_projection SET last_state_log_id = 0`)
+  forces a full re-projection, and that the compose stack has no
+  graph-server (Oxigraph is test-only; see `docs/follow-ups.md`)
+- [ ] **Step 6: Run everything once more** —
+  `docker compose up -d postgres oxigraph && make test` — PASS
 - [ ] **Step 7: Commit**
 
 ```bash
