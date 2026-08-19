@@ -9,3 +9,9 @@ __pycache__/
 .superpowers/
 settings.local.json
 
+# The claim-time secrets ceremony writes this into every worktree. It holds
+# op:// references, never values, but it is machine state rather than repo
+# content. .worklode/config.toml next to it IS committed, so ignore the file
+# and not the directory.
+.worklode/secrets.env
+

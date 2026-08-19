@@ -21,7 +21,7 @@ import (
 
 const ceremonyCatalogJSON = `{"secrets":[
   {"name":"GITHUB_TOKEN","ref":"op://Employee/GitHub agent token/credential","description":"gh","baseline":true},
-  {"name":"KUBECONFIG_HZDEV","ref":"op://Infrastructure/hzdev kubeconfig/kubeconfig","description":"hzdev",	"baseline":false},
+  {"name":"KUBECONFIG_HZDEV","ref":"op://Infrastructure/hzdev kubeconfig/kubeconfig","description":"hzdev","baseline":false},
   {"name":"OPENALEX_API_KEY","ref":"op://Infrastructure/openalex/key","description":"openalex","baseline":false}
 ]}`
 

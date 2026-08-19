@@ -79,6 +79,10 @@ spec:
                 secretKeyRef:
                   name: worklode-postgres-app
                   key: uri
+          volumeMounts:
+            - name: secrets-catalog
+              mountPath: /etc/worklode/secrets-catalog
+              readOnly: true
           resources:
             requests:
               memory: "128Mi"
@@ -106,3 +110,6 @@ spec:
         - name: migrations
           configMap:
             name: worklode-migrations
+        - name: secrets-catalog
+          configMap:
+            name: worklode-secrets-catalog

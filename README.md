@@ -256,6 +256,41 @@ not persist anywhere, so a later session started without it will not
 recognise worktrees created with it set. Set `worktree_dir` in the repo config
 instead for anything durable.
 
+## Task secrets
+
+Tasks can declare the credentials their executor needs, by symbolic name,
+without ever storing a value in worklode (spec 017).
+
+- **Declaring:** `lode task add --secrets KUBECONFIG_HZDEV,OPENALEX_API_KEY …`
+  or `lode task edit <id> --secrets …` (`--secrets none` clears). Names come
+  from `lode secrets catalog`; a declared name missing from the catalog is a
+  claim-time warning, never a failure.
+- **The ceremony:** `lode next`/`lode resume` take one consent for the
+  task's non-baseline names, then one `op run` authorization that resolves
+  every reference under a single 1Password sign-in. Values go straight into
+  the OS keystore (service `worklode:<task-id>`); `.worklode/secrets.env`
+  holds `op://` references only, never values. Declining, or having no
+  terminal (an agent-driven `lode next`), defers the ceremony to a later
+  `lode resume` run in a terminal.
+- **Running:** `lode secrets exec -- <command>` injects exactly the task's
+  materialized names into the child's environment; `lode secrets status`
+  shows declared vs. materialized state. Items are purged on `lode done`,
+  `lode block`, and worktree removal.
+- **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, deployed
+  as the `worklode-secrets-catalog` ConfigMap.
+- **Guarantees:** worklode stores names only — values never touch disk, logs,
+  or the event log; the `secrets_materialized` event records names, not
+  values.
+
+Two constraints worth knowing: the keystore is the platform's own — Keychain
+on macOS, Secret Service on Linux — so a headless Linux box with no Secret
+Service running cannot materialize secrets and falls back to the
+block-on-missing-secret path instead. And an OS keystore item is capped at
+roughly 2.5-3 KB, so a catalog
+entry must model a credential, not a whole credentialed asset — a full
+kubeconfig doesn't fit and has to be split into a plaintext template plus the
+client credential that actually needs protecting.
+
 ## SSO (optional)
 
 Human login via the org Keycloak is off unless both `LODE_OIDC_ISSUER` and
