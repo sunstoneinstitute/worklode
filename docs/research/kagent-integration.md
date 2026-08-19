@@ -24,18 +24,33 @@ already uses for the tool-manager question. Amend 038 with a "why not" section;
 leave 017 untouched. Three narrow ideas are worth borrowing directly, without
 adopting kagent.
 
+"Is kagent right?" and "is anything right?" are different questions, so §5
+sweeps the wider landscape. It found one project that fits worklode
+substantially better than kagent does —
+[`kubernetes-sigs/agent-sandbox`](https://github.com/kubernetes-sigs/agent-sandbox)
+— and it is a better fit for a specific reason: it is a pod-lifecycle
+controller that stores no execution state of its own, so §3.3's decisive
+objection does not apply to it. That does not reverse the recommendation, and
+it is not something to adopt today. It changes what 038's new section should
+name as the thing to watch.
+
 Method: one primary-source sweep on 2026-08-19 against a shallow clone of
 kagent at `30e056d1` (main, 2026-08-18) and the docs at
 [kagent.dev/docs](https://kagent.dev/docs), plus a read of worklode's own
 017/038 inlined specs and the shipped `internal/secrets` tree. Claims about
 kagent come from its repository source, CRD chart templates, GitHub API
-metadata and official docs. Conclusions marked **Synthesis** are ours.
+metadata and official docs. §5's landscape sweep is a lighter pass — public
+docs, project READMEs and release feeds, no clones — and is scoped to options
+that could sit behind 038 §5's seam, not to agent frameworks generally.
+Conclusions marked **Synthesis** are ours.
 
 Caveats: no substantive independent third-party evaluation of kagent was found,
 so §1's limitations are project-self-reported. GitHub marks every kagent tag
 `prerelease: false` including betas and rcs, so "latest stable = v0.9.12"
 is inferred from tag naming alone. The 0.10 runtime model was not fully traced
-— see "What we did not establish" at the end.
+— see "What we did not establish" at the end. §5 is documentation-depth only:
+nothing there was run, and agent-sandbox in particular deserves a hands-on
+spike before it is relied on.
 
 ---
 
@@ -279,10 +294,15 @@ trigger, not on taste. It should state:
   snapshotting and pre-warmed pools — is pre-production by its own statement,
   and its Claude Code harness is an unwired build target.
 
-**The trigger to revisit is Substrate reaching a stable API *and* shipping a
-first-class Claude Code harness backend** — both, since either alone leaves
-038 building the other half. Phrase it as a trigger, matching §2.1's "the
-trigger to revisit is a second runtime, not a second opinion".
+**The trigger to revisit is dispatch actually being built, not a better
+controller appearing** — phrased as a trigger, matching §2.1's "the trigger to
+revisit is a second runtime, not a second opinion". This note's §5.4 gives the
+wording, and explains why an earlier draft tied the trigger to kagent's
+Substrate roadmap instead: that was too narrow, because a better-shaped
+project already exists outside it. The new 038 section should name
+`kubernetes-sigs/agent-sandbox` as the incumbent candidate to evaluate when
+that moment comes, with a plain Kubernetes `Job` as the baseline it has to
+beat.
 
 Then add one line to **§7 Out of scope**: "An external agent runtime. Declined
 with a named trigger (§5.1), not forgotten."
@@ -303,13 +323,155 @@ worklode's own code.
    network grants. Decide whether a default-deny outbound allowlist belongs in
    §3 before images are built — it is far cheaper to specify now than to
    retrofit.
-3. `[P4]` **Watch Substrate.** Re-read `kagent-dev/substrate` when 038 §3–4
-   implementation starts, against the §5.1 trigger. Snapshot/rehydrate of a
-   stateful coding session is the one thing worklode would not build itself.
+3. `[P4]` **Watch `kubernetes-sigs/agent-sandbox`, not Substrate.** Re-read it
+   when 038 §3–4 implementation starts, against the trigger in this note's
+   §5.4. Warm pools and hibernate/resume of a stateful session are the two
+   things worklode would not build itself; this note's §5.1 records what to
+   re-check (API churn since v0.5.5, and whether our clusters carry a gVisor
+   or Kata `RuntimeClass`).
+4. `[P4]` **Mint task-scoped tokens the ARC way.** When 038 §4.3's
+   "transitional" operator token is replaced, copy Actions Runner Controller's
+   just-in-time pattern (this note's §5.2): the dispatcher mints a per-worker
+   credential bound to the claimed task, the worker never persists it, and it
+   expires with the lease.
 
 ---
 
-## 5. What we did not establish
+## 5. The rest of the landscape
+
+kagent was the candidate the question named. Declining it only answers whether
+*that* project fits; it says nothing about whether some other project should
+sit behind 038 §5's provisioning seam. This section sweeps that ground.
+
+The filter is §3.3's ownership test, applied first rather than last: any
+candidate that keeps its own record of what happened during a session is
+disqualified before its features are worth reading, because the backbone owns
+execution facts. That test removes most of the field, and it is what makes the
+one survivor interesting.
+
+### 5.1 `kubernetes-sigs/agent-sandbox` — the closer fit
+
+A Kubernetes SIG Apps subproject, announced by GKE engineers in November 2025,
+that does one thing: manage the lifecycle of an isolated, stateful, singleton
+pod ([project](https://github.com/kubernetes-sigs/agent-sandbox),
+[docs](https://agent-sandbox.sigs.k8s.io/docs/),
+[announcement](https://opensource.googleblog.com/2025/11/unleashing-autonomous-ai-agents-why-kubernetes-needs-a-new-standard-for-agent-execution.html)).
+Four CRDs on `agents.x-k8s.io/v1beta1`: `Sandbox` (a pod with a stable
+hostname and optional persistent storage), `SandboxTemplate`, `SandboxClaim`,
+and `SandboxWarmPool` (pre-provisioned pods for sub-second allocation). The
+controller handles creation, scheduled deletion after a TTL, and
+hibernate/resume — a suspended sandbox stops costing compute and wakes on
+network activity. It is explicitly a *sandbox orchestrator*: isolation is
+delegated to gVisor or Kata Containers via `RuntimeClass` rather than
+implemented. Go and Python SDKs ship with it (`sigs.k8s.io/agent-sandbox`).
+
+Four things make it a different proposition from kagent:
+
+- **It stores nothing.** There is no session table, no event log, no task
+  record — the CRs are the state and the persistent volume is the workspace.
+  §3.3's objection, which was decisive against kagent, does not arise. It is a
+  mechanism the backbone could drive without becoming a second owner of
+  anything.
+- **It is scoped to the seam.** kagent wanted to own the agent; this owns the
+  pod. Worklode keeps the queue, the lease, the branch, the brief, the
+  transcript pricing and the event log, and hands out one job: run this
+  container, this long, this isolated.
+- **`SandboxWarmPool` answers a question 038 has open.** Cold start is the
+  cost that makes backbone-initiated dispatch feel bad, and pre-warmed pools
+  are the standard answer to it — the one genuinely useful thing kagent's
+  Substrate promised, here in a shipping beta instead of a pre-production one.
+- **Hibernate/resume matches 038 §0 literally.** §0's motivating case is an
+  agent started from a phone with an ephemeral filesystem and no operator
+  present. A sandbox that suspends when idle, survives with its volume intact,
+  and resumes on the next connection is that scenario's shape, not an
+  approximation of it.
+
+**Where it still does not fit, and this matters as much as the above:**
+
+- **Two different needs are being conflated.** 038 §0's phone-started session
+  is a stateful singleton; 038 §5's dispatched worker is a batch job that
+  claims, works, pushes and exits. agent-sandbox is built for the first. For
+  the second it is strictly more machinery than a Kubernetes `Job`, which is
+  still the right primitive there. Adopting it would serve §0, not §5 — and §5
+  is the seam this research was asked about.
+- **Its headline feature is worth less to worklode than to its target user.**
+  gVisor and Kata exist because the general case runs untrusted
+  model-generated code from strangers. Worklode runs our own agent against our
+  own repositories with our own credentials. The residual threat — prompt
+  injection via repository content or fetched pages — is real but does not
+  justify a kernel boundary on its own, and 038 never claimed it did.
+- **It fills half of one of the four seams.** Provisioning is still
+  `bootstrap.sh`; image selection, token acquisition and entry point are
+  untouched. It does not build images, so 038 §8's Q1 (where worker images
+  live) and Q3 (who builds `.worklode/Dockerfile`) survive intact, and it does
+  no secret handling at all, so 017 is unaffected either way.
+- **It is moving fast.** v0.5.5 landed 2026-08-13, six days before this note,
+  on a roughly weekly cadence. `v1alpha1`→`v1beta1` is already behind it with
+  a published migration guide, and there are breaking changes *within* the
+  v0.5 line: `spec.replicas` replaced by `spec.operatingMode`, `SandboxClaim`
+  switched from `templateRef` to `warmpoolRef`, `volumeClaimTemplates` made
+  immutable after creation, plus an upgrade advisory for a warm-start race in
+  v0.5.0–v0.5.1. Beta backed by a SIG is not the same thing as an API worth
+  writing into a spec today.
+- **The isolation needs cluster support.** Without a gVisor or Kata
+  `RuntimeClass` installed, what you have is a pod-lifecycle controller.
+  Whether `hzdev` and the admin cluster (039) offer one is unverified.
+
+**Synthesis: right shape, wrong seam, too early — but it is the project to
+watch, and kagent is not.** If worklode ever provisions long-lived sandboxes
+rather than dispatching short-lived workers, this is the first thing to
+evaluate, against a plain `Job` as the baseline it has to beat.
+
+### 5.2 Actions Runner Controller — prior art, not a dependency
+
+GitHub's [ARC](https://docs.github.com/en/actions/concepts/runners/actions-runner-controller)
+is worth reading precisely because it is not adoptable: it is GitHub-specific,
+and its queue is the Actions service. But its architecture is 038 §5's four
+seams already built and proven at scale. A listener pod long-polls the service
+for `JobAvailable`/`JobAssigned` and scales an `EphemeralRunnerSet`; each
+runner pod starts, receives a **just-in-time token**, registers, runs exactly
+one job, and exits without reuse.
+
+Two things follow. First, it is independent confirmation that the Job-shaped
+design in §3.4 is the right one — the closest real system to what 038 §5
+describes reached the same shape without a sandbox controller. Second, the JIT
+token is the answer to a problem 038 §4.3 already names and defers: it calls
+the long-lived operator token "transitional and known to be so" and wants "a
+short-lived token bound to the claimed task and expiring with its lease". ARC
+shows that pattern working, with the listener minting per-runner credentials
+the runner never persists. Worth copying when §4.3's replacement is designed.
+
+### 5.3 Ruled out, with reasons
+
+| Option | What it is | Why not |
+|---|---|---|
+| [E2B](https://e2b.dev), [Daytona](https://daytona.io), [Modal](https://modal.com), Vercel Sandbox | Managed sandbox-as-a-service. Firecracker microVMs (E2B), gVisor (Modal), containers (Daytona); ~90–150 ms cold starts; billed per vCPU-hour | Moves execution off infrastructure 039 already runs, adds a vendor and a per-hour bill for a capacity problem we do not have, and creates a new trust boundary for 017's materialised secret set. Answers neither image build nor token minting. Daytona's persistent-by-default workspace is the closest match to 038 §0 should a vendor ever be wanted. |
+| [Claude Managed Agents](https://modal.com/blog/introducing-claude-managed-agents-with-modal-sandboxes) incl. self-hosted sandboxes | Anthropic runs the agent loop and session state; a provider (Modal, Cloudflare, Daytona, Vercel) executes tool calls | §3.3's objection one level up — Anthropic would hold session state that the backbone owns and already prices from transcripts. It also targets *building custom agents*, not driving Claude Code across a repository, so it is not the same job. |
+| [Argo Workflows](https://argoproj.github.io/workflows/), [Tekton](https://tekton.dev) | Kubernetes DAG and CI engines | Worklode's DAG is the task graph in Postgres, with dependencies, blockers and ranking already modelled there. Adopting either adds a second scheduler, and Argo a second store of run status. A `Job` is the primitive; a workflow engine is a layer worklode already has. |
+| [OpenHands](https://github.com/All-Hands-AI/OpenHands) and peers | Self-hostable coding agent; issue → branch → PR | Competes with Claude Code, not with 038. Whether to run a different agent is a real question and a separate one; it does not bear on provisioning. |
+
+### 5.4 What the sweep changes
+
+The recommendation on kagent stands unchanged — nothing found here makes it a
+better fit. What changes is §4.2's trigger, which was drawn too narrowly.
+
+Naming *Agent Substrate reaching a stable API and shipping a Claude Code
+harness* as the condition to revisit ties 038 to one vendor's roadmap, and
+§5.1 shows a better-shaped project already exists outside it. The trigger
+should name the **circumstance**, matching §2.1's "the trigger to revisit is a
+second runtime, not a second opinion":
+
+> **The trigger to revisit is dispatch actually being built, not a better
+> controller appearing.** When 032 §8's agent pools reach implementation,
+> evaluate `kubernetes-sigs/agent-sandbox` first — against a plain Kubernetes
+> `Job` as the baseline it must beat — and adopt it only if long-lived,
+> resumable sandboxes are wanted rather than one-shot workers.
+
+Follow-up 3 in §4.3 changes accordingly: watch agent-sandbox, not Substrate.
+
+---
+
+## 6. What we did not establish
 
 - **No independent technical evaluation of kagent exists** that we could find.
   Searches returned vendor blogs and listicles. §1's limitations are
@@ -330,3 +492,17 @@ worklode's own code.
   if we borrow the posture.
 - **No documented outbound event stream.** A `push_notification` table implies
   A2A push callbacks work; there is no docs page and the handler was not read.
+- **§5 is documentation-depth only.** Nothing in the landscape sweep was
+  cloned, built or run. agent-sandbox's release-note details in §5.1 came from
+  a summarising fetch of the releases page, not the raw notes; the version
+  numbers and dates were verified independently against the release feed, the
+  per-release API changes were not. Treat §5.1's breaking-change list as
+  indicative of churn rather than as a migration checklist.
+- **Whether our clusters can deliver agent-sandbox's isolation is unknown.**
+  No check was made for a gVisor or Kata `RuntimeClass` in the admin cluster
+  or `hzdev` (039). Without one, its headline feature is unavailable — this is
+  the first thing to establish if §5.4's trigger ever fires.
+- **agent-sandbox has no named adopters.** The announcement cites ADK and
+  LangChain as integration points, not as users, and no production reference
+  was found. Its scale claims — tens of thousands of parallel sandboxes — are
+  project-stated, like kagent's.
