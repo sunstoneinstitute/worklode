@@ -1068,6 +1068,24 @@ func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (mode
 	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), model.UpdateDocBodyInput{Body: body})
 }
 
+// ReplaceDocEdges calls PUT /api/v1/docs/{id}/edges: re-resolve the document's
+// frontmatter references against the documents that exist now. It is the
+// corpus import's second pass — the first cannot resolve a reference to a
+// document it has not created yet — and needs the admin-only doc.import
+// permission. Nothing else about the document changes; the response is the
+// same detail GET serves, so the caller reads back the resolved edge set.
+func (c *Client) ReplaceDocEdges(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPut, docPath(id, "/edges"), nil)
+	if err != nil {
+		return model.DocDetail{}, nil, err
+	}
+	var d model.DocDetail
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return model.DocDetail{}, nil, fmt.Errorf("decode doc: %w", err)
+	}
+	return d, raw, nil
+}
+
 // AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
 // may accept it (025 §7); anyone else gets 403. The response also carries the
 // tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
