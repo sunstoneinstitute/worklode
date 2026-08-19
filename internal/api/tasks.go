@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -229,12 +230,14 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&detail=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
-// detail=true adds "blocked" and "edges" to each row (see model.TaskListDetail)
-// at the cost of two extra bulk queries.
+// plan_doc narrows to the tasks minted from that plan document — the query
+// that is the plan's task set (025 §9.2, §1); detail=true adds "blocked" and
+// "edges" to each row (see model.TaskListDetail) at the cost of two extra
+// bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var states []string
@@ -267,6 +270,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A plan_doc that does not parse is refused rather than ignored, the same
+	// stance updated_since takes: silently dropping it would read as "no
+	// tasks minted" instead of "the query was malformed".
+	var planDoc int64
+	if raw := q.Get("plan_doc"); raw != "" {
+		var err error
+		if planDoc, err = strconv.ParseInt(raw, 10, 64); err != nil || planDoc <= 0 {
+			writeErr(w, http.StatusBadRequest, "plan_doc must be a positive integer")
+			return
+		}
+	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  q.Get("project"),
 		States:   states,
@@ -278,6 +292,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 
 		HasChildren:  q.Get("has_children") == "true",
 		UpdatedSince: updatedSince,
+		PlanDoc:      planDoc,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

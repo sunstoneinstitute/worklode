@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -25,16 +29,36 @@ func validDocKind(k string) bool {
 	return false
 }
 
-// resolveDocID parses arg as a document id. A backbone document reference can
-// also be a number or a slug (025 §14.3), but resolving those is part 3's job
-// (the plan that extends this command group); this version takes a numeric
-// id only.
-func resolveDocID(arg string) (int64, error) {
-	id, err := strconv.ParseInt(arg, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("%q is not a document id: this version of `lode doc` takes a numeric id only, not a number, slug, or SPEC/ADR reference", arg)
+// resolveDocID resolves a document reference to its id (025 §14.3): a
+// positive integer is the id itself, taken without a round trip; anything
+// else is matched against every document's slug over GET /api/v1/docs
+// (exact match only — corpus-number and SPEC/ADR shorthand resolution stay
+// unbuilt). It is the one resolver both `lode doc <ref>`'s verbs and `lode
+// task list --plan` call, so the two surfaces cannot disagree about what a
+// ref names. An unmatched or ambiguous slug is an error naming what was
+// tried.
+func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		return id, nil
 	}
-	return id, nil
+	resp, _, err := c.ListDocs(ctx, cli.DocListFilter{})
+	if err != nil {
+		return 0, fmt.Errorf("resolve document %q: %w", ref, err)
+	}
+	var matches []int64
+	for _, d := range resp.Docs {
+		if d.Slug == ref {
+			matches = append(matches, d.ID)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return 0, fmt.Errorf("no document found with id or slug %q", ref)
+	default:
+		return 0, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate", ref, len(matches))
+	}
 }
 
 func newDocCmd() *cobra.Command {
@@ -49,6 +73,7 @@ func newDocCmd() *cobra.Command {
 		newDocEditCmd(),
 		newDocAcceptCmd(),
 		newDocReviseCmd(),
+		newDocAnchorsCmd(),
 	)
 	return cmd
 }
@@ -112,10 +137,17 @@ func newDocNewCmd() *cobra.Command {
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, status string
+	var needsPlanning, needsExecution bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List documents: specs, ADRs, and plans",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Ahead of the client: a contradicting selector is an error
+			// whatever the server would say, and refusing it here costs no
+			// round trip.
+			if err := checkDocSelectors(kind, status, needsPlanning, needsExecution); err != nil {
+				return err
+			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
@@ -126,12 +158,17 @@ func newDocListCmd() *cobra.Command {
 			}
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
 				Project: sc.Project, Kind: kind, Status: status,
+				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution,
 			})
 			if err != nil {
 				return err
 			}
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
+				return nil
+			}
+			if needsPlanning {
+				cli.DocPlanningTable(cmd.OutOrStdout(), resp.Docs, resp.PlanningGaps)
 				return nil
 			}
 			cli.DocTable(cmd.OutOrStdout(), resp.Docs)
@@ -141,7 +178,124 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded")
+	cmd.Flags().BoolVar(&needsPlanning, "needs-planning", false,
+		"accepted specs with a section no accepted plan covers")
+	cmd.Flags().BoolVar(&needsExecution, "needs-execution", false,
+		"accepted plans whose task set has an open task")
+	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution")
 	return cmd
+}
+
+// checkDocSelectors refuses a --kind or --status that contradicts one of the
+// derived selectors (026 §2.1): each implies a kind and a status, so the
+// conjunction would always be empty and an empty result would read as
+// "nothing to plan". Restating the implied value is fine — only a
+// contradiction is refused. The server enforces the same rule for clients
+// that are not this one; the mutual exclusion of the two selectors themselves
+// is cobra's, declared on the command.
+func checkDocSelectors(kind, status string, needsPlanning, needsExecution bool) error {
+	for _, c := range []struct {
+		on         bool
+		flag, kind string
+	}{
+		{needsPlanning, "--needs-planning", "spec"},
+		{needsExecution, "--needs-execution", "plan"},
+	} {
+		if !c.on {
+			continue
+		}
+		if kind != "" && kind != c.kind {
+			return fmt.Errorf("%s implies --kind %s; drop --kind or pass %s", c.flag, c.kind, c.kind)
+		}
+		if status != "" && status != "accepted" {
+			return fmt.Errorf("%s implies --status accepted; drop --status or pass accepted", c.flag)
+		}
+	}
+	return nil
+}
+
+// newDocAnchorsCmd is the author's local pre-accept lint (025 §18, §10): it
+// parses a markdown file and reports every anchor defect the backbone would
+// refuse — duplicate anchors, an anchor disagreeing with its heading number,
+// and a section deeper than designdoc.DepthLimit — plus, for a plan, the
+// errors designdoc.PlanTasks reports. No server is involved, so it runs on a
+// file that has never been posted.
+func newDocAnchorsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "anchors <file>",
+		Short: "Lint a markdown file's anchors (and, for a plan, its task definitions)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			doc, err := designdoc.Parse(src)
+			if err != nil {
+				return fmt.Errorf("parse %s: %w", path, err)
+			}
+			findings := lintDocFile(doc)
+			out := cmd.OutOrStdout()
+			if jsonOut(cmd) {
+				if findings == nil {
+					findings = []string{}
+				}
+				return json.NewEncoder(out).Encode(docAnchorsReport{
+					File: path, Plan: isPlanFile(doc), Findings: findings,
+				})
+			}
+			if len(findings) == 0 {
+				fmt.Fprintf(out, "%s: no problems\n", path)
+				return nil
+			}
+			for _, f := range findings {
+				fmt.Fprintf(out, "%s: %s\n", path, f)
+			}
+			return fmt.Errorf("%s: %d problem(s)", path, len(findings))
+		},
+	}
+	return cmd
+}
+
+// docAnchorsReport is `lode doc anchors --json`'s stdout contract. Findings is
+// empty when the file is clean; Plan says whether the plan-task check ran.
+type docAnchorsReport struct {
+	File     string   `json:"file"`
+	Plan     bool     `json:"plan"`
+	Findings []string `json:"findings"`
+}
+
+// lintDocFile collects every finding for one parsed file. The anchor lint and
+// the depth gate are the store's own checks (designdoc.LintAnchors and the
+// accept-time section diff), reused rather than restated.
+func lintDocFile(doc *designdoc.Document) []string {
+	findings := designdoc.LintAnchors(doc)
+	// Diffing against an empty accepted document leaves TooDeep as the only
+	// violation that can fire: Removed and Renumbered need a prior version.
+	findings = append(findings,
+		designdoc.CompareSections(&designdoc.Document{}, doc, designdoc.DepthLimit).Violations()...)
+	if isPlanFile(doc) {
+		if _, err := designdoc.PlanTasks(doc); err != nil {
+			findings = append(findings, err.Error())
+		}
+	}
+	return findings
+}
+
+// isPlanFile reports whether the file identifies itself as a plan. There is no
+// server round trip here, so the frontmatter is the only evidence: an explicit
+// `kind: plan`, or one of the keys only a plan carries — `covers`/`implements`
+// (026 §5) and the plan-ordering `blocks`/`blockedBy` (025 §5). A file that
+// says nothing is not treated as a plan: skipping the plan-task check is
+// better than guessing one onto a spec whose "## Tasks" heading is prose.
+func isPlanFile(doc *designdoc.Document) bool {
+	fm := doc.Frontmatter
+	if fm == nil {
+		return false
+	}
+	return fm.Kind == "plan" || len(fm.CoverageEntries()) > 0 ||
+		len(fm.Blocks) > 0 || len(fm.BlockedBy) > 0
 }
 
 // newDocGetCmd reads back one document: body, sections, and edges. It is
@@ -154,15 +308,15 @@ func newDocListCmd() *cobra.Command {
 // WL-129.
 func newDocGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get <id>",
+		Use:   "get <id-or-slug>",
 		Short: "Get a document: its body, sections, and edges",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -184,19 +338,19 @@ func newDocGetCmd() *cobra.Command {
 func newDocEditCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
+		Use:   "edit <id-or-slug>",
 		Short: "Replace a document's body (a draft, or a plan at any status)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
-			if err != nil {
-				return err
-			}
 			body, err := readBodyFile(cmd, file)
 			if err != nil {
 				return err
 			}
 			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -219,15 +373,15 @@ func newDocEditCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "accept <id>",
+		Use:   "accept <id-or-slug>",
 		Short: "Accept a document (draft -> accepted); only the assignee may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -240,6 +394,13 @@ func newDocAcceptCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "accepted doc %d: status %s\n", d.ID, d.Status)
+			if len(d.Tasks) > 0 {
+				ids := make([]string, len(d.Tasks))
+				for i, task := range d.Tasks {
+					ids[i] = task.ID
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "minted tasks: %s\n", strings.Join(ids, ", "))
+			}
 			return nil
 		},
 	}
@@ -255,15 +416,15 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept bool
 	cmd := &cobra.Command{
-		Use:   "revise <id>",
+		Use:   "revise <id-or-slug>",
 		Short: "Open, update, or land a document's candidate revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}

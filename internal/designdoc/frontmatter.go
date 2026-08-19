@@ -23,6 +23,8 @@ type Frontmatter struct {
 	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 026 §5.1
 	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
 	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
+	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, 025 §5 — orders whole documents
+	BlockedBy      RefList      `yaml:"blockedBy,omitempty"`      // plans only, 025 §5
 	WasDerivedFrom string       `yaml:"wasDerivedFrom,omitempty"` // prov:wasDerivedFrom
 	Amends         AnchorMap    `yaml:"amends,omitempty"`         // 025 §14
 	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 025 §14

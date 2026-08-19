@@ -131,7 +131,8 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     holds an active lease on another task from this worktree (the
 //     leases_active and leases_active_worktree unique indexes are the
 //     backstop for races).
-//   - ErrBlocked: an open 'blocks' edge points at the task.
+//   - ErrBlocked: an open 'blocks' edge points at the task, or a plan
+//     ordered before the task's plan is unfinished (025 §9.3).
 //   - ErrBadTransition: the task has children, or is not in state ready
 //     (draft, merged, ...).
 //   - ErrNotFound: the task or actor does not exist.

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -232,66 +233,136 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 }
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
-// assignee. It freezes the document's published anchor set and flips the
-// target of every document-level replaces edge to superseded, in the same
-// transaction.
+// assignee. For a spec or ADR it freezes the document's published anchor set
+// and flips the target of every document-level replaces edge to superseded,
+// in the same transaction. For a plan it mints the plan's execution tasks
+// instead (see acceptPlanDoc) — the second return is that minted set, in
+// definition order, and nil for a spec or ADR.
 //
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
 // accept still rejects an anchored heading below designdoc.DepthLimit even
 // though rules 1-3 exempt drafts.
-//
-// A plan is refused: plan acceptance must mint the plan's tasks in the same
-// transaction (025 §9.2), and that half is not built yet — an accepted plan
-// without its tasks would break the invariant by construction.
-func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	d, err := lockDoc(tx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Assignee first, matching AcceptRevision: standing to touch the document
 	// does not depend on its state, and checking state first would disclose it
 	// to an actor who has none.
 	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if d.kind == "plan" {
-		return nil, fmt.Errorf(
-			"doc %d is a plan: accepting one mints its tasks in the same transaction (025 §9.2), which is not built yet: %w",
-			id, ErrInvalidInput)
-	}
+	// Draft-only applies to both branches: a plan already accepted must never
+	// mint a second time, which is what keeps doc.status = accepted ⟺ its
+	// tasks exist true by construction (025 §9.2).
 	if d.status != "draft" {
-		return nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
+		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
+	}
+
+	if d.kind == "plan" {
+		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
 	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// No accepted version to diff against, so the comparison runs against an
 	// empty document: Removed and Renumbered come back empty by construction
 	// and TooDeep carries the one rule a first accept still enforces.
 	diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
 	if v := diff.Violations(); len(v) > 0 {
-		return nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
+		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
 	}
 
 	ts := now.UTC().Truncate(time.Second)
 	if _, err := tx.Exec(
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
-		return nil, fmt.Errorf("accept doc %d: %w", id, err)
+		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
 	if _, err := tx.Exec(
 		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
-		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+		return nil, nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
 	}
 	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
 		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return getDocTx(tx, id)
+	doc, err := getDocTx(tx, id)
+	return doc, nil, err
+}
+
+// acceptPlanDoc is AcceptDoc's plan branch (025 §9.2): parse the plan body's
+// ## Tasks declarations, mint one draft task per definition with plan_doc set
+// to id, wire each definition's blockedBy numbers as blocks edges between the
+// minted tasks, then flip the document to accepted — all inside the caller's
+// transaction, so accept and mint are one commit and a failed mint leaves the
+// document draft.
+//
+// Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
+// branch's section or diff machinery runs here: there is nothing to publish
+// and no CompareSections gate to evaluate. d.status is already known draft —
+// AcceptDoc checks it before branching.
+func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
+	parsed, err := parseDocBody(d.kind, d.body)
+	if err != nil {
+		return nil, nil, err
+	}
+	defs, err := designdoc.PlanTasks(parsed.doc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
+	}
+
+	// First pass mints every task and records its minted id by definition
+	// number; second pass wires blockedBy once every number resolves, so a
+	// forward reference (task 1 blockedBy task 2) needs no reordering.
+	mintedID := make(map[int]string, len(defs))
+	tasks := make([]model.Task, 0, len(defs))
+	for _, def := range defs {
+		task, err := CreateTask(tx, now, TaskInput{
+			ProjectID: d.project,
+			Title:     def.Title,
+			Body:      def.Body,
+			Priority:  def.Priority,
+			Kind:      def.Kind,
+			Skills:    def.Skills,
+			CreatedBy: actorID,
+			Draft:     true,
+			PlanDoc:   id,
+		}, eventID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("mint task %d of plan %d: %w", def.Number, id, err)
+		}
+		mintedID[def.Number] = task.ID
+		tasks = append(tasks, *task)
+	}
+	for _, def := range defs {
+		for _, blocker := range def.BlockedBy {
+			if err := AddEdge(tx, now, mintedID[blocker], mintedID[def.Number], "blocks", eventID); err != nil {
+				return nil, nil, fmt.Errorf(
+					"wire blocks edge task %d -> %d of plan %d: %w", blocker, def.Number, id, err)
+			}
+		}
+	}
+
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
+		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
+	}
+	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
+		return nil, nil, err
+	}
+	doc, err := getDocTx(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return doc, tasks, nil
 }
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
@@ -634,37 +705,16 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 			return parsedDoc{}, fmt.Errorf("frontmatter issued %q is not YYYY-MM-DD: %w", issued, ErrInvalidInput)
 		}
 	}
+	// Plans carry no anchors (025 §9), so the lint applies to specs and ADRs
+	// only. designdoc.LintAnchors is the one implementation; `lode doc
+	// anchors` reports its findings as a pre-accept lint, and here any finding
+	// refuses the write.
 	if kind != "plan" {
-		if err := lintAnchors(doc); err != nil {
-			return parsedDoc{}, err
+		if v := designdoc.LintAnchors(doc); len(v) > 0 {
+			return parsedDoc{}, fmt.Errorf("%s: %w", strings.Join(v, "; "), ErrInvalidInput)
 		}
 	}
 	return parsedDoc{doc: doc, issued: issued}, nil
-}
-
-// lintAnchors rejects the two anchor defects that make a section
-// unaddressable: two headings claiming one anchor, and an anchor that
-// disagrees with its heading number. secfmt.py writes the anchor as
-// "sec-<number>", so the number is the anchor and a disagreement means one of
-// them is a typo. Headings are named rather than line-numbered — the parser
-// yields no line numbers, and the heading text locates the defect.
-func lintAnchors(doc *designdoc.Document) error {
-	seen := map[string]string{}
-	for _, sec := range doc.Sections {
-		if sec.Anchor == "" {
-			continue
-		}
-		if prev, dup := seen[sec.Anchor]; dup {
-			return fmt.Errorf("anchor #%s is claimed by both %q and %q: %w",
-				sec.Anchor, prev, sec.Title, ErrInvalidInput)
-		}
-		seen[sec.Anchor] = sec.Title
-		if sec.Number != "" && sec.Anchor != "sec-"+sec.Number {
-			return fmt.Errorf("heading %q is numbered %s but anchored #%s: %w",
-				sec.Title, sec.Number, sec.Anchor, ErrInvalidInput)
-		}
-	}
-	return nil
 }
 
 // priorSection is the accept-time state rebuildSections carries forward.
@@ -772,6 +822,11 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 		if err != nil {
 			return err
 		}
+		if e.typ == "blocks" {
+			if err := checkPlanOrdering(tx, docID, e.ref, toDoc, resolved); err != nil {
+				return err
+			}
+		}
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
 			row.toDoc, row.toAnchor = toDoc, fragment
@@ -796,13 +851,54 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 	return nil
 }
 
+// checkPlanOrdering enforces that a blocks edge runs between two *distinct*
+// plan documents (025 §5): it orders plan against plan, and
+// planBlockedCondition reads it as the blocking plan's whole task set. An
+// unresolved reference is refused too — nothing here can say it names a plan,
+// and a to_external ordering edge would gate nothing while looking like it
+// did.
+//
+// A plan naming its own slug resolves to itself (resolveDocRef matches within
+// the project), which would wedge that plan's task set forever: with
+// from_doc = to_doc its own open tasks block themselves, and while it is draft
+// the unminted-set arm blocks too. Cycles through two or more plans are
+// reachable the same way and are not detected here (WL-144).
+func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolved bool) error {
+	if !resolved {
+		return fmt.Errorf(
+			"blocks edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
+			docID, ref, ErrInvalidInput)
+	}
+	if toDoc == docID {
+		return fmt.Errorf(
+			"blocks edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
+			docID, ref, ErrInvalidInput)
+	}
+	for _, end := range []struct {
+		id   int64
+		side string
+	}{{docID, "from"}, {toDoc, "to"}} {
+		var kind string
+		if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, end.id).Scan(&kind); err != nil {
+			return fmt.Errorf("read kind of doc %d: %w", end.id, err)
+		}
+		if kind != "plan" {
+			return fmt.Errorf("blocks orders plan documents, but the %s end (doc %d) is a %s (025 §5): %w",
+				end.side, end.id, kind, ErrInvalidInput)
+		}
+	}
+	return nil
+}
+
 // frontmatterEdges reads the acting-direction relations out of fm, in a
 // deterministic order. rebuildEdges dedupes what comes back, on the resolved
 // row rather than on the reference text.
 //
-// The inverse spellings (isRequiredBy, amendedBy, isReplacedBy) are skipped:
-// one row read backward is the inverse (025 §14), so writing them too would
-// double every edge and let the two directions disagree.
+// The inverse spellings (isRequiredBy, blockedBy, amendedBy, isReplacedBy) are
+// skipped: one row read backward is the inverse (025 §14), so writing them too
+// would double every edge and let the two directions disagree. For plan
+// ordering that means only the blocking plan can declare it — `blockedBy:`
+// parses and writes nothing (WL-143).
 //
 // An empty reference is dropped rather than written as an empty to_external —
 // a coverage entry qualified with a level but no `spec:`, say, names no
@@ -824,6 +920,13 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	}
 	for _, ref := range fm.Requires {
 		add("", "requires", ref)
+	}
+	// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge
+	// that would otherwise need a container row to attach to. ns/ontology.ttl
+	// still declares wl:blocks Task-to-Task; mirroring the document-level edge
+	// there is WL-142.
+	for _, ref := range fm.Blocks {
+		add("", "blocks", ref)
 	}
 	add("", "wasDerivedFrom", fm.WasDerivedFrom)
 	for _, m := range []struct {
@@ -1032,6 +1135,138 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	return out, nil
 }
 
+// NeedsPlanning returns the accepted specs that have at least one section no
+// accepted plan undertakes, each with the anchors that made it a gap (026
+// §2.1). project narrows the answer; "" answers over every project.
+//
+// A section counts as planned when some accepted plan carries a `covers` edge
+// naming both the spec and that exact anchor. Three consequences are
+// deliberate:
+//
+//   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
+//     say which present section it undertakes and would silently claim future
+//     ones (026 §2.1), so it never appears in the planned set.
+//   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
+//     §4.3), so it falls out of the join without a case of its own.
+//   - Only accepted documents on both ends participate: a draft spec is not
+//     yet owed planning, and a draft plan has not yet undertaken work.
+//
+// Coverage here is two-valued — an edge to the anchor means planned. 026 §2.1
+// specifies a three-valued `coverage: full|partial|none` relation with
+// `fullCoverageWith` closure checking, which doc_edges cannot express: it has
+// no coverage-level column, so `rebuildEdges` writes the level away. Closing
+// that gap needs a schema change and is tracked as WL-141.
+func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`WITH planned AS (
+		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
+		       FROM doc_edges e
+		       JOIN docs p ON p.id = e.from_doc
+		      WHERE e.type = 'covers'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		        AND p.kind = 'plan' AND p.status = 'accepted'
+		 )
+		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
+		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
+		                 FILTER (WHERE pl.anchor IS NULL), '[]')::text
+		   FROM docs d
+		   JOIN doc_sections sec ON sec.doc_id = d.id
+		   LEFT JOIN planned pl ON pl.doc_id = sec.doc_id AND pl.anchor = sec.anchor
+		  WHERE d.kind = 'spec' AND d.status = 'accepted'
+		    AND ($1 = '' OR d.project_id = $1)
+		  GROUP BY d.id
+		 HAVING count(*) FILTER (WHERE pl.anchor IS NULL) > 0
+		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)
+	}
+	defer rows.Close()
+
+	var docs []model.Doc
+	var gaps []model.DocPlanningGap
+	for rows.Next() {
+		var gap model.DocPlanningGap
+		var unplannedJSON string
+		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &unplannedJSON}})
+		if err != nil {
+			return nil, nil, fmt.Errorf("scan spec needing planning: %w", err)
+		}
+		if err := json.Unmarshal([]byte(unplannedJSON), &gap.Unplanned); err != nil {
+			return nil, nil, fmt.Errorf("decode unplanned anchors of doc %d: %w", d.ID, err)
+		}
+		gap.Doc = d.ID
+		docs = append(docs, *d)
+		gaps = append(gaps, gap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)
+	}
+	return docs, gaps, nil
+}
+
+// NeedsExecution returns the accepted plans whose task set holds at least one
+// task that is not closed. project narrows the answer; "" answers over every
+// project. "Closed" is taskClosed's notion, shared with the ready set and the
+// blocks predicate, so the three cannot drift on what done means.
+//
+// This departs from 025 §18's "unminted or unfinished" deliberately, as the
+// 2026-08-03 plan-acceptance plan records: through the accept path an
+// accepted-but-unminted plan cannot exist, and the only accepted plans with no
+// task set are the importer's *spent* plans, which must not be reported as
+// pending work. The ordering need §18's "unminted" arm served is covered by
+// the plan-to-plan blocks predicate (planBlockedCondition).
+func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+qualifiedDocColumns("d")+`
+		   FROM docs d
+		  WHERE d.kind = 'plan' AND d.status = 'accepted'
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND EXISTS (SELECT 1 FROM tasks t
+		                 WHERE t.plan_doc = d.id AND NOT `+taskClosed("t")+`)
+		  ORDER BY d.project_id, d.slug`, project)
+	if err != nil {
+		return nil, fmt.Errorf("list plans needing execution: %w", err)
+	}
+	defer rows.Close()
+
+	var out []model.Doc
+	for rows.Next() {
+		d, err := scanDoc(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan plan needing execution: %w", err)
+		}
+		out = append(out, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list plans needing execution: %w", err)
+	}
+	return out, nil
+}
+
+// appendScan lets scanDoc read a row that carries extra trailing columns: it
+// forwards the document's own destinations and appends the caller's. Without
+// it every query that joins something onto docs would need its own copy of
+// the fourteen-column scan.
+type appendScan struct {
+	rowScanner
+	extra []any
+}
+
+func (a appendScan) Scan(dest ...any) error {
+	return a.rowScanner.Scan(append(dest, a.extra...)...)
+}
+
+// qualifiedDocColumns renders docColumns with every name prefixed by alias,
+// for queries that join docs against a table carrying a column of the same
+// name (doc_sections.number).
+func qualifiedDocColumns(alias string) string {
+	cols := strings.Split(docColumns, ", ")
+	for i, c := range cols {
+		cols[i] = alias + "." + c
+	}
+	return strings.Join(cols, ", ")
+}
+
 // ListDocSections returns a document's sections in document order. A plan
 // carries none (025 §9), which is an empty result rather than an error.
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
@@ -1153,6 +1388,16 @@ func (s *Store) RecordDocEvent(
 	id, inserted, err = s.RecordEvent(ctx, source, externalID, typ, payload, apply)
 	s.metrics.docOp(op, err)
 	return id, inserted, err
+}
+
+// RecordPlanTasksMinted records n tasks minted by one plan accept
+// (worklode_doc_plan_tasks_minted_total). AcceptDoc is a package-level
+// function with no *Store to record through, so the caller — the API's
+// acceptDoc handler — calls this once the accepting transaction has
+// committed, with the length of AcceptDoc's minted-task return. Nil-safe:
+// a store opened without WithMetrics records nothing.
+func (s *Store) RecordPlanTasksMinted(n int) {
+	s.metrics.planTasksMinted(n)
 }
 
 // nullText maps "" to NULL, for the document columns where absent and empty

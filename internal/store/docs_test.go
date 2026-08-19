@@ -186,6 +186,49 @@ wasDerivedFrom: 025-documents-in-the-backbone.md
 Do the thing.
 `
 
+// planMintBody is a well-formed plan in the mintable ## Tasks format
+// (025 §9.1): three definitions, Task 2 blocked by Task 1.
+const planMintBody = `---
+status: draft
+---
+
+# A mintable plan
+
+## Tasks
+
+### Task 1 — First task
+
+` + "```yaml" + `
+kind: feature
+priority: high
+skills:
+  - superpowers:test-driven-development
+blockedBy: []
+` + "```" + `
+
+Do the first thing.
+
+### Task 2 — Second task
+
+` + "```yaml" + `
+kind: bug
+priority: medium
+blockedBy: [1]
+` + "```" + `
+
+Do the second thing.
+
+### Task 3 — Third task
+
+` + "```yaml" + `
+kind: chore
+priority: low
+blockedBy: []
+` + "```" + `
+
+Do the third thing.
+`
+
 // insertDoc inserts a docs row with the given kind/number/slug, returning
 // the generated id and any insert error.
 func insertDoc(t *testing.T, s *Store, kind string, number any, slug string) (int64, error) {
@@ -979,18 +1022,20 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 
 // --- editorial lifecycle (025 §6, §7) ---------------------------------------
 
-// acceptDoc runs AcceptDoc through RecordDocEvent, the way the API will.
-func acceptDoc(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
+// acceptDoc runs AcceptDoc through RecordDocEvent, the way the API will. The
+// second return is the minted task set (nil for a spec or ADR accept).
+func acceptDoc(t *testing.T, s *Store, id int64, actor string) (*model.Doc, []model.Task, error) {
 	t.Helper()
 	var out *model.Doc
+	var minted []model.Task
 	_, _, err := s.RecordDocEvent(t.Context(), "accept", "cli",
 		fmt.Sprintf("doc-accept-%d", docEventSeq.Add(1)), "doc.accept", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
-			out, err = AcceptDoc(tx, s.Now(), id, actor, eventID)
+			out, minted, err = AcceptDoc(tx, s.Now(), id, actor, eventID)
 			return err
 		})
-	return out, err
+	return out, minted, err
 }
 
 // reviseDoc runs ReviseDoc through RecordDocEvent.
@@ -1036,7 +1081,7 @@ func mustAcceptedSpec(t *testing.T, s *Store, slug string) *model.Doc {
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: slug, Body: specBody, CreatedBy: "stig",
 	})
-	accepted, err := acceptDoc(t, s, doc.ID, "stig")
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
 	if err != nil {
 		t.Fatalf("AcceptDoc(%s): %v", slug, err)
 	}
@@ -1080,7 +1125,7 @@ func TestDocAcceptDraftSpec(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
 	})
 
-	accepted, err := acceptDoc(t, s, doc.ID, "stig")
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
 	if err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
@@ -1115,7 +1160,7 @@ func TestDocAcceptWrongActorForbidden(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
 	})
 
-	_, err := acceptDoc(t, s, doc.ID, "ada")
+	_, _, err := acceptDoc(t, s, doc.ID, "ada")
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("err = %v, want ErrForbidden", err)
 	}
@@ -1132,27 +1177,347 @@ func TestDocAcceptAlreadyAccepted(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
-	if _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
 }
 
-// TestDocAcceptPlanRejected: plan acceptance mints the plan's tasks in the
-// same transaction (025 §9.2), which part 3 supplies — an accepted plan with
-// no tasks must never exist, so the stub refuses.
+// TestDocAcceptPlanRejected: a plan whose body defines no ## Tasks section
+// refuses to accept — PlanTasks's error surfaces as ErrInvalidInput, and an
+// accepted plan with no tasks must never exist (025 §9.2).
 func TestDocAcceptPlanRejected(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody, CreatedBy: "stig",
 	})
 
-	_, err := acceptDoc(t, s, doc.ID, "stig")
+	_, _, err := acceptDoc(t, s, doc.ID, "stig")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
 	if !strings.Contains(err.Error(), "task") {
 		t.Errorf("err = %v, want it to name task minting", err)
 	}
+}
+
+// countTasksWithPlanDoc counts the tasks.plan_doc rows pointing at docID.
+func countTasksWithPlanDoc(t *testing.T, s *Store, docID int64) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE plan_doc = $1`, docID).Scan(&n); err != nil {
+		t.Fatalf("count tasks with plan_doc %d: %v", docID, err)
+	}
+	return n
+}
+
+// TestDocAcceptPlanMintsTasks: accepting a plan mints one draft task per
+// ## Tasks definition, in the plan's project, carrying plan_doc, title, body,
+// kind, priority and skills from its definition and created_by the accepting
+// actor — and nothing above them: no child_of edge is written for any of
+// them.
+func TestDocAcceptPlanMintsTasks(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	accepted, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+	if len(minted) != 3 {
+		t.Fatalf("minted %d tasks, want 3", len(minted))
+	}
+
+	wantTitles := []string{"First task", "Second task", "Third task"}
+	wantKinds := []string{"feature", "bug", "chore"}
+	wantPriorities := []string{"high", "medium", "low"}
+	for i, task := range minted {
+		if task.State != "draft" {
+			t.Errorf("minted task %d state = %q, want draft", i, task.State)
+		}
+		if task.Project != "p1" {
+			t.Errorf("minted task %d project = %q, want p1", i, task.Project)
+		}
+		if task.Title != wantTitles[i] {
+			t.Errorf("minted task %d title = %q, want %q", i, task.Title, wantTitles[i])
+		}
+		if task.Kind != wantKinds[i] {
+			t.Errorf("minted task %d kind = %q, want %q", i, task.Kind, wantKinds[i])
+		}
+		if task.Priority != wantPriorities[i] {
+			t.Errorf("minted task %d priority = %q, want %q", i, task.Priority, wantPriorities[i])
+		}
+		if task.CreatedBy != "stig" {
+			t.Errorf("minted task %d created_by = %q, want stig", i, task.CreatedBy)
+		}
+	}
+	if !strings.Contains(minted[0].Body, "Do the first thing.") {
+		t.Errorf("minted task 0 body = %q, missing prose", minted[0].Body)
+	}
+	if len(minted[0].Skills) != 1 || minted[0].Skills[0] != "superpowers:test-driven-development" {
+		t.Errorf("minted task 0 skills = %v, want [superpowers:test-driven-development]", minted[0].Skills)
+	}
+
+	for _, task := range minted {
+		var planDoc sql.NullInt64
+		if err := s.db.QueryRow(`SELECT plan_doc FROM tasks WHERE id = $1`, task.ID).Scan(&planDoc); err != nil {
+			t.Fatalf("read plan_doc of %s: %v", task.ID, err)
+		}
+		if !planDoc.Valid || planDoc.Int64 != doc.ID {
+			t.Errorf("task %s plan_doc = %v, want %d", task.ID, planDoc, doc.ID)
+		}
+	}
+
+	// Nothing above the minted tasks: no child_of edge involves any of them.
+	for _, task := range minted {
+		var n int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM task_edges WHERE type = 'child_of' AND (from_task = $1 OR to_task = $1)`,
+			task.ID).Scan(&n); err != nil {
+			t.Fatalf("count child_of edges of %s: %v", task.ID, err)
+		}
+		if n != 0 {
+			t.Errorf("task %s has %d child_of edges, want none", task.ID, n)
+		}
+	}
+}
+
+// TestDocAcceptPlanInvariant: before accept, no task carries the plan's id;
+// after, the count equals the definition count; a second accept is
+// ErrInvalidInput, so the set can never double-mint (025 §9.2 AC2).
+func TestDocAcceptPlanInvariant(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "invariant-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	if before := countTasksWithPlanDoc(t, s, doc.ID); before != 0 {
+		t.Fatalf("tasks with plan_doc before accept = %d, want 0", before)
+	}
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	after := countTasksWithPlanDoc(t, s, doc.ID)
+	if after != len(minted) {
+		t.Fatalf("tasks with plan_doc after accept = %d, want %d", after, len(minted))
+	}
+
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second accept err = %v, want ErrInvalidInput", err)
+	}
+	if got := countTasksWithPlanDoc(t, s, doc.ID); got != after {
+		t.Fatalf("tasks with plan_doc after rejected second accept = %d, want unchanged %d", got, after)
+	}
+}
+
+// TestDocAcceptPlanBlockedByMintsBlocksEdge: blockedBy: [1] on Task 2's
+// definition yields a blocks edge from minted task 1 to minted task 2; the
+// blocked task is absent from the ready set until task 1 closes, using the
+// existing blockedCondition — no new machinery here, and no plan-to-plan gate
+// (that is a later task).
+func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "blocked-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	task1, task2 := minted[0].ID, minted[1].ID
+
+	var edgeType string
+	err = s.db.QueryRow(
+		`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`, task1, task2,
+	).Scan(&edgeType)
+	if err != nil {
+		t.Fatalf("read edge %s -> %s: %v", task1, task2, err)
+	}
+	if edgeType != "blocks" {
+		t.Fatalf("edge %s -> %s type = %q, want blocks", task1, task2, edgeType)
+	}
+
+	// Promote both minted tasks out of draft so the ready-set check exercises
+	// blockedCondition rather than the draft-state filter.
+	if err := transition(t, s, taskTestNow, task1, "draft", "ready"); err != nil {
+		t.Fatalf("transition task1 to ready: %v", err)
+	}
+	if err := transition(t, s, taskTestNow, task2, "draft", "ready"); err != nil {
+		t.Fatalf("transition task2 to ready: %v", err)
+	}
+
+	if !isBlocked(t, s, task2) {
+		t.Fatalf("IsBlocked(%s): want true while task1 open", task2)
+	}
+	ready, err := s.readyCandidates(t.Context(), "p1", "")
+	if err != nil {
+		t.Fatalf("readyCandidates: %v", err)
+	}
+	for _, r := range ready {
+		if r.ID == task2 {
+			t.Fatalf("readyCandidates offered %s, which task1 still blocks", task2)
+		}
+	}
+
+	walkTo(t, s, task1, "merged")
+
+	if isBlocked(t, s, task2) {
+		t.Fatalf("IsBlocked(%s): want false after task1 merged", task2)
+	}
+	ready, err = s.readyCandidates(t.Context(), "p1", "")
+	if err != nil {
+		t.Fatalf("readyCandidates after release: %v", err)
+	}
+	found := false
+	for _, r := range ready {
+		if r.ID == task2 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("readyCandidates after task1 merged omitted %s", task2)
+	}
+}
+
+// TestDocAcceptPlanParseFailureRefusesAndStaysDraft: a plan whose body fails
+// designdoc.PlanTasks refuses to accept, wrapped as ErrInvalidInput, and its
+// status stays draft — the status flip and the mint never run.
+func TestDocAcceptPlanParseFailureRefusesAndStaysDraft(t *testing.T) {
+	frontmatter := "---\nstatus: draft\n---\n\n# A plan\n\n"
+	cases := map[string]string{
+		"no tasks section": frontmatter + "No tasks here.\n",
+		"dangling blockedBy": frontmatter + `## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: feature
+blockedBy: [2]
+` + "```" + `
+
+Do it.
+`,
+		"cyclic blockedBy": frontmatter + `## Tasks
+
+### Task 1 — First
+
+` + "```yaml" + `
+kind: feature
+blockedBy: [2]
+` + "```" + `
+
+a
+
+### Task 2 — Second
+
+` + "```yaml" + `
+kind: feature
+blockedBy: [1]
+` + "```" + `
+
+b
+`,
+		"missing kind": frontmatter + `## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+priority: medium
+` + "```" + `
+
+Do it.
+`,
+		"unmintable kind": frontmatter + `## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: review
+` + "```" + `
+
+Do it.
+`,
+	}
+
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			s := openDocStore(t)
+			doc := mustCreateDoc(t, s, DocInput{
+				Project: "p1", Kind: "plan", Slug: "bad-plan", Body: body, CreatedBy: "stig",
+			})
+
+			_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("err = %v, want ErrInvalidInput", err)
+			}
+			if minted != nil {
+				t.Errorf("minted = %v, want nil", minted)
+			}
+			got, err := s.GetDoc(t.Context(), doc.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != "draft" {
+				t.Errorf("status = %q, want draft", got.Status)
+			}
+			if n := countTasksWithPlanDoc(t, s, doc.ID); n != 0 {
+				t.Errorf("tasks with plan_doc after refused accept = %d, want 0", n)
+			}
+		})
+	}
+}
+
+// TestDocAcceptPlanWrongActorForbidden: acceptance is the assignee's act,
+// exactly as for a spec (025 §7); a forbidden accept mints nothing.
+func TestDocAcceptPlanWrongActorForbidden(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "gated-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	if _, _, err := acceptDoc(t, s, doc.ID, "ada"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Status != "draft" {
+		t.Fatalf("doc = %+v, %v; want it still draft", got, err)
+	}
+	if n := countTasksWithPlanDoc(t, s, doc.ID); n != 0 {
+		t.Errorf("tasks with plan_doc after forbidden accept = %d, want 0", n)
+	}
+}
+
+// TestDocPlanTasksMintedMetric: RecordPlanTasksMinted adds n to
+// worklode_doc_plan_tasks_minted_total. AcceptDoc itself does not call it —
+// it is a package-level function with no *Store — so the API handler calls
+// it after the accepting transaction commits; this exercises that method
+// directly, the pattern TestDocOperationsMetric above uses for docOp.
+func TestDocPlanTasksMintedMetric(t *testing.T) {
+	s := openDocStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+
+	s.RecordPlanTasksMinted(3)
+	if got := testutil.ToFloat64(s.metrics.docTasksMinted); got != 3 {
+		t.Fatalf("worklode_doc_plan_tasks_minted_total = %v, want 3", got)
+	}
+	s.RecordPlanTasksMinted(2)
+	if got := testutil.ToFloat64(s.metrics.docTasksMinted); got != 5 {
+		t.Fatalf("worklode_doc_plan_tasks_minted_total = %v, want 5", got)
+	}
+}
+
+// TestDocPlanTasksMintedMetricNilSafe: a store opened without WithMetrics
+// records nothing.
+func TestDocPlanTasksMintedMetricNilSafe(t *testing.T) {
+	var m *storeMetrics
+	m.planTasksMinted(3)
 }
 
 // TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
@@ -1175,7 +1540,7 @@ func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
 	})
 
-	if _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
 	got, err := s.GetDoc(t.Context(), old.ID)
@@ -1224,7 +1589,7 @@ func TestDocAcceptSectionScopedReplacesDoesNotSupersede(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
 	})
 
-	if _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
 	got, err := s.GetDoc(t.Context(), old.ID)
@@ -1246,7 +1611,7 @@ func TestDocAcceptRejectsTooDeepAnchor(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-deep", Body: deep, CreatedBy: "stig",
 	})
 
-	_, err := acceptDoc(t, s, doc.ID, "stig")
+	_, _, err := acceptDoc(t, s, doc.ID, "stig")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
@@ -1265,7 +1630,7 @@ func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-ok", Body: body, CreatedBy: "stig",
 	})
 
-	if _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
 }
@@ -1273,7 +1638,7 @@ func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
 // TestDocAcceptNotFound covers the unknown-id path.
 func TestDocAcceptNotFound(t *testing.T) {
 	s := openDocStore(t)
-	if _, err := acceptDoc(t, s, 9999, "stig"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := acceptDoc(t, s, 9999, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
@@ -1774,5 +2139,389 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 		if slices.Contains(types, e.Type) {
 			t.Errorf("inbound edge kept its forward spelling %q", e.Type)
 		}
+	}
+}
+
+// TestDocCreateWritesPlanBlocksEdge: a plan's document-level `blocks` orders
+// it before another plan (025 §5, §9.3). The inverse spelling writes nothing —
+// one row read backward is `blockedBy`, so writing it too would double the
+// edge and let the two directions disagree.
+func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
+	s := openDocStore(t)
+
+	one := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-one", Body: planMintBody, CreatedBy: "stig",
+	})
+	three := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-three", Body: planMintBody, CreatedBy: "stig",
+	})
+	two := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-two", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblocks: plan-three\nblockedBy: plan-one\n---\n\n# Plan two\n",
+	})
+
+	got := docEdges(t, s, two.ID)
+	want := []model.DocEdge{{Type: "blocks", ToDoc: three.ID}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("edges of plan-two = %+v, want %+v", got, want)
+	}
+	// blockedBy is read off plan-one's own row, not written from plan-two's.
+	if edges := docEdges(t, s, one.ID); len(edges) != 0 {
+		t.Fatalf("edges of plan-one = %+v, want none", edges)
+	}
+}
+
+// TestDocEdgesRejectBlocksBetweenNonPlans: `blocks` orders whole plan
+// documents (025 §5). An end that is not a plan, or a reference this project
+// cannot resolve to one, is ErrInvalidInput rather than a dead edge.
+func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
+	s := openDocStore(t)
+
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-real-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	cases := []struct {
+		name string
+		want string // substring, so the right guard is what refused
+		in   DocInput
+	}{
+		{
+			name: "plan blocks a spec",
+			want: "the to end",
+			in: DocInput{
+				Project: "p1", Kind: "plan", Slug: "blocks-a-spec", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: 025-documents-in-the-backbone\n---\n\n# Plan\n",
+			},
+		},
+		{
+			name: "spec blocks a plan",
+			want: "the from end",
+			in: DocInput{
+				Project: "p1", Kind: "spec", Number: 26, Slug: "026-blocking-spec", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: a-real-plan\n---\n\n# Spec\n\n## 1. One {#sec-1}\n\nx\n",
+			},
+		},
+		{
+			name: "plan blocks an unresolvable reference",
+			want: "no plan in this project resolves to",
+			in: DocInput{
+				Project: "p1", Kind: "plan", Slug: "blocks-nowhere", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: 999-nowhere.md\n---\n\n# Plan\n",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := createDoc(t, s, tc.in)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("createDoc = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestDocEdgesRejectSelfBlockingPlan: a plan whose `blocks` names its own slug
+// resolves to itself and would wedge its own task set forever — every task of
+// the plan would block itself, and while the plan is draft the unminted-set
+// arm blocks too. It is refused at write time (025 §5).
+func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "self-blocker", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblocks: self-blocker\n---\n\n# Plan\n",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "cannot block itself") {
+		t.Fatalf("createDoc = %v, want it to say a plan cannot block itself", err)
+	}
+}
+
+// --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
+
+// planCoveringBody renders a plan whose frontmatter covers refs and whose
+// ## Tasks section holds one definition, so the plan can be accepted.
+func planCoveringBody(refs ...string) string {
+	var b strings.Builder
+	b.WriteString("---\nstatus: draft\n")
+	if len(refs) > 0 {
+		b.WriteString("covers:\n")
+		for _, ref := range refs {
+			b.WriteString("  - " + ref + "\n")
+		}
+	}
+	b.WriteString("---\n\n# A covering plan\n\n## Tasks\n\n### Task 1 — Only task\n\n")
+	b.WriteString("```yaml\nkind: chore\n```\n\nDo it.\n")
+	return b.String()
+}
+
+// coveringPlan creates a plan covering refs, accepting it when accept is set.
+func coveringPlan(t *testing.T, s *Store, slug string, accept bool, refs ...string) *model.Doc {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: slug, Body: planCoveringBody(refs...), CreatedBy: "stig",
+	})
+	if !accept {
+		return doc
+	}
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan %s: %v", slug, err)
+	}
+	return accepted
+}
+
+// needsPlanning runs the query and returns the one gap it expects, failing
+// the test when the result does not name exactly the given specs.
+func needsPlanningSlugs(t *testing.T, s *Store, project string) ([]string, []model.DocPlanningGap) {
+	t.Helper()
+	docs, gaps, err := s.NeedsPlanning(t.Context(), project)
+	if err != nil {
+		t.Fatalf("NeedsPlanning: %v", err)
+	}
+	slugs := make([]string, len(docs))
+	for i, d := range docs {
+		slugs[i] = d.Slug
+	}
+	return slugs, gaps
+}
+
+// TestDocNeedsPlanningReportsUncoveredSections: an accepted spec is listed
+// with exactly the anchors no accepted plan's covers edge names, in document
+// order, alongside its total section count.
+func TestDocNeedsPlanningReportsUncoveredSections(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x#sec-1")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if !slices.Equal(slugs, []string{"025-x"}) {
+		t.Fatalf("needs planning = %v, want [025-x]", slugs)
+	}
+	if len(gaps) != 1 {
+		t.Fatalf("gaps = %v, want one entry", gaps)
+	}
+	got := gaps[0]
+	if got.Doc != spec.ID {
+		t.Errorf("gap doc = %d, want %d", got.Doc, spec.ID)
+	}
+	if got.Sections != 3 {
+		t.Errorf("gap sections = %d, want 3", got.Sections)
+	}
+	if !slices.Equal(got.Unplanned, []string{"sec-2", "sec-2.1"}) {
+		t.Errorf("unplanned = %v, want [sec-2 sec-2.1]", got.Unplanned)
+	}
+}
+
+// TestDocNeedsPlanningFullyCoveredSpecOmitted: every section named by some
+// accepted plan takes the spec out of the set, and two plans naming the same
+// section is legal and unremarked (026 §2.1).
+func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x#sec-1", "025-x#sec-2")
+	coveringPlan(t, s, "plan-b", true, "025-x#sec-2", "025-x#sec-2.1")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(slugs) != 0 || len(gaps) != 0 {
+		t.Fatalf("needs planning = %v / %v, want empty", slugs, gaps)
+	}
+}
+
+// TestDocNeedsPlanningDraftSpecNotOwedPlanning: 026 §2.1 — a draft spec is not
+// yet a planning gap.
+func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	slugs, _ := needsPlanningSlugs(t, s, "p1")
+	if len(slugs) != 0 {
+		t.Fatalf("needs planning = %v, want empty for a draft spec", slugs)
+	}
+}
+
+// TestDocNeedsPlanningDraftPlanDoesNotCover: 026 §2.1 — a draft plan has not
+// yet undertaken work, so its covers edges discharge nothing.
+func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", false, "025-x#sec-1", "025-x#sec-2", "025-x#sec-2.1")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningWholeDocumentEdgeCoversNothing: a covers edge with no
+// fragment names no section, so it discharges none (026 §2.1 — it cannot say
+// which present section it undertakes and would silently claim future ones).
+func TestDocNeedsPlanningWholeDocumentEdgeCoversNothing(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "025-x")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningNoSpecSentinelCoversNothing: `covers: NO-SPEC` resolves
+// to no document (026 §4.3), so it lands in to_external and contributes
+// nothing — no special case needed. The plan itself is never a planning gap.
+func TestDocNeedsPlanningNoSpecSentinelCoversNothing(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	coveringPlan(t, s, "plan-a", true, "NO-SPEC")
+
+	slugs, gaps := needsPlanningSlugs(t, s, "p1")
+	if !slices.Equal(slugs, []string{"025-x"}) {
+		t.Fatalf("needs planning = %v, want the spec alone", slugs)
+	}
+	if len(gaps) != 1 || !slices.Equal(gaps[0].Unplanned, []string{"sec-1", "sec-2", "sec-2.1"}) {
+		t.Fatalf("gaps = %v, want every anchor unplanned", gaps)
+	}
+}
+
+// TestDocNeedsPlanningScopesToProject: an empty project answers over every
+// project; a named one narrows to it.
+func TestDocNeedsPlanningScopesToProject(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+	mustAcceptedSpec(t, s, "025-x")
+	other := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 25, Slug: "025-y", Body: specBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, other.ID, "stig"); err != nil {
+		t.Fatalf("accept p2 spec: %v", err)
+	}
+
+	all, _ := needsPlanningSlugs(t, s, "")
+	if !slices.Equal(all, []string{"025-x", "025-y"}) {
+		t.Fatalf("unscoped needs planning = %v, want both specs", all)
+	}
+	scoped, _ := needsPlanningSlugs(t, s, "p2")
+	if !slices.Equal(scoped, []string{"025-y"}) {
+		t.Fatalf("p2 needs planning = %v, want [025-y]", scoped)
+	}
+}
+
+// needsExecutionSlugs runs the query and returns the matching plans' slugs.
+func needsExecutionSlugs(t *testing.T, s *Store, project string) []string {
+	t.Helper()
+	docs, err := s.NeedsExecution(t.Context(), project)
+	if err != nil {
+		t.Fatalf("NeedsExecution: %v", err)
+	}
+	slugs := make([]string, len(docs))
+	for i, d := range docs {
+		slugs[i] = d.Slug
+	}
+	return slugs
+}
+
+// TestDocNeedsExecutionOpenTask: an accepted plan with any non-closed task in
+// its set is pending work.
+func TestDocNeedsExecutionOpenTask(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	if got := needsExecutionSlugs(t, s, "p1"); !slices.Equal(got, []string{"mint-plan"}) {
+		t.Fatalf("needs execution = %v, want [mint-plan]", got)
+	}
+}
+
+// TestDocNeedsExecutionAllTasksClosed: once every task in the set is closed —
+// delivered or abandoned, taskClosed's notion — the plan drops out.
+func TestDocNeedsExecutionAllTasksClosed(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	for i, task := range minted {
+		if err := transition(t, s, taskTestNow, task.ID, "draft", "ready"); err != nil {
+			t.Fatalf("ready %s: %v", task.ID, err)
+		}
+		if i == 0 {
+			walkTo(t, s, task.ID, "abandoned")
+			continue
+		}
+		walkTo(t, s, task.ID, "merged")
+	}
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty once every task is closed", got)
+	}
+}
+
+// TestDocNeedsExecutionDraftPlanOmitted: a draft plan has undertaken nothing.
+func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty for a draft plan", got)
+	}
+}
+
+// TestDocNeedsExecutionUnmintedAcceptedPlanOmitted: the only accepted plans
+// with no task set are the importer's spent plans, which are not pending work
+// — the deliberate departure from 025 §18's "unminted or unfinished".
+func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "spent-plan", Status: "accepted", CreatedBy: "stig",
+		Body: "---\nstatus: accepted\n---\n\n# A spent plan\n\nAll done long ago.\n",
+	})
+
+	if got := needsExecutionSlugs(t, s, "p1"); len(got) != 0 {
+		t.Fatalf("needs execution = %v, want empty for an unminted accepted plan", got)
+	}
+}
+
+// TestDocNeedsExecutionScopesToProjectAndKind: accepted specs never appear,
+// and a project narrows the set.
+func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	if got := needsExecutionSlugs(t, s, ""); !slices.Equal(got, []string{"mint-plan"}) {
+		t.Fatalf("needs execution = %v, want the plan alone", got)
+	}
+	if got := needsExecutionSlugs(t, s, "p2"); len(got) != 0 {
+		t.Fatalf("needs execution in p2 = %v, want empty", got)
 	}
 }

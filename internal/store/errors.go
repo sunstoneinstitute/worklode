@@ -14,7 +14,8 @@ var (
 	ErrBadTransition = errors.New("invalid state transition")
 	// ErrLeased means the task already has an active lease.
 	ErrLeased = errors.New("task is leased")
-	// ErrBlocked means the task has open blocking edges.
+	// ErrBlocked means something holds the task: an open blocking edge, or a
+	// plan ordered before its plan (see IsBlocked).
 	ErrBlocked = errors.New("task is blocked")
 	// ErrRepoTaken means the repo is already mapped to another project.
 	ErrRepoTaken = errors.New("repo already mapped to a project")

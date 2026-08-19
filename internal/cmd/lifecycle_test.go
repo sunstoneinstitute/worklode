@@ -1214,3 +1214,23 @@ func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
 		t.Fatalf("output = %q, want no Skills section when there is nothing to show", buf.String())
 	}
 }
+
+// TestPrintBriefRendersBlockingPlans: the plans holding a task (025 §9.3) are
+// rendered even when they have minted no task to list under "blocked by".
+func TestPrintBriefRendersBlockingPlans(t *testing.T) {
+	b := model.Brief{
+		Task:          model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch:        "WL-1-t",
+		BlockingPlans: []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}},
+		Skills:        model.SkillRecommendation{Provider: "none"},
+	}
+	buf := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+
+	printBrief(cmd, b)
+
+	if out := buf.String(); !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
+		t.Fatalf("output = %q, want the blocking plan rendered", out)
+	}
+}

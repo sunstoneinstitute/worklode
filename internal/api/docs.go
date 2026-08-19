@@ -14,7 +14,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -126,14 +128,39 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// listDocs handles GET /api/v1/docs?project=&kind=&status=.
+// listDocs handles GET /api/v1/docs?project=&kind=&status= plus the two
+// derived selectors of 026 §2, ?needs_planning= and ?needs_execution=.
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
-	docs, err := s.st.ListDocs(r.Context(), docFilterFrom(r))
+	sel, err := docSelectorFrom(r)
 	if err != nil {
-		s.mapStoreErr(w, err)
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+	switch {
+	case sel.needsPlanning:
+		docs, gaps, err := s.st.NeedsPlanning(r.Context(), sel.filter.Project)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model.DocListResponse{
+			Docs: withoutDocBodies(docs), PlanningGaps: gaps,
+		})
+	case sel.needsExecution:
+		docs, err := s.st.NeedsExecution(r.Context(), sel.filter.Project)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+	default:
+		docs, err := s.st.ListDocs(r.Context(), sel.filter)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+	}
 }
 
 // withoutDocBodies blanks the markdown source on a list projection. A corpus
@@ -150,9 +177,11 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 	return out
 }
 
-// docFilterFrom reads the three list selectors off the query string. An
+// docFilterFrom reads the three plain list filters off the query string. An
 // unknown value filters to nothing rather than erroring — the same way the
-// task list treats a state nobody uses.
+// task list treats a state nobody uses. The cockpit's /docs page calls it
+// directly; the JSON API goes through docSelectorFrom, which adds 026 §2's
+// derived selectors on top.
 func docFilterFrom(r *http.Request) store.DocFilter {
 	q := r.URL.Query()
 	return store.DocFilter{
@@ -160,6 +189,79 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 		Kind:    q.Get("kind"),
 		Status:  q.Get("status"),
 	}
+}
+
+// docListSelector is GET /api/v1/docs' query string once validated: the three
+// plain filters, plus at most one of the two derived selectors of 026 §2.
+type docListSelector struct {
+	filter         store.DocFilter
+	needsPlanning  bool
+	needsExecution bool
+}
+
+// docSelectorFrom reads the list selectors off the query string.
+//
+// The three plain filters take any value — an unknown one filters to nothing,
+// the same way the task list treats a state nobody uses. The two derived
+// selectors do not: each implies a kind and a status (026 §2.1), so a
+// contradicting kind or status is an error rather than an empty result, which
+// would read as "nothing to plan". Requesting both is an error for the same
+// reason — they select disjoint kinds, so the conjunction is always empty.
+//
+// The CLI refuses the same combinations locally so the error needs no round
+// trip; this is the authority, for the clients that are not the CLI.
+func docSelectorFrom(r *http.Request) (docListSelector, error) {
+	q := r.URL.Query()
+	sel := docListSelector{filter: docFilterFrom(r)}
+	var err error
+	if sel.needsPlanning, err = queryBool(q, "needs_planning"); err != nil {
+		return docListSelector{}, err
+	}
+	if sel.needsExecution, err = queryBool(q, "needs_execution"); err != nil {
+		return docListSelector{}, err
+	}
+	if sel.needsPlanning && sel.needsExecution {
+		return docListSelector{}, errors.New(
+			"needs_planning and needs_execution select disjoint kinds; pass one (026 §2.1)")
+	}
+	for _, c := range []struct {
+		on         bool
+		name, kind string
+	}{
+		{sel.needsPlanning, "needs_planning", "spec"},
+		{sel.needsExecution, "needs_execution", "plan"},
+	} {
+		if !c.on {
+			continue
+		}
+		if sel.filter.Kind != "" && sel.filter.Kind != c.kind {
+			return docListSelector{}, fmt.Errorf(
+				"%s implies kind=%s; drop kind or pass %s (026 §2.1)", c.name, c.kind, c.kind)
+		}
+		if sel.filter.Status != "" && sel.filter.Status != "accepted" {
+			return docListSelector{}, fmt.Errorf(
+				"%s implies status=accepted; drop status or pass accepted (026 §2.1)", c.name)
+		}
+	}
+	return sel, nil
+}
+
+// queryBool reads a boolean query parameter. Absent is false; present with an
+// empty value ("?needs_planning") is true; anything ParseBool refuses is named
+// rather than silently read as off.
+func queryBool(q url.Values, name string) (bool, error) {
+	if !q.Has(name) {
+		return false, nil
+	}
+	raw := q.Get(name)
+	if raw == "" {
+		return true, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean, got %q", name, raw)
+	}
+	return v, nil
 }
 
 // getDoc handles GET /api/v1/docs/{id}: the document with the rows derived
@@ -235,7 +337,10 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
-// 025 §7, gated on the document's assignee.
+// 025 §7, gated on the document's assignee. On a plan this also mints its
+// execution tasks (025 §9.2) in the same transaction; the response carries
+// the doc and, for a plan, the minted set (model.AcceptDocResponse) — empty
+// and omitted for a spec or ADR, so their response stays byte-identical.
 func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -244,19 +349,21 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	actor := actorFrom(r)
 	now := s.st.Now()
 	var accepted *model.Doc
+	var minted []model.Task
 	err := s.recordDocEvent(w, r, "accept", "doc.accepted", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
+			d, tasks, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
 			if err != nil {
 				return err
 			}
-			accepted = d
+			accepted, minted = d, tasks
 			return nil
 		})
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, accepted)
+	s.st.RecordPlanTasksMinted(len(minted))
+	writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *accepted, Tasks: minted})
 }
 
 // reviseDoc handles POST /api/v1/docs/{id}/revise: opens the one candidate

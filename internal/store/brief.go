@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Brief is the bounded payload an agent needs to start work on a task: the
-// task row, its conventional branch, the open blockers still pointing at it,
-// and the active lease (nil when the task is unleased). It is deliberately
-// bounded — no unbounded lists — so a brief is one cheap, predictable read;
+// task row, its conventional branch, what holds it (open blocker tasks and
+// unfinished blocking plans), and the active lease (nil when the task is
+// unleased). It is deliberately bounded — no unbounded lists — so a brief is
+// one cheap, predictable read;
 // pinned SKILL.md bodies are the one deliberate exception, budget-bounded by
 // the pin list the task author wrote.
 //
@@ -23,15 +25,19 @@ import (
 // "Delivery lifecycle" without spelunking, while the full ancestry and the
 // sibling list are both unbounded and stay out.
 type Brief struct {
-	Task               model.Task   // the task row
-	Body               string       // task body (mirrors Task.Body for the wire contract)
-	Branch             string       // <prefix><id>-<slug>
-	OpenBlockers       []model.Task // open 'blocks' edges pointing at this task; only ID/Title/State are populated
-	Parent             *model.Task  // the task's parent, or nil; only ID/Title/State are populated
-	Lease              *Lease       // active lease, or nil
-	GoverningDesign    *string      // reserved: spec 006 (nil in v1)
-	AffectedComponents []string     // reserved: spec 006 (nil in v1)
-	DefinitionOfDone   *string      // reserved: spec 006 Deliverable (nil in v1)
+	Task         model.Task   // the task row
+	Body         string       // task body (mirrors Task.Body for the wire contract)
+	Branch       string       // <prefix><id>-<slug>
+	OpenBlockers []model.Task // the open tasks holding this one; only ID/Title/State are populated
+	// BlockingPlans are the plan documents ordered before this task's plan
+	// (025 §9.3) whose work is unfinished. A blocking plan still draft has
+	// minted no task, so it lands here with nothing in OpenBlockers.
+	BlockingPlans      []model.DocRef
+	Parent             *model.Task // the task's parent, or nil; only ID/Title/State are populated
+	Lease              *Lease      // active lease, or nil
+	GoverningDesign    *string     // reserved: spec 006 (nil in v1)
+	AffectedComponents []string    // reserved: spec 006 (nil in v1)
+	DefinitionOfDone   *string     // reserved: spec 006 Deliverable (nil in v1)
 	// PinnedSkills are the task's pinned skills, content included; deleted
 	// pins still resolve (with a warning) so briefs never break.
 	PinnedSkills []Skill
@@ -48,8 +54,8 @@ type BriefOptions struct {
 	Skills bool
 }
 
-// Brief assembles the brief for taskID: the task row, its branch, its open
-// blockers, its parent, any active lease, and — when opts.Skills is set — its
+// Brief assembles the brief for taskID: the task row, its branch, what holds
+// it, its parent, any active lease, and — when opts.Skills is set — its
 // pinned skills. Returns ErrNotFound if the task does not exist. It runs a
 // bounded, fixed number of queries — one more only when pins are asked for and
 // the task has some — and never returns unbounded lists.
@@ -60,6 +66,11 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 	}
 
 	blockers, err := s.openBlockers(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	plans, err := s.blockingPlans(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +101,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		Body:          t.Body,
 		Branch:        BranchFor(t),
 		OpenBlockers:  blockers,
+		BlockingPlans: plans,
 		Parent:        parent,
 		Lease:         lease,
 		PinnedSkills:  pinned,
@@ -98,15 +110,28 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 }
 
 // ResolvePins resolves pinned skill names into skills with content, in pin
-// order, deduped. An unknown pin produces a "not found" warning; a pin that
-// resolves to a soft-deleted skill still comes back with its content, plus a
-// "removed from its source repo" warning — a brief must never break because
-// a skill was withdrawn or misspelled upstream.
+// order, deduped. A pin in "plugin:skill" form resolves exactly when the
+// registry name is qualified; when the exact name misses, the segment after
+// the pin's first colon is tried against the registry as a fallback name —
+// the skill-identifier rule of 025 §9.1. An exact hit is authoritative for
+// its own name and never consults the fallback. An unknown pin produces a
+// "not found" warning; a pin that resolves to a soft-deleted skill still
+// comes back with its content, plus a "removed from its source repo"
+// warning — a brief must never break because a skill was withdrawn or
+// misspelled upstream.
+//
+// Dedupe is on the resolved skill, not the pin: the fallback lets two pins
+// ("tdd" and "superpowers:tdd") name one registry row, and inlining that
+// skill's content twice would just inflate the brief. Warnings stay per pin —
+// each names the spelling the task author wrote, and a pin resolving to a
+// skill another pin already brought in is not an error to report.
 //
 // The brief and POST /api/v1/skills/recommend both go through here, so the
 // two agree on the warning text without hand-copying it.
 func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
-	skills, err := s.SkillsByNames(ctx, pins)
+	names := dedupeFirst(pins)
+
+	skills, err := s.SkillsByNames(ctx, names)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
 	}
@@ -115,10 +140,41 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 		found[sk.Name] = sk
 	}
 
+	// Still-unresolved, colon-qualified pins get a second pass against the
+	// segment after their first colon (deduped) — an unqualified registry
+	// name a plugin-qualified pin should still hit.
+	suffixOf := make(map[string]string, len(names))
+	var suffixes []string
+	for _, name := range names {
+		if _, ok := found[name]; ok {
+			continue
+		}
+		if _, suffix, ok := strings.Cut(name, ":"); ok {
+			suffixOf[name] = suffix
+			suffixes = append(suffixes, suffix)
+		}
+	}
+	fallback := make(map[string]Skill, len(suffixes))
+	if len(suffixes) > 0 {
+		hits, err := s.SkillsByNames(ctx, dedupeFirst(suffixes))
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
+		}
+		for _, sk := range hits {
+			fallback[sk.Name] = sk
+		}
+	}
+
 	var pinned []Skill
 	var warnings []string
-	for _, name := range dedupeFirst(pins) {
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
 		sk, ok := found[name]
+		if !ok {
+			if suffix, has := suffixOf[name]; has {
+				sk, ok = fallback[suffix]
+			}
+		}
 		if !ok {
 			warnings = append(warnings, "pinned skill not found: "+name)
 			continue
@@ -126,24 +182,41 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 		if sk.Deleted {
 			warnings = append(warnings, "pinned skill removed from its source repo: "+name)
 		}
+		if seen[sk.Name] {
+			continue
+		}
+		seen[sk.Name] = true
 		pinned = append(pinned, sk)
 	}
 	return pinned, warnings, nil
 }
 
-// openBlockers returns the tasks that are the from_task of an open 'blocks'
-// edge whose to_task is taskID — i.e. the blockers still blocking it. "Open"
-// uses the same predicate as blockedCondition: the blocker has not reached its
-// repo's done_state (taskClosed). Only ID, Title, and State are populated (the brief surfaces no
+// openBlockers returns the open tasks holding taskID: the from_task of a
+// 'blocks' edge pointing at it, and the open tasks of any plan ordered before
+// its plan (025 §9.3). "Open" uses the same predicate as blockedCondition and
+// planBlockedCondition: the blocker has not reached its repo's done_state
+// (taskClosed). Only ID, Title, and State are populated (the brief surfaces no
 // more than that). Ordered by numeric id for a stable payload.
+//
+// A blocking plan still draft has minted no task and so names none here; the
+// brief reports it through blockingPlans instead.
 func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT t.id, t.title, t.state
-		   FROM task_edges e
-		   JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = $1
-		    AND e.type = 'blocks'
-		    AND NOT `+taskClosed("t")+`
+		`SELECT id, title, state FROM (
+		   SELECT b.id, b.title, b.state
+		     FROM task_edges e
+		     JOIN tasks b ON b.id = e.from_task
+		    WHERE e.to_task = $1
+		      AND e.type = 'blocks'
+		      AND NOT `+taskClosed("b")+`
+		   UNION
+		   SELECT b.id, b.title, b.state
+		     FROM tasks dep
+		     JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
+		     JOIN tasks b ON b.plan_doc = de.from_doc
+		    WHERE dep.id = $1
+		      AND NOT `+taskClosed("b")+`
+		 ) t
 		  ORDER BY CAST(split_part(t.id, '-', 2) AS INTEGER)`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)
@@ -160,6 +233,39 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)
+	}
+	return out, nil
+}
+
+// blockingPlans returns the unfinished plans ordered before taskID's own plan
+// (planUnfinished, the predicate planBlockedCondition gates the ready set on),
+// oldest document first. It is what tells an agent *which* plan is holding a
+// task the claim path refuses — including a blocking plan still draft, whose
+// unminted set leaves openBlockers nothing to name.
+func (s *Store) blockingPlans(ctx context.Context, taskID string) ([]model.DocRef, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT bd.id, bd.slug, bd.title, bd.status
+		   FROM tasks dep
+		   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
+		   JOIN docs bd ON bd.id = de.from_doc
+		  WHERE dep.id = $1
+		    AND `+planUnfinished("bd")+`
+		  ORDER BY bd.id`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("blocking plans of %s: %w", taskID, err)
+	}
+	defer rows.Close()
+
+	var out []model.DocRef
+	for rows.Next() {
+		var ref model.DocRef
+		if err := rows.Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
+			return nil, fmt.Errorf("scan blocking plan: %w", err)
+		}
+		out = append(out, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("blocking plans of %s: %w", taskID, err)
 	}
 	return out, nil
 }
