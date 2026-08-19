@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // TestParseClusterEnvMap: only dev and prod are accepted. env_deploys holds
@@ -136,6 +138,52 @@ func TestParseClusterEnvMap(t *testing.T) {
 			}
 			if !maps.Equal(got, tc.want) {
 				t.Fatalf("parseClusterEnvMap(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestGraphProjector: unset LODE_GRAPHSERVER_URL disables projection;
+// URL-only configures an unauthenticated client; a half-configured auth
+// triple (graphserver.FromEnv's contract) fails the boot rather than
+// silently disabling. Each case sets all four LODE_GRAPHSERVER_* variables
+// explicitly, since t.Setenv restores after the test but a var left set from
+// an earlier case would otherwise leak into the next one's meaning.
+func TestGraphProjector(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		url      string
+		tokenURL string
+		clientID string
+		secret   string
+		wantNil  bool
+		wantErr  bool
+	}{
+		{name: "unset disables projection", url: "", tokenURL: "", clientID: "", secret: "", wantNil: true},
+		{name: "url only", url: "http://localhost:9999", tokenURL: "", clientID: "", secret: "", wantNil: false},
+		{name: "half-configured auth fails boot", url: "http://localhost:9999", tokenURL: "http://localhost:9999/token", clientID: "", secret: "", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LODE_GRAPHSERVER_URL", tc.url)
+			t.Setenv("LODE_GRAPHSERVER_TOKEN_URL", tc.tokenURL)
+			t.Setenv("LODE_GRAPHSERVER_CLIENT_ID", tc.clientID)
+			t.Setenv("LODE_GRAPHSERVER_CLIENT_SECRET", tc.secret)
+
+			p, err := graphProjector(prometheus.NewRegistry(), nil)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("graphProjector() = %v, nil, want an error", p)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("graphProjector(): %v", err)
+			}
+			if tc.wantNil && p != nil {
+				t.Fatalf("graphProjector() = %v, want nil (projection disabled)", p)
+			}
+			if !tc.wantNil && p == nil {
+				t.Fatal("graphProjector() = nil, want a non-nil projector")
 			}
 		})
 	}

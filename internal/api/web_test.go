@@ -726,6 +726,48 @@ func TestTaskPageShowsFollowUps(t *testing.T) {
 	bodyContains(t, rr.Body.String(), "Follow-ups", `/tasks/WL-2`)
 }
 
+// TestTaskPageRendersEdgeChangeSummary pins summarizeStateChange's "edge"
+// case: store.AddEdge/RemoveEdge log {"field":"edge","op",...}, not the
+// {"field","old","new"} shape every other state_log row uses, so a naive
+// decode used to render a blank "edge set to " line. Both the add and the
+// remove must render a non-blank, non-generic summary naming both endpoints.
+func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Blocker", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Blocked", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, "edge set to") {
+		t.Fatalf("task page renders the blank field/old/new fallback for an edge change:\n%s", body)
+	}
+	bodyContains(t, body, "edge added: WL-1 blocks WL-2")
+
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "edge removed: WL-1 blocks WL-2")
+}
+
 func TestProjectPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")

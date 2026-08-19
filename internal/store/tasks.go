@@ -108,8 +108,9 @@ var containerForbiddenStates = map[string]bool{
 
 // CreateTask allocates the next <KEY>-<n> id from the project's counter and
 // inserts the task inside the given transaction. It is meant to be called
-// from a RecordEvent apply callback with the store's clock as now.
-func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*model.Task, error) {
+// from a RecordEvent apply callback with the store's clock as now, and
+// appends a state_log row attributed to eventID.
+func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.Task, error) {
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
 	}
@@ -165,6 +166,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput) (*model.Task, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
+	}
+	if err := LogChange(tx, "task", id, eventID,
+		map[string]string{"field": "state", "new": state}); err != nil {
+		return nil, err
 	}
 	created := &model.Task{
 		ID:        id,
@@ -587,8 +592,9 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
 // edges. follow_up_to is unchecked beyond the single-origin index: it is
 // cross-project by design and nothing walks it transitively. A missing
-// endpoint returns ErrNotFound.
-func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
+// endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
+// attributed to eventID, so a cross-project edge dirties both projects.
+func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error {
 	if typ != "child_of" && typ != "blocks" && typ != "follow_up_to" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
 	}
@@ -630,6 +636,14 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string) error {
 			return fmt.Errorf("edge %s %s %s: %w", fromTask, typ, toTask, ErrEdgeExists)
 		}
 		return fmt.Errorf("insert edge %s %s %s: %w", fromTask, typ, toTask, err)
+	}
+	change := map[string]string{"field": "edge", "op": "add", "type": typ,
+		"from": fromTask, "to": toTask}
+	if err := LogChange(tx, "task", fromTask, eventID, change); err != nil {
+		return err
+	}
+	if err := LogChange(tx, "task", toTask, eventID, change); err != nil {
+		return err
 	}
 	return nil
 }
@@ -678,8 +692,9 @@ func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
 }
 
 // RemoveEdge deletes an edge inside the given transaction. Returns
-// ErrNotFound if the edge does not exist.
-func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string) error {
+// ErrNotFound if the edge does not exist. Appends a state_log row for both
+// endpoints, attributed to eventID, matching AddEdge.
+func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string, eventID int64) error {
 	res, err := tx.Exec(
 		`DELETE FROM task_edges WHERE from_task = $1 AND to_task = $2 AND type = $3`,
 		fromTask, toTask, typ,
@@ -693,6 +708,14 @@ func RemoveEdge(tx *sql.Tx, fromTask, toTask, typ string) error {
 	}
 	if affected == 0 {
 		return ErrNotFound
+	}
+	change := map[string]string{"field": "edge", "op": "remove", "type": typ,
+		"from": fromTask, "to": toTask}
+	if err := LogChange(tx, "task", fromTask, eventID, change); err != nil {
+		return err
+	}
+	if err := LogChange(tx, "task", toTask, eventID, change); err != nil {
+		return err
 	}
 	return nil
 }

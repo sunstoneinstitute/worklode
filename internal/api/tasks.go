@@ -129,7 +129,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				Draft:     req.Draft,
 				Skills:    req.Skills,
 				Secrets:   req.Secrets,
-			})
+			}, eventID)
 			if err != nil {
 				return err
 			}
@@ -137,12 +137,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
-				if err := store.AddEdge(tx, now, t.ID, req.Parent, "child_of"); err != nil {
+				if err := store.AddEdge(tx, now, t.ID, req.Parent, "child_of", eventID); err != nil {
 					return err
 				}
 			}
 			if req.FollowUpTo != "" {
-				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "follow_up_to"); err != nil {
+				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "follow_up_to", eventID); err != nil {
 					return err
 				}
 			}
@@ -474,8 +474,8 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.edge_added", payload,
-		func(tx *sql.Tx, _ int64) error {
-			return store.AddEdge(tx, s.st.Now(), from, to, req.Type)
+		func(tx *sql.Tx, eventID int64) error {
+			return store.AddEdge(tx, s.st.Now(), from, to, req.Type, eventID)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -508,8 +508,8 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.edge_removed", payload,
-		func(tx *sql.Tx, _ int64) error {
-			return store.RemoveEdge(tx, from, to, req.Type)
+		func(tx *sql.Tx, eventID int64) error {
+			return store.RemoveEdge(tx, from, to, req.Type, eventID)
 		})
 	if err != nil {
 		s.mapStoreErr(w, err)

@@ -36,8 +36,9 @@ type TimelineResponse struct {
 //
 // Change stays raw because it is a stored state_log payload passing through,
 // not a shape this API declares: LogChange writes {"field","old","new"} for a
-// field update but {"field","names"} for materialized secrets, so there is no
-// one struct to decode it into (ADR 036 §3).
+// field update, {"field","names"} for materialized secrets, and
+// {"field":"edge","op","type","from","to"} for AddEdge/RemoveEdge, so there
+// is no one struct to decode it into (ADR 036 §3).
 type TimelineEntry struct {
 	At   time.Time `json:"at"`
 	Type string    `json:"type"`

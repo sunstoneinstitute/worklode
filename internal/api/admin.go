@@ -546,7 +546,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 
 	var created *model.Task
 	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.promoted", payload,
-		func(tx *sql.Tx, _ int64) error {
+		func(tx *sql.Tx, eventID int64) error {
 			title := req.Title
 			if strings.TrimSpace(title) == "" {
 				t, err := store.IssueTitle(tx, req.Repo, req.Number)
@@ -563,7 +563,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				Kind:      req.Kind,
 				CreatedBy: actor.ID,
 				Draft:     req.Draft,
-			}, req.AppliesToVersions)
+			}, req.AppliesToVersions, eventID)
 			if err != nil {
 				return err
 			}
@@ -571,7 +571,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 			if req.Parent != "" {
 				// Same transaction as the promotion: there is no window
 				// where the child exists unparented.
-				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of"); err != nil {
+				if err := store.AddEdge(tx, s.st.Now(), t.ID, req.Parent, "child_of", eventID); err != nil {
 					return err
 				}
 			}

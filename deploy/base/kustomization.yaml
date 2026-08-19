@@ -63,3 +63,5 @@ configMapGenerator:
       - migrations/0024_task_secrets.down.sql
       - migrations/0025_rename_spec_kind_to_design.up.sql
       - migrations/0025_rename_spec_kind_to_design.down.sql
+      - migrations/0026_graph_projection.up.sql
+      - migrations/0026_graph_projection.down.sql

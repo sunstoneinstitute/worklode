@@ -56,16 +56,17 @@ func (e *env) seedTaskInProject(t *testing.T, projectID, key string) string {
 		t.Fatalf("create project %s: %v", projectID, err)
 	}
 	var id string
-	err := e.st.Tx(context.Background(), func(tx *sql.Tx) error {
-		task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
-			ProjectID: projectID, Title: "validate input", Priority: "medium", Kind: "bug",
+	_, _, err := e.st.RecordEvent(context.Background(), "cli", "seed:"+t.Name()+":"+projectID, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
+				ProjectID: projectID, Title: "validate input", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			id = task.ID
+			return nil
 		})
-		if err != nil {
-			return err
-		}
-		id = task.ID
-		return nil
-	})
 	if err != nil {
 		t.Fatalf("seed task in %s: %v", projectID, err)
 	}
