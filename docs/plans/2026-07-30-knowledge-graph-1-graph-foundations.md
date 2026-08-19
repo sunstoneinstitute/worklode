@@ -10,6 +10,9 @@ covers:
     coverage: partial
   - spec: docs/specs/006-knowledge-graph.md#sec-11
     coverage: partial
+replaces:
+  ".":
+    - 2026-07-30-platform-graph-design.md
 ---
 # Knowledge graph 1/2 (spec 006): IRI grammar, vocabulary gaps & the projection mapping — Implementation Plan
 
