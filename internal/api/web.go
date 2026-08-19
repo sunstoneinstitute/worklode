@@ -357,20 +357,34 @@ func summarizeEntry(e model.TimelineEntry) ui.TimelineRow {
 
 // stateChange is the state_log "change" payload store.LogChange writes: a
 // stored row, not an HTTP body, which is why it is declared here rather than
-// in internal/model (ADR 036 §3).
+// in internal/model (ADR 036 §3). Field "edge" (store.AddEdge / RemoveEdge)
+// uses Op/Type/From/To instead of Old/New — see summarizeStateChange.
 type stateChange struct {
 	Field string `json:"field"`
 	Old   string `json:"old"`
 	New   string `json:"new"`
+	Op    string `json:"op"`
+	Type  string `json:"type"`
+	From  string `json:"from"`
+	To    string `json:"to"`
 }
 
-// summarizeStateChange decodes a state-log "change" payload (written by
-// store.LogChange: {"field": ..., "old": ..., "new": ...}, "old" omitted for
-// a plain field update) into a one-line summary.
+// summarizeStateChange decodes a state-log "change" payload into a one-line
+// summary. Two shapes: a plain field update (store.LogChange callers like
+// Transition/UpdateTaskFields: {"field", "old", "new"}, "old" omitted for a
+// create), and an edge change (store.AddEdge/RemoveEdge:
+// {"field":"edge","op","type","from","to"}).
 func summarizeStateChange(raw json.RawMessage) string {
 	var change stateChange
 	if err := json.Unmarshal(raw, &change); err != nil {
 		return ""
+	}
+	if change.Field == "edge" {
+		verb := "added"
+		if change.Op == "remove" {
+			verb = "removed"
+		}
+		return fmt.Sprintf("edge %s: %s %s %s", verb, change.From, change.Type, change.To)
 	}
 	if change.Old == "" {
 		return fmt.Sprintf("%s set to %s", change.Field, change.New)

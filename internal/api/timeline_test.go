@@ -383,7 +383,7 @@ func entryAt(t *testing.T, i int, e map[string]any) time.Time {
 	return ts
 }
 
-func TestTaskTimelineEmpty(t *testing.T) {
+func TestTaskTimelineNewTask(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
