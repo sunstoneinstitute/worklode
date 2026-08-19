@@ -232,6 +232,36 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	return getDocTx(tx, id)
 }
 
+// ReplaceDocEdges re-resolves a document's outbound edges from its stored
+// body and appends a state_log row attributed to eventID. It is the corpus
+// import's second pass: the frontmatter references that resolved to nothing
+// when the document was created become real edges once the rest of the corpus
+// is present.
+//
+// Nothing authored changes — not the body, not the sections, not the status,
+// and the version does not move: the same source is being read again against a
+// larger corpus. That is why, unlike UpdateDocBody, it works at any status
+// including accepted and superseded; there is no published anchor to protect
+// because no anchor is being restated.
+//
+// The clock is unused (nothing here is timestamped) and taken only so the
+// signature matches the other document writers.
+func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return err
+	}
+	parsed, err := parseDocBody(d.kind, d.body)
+	if err != nil {
+		return err
+	}
+	if err := rebuildEdges(tx, id, d.project, parsed.doc.Frontmatter); err != nil {
+		return err
+	}
+	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "edges"})
+}
+
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
 // assignee. For a spec or ADR it freezes the document's published anchor set
 // and flips the target of every document-level replaces edge to superseded,
@@ -1372,7 +1402,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise.
+// create|update|accept|revise|edges.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

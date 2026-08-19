@@ -27,6 +27,11 @@ func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
 
+// packageDir is internal/cmd itself, captured before runTests moves the
+// process out of it. Tests that read a fixture under testdata/ join onto this
+// rather than a relative path, which the chdir below would break.
+var packageDir string
+
 func runTests(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "lode-cmd-test")
 	if err != nil {
@@ -57,6 +62,10 @@ func runTests(m *testing.M) int {
 	}
 	if err := os.Setenv("HOME", home); err != nil {
 		fmt.Fprintf(os.Stderr, "set HOME: %v\n", err)
+		return 1
+	}
+	if packageDir, err = os.Getwd(); err != nil {
+		fmt.Fprintf(os.Stderr, "read the package directory: %v\n", err)
 		return 1
 	}
 	if err := os.Chdir(wd); err != nil {

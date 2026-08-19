@@ -90,6 +90,17 @@ func updateDocBody(t *testing.T, s *Store, id int64, body string) (*model.Doc, e
 	return out, err
 }
 
+// replaceDocEdges runs ReplaceDocEdges through RecordDocEvent.
+func replaceDocEdges(t *testing.T, s *Store, id int64) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "edges", "cli",
+		fmt.Sprintf("doc-edges-%d", docEventSeq.Add(1)), "doc.edges_rebuilt", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ReplaceDocEdges(tx, s.Now(), id, eventID)
+		})
+	return err
+}
+
 // docSections reads a document's section rows in position order.
 func docSections(t *testing.T, s *Store, docID int64) []model.DocSection {
 	t.Helper()
@@ -772,6 +783,68 @@ func TestDocGetAndList(t *testing.T) {
 	}
 }
 
+// TestReplaceDocEdges is the corpus import's second pass: a frontmatter
+// reference that resolved to nothing when the document was created becomes a
+// real edge once its target exists. Nothing authored moves — and unlike
+// UpdateDocBody it runs at accepted, because no anchor is being restated.
+func TestReplaceDocEdges(t *testing.T) {
+	s := openDocStore(t)
+
+	// Accepted at creation, the state the importer puts a spent plan in.
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "025-part-2", Body: planBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	for _, e := range docEdges(t, s, plan.ID) {
+		if e.ToDoc != 0 {
+			t.Fatalf("edge %+v resolved before its target existed", e)
+		}
+	}
+
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-documents-in-the-backbone",
+		Body: specBody, CreatedBy: "stig",
+	})
+	if err := replaceDocEdges(t, s, plan.ID); err != nil {
+		t.Fatalf("ReplaceDocEdges: %v", err)
+	}
+	want := []model.DocEdge{
+		// 999-nowhere.md names no document here and stays verbatim.
+		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
+		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
+		{Type: "wasDerivedFrom", ToDoc: spec.ID},
+	}
+	if got := docEdges(t, s, plan.ID); !slices.Equal(got, want) {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+	after, err := s.GetDoc(t.Context(), plan.ID)
+	if err != nil {
+		t.Fatalf("GetDoc: %v", err)
+	}
+	if after.Version != 1 || after.Status != "accepted" || after.Body != planBody {
+		t.Errorf("doc = {version:%d status:%s}, want the source untouched at version 1",
+			after.Version, after.Status)
+	}
+
+	// An accepted spec keeps every published anchor and its version: the pass
+	// reads the same body, it does not restate it.
+	acceptedSpec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-x",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	sectionsBefore := docSections(t, s, acceptedSpec.ID)
+	if err := replaceDocEdges(t, s, acceptedSpec.ID); err != nil {
+		t.Fatalf("ReplaceDocEdges on an accepted spec: %v", err)
+	}
+	if got := docSections(t, s, acceptedSpec.ID); !slices.Equal(got, sectionsBefore) {
+		t.Errorf("sections = %+v, want %+v", got, sectionsBefore)
+	}
+
+	if err := replaceDocEdges(t, s, 4711); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
+	}
+}
+
 // TestDocOperationsMetric: RecordDocEvent records the op and its outcome, and
 // carries no unbounded label.
 func TestDocOperationsMetric(t *testing.T) {
@@ -779,13 +852,22 @@ func TestDocOperationsMetric(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
 
-	if _, err := createDoc(t, s, DocInput{
+	created, err := createDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CreateDoc: %v", err)
 	}
 	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("create", "ok")); got != 1 {
 		t.Fatalf("doc_operations{create,ok} = %v, want 1", got)
+	}
+
+	// The importer's re-resolution pass records under its own fixed verb.
+	if err := replaceDocEdges(t, s, created.ID); err != nil {
+		t.Fatalf("ReplaceDocEdges: %v", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("edges", "ok")); got != 1 {
+		t.Fatalf("doc_operations{edges,ok} = %v, want 1", got)
 	}
 
 	// A rejected input records the error outcome under the same op.
@@ -798,9 +880,9 @@ func TestDocOperationsMetric(t *testing.T) {
 		t.Fatalf("doc_operations{create,error} = %v, want 1", got)
 	}
 
-	mfs, err := reg.Gather()
-	if err != nil {
-		t.Fatalf("gather: %v", err)
+	mfs, gatherErr := reg.Gather()
+	if gatherErr != nil {
+		t.Fatalf("gather: %v", gatherErr)
 	}
 	for _, mf := range mfs {
 		if mf.GetName() != "worklode_doc_operations_total" {

@@ -60,7 +60,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document mutations by op (create|update|accept|revise) and outcome.",
+			Help: "Design-document mutations by op (create|update|accept|revise|edges) and outcome.",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
@@ -110,8 +110,8 @@ func (m *storeMetrics) projectWorkRead(err error) {
 }
 
 // docOp records one document mutation by op and outcome. op is the caller's
-// fixed verb (create|update|accept|revise), never a doc id or project — those
-// are unbounded.
+// fixed verb (create|update|accept|revise|edges), never a doc id or project —
+// those are unbounded.
 func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return
