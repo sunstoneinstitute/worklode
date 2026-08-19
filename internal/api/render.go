@@ -7,6 +7,7 @@
 package api
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -143,6 +144,66 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 	}
 	return v
 }
+
+// docsView maps the document corpus into the /docs index.
+func docsView(docs []model.Doc) ui.DocsView {
+	v := ui.DocsView{
+		Page: ui.PageProps{Title: "worklode: documents"},
+		Docs: make([]ui.DocRow, 0, len(docs)),
+	}
+	// Bodies are dropped for the same reason the JSON list drops them: the
+	// index renders none of the markdown, and carrying every document's
+	// source into the page would make it the heaviest response the cockpit
+	// serves.
+	for _, d := range withoutDocBodies(docs) {
+		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: docPageURL(d.ID), Ref: docRef(d)})
+	}
+	return v
+}
+
+// docView maps one document's detail projection into its page.
+func docView(d *model.DocDetail) ui.DocView {
+	return ui.DocView{
+		Page:     ui.PageProps{Title: "worklode: " + d.Slug},
+		Doc:      d.Doc,
+		Ref:      docRef(d.Doc),
+		Sections: d.Sections,
+		Edges:    docEdgeRows(d.Edges),
+		EdgesIn:  docEdgeRows(d.EdgesIn),
+		Revision: d.Revision,
+	}
+}
+
+// docEdgeRows resolves each edge's far end for rendering: a link to the
+// document it names, or the verbatim reference when it names something outside
+// this backbone.
+func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
+	out := make([]ui.DocEdgeRow, 0, len(edges))
+	for _, e := range edges {
+		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
+		if e.ToDoc != 0 {
+			row.URL = docPageURL(e.ToDoc)
+			row.Label = "document " + strconv.FormatInt(e.ToDoc, 10)
+			if e.ToAnchor != "" {
+				row.Label += "#" + e.ToAnchor
+			}
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// docRef is a document's corpus reference for display: "spec 25", or the kind
+// alone for a plan, which carries no number (025 §14.3).
+func docRef(d model.Doc) string {
+	if d.Number == 0 {
+		return d.Kind
+	}
+	return d.Kind + " " + strconv.Itoa(d.Number)
+}
+
+// docPageURL is a document's cockpit page path.
+func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // newTaskView builds the new-task form, with the submitted values selected in
 // the menus and errMsg shown ("" on first render).

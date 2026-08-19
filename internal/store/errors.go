@@ -26,6 +26,15 @@ var (
 	ErrEdgeExists = errors.New("edge already exists")
 	// ErrInvalidInput means a field value failed validation.
 	ErrInvalidInput = errors.New("invalid input")
+	// ErrDocExists means the project already holds a document with that slug
+	// or that (kind, number).
+	ErrDocExists = errors.New("document already exists")
+	// ErrForbidden means the actor may not perform this operation on this
+	// entity — a document accept is the assignee's act (025 §7).
+	ErrForbidden = errors.New("forbidden")
+	// ErrRevisionExists means the document already has an open candidate
+	// revision; 025 §7.2 allows one at a time.
+	ErrRevisionExists = errors.New("revision already open")
 )
 
 // isUniqueViolation reports whether err is a Postgres unique-index violation

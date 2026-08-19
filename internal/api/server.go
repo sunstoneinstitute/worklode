@@ -408,6 +408,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.web("GET /knowledge", s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
 		"Documents and graph-backed expert views arrive with specs 025, 026, and 006.")))
 	r.web("GET /tasks/{id}", s.taskPage)
+	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
+	// a document is an authoring act performed through the API and the CLI,
+	// where the body — the artifact itself — comes from a file.
+	r.web("GET /docs", s.navWrap("docs", s.docsPage))
+	r.web("GET /docs/{id}", s.navWrap("docs", s.docPage))
 	r.public("GET /assets/", s.assetHandler())
 	r.publicFunc("GET /auth/login", s.authLogin)
 	r.publicFunc("GET /auth/callback", s.authCallback)
@@ -463,6 +468,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
 	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
+
+	r.api("POST /api/v1/docs", s.createDoc)
+	r.api("GET /api/v1/docs", s.listDocs)
+	r.api("GET /api/v1/docs/{id}", s.getDoc)
+	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
+	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
+	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
+	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
+	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
 
 	r.api("GET /api/v1/skills", s.listSkills)
 	r.api("GET /api/v1/skills/{name}", s.getSkill)
@@ -733,13 +747,20 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 }
 
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
-// ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
-// ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists → 409, anything else → 500
-// with a generic body (the detail is logged, not leaked).
+// ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
+// ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
+// ErrRevisionExists → 409, anything else → 500 with a generic body (the detail
+// is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
+	// A refusal about this row, not about the endpoint: the document accept
+	// gate (025 §7) admits only the assignee, whatever role the caller holds.
+	// The message is the store's, because "someone else is assigned" is what
+	// the caller has to act on.
+	case errors.Is(err, store.ErrForbidden):
+		writeErr(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, store.ErrBadTransition),
 		errors.Is(err, store.ErrCycle),
 		errors.Is(err, store.ErrInvalidInput):
@@ -748,7 +769,9 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrBlocked),
 		errors.Is(err, store.ErrRepoTaken),
 		errors.Is(err, store.ErrKeyTaken),
-		errors.Is(err, store.ErrEdgeExists):
+		errors.Is(err, store.ErrEdgeExists),
+		errors.Is(err, store.ErrDocExists),
+		errors.Is(err, store.ErrRevisionExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)
