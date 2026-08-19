@@ -121,7 +121,7 @@ outright once it is fixed over annotating it as resolved.
   cache by 37.5%. Every current Claude Code version emits the breakdown, so
   this only bites on old transcripts.
 - `[P3]` **Follow-up edges shipped without four adjacent pieces (spec 004 §1.3
-  follow-up, 2026-08-14).** The `lode` plugin (`plugins/lode/`, the
+  follow-up, 2026-08-14).** The `lode` plugin (`plugins/claude/lode/`, the
   `lode-worker` agent and `/lode:*` commands) does not yet know to reach for
   `--follow-up-to`, so an agent that spots a loose end mid-task still has to
   file it by hand instead of the edge doing its job. `docs/follow-ups.md`
@@ -201,7 +201,7 @@ outright once it is fixed over annotating it as resolved.
   `docs/adr/NNNN-*.md`; all four (with sunstone-cms) carry
   `docs/superpowers/specs/`. Registering them is what turns 026 §4.2's tier 2 from
   dormant into useful, and it needs 025's `docs` rows first.
-- `[P3]` **The `lode` plugin still exists in claude-public-plugins** (`plugins/lode/`,
+- `[P3]` **The `lode` plugin still exists in claude-public-plugins** (`plugins/claude/lode/`,
   published as `lode@sunstone-public`). It was in-sourced here so it versions
   with the binary; removing the public copy is deliberately a separate step,
   once `lode@worklode` is confirmed installing on both Claude Code and Codex.
@@ -289,7 +289,7 @@ Design items landed in spec 025. These are the mechanical leftovers.
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
 - `[P3]` **The copy of the `lode` plugin in `claude-public-plugins` still documents
-  `wt/<id>-<slug>` (spec 008 follow-up).** The in-repo `plugins/lode/` copy was
+  `wt/<id>-<slug>` (spec 008 follow-up).** The in-repo `plugins/claude/lode/` copy was
   updated when spec 008's naming cutover landed, but the duplicate published from the other
   marketplace was not — it needs the same edit, or to be dropped as part of the
   de-duplication already tracked above.
