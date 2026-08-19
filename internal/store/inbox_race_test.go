@@ -80,11 +80,20 @@ func TestTriageLostUpdate(t *testing.T) {
 			}
 			existing := createTask(t, s, inboxTestNow, defaultTaskInput())
 
+			ctx := t.Context()
+			// The winner and loser races run on raw sql.Tx, outside RecordEvent,
+			// so PromoteIssue's eventID must be reserved separately here to
+			// satisfy state_log's FK on events.
+			promoteEventID, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "race.promote", nil, nil)
+			if err != nil {
+				t.Fatalf("reserve promote event id: %v", err)
+			}
+
 			call := func(name string) func(*sql.Tx) error {
 				switch name {
 				case "promote":
 					return func(tx *sql.Tx) error {
-						_, err := PromoteIssue(tx, inboxTestNow, is.Repo, is.Number, defaultTaskInput(), nil)
+						_, err := PromoteIssue(tx, inboxTestNow, is.Repo, is.Number, defaultTaskInput(), nil, promoteEventID)
 						return err
 					}
 				case "dismiss":
@@ -94,7 +103,6 @@ func TestTriageLostUpdate(t *testing.T) {
 				}
 			}
 
-			ctx := t.Context()
 			winTx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
 				t.Fatalf("begin winner tx: %v", err)

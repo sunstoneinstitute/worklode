@@ -438,8 +438,8 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 	followUp := createTask(t, s, claimNextTestNow, defaultTaskInput())
 
 	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
-		func(tx *sql.Tx, _ int64) error {
-			return AddEdge(tx, claimNextTestNow, followUp.ID, origin.ID, "follow_up_to")
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, claimNextTestNow, followUp.ID, origin.ID, "follow_up_to", eventID)
 		}); err != nil {
 		t.Fatalf("AddEdge follow_up_to: %v", err)
 	}

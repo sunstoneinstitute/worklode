@@ -68,16 +68,17 @@ func newEnvWithBranchResolver(t *testing.T, resolveBranch func(repo, branch stri
 func (e *env) seedTask(t *testing.T) string {
 	t.Helper()
 	var id string
-	err := e.st.Tx(context.Background(), func(tx *sql.Tx) error {
-		task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
-			ProjectID: "demo", Title: "fix crash", Priority: "medium", Kind: "bug",
+	_, _, err := e.st.RecordEvent(context.Background(), "cli", "seed:"+t.Name(), "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
+				ProjectID: "demo", Title: "fix crash", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			id = task.ID
+			return nil
 		})
-		if err != nil {
-			return err
-		}
-		id = task.ID
-		return nil
-	})
 	if err != nil {
 		t.Fatalf("seed task: %v", err)
 	}

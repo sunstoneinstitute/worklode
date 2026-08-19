@@ -158,7 +158,9 @@ func TestTaskTimeline(t *testing.T) {
 		}
 		prev = ts
 	}
-	want := []string{"state", "pr", "ci", "review", "artifact", "deployment", "runtime"}
+	// Two "state" entries: CreateTask's own state_log row (see store.CreateTask),
+	// then the claim's ready -> in_progress transition.
+	want := []string{"state", "state", "pr", "ci", "review", "artifact", "deployment", "runtime"}
 	if len(types) != len(want) {
 		t.Fatalf("timeline types = %v, want %v", types, want)
 	}
@@ -168,6 +170,9 @@ func TestTaskTimeline(t *testing.T) {
 		}
 	}
 
+	// byType keeps the last entry seen per type, so "state" ends up holding
+	// the claim's transition (later in the ascending timeline), not the
+	// create row.
 	byType := map[string]map[string]any{}
 	for _, raw := range timeline {
 		e := raw.(map[string]any)
@@ -320,11 +325,11 @@ func TestTimelineDeliveryEntries(t *testing.T) {
 		prev = ts
 		entries = append(entries, e)
 	}
-	// Exactly the four covered facts: no prod deploy (frontier behind), no
-	// repoB deploy (Flux behind), no second landed entry for repoA's two
-	// commits, no extra release.
-	if len(entries) != 4 {
-		t.Fatalf("timeline = %v, want 4 delivery entries", entries)
+	// CreateTask's own state_log row, plus exactly the four covered delivery
+	// facts: no prod deploy (frontier behind), no repoB deploy (Flux behind),
+	// no second landed entry for repoA's two commits, no extra release.
+	if len(entries) != 5 {
+		t.Fatalf("timeline = %v, want 1 state entry + 4 delivery entries", entries)
 	}
 
 	byType := map[string][]map[string]any{}
@@ -390,9 +395,16 @@ func TestTaskTimelineEmpty(t *testing.T) {
 		t.Fatalf("timeline status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	got := decodeMap(t, rr)
-	// Empty timeline must be a JSON array, not null.
-	if tl, ok := got["timeline"].([]any); !ok || len(tl) != 0 {
-		t.Fatalf("timeline = %v, want []", got["timeline"])
+	// A brand-new task's only entry is CreateTask's own state_log row (see
+	// store.CreateTask); this also pins the "must be a JSON array, not null"
+	// contract for a task with no other history.
+	tl, ok := got["timeline"].([]any)
+	if !ok || len(tl) != 1 {
+		t.Fatalf("timeline = %v, want exactly one state entry", got["timeline"])
+	}
+	entry := tl[0].(map[string]any)
+	if entry["type"] != "state" {
+		t.Fatalf("timeline entry = %v, want type state", entry)
 	}
 
 	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-99/timeline", token, nil)
