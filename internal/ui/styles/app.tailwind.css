@@ -147,7 +147,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .main{padding:22px 26px 60px;min-width:0}
 .mode{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
 .mode.active{display:grid}
-@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
+/* Rail's sticky offset assumes it sits beside scrolling content; once the
+ * grid collapses to one column it sits above the content instead, so a stuck
+ * sticky rail paints over the work list below it. */
+@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1;position:static;top:auto}}
 
 /* Below 880px the shell collapses to one column (spec 032 §10: reduced
  * columns, not a squeezed grid): the sidebar — global or project — becomes
