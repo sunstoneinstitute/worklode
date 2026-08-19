@@ -392,11 +392,13 @@ one pass.
 - `[gated]` **The Oxigraph integration tests never run on the common CI path.**
   `_test.yml` starts its ephemeral Oxigraph under `if: contains(inputs.runs-on,
   'ubuntu-latest')`, but `pr-checks.yml` routes *trusted* PRs to the
-  `gha-pgvector`/`gha-buildcache` self-hosted runners, which have no usable
-  Docker socket — so a team PR, the majority path, skips the branch's only
+  `gha-pgvector`/`gha-buildcache` self-hosted runners, which are not targeted
+  at the `docker` label, so a Docker daemon is not guaranteed to the `test` job
+  the way it is to `build-image` (`docs/self-hosted-runner.md`) — so a team PR,
+  the majority path, skips the branch's only
   triple-store proof (`internal/graphproj/oxigraph_test.go`: the `ns/` parse
   gate, the project-graph replace round-trip and the `dependsOn+` path) and
-  only a fork PR exercises it. This follows the plan and the Docker-less-runner
+  only a fork PR exercises it. This follows the plan and the runner-label
   constraint, so it is not a defect. The fix is symmetrical with Postgres: an
   always-on Oxigraph container beside hel01's Postgres
   (`docs/self-hosted-runner.md`), with `TEST_SPARQL_URL` set on the
