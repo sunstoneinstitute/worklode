@@ -297,7 +297,7 @@ docs/plans/2026-07-30-drift-and-overview-1-repo-derivers.md:
     design-calls-this-series-makes: "## Design calls this series makes"
     file-structure: "## File Structure"
     task-1-layer-graph-names-and-the-repo-iri: "## Task 1: Layer graph names and the repo IRI"
-    task-2-atomic-graph-replace-on-the-sparql-client: "## Task 2: Atomic graph replace on the SPARQL client"
+    task-2-atomic-graph-replace-already-landed-verify-only: "## Task 2: Atomic graph replace — already landed, verify only"
     task-3-the-deriver-runner-hash-short-circuit-confinement: "## Task 3: The deriver runner (hash short-circuit + confinement)"
     task-4-deriver-1-go-imports: "## Task 4: Deriver 1 — go-imports"
     task-5-deriver-2-repo-layout: "## Task 5: Deriver 2 — repo layout"
