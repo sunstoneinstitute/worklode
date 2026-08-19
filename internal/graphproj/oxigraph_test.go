@@ -79,19 +79,19 @@ func TestProjectGraphReplaceRoundTrip(t *testing.T) {
 
 	blocks := model.Edge{From: "WL-101", To: "WL-102", Type: "blocks"}
 	render := func(secondState string) []byte {
-		first := testTask("WL-101", alpha, "open")
+		first := testTask("WL-101", alpha, "ready")
 		second := testTask("WL-102", alpha, secondState)
 		triples := TaskTriples(first, []model.Edge{blocks}, nil)
 		triples = append(triples, TaskTriples(second, nil, []model.Edge{blocks})...)
 		return Document(append(triples, ProjectTriples(model.Project{ID: alpha, Name: "Alpha"})...))
 	}
 
-	graphtest.PutGraph(t, base, alphaGraph, render("open"))
-	third := testTask("WL-201", beta, "open")
+	graphtest.PutGraph(t, base, alphaGraph, render("ready"))
+	third := testTask("WL-201", beta, "ready")
 	graphtest.PutGraph(t, base, betaGraph, Document(TaskTriples(third, nil, nil)))
 
-	// Re-project alpha with WL-102 done; the PUT replaces the whole graph.
-	graphtest.PutGraph(t, base, alphaGraph, render("done"))
+	// Re-project alpha with WL-102 merged; the PUT replaces the whole graph.
+	graphtest.PutGraph(t, base, alphaGraph, render("merged"))
 
 	states := func(graph string) map[string][]string {
 		rows := graphtest.Select(t, base, fmt.Sprintf(
@@ -106,8 +106,8 @@ func TestProjectGraphReplaceRoundTrip(t *testing.T) {
 
 	got := states(alphaGraph)
 	want := map[string][]string{
-		iri.Task("WL-101"): {"open"}, // sibling untouched by the replace
-		iri.Task("WL-102"): {"done"}, // new state, and only the new state
+		iri.Task("WL-101"): {"ready"},  // sibling untouched by the replace
+		iri.Task("WL-102"): {"merged"}, // new state, and only the new state
 	}
 	for task, states := range want {
 		if fmt.Sprint(got[task]) != fmt.Sprint(states) {
@@ -118,7 +118,7 @@ func TestProjectGraphReplaceRoundTrip(t *testing.T) {
 		t.Errorf("alpha graph has %d tasks with a state, want %d: %v", len(got), len(want), got)
 	}
 
-	if betaStates := states(betaGraph); fmt.Sprint(betaStates[iri.Task("WL-201")]) != "[open]" {
+	if betaStates := states(betaGraph); fmt.Sprint(betaStates[iri.Task("WL-201")]) != "[ready]" {
 		t.Errorf("beta graph disturbed by the alpha replace: %v", betaStates)
 	}
 }
@@ -135,9 +135,9 @@ func TestDependsOnPath(t *testing.T) {
 	second := model.Edge{From: "WL-2", To: "WL-3", Type: "blocks"}
 
 	var triples []Triple
-	triples = append(triples, TaskTriples(testTask("WL-1", project, "open"), []model.Edge{first}, nil)...)
-	triples = append(triples, TaskTriples(testTask("WL-2", project, "open"), []model.Edge{second}, []model.Edge{first})...)
-	triples = append(triples, TaskTriples(testTask("WL-3", project, "open"), nil, []model.Edge{second})...)
+	triples = append(triples, TaskTriples(testTask("WL-1", project, "ready"), []model.Edge{first}, nil)...)
+	triples = append(triples, TaskTriples(testTask("WL-2", project, "ready"), []model.Edge{second}, []model.Edge{first})...)
+	triples = append(triples, TaskTriples(testTask("WL-3", project, "ready"), nil, []model.Edge{second})...)
 	graphtest.PutGraph(t, base, graph, Document(triples))
 
 	rows := graphtest.Select(t, base, fmt.Sprintf(

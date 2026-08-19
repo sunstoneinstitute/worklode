@@ -37,6 +37,11 @@ const (
 // parent; that triple belongs on the child's own projection (dct:isPartOf
 // with this task as object), not here — subject-completeness requires
 // emitting nothing for it.
+//
+// Both wl:blocks and wl:dependsOn are emitted even though ns/ontology.ttl
+// declares them owl:inverseOf: the graph store runs no reasoner, so each
+// direction must be materialised at projection time for a query to traverse
+// it.
 func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 	subj := iri.Task(t.ID)
 	triples := []Triple{

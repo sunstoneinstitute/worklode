@@ -739,8 +739,8 @@ fixed graph-server branch (project is a *property*, not a branch — §13.2 item
 Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
 
-A Project's projection named graph is `…/graph/project/<project-id>` — the family §11 anchors
-and `e2e/graphserver_test.go` already exercises.
+A Project's projection named graph is `…/graph/project/<project-id>` — the family that §11 anchors
+and that `e2e/graphserver_test.go` already exercises.
 
 ---
 
@@ -796,11 +796,12 @@ these Project graphs.)
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
-| Task node + `concern`/`priority`/state/`wl:taskKind` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
+| Task node + `wl:concern`/`wl:priority`/`wl:taskState`/`wl:taskKind` + `dct:title`/`created`/`modified` + `prov:wasAssociatedWith` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
 | `wl:affects` (Task→Component) | 2 | backbone | v1 | yes | task edit / ingest |
 | `wl:produces` (Task→Deliverable) | 2 | backbone | v1 | yes | task edit |
 | `dct:isPartOf` (child_of mirror) | 2 | backbone | v1 | yes | task lifecycle |
 | `wl:dependsOn` / `wl:blocks` (Task↔Task, transitive) | 2 | backbone | v1 | yes | task edit / block |
+| `wl:followUpTo` (Task→Task) | 2 | backbone | v1 | yes | task create with `--follow-up-to` |
 | `wl:inProject` (Task→Project) + Project node | 2 | backbone | v1 | yes | project edit |
 | `wl:mirrors` (Task↔Issue) | 2 | backbone+ingest | v1 | yes | task create / issue ingest |
 | Issue / PullRequest + `affects` | 2 | ingest | v1 | yes | VCS ingest (PR/issue open/merge) |
