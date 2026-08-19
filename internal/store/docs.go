@@ -842,6 +842,11 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 		if err != nil {
 			return err
 		}
+		if e.typ == "blocks" {
+			if err := checkPlanOrdering(tx, docID, e.ref, toDoc, resolved); err != nil {
+				return err
+			}
+		}
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
 			row.toDoc, row.toAnchor = toDoc, fragment
@@ -866,13 +871,40 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 	return nil
 }
 
+// checkPlanOrdering enforces that a blocks edge runs between two plan
+// documents (025 §5): it orders plan against plan, and planBlockedCondition
+// reads it as the blocking plan's whole task set. An unresolved reference is
+// refused too — nothing here can say it names a plan, and a to_external
+// ordering edge would gate nothing while looking like it did.
+func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolved bool) error {
+	if !resolved {
+		return fmt.Errorf(
+			"blocks edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
+			docID, ref, ErrInvalidInput)
+	}
+	for _, end := range []struct {
+		id   int64
+		side string
+	}{{docID, "from"}, {toDoc, "to"}} {
+		var kind string
+		if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, end.id).Scan(&kind); err != nil {
+			return fmt.Errorf("read kind of doc %d: %w", end.id, err)
+		}
+		if kind != "plan" {
+			return fmt.Errorf("blocks orders plan documents, but the %s end (doc %d) is a %s (025 §5): %w",
+				end.side, end.id, kind, ErrInvalidInput)
+		}
+	}
+	return nil
+}
+
 // frontmatterEdges reads the acting-direction relations out of fm, in a
 // deterministic order. rebuildEdges dedupes what comes back, on the resolved
 // row rather than on the reference text.
 //
-// The inverse spellings (isRequiredBy, amendedBy, isReplacedBy) are skipped:
-// one row read backward is the inverse (025 §14), so writing them too would
-// double every edge and let the two directions disagree.
+// The inverse spellings (isRequiredBy, blockedBy, amendedBy, isReplacedBy) are
+// skipped: one row read backward is the inverse (025 §14), so writing them too
+// would double every edge and let the two directions disagree.
 //
 // An empty reference is dropped rather than written as an empty to_external —
 // a coverage entry qualified with a level but no `spec:`, say, names no
@@ -894,6 +926,11 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	}
 	for _, ref := range fm.Requires {
 		add("", "requires", ref)
+	}
+	// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge
+	// that would otherwise need a container row to attach to.
+	for _, ref := range fm.Blocks {
+		add("", "blocks", ref)
 	}
 	add("", "wasDerivedFrom", fm.WasDerivedFrom)
 	for _, m := range []struct {

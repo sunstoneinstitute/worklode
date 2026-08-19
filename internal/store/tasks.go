@@ -912,11 +912,35 @@ var blockedCondition = `e.type = 'blocks'
 	             WHERE b.id = e.from_task
 	               AND NOT ` + taskClosed("b") + `)`
 
+// planBlockedCondition holds a task while its plan is ordered after another
+// plan whose work is not done (025 §9.3): a document-level blocks edge between
+// the two plan documents, evaluated over the blocking plan's task set — any
+// open task, or a set not yet minted because the blocking document is still
+// draft (§7's literal sentence would read that empty set as unblocked; §10
+// calls an unminted set unfinished).
+//
+// "Open" is taskClosed's complement, so this and blockedCondition cannot drift
+// on what closed means. It binds `de`, `bt` and `bd` on top of the aliases
+// taskClosed binds; the enclosing query must alias the task row as `t`.
+var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
+	 SELECT 1 FROM doc_edges de
+	  WHERE de.type = 'blocks' AND de.to_doc = t.plan_doc
+	    AND (EXISTS (SELECT 1 FROM tasks bt
+	                 WHERE bt.plan_doc = de.from_doc
+	                   AND NOT ` + taskClosed("bt") + `)
+	         OR EXISTS (SELECT 1 FROM docs bd
+	                    WHERE bd.id = de.from_doc AND bd.status = 'draft')))`
+
 // BlockedTaskIDs returns the ids of tasks that have at least one open
-// 'blocks' edge pointing at them (the blocker is not in a closed state).
+// 'blocks' edge pointing at them (the blocker is not in a closed state), plus
+// the tasks a plan-to-plan ordering edge holds. It answers the same question
+// IsBlocked answers per task, so the two must name the same set: a task shown
+// as pickable that Claim then refuses is worse than no badge at all.
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition)
+		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition+`
+		 UNION
+		 SELECT t.id FROM tasks t WHERE `+planBlockedCondition)
 	if err != nil {
 		return nil, fmt.Errorf("blocked task ids: %w", err)
 	}
@@ -936,13 +960,19 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	return out, nil
 }
 
-// IsBlocked reports whether taskID has an open 'blocks' edge pointing at it.
-// It runs inside the given transaction so lease claims can check it
-// atomically.
+// IsBlocked reports whether taskID has an open 'blocks' edge pointing at it,
+// or sits in a plan another plan is ordered before (planBlockedCondition). It
+// runs inside the given transaction so lease claims can check it atomically.
+//
+// The plan arm reads the task row through a one-row subquery because the
+// condition is written against a `t`-aliased row — the same text
+// readyCandidates renders, so the claim path and the ready set cannot
+// disagree about what is pickable.
 func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 	var blocked bool
 	err := tx.QueryRow(
-		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)`,
+		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)
+		     OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND `+planBlockedCondition+`)`,
 		taskID,
 	).Scan(&blocked)
 	if err != nil {

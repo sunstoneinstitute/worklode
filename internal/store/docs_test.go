@@ -2141,3 +2141,89 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 		}
 	}
 }
+
+// TestDocCreateWritesPlanBlocksEdge: a plan's document-level `blocks` orders
+// it before another plan (025 §5, §9.3). The inverse spelling writes nothing —
+// one row read backward is `blockedBy`, so writing it too would double the
+// edge and let the two directions disagree.
+func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
+	s := openDocStore(t)
+
+	one := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-one", Body: planMintBody, CreatedBy: "stig",
+	})
+	three := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-three", Body: planMintBody, CreatedBy: "stig",
+	})
+	two := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-two", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblocks: plan-three\nblockedBy: plan-one\n---\n\n# Plan two\n",
+	})
+
+	got := docEdges(t, s, two.ID)
+	want := []model.DocEdge{{Type: "blocks", ToDoc: three.ID}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("edges of plan-two = %+v, want %+v", got, want)
+	}
+	// blockedBy is read off plan-one's own row, not written from plan-two's.
+	if edges := docEdges(t, s, one.ID); len(edges) != 0 {
+		t.Fatalf("edges of plan-one = %+v, want none", edges)
+	}
+}
+
+// TestDocEdgesRejectBlocksBetweenNonPlans: `blocks` orders whole plan
+// documents (025 §5). An end that is not a plan, or a reference this project
+// cannot resolve to one, is ErrInvalidInput rather than a dead edge.
+func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
+	s := openDocStore(t)
+
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-real-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	cases := []struct {
+		name string
+		want string // substring, so the right guard is what refused
+		in   DocInput
+	}{
+		{
+			name: "plan blocks a spec",
+			want: "the to end",
+			in: DocInput{
+				Project: "p1", Kind: "plan", Slug: "blocks-a-spec", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: 025-documents-in-the-backbone\n---\n\n# Plan\n",
+			},
+		},
+		{
+			name: "spec blocks a plan",
+			want: "the from end",
+			in: DocInput{
+				Project: "p1", Kind: "spec", Number: 26, Slug: "026-blocking-spec", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: a-real-plan\n---\n\n# Spec\n\n## 1. One {#sec-1}\n\nx\n",
+			},
+		},
+		{
+			name: "plan blocks an unresolvable reference",
+			want: "no plan in this project resolves to",
+			in: DocInput{
+				Project: "p1", Kind: "plan", Slug: "blocks-nowhere", CreatedBy: "stig",
+				Body: "---\nstatus: draft\nblocks: 999-nowhere.md\n---\n\n# Plan\n",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := createDoc(t, s, tc.in)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("createDoc = %v, want ErrInvalidInput", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("createDoc = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}

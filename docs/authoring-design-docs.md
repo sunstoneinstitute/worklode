@@ -75,6 +75,7 @@ three specs.
 | `issued` | `dct:issued` | `YYYY-MM-DD` of first publication | specs, design records |
 | `covers` | `wl:covers` | scalar or list of spec references, or the qualified form (026 §5.1) | **plans** |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | list of references | both |
+| `blocks` / `blockedBy` | — (see 025 §5) | list of references to other plans | **plans** |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | scalar reference | specs |
 | `amends` / `amendedBy` | — (see 025 §14) | **map**, see below | both |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | **map**, see below | both |
@@ -87,14 +88,22 @@ spec for the `WL-SPEC-<n>`/`WL-ADR-<n>` shorthand's `<TYPE>` check (026 §4.2,
 task `kind` (`feature`/`bug`/`chore`/`design`) documented above; the two share
 a name and nothing else.
 
+`blocks` orders one plan's execution before another's (025 §5, §9.3): it is the
+ordering edge that would otherwise need a container row above a plan's tasks.
+Both ends must be plans in the same project — the backbone refuses the edge
+otherwise — and while any task of the blocking plan is open, or its set is not
+minted yet, none of the blocked plan's tasks is pickable. Declare it on the
+blocking plan; `blockedBy` is the same edge read from the other end, so
+spelling it writes nothing.
+
 `task` records the lode task that implements a spec while plans still live in
 git. It is not an ontology term and goes away when plan acceptance mints the
 tasks (spec 025 §9.2 — the binding becomes the minted tasks' doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
-Order keys as in the table: lifecycle, then `covers`, then dependency, then
-amendment, then supersession.
+Order keys as in the table: lifecycle, then `covers`, then dependency
+(`requires`, then `blocks`), then amendment, then supersession.
 
 ### References
 
