@@ -30,18 +30,31 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// TestMain sets a package-wide default LODE_SKILLS_DIR before any test runs,
-// so isolation from a developer's real ~/.worklode/skills is structural
-// rather than resting on "no other test's brief happens to carry skills".
-// Individual skills tests still set their own via t.Setenv (scoped and
-// auto-restored); this is the backstop for any that forget.
+// TestMain isolates the package from the developer's real machine before any
+// test runs: a temp LODE_SKILLS_DIR (so no brief can reach ~/.worklode/skills)
+// and a temp HOME plus a mock keyring (so no worktree-remove can reach a real
+// keychain). Isolation is structural here rather than resting on "no test
+// happens to carry skills" or "no test id happens to be live": worktree-remove
+// purges from ~/.cache/worklode/secrets/<id>.json and the OS keystore, and the
+// ids these tests use (WL-1..WL-4) are exactly the ones a developer's own
+// tasks have. Individual tests still set their own (scoped and auto-restored);
+// this is the backstop for any that forget.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "worklode-skills-test-*")
+	dir, err := os.MkdirTemp("", "worklode-hookrun-test-*")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "TestMain: create temp skills dir:", err)
+		fmt.Fprintln(os.Stderr, "TestMain: create temp dir:", err)
 		os.Exit(1)
 	}
-	os.Setenv("LODE_SKILLS_DIR", dir)
+	home, skills := filepath.Join(dir, "home"), filepath.Join(dir, "skills")
+	for _, d := range []string{home, skills} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			fmt.Fprintln(os.Stderr, "TestMain: create", d, err)
+			os.Exit(1)
+		}
+	}
+	os.Setenv("LODE_SKILLS_DIR", skills)
+	os.Setenv("HOME", home)
+	keyring.MockInit()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -914,6 +927,9 @@ func TestWorktreeExitKeepsSecrets(t *testing.T) {
 
 	root := initGitRepo(t)
 	wtDir := addWorktree(t, root, taskID, "hop")
+	if err := writeSessionMarker(wtDir, "sess-1", time.Now()); err != nil {
+		t.Fatalf("write session marker: %v", err)
+	}
 
 	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
 	payload := payloadJSON(t, Payload{Cwd: root, SessionID: "sess-1", ToolInput: toolInput})
@@ -928,6 +944,16 @@ func TestWorktreeExitKeepsSecrets(t *testing.T) {
 	})
 	if code != 0 {
 		t.Fatalf("hook exit = %d; hooks never fail the event", code)
+	}
+	// Positive control: without it, "the secrets survived" would also be true
+	// of a handler that returned at its first guard. The deliberately-failing
+	// NewClient proves endSession was reached, and the marker removal proves
+	// the handler ran to its end.
+	if !strings.Contains(stderr.String(), "load config") {
+		t.Fatalf("handler did not reach the backbone call; stderr: %q", stderr.String())
+	}
+	if _, ok := markerSessionID(wtDir); ok {
+		t.Fatal("session marker survived worktree-exit")
 	}
 	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err != nil {
 		t.Fatalf("leaving the worktree purged a still-leased task's secrets: %v", err)
