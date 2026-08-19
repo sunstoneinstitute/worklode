@@ -60,8 +60,8 @@ func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 // CreateTask, then marks the issue triage_state=promoted, linking task_id and
 // recording appliesToVersions (marshalled to JSON). The issue must currently
 // be triage_state='new' — anything else (already promoted, dismissed, or no
-// such issue) is an error.
-func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string) (*model.Task, error) {
+// such issue) is an error. eventID is passed through to CreateTask.
+func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string, eventID int64) (*model.Task, error) {
 	var triageState string
 	err := tx.QueryRow(
 		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
@@ -76,7 +76,7 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 		return nil, fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
 	}
 
-	task, err := CreateTask(tx, now, in)
+	task, err := CreateTask(tx, now, in, eventID)
 	if err != nil {
 		return nil, err
 	}

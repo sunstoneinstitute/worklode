@@ -64,6 +64,10 @@ func (f ProjectWorkFact) Blocked() bool { return len(f.OpenBlockers) > 0 }
 // newest row), so that part needs no fan-out. OpenBlockers is a second,
 // separate query (an edge fan-out the first query cannot express without
 // duplicating task rows), merged in afterward.
+//
+// The state-log lookup requires an "old" key so CreateTask's own state_log
+// row (edit style, no "old" — see CreateTask) never counts as a transition:
+// StateEvent stays nil until the task's first real move.
 func (s *Store) ListProjectWorkFacts(ctx context.Context, projectID string) (out []ProjectWorkFact, err error) {
 	defer func() { s.metrics.projectWorkRead(err) }()
 
@@ -85,6 +89,7 @@ SELECT `+prefixedTaskColumns("t")+`,
      WHERE sl.entity_kind = 'task'
        AND sl.entity_id = t.id
        AND sl.change->>'field' = 'state'
+       AND sl.change ? 'old'
      ORDER BY sl.at DESC, sl.id DESC
      LIMIT 1
   ) se ON true

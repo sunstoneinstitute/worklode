@@ -38,7 +38,7 @@ func promoteIssue(t *testing.T, s *Store, now time.Time, repo string, number int
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "issue.promote", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
-			task, err = PromoteIssue(tx, now, repo, number, in, versions)
+			task, err = PromoteIssue(tx, now, repo, number, in, versions, eventID)
 			return err
 		})
 	if err != nil {
@@ -289,14 +289,15 @@ func TestLinkIssueAttachesExistingTask(t *testing.T) {
 	}
 
 	var taskID string
-	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
-		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
-		if err != nil {
-			return err
-		}
-		taskID = task.ID
-		return nil
-	}); err != nil {
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := CreateTask(tx, inboxTestNow, defaultTaskInput(), eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		}); err != nil {
 		t.Fatalf("create task: %v", err)
 	}
 
@@ -328,14 +329,15 @@ func TestLinkIssueRejectsAlreadyTriaged(t *testing.T) {
 	}
 
 	var taskID string
-	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
-		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
-		if err != nil {
-			return err
-		}
-		taskID = task.ID
-		return nil
-	}); err != nil {
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := CreateTask(tx, inboxTestNow, defaultTaskInput(), eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		}); err != nil {
 		t.Fatalf("create task: %v", err)
 	}
 
@@ -355,14 +357,15 @@ func TestLinkIssueRejectsAlreadyPromoted(t *testing.T) {
 	}
 
 	var taskID string
-	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
-		task, err := CreateTask(tx, inboxTestNow, defaultTaskInput())
-		if err != nil {
-			return err
-		}
-		taskID = task.ID
-		return nil
-	}); err != nil {
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := CreateTask(tx, inboxTestNow, defaultTaskInput(), eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		}); err != nil {
 		t.Fatalf("create task: %v", err)
 	}
 

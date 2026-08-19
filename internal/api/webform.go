@@ -276,7 +276,7 @@ func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFor
 				Concern:   v.Concern,
 				CreatedBy: actorID,
 				Draft:     v.Draft,
-			})
+			}, eventID)
 			if err != nil {
 				return err
 			}

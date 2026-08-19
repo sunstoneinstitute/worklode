@@ -434,17 +434,22 @@ func TestImportDoesNotClobberPromotedRow(t *testing.T) {
 	}
 
 	// Promote it, then re-import with a changed upstream title.
+	extID, err := randomExternalID()
+	if err != nil {
+		t.Fatalf("random external id: %v", err)
+	}
 	var taskID string
-	err := st.Tx(ctx, func(tx *sql.Tx) error {
-		task, err := store.PromoteIssue(tx, st.Now(), "acme/widgets", 1, store.TaskInput{
-			ProjectID: "proj", Title: "kept", Priority: "low", Kind: "bug", CreatedBy: "someone",
-		}, nil)
-		if err != nil {
-			return err
-		}
-		taskID = task.ID
-		return nil
-	})
+	_, _, err = st.RecordEvent(ctx, "cli", extID, "issue.promoted", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.PromoteIssue(tx, st.Now(), "acme/widgets", 1, store.TaskInput{
+				ProjectID: "proj", Title: "kept", Priority: "low", Kind: "bug", CreatedBy: "someone",
+			}, nil, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		})
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
@@ -519,23 +524,28 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 		t.Fatalf("create actor: %v", err)
 	}
 	var taskID, containerID string
-	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
-		container, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
-			ProjectID: "proj", Title: "container", Priority: "low", Kind: "feature", CreatedBy: "someone",
-		})
-		if err != nil {
-			return err
-		}
-		containerID = container.ID
-		task, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
-			ProjectID: "proj", Title: "unrelated", Priority: "low", Kind: "bug", CreatedBy: "someone",
-		})
-		if err != nil {
-			return err
-		}
-		taskID = task.ID
-		return nil
-	}); err != nil {
+	extID, err := randomExternalID()
+	if err != nil {
+		t.Fatalf("random external id: %v", err)
+	}
+	if _, _, err := st0.RecordEvent(ctx, "cli", extID, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			container, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
+				ProjectID: "proj", Title: "container", Priority: "low", Kind: "feature", CreatedBy: "someone",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			containerID = container.ID
+			task, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
+				ProjectID: "proj", Title: "unrelated", Priority: "low", Kind: "bug", CreatedBy: "someone",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		}); err != nil {
 		t.Fatalf("create tasks: %v", err)
 	}
 	// Claim first, edge second: the claim's own ready -> in_progress is a real
@@ -544,9 +554,14 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 	if _, err := st0.Claim(ctx, taskID, "someone", "some/worktree", 0); err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
-		return store.AddEdge(tx, st0.Now(), taskID, containerID, "child_of")
-	}); err != nil {
+	edgeExtID, err := randomExternalID()
+	if err != nil {
+		t.Fatalf("random external id: %v", err)
+	}
+	if _, _, err := st0.RecordEvent(ctx, "cli", edgeExtID, "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.AddEdge(tx, st0.Now(), taskID, containerID, "child_of", eventID)
+		}); err != nil {
 		t.Fatalf("add child_of edge: %v", err)
 	}
 

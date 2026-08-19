@@ -464,7 +464,7 @@ func TestPerProjectTaskNumbering(t *testing.T) {
 				var e error
 				task, e = CreateTask(tx, s.Now(), TaskInput{
 					ProjectID: project, Title: "t", Priority: "medium", Kind: "feature",
-				})
+				}, eventID)
 				return e
 			})
 		if err != nil {

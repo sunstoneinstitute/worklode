@@ -331,11 +331,11 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 			Concern:   concern.String,
 			CreatedBy: createdBy,
 			Draft:     true,
-		})
+		}, eventID)
 		if err != nil {
 			return nil, err
 		}
-		if err := AddEdge(tx, now, child.ID, parentID, "child_of"); err != nil {
+		if err := AddEdge(tx, now, child.ID, parentID, "child_of", eventID); err != nil {
 			return nil, err
 		}
 		children = append(children, *child)
