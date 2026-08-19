@@ -140,7 +140,7 @@ func newTaskAddCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
-	var priority, parent, assignee string
+	var priority, parent, assignee, plan string
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -155,8 +155,15 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var planDoc int64
+			if plan != "" {
+				if planDoc, err = resolveDocID(cmd.Context(), c, plan); err != nil {
+					return err
+				}
+			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
 				Project: sc.Project, States: states, Priority: priority, Parent: parent, Assignee: assignee,
+				PlanDoc: planDoc,
 			})
 			if err != nil {
 				return err
@@ -176,6 +183,7 @@ func newTaskListCmd() *cobra.Command {
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
+	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, 025 §9.2)")
 	return cmd
 }
 

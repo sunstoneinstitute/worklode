@@ -113,3 +113,12 @@ type DocDetail struct {
 type DocListResponse struct {
 	Docs []Doc `json:"docs"`
 }
+
+// AcceptDocResponse is the response body of POST /api/v1/docs/{id}/accept.
+// It embeds Doc so every existing field stays at the top level — a spec or
+// ADR accept is byte-identical to before — and adds Tasks, the tasks a
+// plan's acceptance minted (025 §9.2); omitted and nil for a spec or ADR.
+type AcceptDocResponse struct {
+	Doc
+	Tasks []Task `json:"tasks,omitempty"`
+}

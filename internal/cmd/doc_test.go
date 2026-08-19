@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -17,6 +18,36 @@ import (
 // kind — a plan needs no sections, and a spec/ADR with no numbered headings
 // has nothing for the anchor lint to reject.
 const docTestBody = "# Test Document\n\nSome body text.\n"
+
+// docPlanMintBody is a well-formed plan in the mintable ## Tasks format
+// (025 §9.1): two definitions, no blockers, for the CLI's plan-accept and
+// `task list --plan` tests.
+const docPlanMintBody = `---
+status: draft
+---
+
+# A mintable plan
+
+## Tasks
+
+### Task 1 — First task
+
+` + "```yaml" + `
+kind: feature
+priority: high
+` + "```" + `
+
+Do the first thing.
+
+### Task 2 — Second task
+
+` + "```yaml" + `
+kind: bug
+priority: medium
+` + "```" + `
+
+Do the second thing.
+`
 
 // writeDocFile writes content to a temp file and returns its path, for
 // commands that read a document body via --file.
@@ -66,29 +97,6 @@ func TestDocNewMissingSlug(t *testing.T) {
 	}
 }
 
-func TestDocGetNonNumericID(t *testing.T) {
-	cmd := newDocGetCmd()
-	cmd.SetArgs([]string{"WL-12"})
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "numeric id") {
-		t.Fatalf("err = %v; want it to say a numeric id is required", err)
-	}
-}
-
-func TestDocEditNonNumericID(t *testing.T) {
-	file := writeDocFile(t, docTestBody)
-	cmd := newDocEditCmd()
-	cmd.SetArgs([]string{"spec-15", "--file", file})
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "numeric id") {
-		t.Fatalf("err = %v; want it to say a numeric id is required", err)
-	}
-}
-
 func TestDocEditMissingFile(t *testing.T) {
 	cmd := newDocEditCmd()
 	cmd.SetArgs([]string{"5"})
@@ -111,14 +119,93 @@ func TestDocReviseFileAndAcceptMutuallyExclusive(t *testing.T) {
 	}
 }
 
-func TestDocReviseNonNumericID(t *testing.T) {
-	cmd := newDocReviseCmd()
-	cmd.SetArgs([]string{"not-a-number"})
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "numeric id") {
-		t.Fatalf("err = %v; want it to say a numeric id is required", err)
+// --- doc ref resolution (025 §14.3; needs a real server) -----------------
+
+func TestResolveDocIDNumeric(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	d, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 1, Slug: "my-spec", Body: docTestBody,
+	})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	id, err := resolveDocID(context.Background(), c, strconv.FormatInt(d.ID, 10))
+	if err != nil {
+		t.Fatalf("resolveDocID numeric: %v", err)
+	}
+	if id != d.ID {
+		t.Fatalf("resolveDocID numeric = %d, want %d", id, d.ID)
+	}
+}
+
+func TestResolveDocIDBySlug(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	d, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 1, Slug: "my-spec", Body: docTestBody,
+	})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	id, err := resolveDocID(context.Background(), c, "my-spec")
+	if err != nil {
+		t.Fatalf("resolveDocID by slug: %v", err)
+	}
+	if id != d.ID {
+		t.Fatalf("resolveDocID by slug = %d, want %d", id, d.ID)
+	}
+}
+
+func TestResolveDocIDUnmatchedRef(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if _, err := resolveDocID(context.Background(), c, "no-such-slug"); err == nil ||
+		!strings.Contains(err.Error(), "no-such-slug") {
+		t.Fatalf("resolveDocID unmatched ref: err = %v, want it to name the ref", err)
+	}
+}
+
+// TestResolveDocIDAmbiguousSlug: the same slug in two projects (slugs are
+// unique per project, not globally) is refused rather than picking one.
+func TestResolveDocIDAmbiguousSlug(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if _, _, err := c.CreateProject(context.Background(),
+		model.CreateProjectInput{ID: "proj2", Name: "Proj2", Key: "PROJ2"}); err != nil {
+		t.Fatalf("create project 2: %v", err)
+	}
+	if _, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 1, Slug: "dup", Body: docTestBody,
+	}); err != nil {
+		t.Fatalf("create doc 1: %v", err)
+	}
+	if _, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj2", Kind: "spec", Number: 1, Slug: "dup", Body: docTestBody,
+	}); err != nil {
+		t.Fatalf("create doc 2: %v", err)
+	}
+	if _, err := resolveDocID(context.Background(), c, "dup"); err == nil || !strings.Contains(err.Error(), "dup") {
+		t.Fatalf("resolveDocID ambiguous slug: err = %v, want it to name the ref", err)
+	}
+}
+
+// TestDocAcceptBySlugPrintsMintedTasks: `lode doc accept <slug>` resolves the
+// ref and, for a plan, reports the minted task ids (025 §9.2).
+func TestDocAcceptBySlugPrintsMintedTasks(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	planFile := writeDocFile(t, docPlanMintBody)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+		"--slug", "mint-plan", "--file", planFile); err != nil {
+		t.Fatalf("doc new: %v", err)
+	}
+	out, err := runLode(t, "doc", "accept", "mint-plan")
+	if err != nil {
+		t.Fatalf("doc accept mint-plan: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "accepted doc") || !strings.Contains(out, "minted tasks:") {
+		t.Fatalf("doc accept output = %q, want it to report the minted tasks", out)
 	}
 }
 

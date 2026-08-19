@@ -53,6 +53,35 @@ covers:
 Do the thing.
 `
 
+// docPlanMintBody is a well-formed plan in the mintable ## Tasks format
+// (025 §9.1): two definitions, no blockers, for the accept-response tests.
+const docPlanMintBody = `---
+status: draft
+---
+
+# A mintable plan
+
+## Tasks
+
+### Task 1 — First task
+
+` + "```yaml" + `
+kind: feature
+priority: high
+` + "```" + `
+
+Do the first thing.
+
+### Task 2 — Second task
+
+` + "```yaml" + `
+kind: bug
+priority: medium
+` + "```" + `
+
+Do the second thing.
+`
+
 // docActor registers an actor and returns a bearer token for it, for the
 // cases that need a second identity (the accept gate is assignee-only).
 func docActor(t *testing.T, st *store.Store, id string) string {
@@ -515,6 +544,47 @@ func TestAcceptDoc(t *testing.T) {
 	}
 	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "plan") {
 		t.Errorf("error = %q, want it to say a plan cannot be accepted yet", msg)
+	}
+}
+
+// TestAcceptPlanReturnsMintedTasks: accepting a plan returns the doc and the
+// tasks it minted in one response (025 §9.2); accepting a spec or ADR
+// carries no "tasks" key at all, so the response stays byte-identical to
+// before this field existed.
+func TestAcceptPlanReturnsMintedTasks(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "mint-plan", Body: docPlanMintBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var resp model.AcceptDocResponse
+	decodeInto(t, rr, &resp)
+	if resp.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", resp.Status)
+	}
+	if len(resp.Tasks) != 2 {
+		t.Fatalf("tasks = %v, want 2 minted tasks", resp.Tasks)
+	}
+	for _, task := range resp.Tasks {
+		if task.PlanDoc != plan.ID {
+			t.Errorf("task %s plan_doc = %d, want %d", task.ID, task.PlanDoc, plan.ID)
+		}
+	}
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 1, Slug: "spec-1", Body: docSpecBody,
+	})
+	rr = doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept spec status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if _, present := decodeMap(t, rr)["tasks"]; present {
+		t.Errorf(`spec accept response carries a "tasks" key, want none`)
 	}
 }
 

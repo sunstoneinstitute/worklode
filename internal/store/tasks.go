@@ -58,6 +58,9 @@ type TaskFilter struct {
 	// the incremental fetch a polling mirror makes with the highest
 	// updated_at it has already seen. The zero value does not filter.
 	UpdatedSince time.Time
+	// PlanDoc narrows to the tasks minted from this plan document (0 = none)
+	// — the query that is the plan's task set (025 §9.2, §1).
+	PlanDoc int64
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -190,6 +193,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		UpdatedAt: ts,
 		Skills:    skills,
 		Secrets:   secretNames,
+		PlanDoc:   in.PlanDoc,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -359,12 +363,14 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	return nil
 }
 
-// taskColumns is the SELECT list scanTask expects, in order. skills and
-// secrets are last so positional scans elsewhere are unaffected by their
-// addition. Both columns are "jsonb NOT NULL DEFAULT '[]'" (see migrations
-// 0007 and 0024), so a bare cast is enough — no coalesce needed, and
-// prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text`
+// taskColumns is the SELECT list scanTask expects, in order. skills,
+// secrets and plan_doc are last so positional scans elsewhere are unaffected
+// by their addition. skills and secrets are "jsonb NOT NULL DEFAULT '[]'"
+// (see migrations 0007 and 0024), so a bare cast is enough — no coalesce
+// needed; plan_doc is a nullable bigint (migration 0027), scanned into
+// sql.NullInt64. prefixedTaskColumns below requires each entry to be
+// comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -374,9 +380,13 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
+	var planDoc sql.NullInt64
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc); err != nil {
 		return nil, err
+	}
+	if planDoc.Valid {
+		t.PlanDoc = planDoc.Int64
 	}
 	t.Body = body.String
 	t.Concern = concern.String
@@ -528,6 +538,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if f.Kind != "" {
 		args = append(args, f.Kind)
 		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+	}
+	if f.PlanDoc != 0 {
+		args = append(args, f.PlanDoc)
+		conds = append(conds, fmt.Sprintf(`plan_doc = $%d`, len(args)))
 	}
 	if f.Assignee != "" {
 		args = append(args, f.Assignee)

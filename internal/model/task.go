@@ -27,6 +27,9 @@ type Task struct {
 	// Secrets is the task's declared org-catalog secret names (spec 017).
 	// Names only; nil and empty are equivalent, always [] on the wire.
 	Secrets []string `json:"secrets"`
+	// PlanDoc is the plan document this task was minted from (025 §9.2); 0
+	// (omitted on the wire) when no plan authored it.
+	PlanDoc int64 `json:"plan_doc,omitempty"`
 }
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).

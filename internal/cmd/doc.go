@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,16 +26,36 @@ func validDocKind(k string) bool {
 	return false
 }
 
-// resolveDocID parses arg as a document id. A backbone document reference can
-// also be a number or a slug (025 §14.3), but resolving those is part 3's job
-// (the plan that extends this command group); this version takes a numeric
-// id only.
-func resolveDocID(arg string) (int64, error) {
-	id, err := strconv.ParseInt(arg, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("%q is not a document id: this version of `lode doc` takes a numeric id only, not a number, slug, or SPEC/ADR reference", arg)
+// resolveDocID resolves a document reference to its id (025 §14.3): a
+// positive integer is the id itself, taken without a round trip; anything
+// else is matched against every document's slug over GET /api/v1/docs
+// (exact match only — corpus-number and SPEC/ADR shorthand resolution stay
+// unbuilt). It is the one resolver both `lode doc <ref>`'s verbs and `lode
+// task list --plan` call, so the two surfaces cannot disagree about what a
+// ref names. An unmatched or ambiguous slug is an error naming what was
+// tried.
+func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		return id, nil
 	}
-	return id, nil
+	resp, _, err := c.ListDocs(ctx, cli.DocListFilter{})
+	if err != nil {
+		return 0, fmt.Errorf("resolve document %q: %w", ref, err)
+	}
+	var matches []int64
+	for _, d := range resp.Docs {
+		if d.Slug == ref {
+			matches = append(matches, d.ID)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return 0, fmt.Errorf("no document found with id or slug %q", ref)
+	default:
+		return 0, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate", ref, len(matches))
+	}
 }
 
 func newDocCmd() *cobra.Command {
@@ -154,15 +175,15 @@ func newDocListCmd() *cobra.Command {
 // WL-129.
 func newDocGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get <id>",
+		Use:   "get <id-or-slug>",
 		Short: "Get a document: its body, sections, and edges",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -184,19 +205,19 @@ func newDocGetCmd() *cobra.Command {
 func newDocEditCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
+		Use:   "edit <id-or-slug>",
 		Short: "Replace a document's body (a draft, or a plan at any status)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
-			if err != nil {
-				return err
-			}
 			body, err := readBodyFile(cmd, file)
 			if err != nil {
 				return err
 			}
 			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -219,15 +240,15 @@ func newDocEditCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "accept <id>",
+		Use:   "accept <id-or-slug>",
 		Short: "Accept a document (draft -> accepted); only the assignee may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
@@ -240,6 +261,13 @@ func newDocAcceptCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "accepted doc %d: status %s\n", d.ID, d.Status)
+			if len(d.Tasks) > 0 {
+				ids := make([]string, len(d.Tasks))
+				for i, task := range d.Tasks {
+					ids[i] = task.ID
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "minted tasks: %s\n", strings.Join(ids, ", "))
+			}
 			return nil
 		},
 	}
@@ -255,15 +283,15 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept bool
 	cmd := &cobra.Command{
-		Use:   "revise <id>",
+		Use:   "revise <id-or-slug>",
 		Short: "Open, update, or land a document's candidate revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveDocID(args[0])
+			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			c, err := newAPIClient()
+			id, err := resolveDocID(cmd.Context(), c, args[0])
 			if err != nil {
 				return err
 			}
