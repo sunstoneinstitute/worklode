@@ -109,6 +109,12 @@ func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	}, nil
 }
 
+// Title is the document's H1 title — the first "# …" line of the preamble.
+// Reported false when the preamble carries none.
+func Title(d *Document) (string, bool) {
+	return docTitle(d.Preamble)
+}
+
 // docTitle returns the preamble's first "# " heading line, hash and
 // whitespace stripped. ok is false when the preamble has none.
 func docTitle(preamble string) (string, bool) {
