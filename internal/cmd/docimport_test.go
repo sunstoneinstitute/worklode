@@ -109,6 +109,32 @@ func TestUnresolvedImportRefs(t *testing.T) {
 	}
 }
 
+// TestPrintUnresolvedRefsSeparatesTheSentinel: a plan declaring NO-SPEC is
+// counted apart from a reference that was meant to resolve and did not. The
+// real corpus carries eight of the former and none of the latter, and the
+// cutover's go/no-go is read off exactly this output.
+func TestPrintUnresolvedRefsSeparatesTheSentinel(t *testing.T) {
+	var buf strings.Builder
+	printUnresolvedRefs(&buf, []unresolvedRef{
+		{slug: "a-plan", ref: noSpecSentinel},
+		{slug: "b-plan", ref: "rdf-registry:ADR-0006"},
+		{slug: "c-plan", ref: noSpecSentinel},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"b-plan: rdf-registry:ADR-0006",
+		"1 reference(s) resolve to no document",
+		"2 plan(s) declare NO-SPEC",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q; got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "a-plan: ") || strings.Contains(out, "c-plan: ") {
+		t.Errorf("the sentinel was listed as a dangling reference; got:\n%s", out)
+	}
+}
+
 // writeCorpus materialises a corpus tree from path -> contents and returns its
 // root.
 func writeCorpus(t *testing.T, files map[string]string) string {

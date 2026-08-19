@@ -52,6 +52,11 @@ type importDoc struct {
 // unresolvedRef is one frontmatter reference no walked document satisfies.
 type unresolvedRef struct{ slug, ref string }
 
+// noSpecSentinel is 026 §4.3's "no governing spec" coverage declaration. It
+// resolves to nothing on purpose, so it is reported apart from the references
+// that were meant to resolve and did not.
+const noSpecSentinel = "NO-SPEC"
+
 // importSubdirs are the corpus subdirectories and the kind their files take.
 // Only these two, and only their top level: docs/specs/inlined/ is a generated
 // view of the same specs, and importing it would duplicate the corpus.
@@ -367,11 +372,27 @@ func printImportCorpus(w io.Writer, docs []importDoc) {
 // printUnresolvedRefs reports every reference that will land in to_external,
 // one per line, on stderr — the summary belongs on stdout, these belong where a
 // caller can filter them out of it.
+//
+// 026 §4.3's NO-SPEC sentinel is counted apart from the rest. It also lands in
+// to_external, but it names no target by design — it is a plan asserting that
+// no spec governs it — so counting it with the genuinely dangling references
+// would make a clean corpus look defective at exactly the moment the count is
+// being read as a go/no-go.
 func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
+	var dangling, sentinels int
 	for _, u := range refs {
+		if u.ref == noSpecSentinel {
+			sentinels++
+			continue
+		}
+		dangling++
 		fmt.Fprintf(w, "%s: %s\n", u.slug, u.ref)
 	}
-	if len(refs) > 0 {
-		fmt.Fprintf(w, "%d reference(s) resolve to no document in this project; kept verbatim\n", len(refs))
+	if dangling > 0 {
+		fmt.Fprintf(w, "%d reference(s) resolve to no document in this project; kept verbatim\n", dangling)
+	}
+	if sentinels > 0 {
+		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim, no target expected (026 §4.3)\n",
+			sentinels, noSpecSentinel)
 	}
 }
