@@ -41,21 +41,6 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	return m
 }
 
-// Runs exposes the counter for test assertions.
-func (m *Metrics) Runs() *prometheus.CounterVec {
-	return m.runs
-}
-
-// Projects exposes the counter for test assertions.
-func (m *Metrics) Projects() prometheus.Counter {
-	return m.projects
-}
-
-// Duration exposes the histogram for test assertions.
-func (m *Metrics) Duration() prometheus.Histogram {
-	return m.duration
-}
-
 // recordRun records the outcome and duration of one RunOnce call. result is
 // "ok" or "error" — nothing else, so the label stays bounded.
 func (m *Metrics) recordRun(result string, d time.Duration) {

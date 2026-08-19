@@ -9,7 +9,10 @@
 // and PUTs the complete graph, replacing what graph-server held for it.
 // Deterministic rendering (graphproj.Document sorts and dedupes rendered
 // lines) makes an unchanged re-projection byte-identical, so re-running
-// after a crash or a duplicated batch is idempotent.
+// after a crash or a duplicated batch is idempotent. One task mutation writes
+// no outbox row — SetTaskSkills (internal/store/tasks.go) — which is
+// harmless since skills are not projected; the only effect is a
+// dct:modified that lags until the task's next real event.
 package projector
 
 import (

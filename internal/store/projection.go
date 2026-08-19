@@ -35,10 +35,14 @@ func (s *Store) SetProjectionCheckpoint(ctx context.Context, id int64) error {
 //
 // The LEFT JOIN keeps the watermark advancing even over a log row whose
 // task no longer resolves (no delete path exists today; this is a guard,
-// not a feature). state_log ids are assigned at insert time, so a slow
-// transaction can in principle commit a lower id after a higher one was
-// already projected; with a single API server and short transactions the
-// window is negligible for v1, and a watermark rewind re-renders everything.
+// not a feature). state_log ids are assigned at insert time, so two
+// concurrent transactions within one process can commit out of order: a
+// slow transaction can commit a lower id after a projector scan already read
+// past it and checkpointed, and that row is never scanned. Acceptable for
+// v1 because it self-heals: the project's next real event re-renders its
+// whole graph from scratch, and a watermark rewind heals unconditionally.
+// The tracked fix is WL-119 (read to a commit horizon, as
+// EventLogHorizonID does in internal/store/events.go).
 func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (projects []string, through int64, err error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT sl.id, t.project_id
