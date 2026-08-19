@@ -45,8 +45,9 @@ func TestTaskTriples(t *testing.T) {
 		{From: "WL-42", To: "WL-7", Type: "follow_up_to"}, // WL-42 is a follow-up to WL-7
 	}
 	in := []model.Edge{
-		{From: "WL-3", To: "WL-42", Type: "blocks"},    // WL-3 blocks WL-42
-		{From: "WL-42", To: "WL-42", Type: "child_of"}, // WL-42 is a parent (incoming child_of) — must emit nothing
+		{From: "WL-3", To: "WL-42", Type: "blocks"},       // WL-3 blocks WL-42
+		{From: "WL-9", To: "WL-42", Type: "child_of"},     // WL-9 is a child of WL-42 — belongs on WL-9's subject, must emit nothing here
+		{From: "WL-8", To: "WL-42", Type: "follow_up_to"}, // WL-8 is a follow-up to WL-42 — no named inverse, must emit nothing here
 	}
 
 	triples := TaskTriples(task, out, in)
