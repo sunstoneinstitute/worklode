@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -98,15 +99,22 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 }
 
 // ResolvePins resolves pinned skill names into skills with content, in pin
-// order, deduped. An unknown pin produces a "not found" warning; a pin that
-// resolves to a soft-deleted skill still comes back with its content, plus a
-// "removed from its source repo" warning — a brief must never break because
-// a skill was withdrawn or misspelled upstream.
+// order, deduped. A pin in "plugin:skill" form resolves exactly when the
+// registry name is qualified; when the exact name misses, the segment after
+// the pin's first colon is tried against the registry as a fallback name —
+// the skill-identifier rule of 025 §9.1. An exact hit is authoritative for
+// its own name and never consults the fallback. An unknown pin produces a
+// "not found" warning; a pin that resolves to a soft-deleted skill still
+// comes back with its content, plus a "removed from its source repo"
+// warning — a brief must never break because a skill was withdrawn or
+// misspelled upstream.
 //
 // The brief and POST /api/v1/skills/recommend both go through here, so the
 // two agree on the warning text without hand-copying it.
 func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
-	skills, err := s.SkillsByNames(ctx, pins)
+	names := dedupeFirst(pins)
+
+	skills, err := s.SkillsByNames(ctx, names)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
 	}
@@ -115,10 +123,40 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 		found[sk.Name] = sk
 	}
 
+	// Still-unresolved, colon-qualified pins get a second pass against the
+	// segment after their first colon (deduped) — an unqualified registry
+	// name a plugin-qualified pin should still hit.
+	suffixOf := make(map[string]string, len(names))
+	var suffixes []string
+	for _, name := range names {
+		if _, ok := found[name]; ok {
+			continue
+		}
+		if _, suffix, ok := strings.Cut(name, ":"); ok {
+			suffixOf[name] = suffix
+			suffixes = append(suffixes, suffix)
+		}
+	}
+	fallback := make(map[string]Skill, len(suffixes))
+	if len(suffixes) > 0 {
+		hits, err := s.SkillsByNames(ctx, dedupeFirst(suffixes))
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
+		}
+		for _, sk := range hits {
+			fallback[sk.Name] = sk
+		}
+	}
+
 	var pinned []Skill
 	var warnings []string
-	for _, name := range dedupeFirst(pins) {
+	for _, name := range names {
 		sk, ok := found[name]
+		if !ok {
+			if suffix, has := suffixOf[name]; has {
+				sk, ok = fallback[suffix]
+			}
+		}
 		if !ok {
 			warnings = append(warnings, "pinned skill not found: "+name)
 			continue

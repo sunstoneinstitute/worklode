@@ -172,6 +172,132 @@ func TestResolvePinsDedupes(t *testing.T) {
 	}
 }
 
+// TestResolvePinsAfterColonFallback covers 025 §9.1's skill-identifier rule:
+// a plugin-qualified pin against an unqualified registry name falls back to
+// the segment after the colon.
+func TestResolvePinsAfterColonFallback(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("test-driven-development", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"superpowers:test-driven-development"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "test-driven-development" || pinned[0].SkillMD == "" {
+		t.Fatalf("pinned = %+v, want test-driven-development resolved via fallback with content", pinned)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", warnings)
+	}
+}
+
+// TestResolvePinsExactBeatsFallback: a pin that matches a qualified registry
+// name exactly resolves to it directly and never consults the fallback.
+func TestResolvePinsExactBeatsFallback(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("superpowers:writing-plans", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"superpowers:writing-plans"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "superpowers:writing-plans" || pinned[0].SkillMD == "" {
+		t.Fatalf("pinned = %+v, want superpowers:writing-plans resolved exactly", pinned)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", warnings)
+	}
+}
+
+// TestResolvePinsUnknownBothWarns: a pin absent under both its own name and
+// its after-colon suffix warns exactly as an unqualified miss does today.
+func TestResolvePinsUnknownBothWarns(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"other:absent"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 0 {
+		t.Fatalf("pinned = %+v, want none", pinned)
+	}
+	if len(warnings) != 1 || warnings[0] != "pinned skill not found: other:absent" {
+		t.Fatalf("warnings = %+v, want [pinned skill not found: other:absent]", warnings)
+	}
+}
+
+// TestResolvePinsNoColonNoFallback: a pin with no colon has no suffix to
+// fall back to, so a miss just warns.
+func TestResolvePinsNoColonNoFallback(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"absent"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 0 {
+		t.Fatalf("pinned = %+v, want none", pinned)
+	}
+	if len(warnings) != 1 || warnings[0] != "pinned skill not found: absent" {
+		t.Fatalf("warnings = %+v, want [pinned skill not found: absent]", warnings)
+	}
+}
+
+// TestResolvePinsFallbackOnlyOnUnqualifiedNames: the fallback tries the
+// after-colon suffix as a registry name literally — it must not match a
+// differently-qualified registry row that happens to share the suffix.
+func TestResolvePinsFallbackOnlyOnUnqualifiedNames(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("b:x", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"a:x"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 0 {
+		t.Fatalf("pinned = %+v, want none (must not match b:x)", pinned)
+	}
+	if len(warnings) != 1 || warnings[0] != "pinned skill not found: a:x" {
+		t.Fatalf("warnings = %+v, want [pinned skill not found: a:x]", warnings)
+	}
+}
+
+// TestResolvePinsFallbackDeletedSkill: a fallback hit on a soft-deleted skill
+// behaves exactly like an exact-match hit on one — content plus warning.
+func TestResolvePinsFallbackDeletedSkill(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("test-driven-development", "h1")); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", nil); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	pinned, warnings, err := s.ResolvePins(ctx, []string{"superpowers:test-driven-development"})
+	if err != nil {
+		t.Fatalf("ResolvePins: %v", err)
+	}
+	if len(pinned) != 1 || pinned[0].Name != "test-driven-development" || pinned[0].SkillMD == "" {
+		t.Fatalf("pinned = %+v, want test-driven-development resolved via fallback despite deletion", pinned)
+	}
+	// Warnings name the pin as written, not the resolved registry name.
+	if len(warnings) != 1 || warnings[0] != "pinned skill removed from its source repo: superpowers:test-driven-development" {
+		t.Fatalf("warnings = %+v, want a removed-from-source-repo warning naming the pin as written", warnings)
+	}
+}
+
 // TestBriefWithoutSkillsSkipsTheQuery: the flag must skip the work, not just
 // omit the output. Renaming the skills table away makes any pin lookup fail
 // outright, so a brief that still succeeds provably never ran one.
