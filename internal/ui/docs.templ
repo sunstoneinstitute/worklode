@@ -1,0 +1,132 @@
+package ui
+
+// docs.templ renders the backbone's document corpus (spec 025 §5): the index
+// at /docs and one document at /docs/{id}. Both are read-only. Authoring is
+// not a page: a document's body is a markdown artifact with frontmatter,
+// submitted whole through the API or `lode doc`, and a textarea in a browser
+// would be a worse editor pretending to be the source of truth.
+//
+// The body renders inside a <pre>, the same way the task page renders a task's
+// body: there is no markdown renderer in this repo, and inventing one here
+// would make the page disagree with what is stored.
+
+templ Docs(v DocsView) {
+	@Page(v.Page) {
+		@globalShell("") {
+			<section class="card">
+				<div class="hd"><h3>Documents</h3></div>
+				<div class="bd">
+					if len(v.Docs) == 0 {
+						<p class="muted">No documents yet. Specs, ADRs and plans land here as they are authored.</p>
+					} else {
+						<table>
+							<tr><th>Reference</th><th>Title</th><th>Project</th><th>Status</th><th>Version</th></tr>
+							for _, d := range v.Docs {
+								<tr>
+									<td>
+										<a href={ d.URL }>{ d.Ref }</a>
+										<div class="muted small mono">{ d.Doc.Slug }</div>
+									</td>
+									<td>{ d.Doc.Title }</td>
+									<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
+									<td><span class={ "chip " + DocStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
+									<td class="mono">{ d.Doc.Version }</td>
+								</tr>
+							}
+						</table>
+					}
+				</div>
+			</section>
+		}
+	}
+}
+
+templ Doc(v DocView) {
+	@Page(v.Page) {
+		@globalShell("") {
+			<section class="card pad">
+				<h1>{ v.Doc.Title }</h1>
+				<p>
+					<span class={ "chip " + DocStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
+					<span class="chip plain">{ v.Ref }</span>
+					<span class="chip plain">version { v.Doc.Version }</span>
+					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
+				</p>
+				<p class="muted small mono">{ v.Doc.Slug }</p>
+				<p class="muted small">
+					Created { FmtTime(v.Doc.CreatedAt) } by { v.Doc.CreatedBy } &mdash; updated { FmtTime(v.Doc.UpdatedAt) }
+					if v.Doc.Issued != "" {
+						{ " · issued " + v.Doc.Issued }
+					}
+				</p>
+				if v.Doc.Assignee != "" {
+					<p class="muted small">Assigned to { v.Doc.Assignee }</p>
+				}
+				if v.Revision != nil {
+					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ FmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
+				}
+			</section>
+			if len(v.Sections) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Sections</h3></div>
+					<div class="bd">
+						<table>
+							<tr><th>Anchor</th><th>Heading</th><th>Last revised in</th><th>Published</th></tr>
+							for _, sec := range v.Sections {
+								<tr>
+									<td class="mono">{ "#" + sec.Anchor }</td>
+									<td>{ sec.Heading }</td>
+									<td class="mono">{ sec.LastRevisedIn }</td>
+									<td>
+										if sec.Published {
+											<span class="chip ok">published</span>
+										} else {
+											<span class="chip plain">draft</span>
+										}
+									</td>
+								</tr>
+							}
+						</table>
+					</div>
+				</section>
+			}
+			<section class="card">
+				<div class="hd"><h3>Relations</h3></div>
+				<div class="bd">
+					@docEdges("Out of this document", v.Edges)
+					@docEdges("Into this document", v.EdgesIn)
+				</div>
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Body</h3></div>
+				<div class="bd"><pre>{ v.Doc.Body }</pre></div>
+			</section>
+		}
+	}
+}
+
+// docEdges renders one direction of a document's relations. An unresolved
+// cross-corpus reference (URL "") is rendered as text: it names something this
+// backbone does not hold, and a link to nothing is worse than none.
+templ docEdges(heading string, edges []DocEdgeRow) {
+	<h4>{ heading }</h4>
+	if len(edges) == 0 {
+		<p class="muted">none</p>
+	} else {
+		<ul>
+			for _, e := range edges {
+				<li>
+					if e.Anchor != "" {
+						<span class="mono">{ "#" + e.Anchor }</span>{ " " }
+					}
+					<span class="chip plain">{ e.Type }</span>{ " " }
+					if e.URL != "" {
+						<a href={ e.URL }>{ e.Label }</a>
+					} else {
+						<span class="mono">{ e.Label }</span>
+					}
+				</li>
+			}
+		</ul>
+	}
+}

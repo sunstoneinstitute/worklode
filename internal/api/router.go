@@ -66,6 +66,8 @@ var routeGuards = map[string]routeGuard{
 	"GET /deliveries":                     guarded(permWebRead),
 	"GET /knowledge":                      guarded(permWebRead),
 	"GET /tasks/{id}":                     guarded(permWebRead),
+	"GET /docs":                           guarded(permWebRead),
+	"GET /docs/{id}":                      guarded(permWebRead),
 
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
@@ -106,6 +108,20 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/assign":            guarded(permTaskAssign),
 	"POST /api/v1/tasks/{id}/unassign":          guarded(permTaskAssign),
 	"GET /api/v1/board":                         guarded(permTaskRead),
+
+	// --- documents (spec 025 §5, §6, §7) --------------------------------------
+	// Reading and writing the corpus is its own capability (see permDocRead in
+	// authz.go). The accept routes are permDocWrite like the rest: whether a
+	// given actor may accept a given document is the assignee gate of 025 §7,
+	// a per-document fact the store checks, not a role.
+	"POST /api/v1/docs":                      guarded(permDocWrite),
+	"GET /api/v1/docs":                       guarded(permDocRead),
+	"GET /api/v1/docs/{id}":                  guarded(permDocRead),
+	"PUT /api/v1/docs/{id}/body":             guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
+	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
 
 	// --- skills --------------------------------------------------------------
 	"GET /api/v1/skills":                       guarded(permSkillRead),

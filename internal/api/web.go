@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strconv"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -281,6 +282,44 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := ui.Task(view).Render(r.Context(), w); err != nil {
 		s.log.Error("render task page", "err", err)
+	}
+}
+
+// docsPage handles GET /docs: the whole document corpus (spec 025 §5), in
+// ListDocs's corpus order — project, kind, number (plans last), slug.
+// Read-only, like the document page below.
+func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
+	docs, err := s.st.ListDocs(r.Context(), docFilterFrom(r))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	view := docsView(docs)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := ui.Docs(view).Render(r.Context(), w); err != nil {
+		s.log.Error("render docs page", "err", err)
+	}
+}
+
+// docPage handles GET /docs/{id}: one document's identity, sections, relations
+// and body — built from the same docDetail the JSON API serves. A non-numeric
+// id 404s here rather than 400ing as the API does: a browser following a bad
+// link is asking for a page that does not exist.
+func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	detail, err := s.docDetail(r, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	view := docView(detail)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := ui.Doc(view).Render(r.Context(), w); err != nil {
+		s.log.Error("render doc page", "err", err)
 	}
 }
 
