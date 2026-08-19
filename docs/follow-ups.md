@@ -132,9 +132,9 @@ outright once it is fixed over annotating it as resolved.
   file it by hand instead of the edge doing its job. `docs/follow-ups.md`
   itself is not migrated into tasks carrying `follow_up_to` edges — a data
   question, not a code one. No board or cockpit surface shows follow-ups
-  (a spec 032 question, not asked here). And the backbone→graph projection
-  (spec 006) does not emit `wl:followUpTo`, though `ns/ontology.ttl` now
-  declares it. Recorded in
+  (a spec 032 question, not asked here). And `wl:followUpTo` now has its
+  triple in the projection mapping (`internal/graphproj`, WL-25) but reaches
+  the graph only when the part-2 projector ships (WL-26). Recorded in
   `docs/plans/2026-08-14-follow-up-edges.md`'s "Follow-ups this plan
   deliberately does not close".
 - `[gated]` **Authorization is a seam, not a model**: `internal/api/authz.go` puts every

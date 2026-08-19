@@ -335,12 +335,17 @@ docs/plans/2026-07-30-knowledge-graph-1-graph-foundations.md:
     task-5-oxigraph-harness-and-graph-layer-integration-proof: "### Task 5 — Oxigraph harness and graph-layer integration proof"
 docs/plans/2026-07-30-knowledge-graph-2-projector.md:
   sections:
-    file-structure: "## File Structure"
-    task-7-complete-the-task-outbox: "## Task 7: Complete the task outbox"
-    task-8-the-projection-checkpoint: "## Task 8: The projection checkpoint"
-    task-9-the-projector: "## Task 9: The projector"
-    task-10-the-full-slice-against-oxigraph: "## Task 10: The full slice against Oxigraph"
-    task-11-run-the-projector-under-lode-serve-document-it: "## Task 11: Run the projector under `lode serve`, document it"
+    already-built-do-not-recreate: "## Already built — do not recreate"
+    design-calls: "## Design calls"
+    deliberately-not-in-this-plan: "## Deliberately not in this plan"
+    file-structure: "## File structure"
+    tasks: "## Tasks"
+    task-1-complete-the-task-outbox: "### Task 1 — Complete the task outbox"
+    task-2-the-projection-checkpoint-and-dirty-project-scan: "### Task 2 — The projection checkpoint and dirty-project scan"
+    task-3-the-projector: "### Task 3 — The projector"
+    task-4-projector-metrics: "### Task 4 — Projector metrics"
+    task-5-the-full-slice-against-oxigraph: "### Task 5 — The full slice against Oxigraph"
+    task-6-run-the-projector-under-lode-serve-document-it: "### Task 6 — Run the projector under `lode serve`, document it"
 docs/plans/2026-07-30-platform-graph-design.md:
   sections:
     implementation-status-d1d15: "## Implementation status (D1–D15)"
