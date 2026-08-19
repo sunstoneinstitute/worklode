@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -304,8 +305,9 @@ func buildNextDecision(p *store.Project) *model.Decision {
 
 // mapWorkItem builds one cockpit work item from a project work fact. blocked
 // is the bucket's fixed value the caller has already determined (true only
-// for a ready task with an open blocker — see assembleProjectCockpit's
-// switch), so no further lookup happens here.
+// for a ready task something holds — an open blocker task or an unfinished
+// plan ordered before its own; see assembleProjectCockpit's switch), so no
+// further lookup happens here.
 //
 // owner comes only from Task.Assignee: human ownership recorded through
 // /assign or /start, independent of any lease. delegate comes only from an
@@ -366,12 +368,16 @@ func workItemEvidence(state string, ev *store.EventFact) model.EvidenceSummary {
 	}
 }
 
-// blockerConcerns turns f's open blocker refs into secondary concerns: one
-// entry per open blocker, naming the blocked task it holds up. f is assumed
-// to be blocked (f.Blocked() true) — assembleProjectCockpit only calls this
-// for the ready-and-blocked case.
+// blockerConcerns turns what holds f into secondary concerns: one entry per
+// open blocker task, naming the blocked task it holds up, plus one per
+// unfinished plan ordered before f's own plan (025 §9.3). f is assumed to be
+// blocked (f.Blocked() true) — assembleProjectCockpit only calls this for the
+// ready-and-blocked case.
+//
+// The plan entries are not redundant with the task entries: a blocking plan
+// still draft has minted no task, so it is the only thing there is to name.
 func blockerConcerns(f store.ProjectWorkFact) []model.SecondaryConcern {
-	out := make([]model.SecondaryConcern, 0, len(f.OpenBlockers))
+	out := make([]model.SecondaryConcern, 0, len(f.OpenBlockers)+len(f.BlockingPlans))
 	for _, b := range f.OpenBlockers {
 		out = append(out, model.SecondaryConcern{
 			Kind:  "blocker",
@@ -380,6 +386,18 @@ func blockerConcerns(f store.ProjectWorkFact) []model.SecondaryConcern {
 			Evidence: model.EvidenceSummary{
 				Category: string(evidenceDeclared),
 				Summary:  fmt.Sprintf("Blocks %s (blocker state %s)", f.Task.ID, b.State),
+			},
+		})
+	}
+	for _, p := range f.BlockingPlans {
+		out = append(out, model.SecondaryConcern{
+			Kind:  "blocker",
+			Title: p.Title,
+			URL:   "/docs/" + strconv.FormatInt(p.ID, 10),
+			Evidence: model.EvidenceSummary{
+				Category: string(evidenceDeclared),
+				Summary: fmt.Sprintf("Plan %s (%s) is ordered before %s's plan and is unfinished",
+					p.Slug, p.Status, f.Task.ID),
 			},
 		})
 	}

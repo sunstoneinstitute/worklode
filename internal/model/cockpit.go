@@ -72,7 +72,7 @@ type Decision struct {
 }
 
 // SecondaryConcern is one non-primary concern surfaced on the cockpit — an
-// open blocker today.
+// open blocker task or an unfinished plan ordered before the task's plan.
 type SecondaryConcern struct {
 	Kind     string          `json:"kind"`
 	Title    string          `json:"title"`

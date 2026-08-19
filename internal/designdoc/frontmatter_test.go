@@ -112,6 +112,37 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	}
 }
 
+// TestParseFrontmatterBlocks covers the document-level ordering keys (025 §5,
+// §9.3): a plan orders after another plan with `blocks`, and spells the
+// inverse `blockedBy`. Both take the scalar-or-list latitude every reference
+// list takes.
+func TestParseFrontmatterBlocks(t *testing.T) {
+	const src = `---
+status: draft
+blocks:
+- docs/plans/b.md
+- docs/plans/c.md
+blockedBy: docs/plans/a.md
+---
+# A plan
+`
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	fm := doc.Frontmatter
+	if fm == nil {
+		t.Fatal("Frontmatter is nil")
+	}
+	wantBlocks := []string{"docs/plans/b.md", "docs/plans/c.md"}
+	if !reflect.DeepEqual([]string(fm.Blocks), wantBlocks) {
+		t.Errorf("Blocks = %v, want %v", fm.Blocks, wantBlocks)
+	}
+	if !reflect.DeepEqual([]string(fm.BlockedBy), []string{"docs/plans/a.md"}) {
+		t.Errorf("BlockedBy = %v, want [docs/plans/a.md]", fm.BlockedBy)
+	}
+}
+
 // TestFrontmatterCoverage protects the plan coverage API: scalars mean full
 // coverage, objects retain their qualifiers, and the retired spelling remains
 // readable only when the current spelling is absent. Removing scalar handling,

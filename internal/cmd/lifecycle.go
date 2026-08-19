@@ -518,6 +518,7 @@ type statusResult struct {
 	LeaseState    string               `json:"lease_state"` // held, expired, held_elsewhere, none
 	Lease         *model.Lease         `json:"lease,omitempty"`
 	OpenBlockers  []model.BriefBlocker `json:"open_blockers"`
+	BlockingPlans []model.DocRef       `json:"blocking_plans"`
 	SessionMarker bool                 `json:"session_marker"`
 	Project       string               `json:"project,omitempty"`
 	ProjectSource string               `json:"project_source"`
@@ -601,6 +602,7 @@ func newStatusCmd() *cobra.Command {
 					LeaseState:    state,
 					Lease:         brief.Lease,
 					OpenBlockers:  brief.OpenBlockers,
+					BlockingPlans: brief.BlockingPlans,
 					SessionMarker: sessionPresent,
 					Project:       scope.Project,
 					ProjectSource: string(scope.Source),
@@ -633,6 +635,12 @@ func newStatusCmd() *cobra.Command {
 				fmt.Fprintln(o, "blocked by:")
 				for _, blk := range brief.OpenBlockers {
 					fmt.Fprintf(o, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
+				}
+			}
+			if len(brief.BlockingPlans) > 0 {
+				fmt.Fprintln(o, "blocked by plans:")
+				for _, p := range brief.BlockingPlans {
+					fmt.Fprintf(o, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
 				}
 			}
 			marker := "absent"

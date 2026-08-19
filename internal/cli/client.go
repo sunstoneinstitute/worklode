@@ -541,6 +541,9 @@ type TaskListFilter struct {
 	// Repo narrows to the project owning this repo. Any git remote URL form
 	// works as well as owner/name; the server normalizes it.
 	Repo string
+	// PlanDoc narrows to the tasks minted from this plan document id (025
+	// §9.2). 0 does not filter.
+	PlanDoc int64
 }
 
 // ListTasks calls GET /api/v1/tasks.
@@ -569,6 +572,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	}
 	if f.Repo != "" {
 		q.Set("repo", f.Repo)
+	}
+	if f.PlanDoc != 0 {
+		q.Set("plan_doc", strconv.FormatInt(f.PlanDoc, 10))
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
 	if err != nil {
@@ -1001,10 +1007,16 @@ func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.
 }
 
 // DocListFilter narrows ListDocs. Zero-valued fields do not filter.
+//
+// NeedsPlanning and NeedsExecution are 026 §2's derived selectors, not plain
+// filters: each implies a kind and a status, and the server refuses a Kind or
+// Status that contradicts it, or both selectors at once.
 type DocListFilter struct {
-	Project string
-	Kind    string // spec | adr | plan
-	Status  string // draft | accepted | superseded
+	Project        string
+	Kind           string // spec | adr | plan
+	Status         string // draft | accepted | superseded
+	NeedsPlanning  bool
+	NeedsExecution bool
 }
 
 // ListDocs calls GET /api/v1/docs.
@@ -1015,6 +1027,13 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	} {
 		if value != "" {
 			q.Set(key, value)
+		}
+	}
+	for key, on := range map[string]bool{
+		"needs_planning": f.NeedsPlanning, "needs_execution": f.NeedsExecution,
+	} {
+		if on {
+			q.Set(key, "true")
 		}
 	}
 	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)
@@ -1050,9 +1069,19 @@ func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (mode
 }
 
 // AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
-// may accept it (025 §7); anyone else gets 403.
-func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
-	return c.docWrite(ctx, http.MethodPost, docPath(id, "/accept"), nil)
+// may accept it (025 §7); anyone else gets 403. The response also carries the
+// tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
+// ADR.
+func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.AcceptDocResponse, []byte, error) {
+	raw, err := c.do(ctx, http.MethodPost, docPath(id, "/accept"), nil)
+	if err != nil {
+		return model.AcceptDocResponse{}, nil, err
+	}
+	var resp model.AcceptDocResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return model.AcceptDocResponse{}, nil, fmt.Errorf("decode doc accept: %w", err)
+	}
+	return resp, raw, nil
 }
 
 // ReviseDoc calls POST /api/v1/docs/{id}/revise, opening the one candidate

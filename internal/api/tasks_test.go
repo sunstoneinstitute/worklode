@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,8 +18,26 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// mintedPlanTasks creates and accepts a mintable plan doc in project "proj"
+// (which the caller must have created), returning the tasks it minted
+// (025 §9.2) — the fixture the plan_doc task tests build on.
+func mintedPlanTasks(t *testing.T, h http.Handler, token string) []model.Task {
+	t.Helper()
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "mint-plan", Body: docPlanMintBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var resp model.AcceptDocResponse
+	decodeInto(t, rr, &resp)
+	return resp.Tasks
+}
 
 // createProject registers a project for tests. Most tests only create one
 // project and rely on tasks getting "WL-<n>" ids (a holdover from the old
@@ -265,6 +284,64 @@ func TestListTasksFilters(t *testing.T) {
 		if got := len(list(tc.path)); got != tc.want {
 			t.Errorf("%s: %d tasks, want %d", tc.path, got, tc.want)
 		}
+	}
+}
+
+// TestGetTaskShowsPlanDoc: a task minted from a plan carries "plan_doc"
+// (025 §9.2); an ordinary task no plan authored omits the key entirely —
+// its absence is the correct answer, not a zero value.
+func TestGetTaskShowsPlanDoc(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	minted := mintedPlanTasks(t, h, token)
+	if len(minted) == 0 {
+		t.Fatalf("no tasks minted")
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+minted[0].ID, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if int64(got["plan_doc"].(float64)) != minted[0].PlanDoc {
+		t.Errorf("plan_doc = %v, want %d", got["plan_doc"], minted[0].PlanDoc)
+	}
+
+	ordinary := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ordinary", "priority": "medium", "kind": "feature",
+	})
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+ordinary["id"].(string), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if _, present := decodeMap(t, rr)["plan_doc"]; present {
+		t.Errorf(`ordinary task carries a "plan_doc" key, want none`)
+	}
+}
+
+// TestListTasksFilterByPlanDoc: GET /tasks?plan_doc=<id> returns exactly the
+// plan's minted task set — the query that is the plan's task set (§1). A
+// non-numeric plan_doc is a named 400, not a silently empty result.
+func TestListTasksFilterByPlanDoc(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	minted := mintedPlanTasks(t, h, token)
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ordinary", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", fmt.Sprintf("/api/v1/tasks?plan_doc=%d", minted[0].PlanDoc), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	tasks, ok := decodeMap(t, rr)["tasks"].([]any)
+	if !ok || len(tasks) != len(minted) {
+		t.Fatalf("got %d tasks, want %d minted tasks: %v", len(tasks), len(minted), tasks)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks?plan_doc=not-a-number", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("non-numeric plan_doc status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

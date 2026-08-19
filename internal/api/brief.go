@@ -16,6 +16,7 @@ func toBriefJSON(b *store.Brief) model.Brief {
 		Body:               b.Body,
 		Branch:             b.Branch,
 		OpenBlockers:       make([]model.BriefBlocker, 0, len(b.OpenBlockers)),
+		BlockingPlans:      append(make([]model.DocRef, 0, len(b.BlockingPlans)), b.BlockingPlans...),
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,

@@ -487,3 +487,155 @@ func TestClaimNextDryRun(t *testing.T) {
 		t.Fatalf("leases table after dry-run: got %d rows, want 0", total)
 	}
 }
+
+// --- plan-to-plan ordering (025 §9.3) ---------------------------------------
+
+// planTaskBody renders a mintable one-task plan body carrying extra
+// frontmatter lines, so a test can state the ordering edge and nothing else.
+func planTaskBody(frontmatter, title string) string {
+	return "---\nstatus: draft\n" + frontmatter + "---\n\n# " + title + `
+
+## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do it.
+`
+}
+
+// mintReadyPlan creates a plan from body, accepts it, and moves every minted
+// task to ready, returning the minted ids in definition order.
+func mintReadyPlan(t *testing.T, s *Store, slug, body string) []string {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: slug, Body: body, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc %s: %v", slug, err)
+	}
+	ids := make([]string, 0, len(minted))
+	for _, task := range minted {
+		if err := transition(t, s, taskTestNow, task.ID, "draft", "ready"); err != nil {
+			t.Fatalf("transition %s to ready: %v", task.ID, err)
+		}
+		ids = append(ids, task.ID)
+	}
+	return ids
+}
+
+// inReadySet reports whether the project's ready set offers taskID.
+func inReadySet(t *testing.T, s *Store, taskID string) bool {
+	t.Helper()
+	ready, err := s.readyCandidates(t.Context(), "p1", "")
+	if err != nil {
+		t.Fatalf("readyCandidates: %v", err)
+	}
+	for _, r := range ready {
+		if r.ID == taskID {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPlanBlockedReadySetReleasesWhenBlockerCloses: a plan-to-plan blocks edge
+// holds the blocked plan's whole task set out of the ready set and out of
+// Claim while any task of the blocking plan is open, and releases it when they
+// all close — no edge removal and no event, because the predicate is live
+// (025 §9.3).
+func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+
+	if !isBlocked(t, s, blocked[0]) {
+		t.Fatalf("IsBlocked(%s): want true while plan A's set is open", blocked[0])
+	}
+	if inReadySet(t, s, blocked[0]) {
+		t.Fatalf("readyCandidates offered %s, which plan A still blocks", blocked[0])
+	}
+	if _, err := s.Claim(t.Context(), blocked[0], "stig", "host:/wt", 0); !errors.Is(err, ErrBlocked) {
+		t.Fatalf("Claim(%s) = %v, want ErrBlocked", blocked[0], err)
+	}
+	if ids, err := s.BlockedTaskIDs(t.Context()); err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	} else if !ids[blocked[0]] {
+		t.Fatalf("BlockedTaskIDs omitted %s, which the claim path refuses", blocked[0])
+	}
+
+	// The blocking plan's own set is unaffected: nothing blocks plan A.
+	if !inReadySet(t, s, blockers[0]) {
+		t.Fatalf("readyCandidates omitted %s, the blocking plan's own task", blockers[0])
+	}
+
+	walkTo(t, s, blockers[0], "merged")
+
+	if isBlocked(t, s, blocked[0]) {
+		t.Fatalf("IsBlocked(%s): want false once plan A's set closed", blocked[0])
+	}
+	if !inReadySet(t, s, blocked[0]) {
+		t.Fatalf("readyCandidates omitted %s after plan A's set closed", blocked[0])
+	}
+	if _, err := s.Claim(t.Context(), blocked[0], "stig", "host:/wt", 0); err != nil {
+		t.Fatalf("Claim(%s) after release: %v", blocked[0], err)
+	}
+}
+
+// TestPlanBlockedByDraftPlan: an unminted blocking set blocks. §7's literal
+// sentence would read the empty set as unblocked; §10's --needs-execution
+// calls an unminted set unfinished, so the edge holds until the blocking plan
+// is accepted and its tasks close.
+func TestPlanBlockedByDraftPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
+	// Plan C is created and left draft, so it has an edge and no tasks.
+	blocker := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-c",
+		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+	})
+
+	if !isBlocked(t, s, blocked[0]) {
+		t.Fatalf("IsBlocked(%s): want true while the blocking plan is draft", blocked[0])
+	}
+	if inReadySet(t, s, blocked[0]) {
+		t.Fatalf("readyCandidates offered %s, which a draft plan blocks", blocked[0])
+	}
+
+	if _, _, err := acceptDoc(t, s, blocker.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc plan C: %v", err)
+	}
+	// Accepted now, but its minted task is open, so the edge still blocks.
+	if !isBlocked(t, s, blocked[0]) {
+		t.Fatalf("IsBlocked(%s): want true while plan C's minted set is open", blocked[0])
+	}
+}
+
+// TestPlanBlockedIgnoresTasksWithoutPlan: the gate reads a task's plan_doc, so
+// a task no plan authored is never plan-blocked.
+func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-f", planTaskBody("", "Plan F"))
+	mintReadyPlan(t, s, "plan-e", planTaskBody("blocks: plan-f\n", "Plan E"))
+
+	in := defaultTaskInput()
+	in.ProjectID = "p1"
+	loose := createTask(t, s, taskTestNow, in)
+
+	if isBlocked(t, s, loose.ID) {
+		t.Fatalf("IsBlocked(%s): a task with no plan_doc must never be plan-blocked", loose.ID)
+	}
+	if !inReadySet(t, s, loose.ID) {
+		t.Fatalf("readyCandidates omitted %s, a task with no plan_doc", loose.ID)
+	}
+	if !isBlocked(t, s, blocked[0]) {
+		t.Fatalf("IsBlocked(%s): want true, the fixture's plan-blocked task", blocked[0])
+	}
+}
