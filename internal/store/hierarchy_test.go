@@ -24,8 +24,8 @@ func TestKindCheckRejectsUnknownKinds(t *testing.T) {
 		bad := defaultTaskInput()
 		bad.Kind = kind
 		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
-			func(tx *sql.Tx, _ int64) error {
-				_, err := CreateTask(tx, taskTestNow, bad)
+			func(tx *sql.Tx, eventID int64) error {
+				_, err := CreateTask(tx, taskTestNow, bad, eventID)
 				return err
 			})
 		if !isCheckViolationOn(err, "tasks_kind_check") {
@@ -67,8 +67,8 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 	followUp := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
-		func(tx *sql.Tx, _ int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, origin.ID, "follow_up_to")
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, origin.ID, "follow_up_to", eventID)
 		}); err != nil {
 		t.Fatalf("AddEdge follow_up_to: %v", err)
 	}
@@ -98,14 +98,14 @@ func TestSingleOriginIndex(t *testing.T) {
 	originB := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
-		func(tx *sql.Tx, _ int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, originA.ID, "follow_up_to")
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, originA.ID, "follow_up_to", eventID)
 		}); err != nil {
 		t.Fatalf("first origin: %v", err)
 	}
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
-		func(tx *sql.Tx, _ int64) error {
-			return AddEdge(tx, taskTestNow, followUp.ID, originB.ID, "follow_up_to")
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, followUp.ID, originB.ID, "follow_up_to", eventID)
 		})
 	if !errors.Is(err, ErrEdgeExists) {
 		t.Fatalf("second origin error = %v, want ErrEdgeExists", err)

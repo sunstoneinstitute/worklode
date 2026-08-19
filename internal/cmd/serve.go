@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
+	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -54,6 +56,22 @@ const (
 	shutdownGrace   = 2 * time.Second
 	shutdownTimeout = 10 * time.Second
 )
+
+// graphProjector builds the knowledge-graph projector when
+// LODE_GRAPHSERVER_URL is set (spec 006 §11): the same LODE_GRAPHSERVER_*
+// variables graphserver.FromEnv documents, so serve and every other caller
+// share one configuration surface. Unset means projection is disabled;
+// set-but-broken fails the boot.
+func graphProjector(reg prometheus.Registerer, st *store.Store) (*projector.Projector, error) {
+	if os.Getenv("LODE_GRAPHSERVER_URL") == "" {
+		return nil, nil
+	}
+	gc, err := graphserver.FromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return projector.New(st, gc, projector.NewMetrics(reg), 200), nil
+}
 
 // shutdownServers stops every server gracefully and returns the first real
 // error, treating http.ErrServerClosed as success.
@@ -200,6 +218,38 @@ func newServeCmd() *cobra.Command {
 					}
 				}
 			}()
+
+			proj, err := graphProjector(reg, st)
+			if err != nil {
+				return err
+			}
+			if proj != nil {
+				// Knowledge-graph projection (spec 006 §11): follow the
+				// state_log outbox and replace each dirty project's graph on
+				// graph-server every 10s until shutdown. Single projector by
+				// construction — one lode serve wired to LODE_GRAPHSERVER_URL
+				// — so graph-server's per-branch lock covers it for now;
+				// If-Match CAS (006 §13.3 item 6) is wanted before any second
+				// writer.
+				go func() {
+					ticker := time.NewTicker(10 * time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-ticker.C:
+							if n, err := proj.RunOnce(ctx); errors.Is(err, context.Canceled) {
+								return
+							} else if err != nil {
+								slog.Error("graph projection", "err", err)
+							} else if n > 0 {
+								slog.Info("projected project graphs", "count", n)
+							}
+						}
+					}
+				}()
+			}
 
 			// Every in-flight request derives from reqCtx, which shutdown
 			// cancels — see shutdownServers.

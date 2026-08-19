@@ -318,6 +318,37 @@ pasted back. `--no-browser` asks for that directly.
 The web session cookie is `Secure`, so web login requires the server to be
 reached over HTTPS (or `localhost`); the `lode login` CLI flow is unaffected.
 
+## Knowledge graph projection
+
+When `LODE_GRAPHSERVER_URL` is set, `lode serve` mirrors every project's
+tasks into the data-platform knowledge graph (spec 006). A background
+projector follows the `state_log` outbox and, for each dirtied project,
+replaces its named graph (`https://worklode.io/ns/graph/project/<id>`)
+wholesale on graph-server's `main` branch — checkpointed in the
+`graph_projection` table so a crash or restart resumes rather than re-scans
+everything.
+
+| Var | Meaning |
+|---|---|
+| `LODE_GRAPHSERVER_URL` | base URL, e.g. `https://graph.dev.sunstoneinstitute.ai` (required to enable projection; must be an absolute http(s) URL) |
+| `LODE_GRAPHSERVER_TOKEN_URL` | Keycloak token endpoint (client-credentials) |
+| `LODE_GRAPHSERVER_CLIENT_ID` | OAuth2 client id, e.g. `dataplatform-svc` |
+| `LODE_GRAPHSERVER_CLIENT_SECRET` | OAuth2 client secret |
+
+The three Keycloak variables must be set together or not at all; with none of
+them set, the client runs unauthenticated, which only works against a
+graph-server started without `AUTH_ENFORCE`. Unset `LODE_GRAPHSERVER_URL`
+disables projection entirely; set but otherwise misconfigured, it fails
+`lode serve`'s boot rather than silently running without it.
+
+Forcing a full re-projection — after a schema change to the projected shape,
+say — is a watermark rewind: `UPDATE graph_projection SET
+last_state_log_id = 0`. The next run treats every project as dirty again.
+
+The compose stack ships **no** graph-server; the Oxigraph container it can
+start is test-only (see `docs/follow-ups.md`), so projection has nowhere to
+write locally today.
+
 ## Cluster watcher
 
 `lode watch` runs a pod informer against one cluster and reports crash loops

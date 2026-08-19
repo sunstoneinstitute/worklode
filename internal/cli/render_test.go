@@ -440,3 +440,26 @@ func TestActorName(t *testing.T) {
 		}
 	}
 }
+
+// TestTimelineSummaryEdgeChange pins timelineSummary's "edge" case:
+// store.AddEdge/RemoveEdge log {"field":"edge","op","type","from","to"}, not
+// the {"field","old","new"} shape every other state_log row uses, so a naive
+// key read used to render a blank "edge: " line. Both directions must render
+// non-blank and name both endpoints.
+func TestTimelineSummaryEdgeChange(t *testing.T) {
+	added := model.TimelineEntry{
+		Type:   "state",
+		Change: []byte(`{"field":"edge","op":"add","type":"blocks","from":"WL-1","to":"WL-2"}`),
+	}
+	if got, want := timelineSummary(added), "edge added: WL-1 blocks WL-2"; got != want {
+		t.Fatalf("timelineSummary(add) = %q, want %q", got, want)
+	}
+
+	removed := model.TimelineEntry{
+		Type:   "state",
+		Change: []byte(`{"field":"edge","op":"remove","type":"blocks","from":"WL-1","to":"WL-2"}`),
+	}
+	if got, want := timelineSummary(removed), "edge removed: WL-1 blocks WL-2"; got != want {
+		t.Fatalf("timelineSummary(remove) = %q, want %q", got, want)
+	}
+}

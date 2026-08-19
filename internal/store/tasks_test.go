@@ -61,7 +61,7 @@ func createTask(t *testing.T, s *Store, now time.Time, in TaskInput) *model.Task
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
-			task, err = CreateTask(tx, now, in)
+			task, err = CreateTask(tx, now, in, eventID)
 			return err
 		})
 	if err != nil {
@@ -111,7 +111,7 @@ func addEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.add", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, taskTestNow, fromTask, toTask, typ)
+			return AddEdge(tx, taskTestNow, fromTask, toTask, typ, eventID)
 		})
 	return err
 }
@@ -120,7 +120,7 @@ func removeEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.remove", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return RemoveEdge(tx, fromTask, toTask, typ)
+			return RemoveEdge(tx, fromTask, toTask, typ, eventID)
 		})
 	return err
 }
@@ -305,10 +305,14 @@ func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
 		t.Fatalf("UpdatedAt: got %v, want %v (bumped)", got.UpdatedAt, moved)
 	}
 
+	// entity_id alone no longer picks one row: CreateTask now logs its own
+	// state_log entry too, so this reads the transition's row specifically,
+	// by the eventID RecordEvent handed the apply callback above.
 	var kind, entityID, changeJSON string
 	var loggedEventID int64
 	row := s.db.QueryRow(
-		`SELECT entity_kind, entity_id, change, event_id FROM state_log WHERE entity_id = $1`, task.ID)
+		`SELECT entity_kind, entity_id, change, event_id FROM state_log WHERE entity_id = $1 AND event_id = $2`,
+		task.ID, eventID)
 	if err := row.Scan(&kind, &entityID, &changeJSON, &loggedEventID); err != nil {
 		t.Fatalf("read state_log: %v", err)
 	}
@@ -1165,7 +1169,7 @@ func TestCreateTaskInvalidConcernRejected(t *testing.T) {
 	in.Concern = "not-a-concern"
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			_, err := CreateTask(tx, taskTestNow, in)
+			_, err := CreateTask(tx, taskTestNow, in, eventID)
 			return err
 		})
 	if !errors.Is(err, ErrInvalidInput) {
@@ -1324,7 +1328,7 @@ func TestCreateTaskNormalizesPins(t *testing.T) {
 	in.Skills = over
 	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			_, err := CreateTask(tx, taskTestNow, in)
+			_, err := CreateTask(tx, taskTestNow, in, eventID)
 			return err
 		})
 	if !errors.Is(err, ErrInvalidInput) {
@@ -1507,14 +1511,15 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 	}
 
 	var created *model.Task
-	err := s.Tx(ctx, func(tx *sql.Tx) error {
-		task, err := CreateTask(tx, s.Now(), TaskInput{
-			ProjectID: "secproj", Title: "needs creds", Priority: "medium", Kind: "chore",
-			Secrets: []string{"KUBECONFIG_HZDEV", "OPENALEX_API_KEY"},
+	_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := CreateTask(tx, s.Now(), TaskInput{
+				ProjectID: "secproj", Title: "needs creds", Priority: "medium", Kind: "chore",
+				Secrets: []string{"KUBECONFIG_HZDEV", "OPENALEX_API_KEY"},
+			}, eventID)
+			created = task
+			return err
 		})
-		created = task
-		return err
-	})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
@@ -1551,13 +1556,14 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 	if err := s.CreateProject(ctx, "secproj2", "Secrets2", "SF"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	err := s.Tx(ctx, func(tx *sql.Tx) error {
-		_, err := CreateTask(tx, s.Now(), TaskInput{
-			ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
-			Secrets: []string{"op://Employee/x"},
+	_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, s.Now(), TaskInput{
+				ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
+				Secrets: []string{"op://Employee/x"},
+			}, eventID)
+			return err
 		})
-		return err
-	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("create with bad secret name: %v; want ErrInvalidInput", err)
 	}
