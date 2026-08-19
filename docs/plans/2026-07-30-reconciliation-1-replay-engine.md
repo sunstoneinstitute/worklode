@@ -75,7 +75,9 @@ Design calls this plan makes (record here, not re-litigated in tasks):
   plan.
 - Architectural drift (`lode drift`) — spec 007.
 - Promoting untracked work into tasks — `lode inbox`, already shipped.
-- KG groundwork (`internal/kg/*`) — `docs/plans/2026-07-30-platform-graph-design.md`.
+- KG groundwork (`internal/kg/*`) —
+  `docs/plans/2026-07-30-knowledge-graph-1-graph-foundations.md` (`iri`) and
+  `docs/plans/2026-08-19-component-boundary-manifest.md` (`manifest`).
 - Scope-chain resolution — `docs/plans/2026-07-30-project-scoping.md`
   (shipped; `lode doctor` only reads `cfg.CurrentProject`, it does not
   re-implement resolution).

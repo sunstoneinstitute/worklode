@@ -34,9 +34,14 @@ golang-migrate, `gopkg.in/yaml.v3`, standard-library testing.
 
 ## Prerequisites (sibling plans, same day)
 
-- `docs/plans/2026-07-30-platform-graph-design.md` owns `internal/kg/iri`
-  and `internal/kg/manifest`. Tasks 3, 8–10 here extend/consume those
-  packages and cannot start before that plan's Tasks 1–2 have landed.
+- `internal/kg/iri` is owned by
+  `docs/plans/2026-07-30-knowledge-graph-1-graph-foundations.md` and has
+  landed (WL-25); `internal/kg/manifest` is owned by
+  `docs/plans/2026-08-19-component-boundary-manifest.md` (successor to the
+  superseded `2026-07-30-platform-graph-design.md` Tasks 2–3 — WL-109).
+  Task 3 here extends `internal/kg/iri`; Tasks 8–10 consume
+  `internal/kg/manifest` and cannot start before that plan's Task 1 has
+  landed.
 - `docs/plans/2026-07-30-runtime-layer.md` owns `internal/graphproj`
   (`Triple`, `Render`). Task 10 here consumes it and cannot start before that
   plan's Task 6 has landed.
@@ -297,7 +302,8 @@ git commit -m "Rename the ls prefixes to wl across the docs (spec 025 §17)"
 - Modify: `internal/kg/iri/iri.go`
 - Test: `internal/kg/iri/iri_test.go` (append)
 
-Depends on the platform-graph-design plan's Task 1 (`internal/kg/iri`).
+Depends on `internal/kg/iri` (owned by the knowledge-graph-1 plan; landed
+under WL-25).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1483,8 +1489,9 @@ git commit -m "Parse the implements manifest with pinned-version validation"
 - Create: `internal/kg/implements/resolve.go`
 - Test: `internal/kg/implements/resolve_test.go`
 
-Depends on the platform-graph-design plan's `internal/kg/manifest`
-(first-match-wins `Match`) and `internal/kg/iri` (`Component`).
+Depends on the component-boundary-manifest plan's `internal/kg/manifest`
+(first-match-wins `Match`; `2026-08-19-component-boundary-manifest.md`) and
+`internal/kg/iri` (`Component`; landed via the knowledge-graph-1 plan).
 
 - [ ] **Step 1: Write the failing test**
 

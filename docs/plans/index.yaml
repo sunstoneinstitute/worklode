@@ -992,6 +992,13 @@ docs/plans/2026-08-18-motherlode-remix-research.md:
     task-5-extract-the-plugin-level-prompts-and-reconcile-the-set: "### Task 5 — Extract the plugin-level prompts and reconcile the set"
     task-6-fold-the-findings-back-into-spec-037: "### Task 6 — Fold the findings back into spec 037"
     verification: "## Verification"
+docs/plans/2026-08-19-component-boundary-manifest.md:
+  sections:
+    file-structure: "## File Structure"
+    tasks: "## Tasks"
+    task-1-parse-the-component-boundary-manifest-with-first-match-wins-globs: "### Task 1 — Parse the component-boundary manifest with first-match-wins globs"
+    task-2-declare-worklodes-whole-repo-component-manifest: "### Task 2 — Declare Worklode's whole-repo component manifest"
+    out-of-scope-owned-elsewhere: "## Out of scope (owned elsewhere)"
 docs/plans/2026-08-19-show-pager-flag.md:
   sections:
     global-constraints: "## Global Constraints"

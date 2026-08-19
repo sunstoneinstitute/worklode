@@ -1,8 +1,20 @@
 ---
 status: superseded
 covers: docs/specs/006-knowledge-graph.md
+isReplacedBy:
+  ".":
+    - 2026-07-30-knowledge-graph-1-graph-foundations.md
+    - 2026-08-19-component-boundary-manifest.md
 ---
 # Platform graph design record (spec 003) — Implementation Plan
+
+> **Superseded (WL-109).** Task 1 (`internal/kg/iri`) was re-planned into
+> `2026-07-30-knowledge-graph-1-graph-foundations.md` (executed under WL-25,
+> merged, with a plain-string API replacing this plan's `(string, error)`
+> signature). Tasks 2–3 (`internal/kg/manifest`, `.worklode/components.yaml`)
+> carried forward into `2026-08-19-component-boundary-manifest.md`. The
+> original `status: superseded` stamp (commit `9a698a9`) named no successor;
+> this note makes the replacement deliberate.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
