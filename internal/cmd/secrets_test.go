@@ -128,3 +128,76 @@ func TestSecretsPurgeCommand(t *testing.T) {
 		t.Fatalf("purge output = %q; want the purged name", out.String())
 	}
 }
+
+func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	initSecretsWorktree(t, "WL-9")
+
+	for _, n := range []string{"A_TOKEN", "B_KEY"} {
+		if err := secrets.Put("WL-9", n, "val-"+n); err != nil {
+			t.Fatalf("put: %v", err)
+		}
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN", "B_KEY"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	var gotArgv, gotEnv []string
+	restore := execFn
+	execFn = func(bin string, argv, env []string) error {
+		gotArgv, gotEnv = argv, env
+		return nil
+	}
+	defer func() { execFn = restore }()
+
+	cmd := newSecretsExecCmd()
+	cmd.SetArgs([]string{"--", "env"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if len(gotArgv) == 0 || gotArgv[0] != "env" {
+		t.Fatalf("argv = %v", gotArgv)
+	}
+	injected := map[string]string{}
+	for _, kv := range gotEnv {
+		k, v, _ := strings.Cut(kv, "=")
+		injected[k] = v
+	}
+	if injected["A_TOKEN"] != "val-A_TOKEN" || injected["B_KEY"] != "val-B_KEY" {
+		t.Fatalf("injected env missing secrets: %v", injected)
+	}
+}
+
+func TestSecretsExecFailsOnMissingKeystoreItem(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	initSecretsWorktree(t, "WL-9")
+	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"GONE_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	cmd := newSecretsExecCmd()
+	cmd.SetArgs([]string{"--", "env"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "GONE_TOKEN") {
+		t.Fatalf("exec with missing item: %v; want error naming GONE_TOKEN", err)
+	}
+}
+
+func TestSecretsExecRequiresWorktree(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	// A git repo whose root is NOT wt/<id>-<slug>: the guard must reject it.
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Chdir(dir)
+
+	cmd := newSecretsExecCmd()
+	cmd.SetArgs([]string{"--", "env"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("exec outside a Worklode worktree succeeded; want the guard to fail")
+	}
+}
