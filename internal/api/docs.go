@@ -235,7 +235,10 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
-// 025 §7, gated on the document's assignee.
+// 025 §7, gated on the document's assignee. On a plan this also mints its
+// execution tasks (025 §9.2); the response shape is unchanged for now
+// (part 3 of the plan surfaces the minted set), but the mint count is
+// recorded once the transaction commits.
 func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -244,18 +247,20 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	actor := actorFrom(r)
 	now := s.st.Now()
 	var accepted *model.Doc
+	var minted []model.Task
 	err := s.recordDocEvent(w, r, "accept", "doc.accepted", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
+			d, tasks, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
 			if err != nil {
 				return err
 			}
-			accepted = d
+			accepted, minted = d, tasks
 			return nil
 		})
 	if err != nil {
 		return
 	}
+	s.st.RecordPlanTasksMinted(len(minted))
 	writeJSON(w, http.StatusOK, accepted)
 }
 

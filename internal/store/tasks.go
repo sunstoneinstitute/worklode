@@ -30,6 +30,10 @@ type TaskInput struct {
 	CreatedBy string
 	Draft     bool
 	Skills    []string
+	// PlanDoc is the plan document this task was minted from (0 = none).
+	// Written only by AcceptDoc's plan branch (025 §9.2) — no other caller
+	// sets it.
+	PlanDoc int64
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -160,9 +164,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)`,
-		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts, string(skillsJSON), string(secretsVal),
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14)`,
+		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
+		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)

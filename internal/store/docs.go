@@ -232,66 +232,136 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 }
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
-// assignee. It freezes the document's published anchor set and flips the
-// target of every document-level replaces edge to superseded, in the same
-// transaction.
+// assignee. For a spec or ADR it freezes the document's published anchor set
+// and flips the target of every document-level replaces edge to superseded,
+// in the same transaction. For a plan it mints the plan's execution tasks
+// instead (see acceptPlanDoc) — the second return is that minted set, in
+// definition order, and nil for a spec or ADR.
 //
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
 // accept still rejects an anchored heading below designdoc.DepthLimit even
 // though rules 1-3 exempt drafts.
-//
-// A plan is refused: plan acceptance must mint the plan's tasks in the same
-// transaction (025 §9.2), and that half is not built yet — an accepted plan
-// without its tasks would break the invariant by construction.
-func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	d, err := lockDoc(tx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Assignee first, matching AcceptRevision: standing to touch the document
 	// does not depend on its state, and checking state first would disclose it
 	// to an actor who has none.
 	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if d.kind == "plan" {
-		return nil, fmt.Errorf(
-			"doc %d is a plan: accepting one mints its tasks in the same transaction (025 §9.2), which is not built yet: %w",
-			id, ErrInvalidInput)
-	}
+	// Draft-only applies to both branches: a plan already accepted must never
+	// mint a second time, which is what keeps doc.status = accepted ⟺ its
+	// tasks exist true by construction (025 §9.2).
 	if d.status != "draft" {
-		return nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
+		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
+	}
+
+	if d.kind == "plan" {
+		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
 	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// No accepted version to diff against, so the comparison runs against an
 	// empty document: Removed and Renumbered come back empty by construction
 	// and TooDeep carries the one rule a first accept still enforces.
 	diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
 	if v := diff.Violations(); len(v) > 0 {
-		return nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
+		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
 	}
 
 	ts := now.UTC().Truncate(time.Second)
 	if _, err := tx.Exec(
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
-		return nil, fmt.Errorf("accept doc %d: %w", id, err)
+		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
 	if _, err := tx.Exec(
 		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
-		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+		return nil, nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
 	}
 	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
 		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return getDocTx(tx, id)
+	doc, err := getDocTx(tx, id)
+	return doc, nil, err
+}
+
+// acceptPlanDoc is AcceptDoc's plan branch (025 §9.2): parse the plan body's
+// ## Tasks declarations, mint one draft task per definition with plan_doc set
+// to id, wire each definition's blockedBy numbers as blocks edges between the
+// minted tasks, then flip the document to accepted — all inside the caller's
+// transaction, so accept and mint are one commit and a failed mint leaves the
+// document draft.
+//
+// Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
+// branch's section or diff machinery runs here: there is nothing to publish
+// and no CompareSections gate to evaluate. d.status is already known draft —
+// AcceptDoc checks it before branching.
+func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
+	parsed, err := parseDocBody(d.kind, d.body)
+	if err != nil {
+		return nil, nil, err
+	}
+	defs, err := designdoc.PlanTasks(parsed.doc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
+	}
+
+	// First pass mints every task and records its minted id by definition
+	// number; second pass wires blockedBy once every number resolves, so a
+	// forward reference (task 1 blockedBy task 2) needs no reordering.
+	mintedID := make(map[int]string, len(defs))
+	tasks := make([]model.Task, 0, len(defs))
+	for _, def := range defs {
+		task, err := CreateTask(tx, now, TaskInput{
+			ProjectID: d.project,
+			Title:     def.Title,
+			Body:      def.Body,
+			Priority:  def.Priority,
+			Kind:      def.Kind,
+			Skills:    def.Skills,
+			CreatedBy: actorID,
+			Draft:     true,
+			PlanDoc:   id,
+		}, eventID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("mint task %d of plan %d: %w", def.Number, id, err)
+		}
+		mintedID[def.Number] = task.ID
+		tasks = append(tasks, *task)
+	}
+	for _, def := range defs {
+		for _, blocker := range def.BlockedBy {
+			if err := AddEdge(tx, now, mintedID[blocker], mintedID[def.Number], "blocks", eventID); err != nil {
+				return nil, nil, fmt.Errorf(
+					"wire blocks edge task %d -> %d of plan %d: %w", blocker, def.Number, id, err)
+			}
+		}
+	}
+
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
+		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
+	}
+	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
+		return nil, nil, err
+	}
+	doc, err := getDocTx(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return doc, tasks, nil
 }
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
@@ -1153,6 +1223,16 @@ func (s *Store) RecordDocEvent(
 	id, inserted, err = s.RecordEvent(ctx, source, externalID, typ, payload, apply)
 	s.metrics.docOp(op, err)
 	return id, inserted, err
+}
+
+// RecordPlanTasksMinted records n tasks minted by one plan accept
+// (worklode_doc_plan_tasks_minted_total). AcceptDoc is a package-level
+// function with no *Store to record through, so the caller — the API's
+// acceptDoc handler — calls this once the accepting transaction has
+// committed, with the length of AcceptDoc's minted-task return. Nil-safe:
+// a store opened without WithMetrics records nothing.
+func (s *Store) RecordPlanTasksMinted(n int) {
+	s.metrics.planTasksMinted(n)
 }
 
 // nullText maps "" to NULL, for the document columns where absent and empty

@@ -33,6 +33,7 @@ type storeMetrics struct {
 	expiries         prometheus.Counter
 	projectWorkReads *prometheus.CounterVec
 	docOps           *prometheus.CounterVec
+	docTasksMinted   prometheus.Counter
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -61,8 +62,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_doc_operations_total",
 			Help: "Design-document mutations by op (create|update|accept|revise) and outcome.",
 		}, []string{"op", "outcome"}),
+		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_doc_plan_tasks_minted_total",
+			Help: "Tasks minted across all plan-document accepts (025 §9.2).",
+		}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads, m.docOps)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads, m.docOps, m.docTasksMinted)
 	return m
 }
 
@@ -112,6 +117,17 @@ func (m *storeMetrics) docOp(op string, err error) {
 		return
 	}
 	m.docOps.WithLabelValues(op, outcome(err)).Inc()
+}
+
+// planTasksMinted adds n to worklode_doc_plan_tasks_minted_total, the tasks
+// minted by one plan accept. n <= 0 records nothing — a successful plan
+// accept always mints at least one task (PlanTasks refuses an empty set),
+// but the guard keeps this symmetric with expire.
+func (m *storeMetrics) planTasksMinted(n int) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.docTasksMinted.Add(float64(n))
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the
