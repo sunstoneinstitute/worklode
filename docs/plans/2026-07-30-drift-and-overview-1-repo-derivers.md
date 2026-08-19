@@ -50,7 +50,7 @@ none of their packages; it only calls them.
 | Plan | Provides (consumed here) |
 |---|---|
 | `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` | part 1: `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`; part 2: projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
-| `docs/plans/2026-07-30-platform-graph-design.md` | `internal/kg/iri` (IRI grammar, `GraphNS`), `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §1), Worklode's own manifest |
+| `docs/plans/2026-08-19-component-boundary-manifest.md` (successor to the superseded `2026-07-30-platform-graph-design.md` Tasks 2–3 — WL-109) | `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2.2), Worklode's own manifest. `internal/kg/iri` (IRI grammar) moved to `2026-07-30-knowledge-graph-1-graph-foundations.md` and has landed (WL-25) |
 | `docs/plans/2026-07-30-runtime-layer.md` | `internal/graphproj` (`Triple`, `Render`, `ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCoversTriples`, `CommitKnown`) — exactly the row→triple functions 015 says "007's observed/deploy deriver will emit" |
 | `docs/plans/2026-07-30-reconciliation-{1-replay-engine,2-cli-surface,3-poll-engine}.md` | nothing consumed directly; noted because the series owns `lode doctor` and `internal/reconcile`, which this series must not touch |
 | `docs/plans/2026-07-30-design-documents-as-graph-objects.md` | nothing consumed; owns everything this series defers to "the 014 plan" — `internal/kg/implements`, the `observed/repo-implements` deriver, sections, `lode doc` |
@@ -1172,8 +1172,10 @@ The full-series map is split across the three parts; this part covers:
    the data-platform-kg-requirements plan, Overlaps §2) — resolve at the
    planning tier before any deriver writes to prod.
 2. **`.worklode/components.yaml` parser** is owned by
-   2026-07-30-platform-graph-design (`internal/kg/manifest`); this series only
-   calls `Parse`/`Match` and assumes the `Component.IRI` field name.
+   2026-08-19-component-boundary-manifest (`internal/kg/manifest`; successor
+   to the superseded platform-graph-design plan's Tasks 2–3 — WL-109); this
+   series only calls `Parse`/`Match` and assumes the `Component.IRI` field
+   name.
 3. **Spec 007 correction:** deriver 3's claim that PR changed-file lists are
    "already ingested" is false in this codebase; part 2 fetches them at
    derive time. If ingestion is preferred later, `PRAffectsTriples` keeps
