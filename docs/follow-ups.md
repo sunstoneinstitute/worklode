@@ -46,6 +46,16 @@ outright once it is fixed over annotating it as resolved.
   `registry_package` handler mints every image as an artifact, but delivery is
   still decided per repo, so the second image's deploy tells the tracker
   nothing the first one didn't.
+- `[P3]` **Spec 006 §11.1 still says image ingest does not exist.** It reads
+  "Nothing creates `docker_image`, `pypi` or `binary` rows" and calls
+  `deployments.artifact_id` null in practice, but `applyRegistryPackage`
+  (`internal/hooks/github.go`) mints `docker_image` artifacts from
+  `registry_package` webhooks and `FindArtifactByImage` resolves them. §15
+  question 11 ("the artifact ingest gap is the real blocker") is therefore
+  narrower than it reads — what remains is the App permission item below, not
+  the absence of a handler. Needs an amendment to 006 §11.1 and §15 item 11.
+  Noticed while executing the runtime-layer plan (WL-27), whose projection is
+  correct either way: a nil artifact emits no `prov:used`.
 - `[P4]` **`registry_package` ignores non-container packages**: PyPI/npm
   versions are recorded as events and dropped. The `pypi` artifact kind exists
   in the `artifacts.kind` CHECK, nothing writes it, and nothing reads it —

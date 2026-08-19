@@ -86,8 +86,8 @@ expected to find little or nothing), and the projection functions with the
 no runtime row→triple functions.
 
 **Explicitly out of scope, per the spec:** 007's deriver/graph-server wiring;
-image-publish ingest closing the `deployments.artifact_id` gap (Open Q5);
-`wl:RuntimeEvent` projection (Open Q1 — declared, unprojected);
+image-publish ingest closing the `deployments.artifact_id` gap (006 §15 question 11);
+`wl:RuntimeEvent` projection (006 §15 question 7 — declared, unprojected);
 `wl:Build` instances (no source); the `env_deploys` frontier node (v2);
 serving `ns/*.ttl` under `worklode.io/ns/` — unowned, tracked in
 `docs/follow-ups.md` (the rdf-registry publish route died with
@@ -130,7 +130,7 @@ covering the §10.1 runtime examples), `internal/graphproj`'s
 
 **Working directory:** the repo root.
 
-- [ ] **Step 1: Confirm the tree is clean and the checks pass**
+- [x] **Step 1: Confirm the tree is clean and the checks pass**
 
 Run: `git status --short --branch`, then `riot --validate ns/*.ttl` and
 `go test -trimpath ./internal/graphproj/` (the Oxigraph `ns/` parse gate;
@@ -164,12 +164,12 @@ tagged `wl:layer wlc:runtime`:
   `manual`}, `wlc:RuntimeEventKind` {`crashloop`, `oom`, `flux_failure`,
   `flux_recovery`}.
 
-- [ ] **Step 1: Diff**
+- [x] **Step 1: Diff**
 
 Grep each term in `ns/`; confirm layer tags, domains/ranges and scheme
 membership match the list above (spec 006 §2.1, §3.1, §6 as folded).
 
-- [ ] **Step 2: Fill any gap**
+- [x] **Step 2: Fill any gap**
 
 For a missing or wrong term: amend spec 006 first, mirror `ns/` in the same
 commit (CLAUDE.md ordering), re-run `riot --validate ns/*.ttl`. If the gap
@@ -193,7 +193,7 @@ one `dct:identifier`), and `wl:cutFromShape` (subjects of `wl:cutFrom` are
 Artifacts, objects Commits). No shape for `wl:Build`, `wl:RuntimeEvent` —
 deliberate (006 §15 item 7).
 
-- [ ] **Step 1: Diff, fill as in Task 2, `riot --validate ns/*.ttl`**
+- [x] **Step 1: Diff, fill as in Task 2, `riot --validate ns/*.ttl`**
 
 Note: this repo has no SHACL *execution* harness — `riot` validates syntax
 and the Oxigraph gate validates parseability, but nothing here runs the
@@ -219,7 +219,7 @@ survives locally:
 - **AC9 (no Build/RuntimeEvent instances)** — holds by construction: no
   projection function below emits either class.
 
-- [ ] **Step 1: Verify the gate is green**
+- [x] **Step 1: Verify the gate is green**
 
 Run: `docker compose up -d oxigraph && go test -trimpath ./internal/graphproj/`
 Expected: PASS (not skipped).
@@ -248,7 +248,7 @@ patterns are already there: `iri.Artifact(kind, name, version)` (kind-first,
 not the three-part `(host, "owner/repo", sha)` shape this plan originally
 sketched).
 
-- [ ] **Step 1: Verify the grammar and its tests cover the §10.1 examples**
+- [x] **Step 1: Verify the grammar and its tests cover the §10.1 examples**
 
 `internal/kg/iri/iri_test.go`'s `TestGrammar` table already carries the
 docker-image artifact, deployment, environment and commit examples verbatim.
@@ -273,7 +273,7 @@ plan sketched a `{S, P, O string, Lit bool, DT string}` triple and a
 triple set is byte-identical regardless of build order.
 `triple_test.go` already proves ordering, dedupe, escaping and datatypes.
 
-- [ ] **Step 1: Verify**
+- [x] **Step 1: Verify**
 
 Run: `go test -trimpath ./internal/graphproj/`
 Expected: PASS. Nothing to build; Task 7 emits `[]graphproj.Triple` and
@@ -302,7 +302,7 @@ declares. `GitHubHost` and `splitRepo` live here — repos are stored as
 GitHub's "owner/name" full_name, but `iri.Commit` wants the parts
 separately.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 package graphproj
@@ -416,7 +416,7 @@ func TestDeploymentTriples(t *testing.T) {
 	}
 }
 
-// deployments.artifact_id is null in practice today (006 §11.1, Open Q5):
+// deployments.artifact_id is null in practice today (006 §11.1, §15 question 11):
 // the prov:used edge is specified but must simply be absent, not invented.
 func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 	d := store.Deployment{
@@ -485,12 +485,12 @@ func TestMalformedRepoOmitsEdges(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test -trimpath ./internal/graphproj/`
 Expected: FAIL — `undefined: ArtifactTriples` (and the other new functions).
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```go
 package graphproj
@@ -578,7 +578,7 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
 
 // DeploymentTriples projects one deployments row. artifact is the row
 // deployments.artifact_id resolves to, nil when unset — null in practice
-// today (006 §11.1, Open Q5), so prov:used is simply absent.
+// today (006 §11.1, §15 question 11), so prov:used is simply absent.
 func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
 	s := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
 	ts := []Triple{
@@ -660,17 +660,17 @@ func xsdTime(t time.Time) string {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `go test -trimpath ./internal/graphproj/ -v`
 Expected: PASS (all tests).
 
-- [ ] **Step 5: Run `go vet` and the package tests once more**
+- [x] **Step 5: Run `go vet` and the package tests once more**
 
 Run: `go vet ./internal/graphproj/ && go test -trimpath ./internal/graphproj/...`
 Expected: clean, PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/graphproj
@@ -683,17 +683,18 @@ git commit -m "Project runtime rows into wl: triples with the source-sha guard"
 
 ### Task 8: Full-suite verification
 
-- [ ] **Step 1: Vocabulary and full suite**
+- [x] **Step 1: Vocabulary and full suite**
 
 Run: `riot --validate ns/*.ttl && make test`
 Expected: PASS. `internal/graphproj` gains only leaf code — nothing else
 should have changed. Store/api/cmd tests need Postgres, as before; run the
 Oxigraph-gated tests for real with `docker compose up -d oxigraph`.
 
-- [ ] **Step 2: Acceptance-criteria walkthrough**
+- [x] **Step 2: Acceptance-criteria walkthrough**
 
-Confirm each criterion (spec 015's nine, folded into 006) maps to green
-evidence:
+Confirm each criterion maps to green evidence. **The numbering below is spec
+015's nine, which is off by one from 006 §16's ten** — 015's AC8 is 006 §16
+criterion 9. Read them as 015's throughout:
 1 (layer tags) and 2 (no foreign imports) → the Task 2 diff over `ns/`,
 which already carries the terms with their tags — the old graph-side pytest
 assertions died with the rdf-registry harness ·
@@ -701,15 +702,64 @@ assertions died with the rdf-registry harness ·
 4, 5, 7 → the vocabulary and shapes exist in `ns/` (Tasks 2–3); no in-repo
 SHACL/owlrl runner exercises them against instance data (Task 4) ·
 6 → the four node shapes in `ns/shapes.ttl` (Task 3) ·
-8 → `TestReleaseCutFromTriples`, `TestBranchNameProjectsNoCommitEdge` ·
-9 → `TestMalformedRepoOmitsEdges` plus construction: no function above
-emits a Build or RuntimeEvent instance anywhere.
+8 → `TestReleaseCutFromTriples`, `TestBranchNameProjectsNoCommitEdge`,
+`TestCutFromEdgeLandsOnProjectedNodes` (the edge lands on nodes the other two
+functions project, so it cannot dangle) ·
+9 → **by construction, with no test**: no function above emits a Build or
+RuntimeEvent instance anywhere. Nothing asserts their absence, because a test
+that no code path exists is a test of the reader, not the code.
 
-- [ ] **Step 3: Report the deliberate leftovers**
+- [x] **Step 3: Report the deliberate leftovers**
 
 In the completion summary, restate what this plan intentionally did not do,
 so nobody mistakes it for a gap: 007 deriver wiring, image-publish ingest
-(Open Q5 — the single highest-value follow-up), RuntimeEvent natural key
-(Open Q1), env_deploys frontier node (v2), SHACL execution against instance
-data (no harness here), and serving `ns/` under `worklode.io/ns/`
+(006 §15 question 11 — the single highest-value follow-up), RuntimeEvent
+natural key (question 7), env_deploys frontier node (v2), SHACL execution
+against instance data (no harness here), and serving `ns/` under
+`worklode.io/ns/`
 (unowned — `docs/follow-ups.md`).
+
+## Execution notes (WL-27)
+
+- Tasks 1–4 found **no gap**: every runtime class, property, scheme and node
+  shape is already in `ns/` with `wl:layer wlc:runtime`, and `wl:cutFrom` is
+  spelled as this plan expects. `ns/` was not modified.
+- Task 5: `internal/kg/iri/iri_test.go`'s `TestGrammar` already carries all
+  four §10.1 runtime examples verbatim; nothing appended.
+- Task 7 landed verbatim, then took three review-driven changes:
+  - **`CommitKnown` is `func(repo, sha string) bool`**, not `func(sha string)
+    bool`. The plan's own doc comment scoped the guard to "the artifact's
+    repo", which a one-argument signature cannot deliver: `main_commits` is
+    `UNIQUE (repo, sha)`, so a batch spanning repos would pass the guard on
+    repo A's sha while minting the IRI from repo B. There are no callers yet,
+    so the fix was free now and would not have been later.
+  - **`TestCutFromEdgeLandsOnProjectedNodes` added.** The plan's three
+    cutFrom/artifact/commit tests each hardcoded their own IRI string and only
+    happened to agree; nothing failed if one function's host-qualification
+    changed alone.
+  - **Comments corrected on two stale facts** (below).
+- The `riot`, Oxigraph and Postgres gates are not runnable in the execution
+  environment (no `riot` binary, no docker socket, no local Postgres), so
+  `make test` passed with the Postgres-backed packages skipping and the
+  Oxigraph gate skipping. `.github/workflows/_test.yml` runs both services;
+  CI is the gate that actually exercised them.
+- The plan's `Open Q5`/`Open Q1` references were stale — 006 §15 numbers the
+  image-publish ingest gap **11** and the RuntimeEvent natural key **7**
+  (Q1 and Q5 are resolved questions about something else). Corrected here and
+  in `internal/graphproj/runtime.go`.
+- **Spec 006 §11.1 is out of date and this plan inherited it.** It says
+  "Nothing creates `docker_image`, `pypi` or `binary` rows" and that
+  `deployments.artifact_id` is "null in practice", but `applyRegistryPackage`
+  (`internal/hooks/github.go`) has since minted `docker_image` artifacts from
+  `registry_package` webhooks, which `FindArtifactByImage` resolves. The
+  projection is right either way — a nil artifact emits no `prov:used` — but
+  the comments no longer repeat the stale claim, and §15 question 11 is
+  narrower than "no image ingest exists". Amending 006 §11.1 is out of scope
+  here; filed as a follow-up. The remaining half of that gap (the GitHub App
+  needs `Packages: read` and a `registry_package` subscription) is already in
+  `docs/follow-ups.md`.
+- Not changed, recorded as known: `deployments.environment` has no CHECK
+  constraint, so `wl:EnvironmentShape`'s dev/prod closure rests on
+  `store.NormalizeEnvironment` alone; `splitRepo` splits at the first slash,
+  so a three-part repo string would yield a five-segment commit IRI rather
+  than being rejected. Both are documented at their call sites.
