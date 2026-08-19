@@ -32,6 +32,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/transcript"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -361,6 +362,20 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 		Agent: agentName(), SessionID: sessionID, Usage: usage,
 	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)
+	}
+}
+
+// purgeSecrets removes a task's materialized secrets when its worktree goes
+// away — materialized lifetime equals worktree lifetime (spec 017). Local
+// only, so it runs BEFORE any backbone call and regardless of their outcome.
+func purgeSecrets(opts Options, taskID string) {
+	names, err := secrets.PurgeTask(taskID)
+	if err != nil {
+		warn(opts, "purge secrets for %s: %v", taskID, err)
+		return
+	}
+	if len(names) > 0 {
+		warn(opts, "purged secrets for %s: %s", taskID, strings.Join(names, ", "))
 	}
 }
 
@@ -704,6 +719,7 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 	if !ok {
 		return
 	}
+	purgeSecrets(opts, taskID)
 	c, err := opts.client()
 	if err != nil {
 		warn(opts, "load config: %v", err)
@@ -820,6 +836,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
+	purgeSecrets(opts, taskID)
 	sessionID := p.SessionID
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
