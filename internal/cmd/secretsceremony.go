@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -80,14 +81,35 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 
 	var declined []string
 	consented := consentSet
-	if len(consentSet) > 0 && !consentToSecrets(cmd, consentSet) {
-		declined = entryNames(consentSet)
-		consented = nil
+	if len(consentSet) > 0 {
+		ok, asked := consentToSecrets(cmd, consentSet)
+		if !ok {
+			consented = nil
+			// Only a human's "no" is recorded. An auto-decline (no terminal,
+			// --json) records nothing anywhere, so the declared names stay
+			// unsatisfied and a later `lode resume` in a terminal re-runs the
+			// ceremony instead of skipping it forever.
+			if asked {
+				declined = entryNames(consentSet)
+			}
+		}
 	}
 
 	pack := append(append([]secrets.Entry{}, baseline...), consented...)
 	if len(pack) == 0 {
-		if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Declined: declined}); err != nil {
+		if len(declined) == 0 {
+			return // auto-declined: leave every prior record untouched
+		}
+		// The manifest is the only record of what the keystore holds (keyring
+		// cannot enumerate), and the write below replaces it wholesale: drop
+		// the previous run's items first or they outlive the worktree with no
+		// purge path able to reach them.
+		if _, err := secrets.PurgeTask(taskID); err != nil {
+			fmt.Fprintf(errw, "secrets: remove previously materialized items: %v\n", err)
+		}
+		if err := secrets.SaveManifest(secrets.Manifest{
+			Task: taskID, Declined: declined, At: time.Now().UTC(),
+		}); err != nil {
 			fmt.Fprintf(errw, "secrets: record declined names: %v\n", err)
 		}
 		fmt.Fprintf(errw, "secrets: declined %s — credentialed steps will block\n", strings.Join(declined, ", "))
@@ -107,7 +129,10 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 	excludeSecretsEnv(dir)
 
 	names := entryNames(pack)
-	if err := opRunFunc(dir, envFile, taskID, names, declined, cmd.OutOrStdout(), errw); err != nil {
+	// The child's own stdout (pack's "packed N secrets for X") is operator
+	// feedback, not data: it goes to stderr so a `--json` caller's stdout
+	// carries nothing but the JSON document it is about to print.
+	if err := opRunFunc(dir, envFile, taskID, names, declined, errw, errw); err != nil {
 		fmt.Fprintf(errw, "secrets: materialization failed: %v — signed in to op? `lode resume` re-runs the ceremony\n", err)
 		return
 	}
@@ -120,39 +145,53 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 	}
 }
 
-// consentToSecrets shows the non-baseline set and takes one yes/no for it.
-// Without a terminal (agent-run `lode next`, --json pipelines) the answer is
-// "no": the claim still succeeds, and `lode resume` in a terminal — where the
-// operator is present by definition — re-runs the ceremony.
-func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) bool {
+// consentToSecrets shows the non-baseline set and takes one yes/no for it. It
+// reports whether the operator consented, and whether a human was asked at
+// all.
+//
+// Nobody is asked when there is no operator to ask: a `--json` caller is a
+// machine by definition (and under a pty-wrapped unattended runner a prompt
+// would hang forever, with the task already claimed), and stdin that is a
+// non-terminal file is an agent-run `lode next`. Both answer "no" with
+// asked=false — a deferral, not a decision, which the caller must not persist
+// — and `lode resume` in a terminal re-runs the ceremony.
+func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) (consented, asked bool) {
 	errw := cmd.ErrOrStderr()
 	fmt.Fprintln(errw, "This task declares secrets:")
 	for _, e := range entries {
 		fmt.Fprintf(errw, "  %-28s %s\n", e.Name, e.Description)
 	}
-	if f, ok := cmd.InOrStdin().(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
-		fmt.Fprintln(errw, "secrets: no terminal for consent — declined; `lode resume` in a terminal to materialize")
-		return false
+	f, isFile := cmd.InOrStdin().(*os.File)
+	if jsonOut(cmd) || (isFile && !term.IsTerminal(int(f.Fd()))) {
+		fmt.Fprintln(errw, "secrets: no operator to ask — deferred, not declined; `lode resume` in a terminal materializes them")
+		return false, false
 	}
 	fmt.Fprint(errw, "Materialize into the OS keystore for unattended use? [y/N] ")
 	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if err != nil {
-		return false
+		return false, true // EOF at a real prompt is an answer: no
 	}
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
-		return true
+		return true, true
 	}
-	return false
+	return false, true
 }
 
 // secretsSatisfied reports whether a resume can skip the ceremony: a manifest
 // exists, every materialized name is still in the keystore, and every
 // declared name was either materialized or explicitly declined.
+//
+// No manifest is never satisfied, even for a task declaring nothing: `lode
+// next` packs the baseline set regardless of declaration, so after a purge, on
+// a second machine, or when a baseline entry joined the catalog since the
+// claim, there is real work for the ceremony to do. Re-running it costs
+// nothing when there isn't — it no-ops silently on an unreachable catalog or
+// an empty resolved set.
 func secretsSatisfied(taskID string, declared []string) bool {
 	m, ok := secrets.LoadManifest(taskID)
 	if !ok {
-		return len(declared) == 0
+		return false
 	}
 	for _, n := range m.Materialized {
 		if _, err := secrets.Fetch(taskID, n); err != nil {
