@@ -16,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -302,6 +303,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		return fmt.Errorf("fetch brief for %s: %w", taskID, err)
 	}
 
+	// Spec 017: consent + materialization while the operator is present.
+	// Never fails the claim; writes to stderr only.
+	runSecretsCeremony(ctx, cmd, c, taskID, dir, brief.Task.Secrets)
+
 	if jsonOut(cmd) {
 		out := nextResult{
 			Claimed: true, Worktree: dir, Branch: branch,
@@ -393,6 +398,9 @@ func runResume(cmd *cobra.Command, dir string) error {
 	if err != nil {
 		return err
 	}
+	if !secretsSatisfied(taskID, brief.Task.Secrets) {
+		runSecretsCeremony(ctx, cmd, c, taskID, root, brief.Task.Secrets)
+	}
 	if jsonOut(cmd) {
 		printRaw(cmd, raw)
 		return nil
@@ -423,6 +431,11 @@ func newDoneCmd() *cobra.Command {
 			t, raw, err := c.DoneTask(cmd.Context(), taskID)
 			if err != nil {
 				return err
+			}
+			if names, err := secrets.PurgeTask(taskID); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purge: %v\n", err)
+			} else if len(names) > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purged %s\n", strings.Join(names, ", "))
 			}
 			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
@@ -469,6 +482,11 @@ func newBlockCmd() *cobra.Command {
 			}
 			if _, err := c.ReleaseLease(ctx, taskID); err != nil {
 				return fmt.Errorf("recorded %s blocked by %s, but failed to release the lease: %w", taskID, on, err)
+			}
+			if names, err := secrets.PurgeTask(taskID); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purge: %v\n", err)
+			} else if len(names) > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purged %s\n", strings.Join(names, ", "))
 			}
 			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
