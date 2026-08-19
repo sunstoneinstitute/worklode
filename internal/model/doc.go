@@ -109,6 +109,16 @@ type DocDetail struct {
 	Revision *DocRevision `json:"revision"`
 }
 
+// DocRef is a minimal reference to a document — enough to name and link it
+// without carrying its body. It is how a task's brief reports the plans
+// ordered before that task's plan (025 §9.3).
+type DocRef struct {
+	ID     int64  `json:"id"`
+	Slug   string `json:"slug"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+}
+
 // DocPlanningGap names the sections of one accepted spec that no accepted
 // plan undertakes (026 §2.1). It is keyed by document id rather than
 // embedding the document, so GET /api/v1/docs answers with one listing shape

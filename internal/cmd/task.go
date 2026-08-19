@@ -961,6 +961,12 @@ func printBrief(cmd *cobra.Command, b model.Brief) {
 			fmt.Fprintf(out, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
 		}
 	}
+	if len(b.BlockingPlans) > 0 {
+		fmt.Fprintln(out, "blocked by plans:")
+		for _, p := range b.BlockingPlans {
+			fmt.Fprintf(out, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
+		}
+	}
 	if b.Body != "" {
 		fmt.Fprintln(out)
 		cli.Markdown(out, b.Body)

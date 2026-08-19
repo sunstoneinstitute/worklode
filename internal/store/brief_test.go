@@ -404,3 +404,59 @@ func TestBriefParent(t *testing.T) {
 		t.Fatalf("parent of a root task = %+v, want nil", root.Parent)
 	}
 }
+
+// TestBriefPlanBlockers: the brief names the open tasks of a plan ordered
+// before this task's plan (025 §9.3), so an agent handed a refused task can
+// see what is holding it.
+func TestBriefPlanBlockers(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
+	blockers := mintReadyPlan(t, s, "plan-a", planTaskBody("blocks: plan-b\n", "Plan A"))
+
+	b, err := s.Brief(t.Context(), blocked[0], BriefOptions{})
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.OpenBlockers) != 1 || b.OpenBlockers[0].ID != blockers[0] {
+		t.Errorf("OpenBlockers = %#v, want plan A's open task %s", b.OpenBlockers, blockers[0])
+	}
+	if len(b.BlockingPlans) != 1 || b.BlockingPlans[0].Slug != "plan-a" {
+		t.Errorf("BlockingPlans = %#v, want plan-a", b.BlockingPlans)
+	}
+
+	walkTo(t, s, blockers[0], "merged")
+
+	b, err = s.Brief(t.Context(), blocked[0], BriefOptions{})
+	if err != nil {
+		t.Fatalf("Brief after release: %v", err)
+	}
+	if len(b.OpenBlockers) != 0 || len(b.BlockingPlans) != 0 {
+		t.Errorf("after plan A closed: blockers = %#v, plans = %#v, want none",
+			b.OpenBlockers, b.BlockingPlans)
+	}
+}
+
+// TestBriefBlockedByDraftPlan: a draft blocking plan has minted no task, so
+// the brief has no blocker to name and reports the plan itself instead.
+func TestBriefBlockedByDraftPlan(t *testing.T) {
+	s := openDocStore(t)
+
+	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-c",
+		Body: planTaskBody("blocks: plan-d\n", "Plan C"), CreatedBy: "stig",
+	})
+
+	b, err := s.Brief(t.Context(), blocked[0], BriefOptions{})
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.OpenBlockers) != 0 {
+		t.Errorf("OpenBlockers = %#v, want none: a draft plan has minted no task", b.OpenBlockers)
+	}
+	if len(b.BlockingPlans) != 1 || b.BlockingPlans[0].Slug != "plan-c" ||
+		b.BlockingPlans[0].Status != "draft" {
+		t.Errorf("BlockingPlans = %#v, want draft plan-c", b.BlockingPlans)
+	}
+}

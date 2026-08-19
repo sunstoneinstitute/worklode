@@ -912,24 +912,35 @@ var blockedCondition = `e.type = 'blocks'
 	             WHERE b.id = e.from_task
 	               AND NOT ` + taskClosed("b") + `)`
 
-// planBlockedCondition holds a task while its plan is ordered after another
-// plan whose work is not done (025 §9.3): a document-level blocks edge between
-// the two plan documents, evaluated over the blocking plan's task set — any
-// open task, or a set not yet minted because the blocking document is still
-// draft (§7's literal sentence would read that empty set as unblocked; §10
-// calls an unminted set unfinished).
+// planUnfinished renders "the plan document aliased as alias still has work
+// outstanding" (025 §9.3): any open task in its set, or a set not yet minted
+// because the document is still draft (§7's literal sentence would read that
+// empty set as finished; §10 calls an unminted set unfinished).
 //
 // "Open" is taskClosed's complement, so this and blockedCondition cannot drift
-// on what closed means. It binds `de`, `bt` and `bd` on top of the aliases
-// taskClosed binds; the enclosing query must alias the task row as `t`.
+// on what closed means. It binds `bt` on top of the aliases taskClosed binds.
+// Every surface that reports plan-to-plan blocking renders this one predicate
+// — planBlockedCondition for the gate, the blocking-plan queries for the
+// cockpit and the brief — so no surface can disagree with Claim.
+func planUnfinished(alias string) string {
+	return `(` + alias + `.status = 'draft'
+	     OR EXISTS (SELECT 1 FROM tasks bt
+	                WHERE bt.plan_doc = ` + alias + `.id
+	                  AND NOT ` + taskClosed("bt") + `))`
+}
+
+// planBlockedCondition holds a task while its plan is ordered after another
+// plan whose work is unfinished (025 §9.3): a document-level blocks edge
+// between the two plan documents, evaluated over the blocking plan through
+// planUnfinished.
+//
+// It binds `de` and `bd` on top of the aliases planUnfinished binds; the
+// enclosing query must alias the task row as `t`.
 var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
 	 SELECT 1 FROM doc_edges de
+	  JOIN docs bd ON bd.id = de.from_doc
 	  WHERE de.type = 'blocks' AND de.to_doc = t.plan_doc
-	    AND (EXISTS (SELECT 1 FROM tasks bt
-	                 WHERE bt.plan_doc = de.from_doc
-	                   AND NOT ` + taskClosed("bt") + `)
-	         OR EXISTS (SELECT 1 FROM docs bd
-	                    WHERE bd.id = de.from_doc AND bd.status = 'draft')))`
+	    AND ` + planUnfinished("bd") + `)`
 
 // BlockedTaskIDs returns the ids of tasks that have at least one open
 // 'blocks' edge pointing at them (the blocker is not in a closed state), plus

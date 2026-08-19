@@ -10,7 +10,10 @@ type BriefBlocker struct {
 
 // Brief is the wire form of GET /api/v1/tasks/{id}/brief: the bounded
 // start-of-work payload for a task. Lease is null when the task has no
-// active lease. OpenBlockers is always an array (never null). Parent is
+// active lease. OpenBlockers and BlockingPlans are always arrays (never
+// null); BlockingPlans names the unfinished plans ordered before this task's
+// plan (025 §9.3), which is the only thing holding a task whose blocking plan
+// is still draft and has minted no task to name. Parent is
 // null for a root task (no omitempty, so the key is always present — see
 // TaskHierarchy.Parent for the same convention on task detail). The three
 // reserved fields serialize as JSON null in v1: GoverningDesign and
@@ -23,6 +26,7 @@ type Brief struct {
 	Body               string              `json:"body"`
 	Branch             string              `json:"branch"`
 	OpenBlockers       []BriefBlocker      `json:"open_blockers"`
+	BlockingPlans      []DocRef            `json:"blocking_plans"`
 	Parent             *TaskParent         `json:"parent"`
 	Lease              *Lease              `json:"lease"`
 	GoverningDesign    *string             `json:"governing_design"`
