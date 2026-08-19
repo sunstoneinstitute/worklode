@@ -1,6 +1,7 @@
 package designdoc
 
 import (
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -38,6 +39,27 @@ func canonDirs(specDir, planDir string) (specCanon, planCanon string) {
 	return canonDir(specDir, specCanonDefault), canonDir(planDir, planCanonDefault)
 }
 
+// findRepoRoot walks up from dir to the nearest directory holding a
+// ".worklode" directory — the repo root a corpus path is relative to (025
+// §16.1). "" when there is none. Unexported: canonDir is the only caller,
+// and WL-147 retired the exported filesystem resolver this used to belong to.
+func findRepoRoot(dir string) string {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for {
+		if st, err := os.Stat(filepath.Join(d, ".worklode")); err == nil && st.IsDir() {
+			return d
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return ""
+		}
+		d = parent
+	}
+}
+
 // canonDir is one corpus directory in canonical repo-relative form: an
 // already-relative directory is its own, an absolute one is taken relative to
 // the repo root it sits under. No directory loaded, no repo root, or a
@@ -49,7 +71,7 @@ func canonDir(dir, fallback string) string {
 	if !filepath.IsAbs(dir) {
 		return path.Clean(filepath.ToSlash(dir))
 	}
-	root := FindRepoRoot(dir)
+	root := findRepoRoot(dir)
 	if root == "" {
 		return fallback
 	}
@@ -136,7 +158,7 @@ func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
 		ix.status[plan] = d.Status
 		home := path.Dir(plan)
 		for _, entry := range planCoverageEntries(d) {
-			rawTarget, anchor := splitFragment(entry.Spec)
+			rawTarget, anchor := SplitFragment(entry.Spec)
 			if anchor == "" || rawTarget == "NO-SPEC" {
 				// A whole-document covers names no section a coverage query
 				// can use, and NO-SPEC has no sections to cover (026 §2.1,

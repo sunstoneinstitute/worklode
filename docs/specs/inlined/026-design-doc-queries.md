@@ -294,7 +294,7 @@ scoped to one spec. Composing it out of two corpus-wide list filters puts the
 join back in the caller's head, which is the cost §0 set out to remove.
 
 ```
-lode doc todo <ref> [--deps] [--offline] [--json]
+lode doc todo <ref> [--deps] [--json]
 ```
 
 `<ref>` is any reference §4 resolves — a filename, a repo-relative path, or the
@@ -378,17 +378,23 @@ server-computed `closed` boolean, and this command reads it. Deriving closure
 from `state` client-side would report shipped work as outstanding in one repo
 and outstanding work as shipped in another.
 
-**`--offline` drops the task level and keeps the rest.** Without a reachable
-server the planning half is still fully derivable from the corpus, and the
-commit hooks, CI, and a fresh checkout all run without one. Offline items
-report `unexecuted (task state unknown)` and the footer names the degradation.
-`blocked` is not emitted at all offline: it is a statement about another plan's
-task state, which is precisely what is unavailable. Reporting it anyway would
-make an item's *type* depend on the caller's connectivity, so the same corpus
-would describe the same work differently from a laptop on a train.
-Without the flag an unreachable server is an error, per §2.2: silently
-downgrading the answer to the question the caller asked is the failure mode
-that flag exists to make explicit.
+**The corpus is the backbone's, and there is no offline answer.** An earlier
+draft of this section read the documents off disk and carried an `--offline`
+flag that dropped the task level and kept the planning half, so commit hooks,
+CI, and a fresh checkout could still answer. §3 has since moved document
+resolution off the filesystem, and the `docs/specs` and `docs/plans` trees are
+being retired: there is no longer a corpus a client can read without the
+server, so there is no half of this question to answer offline. Both levels
+come from one source, an unreachable server is an error per §2.2, and a walk
+reading files would answer about a corpus a checkout is about to stop having.
+
+The cost is a request per document: only `GET /docs/{id}` carries a body, and
+frontmatter — a plan's `covers` levels, its `requires`, its `task` — is what
+the walk reads. The fetches are issued concurrently, and the alternative is
+worse: the backbone's own section and edge rows are its index of that same
+frontmatter, and reading them instead would put two readings of one document in
+the tree, free to disagree. Task closure stays one request for the whole
+project, never one per plan.
 
 **An empty list means the spec is finished, and nothing else may print one.**
 A spec whose own `status` is `draft` is not yet owed planning (§2.1), so the

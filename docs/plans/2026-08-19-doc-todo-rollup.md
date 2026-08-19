@@ -164,12 +164,12 @@ type TodoItem struct {
 type Diagnostics struct {
     Unfollowed []string // requires edges not walked (no --deps)
     Cycles     []string // requires cycles met during the walk
-    Notes      []string // degradations, e.g. offline
+    Notes      []string // degradations, e.g. no closure lookup
 }
 
 type TodoOptions struct {
     Deps   bool
-    Closed func(taskID string) (closed bool, known bool) // nil = offline
+    Closed func(taskID string) (closed bool, known bool) // nil = no closure lookup
 }
 
 func Todo(docs []CorpusDoc, specPath string, opts TodoOptions) ([]TodoItem, Diagnostics, error)
@@ -221,21 +221,22 @@ skills:
 blockedBy: [1, 3]
 ```
 
-New `internal/cmd/doc.go` + `doc_test.go`.
+New `internal/cmd/doctodo.go` + `doctodo_test.go`, hung off the existing `doc`
+parent command.
 
-- `newDocCmd()` — the `doc` parent, registered on `rootCmd` in an `init`, matching
-  the shape of `newEventCmd`/`newSkillsCmd`. **Add no `show` subcommand**
-  (`show_test.go:839`).
-- `newDocTodoCmd()` — `lode doc todo <ref>`, flags `--deps` and `--offline`.
-  `--json` comes from the root persistent flag; read it with `jsonOut(cmd)`.
-- Resolve `<ref>` with `designdoc.ResolveRef` against `designdoc.FindCorpus`, so
-  a filename, a repo-relative path and `WL-SPEC-25` all work.
-- Closure: unless `--offline`, one `client.ListTasks` call with the project
-  filter, indexed by id into the `TodoOptions.Closed` lookup. A referenced task
-  absent from the response is `known == false` and renders as
-  `unexecuted (task not found)`. An unreachable server is an error — say what
-  `--offline` would do instead. With `--offline`, pass a nil `Closed` and add the
-  degradation to `Diagnostics.Notes`.
+- `newDocTodoCmd()` — `lode doc todo <ref>`, flag `--deps`, added to the
+  existing `newDocCmd()` subcommand list. `--json` comes from the root
+  persistent flag; read it with `jsonOut(cmd)`.
+- Resolve `<ref>` with `resolveDocRef` against the documents `GET /docs` serves,
+  so a filename, a repo-relative path and `WL-SPEC-25` all work.
+- Build the corpus from the backbone: `GET /docs`, then one `GET /docs/{id}` per
+  document for its body, fanned out, each turned into a `CorpusDoc` by
+  `designdoc.CorpusDocFromBody` at the path `designdoc.CorpusPath` gives it.
+- Closure: one `client.ListTasks` call with the project filter, indexed by id
+  into the `TodoOptions.Closed` lookup. A referenced task absent from the
+  response is `known == false` and renders as `unexecuted (task not found)`. An
+  unreachable server is an error: the corpus lives there too, so there is no
+  narrower answer to fall back to.
 - Table output: one line per item, columns type / anchor / plan / detail, then a
   footer rendering the diagnostics. `--json` emits `{"items": [...],
   "diagnostics": {...}}` — one document, both halves.
@@ -246,13 +247,13 @@ Per ADR 036 the `--json` shape is an `internal/cmd` stdout contract, not an HTTP
 body, so a **named** struct declared here is correct; an anonymous one is not
 (`internal/model/rule_test.go`).
 
-Tests drive the cobra command with a synthetic corpus and a stub task lookup,
-asserting rendered output and the JSON shape, in the style of the existing
-`internal/cmd` tests.
+Tests drive the cobra command against a stub backbone serving a synthetic
+corpus and a task list, asserting rendered output and the JSON shape, in the
+style of the existing `internal/cmd` tests.
 
-- [ ] `doc` parent command, no `show` child
-- [ ] `todo` subcommand, ref resolution, both flags
-- [ ] task lookup in one request + the not-found and unreachable paths
+- [ ] `todo` subcommand, ref resolution, `--deps`
+- [ ] corpus in one list + one body per document; closure in one request, plus
+      the not-found and unreachable paths
 - [ ] table and `--json` rendering, exit 0 with work outstanding
 
 ### Task 5 — Dogfood it and record what it finds
@@ -271,8 +272,8 @@ Verification against the real corpus, which is the point of the command.
   non-empty, ordered list. 025 is `status: draft`, so the no-`--deps` run is
   expected to report the acceptance decision — confirm it does rather than
   printing nothing.
-- Run `./bin/lode doc todo WL-SPEC-26 --offline` and confirm the degradation
-  footer appears and no server call is made.
+- Run `./bin/lode doc todo WL-SPEC-26` and confirm the walk answers about a
+  document other than the one 025 leads with.
 - `make test`, `make vet`, `./scripts/secfmt.py -l`, `./scripts/secmeta.py`,
   `./scripts/inlinespec.py --check`.
 - Append one entry to `docs/follow-ups.md`: `lode doc list --needs-planning` and
@@ -281,6 +282,6 @@ Verification against the real corpus, which is the point of the command.
   something already there.
 
 - [ ] both `WL-SPEC-25` runs, output pasted into the task
-- [ ] `--offline` run
+- [ ] `WL-SPEC-26` run
 - [ ] full check suite green
 - [ ] follow-up filed

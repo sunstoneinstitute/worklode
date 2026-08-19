@@ -197,12 +197,12 @@ func (w *todoWalk) dropped(docPath, anchor string) bool {
 // resolve canonicalises the ref the caller named and checks it addresses a
 // spec or ADR this corpus holds.
 func (w *todoWalk) resolve(ref string) (string, error) {
-	base, _ := splitFragment(strings.TrimSpace(ref))
+	base, _ := SplitFragment(strings.TrimSpace(ref))
 	if base == "" {
 		return "", fmt.Errorf("no document reference given")
 	}
 	if base == "NO-SPEC" {
-		return "", noSpecError(ref)
+		return "", NoSpecError(ref)
 	}
 	canon := resolveDoc(base, w.specCanon, w.specDir)
 	d, ok := w.byPath[canon]
@@ -261,7 +261,7 @@ func (w *todoWalk) requires(docPath string) []string {
 	home := path.Dir(docPath)
 	out := make([]string, 0, len(fm.Requires))
 	for _, ref := range fm.Requires {
-		base, _ := splitFragment(ref)
+		base, _ := SplitFragment(ref)
 		if base == "" || base == "NO-SPEC" {
 			continue
 		}
