@@ -1,0 +1,302 @@
+package cmd
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"slices"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
+)
+
+// This file implements `lode secrets`: the runtime surface of spec 017.
+// Values pass through exactly two places here — the pack command's inherited
+// environment (as the child of `op run`) and the exec command's child
+// environment. Neither is ever written, logged, or echoed.
+
+func init() {
+	cmd := &cobra.Command{
+		Use:   "secrets",
+		Short: "Task-declared secrets: catalog, status, exec, purge (spec 017)",
+	}
+	cmd.AddCommand(newSecretsCatalogCmd(), newSecretsStatusCmd(), newSecretsExecCmd(),
+		newSecretsPurgeCmd(), newSecretsPackCmd())
+	rootCmd.AddCommand(cmd)
+}
+
+func newSecretsCatalogCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "catalog",
+		Short: "List the org secrets catalog: names, baseline flag, descriptions",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.SecretsCatalog(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			out := cmd.OutOrStdout()
+			for _, e := range resp.Secrets {
+				marker := " "
+				if e.Baseline {
+					marker = "*"
+				}
+				fmt.Fprintf(out, "%s %-28s %s\n", marker, e.Name, e.Description)
+			}
+			if len(resp.Secrets) > 0 {
+				fmt.Fprintln(out, "\n* = baseline: packed for every task, no per-task declaration needed")
+			}
+			return nil
+		},
+	}
+}
+
+func newSecretsStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show declared vs materialized secret names for the bound task (names only)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			brief, _, err := c.Brief(cmd.Context(), taskID)
+			if err != nil {
+				return err
+			}
+			m, _ := secrets.LoadManifest(taskID)
+
+			inKeystore := func(name string) bool {
+				_, err := secrets.Fetch(taskID, name)
+				return err == nil
+			}
+			state := func(name string) string {
+				switch {
+				case slices.Contains(m.Declined, name):
+					return "declined"
+				case slices.Contains(m.Materialized, name) && inKeystore(name):
+					return "materialized"
+				case slices.Contains(m.Materialized, name):
+					return "missing from keystore"
+				default:
+					return "unmaterialized"
+				}
+			}
+
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "task: %s\n", taskID)
+			for _, name := range brief.Task.Secrets {
+				fmt.Fprintf(out, "  %-28s %s (declared)\n", name, state(name))
+			}
+			for _, name := range m.Materialized {
+				if !slices.Contains(brief.Task.Secrets, name) {
+					fmt.Fprintf(out, "  %-28s %s (baseline)\n", name, state(name))
+				}
+			}
+			if len(brief.Task.Secrets) == 0 && len(m.Materialized) == 0 && len(m.Declined) == 0 {
+				fmt.Fprintln(out, "  no secrets declared or materialized")
+			}
+			return nil
+		},
+	}
+}
+
+func newSecretsPurgeCmd() *cobra.Command {
+	var taskID string
+	cmd := &cobra.Command{
+		Use:   "purge [--task <id>]",
+		Short: "Remove the task's keystore items (invoked by release hooks)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := taskID
+			if id == "" {
+				layout, err := layoutFrom(".")
+				if err != nil {
+					return err
+				}
+				id, _, err = resolveWorktreeTask(layout, ".", "lode secrets purge --task <id>")
+				if err != nil {
+					return err
+				}
+			}
+			names, err := secrets.PurgeTask(id)
+			if err != nil {
+				return err
+			}
+			if len(names) == 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "no secrets stored for %s\n", id)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "purged %s for %s\n", strings.Join(names, ", "), id)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&taskID, "task", "", "task id (default: the current worktree's task)")
+	return cmd
+}
+
+// newSecretsPackCmd is the internal child of the ceremony's single `op run`:
+// op resolves every NAME=op://ref line into this process's environment under
+// one 1Password authorization; pack moves each value into the OS keystore and
+// exits. Values never touch disk or the shell.
+func newSecretsPackCmd() *cobra.Command {
+	var taskID, namesCSV, declinedCSV string
+	cmd := &cobra.Command{
+		Use:    "pack",
+		Hidden: true,
+		Short:  "Internal: write op-run-resolved env values into the OS keystore",
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			names, declined := splitNames(namesCSV), splitNames(declinedCSV)
+			if taskID == "" || len(names) == 0 {
+				return errors.New("--task and --names are required")
+			}
+			// The ceremony hook builds these lists, but pack is the last gate
+			// before a name becomes a keystore item and, later, an assignment
+			// in an exec child's environment.
+			for _, n := range slices.Concat(names, declined) {
+				if !secrets.ValidName(n) {
+					return fmt.Errorf("invalid secret name %q", n)
+				}
+			}
+			var missing []string
+			for _, n := range names {
+				if os.Getenv(n) == "" {
+					missing = append(missing, n)
+				}
+			}
+			if len(missing) > 0 {
+				return fmt.Errorf("not resolved in environment (op run did not supply): %s",
+					strings.Join(missing, ", "))
+			}
+			for _, n := range names {
+				if err := secrets.Put(taskID, n, os.Getenv(n)); err != nil {
+					return err
+				}
+			}
+			// A re-run after the declaration narrowed (spec 017 §3,
+			// re-materialization) replaces the manifest wholesale, and the
+			// manifest is the only authority purge has — keyring cannot
+			// enumerate. Drop the dropped names' items now or they outlive
+			// the worktree with no way to reach them.
+			if prev, ok := secrets.LoadManifest(taskID); ok {
+				for _, n := range prev.Materialized {
+					if !slices.Contains(names, n) {
+						if err := secrets.Del(taskID, n); err != nil {
+							return err
+						}
+					}
+				}
+			}
+			if err := secrets.SaveManifest(secrets.Manifest{
+				Task: taskID, Materialized: names, Declined: declined,
+				At: time.Now().UTC(),
+			}); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "packed %d secrets for %s\n", len(names), taskID)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&taskID, "task", "", "task id")
+	cmd.Flags().StringVar(&namesCSV, "names", "", "comma-separated names to pack")
+	cmd.Flags().StringVar(&declinedCSV, "declined", "", "comma-separated names the operator declined")
+	return cmd
+}
+
+// execFn wraps syscall.Exec so tests can capture the argv/env instead of
+// replacing the test process.
+var execFn = syscall.Exec
+
+func newSecretsExecCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "exec [--] <command> [args...]",
+		Short: "Run a command with the bound task's materialized secrets in its environment",
+		Long: "Resolves the task from the wt/<id>-<slug> worktree guard, reads that task's " +
+			"items from the OS keystore, injects them as environment variables, and execs. " +
+			"Values exist only in the child process. The injected set is exactly the task's " +
+			"materialized names — not the catalog, not the operator's secrets.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			m, ok := secrets.LoadManifest(taskID)
+			if !ok || len(m.Materialized) == 0 {
+				return fmt.Errorf("no secrets materialized for %s; `lode resume` runs the ceremony", taskID)
+			}
+			injected := make([]string, 0, len(m.Materialized))
+			for _, name := range m.Materialized {
+				v, err := secrets.Fetch(taskID, name)
+				if err != nil {
+					return fmt.Errorf("secret %s is not in the keystore — do not retry or "+
+						"work around; `lode block` with reason missing-secret", name)
+				}
+				injected = append(injected, name+"="+v)
+			}
+			bin, err := exec.LookPath(args[0])
+			if err != nil {
+				return err
+			}
+			return execFn(bin, args, childEnv(os.Environ(), m.Materialized, injected))
+		},
+	}
+	// The wrapped command's flags are its own: without this, cobra claims
+	// `lode secrets exec kubectl get pods -n foo`'s -n and fails.
+	cmd.Flags().SetInterspersed(false)
+	return cmd
+}
+
+// childEnv returns parent with every assignment to one of names stripped,
+// then injected appended. execve keeps duplicate entries and getenv returns
+// the first, so appending alone would hand the child the operator's ambient
+// value instead of the task's (spec 017 §4: "not the operator's shell
+// environment").
+func childEnv(parent, names, injected []string) []string {
+	out := make([]string, 0, len(parent)+len(injected))
+	for _, kv := range parent {
+		if k, _, ok := strings.Cut(kv, "="); ok && slices.Contains(names, k) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, injected...)
+}
+
+// splitNames splits a comma-separated name list, dropping empties.
+func splitNames(csv string) []string {
+	var out []string
+	for _, s := range strings.Split(csv, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

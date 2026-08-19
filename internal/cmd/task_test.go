@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -571,5 +574,91 @@ func TestTaskAddBodyFlagsMutuallyExclusive(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "none of the others can be") {
 		t.Fatalf("err = %v; want cobra mutual-exclusion error", err)
+	}
+}
+
+func TestTaskAddSendsSecrets(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, `{"id":"SE-1","project":"secproj","title":"t","priority":"medium","kind":"chore","state":"ready","secrets":["KUBECONFIG_HZDEV","OPENALEX_API_KEY"]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newTaskAddCmd()
+	cmd.SetArgs([]string{"--project", "secproj", "--title", "t", "--kind", "chore",
+		"--secrets", "KUBECONFIG_HZDEV,OPENALEX_API_KEY"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task add: %v", err)
+	}
+	if !strings.Contains(gotBody, `"secrets":["KUBECONFIG_HZDEV","OPENALEX_API_KEY"]`) {
+		t.Fatalf("request body = %q; want the secrets list", gotBody)
+	}
+}
+
+// TestTaskEditSendsSecrets covers both halves of --secrets on edit: a name
+// list replaces the declaration, and the "none" sentinel clears it. `none`
+// must reach the server as an empty list, not as a one-element list holding
+// the literal word, and not as an omitted field (which means "unchanged").
+func TestTaskEditSendsSecrets(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"SE-1","project":"secproj","title":"t","priority":"medium","kind":"chore","state":"ready"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	for _, tc := range []struct{ flag, want string }{
+		{"KUBECONFIG_HZDEV,OPENALEX_API_KEY", `"secrets":["KUBECONFIG_HZDEV","OPENALEX_API_KEY"]`},
+		{"none", `"secrets":[]`},
+	} {
+		gotBody = ""
+		cmd := newTaskEditCmd()
+		cmd.SetArgs([]string{"SE-1", "--secrets", tc.flag})
+		cmd.SetOut(io.Discard)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task edit --secrets %s: %v", tc.flag, err)
+		}
+		if !strings.Contains(gotBody, tc.want) {
+			t.Errorf("--secrets %s sent %q; want it to carry %s", tc.flag, gotBody, tc.want)
+		}
+	}
+
+	// Without the flag the field stays null — "unchanged" — so an unrelated
+	// edit cannot clear a declaration.
+	gotBody = ""
+	cmd := newTaskEditCmd()
+	cmd.SetArgs([]string{"SE-1", "--priority", "low"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task edit --priority: %v", err)
+	}
+	if !strings.Contains(gotBody, `"secrets":null`) {
+		t.Errorf("unrelated edit sent %q; want a null secrets field", gotBody)
+	}
+}
+
+func TestPrintBriefShowsSecrets(t *testing.T) {
+	cmd := newTaskBriefCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	printBrief(cmd, model.Brief{
+		Task:   model.Task{ID: "SE-1", Title: "t", State: "ready", Priority: "medium", Secrets: []string{"A_TOKEN", "B_KEY"}},
+		Branch: "lode/SE-1-t",
+	})
+	if !strings.Contains(out.String(), "secrets: A_TOKEN, B_KEY") {
+		t.Fatalf("brief output missing secrets line:\n%s", out.String())
 	}
 }

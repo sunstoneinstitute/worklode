@@ -1273,6 +1273,29 @@ func (c *Client) Timeline(ctx context.Context, taskID string) (model.TimelineRes
 	return resp, raw, nil
 }
 
+// SecretsCatalog calls GET /api/v1/secrets/catalog (authenticated; 404 when
+// the server has no catalog configured).
+func (c *Client) SecretsCatalog(ctx context.Context) (model.SecretCatalogResponse, []byte, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/api/v1/secrets/catalog", nil)
+	if err != nil {
+		return model.SecretCatalogResponse{}, nil, err
+	}
+	var resp model.SecretCatalogResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return model.SecretCatalogResponse{}, nil, fmt.Errorf("decode secrets catalog: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// RecordSecretsMaterialized calls POST /api/v1/tasks/{id}/secrets-materialized
+// with the materialized name list — the names-only audit event of spec 017.
+func (c *Client) RecordSecretsMaterialized(ctx context.Context, id string, names []string) error {
+	_, err := c.do(ctx, http.MethodPost,
+		"/api/v1/tasks/"+url.PathEscape(id)+"/secrets-materialized",
+		model.SecretsMaterializedInput{Names: names})
+	return err
+}
+
 // --- events (spec 025 §15/§18) ---------------------------------------------
 
 // EventListFilter narrows ListEvents. Zero-valued fields do not filter.
