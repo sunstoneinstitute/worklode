@@ -1,6 +1,6 @@
 ---
 status: accepted
-task: WL-7
+task: WL-30
 covers: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 3/3 (spec 007): overview engine & surfaces — Implementation Plan
@@ -18,12 +18,15 @@ surface (`lode overview`/`drift`/`gaps`/`frontier`/`critical-path`,
 `POST /api/v1/derive`), and the read-only drift web view.
 
 **Architecture:** Standing queries live in a new `internal/overview` package
-as SPARQL reads through `internal/graph.Client`; critical path is computed in
+as SPARQL reads through `internal/graphserver.Client.Select` (the read-only
+`/sparql` proxy — the only production graph client, per knowledge-graph
+part 1); critical path is computed in
 Go on each read by joining backbone `blocks` edges with KG `wl:dependsOn`
 edges. The authoritative ready frontier stays on the backbone
 (`store.rankTasks`); the overview only mirrors it via part 2's
 `store.Frontier`. `lode serve` wires `overview.Service` and the server-side
-derivers from `LODE_GRAPH_URL`; the handlers, CLI commands, and drift board
+derivers from the same `LODE_GRAPHSERVER_*` client `graphProjector` already
+builds; the handlers, CLI commands, and drift board
 are read-only (the one mutation, `POST /api/v1/derive`, is admin-gated).
 
 **Tech Stack:** Go 1.26, cobra CLI, PostgreSQL via `database/sql`,
@@ -59,7 +62,7 @@ shape Tasks 11–13):
 
 | Path | Responsibility |
 |---|---|
-| `internal/overview/queries.go` | standing queries 4.1/4.2 as SPARQL over `graph.Client`; row types |
+| `internal/overview/queries.go` | standing queries 4.1/4.2 as SPARQL over `graphserver.Client`; row types |
 | `internal/overview/queries_test.go` | query-text golden checks (prefix/graph confinement, injected date) |
 | `internal/overview/critpath.go` | SCC cycle detection, longest-path depth, transitive fan-out, critical set |
 | `internal/overview/critpath_test.go` | known DAG, planted cycle excluded + surfaced |
@@ -75,7 +78,7 @@ shape Tasks 11–13):
 |---|---|
 | `internal/api/server.go` | routes for the five reads + `POST /api/v1/derive`; `GET /drift` web route |
 | `internal/api/web.go` | `driftPage` handler |
-| `internal/cmd/serve.go` | wire `overview.Service` + server-side derivers from `LODE_GRAPH_URL` env |
+| `internal/cmd/serve.go` | wire `overview.Service` + server-side derivers from the `LODE_GRAPHSERVER_*` env (share `graphProjector`'s client) |
 | `internal/cmd/overview.go` | add `lode overview/drift/gaps/frontier/critical-path` beside part 1's `derive` |
 | `internal/cmd/overview_test.go` | flag wiring + `--json` passthrough against a fake server |
 | `internal/cli/client.go` | `Overview`, `Drift`, `Gaps`, `Frontier`, `CriticalPath`, `RunDerive` |
@@ -85,7 +88,7 @@ shape Tasks 11–13):
 
 - Pure packages (no services): `go test ./internal/overview/...`
 - Postgres-backed: `docker compose up -d postgres && go test ./internal/api/... ./internal/cmd/...`
-- Oxigraph-backed (skip when `TEST_SPARQL_URL` unset, per `graphtest`):
+- Oxigraph-backed (skip when unreachable, per `graphproj/graphtest`):
   `docker compose up -d oxigraph && go test ./internal/overview/...`
 - Everything: `docker compose up -d postgres oxigraph && go test ./...`
 
@@ -406,7 +409,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 )
 
 const sparqlPrefixes = `PREFIX wl:  <https://worklode.io/ns/ontology#>
@@ -513,7 +516,7 @@ func driftEdges(rows []map[string]string) []DriftEdge {
 }
 
 // Violations runs the 4.1 violation query.
-func Violations(ctx context.Context, c *graph.Client) ([]DriftEdge, error) {
+func Violations(ctx context.Context, c *graphserver.Client) ([]DriftEdge, error) {
 	rows, err := c.Select(ctx, violationsQuery(today()))
 	if err != nil {
 		return nil, fmt.Errorf("drift violations: %w", err)
@@ -522,7 +525,7 @@ func Violations(ctx context.Context, c *graph.Client) ([]DriftEdge, error) {
 }
 
 // StaleIntent runs the 4.1 stale-intent query.
-func StaleIntent(ctx context.Context, c *graph.Client) ([]DriftEdge, error) {
+func StaleIntent(ctx context.Context, c *graphserver.Client) ([]DriftEdge, error) {
 	rows, err := c.Select(ctx, staleIntentQuery())
 	if err != nil {
 		return nil, fmt.Errorf("stale intent: %w", err)
@@ -532,7 +535,7 @@ func StaleIntent(ctx context.Context, c *graph.Client) ([]DriftEdge, error) {
 
 // Acknowledged lists accepted deviations, marking expiry against the
 // injected clock.
-func Acknowledged(ctx context.Context, c *graph.Client) ([]Deviation, error) {
+func Acknowledged(ctx context.Context, c *graphserver.Client) ([]Deviation, error) {
 	rows, err := c.Select(ctx, acknowledgedQuery)
 	if err != nil {
 		return nil, fmt.Errorf("acknowledged deviations: %w", err)
@@ -548,7 +551,7 @@ func Acknowledged(ctx context.Context, c *graph.Client) ([]Deviation, error) {
 }
 
 // Gaps runs the 4.2 doc-gap and unmatched-path queries.
-func Gaps(ctx context.Context, c *graph.Client) ([]Gap, error) {
+func Gaps(ctx context.Context, c *graphserver.Client) ([]Gap, error) {
 	var out []Gap
 	rows, err := c.Select(ctx, docGapsQuery)
 	if err != nil {
@@ -608,21 +611,21 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// ErrNoGraph is returned by graph-backed reads when no SPARQL endpoint is
+// ErrNoGraph is returned by graph-backed reads when no graph-server is
 // configured; the API maps it to 503.
-var ErrNoGraph = errors.New("knowledge graph not configured (LODE_GRAPH_URL)")
+var ErrNoGraph = errors.New("knowledge graph not configured (LODE_GRAPHSERVER_URL)")
 
 // Service is the read-only overview surface. Store is always present;
-// Graph is nil when LODE_GRAPH_URL is unset, which disables the
+// Graph is nil when LODE_GRAPHSERVER_URL is unset, which disables the
 // graph-backed reads but not the frontier (backbone-authoritative).
 type Service struct {
 	Store *store.Store
-	Graph *graph.Client
+	Graph *graphserver.Client
 }
 
 // FrontierTask is one row of the frontier mirror, annotated with the
@@ -822,9 +825,22 @@ func (s *Service) Roll(ctx context.Context, projectID string) (*Overview, error)
 
 - [ ] **Step 3: Write the Oxigraph acceptance test**
 
-`internal/overview/oxigraph_test.go`, using the knowledge-graph plan's
-harness (`internal/graph/graphtest`; it skips unless `TEST_SPARQL_URL` is
-set — adapt the constructor call to the harness's landed API):
+`internal/overview/oxigraph_test.go`, using the landed harness
+(`internal/graphproj/graphtest`: `Endpoint(t)` skips when no Oxigraph is
+reachable; `PutGraph(t, base, graphIRI, turtle)` seeds one named graph and
+registers its cleanup). The production functions take a
+`*graphserver.Client`, and Oxigraph does not speak graph-server's surface,
+so a small translating proxy bridges the read path — copy
+`internal/projector/oxigraph_test.go`'s `translatingOxigraphProxy` and
+extend it with a `POST /sparql` → Oxigraph `POST /query` forward (body and
+both content-type/accept headers pass through unchanged). Everything
+upstream of the proxy is production code.
+
+Seeding is whole-graph `PutGraph` Turtle — graph-server has no SPARQL
+Update, and the harness deliberately doesn't either. Mutating a fixture
+(the deviation-expiry step below) is a re-PUT of the whole declared graph,
+which is also exactly the replace semantics the declared layer has in
+production.
 
 ```go
 package overview_test
@@ -835,8 +851,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/graph"
-	"github.com/sunstoneinstitute/worklode/internal/graph/graphtest"
+	"github.com/sunstoneinstitute/worklode/internal/graphproj/graphtest"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 )
@@ -845,39 +861,53 @@ const (
 	compA = "https://worklode.io/ns/id/component/github.com/acme/app/a"
 	compB = "https://worklode.io/ns/id/component/github.com/acme/app/b"
 	compC = "https://worklode.io/ns/id/component/github.com/acme/app/c"
+
+	ttlPrefixes = "@prefix wl:  <https://worklode.io/ns/ontology#> .\n" +
+		"@prefix dct: <http://purl.org/dc/terms/> .\n" +
+		"@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n" +
+		"@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n"
 )
 
-// seed plants: declared A→B; observed A→B (agreement), A→C (violation),
-// and declared B→C with no observed counterpart (stale intent). Components
-// are typed; only A is governed by a doc (B, C are doc gaps).
-func seed(t *testing.T, c *graph.Client) {
+// declaredTTL plants A→B and B→C plus a doc governing A; extra is appended
+// verbatim (the deviation tests re-PUT the graph with it).
+func declaredTTL(extra string) []byte {
+	return []byte(fmt.Sprintf(ttlPrefixes+`
+<%s> dct:requires <%s> .
+<%s> dct:requires <%s> .
+<urn:doc:1> a wl:DesignDoc ; wl:governs <%s> .
+%s`, compA, compB, compB, compC, compA, extra))
+}
+
+// observedTTL plants A→B (agreement) and A→C (violation); components typed.
+// B→C has no observed counterpart, so it is the stale-intent edge.
+func observedTTL() []byte {
+	return []byte(fmt.Sprintf(ttlPrefixes+`
+<%s> dct:requires <%s> .
+<%s> dct:requires <%s> .
+<%s> a wl:Component . <%s> a wl:Component . <%s> a wl:Component .
+`, compA, compB, compA, compC, compA, compB, compC))
+}
+
+// seed loads both layers into Oxigraph and returns a production client
+// whose reads go through the translating proxy.
+func seed(t *testing.T, declaredExtra string) *graphserver.Client {
 	t.Helper()
-	declared := iri.DeclaredGraph("adr-test-0001")
-	observed := iri.ObservedGraph("go-imports")
-	update := fmt.Sprintf(`
-	PREFIX wl:  <https://worklode.io/ns/ontology#>
-	PREFIX dct: <http://purl.org/dc/terms/>
-	INSERT DATA {
-	  GRAPH <%s> {
-	    <%s> dct:requires <%s> .
-	    <%s> dct:requires <%s> .
-	    <urn:doc:1> a wl:DesignDoc ; wl:governs <%s> .
-	  }
-	  GRAPH <%s> {
-	    <%s> dct:requires <%s> .
-	    <%s> dct:requires <%s> .
-	    <%s> a wl:Component . <%s> a wl:Component . <%s> a wl:Component .
-	  }
-	}`, declared, compA, compB, compB, compC, compA,
-		observed, compA, compB, compA, compC, compA, compB, compC)
-	if err := c.Update(context.Background(), update); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	base := graphtest.Endpoint(t)
+	graphtest.PutGraph(t, base, iri.DeclaredGraph("adr-test-0001"), declaredTTL(declaredExtra))
+	graphtest.PutGraph(t, base, iri.ObservedGraph("go-imports"), observedTTL())
+	return graphserver.New(sparqlProxy(t, base).URL, nil)
+}
+
+func deviationTTL(validUntil string) string {
+	return fmt.Sprintf(`<urn:dev:1> a wl:AcceptedDeviation ;
+    rdf:subject <%s> ; rdf:predicate dct:requires ; rdf:object <%s> ;
+    wl:sanctionedBy <urn:doc:1> ;
+    dct:valid "%s"^^xsd:date .
+`, compA, compC, validUntil)
 }
 
 func TestDriftBothDirections(t *testing.T) {
-	c := graphtest.Client(t)
-	seed(t, c)
+	c := seed(t, "")
 
 	v, err := overview.Violations(context.Background(), c)
 	if err != nil {
@@ -897,26 +927,9 @@ func TestDriftBothDirections(t *testing.T) {
 }
 
 func TestDeviationSuppressesUntilExpiry(t *testing.T) {
-	c := graphtest.Client(t)
-	seed(t, c)
-	declared := iri.DeclaredGraph("adr-test-0001")
-
 	// Active deviation for A→C (expires next year): 4.1 must drop it.
 	future := time.Now().UTC().AddDate(1, 0, 0).Format("2006-01-02")
-	plant := fmt.Sprintf(`
-	PREFIX wl:  <https://worklode.io/ns/ontology#>
-	PREFIX dct: <http://purl.org/dc/terms/>
-	PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-	INSERT DATA { GRAPH <%s> {
-	  <urn:dev:1> a wl:AcceptedDeviation ;
-	      rdf:subject <%s> ; rdf:predicate dct:requires ; rdf:object <%s> ;
-	      wl:sanctionedBy <urn:doc:1> ;
-	      dct:valid "%s"^^xsd:date .
-	} }`, declared, compA, compC, future)
-	if err := c.Update(context.Background(), plant); err != nil {
-		t.Fatalf("plant deviation: %v", err)
-	}
+	c := seed(t, deviationTTL(future))
 
 	v, err := overview.Violations(context.Background(), c)
 	if err != nil {
@@ -937,16 +950,10 @@ func TestDeviationSuppressesUntilExpiry(t *testing.T) {
 		t.Fatalf("acknowledged = %+v, %v; want one active deviation", ack, err)
 	}
 
-	// Expire it: the violation re-surfaces.
-	expire := fmt.Sprintf(`
-	PREFIX dct: <http://purl.org/dc/terms/>
-	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-	DELETE WHERE { GRAPH <%s> { <urn:dev:1> dct:valid ?v } } ;
-	INSERT DATA { GRAPH <%s> { <urn:dev:1> dct:valid "2020-01-01"^^xsd:date } }`,
-		declared, declared)
-	if err := c.Update(context.Background(), expire); err != nil {
-		t.Fatalf("expire deviation: %v", err)
-	}
+	// Expire it — re-PUT the declared graph with a past dct:valid: the
+	// violation re-surfaces and the deviation lists as expired.
+	base := graphtest.Endpoint(t)
+	graphtest.PutGraph(t, base, iri.DeclaredGraph("adr-test-0001"), declaredTTL(deviationTTL("2020-01-01")))
 	v, _ = overview.Violations(context.Background(), c)
 	if len(v) != 1 {
 		t.Fatalf("violations after expiry = %+v; want A→C re-surfaced", v)
@@ -958,8 +965,7 @@ func TestDeviationSuppressesUntilExpiry(t *testing.T) {
 }
 
 func TestGaps(t *testing.T) {
-	c := graphtest.Client(t)
-	seed(t, c)
+	c := seed(t, "")
 	gaps, err := overview.Gaps(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Gaps: %v", err)
@@ -971,10 +977,11 @@ func TestGaps(t *testing.T) {
 }
 ```
 
-Note: `graphtest` must give each test an isolated graph set (its plan says
-"unique graphs"). If the landed harness namespaces graphs per test, route
-`iri.DeclaredGraph`/`ObservedGraph` values through its namespacing helper;
-if it wipes the store per test, the code above works as written.
+(`sparqlProxy` is the translating proxy described above; ~25 lines of
+`httptest`, written once at the bottom of this file.) The named graphs are
+fixed IRIs, so these tests cannot run in parallel against a shared endpoint
+with themselves — `graphtest.PutGraph`'s cleanup keeps runs isolated in
+sequence, which matches how the rest of the Oxigraph suite behaves.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1175,9 +1182,12 @@ In `internal/api/server.go`:
 	mux.Handle("POST /api/v1/derive", s.auth(requireAdmin(s.postDerive)))
 ```
 
-In `internal/cmd/serve.go`, where the knowledge-graph plan constructs the
-projector's graph client from `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, reuse
-the same client for the overview service and derivers:
+In `internal/cmd/serve.go`, the projector already builds its
+`*graphserver.Client` from the `LODE_GRAPHSERVER_*` environment
+(`graphProjector` → `graphserver.FromEnv`; unset URL means no graph).
+Hoist that construction so the one client is shared by the projector, the
+overview service and the derivers (`graphClient` below; nil when
+`LODE_GRAPHSERVER_URL` is unset):
 
 ```go
 	svc := &overview.Service{Store: st, Graph: graphClient} // graphClient may be nil
@@ -1695,7 +1705,7 @@ backbone and render even without a graph endpoint:
 {{range .CriticalPath.Cycles}}<p class="error">cycle: {{range .}}{{.}} {{end}}</p>{{end}}
 
 {{if not .GraphEnabled}}
-  <p class="empty">knowledge graph not configured — set LODE_GRAPH_URL and run the derivers for drift and gap views.</p>
+  <p class="empty">knowledge graph not configured — set LODE_GRAPHSERVER_URL and run the derivers for drift and gap views.</p>
 {{else}}
   <h2>Violations <small>observed − declared − acknowledged</small></h2>
   <table>{{range .Drift.Violations}}<tr><td>{{.From}}</td><td>requires</td><td>{{.To}}</td></tr>{{end}}</table>
@@ -1742,7 +1752,7 @@ Add a "Drift & overview" section to `README.md`: the two-layer model in two
 sentences; the deriver contract (idempotent, full-replace, hash
 short-circuit, one graph each); `lode derive` in CI for repo-local sources
 and `POST /api/v1/derive` for server-side ones; the five read commands with
-`--json`; `LODE_GRAPH_URL`. Keep it under 40 lines.
+`--json`; the `LODE_GRAPHSERVER_*` environment. Keep it under 40 lines.
 
 - [ ] **Step 2: Full suite**
 

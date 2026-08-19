@@ -1,6 +1,6 @@
 ---
 status: accepted
-task: WL-5
+task: WL-28
 covers: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 1/3 (spec 007): graph wiring & repo-local derivers — Implementation Plan
@@ -23,9 +23,10 @@ repo-layout), and `lode derive` so a repo's CI can materialize its
 
 **Architecture:** Derivers are pure row/file→triple functions in a new
 `internal/derive` package, serialized as deterministic N-Triples
-(`internal/graphproj.Render`) and written by a shared runner that does an
-atomic Graph Store Protocol `PUT` per source graph, short-circuited by a
-content hash stored as a triple inside the graph itself (no Postgres
+(`internal/graphproj.Document`) and written by a shared runner that does an
+atomic Graph Store Protocol `PUT` per source graph through
+`internal/graphserver` (the production graph-server client), short-circuited
+by a content hash stored as a triple inside the graph itself (no Postgres
 migration). This part builds the runner and the repo-local derivers
 (go-imports, repo-layout), which run via a new `lode derive` command in CI.
 The DB-backed derivers ship in part 2; the standing queries, critical path,
@@ -49,12 +50,12 @@ none of their packages; it only calls them.
 
 | Plan | Provides (consumed here) |
 |---|---|
-| `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` | part 1: `internal/graph` (`Client.Update/Select/Ask/Load`, `Triple`, `graphtest` Oxigraph harness), `rdf/wl/*.ttl`; part 2: projector env vars `LODE_GRAPH_URL`/`LODE_GRAPH_TOKEN_URL`, migration 0008 |
+| `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` (landed — WL-25/WL-26) | part 1: `internal/kg/iri` (plain-string constructors + the exported namespace constants), `internal/graphproj` (`Term`/`Triple`/`Document`, the `graphproj/graphtest` Oxigraph harness), the `ns/*.ttl` vocabulary checks; part 2: `internal/projector` and the `LODE_GRAPHSERVER_*` client wiring in `serve.go` (`graphserver.FromEnv`) |
 | `docs/plans/2026-08-19-component-boundary-manifest.md` (successor to the superseded `2026-07-30-platform-graph-design.md` Tasks 2–3 — WL-109) | `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2.2), Worklode's own manifest. `internal/kg/iri` (IRI grammar) moved to `2026-07-30-knowledge-graph-1-graph-foundations.md` and has landed (WL-25) |
-| `docs/plans/2026-07-30-runtime-layer.md` | `internal/graphproj` (`Triple`, `Render`, `ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCoversTriples`, `CommitKnown`) — exactly the row→triple functions 015 says "007's observed/deploy deriver will emit" |
+| `docs/plans/2026-07-30-runtime-layer.md` | the runtime row→triple functions in `internal/graphproj` (`ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCutFromTriples`, `CommitKnown`) — exactly the row→triple functions 006 §11.1 says "007's observed/deploy deriver will emit". (`Triple`/`Document` themselves landed with knowledge-graph part 1.) |
 | `docs/plans/2026-07-30-reconciliation-{1-replay-engine,2-cli-surface,3-poll-engine}.md` | nothing consumed directly; noted because the series owns `lode doctor` and `internal/reconcile`, which this series must not touch |
 | `docs/plans/2026-07-30-design-documents-as-graph-objects.md` | nothing consumed; owns everything this series defers to "the 014 plan" — `internal/kg/implements`, the `observed/repo-implements` deriver, sections, `lode doc` |
-| `docs/plans/2026-07-30-data-platform-kg-requirements.md` | nothing consumed; owns `internal/graphserver` (the prod graph-server client — GSP + read-only `/sparql` only) and the spec 009 hand-off issues |
+| `docs/plans/2026-07-30-data-platform-kg-requirements.md` | owns `internal/graphserver` (the prod graph-server client — GSP + read-only `/sparql` only; landed) and the spec 009 hand-off issues. This series writes and reads through that client — see design call 9 |
 
 If a prerequisite type's final name differs slightly from the plan text it
 came from (these plans are unlanded), adapt the call site mechanically — the
@@ -114,21 +115,24 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
   with deriver 5 (`observed/repo-implements`) and `lode drift --docs`.
 - Declared-layer authoring (the `declared/<doc>` graph writers) — 008/014.
   This series only reads declared graphs; tests seed them directly.
-- The prod SPARQL endpoint, write auth, outbox materializer — spec 009,
-  cross-repo. Everything here targets whatever `LODE_GRAPH_URL` names
-  (Oxigraph in dev/tests).
+- The graph-server itself, write auth, outbox materializer — spec 009,
+  cross-repo. Everything here targets whatever `LODE_GRAPHSERVER_URL` names
+  (in tests: `httptest` fakes, or Oxigraph behind the translating proxy —
+  design call 9).
 - The atomic `claim --next` ordering — 005, shipped on the backbone;
   untouched.
 
 ## Design calls this series makes
 
-1. **IRI package: `internal/kg/iri`** (platform-graph-design plan). The
+1. **IRI package: `internal/kg/iri`** (owned by
+   `2026-07-30-knowledge-graph-1-graph-foundations.md`; landed — WL-25). The
    sibling plans previously disagreed on where the grammar lives; that is
    now resolved in favor of `internal/kg/iri` (see Overlaps below), so this
-   plan takes it as a prerequisite rather than binding to the
-   knowledge-graph plan's own package. Runtime-node IRIs come via
-   `internal/graphproj` (which the runtime plan pairs with the row→triple
-   functions), not re-minted.
+   plan takes it as a prerequisite rather than binding a package of its own.
+   Constructors are plain-string, pure and non-validating (that plan's
+   design call 5); the runtime-node patterns (`iri.Artifact`,
+   `iri.Deployment`, `iri.Environment`, `iri.Commit`) are already there,
+   not re-minted.
 2. **No migration.** The deriver no-op short circuit stores the input hash as
    a triple inside the deriver's own graph
    (`<graphIRI> dct:identifier "sha256:…"`), read back with a SELECT before
@@ -136,9 +140,10 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
    becomes necessary, it takes whatever id is next free when the owning part
    actually executes — migration ids are provisional, assigned sequentially
    at execution time by the migration-id script.
-3. **Serialization: N-Triples via `graphproj.Render`** for every deriver
-   (deterministic sorted+deduped output; GSP PUT with
-   `Content-Type: application/n-triples`). One renderer, no new one.
+3. **Serialization: N-Triples via `graphproj.Document`** for every deriver
+   (deterministic sorted+deduped output). One renderer, no new one. Writes
+   go through `graphserver.PutGraph`, which sends `text/turtle` — N-Triples
+   is a syntactic subset of Turtle, so the same bytes are the payload.
 4. **PR files and manifests are fetched at derive time** through a narrow
    `RepoReader` interface (GitHub implementation over
    `githubauth.AppAuth.InstallationToken`); derivers stay pull-based and
@@ -150,11 +155,23 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
    `iri.Repo(host, owner, name)` → `id/repo/<host>/<owner>/<name>` (flagged
    for spec 006).
 7. **`wl:unmatchedPath` is minted** (one DatatypeProperty appended to
-   `rdf/wl/ontology.ttl`) so deriver 2 can report coverage gaps in-graph, as
-   4.2 requires.
+   `ns/ontology.ttl` — `ns/` is the vocabulary's only home; the `rdf/wl/`
+   route through rdf-registry was cancelled) so deriver 2 can report coverage
+   gaps in-graph, as 4.2 requires. Per CLAUDE.md's ordering, amend spec
+   006/007 first in the same commit (Overlaps item 9 flags the term), then
+   mirror it in `ns/` and check with `riot --validate ns/*.ttl`.
 8. **The clock is bound from `lode`**: deviation-expiry comparison
    (`dct:valid < today`) injects today's date into the query text rather than
    relying on `NOW()`, keeping query output deterministic under test.
+9. **All graph I/O goes through `internal/graphserver`** (knowledge-graph
+   part 1's design call 4: no other production SPARQL client is built).
+   Writes are `PutGraph` — graph-server's whole-graph GSP replace, which is
+   exactly the atomic full-replace the deriver contract needs — and reads
+   are `Select` against the read-only `/sparql` proxy. graph-server has no
+   SPARQL Update endpoint, so the runner embeds its hash triple in the PUT
+   body rather than patching (Task 3). Unit tests fake the two routes with
+   `httptest`; Oxigraph-backed tests bridge with a translating proxy, the
+   `internal/projector/oxigraph_test.go` pattern.
 
 ---
 
@@ -178,16 +195,16 @@ web view — spec status — is 4.3/4.4-dependent and deferred with them.)
 | Path | Change |
 |---|---|
 | `internal/kg/iri/iri.go` | add `DeclaredGraph`, `ObservedGraph`, `Repo` |
-| `internal/graph/client.go` | add `Replace` (GSP `PUT`) next to `Load` |
-| `rdf/wl/ontology.ttl` | append `wl:unmatchedPath` |
-| `rdf/vocab_test.go` | add `wl:unmatchedPath` to the mint-set check |
+| `docs/specs/006-knowledge-graph.md` / `007-drift-and-overview.md` | amendment minting `wl:unmatchedPath` (Overlaps item 9) |
+| `ns/ontology.ttl` | mirror `wl:unmatchedPath` in the same commit |
 
 **Test commands**
 
-- Pure packages (no services): `go test ./internal/derive/... ./internal/kg/iri/... ./internal/graph/ ./rdf/...`
-- Postgres-backed: `docker compose up -d postgres && go test ./internal/cmd/...`
-- Oxigraph-backed (skip when `TEST_SPARQL_URL` unset, per `graphtest`):
-  `docker compose up -d oxigraph && go test ./internal/derive/...`
+- Pure packages (no services): `go test -trimpath ./internal/derive/... ./internal/kg/iri/... ./internal/graphproj/...`
+- Postgres-backed: `docker compose up -d postgres && go test -trimpath ./internal/cmd/...`
+- Oxigraph-backed (skip when unreachable, per `graphproj/graphtest`):
+  `docker compose up -d oxigraph && go test -trimpath ./internal/derive/... ./internal/graphproj/...`
+- Vocabulary: `riot --validate ns/*.ttl`
 
 ---
 
@@ -252,68 +269,23 @@ git commit -m "Add declared/observed graph names and the repo IRI"
 
 ---
 
-## Task 2: Atomic graph replace on the SPARQL client
+## Task 2: Atomic graph replace — already landed, verify only
 
-**Files:**
-- Modify: `internal/graph/client.go`
-- Test: `internal/graph/client_test.go` (append)
+**Files:** none.
 
-- [ ] **Step 1: Write the failing test**
+An earlier revision of this plan added a `Replace` (GSP `PUT`) method to a
+worklode-local SPARQL client. That client was never built: knowledge-graph
+part 1's design call 4 makes `internal/graphserver` the only production
+graph client, and its `PutGraph(ctx, branch, graphIRI, turtle)` *is* the
+atomic whole-graph replace — graph-server's writes replace or merge whole
+named graphs, and there is no SPARQL Update endpoint to drift back to.
+`Select` (the read-only `/sparql` proxy) covers the runner's hash read.
+Both landed with `internal/graphserver` (`client.go`).
 
-Append to `internal/graph/client_test.go` (reuse its `recordingServer`
-helper; extend `record` with a `method` field set from `r.Method` if it does
-not carry one yet):
+- [ ] **Step 1: Verify the surface this series needs exists**
 
-```go
-func TestReplacePutsGraph(t *testing.T) {
-	srv, rec := recordingServer(t, http.StatusNoContent, "")
-	c := graph.NewClient(srv.URL, nil)
-	err := c.Replace(context.Background(), "urn:g",
-		"application/n-triples", []byte("<urn:s> <urn:p> <urn:o> .\n"))
-	if err != nil {
-		t.Fatalf("Replace: %v", err)
-	}
-	if rec.method != http.MethodPut || rec.path != "/store" ||
-		rec.query != "graph=urn%3Ag" || rec.contentType != "application/n-triples" {
-		t.Fatalf("request = %+v; want PUT /store?graph=urn%%3Ag as n-triples", rec)
-	}
-}
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `go test ./internal/graph/ -run TestReplace`
-Expected: FAIL — `c.Replace undefined`
-
-- [ ] **Step 3: Write the implementation**
-
-In `internal/graph/client.go`, generalize the private request helper to take
-a method (mechanical: `post(ctx, path, …)` becomes
-`send(ctx, method, path, …)`; `post` stays as a one-line wrapper), then add
-next to `Load`:
-
-```go
-// Replace PUTs a document as the entire new content of a named graph (Graph
-// Store Protocol). This is the atomic full-graph replace spec 007's deriver
-// contract requires: no stale triple survives a run.
-func (c *Client) Replace(ctx context.Context, graphIRI, contentType string, doc []byte) error {
-	_, err := c.send(ctx, http.MethodPut,
-		"/store?graph="+url.QueryEscape(graphIRI), contentType, "", doc)
-	return err
-}
-```
-
-- [ ] **Step 4: Run the graph suite**
-
-Run: `go test ./internal/graph/...`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add internal/graph
-git commit -m "Add atomic named-graph replace to the SPARQL client"
-```
+Run: `go doc ./internal/graphserver Client.PutGraph && go doc ./internal/graphserver Client.Select`
+Expected: both print — nothing to build. Continue to Task 3.
 
 ---
 
@@ -338,30 +310,31 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 )
 
-// fakeEndpoint is a minimal SPARQL/GSP endpoint: it answers the hash SELECT
-// with storedHash and counts PUTs. There is deliberately no /update route —
-// the prod graph-server exposes only GSP writes plus a read-only SPARQL
-// proxy (spec 009), so Run must never need one.
-type fakeEndpoint struct {
+// fakeGraphServer fakes graph-server's two relevant routes: the read-only
+// POST /sparql answers the hash SELECT with storedHash, and the branch-scoped
+// GSP PUT /branches/main/graphs counts writes. There is deliberately no
+// update route — graph-server exposes only whole-graph GSP writes plus the
+// read-only SPARQL proxy (spec 009), so Run must never need one.
+type fakeGraphServer struct {
 	storedHash string
 	puts       atomic.Int32
 	lastPut    atomic.Pointer[string]
 }
 
-func (f *fakeEndpoint) handler() http.Handler {
+func (f *fakeGraphServer) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/query":
+		case r.URL.Path == "/sparql" && r.Method == http.MethodPost:
 			bindings := ""
 			if f.storedHash != "" {
 				bindings = `{"h": {"type": "literal", "value": "` + f.storedHash + `"}}`
 			}
 			w.Header().Set("Content-Type", "application/sparql-results+json")
 			io.WriteString(w, `{"head":{"vars":["h"]},"results":{"bindings":[`+bindings+`]}}`)
-		case r.URL.Path == "/store" && r.Method == http.MethodPut:
+		case r.URL.Path == "/branches/main/graphs" && r.Method == http.MethodPut:
 			f.puts.Add(1)
 			body, _ := io.ReadAll(r.Body)
 			s := string(body)
@@ -374,10 +347,10 @@ func (f *fakeEndpoint) handler() http.Handler {
 }
 
 func TestRunWritesPayloadWithEmbeddedHash(t *testing.T) {
-	f := &fakeEndpoint{}
+	f := &fakeGraphServer{}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
-	c := graph.NewClient(srv.URL, nil)
+	c := graphserver.New(srv.URL, nil)
 
 	res, err := derive.Run(context.Background(), c, "urn:g",
 		[]byte("<urn:s> <urn:p> <urn:o> .\n"))
@@ -395,7 +368,7 @@ func TestRunWritesPayloadWithEmbeddedHash(t *testing.T) {
 		t.Fatalf("PUT body = %q; want the payload", got)
 	}
 	// The hash triple rides inside the same PUT, so it lands atomically with
-	// the data and needs no SPARQL Update (which prod graph-server lacks).
+	// the data and needs no SPARQL Update (which graph-server lacks).
 	if !strings.Contains(got, `<urn:g> <http://purl.org/dc/terms/identifier> "`+res.Hash+`"`) {
 		t.Fatalf("PUT body = %q; want the embedded hash triple", got)
 	}
@@ -403,10 +376,10 @@ func TestRunWritesPayloadWithEmbeddedHash(t *testing.T) {
 
 func TestRunSkipsOnMatchingHash(t *testing.T) {
 	payload := []byte("<urn:s> <urn:p> <urn:o> .\n")
-	f := &fakeEndpoint{storedHash: derive.HashOf(payload)}
+	f := &fakeGraphServer{storedHash: derive.HashOf(payload)}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
-	c := graph.NewClient(srv.URL, nil)
+	c := graphserver.New(srv.URL, nil)
 
 	res, err := derive.Run(context.Background(), c, "urn:g", payload)
 	if err != nil {
@@ -415,17 +388,16 @@ func TestRunSkipsOnMatchingHash(t *testing.T) {
 	if !res.Skipped {
 		t.Fatalf("result = %+v; want Skipped", res)
 	}
-	if f.puts.Load() != 0 || f.updates.Load() != 0 {
-		t.Fatalf("puts=%d updates=%d; a matching hash must write nothing",
-			f.puts.Load(), f.updates.Load())
+	if f.puts.Load() != 0 {
+		t.Fatalf("puts=%d; a matching hash must write nothing", f.puts.Load())
 	}
 }
 
 func TestRunRewritesOnChangedHash(t *testing.T) {
-	f := &fakeEndpoint{storedHash: "sha256:stale"}
+	f := &fakeGraphServer{storedHash: "sha256:stale"}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
-	c := graph.NewClient(srv.URL, nil)
+	c := graphserver.New(srv.URL, nil)
 
 	res, err := derive.Run(context.Background(), c, "urn:g", []byte("<urn:s> <urn:p> <urn:o> .\n"))
 	if err != nil || res.Skipped {
@@ -454,8 +426,12 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 )
+
+// Branch is the fixed graph-server branch the work graph lives on — the
+// same value as projector.Branch (spec 006 §13.2 item 5).
+const Branch = "main"
 
 // dctIdentifier stores the input hash of a deriver run as a triple about
 // the graph, inside the graph — replaced atomically with everything else,
@@ -477,7 +453,7 @@ func HashOf(payload []byte) string {
 }
 
 // storedHash reads the hash triple of a graph's previous run ("" if none).
-func storedHash(ctx context.Context, c *graph.Client, graphIRI string) (string, error) {
+func storedHash(ctx context.Context, c *graphserver.Client, graphIRI string) (string, error) {
 	rows, err := c.Select(ctx, fmt.Sprintf(
 		"SELECT ?h WHERE { GRAPH <%s> { <%s> <%s> ?h } }",
 		graphIRI, graphIRI, dctIdentifier))
@@ -492,12 +468,13 @@ func storedHash(ctx context.Context, c *graph.Client, graphIRI string) (string, 
 
 // Run applies the deriver contract: if the payload's hash matches the
 // graph's stored hash the run is a no-op; otherwise the graph is atomically
-// replaced (one GSP PUT) by the payload plus a triple recording the new
-// hash. Embedding the hash in the PUT body keeps the write a single atomic
-// operation and works against endpoints that expose only GSP + read-only
-// SPARQL (prod graph-server, spec 009) — no SPARQL Update is ever needed.
-// Run never touches any graph other than graphIRI.
-func Run(ctx context.Context, c *graph.Client, graphIRI string, payload []byte) (Result, error) {
+// replaced (one GSP PUT via graphserver.PutGraph — N-Triples is a Turtle
+// subset, so the rendered document is the payload as-is) by the payload plus
+// a triple recording the new hash. Embedding the hash in the PUT body keeps
+// the write a single atomic operation and works against graph-server's
+// GSP-plus-read-only-SPARQL surface (spec 009) — no SPARQL Update is ever
+// needed. Run never touches any graph other than graphIRI.
+func Run(ctx context.Context, c *graphserver.Client, graphIRI string, payload []byte) (Result, error) {
 	hash := HashOf(payload)
 	prev, err := storedHash(ctx, c, graphIRI)
 	if err != nil {
@@ -507,7 +484,7 @@ func Run(ctx context.Context, c *graph.Client, graphIRI string, payload []byte) 
 		return Result{Graph: graphIRI, Hash: hash, Skipped: true}, nil
 	}
 	doc := fmt.Sprintf("%s<%s> <%s> %q .\n", payload, graphIRI, dctIdentifier, hash)
-	if err := c.Replace(ctx, graphIRI, "application/n-triples", []byte(doc)); err != nil {
+	if _, err := c.PutGraph(ctx, Branch, graphIRI, []byte(doc)); err != nil {
 		return Result{}, fmt.Errorf("replace %s: %w", graphIRI, err)
 	}
 	return Result{Graph: graphIRI, Hash: hash, Bytes: len(payload)}, nil
@@ -673,7 +650,7 @@ func componentOf(p listedPackage, moduleRoot string, m *manifest.Manifest) strin
 // observed/go-imports document (spec 007 deriver 1): one
 // <a> dct:requires <b> per pair of distinct components with at least one
 // package-level import between them. Same-component and unmapped edges are
-// dropped; graphproj.Render sorts and dedupes, so output is deterministic.
+// dropped; graphproj.Document sorts and dedupes, so output is deterministic.
 func ImportsTriples(goList io.Reader, moduleRoot string, m *manifest.Manifest) ([]byte, error) {
 	dec := json.NewDecoder(goList)
 	var pkgs []listedPackage
@@ -697,11 +674,11 @@ func ImportsTriples(goList io.Reader, moduleRoot string, m *manifest.Manifest) (
 		}
 		for _, imp := range p.Imports {
 			if to := byImportPath[imp]; to != "" && to != from {
-				ts = append(ts, graphproj.Triple{S: from, P: dctRequires, O: to})
+				ts = append(ts, graphproj.Triple{S: from, P: dctRequires, O: graphproj.IRIRef(to)})
 			}
 		}
 	}
-	return graphproj.Render(ts), nil
+	return graphproj.Document(ts), nil
 }
 
 // GoListDeps runs `go list -deps -json ./...` in repoRoot and returns its
@@ -740,11 +717,14 @@ git commit -m "Derive component dependencies from Go imports"
 **Files:**
 - Create: `internal/derive/layout.go`
 - Test: `internal/derive/layout_test.go`
-- Modify: `rdf/wl/ontology.ttl`, `rdf/vocab_test.go`
+- Modify: `docs/specs/007-drift-and-overview.md` (amendment), `ns/ontology.ttl`
 
 - [ ] **Step 1: Mint `wl:unmatchedPath`**
 
-Append to `rdf/wl/ontology.ttl`:
+Per CLAUDE.md's ordering, amend the spec first (a short amendment on spec
+007's reporting section naming the predicate — Overlaps item 9), then mirror
+the term in `ns/ontology.ttl` in the same commit, next to the other
+`wl:` datatype properties:
 
 ```turtle
 wl:unmatchedPath a owl:DatatypeProperty ; wl:layer wlc:execution ;
@@ -752,8 +732,9 @@ wl:unmatchedPath a owl:DatatypeProperty ; wl:layer wlc:execution ;
     rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (spec 007 §1, §4.2). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
 ```
 
-Add `"wl:unmatchedPath a owl:DatatypeProperty"` to `mintedDeclarations` in
-`rdf/vocab_test.go`, then run `go test ./rdf/...` — expected PASS.
+Check with `riot --validate ns/*.ttl` and
+`go test -trimpath ./internal/graphproj/` (the Oxigraph `ns/` parse gate;
+skips when no endpoint is reachable) — expected PASS.
 
 - [ ] **Step 2: Write the failing deriver test**
 
@@ -870,8 +851,8 @@ func LayoutTriples(root, host, owner, name string, m *manifest.Manifest) ([]byte
 	var ts []graphproj.Triple
 	for _, c := range m.Components {
 		ts = append(ts,
-			graphproj.Triple{S: repo, P: dctHasPart, O: c.IRI},
-			graphproj.Triple{S: c.IRI, P: rdfType, O: wlComponent},
+			graphproj.Triple{S: repo, P: dctHasPart, O: graphproj.IRIRef(c.IRI)},
+			graphproj.Triple{S: c.IRI, P: rdfType, O: graphproj.IRIRef(wlComponent)},
 		)
 	}
 
@@ -910,21 +891,21 @@ func LayoutTriples(root, host, owner, name string, m *manifest.Manifest) ([]byte
 	}
 	sort.Strings(prefixes)
 	for _, p := range prefixes {
-		ts = append(ts, graphproj.Triple{S: repo, P: wlUnmatched, O: p, Lit: true})
+		ts = append(ts, graphproj.Triple{S: repo, P: wlUnmatched, O: graphproj.Text(p)})
 	}
-	return graphproj.Render(ts), nil
+	return graphproj.Document(ts), nil
 }
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `go test ./internal/derive/ -run TestLayout -v && go test ./rdf/...`
+Run: `go test -trimpath ./internal/derive/ -run TestLayout -v && riot --validate ns/*.ttl`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add internal/derive rdf
+git add internal/derive ns docs/specs
 git commit -m "Derive repo layout and coverage gaps from the component manifest"
 ```
 
@@ -940,8 +921,10 @@ The command runs from a repo checkout (CI/cron per the spec's trigger
 contract): loads `.worklode/components.yaml`, resolves the repo coordinates
 from the origin remote (`internal/repourl.Normalize` + the existing
 `gitRemoteURL` in `internal/cli`), computes both documents, and PUTs them to
-`LODE_GRAPH_URL` (flag `--graph-url` overrides). `--dry-run` prints the
-N-Triples and writes nothing.
+the graph-server named by the `LODE_GRAPHSERVER_*` environment
+(`graphserver.FromEnv`; flag `--graph-url` overrides with an
+unauthenticated client). `--dry-run` prints the N-Triples and writes
+nothing.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1017,7 +1000,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
-	"github.com/sunstoneinstitute/worklode/internal/graph"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
@@ -1027,7 +1010,7 @@ import (
 // repo-layout) for the repo at root. With dryRun it returns the rendered
 // N-Triples; otherwise it Runs each through the deriver contract against c.
 // A repo that is not a Go module derives layout only (reported inline).
-func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun bool, c *graph.Client) (string, error) {
+func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun bool, c *graphserver.Client) (string, error) {
 	manPath := filepath.Join(root, ".worklode", "components.yaml")
 	data, err := os.ReadFile(manPath)
 	if err != nil {
@@ -1099,22 +1082,25 @@ func newDeriveCmd() *cobra.Command {
 			}
 			owner, name, _ := strings.Cut(coord, "/")
 
-			var c *graph.Client
+			var c *graphserver.Client
 			if !dryRun {
-				if graphURL == "" {
-					graphURL = os.Getenv("LODE_GRAPH_URL")
+				switch {
+				case graphURL != "":
+					c = graphserver.New(graphURL, nil)
+				case os.Getenv("LODE_GRAPHSERVER_URL") != "":
+					if c, err = graphserver.FromEnv(); err != nil {
+						return err
+					}
+				default:
+					return errors.New("no graph endpoint: set --graph-url or LODE_GRAPHSERVER_URL (or use --dry-run)")
 				}
-				if graphURL == "" {
-					return errors.New("no graph endpoint: set --graph-url or LODE_GRAPH_URL (or use --dry-run)")
-				}
-				c = graph.NewClient(graphURL, nil)
 			}
 			out, err := runDeriveLocal(cmd.Context(), root, "github.com", owner, name, dryRun, c)
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return err
 		},
 	}
-	cmd.Flags().StringVar(&graphURL, "graph-url", "", "SPARQL endpoint base URL (default $LODE_GRAPH_URL)")
+	cmd.Flags().StringVar(&graphURL, "graph-url", "", "graph-server base URL, unauthenticated (default: the LODE_GRAPHSERVER_* env via graphserver.FromEnv)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the N-Triples instead of writing")
 	return cmd
 }
@@ -1154,17 +1140,15 @@ The full-series map is split across the three parts; this part covers:
 
 ## Overlaps and open questions
 
-1. **IRI-grammar package: resolved to `internal/kg/iri`.** The sibling plans
-   previously disagreed on where the grammar lives: this series bound to a
-   knowledge-graph-plan package of the same short name, another line ran
-   through `internal/kg/iri` (2026-07-30-platform-graph-design, extended by
-   2026-07-30-design-documents-as-graph-objects, and named canonical by
-   2026-07-30-data-platform-kg-requirements), and `internal/graphproj`
-   (2026-07-30-runtime-layer) covered runtime nodes only. Resolved at the
-   planning tier in favor of `internal/kg/iri`, owned by the
-   platform-graph-design plan; this series now takes it as a prerequisite, and
-   `internal/graphproj` keeps runtime-node IRIs (paired with its triple
-   functions) — the grammar itself is unchanged (base
+1. **IRI-grammar package: resolved to `internal/kg/iri`, landed.** The
+   sibling plans previously disagreed on where the grammar lives; it is
+   owned by `2026-07-30-knowledge-graph-1-graph-foundations.md` and landed
+   under WL-25 (the superseding of 2026-07-30-platform-graph-design records
+   the hand-over). The API is plain-string — pure, non-validating
+   constructors plus exported namespace constants — and already includes
+   the runtime-node patterns, so this series takes it as a prerequisite and
+   adds only the three graph/repo patterns of Task 1, on the same
+   convention. The grammar itself is unchanged (base
    `https://worklode.io/ns/`, `id/`, `graph/` families). A narrower conflict
    remains above all five plans: data-platform ADR-0003 and Worklode spec
    006/014 now agree on the schema base (`https://worklode.io/ns/ontology#`)
@@ -1210,13 +1194,14 @@ The full-series map is split across the three parts; this part covers:
     hook), matching the spec's trigger contract without a background loop.
     If a loop is wanted, hang it off the projector ticker the
     knowledge-graph plan adds to `lode serve`.
-11. **Prod endpoint flavor.** This series writes and reads through
-    `internal/graph.Client` (Oxigraph-native `/store`, `/query`), which is
-    what dev/tests expose. Prod graph-server (spec 009) exposes
-    branch-scoped GSP (`PUT /branches/main/graphs?graph=…`) plus a
-    read-only `/sparql` proxy — the data-platform-kg-requirements plan's
-    `internal/graphserver` client. The deriver contract was designed for
-    that surface (single PUT, hash embedded in the payload, reads via
-    SELECT only — Task 3), so pointing production at graph-server is a
-    client/path swap in `derive.Run`'s and `overview`'s constructor wiring,
-    not a redesign.
+11. **Endpoint flavor: graph-server everywhere.** This series writes and
+    reads through `internal/graphserver` (branch-scoped GSP
+    `PUT /branches/main/graphs?graph=…` plus the read-only `/sparql`
+    proxy) — there is no worklode-local SPARQL client (knowledge-graph
+    part 1, design call 4). The deriver contract was designed for exactly
+    that surface: single PUT, hash embedded in the payload, reads via
+    SELECT only (Task 3). Unit tests fake the two routes; Oxigraph-backed
+    tests (which speak plain GSP `/store` + `/query`) bridge with the small
+    translating proxy `internal/projector/oxigraph_test.go` established,
+    extended with a `/sparql`→`/query` forward where a test drives the
+    production client end to end.

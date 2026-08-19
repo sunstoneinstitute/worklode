@@ -1,6 +1,6 @@
 ---
 status: accepted
-task: WL-4
+task: WL-44
 covers: docs/specs/025-documents-in-the-backbone.md
 ---
 # Design documents as graph objects (spec 014) — Implementation Plan
@@ -42,9 +42,11 @@ golang-migrate, `gopkg.in/yaml.v3`, standard-library testing.
   Task 3 here extends `internal/kg/iri`; Tasks 8–10 consume
   `internal/kg/manifest` and cannot start before that plan's Task 1 has
   landed.
-- `docs/plans/2026-07-30-runtime-layer.md` owns `internal/graphproj`
-  (`Triple`, `Render`). Task 10 here consumes it and cannot start before that
-  plan's Task 6 has landed.
+- `internal/graphproj`'s core (`Term`, `Triple`, `Document`) landed with
+  `2026-07-30-knowledge-graph-1-graph-foundations.md` (WL-25); Task 10 here
+  consumes only that core, so it is unblocked. The runtime-layer plan owns
+  the runtime row→triple functions in the same package, which this plan
+  does not touch.
 - Tasks 1, 2, 4–7 have no cross-plan dependency; Tasks 4–7 only need Task 3.
 
 ## Already implemented vs. what remains
@@ -59,9 +61,10 @@ golang-migrate, `gopkg.in/yaml.v3`, standard-library testing.
   `docs/specs/013-reconciliation.md:22,132,170,211,236,253`. No doc-amendment
   work remains except the mechanical prefix rename (Task 2), which is what
   makes several of those callouts redundant.
-- **rdf-registry side of §1.** No `rdf/ls/` directory ever existed; the
-  runtime-layer plan creates `rdf/wl/` directly under the `wl:` base. Nothing
-  to move.
+- **rdf-registry side of §1.** No `rdf/ls/` directory ever existed, and the
+  rdf-registry route itself was cancelled (rdf-registry#31 closed): the
+  `wl:` vocabulary's one home is `ns/*.ttl` in this repo, already written
+  under the `wl:` base. Nothing to move.
 
 **Not implemented — this plan's build scope:**
 
@@ -303,32 +306,27 @@ git commit -m "Rename the ls prefixes to wl across the docs (spec 025 §17)"
 - Test: `internal/kg/iri/iri_test.go` (append)
 
 Depends on `internal/kg/iri` (owned by the knowledge-graph-1 plan; landed
-under WL-25).
+under WL-25). The landed API is plain-string — pure, non-validating
+constructors (that plan's design call 5) — so these two additions follow
+the same convention: no error return, no rejection cases. Inputs come from
+the section parser and the store's version counter, both of which enforce
+their own grammar; validation here would be dead weight.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/kg/iri/iri_test.go`, inside `TestInstanceIRIs`'s `cases`
+Append to `internal/kg/iri/iri_test.go`, inside `TestGrammar`'s `cases`
 slice:
 
 ```go
-		{"section (025 §3)", func() (string, error) {
-			return iri.Section("spec-worklode-014", "sec-3")
-		}, b + "section/spec-worklode-014/sec-3"},
-		{"versioned doc (025 §4)", func() (string, error) {
-			return iri.DocVersion("spec-worklode-014", 3)
-		}, b + "doc/spec-worklode-014/v3"},
-```
-
-and inside `TestInstanceIRIRejects`'s `cases` slice:
-
-```go
-		{"section empty anchor", func() (string, error) { return iri.Section("spec-worklode-014", "") }},
-		{"doc version zero", func() (string, error) { return iri.DocVersion("spec-worklode-014", 0) }},
+		{"section (025 §3)", iri.Section("spec-worklode-014", "sec-3"),
+			base + "id/section/spec-worklode-014/sec-3"},
+		{"versioned doc (025 §4)", iri.DocVersion("spec-worklode-014", 3),
+			base + "id/doc/spec-worklode-014/v3"},
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `go test ./internal/kg/iri/`
+Run: `go test -trimpath ./internal/kg/iri/`
 Expected: FAIL — `undefined: iri.Section`, `undefined: iri.DocVersion`
 
 - [ ] **Step 3: Write the implementation**
@@ -340,22 +338,19 @@ Add to `internal/kg/iri/iri.go`, after `Doc`:
 // (025 §3): id/section/<doc-slug>/<anchor>. The anchor is assigned at first
 // publication and never changes; the IRI is therefore as durable as the
 // document's.
-func Section(docSlug, anchor string) (string, error) {
-	return mint("section", docSlug, anchor)
+func Section(docSlug, anchor string) string {
+	return IDNS + "section/" + docSlug + "/" + anchor
 }
 
 // DocVersion returns the immutable versioned sibling IRI of a design
 // document (025 §4): id/doc/<slug>/v<n>. Everything links to the canonical
 // Doc IRI by default; versioned IRIs appear only in pinned claims.
-func DocVersion(slug string, version int) (string, error) {
-	if version <= 0 {
-		return "", fmt.Errorf("iri: doc version %d is not positive", version)
-	}
-	return mint("doc", slug, "v"+strconv.Itoa(version))
+func DocVersion(slug string, version int) string {
+	return IDNS + "doc/" + slug + "/v" + strconv.Itoa(version)
 }
 ```
 
-(`fmt`, `strconv` are already imported.)
+(Add `strconv` to the imports.)
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1679,11 +1674,7 @@ type Claim struct {
 func Resolve(f *File, m *manifest.Manifest, repoCoords string) ([]Claim, error) {
 	implicit := ""
 	if m == nil {
-		var err error
-		implicit, err = iri.Component(repoCoords)
-		if err != nil {
-			return nil, fmt.Errorf("implicit component for %q: %w", repoCoords, err)
-		}
+		implicit = iri.Component(repoCoords)
 	}
 
 	seen := map[Claim]bool{}
@@ -1746,8 +1737,8 @@ git commit -m "Derive implementation claims from paths via the component manifes
 - Create: `internal/kg/implements/triples.go`
 - Test: `internal/kg/implements/triples_test.go`
 
-Depends on the runtime-layer plan's Task 6 (`graphproj.Triple`,
-`graphproj.Render`). This is the pure half of 007's future
+Depends on `graphproj.Triple`/`graphproj.Document`, landed with
+knowledge-graph part 1 (WL-25). This is the pure half of 007's future
 `observed/repo-implements` deriver; the deriver itself (input fetching,
 named-graph PUT, triggers) belongs to spec 007's plan.
 
@@ -1776,7 +1767,7 @@ func TestTriples(t *testing.T) {
 			Pinned:    "https://worklode.io/ns/id/doc/spec-worklode-013/v1",
 		},
 	}
-	got := string(graphproj.Render(implements.Triples(claims)))
+	got := string(graphproj.Document(implements.Triples(claims)))
 	want := "<https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode> " +
 		"<https://worklode.io/ns/ontology#implements> " +
 		"<https://worklode.io/ns/id/section/spec-worklode-004/sec-4> .\n" +
@@ -1795,9 +1786,9 @@ func TestTriplesEdgeIsPinFree(t *testing.T) {
 		{Component: "https://x/c", Section: "https://x/s", Pinned: "https://x/d/v1"},
 		{Component: "https://x/c", Section: "https://x/s", Pinned: "https://x/d/v2"},
 	}
-	got := string(graphproj.Render(implements.Triples(claims)))
+	got := string(graphproj.Document(implements.Triples(claims)))
 	if want := "<https://x/c> <https://worklode.io/ns/ontology#implements> <https://x/s> .\n"; got != want {
-		t.Fatalf("Render = %q; want the single deduplicated edge %q", got, want)
+		t.Fatalf("Document = %q; want the single deduplicated edge %q", got, want)
 	}
 }
 ```
@@ -1822,15 +1813,16 @@ import (
 //
 // Only the edge is emitted. 025 §11 also wants the pinned version in the
 // graph for the stale-claim query, but names no predicate or annotation
-// encoding for a per-edge value; that mint belongs to the 006 vocabulary PR
-// (see this plan's Overlaps section). Claims carry the pin in Go until then.
+// encoding for a per-edge value; that mint follows the amend-006-then-
+// mirror-ns/ route (see this plan's Overlaps section). Claims carry the
+// pin in Go until then.
 func Triples(claims []Claim) []graphproj.Triple {
 	ts := make([]graphproj.Triple, 0, len(claims))
 	for _, c := range claims {
 		ts = append(ts, graphproj.Triple{
 			S: c.Component,
-			P: iri.Ontology + "implements",
-			O: c.Section,
+			P: iri.Term("implements"),
+			O: graphproj.IRIRef(c.Section),
 		})
 	}
 	return ts
@@ -1876,21 +1868,21 @@ does not maps to a named owner:
 
 | AC | Status |
 |---|---|
-| 1 | docs half: Step 3 grep. rdf-registry half (`rdf/wl/`, publish base): runtime-layer plan + rdf-registry branch `worklode-io-spec` |
-| 2 | callouts already applied (006:65,109,328); ontology absence of `wl:Plan` → 006 vocabulary PR |
+| 1 | docs half: Step 3 grep. Vocabulary half: `ns/*.ttl` already written under the `wl:` base; serving it at `worklode.io/ns/` is unowned (`docs/follow-ups.md`) |
+| 2 | callouts already applied (006:65,109,328); `wl:Plan` is declared in `ns/ontology.ttl` |
 | 3 | `iri.Section` + `TestParse`/`TestLintRules`; graph resolution → deferred |
 | 3a | `TestCompareRenumberIsViolationInsertIsNot` |
 | 4 | deferred — needs the graph server (009) |
-| 5 | local gate: `TestCompareRemovedAnchorIsViolation`; SHACL form → 006 PR |
+| 5 | local gate: `TestCompareRemovedAnchorIsViolation`; SHACL form: `wl:SectionShape` in `ns/shapes.ttl` |
 | 6 | edge set: Tasks 8–10; graph write + full-replace no-op → 007 deriver plan |
 | 6a | `TestResolveImplicitComponent` |
 | 6b | `TestResolveSplitsAcrossComponents`, `TestResolveUnmatchedPathIsError` |
 | 6c | lint/diff halves: `TestLintDepthLimitIsConfigurable`, `TestCompareLoweredLimitNamesOrphans`; claim-vs-depth rejection needs the published section set → deferred with publication |
 | 7 | deferred — coverage query needs the graph |
 | 8 | `Changed` is the exact `wl:lastRevisedIn` input (`TestCompareChangedIsExact`); the staleness query → 007 |
-| 9 | 006 vocabulary PR (concept scheme) |
+| 9 | `wlc:DesignDocStatus` in `ns/concept.ttl` (no `implemented` concept, as required) |
 | 10 | deferred — revision lifecycle |
-| 11 | DB+API: `TestCreateTaskAllKinds`, `TestMigrateRoundTrip`; `wlc:TaskKind` → 006 PR |
+| 11 | DB+API: `TestCreateTaskAllKinds`, `TestMigrateRoundTrip`; `wlc:TaskKind` (six concepts) in `ns/concept.ttl`, held to the migration by a test |
 | 12 | deferred — projection (`prov:wasGeneratedBy`) |
 
 - [ ] **Step 5: Report the deliberate leftovers**
@@ -1904,8 +1896,8 @@ Deferred table below, so nobody mistakes it for a gap.
 
 | Work | Owner / blocker |
 |---|---|
-| `wl:Section`, `wl:lastRevisedIn`, `wl:DesignDoc`/`ADR`/`Spec` TTL, `wlc:DesignDocStatus` without `implemented`, `wlc:TaskKind` (six), disjointness updates, widened `wl:status` domain, DCAT/PROV version properties, §7 SHACL shapes | spec 006's rdf-registry PR — extends `rdf/wl/{ontology,concept}.ttl` and `rdf/shapes/wl-shapes.ttl` created by the runtime-layer plan; must fold in the 014 amendment callouts already sitting in 006 |
-| ADR-0006 amendment (versioned sibling IRIs as a named exception) | same rdf-registry PR |
+| `wl:Section`, `wl:lastRevisedIn`, `wl:DesignDoc`/`ADR`/`Spec` TTL, `wlc:DesignDocStatus` without `implemented`, `wlc:TaskKind` (six), disjointness updates, widened `wl:status` domain, DCAT/PROV version properties, §7 SHACL shapes | **already in `ns/*.ttl`** — the 025/026 vocabulary extraction landed all of it (including `wl:implements`); anything a later diff finds missing follows the amend-spec-then-mirror-`ns/` route |
+| ADR-0006 amendment (versioned sibling IRIs as a named exception) | data-platform's ADR corpus — cross-repo, still owed |
 | Versioned named graphs, the single-transaction publication, `lode doc list/show/coverage/revise/publish`, `lode drift --docs`, the web view, crit-gated revisions, the server-side depth-limit setting | blocked on the graph server (spec 009, cross-repo) and 007's overview surface |
 | The `observed/repo-implements` deriver (fetch manifests at branch head, named-graph PUT, push/schedule triggers) and the coverage/stale/orphan standing queries | spec 007's plan, consuming this plan's `implements` package |
 | `prov:wasGeneratedBy` authorship projection (§9) | 006 projection work |
@@ -1913,21 +1905,24 @@ Deferred table below, so nobody mistakes it for a gap.
 
 ## Overlaps and open questions
 
-1. **The runtime IRI grammar duplication is resolved.** The
-   platform-graph-design plan's `internal/kg/iri` is the single owner of the
-   minting grammar, on its validating `(string, error)` signature. The
-   runtime-layer plan no longer creates `graphproj/iri.go`;
-   `internal/graphproj` keeps its N-Triples rendering and row→triple
-   projection role and imports `internal/kg/iri` instead of minting. This
-   plan is unaffected — it takes doc/section IRIs from `internal/kg/iri` and
-   only `Triple`/`Render` from `graphproj`.
+1. **The runtime IRI grammar duplication is resolved.** `internal/kg/iri`
+   is the single owner of the minting grammar, owned by
+   `2026-07-30-knowledge-graph-1-graph-foundations.md` and landed under
+   WL-25 on **plain-string** signatures — pure, non-validating constructors
+   (the superseded platform-graph-design plan's `(string, error)` shape
+   died with it). The runtime-layer plan no longer creates
+   `graphproj/iri.go`; `internal/graphproj` keeps its N-Triples rendering
+   and row→triple projection role and imports `internal/kg/iri` instead of
+   minting. This plan is unaffected — it takes doc/section IRIs from
+   `internal/kg/iri` and only `Triple`/`Document` from `graphproj`.
 2. **The pin has no graph encoding.** 025 §11 requires the deriver to emit
    "the pinned version for staleness testing" but mints no predicate for it,
    and §Amendments forbids a coverage-flavored predicate. 006 publishes RDF
    1.2 (umbrella, resolved questions), so a triple-term annotation on the
    `wl:implements` edge is the likely shape — but that is a vocabulary
-   decision for the 006 PR. Until then `implements.Claim` carries the pin in
-   Go and `Triples` emits only the edge.
+   decision to make by amending 006 and mirroring `ns/`. Until then
+   `implements.Claim` carries the pin in Go and `Triples` emits only the
+   edge.
 3. **AC1 is literally unsatisfiable while prose describes the rename.**
    Resolved here by rewording historical mentions to the colon-free form
    (`` `ls` ``), including 025 §17's own table. If reviewers prefer keeping
