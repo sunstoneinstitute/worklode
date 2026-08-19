@@ -269,13 +269,16 @@ without ever storing a value in worklode (spec 017).
   task's non-baseline names, then one `op run` authorization that resolves
   every reference under a single 1Password sign-in. Values go straight into
   the OS keystore (service `worklode:<task-id>`); `.worklode/secrets.env`
-  holds `op://` references only, never values. Declining, or having no
-  terminal (an agent-driven `lode next`), defers the ceremony to a later
+  holds `op://` references only, never values. Declining is recorded and
+  credentialed steps then block; having no operator to ask (an agent-driven or
+  `--json` `lode next`) records nothing and defers the ceremony to a later
   `lode resume` run in a terminal.
 - **Running:** `lode secrets exec -- <command>` injects exactly the task's
   materialized names into the child's environment; `lode secrets status`
   shows declared vs. materialized state. Items are purged on `lode done`,
-  `lode block`, and worktree removal.
+  `lode block`, and worktree removal — merely leaving a worktree keeps them,
+  since the lease is still yours; `lode secrets purge --task <id>` is the
+  manual escape hatch.
 - **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, deployed
   as the `worklode-secrets-catalog` ConfigMap.
 - **Guarantees:** worklode stores names only — values never touch disk, logs,
@@ -285,11 +288,11 @@ without ever storing a value in worklode (spec 017).
 Two constraints worth knowing: the keystore is the platform's own — Keychain
 on macOS, Secret Service on Linux — so a headless Linux box with no Secret
 Service running cannot materialize secrets and falls back to the
-block-on-missing-secret path instead. And an OS keystore item is capped at
-roughly 2.5-3 KB, so a catalog
+block-on-missing-secret path instead. And macOS and Windows cap a keystore
+item at roughly 2.5-3 KB (Secret Service does not), so a catalog
 entry must model a credential, not a whole credentialed asset — a full
-kubeconfig doesn't fit and has to be split into a plaintext template plus the
-client credential that actually needs protecting.
+kubeconfig doesn't fit everywhere and has to be split into a plaintext template
+plus the client credential that actually needs protecting.
 
 ## SSO (optional)
 
