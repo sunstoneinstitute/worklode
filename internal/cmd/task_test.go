@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -571,5 +574,44 @@ func TestTaskAddBodyFlagsMutuallyExclusive(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "none of the others can be") {
 		t.Fatalf("err = %v; want cobra mutual-exclusion error", err)
+	}
+}
+
+func TestTaskAddSendsSecrets(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, `{"id":"SE-1","project":"secproj","title":"t","priority":"medium","kind":"chore","state":"ready","secrets":["KUBECONFIG_HZDEV","OPENALEX_API_KEY"]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newTaskAddCmd()
+	cmd.SetArgs([]string{"--project", "secproj", "--title", "t", "--kind", "chore",
+		"--secrets", "KUBECONFIG_HZDEV,OPENALEX_API_KEY"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task add: %v", err)
+	}
+	if !strings.Contains(gotBody, `"secrets":["KUBECONFIG_HZDEV","OPENALEX_API_KEY"]`) {
+		t.Fatalf("request body = %q; want the secrets list", gotBody)
+	}
+}
+
+func TestPrintBriefShowsSecrets(t *testing.T) {
+	cmd := newTaskBriefCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	printBrief(cmd, model.Brief{
+		Task:   model.Task{ID: "SE-1", Title: "t", State: "ready", Priority: "medium", Secrets: []string{"A_TOKEN", "B_KEY"}},
+		Branch: "lode/SE-1-t",
+	})
+	if !strings.Contains(out.String(), "secrets: A_TOKEN, B_KEY") {
+		t.Fatalf("brief output missing secrets line:\n%s", out.String())
 	}
 }

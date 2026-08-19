@@ -83,6 +83,7 @@ func newTaskAddCmd() *cobra.Command {
 	var title, body, bodyFile, priority, kind, concern, parent, followUpTo string
 	var draft bool
 	var skills []string
+	var secretNames []string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Create a task",
@@ -105,6 +106,7 @@ func newTaskAddCmd() *cobra.Command {
 			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
+				Secrets: secretNames,
 			})
 			if err != nil {
 				return err
@@ -130,6 +132,8 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
 		"record that this task was spun out of the work on that task")
+	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
+		"org-catalog secret names this task needs, comma-separated (see `lode secrets catalog`)")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -298,6 +302,7 @@ func printSkills(cmd *cobra.Command, skills []string) {
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority string
 	var needsDecomposition bool
+	var secretNames []string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag",
@@ -328,8 +333,15 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("needs-decomposition") {
 				in.NeedsDecomposition = &needsDecomposition
 			}
-			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil {
-				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, or --needs-decomposition")
+			if cmd.Flags().Changed("secrets") {
+				names := secretNames
+				if len(names) == 1 && names[0] == "none" {
+					names = []string{}
+				}
+				in.Secrets = &names
+			}
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --needs-decomposition, or --secrets")
 			}
 
 			c, cfg, err := newAPIClientWithConfig()
@@ -358,6 +370,8 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
+	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
+		"replace the task's declared secret names (comma-separated; 'none' clears)")
 	return cmd
 }
 
@@ -927,6 +941,9 @@ func printBrief(cmd *cobra.Command, b model.Brief) {
 	fmt.Fprintf(out, "%s: %s\n", b.Task.ID, b.Task.Title)
 	fmt.Fprintf(out, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
 	fmt.Fprintf(out, "branch: %s\n", b.Branch)
+	if len(b.Task.Secrets) > 0 {
+		fmt.Fprintf(out, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
+	}
 	if b.Lease != nil {
 		fmt.Fprintf(out, "lease: %s (expires %s)\n", b.Lease.Worktree, b.Lease.ExpiresAt.Local().Format(time.RFC3339))
 	}
