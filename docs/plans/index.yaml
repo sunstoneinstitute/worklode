@@ -418,6 +418,7 @@ docs/plans/2026-07-30-runtime-layer.md:
     task-7-rowtriples-with-the-6-guards-ac3-ac8: "### Task 7: Row→triples with the §6 guards (AC3, AC8)"
     phase-5-verification: "## Phase 5 — Verification"
     task-8-full-suite-verification: "### Task 8: Full-suite verification"
+    execution-notes-wl-27: "## Execution notes (WL-27)"
 docs/plans/2026-07-30-task-secrets-1-server-core.md:
   sections:
     what-exists-vs-what-this-builds: "## What exists vs. what this builds"
