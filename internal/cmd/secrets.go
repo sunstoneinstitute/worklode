@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -199,9 +201,48 @@ func newSecretsPackCmd() *cobra.Command {
 	return cmd
 }
 
-// newSecretsExecCmd is a placeholder until Task 10 replaces it, test-first.
+// execFn wraps syscall.Exec so tests can capture the argv/env instead of
+// replacing the test process.
+var execFn = syscall.Exec
+
 func newSecretsExecCmd() *cobra.Command {
-	return &cobra.Command{Use: "exec", Hidden: true}
+	return &cobra.Command{
+		Use:   "exec [--] <command> [args...]",
+		Short: "Run a command with the bound task's materialized secrets in its environment",
+		Long: "Resolves the task from the wt/<id>-<slug> worktree guard, reads that task's " +
+			"items from the OS keystore, injects them as environment variables, and execs. " +
+			"Values exist only in the child process. The injected set is exactly the task's " +
+			"materialized names — not the catalog, not the operator's secrets.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			m, ok := secrets.LoadManifest(taskID)
+			if !ok || len(m.Materialized) == 0 {
+				return fmt.Errorf("no secrets materialized for %s; `lode resume` runs the ceremony", taskID)
+			}
+			env := os.Environ()
+			for _, name := range m.Materialized {
+				v, err := secrets.Fetch(taskID, name)
+				if err != nil {
+					return fmt.Errorf("secret %s is not in the keystore — do not retry or "+
+						"work around; `lode block` with reason missing-secret: %s", name, name)
+				}
+				env = append(env, name+"="+v)
+			}
+			bin, err := exec.LookPath(args[0])
+			if err != nil {
+				return err
+			}
+			return execFn(bin, args, env)
+		},
+	}
 }
 
 // splitNames splits a comma-separated name list, dropping empties.
