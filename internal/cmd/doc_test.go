@@ -546,8 +546,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if len(resp.Docs) != 1 || len(resp.PlanningGaps) != 1 {
 		t.Fatalf("json = %+v, want one doc and one gap", resp)
 	}
-	if resp.PlanningGaps[0].Sections != 2 ||
-		!strings.Contains(strings.Join(resp.PlanningGaps[0].Unplanned, " "), "sec-2") {
+	if resp.PlanningGaps[0].Sections != 2 || len(resp.PlanningGaps[0].Gaps) != 1 ||
+		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "unplanned"}) {
 		t.Errorf("gap = %+v, want 2 sections with sec-2 unplanned", resp.PlanningGaps[0])
 	}
 

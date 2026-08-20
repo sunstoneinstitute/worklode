@@ -22,6 +22,28 @@ func TestProjectTableShowsKey(t *testing.T) {
 	}
 }
 
+// TestDocPlanningTableAnnotatesAnchorsWithCoverage: the ANCHORS column
+// renders each gap as anchor(coverage), matching 026 §2.1's sample output
+// line.
+func TestDocPlanningTableAnnotatesAnchorsWithCoverage(t *testing.T) {
+	var b strings.Builder
+	DocPlanningTable(&b, []model.Doc{{ID: 1, Number: 7, Slug: "007-drift-and-overview"}},
+		[]model.DocPlanningGap{{
+			Doc: 1, Sections: 9,
+			Gaps: []model.DocSectionGap{
+				{Anchor: "sec-2.4", Coverage: "partial"},
+				{Anchor: "sec-4", Coverage: "unplanned"},
+			},
+		}})
+	out := b.String()
+	if !strings.Contains(out, "2/9") {
+		t.Fatalf("DocPlanningTable output missing the 2/9 ratio:\n%s", out)
+	}
+	if !strings.Contains(out, "sec-2.4(partial) sec-4(unplanned)") {
+		t.Fatalf("DocPlanningTable output missing annotated anchors:\n%s", out)
+	}
+}
+
 // TestBoardSectionGroupsChildren checks that a parent's children render
 // directly beneath it while the rest of the rows keep the order the server
 // sent — the server already sorts by priority, so a plain id sort would be

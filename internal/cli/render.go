@@ -215,9 +215,11 @@ func DocTable(w io.Writer, docs []model.Doc) {
 }
 
 // DocPlanningTable prints the `lode doc list --needs-planning` view: one row
-// per accepted spec, with the gap ratio 026 §2.1 shows and the anchors no
-// accepted plan undertakes. gaps is keyed by document id, so a document
-// without one renders as no gap rather than misaligning the table.
+// per accepted spec, with the gap ratio 026 §2.1 shows and each undischarged
+// anchor annotated with why it is still a gap — "sec-2.4(partial)
+// sec-4(unplanned)" (026 §2.1's sample output). gaps is keyed by document id,
+// so a document without one renders as no gap rather than misaligning the
+// table.
 func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap) {
 	byDoc := make(map[int64]model.DocPlanningGap, len(gaps))
 	for _, g := range gaps {
@@ -229,7 +231,7 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 		column{header: "SLUG"},
 		titleColumn("TITLE"),
 		column{header: "GAPS"},
-		column{header: "UNPLANNED"},
+		column{header: "ANCHORS"},
 	)
 	for _, d := range docs {
 		g := byDoc[d.ID]
@@ -237,9 +239,13 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 		if d.Number != 0 {
 			number = strconv.Itoa(d.Number)
 		}
+		anchors := make([]string, len(g.Gaps))
+		for i, s := range g.Gaps {
+			anchors[i] = fmt.Sprintf("%s(%s)", s.Anchor, s.Coverage)
+		}
 		tbl.add(strconv.FormatInt(d.ID, 10), number, d.Slug, d.Title,
-			fmt.Sprintf("%d/%d", len(g.Unplanned), g.Sections),
-			strings.Join(g.Unplanned, " "))
+			fmt.Sprintf("%d/%d", len(g.Gaps), g.Sections),
+			strings.Join(anchors, " "))
 	}
 	tbl.flush(w)
 }
