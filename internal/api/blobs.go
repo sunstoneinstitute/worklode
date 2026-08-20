@@ -1,8 +1,9 @@
-// blobs.go implements spec 021's two blob endpoints: POST /api/v1/blobs,
-// which stores a content-addressed payload, and GET /blob/{hash}, which
-// redirects to a short-lived presigned URL for one. The bytes never transit
-// this process on the way out, which is what makes a 100 MiB screen recording
-// affordable to serve.
+// blobs.go implements spec 021's blob endpoints: POST /api/v1/blobs, which
+// stores a content-addressed payload, GET /blob/{hash}, which redirects to a
+// short-lived presigned URL for one, and the task blob reference endpoints
+// (list, attach, detach) that manage a task's row in the reference graph.
+// The bytes never transit this process on the way out, which is what makes a
+// 100 MiB screen recording affordable to serve.
 package api
 
 import (
@@ -13,9 +14,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -160,29 +161,6 @@ func (f writerFunc) Write(p []byte) (int, error) {
 // comfortably inside it.
 const presignTTL = 5 * time.Minute
 
-// embeddableTypes render in place in the web UI and terminal-adjacent
-// surfaces. Everything else is a download (spec 021 §5). Nothing is rejected
-// on type: a core dump is a legitimate attachment, and an allowlist buys
-// nothing once non-embeddable types can only be served as attachments.
-var embeddableTypes = map[string]bool{
-	"image/png":     true,
-	"image/jpeg":    true,
-	"image/gif":     true,
-	"image/webp":    true,
-	"image/svg+xml": true,
-	"video/mp4":     true,
-	"video/webm":    true,
-}
-
-// embeddable reports whether a media type renders inline. Sniffed types can
-// carry parameters (text/plain; charset=utf-8), so compare the bare type.
-func embeddable(mediaType string) bool {
-	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
-		mediaType = strings.TrimSpace(mediaType[:i])
-	}
-	return embeddableTypes[mediaType]
-}
-
 // serveBlob handles GET /blob/{hash}: the caller is already authenticated and
 // authorized by eitherGuard, so this redirects to a short-lived presigned
 // URL. This is the GitHub and GitLab pattern -- the durable identifier lives
@@ -208,7 +186,7 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	disposition := "attachment"
-	if embeddable(b.MediaType) {
+	if blobref.Embeddable(b.MediaType) {
 		disposition = "inline"
 	}
 
@@ -232,4 +210,79 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	s.observeBlobServe("redirect")
 	http.Redirect(w, r, url, http.StatusFound)
+}
+
+// listTaskBlobs handles GET /api/v1/tasks/{id}/blobs: a task's full
+// reference graph row, embedded and attached alike (spec 021 §3). The task is
+// checked to exist first, so an unknown id is a 404 rather than an empty list
+// that reads as "this task has no blobs".
+func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	refs, err := s.st.ListTaskBlobs(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	out := make([]model.TaskBlob, 0, len(refs))
+	for _, b := range refs {
+		b.URL = "/blob/" + b.Hash
+		out = append(out, b)
+	}
+	writeJSON(w, http.StatusOK, model.TaskBlobsResponse{Blobs: out})
+}
+
+// attachTaskBlob handles POST /api/v1/tasks/{id}/blobs: declares an explicit
+// reference to an already-uploaded blob, distinct from the embedded
+// references ReconcileEmbedded derives from the body (spec 021 §3). Both the
+// task and the blob are checked to exist before the write, so a bad id or
+// hash comes back as a clean 404 rather than an FK violation surfacing as a
+// 500.
+func (s *server) attachTaskBlob(w http.ResponseWriter, r *http.Request) {
+	var req model.AttachBlobInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.Hash == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "hash is required")
+		return
+	}
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if _, err := s.st.GetBlob(r.Context(), req.Hash); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if err := s.st.AttachBlob(r.Context(), id, req.Hash, req.Filename, actorIDFrom(r)); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeTaskBlobRef("attached")
+	writeJSON(w, http.StatusOK, model.AttachBlobResponse{Status: "attached"})
+}
+
+// detachTaskBlob handles DELETE /api/v1/tasks/{id}/blobs/{hash}: clears the
+// explicit reference. A row the body still embeds survives with only its
+// declared half cleared (DetachBlob); a row with neither half left is
+// deleted. Like list and attach, an unknown task id is a 404 -- the delete
+// is idempotent in the hash, not in the task.
+func (s *server) detachTaskBlob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if err := s.st.DetachBlob(r.Context(), id, r.PathValue("hash")); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeTaskBlobRef("detached")
+	w.WriteHeader(http.StatusNoContent)
 }

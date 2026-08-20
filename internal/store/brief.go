@@ -43,6 +43,10 @@ type Brief struct {
 	PinnedSkills []Skill
 	// SkillWarnings surface unknown/deleted pins.
 	SkillWarnings []string
+	// Blobs are the task's images and attachments, so an agent never has to
+	// parse markdown to find them. A vision-capable agent can read the
+	// screenshot the reporter actually saw; any agent can pull the log.
+	Blobs []model.TaskBlob
 }
 
 // BriefOptions selects the optional work a brief does.
@@ -87,6 +91,11 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		return nil, err
 	}
 
+	blobs, err := s.ListTaskBlobs(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
 	var pinned []Skill
 	var warnings []string
 	if opts.Skills && len(t.Skills) > 0 {
@@ -106,6 +115,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		Lease:         lease,
 		PinnedSkills:  pinned,
 		SkillWarnings: warnings,
+		Blobs:         blobs,
 	}, nil
 }
 

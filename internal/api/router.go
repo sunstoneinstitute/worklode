@@ -83,12 +83,17 @@ var routeGuards = map[string]routeGuard{
 	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
 
 	// --- tasks ---------------------------------------------------------------
-	"POST /api/v1/tasks":                        guarded(permTaskWrite),
-	"GET /api/v1/tasks":                         guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}":                    guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/brief":              guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/cost":               guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/timeline":           guarded(permTaskRead),
+	"POST /api/v1/tasks":              guarded(permTaskWrite),
+	"GET /api/v1/tasks":               guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}":          guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/brief":    guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/cost":     guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/timeline": guarded(permTaskRead),
+	// A task's blob references (spec 021 §3). Listing is a task read; both
+	// halves of the reference graph are task writes.
+	"GET /api/v1/tasks/{id}/blobs":              guarded(permTaskRead),
+	"POST /api/v1/tasks/{id}/blobs":             guarded(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/blobs/{hash}":    guarded(permTaskWrite),
 	"PATCH /api/v1/tasks/{id}":                  guarded(permTaskWrite),
 	"PUT /api/v1/tasks/{id}/skills":             guarded(permTaskWrite),
 	"POST /api/v1/tasks/{id}/edges":             guarded(permTaskWrite),

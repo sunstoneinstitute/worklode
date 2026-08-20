@@ -20,7 +20,10 @@ type BriefBlocker struct {
 // DefinitionOfDone are *string, AffectedComponents is a nil []string
 // (marshals to null, not []) — see store.Brief. Skills carries the task's
 // pinned skills (content inline) plus embedding-matched suggestions, in the
-// same shape as POST /api/v1/skills/recommend.
+// same shape as POST /api/v1/skills/recommend. Blobs is always an array
+// (never null) and carries absolute URLs (spec 021 §10): an agent fetching a
+// brief is not same-origin with the server and has nothing to resolve a
+// root-relative reference against.
 type Brief struct {
 	Task               Task                `json:"task"`
 	Body               string              `json:"body"`
@@ -33,4 +36,5 @@ type Brief struct {
 	AffectedComponents []string            `json:"affected_components"`
 	DefinitionOfDone   *string             `json:"definition_of_done"`
 	Skills             SkillRecommendation `json:"skills"`
+	Blobs              []TaskBlob          `json:"blobs"`
 }
