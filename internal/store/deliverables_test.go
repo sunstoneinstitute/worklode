@@ -84,7 +84,7 @@ func TestCreateDeliverableAllocatesPerProjectOrdinals(t *testing.T) {
 func TestCreateDeliverableStoresFields(t *testing.T) {
 	s := deliverableStore(t)
 	ctx := context.Background()
-	if err := s.UpsertHumanActor(ctx, "kari", "Kari Nordmann", false, ""); err != nil {
+	if err := s.UpsertHumanActor(ctx, "kari", "Kari Nordmann", false, "", "", nil); err != nil {
 		t.Fatalf("upsert actor: %v", err)
 	}
 

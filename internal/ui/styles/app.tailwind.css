@@ -249,6 +249,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .chip.crit{color:var(--crit);background:var(--crit-bg)}
 .chip.info{color:var(--info);background:var(--info-bg)}
 .chip.plain{color:var(--ink-2);background:var(--sunk)}
+.chip.lead{color:var(--accent-ink);background:var(--accent)}
 
 /* dossier / list rows */
 .dossier .q{font-size:17px;font-family:"Source Serif 4",serif;font-weight:600;line-height:1.35;margin:0 0 4px}
@@ -274,6 +275,14 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .dodrow .def{color:var(--ink-3);font-size:12px;margin-top:2px}
 .dodrow .ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;overflow-wrap:anywhere}
 .dodrow .st{justify-self:end;text-align:right}
+/* A per-row action form (the Crew roster's Remove button): .btn is
+ * full-width by default, which is right in a form's button row and wrong
+ * beside a table row. */
+.rowform .btn{width:auto;padding:6px 10px;font-size:12px;font-weight:600}
+/* An open-work list shown when a removal is refused: the items the member
+ * still owns, each linked so it can be reassigned or closed. */
+.resp{margin:10px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-2)}
+.resp li{margin-top:4px}
 
 /* worklist */
 .wl{display:flex;flex-direction:column}

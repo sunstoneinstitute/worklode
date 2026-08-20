@@ -80,3 +80,7 @@ configMapGenerator:
       - migrations/0033_agent_harnesses.down.sql
       - migrations/0034_soft_delete.up.sql
       - migrations/0034_soft_delete.down.sql
+      - migrations/0035_actor_identity_claims.up.sql
+      - migrations/0035_actor_identity_claims.down.sql
+      - migrations/0036_project_participants.up.sql
+      - migrations/0036_project_participants.down.sql

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -17,10 +18,10 @@ import (
 // against the store (create tasks, claim leases, etc.). Admin actors may
 // additionally manage projects, actors, and tokens.
 //
-// Actor is deliberately not model.Actor: ExpectedGitHubLogin is an auth
-// bookkeeping field this package needs internally (matching a Keycloak
-// login) that never crosses the wire, so it stays outside the four fields
-// model.Actor declares (ADR 036 §3, "store scan plumbing").
+// Actor is deliberately not model.Actor: ExpectedGitHubLogin, Email, and
+// Groups are auth bookkeeping fields this package needs internally (matching
+// a Keycloak login) that never cross the wire, so they stay outside the four
+// fields model.Actor declares (ADR 036 §3, "store scan plumbing").
 type Actor struct {
 	ID          string
 	Kind        string
@@ -31,6 +32,14 @@ type Actor struct {
 	// on every login. Empty when the Keycloak account carries no such
 	// attribute.
 	ExpectedGitHubLogin string
+	// Email is the Keycloak email claim, re-synced on every login (spec 029
+	// §6.2). Empty when the account carries no email or has never logged in
+	// since migration 0035.
+	Email string
+	// Groups is the raw groups claim, stored in full (not filtered to
+	// user/admin) and re-synced on every login (spec 029 §6.2). Nil when the
+	// actor has never logged in since migration 0035.
+	Groups []string
 }
 
 // tokenPrefix marks plaintext bearer tokens so they are visually
@@ -74,20 +83,34 @@ func (s *Store) EnsureServiceActor(ctx context.Context, id, displayName string) 
 }
 
 // UpsertHumanActor inserts a human actor, or on repeat login updates its
-// display name, admin flag, and expected GitHub login. Admin and
-// expectedGitHubLogin are both re-synced on every login, so a Keycloak
-// demotion or a cleared github_username attribute takes effect the next time
-// the user logs in. expectedGitHubLogin is stored as SQL NULL when empty.
-// Kind is set to 'human' on insert and left unchanged on update.
-func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool, expectedGitHubLogin string) error {
+// display name, admin flag, expected GitHub login, email, and groups. All of
+// these are re-synced on every login — Keycloak stays the sole authority
+// (spec 029 §6.2) — so a Keycloak demotion, a cleared github_username
+// attribute, or a narrower groups claim takes effect the next time the user
+// logs in. expectedGitHubLogin and email are stored as SQL NULL when empty;
+// groups is stored as jsonb, with nil marshalled as `[]` (matching
+// SetProjectFocus's handling of projects.focus). Kind is set to 'human' on
+// insert and left unchanged on update.
+func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, admin bool, expectedGitHubLogin, email string, groups []string) error {
 	var ghLogin sql.NullString
 	if expectedGitHubLogin != "" {
 		ghLogin = sql.NullString{String: expectedGitHubLogin, Valid: true}
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO actors (id, kind, display_name, admin, expected_github_login) VALUES ($1, 'human', $2, $3, $4)
-		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin, expected_github_login = excluded.expected_github_login`,
-		id, displayName, admin, ghLogin,
+	var emailArg sql.NullString
+	if email != "" {
+		emailArg = sql.NullString{String: email, Valid: true}
+	}
+	if groups == nil {
+		groups = []string{}
+	}
+	groupsJSON, err := json.Marshal(groups)
+	if err != nil {
+		return fmt.Errorf("marshal groups for actor %s: %w", id, err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO actors (id, kind, display_name, admin, expected_github_login, email, groups) VALUES ($1, 'human', $2, $3, $4, $5, $6)
+		 ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, admin = excluded.admin, expected_github_login = excluded.expected_github_login, email = excluded.email, groups = excluded.groups`,
+		id, displayName, admin, ghLogin, emailArg, groupsJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert human actor %s: %w", id, err)
@@ -109,20 +132,41 @@ func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
 }
 
 // actorColumns is the SELECT list scanActor expects, in order.
-const actorColumns = `id, kind, display_name, admin, expected_github_login`
+const actorColumns = `id, kind, display_name, admin, expected_github_login, email, groups`
 
 // actorColumnsA is actorColumns under the `a` alias, for Authenticate's join.
 var actorColumnsA = qualifyColumns(actorColumns, "a")
 
 func scanActor(row rowScanner) (*Actor, error) {
 	var a Actor
-	var displayName, ghLogin sql.NullString
-	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin); err != nil {
+	var displayName, ghLogin, email sql.NullString
+	var groupsRaw []byte
+	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin, &email, &groupsRaw); err != nil {
 		return nil, err
 	}
 	a.DisplayName = displayName.String
 	a.ExpectedGitHubLogin = ghLogin.String
+	a.Email = email.String
+	groups, err := scanActorGroups(groupsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("actor %s: %w", a.ID, err)
+	}
+	a.Groups = groups
 	return &a, nil
+}
+
+// scanActorGroups unmarshals a jsonb groups column (read as raw bytes) into
+// a []string, the same way scanProjectFocus handles projects.focus. An empty
+// or null column yields a nil slice.
+func scanActorGroups(raw []byte) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var groups []string
+	if err := json.Unmarshal(raw, &groups); err != nil {
+		return nil, fmt.Errorf("unmarshal groups: %w", err)
+	}
+	return groups, nil
 }
 
 // CreateToken mints a new bearer token for actorID and returns the plaintext

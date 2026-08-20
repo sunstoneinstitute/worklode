@@ -588,3 +588,16 @@ while dogfooding it against the real corpus.
   so an author who wrote `[shot](./shot.png)` gets a task whose link resolves
   nowhere and no hint why. `blobref` already walks `ast.Link`, so this is a
   second exported helper and one `Fprintf`.
+
+## From WL-52 — project crew participants e2e (2026-08-20)
+
+- `[gated]` **`crew.write` is granted to every authenticated user, not scoped
+  to a project's own Crew.** `internal/api/authz.go`'s grants table reads
+  `permCrewWrite: {RoleUser, RoleAdmin}`, so spec 029 §6.1's "any Crew member
+  may add or remove an ordinary Crew member" is enforced far wider than the
+  spec intends — any authenticated actor, Crew member or not, can add or
+  remove one on any project. This is a conflict between spec and system, not
+  a planned partial: there is no project-scoped role concept yet (`authz.go`'s
+  own package doc says as much), and fixing it needs authz decisions to become
+  project-scoped, which is a larger change than this plan's task set. Gated on
+  that decision landing.
