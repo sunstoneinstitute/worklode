@@ -66,6 +66,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
 		return
 	}
+	req.Kind = s.normalizeTaskKind(req.Kind, "create")
 	if !validKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
@@ -283,6 +284,9 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 // bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	// Normalised so `lode task list --kind spec` keeps returning the rows
+	// migration 0025 rewrote to design, rather than an empty set.
+	kind := s.normalizeTaskKind(q.Get("kind"), "list")
 	var states []string
 	for _, v := range q["state"] {
 		for _, part := range strings.Split(v, ",") {
@@ -338,7 +342,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		Project:  q.Get("project"),
 		States:   states,
 		Priority: q.Get("priority"),
-		Kind:     q.Get("kind"),
+		Kind:     kind,
 		Parent:   q.Get("parent"),
 		Assignee: q.Get("assignee"),
 		Repo:     repo,

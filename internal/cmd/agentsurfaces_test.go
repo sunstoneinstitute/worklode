@@ -260,9 +260,10 @@ func flagValue(rest []string, i int) string {
 
 // checkFlagValue rejects a value outside the closed set a flag's usage string
 // names. Only --kind is checked: it is the flag agent docs get wrong (a task
-// kind is not a document kind, and "spec" is neither), and the two enums
-// differ per command, which a hardcoded table here would get wrong in the same
-// way the docs did.
+// kind is not a document kind, and "spec" is a retired task-kind spelling the
+// server still accepts as a deprecated alias, but agent docs must not use
+// it), and the two enums differ per command, which a hardcoded table here
+// would get wrong in the same way the docs did.
 func checkFlagValue(cmd *cobra.Command, flag *pflag.Flag, name, value string) string {
 	if name != "kind" || value == "" || placeholder(value) {
 		return ""
