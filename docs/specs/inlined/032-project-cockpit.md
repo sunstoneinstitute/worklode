@@ -300,6 +300,24 @@ progressive disclosure, and reduced columns rather than compressing the desktop
 grid. Specialist evidence may remain desktop-dense but cannot be the only path
 to a primary decision.
 
+Three consequences of that rule are settled rather than aspirational, because a
+narrow-width audit at 320, 375 and 768 CSS px and at 200% zoom fixed them:
+
+- **No page scrolls horizontally at 320 CSS px.** A data table is the one
+  exception WCAG 1.4.10 grants — it needs two dimensions to carry meaning — so
+  each table scrolls inside its own labelled, keyboard-focusable container
+  rather than losing columns. Everything else reflows.
+- **Nothing is truncated to fit.** A row that cannot hold its content at a
+  narrow width stacks; it does not ellipsis away the text that identifies it.
+- **Visual order follows document order at every width.** A column that moves
+  when the grid collapses moves in the document too, or it does not move: the
+  decision rail therefore follows the work list on a phone rather than being
+  lifted above it, so what a sighted keyboard user tabs through is what they
+  see.
+
+The rest of this section remains the target it says it is. Only 1.3.2, 1.4.4,
+1.4.10, 2.4.11 and 2.5.8 have been verified against the built pages so far.
+
 The UI follows Sunstone's approved contrast-safe palette and typography. Visual
 style is not a source of domain meaning; icons, text, and state labels accompany
 colour.

@@ -213,6 +213,10 @@ func Cockpit(v CockpitView) templ.Component {
 // methodology chrome. No step is marked done or current: the cockpit
 // projection carries no stage fact (Operations is the catch-all default mode,
 // reached by legacy projects too), so a progress marker would be fabricated.
+//
+// The strip scrolls inside itself below roughly 700px and holds no focusable
+// child, so tabindex="0" is what lets a keyboard user reach the stages past
+// the fold (WCAG 2.1.1); role="group" gives the aria-label something to name.
 func stageStepper() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -234,7 +238,7 @@ func stageStepper() templ.Component {
 			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"stepper\" aria-label=\"Sunstone Way stages\"><div class=\"step\"><span class=\"pip\">1</span><span class=\"stx\">Launch</span></div><div class=\"step\"><span class=\"pip\">2</span><span class=\"stx\">Research</span></div><div class=\"step\"><span class=\"pip\">3</span><span class=\"stx\">Report</span></div><div class=\"step\"><span class=\"pip\">4</span><span class=\"stx\">Story</span></div><div class=\"step\"><span class=\"pip\">5</span><span class=\"stx\">Distribution</span></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"stepper\" role=\"group\" aria-label=\"Sunstone Way stages\" tabindex=\"0\"><div class=\"step\"><span class=\"pip\">1</span><span class=\"stx\">Launch</span></div><div class=\"step\"><span class=\"pip\">2</span><span class=\"stx\">Research</span></div><div class=\"step\"><span class=\"pip\">3</span><span class=\"stx\">Report</span></div><div class=\"step\"><span class=\"pip\">4</span><span class=\"stx\">Story</span></div><div class=\"step\"><span class=\"pip\">5</span><span class=\"stx\">Distribution</span></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -277,7 +281,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(f.PinnedBy)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 93, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 97, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -290,7 +294,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(f.PinnedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 93, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 97, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -308,7 +312,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(f.PinnedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 95, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 99, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -326,7 +330,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(f.Note)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 100, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 104, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -394,7 +398,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(WorkRowInitials(item))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 112, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 116, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -407,7 +411,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var19 templ.SafeURL
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 115, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 119, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -420,7 +424,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(item.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 115, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 119, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
@@ -433,7 +437,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(item.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 115, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 119, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
@@ -446,7 +450,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(WorkRowActors(item))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 116, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 120, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {
@@ -481,7 +485,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(EvidenceLabel(item.EvidenceCategory))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 119, Col: 146}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 123, Col: 146}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -516,7 +520,7 @@ func workRow(item WorkRow) templ.Component {
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(StateLabel(item.State))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 120, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 124, Col: 118}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 		if templ_7745c5c3_Err != nil {
@@ -561,7 +565,7 @@ func decisionCard(d *CockpitDecision) templ.Component {
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(d.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 135, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 139, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
@@ -579,7 +583,7 @@ func decisionCard(d *CockpitDecision) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(Initials(d.Accountable))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 137, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 141, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -592,7 +596,7 @@ func decisionCard(d *CockpitDecision) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(d.Accountable)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 137, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 141, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -611,7 +615,7 @@ func decisionCard(d *CockpitDecision) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(d.Readiness)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 142, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 146, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -660,7 +664,7 @@ func exceptionCard(c CockpitConcern) templ.Component {
 		var templ_7745c5c3_Var35 templ.SafeURL
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinURLErrs(c.URL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 159, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 163, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -673,7 +677,7 @@ func exceptionCard(c CockpitConcern) templ.Component {
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(c.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 159, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 163, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
@@ -686,7 +690,7 @@ func exceptionCard(c CockpitConcern) templ.Component {
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(c.EvidenceSummary)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 159, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 163, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -742,7 +746,7 @@ func automationBoundary(totals []CockpitCostTotal) templ.Component {
 				var templ_7745c5c3_Var39 string
 				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(t.Currency)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 176, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 180, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 				if templ_7745c5c3_Err != nil {
@@ -755,7 +759,7 @@ func automationBoundary(totals []CockpitCostTotal) templ.Component {
 				var templ_7745c5c3_Var40 string
 				templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(t.CostAmount)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 176, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 180, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 				if templ_7745c5c3_Err != nil {

@@ -166,6 +166,24 @@
   .sticky {
     position: sticky;
   }
+  .container {
+    width: 100%;
+    @media (width >= 40rem) {
+      max-width: 40rem;
+    }
+    @media (width >= 48rem) {
+      max-width: 48rem;
+    }
+    @media (width >= 64rem) {
+      max-width: 64rem;
+    }
+    @media (width >= 80rem) {
+      max-width: 80rem;
+    }
+    @media (width >= 96rem) {
+      max-width: 96rem;
+    }
+  }
   .grid {
     display: grid;
   }
@@ -315,6 +333,13 @@
 }
 html,body {
   margin: 0;
+}
+html {
+  scroll-padding-top: 64px;
+}
+pre {
+  overflow-x: auto;
+  max-width: 100%;
 }
 body {
   background: var(--bg);
@@ -657,9 +682,6 @@ nav.local a .cnt {
   .mode.active {
     grid-template-columns: minmax(0,1fr);
   }
-  .rail {
-    order: -1;
-  }
 }
 @media (max-width:880px) {
   .shell {
@@ -873,6 +895,15 @@ nav.local a .cnt {
 .small {
   font-size: 12.5px;
 }
+.tablewrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.newlink {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -997,7 +1028,7 @@ nav.local a .cnt {
 }
 .dodrow {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0,1fr) auto;
   gap: 10px 14px;
   padding: 12px 0;
   border-top: 1px solid var(--line);
@@ -1020,6 +1051,7 @@ nav.local a .cnt {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 7px;
+  overflow-wrap: anywhere;
 }
 .dodrow .st {
   justify-self: end;
@@ -1044,6 +1076,7 @@ nav.local a .cnt {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 0 0 auto;
 }
 .wlrow .who .avatar {
   width: 26px;
@@ -1079,6 +1112,32 @@ nav.local a .cnt {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--ink-3);
+}
+@media (max-width:880px) {
+  .wlrow {
+    flex-wrap: wrap;
+  }
+  .wlrow .tl {
+    flex: 1 1 auto;
+  }
+  .wlrow .tl .t {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .wlrow .rt {
+    flex: 1 1 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .dodrow {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .dodrow .st {
+    justify-self: start;
+    text-align: left;
+  }
 }
 .kv {
   display: grid;
@@ -1345,9 +1404,10 @@ nav.local a .cnt {
   color: var(--ink-2);
 }
 .fieldrow.check input {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   min-height: 0;
+  flex: 0 0 auto;
   accent-color: var(--link);
 }
 .btnrow {
@@ -1359,6 +1419,9 @@ nav.local a .cnt {
   width: auto;
   min-height: 40px;
   padding: 9px 18px;
+}
+.prose {
+  overflow-wrap: anywhere;
 }
 .prose > :first-child {
   margin-top: 0;
@@ -1415,6 +1478,10 @@ nav.local a .cnt {
 }
 .prose table {
   border-collapse: collapse;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .prose th,.prose td {
   border: 1px solid var(--line);
