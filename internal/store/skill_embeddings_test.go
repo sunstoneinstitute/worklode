@@ -207,6 +207,56 @@ func TestReplaceSkillEmbeddingsNilClears(t *testing.T) {
 	}
 }
 
+// TestReplaceSkillEmbeddingsKeepsChunkOrder pins the mapping the batched
+// insert relies on: chunk_index is the vector's position in the argument
+// slice, so the stored order is the caller's order and no vector is dropped
+// or duplicated. WITH ORDINALITY is 1-based, so an off-by-one here would
+// shift every chunk index by one.
+func TestReplaceSkillEmbeddingsKeepsChunkOrder(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	tdd, _ := s.GetSkill(ctx, "tdd")
+	vecs := [][]float32{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0.5, 0.5, 0}}
+	if err := s.ReplaceSkillEmbeddings(ctx, tdd.ID, vecs); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT chunk_index, embedding::text FROM skill_embeddings
+		  WHERE skill_id = $1 ORDER BY chunk_index`, tdd.ID)
+	if err != nil {
+		t.Fatalf("read chunks: %v", err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var idx int
+		var lit string
+		if err := rows.Scan(&idx, &lit); err != nil {
+			t.Fatalf("scan chunk: %v", err)
+		}
+		if idx != len(got) {
+			t.Fatalf("chunk_index = %d, want %d", idx, len(got))
+		}
+		got = append(got, lit)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read chunks: %v", err)
+	}
+	if len(got) != len(vecs) {
+		t.Fatalf("stored %d chunks, want %d", len(got), len(vecs))
+	}
+	for i, v := range vecs {
+		if got[i] != vectorLiteral(v) {
+			t.Errorf("chunk %d = %s, want %s", i, got[i], vectorLiteral(v))
+		}
+	}
+}
+
 // TestRecommendSkillsSkipsSkillWithoutEmbeddings pins the inner JOIN:
 // a live skill that was never embedded must not appear in results
 // (LEFT JOIN would incorrectly surface it with a null score).

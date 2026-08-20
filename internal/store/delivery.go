@@ -255,17 +255,24 @@ func ConfirmedFrontier(tx *sql.Tx, repo, env string) (*int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("frontier %s/%s: %w", repo, env, err)
 	}
+	return confirmedFrontierFrom(gh, flux, fluxSeen), nil
+}
+
+// confirmedFrontierFrom is the dual-signal rule itself, over one env_deploys
+// row's watermarks. Callers that already hold the row apply it directly
+// instead of reselecting the row through ConfirmedFrontier.
+func confirmedFrontierFrom(gh, flux sql.NullInt64, fluxSeen bool) *int64 {
 	if !fluxSeen {
 		if !gh.Valid {
-			return nil, nil
+			return nil
 		}
-		return &gh.Int64, nil
+		return &gh.Int64
 	}
 	if !gh.Valid || !flux.Valid {
-		return nil, nil
+		return nil
 	}
 	confirmed := min(gh.Int64, flux.Int64)
-	return &confirmed, nil
+	return &confirmed
 }
 
 // SetReleaseFrontier records the newest main commit covered by a published
@@ -308,8 +315,8 @@ type DeployFact struct {
 
 // DeliveryFactsForTask returns the task's delivery facts, one entry per repo
 // its work landed in (newest landed commit per repo); repos where nothing has
-// landed are absent. Read-only, but runs in a transaction so it can reuse
-// ConfirmedFrontier's dual-signal rule instead of restating it in SQL.
+// landed are absent. Read-only, but runs in a transaction so its several
+// queries see one consistent snapshot.
 func (s *Store) DeliveryFactsForTask(ctx context.Context, taskID string) ([]DeliveryFacts, error) {
 	var out []DeliveryFacts
 	err := s.Tx(ctx, func(tx *sql.Tx) error {
@@ -365,39 +372,34 @@ func deliveryFactsForTask(tx *sql.Tx, taskID string) ([]DeliveryFacts, error) {
 }
 
 // attachDeployFacts records the environments whose confirmed frontier covers
-// landedID. The confirmation rule is ConfirmedFrontier's, not this query's:
-// env_deploys rows exist as soon as one signal arrives, long before they
-// confirm anything. The rows are drained before the frontier lookups: a
-// transaction holds one connection, so the queries cannot overlap.
+// landedID. The confirmation rule is confirmedFrontierFrom's, not this
+// query's: env_deploys rows exist as soon as one signal arrives, long before
+// they confirm anything. The watermarks come out of the same row as the
+// environment, so no environment costs a second query.
 func attachDeployFacts(tx *sql.Tx, f *DeliveryFacts, landedID int64) error {
 	rows, err := tx.Query(
-		`SELECT environment, updated_at FROM env_deploys WHERE repo = $1
-		 ORDER BY environment`, f.Repo)
+		`SELECT environment, updated_at, gh_main_id, flux_main_id, flux_seen
+		   FROM env_deploys WHERE repo = $1
+		  ORDER BY environment`, f.Repo)
 	if err != nil {
 		return fmt.Errorf("env deploys for %s: %w", f.Repo, err)
 	}
 	defer rows.Close()
-	var envs []DeployFact
 	for rows.Next() {
 		var d DeployFact
 		var updatedAt time.Time
-		if err := rows.Scan(&d.Environment, &updatedAt); err != nil {
+		var gh, flux sql.NullInt64
+		var fluxSeen bool
+		if err := rows.Scan(&d.Environment, &updatedAt, &gh, &flux, &fluxSeen); err != nil {
 			return fmt.Errorf("scan env deploy for %s: %w", f.Repo, err)
 		}
 		d.At = updatedAt.UTC()
-		envs = append(envs, d)
+		if frontier := confirmedFrontierFrom(gh, flux, fluxSeen); frontier != nil && *frontier >= landedID {
+			f.Deployed = append(f.Deployed, d)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("env deploys for %s: %w", f.Repo, err)
-	}
-	for _, d := range envs {
-		frontier, err := ConfirmedFrontier(tx, f.Repo, d.Environment)
-		if err != nil {
-			return err
-		}
-		if frontier != nil && *frontier >= landedID {
-			f.Deployed = append(f.Deployed, d)
-		}
 	}
 	return nil
 }

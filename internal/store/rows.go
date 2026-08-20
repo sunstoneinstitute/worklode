@@ -80,6 +80,15 @@ func nullText(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
+// nullTextPtr is nullText for an array element: a slice of these binds as a
+// text[] whose empty entries arrive as NULL, which sql.NullString does not do.
+func nullTextPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // nullID maps 0 to NULL, for the nullable id references (doc_edges.to_doc,
 // tasks.plan_doc).
 func nullID(id int64) sql.NullInt64 {
