@@ -90,6 +90,15 @@ func resolveTaskIDPair(ctx context.Context, a, b string, c *cli.Client, cfg cli.
 	return ra, rb, nil
 }
 
+// workingDir is os.Getwd with one error wording for the whole package.
+func workingDir() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("determine working directory: %w", err)
+	}
+	return wd, nil
+}
+
 // currentScope resolves the project the working directory belongs to. An
 // unreadable working directory is not fatal — the config/git-remote chain
 // simply has one fewer input.

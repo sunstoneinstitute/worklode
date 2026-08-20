@@ -518,9 +518,9 @@ func newTaskReworkCmd() *cobra.Command {
 // currentWorktreeIdentity derives the worktree identity for the current
 // directory, used as the default lease binding for claim and claim --next.
 func currentWorktreeIdentity() (string, error) {
-	cwd, err := os.Getwd()
+	cwd, err := workingDir()
 	if err != nil {
-		return "", fmt.Errorf("determine working directory: %w", err)
+		return "", err
 	}
 	wt, err := worktree.Identity(cwd)
 	if err != nil {

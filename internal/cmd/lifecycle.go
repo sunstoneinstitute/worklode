@@ -547,77 +547,82 @@ func hasSessionMarker(root string) bool {
 
 // newStatusCmd builds `lode status`: read-only, never claims/renews/releases.
 func newStatusCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "status",
 		Short: "Show the current worktree's task, lease, and session-marker state (read-only)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			layout, err := layoutFrom(".")
-			if err != nil {
-				return err
-			}
-			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task brief <id>")
-			if err != nil {
-				return err
-			}
-			identity, err := worktree.Identity(root)
-			if err != nil {
-				return err
-			}
-			// status reports the lease, nothing from the brief's skills.
-			brief, _, err := c.BriefWithoutSkills(cmd.Context(), taskID)
-			if err != nil {
-				return err
-			}
-
-			sessionPresent := hasSessionMarker(root)
-			state := leaseState(brief.Lease, identity, time.Now())
-
-			scope := currentScope(cmd.Context(), c, cfg)
-
-			if jsonOut(cmd) {
-				return printJSON(cmd, statusResult{
-					Worktree:      root,
-					Task:          brief.Task,
-					LeaseState:    state,
-					Lease:         brief.Lease,
-					OpenBlockers:  brief.OpenBlockers,
-					BlockingPlans: brief.BlockingPlans,
-					SessionMarker: sessionPresent,
-					Project:       scope.Project,
-					ProjectSource: string(scope.Source),
-				})
-			}
-
-			o := cmd.OutOrStdout()
-			fmt.Fprintf(o, "worktree: %s\n", root)
-			fmt.Fprintf(o, "project:  %s (%s)\n", cmp.Or(scope.Project, "-"), scope.Source)
-			fmt.Fprintf(o, "task: %s — %s\n", brief.Task.ID, brief.Task.Title)
-			fmt.Fprintf(o, "state: %s   priority: %s\n", brief.Task.State, brief.Task.Priority)
-			switch state {
-			case "none":
-				fmt.Fprintln(o, "lease: none")
-			case "held_elsewhere":
-				fmt.Fprintf(o, "lease: held elsewhere (%s)\n", brief.Lease.Worktree)
-			case "expired":
-				fmt.Fprintf(o, "lease: expired at %s (renewed %s)\n",
-					brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
-			default:
-				fmt.Fprintf(o, "lease: held, expires %s (renewed %s)\n",
-					brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
-			}
-			printBlockers(o, brief.OpenBlockers, brief.BlockingPlans)
-			marker := "absent"
-			if sessionPresent {
-				marker = "present"
-			}
-			fmt.Fprintf(o, "session marker: %s\n", marker)
-			return nil
+			return runStatus(cmd)
 		},
 	}
-	return cmd
+}
+
+// runStatus is `lode status`'s body: read the worktree's task, classify its
+// lease, and report both with the project the directory scopes to.
+func runStatus(cmd *cobra.Command) error {
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	layout, err := layoutFrom(".")
+	if err != nil {
+		return err
+	}
+	taskID, root, err := resolveWorktreeTask(layout, ".", "lode task brief <id>")
+	if err != nil {
+		return err
+	}
+	identity, err := worktree.Identity(root)
+	if err != nil {
+		return err
+	}
+	// status reports the lease, nothing from the brief's skills.
+	brief, _, err := c.BriefWithoutSkills(cmd.Context(), taskID)
+	if err != nil {
+		return err
+	}
+
+	sessionPresent := hasSessionMarker(root)
+	state := leaseState(brief.Lease, identity, time.Now())
+
+	scope := currentScope(cmd.Context(), c, cfg)
+
+	if jsonOut(cmd) {
+		return printJSON(cmd, statusResult{
+			Worktree:      root,
+			Task:          brief.Task,
+			LeaseState:    state,
+			Lease:         brief.Lease,
+			OpenBlockers:  brief.OpenBlockers,
+			BlockingPlans: brief.BlockingPlans,
+			SessionMarker: sessionPresent,
+			Project:       scope.Project,
+			ProjectSource: string(scope.Source),
+		})
+	}
+
+	o := cmd.OutOrStdout()
+	fmt.Fprintf(o, "worktree: %s\n", root)
+	fmt.Fprintf(o, "project:  %s (%s)\n", cmp.Or(scope.Project, "-"), scope.Source)
+	fmt.Fprintf(o, "task: %s — %s\n", brief.Task.ID, brief.Task.Title)
+	fmt.Fprintf(o, "state: %s   priority: %s\n", brief.Task.State, brief.Task.Priority)
+	switch state {
+	case "none":
+		fmt.Fprintln(o, "lease: none")
+	case "held_elsewhere":
+		fmt.Fprintf(o, "lease: held elsewhere (%s)\n", brief.Lease.Worktree)
+	case "expired":
+		fmt.Fprintf(o, "lease: expired at %s (renewed %s)\n",
+			brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
+	default:
+		fmt.Fprintf(o, "lease: held, expires %s (renewed %s)\n",
+			brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
+	}
+	printBlockers(o, brief.OpenBlockers, brief.BlockingPlans)
+	marker := "absent"
+	if sessionPresent {
+		marker = "present"
+	}
+	fmt.Fprintf(o, "session marker: %s\n", marker)
+	return nil
 }

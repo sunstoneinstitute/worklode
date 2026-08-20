@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -255,9 +254,9 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := os.Getwd()
+			cwd, err := workingDir()
 			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
+				return err
 			}
 			res, err := installHooks(cmd, cwd, targets, scope)
 			if err != nil {
@@ -296,9 +295,9 @@ func newUninstallCmd() *cobra.Command {
 				return err
 			}
 			scope, _ := cmd.Flags().GetString("scope")
-			cwd, err := os.Getwd()
+			cwd, err := workingDir()
 			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
+				return err
 			}
 			res, err := uninstallHooks(cwd, targets, scope)
 			if err != nil {
