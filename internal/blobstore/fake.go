@@ -16,6 +16,7 @@ type Fake struct {
 	mu      sync.Mutex
 	objects map[string][]byte
 	times   map[string]time.Time
+	puts    int
 	// Now, when set, supplies LastModified; tests that exercise the orphan
 	// sweep's grace period need to place objects in the past.
 	Now func() time.Time
@@ -43,9 +44,21 @@ func (f *Fake) Put(ctx context.Context, key string, r io.Reader, size int64, med
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.puts++
 	f.objects[key] = b
 	f.times[key] = f.now()
 	return nil
+}
+
+// Puts is how many times Put has been called. Counting calls, not objects, is
+// what distinguishes a deduplicated upload from a re-uploaded one: both leave
+// exactly one object behind under the same content-addressed key, so an
+// object count proves nothing about whether the second PUT was issued.
+// Test-only; not part of Store.
+func (f *Fake) Puts() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.puts
 }
 
 func (f *Fake) PresignGet(ctx context.Context, key string, ttl time.Duration, opts GetOptions) (string, error) {

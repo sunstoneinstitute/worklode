@@ -121,15 +121,38 @@ func TestUploadBlobDedup(t *testing.T) {
 	if len(objs) != 1 {
 		t.Fatalf("stored %d objects, want 1", len(objs))
 	}
+	// The object count above cannot tell the two paths apart: a second
+	// PutObject of the same content-addressed key also leaves exactly one
+	// object. Spec 021 AC1's "issues no second PutObject" is this assertion.
+	if n := fake.Puts(); n != 1 {
+		t.Fatalf("PutObject called %d times, want 1: the second upload must "+
+			"dedup off the index and never reach the object store", n)
+	}
 }
 
+// TestUploadBlobTooLarge pins the 413. It lowers the cap rather than
+// uploading 100 MiB: the streaming path spools every byte the client sends
+// before MaxBytesReader refuses it, so asserting at the real cap writes
+// 100 MiB to the spool dir on every `make test`.
 func TestUploadBlobTooLarge(t *testing.T) {
-	_, h, token, _ := newTestServerBlobs(t)
-	// 100 MiB + 1. Uses a repeated byte so the test allocates once.
-	big := bytes.Repeat([]byte("a"), (100<<20)+1)
-	rec := postBlob(t, h, token, "", big)
+	fake := blobstore.NewFake()
+	_, h, token := newTestServerWithConfig(t, api.Config{
+		WebOpen: true, BlobStoreForTest: fake, MaxBlobBytesForTest: 1 << 10,
+	})
+
+	rec := postBlob(t, h, token, "", bytes.Repeat([]byte("a"), (1<<10)+1))
 	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want 413", rec.Code)
+		t.Fatalf("status = %d, want 413; body = %s", rec.Code, rec.Body)
+	}
+	// A rejected upload stores nothing: the cap is enforced before the PUT.
+	if n := fake.Puts(); n != 0 {
+		t.Fatalf("PutObject called %d times for an over-cap upload, want 0", n)
+	}
+	// And a payload exactly at the cap is accepted, so the boundary is the
+	// cap itself and not one byte under it.
+	ok := postBlob(t, h, token, "", bytes.Repeat([]byte("b"), 1<<10))
+	if ok.Code != http.StatusOK {
+		t.Fatalf("at-cap status = %d, want 200; body = %s", ok.Code, ok.Body)
 	}
 }
 
@@ -260,6 +283,60 @@ func TestServeBlobRefusedOnClosedInstance(t *testing.T) {
 	h.ServeHTTP(tok, req)
 	if tok.Code != http.StatusFound {
 		t.Fatalf("token status = %d, want 302; body = %s", tok.Code, tok.Body)
+	}
+}
+
+// TestServeBlobRejectsInvalidToken is the regression eitherGuard's token
+// branch exists to prevent, and the one case the other blob tests cannot
+// reach: an *unknown* bearer token on an instance that opted into an open web
+// UI. The guard must refuse it outright and must not fall through to
+// webSubject, which on this instance yields the open subject and would serve
+// the blob to a caller whose credential was just rejected. Every other test
+// here sends either a valid token or none at all, so a refactor of the token
+// branch into "if err != nil { sub = s.webSubject(...) }" would pass them all
+// while opening exactly that hole.
+func TestServeBlobRejectsInvalidToken(t *testing.T) {
+	fake := blobstore.NewFake()
+	st := newTestStore(t)
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+	main, admin, err := api.NewServer(st, api.Config{WebOpen: true, BlobStoreForTest: fake})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	hash := uploadedHash(t, main, token, pngBytes)
+
+	req := httptest.NewRequest(http.MethodGet, "/blob/"+hash, nil)
+	req.Header.Set("Authorization", "Bearer wl_"+strings.Repeat("a", 40))
+	got := httptest.NewRecorder()
+	main.ServeHTTP(got, req)
+	if got.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for an unknown token even on an open "+
+			"instance; body = %s", got.Code, got.Body)
+	}
+	if loc := got.Header().Get("Location"); loc != "" {
+		t.Fatalf("Location = %q, want none: a rejected token must not be served", loc)
+	}
+
+	// The refusal is counted like any other denial, so a token-guessing
+	// campaign against /blob/ is visible rather than silent.
+	scrape := doReq(t, admin, "GET", "/metrics", "", nil)
+	want := `worklode_authz_decisions_total{outcome="deny",permission="blob.read"} 1`
+	if !strings.Contains(scrape.Body.String(), want) {
+		t.Errorf("metrics body missing %q", want)
+	}
+}
+
+// TestServeBlobUnconfigured covers serveBlob's 501: with no bucket wired up
+// the route is registered and reachable but has nothing to presign against.
+func TestServeBlobUnconfigured(t *testing.T) {
+	_, h, token := newTestServer(t) // no blob store
+	req := httptest.NewRequest(http.MethodGet, "/blob/"+strings.Repeat("e", 64), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	got := httptest.NewRecorder()
+	h.ServeHTTP(got, req)
+	if got.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501 when blob storage is unconfigured; body = %s",
+			got.Code, got.Body)
 	}
 }
 
