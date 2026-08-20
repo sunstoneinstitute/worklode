@@ -3,8 +3,11 @@ package harness
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // copilotHandlers decodes the flat (no matcher-group layer) handler list one
@@ -129,22 +132,61 @@ func TestCopilotInstallWritesOwnedFile(t *testing.T) {
 	}
 }
 
+// initGitRepo makes dir a git repository and returns the path git itself
+// reports as the root, which on macOS differs from t.TempDir() by a /private
+// symlink prefix.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	root, ok := worktree.Root(dir)
+	if !ok {
+		t.Fatalf("git root of %s not found after init", dir)
+	}
+	return root
+}
+
 // ScopeProject writes the committed repo layer, mirroring Claude Code's split.
+// repoDir is the process working directory, so it is a subdirectory here: the
+// file belongs at the top of the repo, where Copilot actually reads it, not
+// beside wherever `lode install` happened to be run.
 func TestCopilotProjectScopeWritesRepoHooks(t *testing.T) {
 	t.Setenv("COPILOT_HOME", t.TempDir())
-	repo := t.TempDir()
+	root := initGitRepo(t)
+	sub := filepath.Join(root, "internal", "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	h, _ := Get("copilot")
-	hi, err := h.InstallHooks(repo, ScopeProject)
+	hi, err := h.InstallHooks(sub, ScopeProject)
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if want := filepath.Join(repo, ".github", "hooks", "worklode.json"); hi.Path != want {
+	if want := filepath.Join(root, ".github", "hooks", "worklode.json"); hi.Path != want {
 		t.Fatalf("path = %s, want %s", hi.Path, want)
 	}
 	if _, err := os.Stat(hi.Path); err != nil {
 		t.Fatalf("project hooks file: %v", err)
 	}
 	copilotHandlers(t, hi.Path, "sessionStart")
+	// Uninstall from the same subdirectory must find the file it wrote.
+	hu, err := h.UninstallHooks(sub, ScopeProject)
+	if err != nil || hu.Action != ActionRemoved {
+		t.Fatalf("uninstall: %+v %v", hu, err)
+	}
+}
+
+// Project scope needs a repo to anchor to; outside one it is an error rather
+// than a file dropped into the working directory.
+func TestCopilotProjectScopeOutsideARepoErrors(t *testing.T) {
+	t.Setenv("COPILOT_HOME", t.TempDir())
+	dir := t.TempDir()
+	h, _ := Get("copilot")
+	if _, err := h.InstallHooks(dir, ScopeProject); err == nil {
+		t.Fatal("project scope outside a git repository was accepted")
+	}
 }
 
 func TestCopilotUnknownScopeErrors(t *testing.T) {

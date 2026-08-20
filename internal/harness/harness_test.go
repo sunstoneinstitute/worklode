@@ -31,10 +31,15 @@ func TestUnboundMatchesEventTable(t *testing.T) {
 	t.Setenv("COPILOT_HOME", t.TempDir())
 	t.Setenv("AMP_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.json"))
 	for _, id := range IDs() {
+		if id == "claude-code" {
+			// Alone among the adapters it resolves a git root, so a bare
+			// temp dir cannot drive it; claudecode_test.go covers it.
+			continue
+		}
 		h, _ := Get(id)
 		hi, err := h.InstallHooks(t.TempDir(), ScopeLocal)
 		if err != nil {
-			// claude-code needs a git repo; its own tests cover it.
+			t.Errorf("%s InstallHooks: %v", id, err)
 			continue
 		}
 		if want := missingEvents(h); !reflect.DeepEqual(hi.Unbound, want) {

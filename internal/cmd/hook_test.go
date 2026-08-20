@@ -90,24 +90,36 @@ func TestHookListNamesEveryEvent(t *testing.T) {
 	}
 }
 
-// Every Claude Code binding `lode install` writes must show up as the trigger
-// of the event it invokes, named alongside the adapter that binds it;
-// anything else means the listing and the adapter have drifted.
-func TestHookTriggersCoverClaudeBindings(t *testing.T) {
-	adapter := harness.ClaudeCode{}
+// Every binding `lode install` writes, for every registered adapter, must show
+// up as the trigger of the event it invokes, named alongside the adapter that
+// binds it. The registry is walked rather than one adapter named, so an
+// adapter dropped from the listing, or one whose native names are mangled on
+// the way into it, fails here instead of reaching `lode hook --list`.
+//
+// This checks the plumbing between the registry and the listing, not the
+// binding tables themselves: both sides read h.Events(), so a table naming an
+// event its harness does not have would pass. The literal event names are
+// pinned against the verified formats in each adapter's own test.
+func TestHookTriggersCoverEveryAdapterBinding(t *testing.T) {
 	triggers := hookTriggers()
-	for event, natives := range adapter.Events() {
-		trigger, ok := triggers[string(event)]
+	for _, id := range harness.IDs() {
+		adapter, ok := harness.Get(id)
 		if !ok {
-			t.Errorf("event %s -> %v has no trigger entry", event, natives)
-			continue
+			t.Fatalf("registry lists %s but Get does not resolve it", id)
 		}
-		if !strings.Contains(trigger, adapter.ID()) {
-			t.Errorf("trigger for %s = %q, want it to name %s", event, trigger, adapter.ID())
-		}
-		for _, native := range natives {
-			if !strings.Contains(trigger, native) {
-				t.Errorf("trigger for %s = %q, want it to name %s", event, trigger, native)
+		for event, natives := range adapter.Events() {
+			trigger, ok := triggers[string(event)]
+			if !ok {
+				t.Errorf("%s: event %s -> %v has no trigger entry", id, event, natives)
+				continue
+			}
+			if !strings.Contains(trigger, id) {
+				t.Errorf("%s: trigger for %s = %q, want it to name the adapter", id, event, trigger)
+			}
+			for _, native := range natives {
+				if !strings.Contains(trigger, native) {
+					t.Errorf("%s: trigger for %s = %q, want it to name %s", id, event, trigger, native)
+				}
 			}
 		}
 	}

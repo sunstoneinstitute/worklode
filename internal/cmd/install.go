@@ -48,8 +48,10 @@ func addHookFlags(cmd *cobra.Command) {
 		"manage the agent's status line, pointing it at 'lode statusline'")
 	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
 	cmd.Flags().String("scope", harness.ScopeLocal,
-		"which Claude Code settings file to write: local (settings.local.json) or project "+
-			"(settings.json); other harnesses write their own user-level config regardless")
+		"whether to write each harness's personal config or its committed one: local or "+
+			"project (Claude Code settings.local.json vs settings.json, Copilot "+
+			"~/.copilot/hooks vs .github/hooks); codex and amp have only a user-level "+
+			"config and ignore this")
 }
 
 // resolveHookTargets turns the parsed flags into the set of integrations to act

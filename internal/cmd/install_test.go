@@ -814,13 +814,40 @@ func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 
 // --- the harness dimension: auto, per-agent stanzas, unbound events --------
 
+// registeredAgent names an adapter a test needs by behaviour, failing loudly
+// rather than silently skipping if the registry no longer carries it.
+func registeredAgent(t *testing.T, id string) string {
+	t.Helper()
+	if _, ok := harness.Get(id); !ok {
+		t.Fatalf("test needs the %q adapter; registry has %v", id, harness.IDs())
+	}
+	return id
+}
+
+// isolateHarnessConfig points every adapter's config location at scratch
+// paths, so an install driven by these tests can never reach the developer's
+// own harness config — CODEX_HOME and COPILOT_HOME are honoured by those
+// adapters' Detect, so redirecting HOME alone is not enough.
+//
+// The paths are absent rather than merely empty: every adapter detects on its
+// config location existing, so a test that redirected to a live directory
+// would silently detect all four and change what `--agent auto` means. Install
+// still works, since writing a hooks file creates its parents.
+func isolateHarnessConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "codex"))
+	t.Setenv("COPILOT_HOME", filepath.Join(t.TempDir(), "copilot"))
+	t.Setenv("AMP_SETTINGS_FILE", filepath.Join(t.TempDir(), "amp", "settings.json"))
+}
+
 // TestInstallReportsPerAgentWithUnboundEvents pins the report's list shape: one
 // stanza per agent, self-describing, and — since claude-code binds every event
-// — with unbound_events omitted rather than rendered empty. HOME is redirected
-// so detection depends only on the repo.
+// — with unbound_events omitted rather than rendered empty. Every harness
+// config location is redirected, so detection depends only on the repo.
 func TestInstallReportsPerAgentWithUnboundEvents(t *testing.T) {
 	root := initGitRepo(t)
-	t.Setenv("HOME", t.TempDir())
+	isolateHarnessConfig(t)
 	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
 		t.Fatalf("mkdir .claude: %v", err)
 	}
@@ -871,7 +898,7 @@ func TestInstallReportsPerAgentWithUnboundEvents(t *testing.T) {
 // succeeds — spec 008 §4 row 1 — but says so rather than going silent.
 func TestInstallHooksAutoDetectsNothing(t *testing.T) {
 	root := initGitRepo(t)
-	t.Setenv("HOME", t.TempDir())
+	isolateHarnessConfig(t)
 
 	var stderr bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
@@ -897,7 +924,7 @@ func TestInstallHooksAutoDetectsNothing(t *testing.T) {
 // asking for it is the detection signal (spec 008 §3.2).
 func TestInstallHooksNamedAgentInstallsUndetected(t *testing.T) {
 	root := initGitRepo(t)
-	t.Setenv("HOME", t.TempDir())
+	isolateHarnessConfig(t)
 
 	res, err := installHooks(discardCmd(), root, claudeTargets("", false), harness.ScopeLocal)
 	if err != nil {
@@ -906,27 +933,6 @@ func TestInstallHooksNamedAgentInstallsUndetected(t *testing.T) {
 	if len(res.Agents) != 1 {
 		t.Fatalf("agents = %+v, want the named harness installed anyway", res.Agents)
 	}
-}
-
-// registeredAgent names an adapter a test needs by behaviour, failing loudly
-// rather than silently skipping if the registry no longer carries it.
-func registeredAgent(t *testing.T, id string) string {
-	t.Helper()
-	if _, ok := harness.Get(id); !ok {
-		t.Fatalf("test needs the %q adapter; registry has %v", id, harness.IDs())
-	}
-	return id
-}
-
-// isolateHarnessConfig points every adapter's config location at scratch
-// directories, so an install driven by these tests can never reach the
-// developer's own harness config.
-func isolateHarnessConfig(t *testing.T) {
-	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CODEX_HOME", t.TempDir())
-	t.Setenv("COPILOT_HOME", t.TempDir())
-	t.Setenv("AMP_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.json"))
 }
 
 // Agents are installed in the order named, one stanza each — the report reads
@@ -957,7 +963,11 @@ func TestInstallHooksReturnsEarlierAgentsWhenALaterOneFails(t *testing.T) {
 	isolateHarnessConfig(t)
 	// The codex adapter refuses to rewrite a config it cannot parse, which is
 	// the natural way to fail the second agent and only the second.
-	corrupt := filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json")
+	codexHome := os.Getenv("CODEX_HOME")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", codexHome, err)
+	}
+	corrupt := filepath.Join(codexHome, "hooks.json")
 	if err := os.WriteFile(corrupt, []byte("not json"), 0o644); err != nil {
 		t.Fatalf("seed corrupt codex config: %v", err)
 	}

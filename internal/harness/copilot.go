@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // copilotBindings is every Copilot event Worklode listens to. Copilot's file
@@ -41,6 +43,9 @@ func copilotHome() (string, error) {
 
 // copilotHooksPath maps a scope to the file this adapter owns: the personal
 // hooks directory for local scope, the repo's committed one for project.
+// Project scope resolves the git root rather than trusting repoDir, which is
+// the process working directory: Copilot reads .github/hooks only at the top
+// of the repo, so a run from a subdirectory must not write one below it.
 func copilotHooksPath(repoDir, scope string) (string, error) {
 	switch scope {
 	case ScopeLocal:
@@ -50,7 +55,11 @@ func copilotHooksPath(repoDir, scope string) (string, error) {
 		}
 		return filepath.Join(home, "hooks", "worklode.json"), nil
 	case ScopeProject:
-		return filepath.Join(repoDir, ".github", "hooks", "worklode.json"), nil
+		root, ok := worktree.Root(repoDir)
+		if !ok {
+			return "", fmt.Errorf("not inside a git repository: %s", repoDir)
+		}
+		return filepath.Join(root, ".github", "hooks", "worklode.json"), nil
 	default:
 		return "", fmt.Errorf("unknown scope %q: want %q or %q", scope, ScopeLocal, ScopeProject)
 	}

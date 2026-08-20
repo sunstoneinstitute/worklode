@@ -496,8 +496,8 @@ func TestIsLodeStatusLine(t *testing.T) {
 	}
 }
 
-// Events() and boundNames(claudeBindings) are both derived from claudeBindings, so what this
-// pins is that the derivation is faithful: every binding install writes is
+// Events() and boundNames() both derive from claudeBindings, so what this pins
+// is that the derivation is faithful: every binding install writes is
 // reachable through the event it runs and through the bound-name list, in the
 // same spelling. Heartbeat is checked by hand because its fan-out to four
 // native events is the part a careless edit to claudeBindings would thin out.
