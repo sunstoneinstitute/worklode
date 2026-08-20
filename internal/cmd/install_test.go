@@ -514,6 +514,7 @@ func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 
 func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	root := initGitRepo(t)
+	isolateHarnessConfig(t)
 	writeCorruptSettings(t, root)
 	t.Chdir(root)
 
@@ -535,6 +536,7 @@ func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 
 func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	root := initGitRepo(t)
+	isolateHarnessConfig(t)
 	if _, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
@@ -783,6 +785,7 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 // output, not just in the struct.
 func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	root := initGitRepo(t)
+	isolateHarnessConfig(t)
 	if _, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
@@ -828,6 +831,13 @@ func registeredAgent(t *testing.T, id string) string {
 // paths, so an install driven by these tests can never reach the developer's
 // own harness config — CODEX_HOME and COPILOT_HOME are honoured by those
 // adapters' Detect, so redirecting HOME alone is not enough.
+//
+// Any test that reaches installHooks or uninstallHooks with the agent left
+// unpinned needs this: --agent defaults to auto, and auto is resolveAgents ->
+// harness.Detected, which walks every adapter. Without it, `lode uninstall`
+// under test deletes the real $COPILOT_HOME/hooks/worklode.json. Passing
+// hookTargets with a nil agents list is safe — resolveAgents only expands the
+// literal "auto" — as is any explicit --agent or --no-agent.
 //
 // The paths are absent rather than merely empty: every adapter detects on its
 // config location existing, so a test that redirected to a live directory
