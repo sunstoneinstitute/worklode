@@ -595,6 +595,41 @@ func pluralSuffix(n int) string {
 	return ""
 }
 
+// --- home project list -------------------------------------------------------
+
+// HomeView is the Home project list (spec 032 §9, first slice). Mode is
+// "actor" (signed-in, has cards), "open" (no actor — all projects, no role
+// badge or signal), or "empty" (an actor on no projects); it also labels the
+// worklode_web_home_renders_total metric, so the three values are fixed.
+type HomeView struct {
+	Page  PageProps
+	Mode  string
+	Cards []HomeCard
+}
+
+// HomeCard is one project card, density B: identity, role badge ("Lead",
+// "Member", or "" when the viewer has no role), the one-line signal saying
+// why the card sits where it does ("" in open mode), the three-count strip,
+// up to five crew initials plus an overflow count, and last activity (zero
+// time = no tasks yet). The whole card links to /projects/{ProjectID}.
+type HomeCard struct {
+	ProjectID, Name, Key          string
+	RoleBadge                     string
+	Signal                        string
+	InProgress, InReview, Blocked int
+	CrewInitials                  []string
+	CrewMore                      int
+	LastActivity                  time.Time
+}
+
+// homeActivity renders a card's last-activity line, honest about absence.
+func homeActivity(t time.Time) string {
+	if t.IsZero() {
+		return "No activity yet"
+	}
+	return "Last activity " + fmtTime(t)
+}
+
 // --- CLI login (spec 001 §8.7) ----------------------------------------------
 
 // CLICodeView is the manual-`lode login` page: the one-time code the user
