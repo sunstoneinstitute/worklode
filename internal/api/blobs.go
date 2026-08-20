@@ -213,9 +213,16 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTaskBlobs handles GET /api/v1/tasks/{id}/blobs: a task's full
-// reference graph row, embedded and attached alike (spec 021 §3).
+// reference graph row, embedded and attached alike (spec 021 §3). The task is
+// checked to exist first, so an unknown id is a 404 rather than an empty list
+// that reads as "this task has no blobs".
 func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
-	refs, err := s.st.ListTaskBlobs(r.Context(), r.PathValue("id"))
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	refs, err := s.st.ListTaskBlobs(r.Context(), id)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -264,9 +271,15 @@ func (s *server) attachTaskBlob(w http.ResponseWriter, r *http.Request) {
 // detachTaskBlob handles DELETE /api/v1/tasks/{id}/blobs/{hash}: clears the
 // explicit reference. A row the body still embeds survives with only its
 // declared half cleared (DetachBlob); a row with neither half left is
-// deleted.
+// deleted. Like list and attach, an unknown task id is a 404 -- the delete
+// is idempotent in the hash, not in the task.
 func (s *server) detachTaskBlob(w http.ResponseWriter, r *http.Request) {
-	if err := s.st.DetachBlob(r.Context(), r.PathValue("id"), r.PathValue("hash")); err != nil {
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if err := s.st.DetachBlob(r.Context(), id, r.PathValue("hash")); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}

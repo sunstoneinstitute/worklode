@@ -78,6 +78,9 @@ func ReconcileEmbedded(tx *sql.Tx, now time.Time, taskID string, hashes []string
 			 VALUES ($1, $2, '', true, $3, $4)
 			 ON CONFLICT (task_id, hash) DO UPDATE SET embedded = true`,
 			taskID, h, nullString(actorID), now.UTC()); err != nil {
+			if pgViolation(err, "23503", "task_blobs_hash_fkey") {
+				return fmt.Errorf("%w: %s", ErrUnknownBlob, h)
+			}
 			return fmt.Errorf("set embedded %s: %w", h, err)
 		}
 	}
@@ -98,15 +101,22 @@ func TaskBody(tx *sql.Tx, taskID string) (string, error) {
 	return body.String, nil
 }
 
-// AttachBlob records an explicit, non-body reference.
+// AttachBlob records an explicit, non-body reference. filename is optional,
+// so an attach that omits it keeps the name an earlier one recorded rather
+// than blanking it -- and a row the body embedded carries ” until an attach
+// names it.
 func (s *Store) AttachBlob(ctx context.Context, taskID, hash, filename, actorID string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO task_blobs (task_id, hash, filename, attached, created_by, created_at)
 		 VALUES ($1, $2, $3, true, $4, $5)
 		 ON CONFLICT (task_id, hash)
-		 DO UPDATE SET attached = true, filename = EXCLUDED.filename`,
+		 DO UPDATE SET attached = true,
+		               filename = COALESCE(NULLIF(EXCLUDED.filename, ''), task_blobs.filename)`,
 		taskID, hash, filename, nullString(actorID), s.nowFn().UTC())
 	if err != nil {
+		if pgViolation(err, "23503", "task_blobs_hash_fkey") {
+			return fmt.Errorf("%w: %s", ErrUnknownBlob, hash)
+		}
 		return fmt.Errorf("attach blob: %w", err)
 	}
 	return nil
@@ -118,20 +128,35 @@ func (s *Store) AttachBlob(ctx context.Context, taskID, hash, filename, actorID 
 // Same interlock as ReconcileEmbedded: an attached-only row must be deleted,
 // not merely cleared, or task_blobs_referenced rejects it. A row the body
 // still embeds just loses its declared half.
+//
+// Which of the two applies is decided under FOR UPDATE, not by putting the
+// flag in each statement's WHERE. Read committed re-plans every statement
+// against a fresh snapshot, so a concurrent body edit landing between a
+// delete guarded by `NOT embedded` and an update guarded by `embedded` makes
+// the row match neither -- the detach vanishes and the blob stays pinned
+// against GC. Locking the row first makes that edit wait its turn.
 func (s *Store) DetachBlob(ctx context.Context, taskID, hash string) error {
-	if _, err := s.db.ExecContext(ctx,
-		`DELETE FROM task_blobs
-		  WHERE task_id = $1 AND hash = $2 AND attached AND NOT embedded`,
-		taskID, hash); err != nil {
-		return fmt.Errorf("detach blob: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE task_blobs SET attached = false
-		  WHERE task_id = $1 AND hash = $2 AND attached AND embedded`,
-		taskID, hash); err != nil {
-		return fmt.Errorf("clear attached: %w", err)
-	}
-	return nil
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		var embedded bool
+		err := tx.QueryRowContext(ctx,
+			`SELECT embedded FROM task_blobs
+			  WHERE task_id = $1 AND hash = $2 AND attached FOR UPDATE`,
+			taskID, hash).Scan(&embedded)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("lock task blob: %w", err)
+		}
+		stmt := `DELETE FROM task_blobs WHERE task_id = $1 AND hash = $2`
+		if embedded {
+			stmt = `UPDATE task_blobs SET attached = false WHERE task_id = $1 AND hash = $2`
+		}
+		if _, err := tx.ExecContext(ctx, stmt, taskID, hash); err != nil {
+			return fmt.Errorf("detach blob: %w", err)
+		}
+		return nil
+	})
 }
 
 // ListTaskBlobs returns a task's references joined to their blobs, embedded

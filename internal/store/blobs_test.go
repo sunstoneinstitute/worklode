@@ -211,3 +211,115 @@ func mustListHashes(t *testing.T, s *Store, taskID string) []string {
 	}
 	return out
 }
+
+// TestDetachBlobRacesBodyEdit pins the interlock DetachBlob's FOR UPDATE
+// exists for. A row that is both embedded and attached used to be split
+// across two guarded statements; a body edit committing between them left the
+// row matching neither, so the detach vanished silently and the blob stayed
+// pinned against GC forever.
+func TestDetachBlobRacesBodyEdit(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-3"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	h := "dd" + strings.Repeat("0", 62)
+	if _, err := s.InsertBlob(ctx, h, "image/png", 1); err != nil {
+		t.Fatalf("insert blob: %v", err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), "WL-3", []string{h}, "alice")
+	}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if err := s.AttachBlob(ctx, "WL-3", h, "shot.png", "alice"); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	// A body edit that drops the image, held open so the detach has to
+	// contend with it.
+	edit, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := edit.ExecContext(ctx,
+		`UPDATE task_blobs SET embedded = false WHERE task_id = 'WL-3' AND hash = $1`,
+		h); err != nil {
+		t.Fatalf("body edit: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- s.DetachBlob(ctx, "WL-3", h) }()
+	waitForBlockedBackend(t, s)
+	if err := edit.Commit(); err != nil {
+		t.Fatalf("commit body edit: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+
+	refs, err := s.ListTaskBlobs(ctx, "WL-3")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(refs) != 0 {
+		t.Fatalf("refs = %+v, want the row gone: neither half references it", refs)
+	}
+}
+
+// TestAttachBlobKeepsFilename: filename is optional on attach, so a later
+// attach that omits it must keep the name an earlier one recorded.
+func TestAttachBlobKeepsFilename(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-4"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	h := "ee" + strings.Repeat("0", 62)
+	if _, err := s.InsertBlob(ctx, h, "text/plain", 5); err != nil {
+		t.Fatalf("insert blob: %v", err)
+	}
+	if err := s.AttachBlob(ctx, "WL-4", h, "crash.log", "alice"); err != nil {
+		t.Fatalf("first attach: %v", err)
+	}
+	if err := s.AttachBlob(ctx, "WL-4", h, "", "alice"); err != nil {
+		t.Fatalf("second attach: %v", err)
+	}
+	refs, err := s.ListTaskBlobs(ctx, "WL-4")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(refs) != 1 || refs[0].Filename != "crash.log" {
+		t.Fatalf("refs = %+v, want the filename kept", refs)
+	}
+}
+
+// TestAttachBlobUnknownHash maps the insert direction of task_blobs_hash_fkey
+// onto a sentinel, so the handler can answer 422 without matching on a
+// constraint name that also fires for a GC deleting a referenced blob.
+func TestAttachBlobUnknownHash(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-5"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	missing := strings.Repeat("f", 64)
+	if err := s.AttachBlob(ctx, "WL-5", missing, "x.log", "alice"); !errors.Is(err, ErrUnknownBlob) {
+		t.Fatalf("AttachBlob error = %v, want ErrUnknownBlob", err)
+	}
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), "WL-5", []string{missing}, "alice")
+	})
+	if !errors.Is(err, ErrUnknownBlob) {
+		t.Fatalf("ReconcileEmbedded error = %v, want ErrUnknownBlob", err)
+	}
+}

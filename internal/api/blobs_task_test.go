@@ -137,6 +137,72 @@ func TestTaskBlobAttachDetach(t *testing.T) {
 	}
 }
 
+// TestTaskBlobsUnknownTask: all three endpoints answer for a task, so all
+// three must 404 on one that does not exist. List returning an empty set and
+// detach returning 204 both read as "this task has no such blob", which is a
+// different and wrong answer.
+func TestTaskBlobsUnknownTask(t *testing.T) {
+	st, h, token, _ := newTestServerBlobs(t)
+	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	hash := strings.Repeat("f", 64)
+	cases := []struct {
+		method, path string
+		body         map[string]any
+	}{
+		{http.MethodGet, "/api/v1/tasks/NOPE-1/blobs", nil},
+		{http.MethodPost, "/api/v1/tasks/NOPE-1/blobs", map[string]any{"hash": hash}},
+		{http.MethodDelete, "/api/v1/tasks/NOPE-1/blobs/" + hash, nil},
+	}
+	for _, c := range cases {
+		rec := doReq(t, h, c.method, c.path, token, c.body)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404; body = %s", c.method, c.path, rec.Code, rec.Body)
+		}
+	}
+}
+
+// TestAttachBlobKeepsFilename: filename is optional on attach, so a second
+// attach that omits it must not blank the name the first one recorded.
+func TestAttachBlobKeepsFilename(t *testing.T) {
+	st, h, token, _ := newTestServerBlobs(t)
+	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	up := postBlob(t, h, token, "", []byte("crash log line\n"))
+	var blob struct {
+		Hash string `json:"hash"`
+	}
+	json.Unmarshal(up.Body.Bytes(), &blob)
+
+	rec := doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project": "p", "title": "crash", "priority": "high", "kind": "bug",
+	})
+	var created struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &created)
+
+	for _, body := range []map[string]any{
+		{"hash": blob.Hash, "filename": "crash.log"},
+		{"hash": blob.Hash},
+	} {
+		if att := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+created.ID+"/blobs",
+			token, body); att.Code != http.StatusOK {
+			t.Fatalf("attach %v: %d %s", body, att.Code, att.Body)
+		}
+	}
+
+	refs, err := st.ListTaskBlobs(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(refs) != 1 || refs[0].Filename != "crash.log" {
+		t.Fatalf("refs = %+v, want filename kept", refs)
+	}
+}
+
 // TestTaskBriefBlobsAreAbsolute checks GET /api/v1/tasks/{id}/brief returns
 // blob URLs absolutized against PublicURL, not the root-relative /blob/...
 // form the store and the plain task-detail/list-blobs endpoints use: an
@@ -218,6 +284,13 @@ func TestTaskBlobRefMetrics(t *testing.T) {
 		ID string `json:"id"`
 	}
 	json.Unmarshal(rec.Body.Bytes(), &created)
+
+	// Scraped before either call, so the zero-valued series proves
+	// pre-initialisation rather than absence.
+	if before := doReq(t, admin, "GET", "/metrics", "", nil).Body.String(); !strings.Contains(
+		before, `worklode_task_blob_refs_total{action="detached"} 0`) {
+		t.Errorf("detached label not pre-initialised to zero: %s", before)
+	}
 
 	att := doReq(t, main, http.MethodPost, "/api/v1/tasks/"+created.ID+"/blobs", token,
 		map[string]any{"hash": blob.Hash, "filename": "crash.log"})

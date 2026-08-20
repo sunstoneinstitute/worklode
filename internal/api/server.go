@@ -893,9 +893,8 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists → 409, a task_blobs_hash_fkey violation (a body citing an
-// unknown blob) → 422, anything else → 500 with a generic body (the detail
-// is logged, not leaked).
+// ErrRevisionExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
+// generic body (the detail is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -906,8 +905,13 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	// the caller has to act on.
 	case errors.Is(err, store.ErrForbidden):
 		writeErr(w, http.StatusForbidden, err.Error())
+	// A body citing a hash with no blob row: user error, not a server fault.
+	// Matched on the sentinel and not on the constraint name, because the
+	// other direction of that same FK -- a GC deleting a blob a task still
+	// references -- is a server bug that has to stay a logged 500.
 	case errors.Is(err, store.ErrBadTransition),
 		errors.Is(err, store.ErrCycle),
+		errors.Is(err, store.ErrUnknownBlob),
 		errors.Is(err, store.ErrInvalidInput):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, store.ErrLeased),
@@ -918,9 +922,6 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrDocExists),
 		errors.Is(err, store.ErrRevisionExists):
 		writeErr(w, http.StatusConflict, err.Error())
-	// A body citing a hash with no blob row: user error, not a server fault.
-	case strings.Contains(err.Error(), "task_blobs_hash_fkey"):
-		writeErr(w, http.StatusUnprocessableEntity, "body references an unknown blob")
 	default:
 		s.log.Error("internal error", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
