@@ -154,6 +154,8 @@ func newServeCmd() *cobra.Command {
 			// Built before NewServer so its boot-time skill sync (a background
 			// goroutine NewServer starts internally) shares the same shutdown
 			// signal as the lease sweeper below, instead of running uncancellable.
+			// Passing it is also what starts the doc-lifecycle subscriber —
+			// see the BackgroundCtx block at the end of NewServer.
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
