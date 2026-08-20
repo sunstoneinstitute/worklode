@@ -33,6 +33,7 @@ var wantTables = []string{
 	"doc_edges",
 	"doc_coverage_completed_with",
 	"doc_revisions",
+	"approvals",
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {

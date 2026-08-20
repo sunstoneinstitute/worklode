@@ -18,15 +18,21 @@
 //     still holds in a deployment with no login provider configured, where the
 //     subject is the anonymous authOpen one and there is no cookie to withhold.
 //
-// Both routes carry permWebWrite (routeGuards), so reaching them at all is a
-// policy decision made in authz.go, not something these handlers re-check.
+// The creation forms carry permWebWrite and the decide route carries
+// permApprovalDecide (routeGuards), so reaching any of them is a policy
+// decision made in authz.go, not something these handlers re-check. The
+// decide route carries one gate more — requireSession, applied at
+// registration — because 029 §7.3 makes deciding an approval a web-session
+// act rather than something a long-lived bearer token can do.
 package api
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -358,4 +364,79 @@ func formMessage(msg string) string {
 		return "The URL must be an absolute http:// or https:// address."
 	}
 	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+}
+
+// --- approvals (spec 029 §7.3) ----------------------------------------------
+
+// decideApproval handles POST /approvals/{id}/decide, the cockpit's one
+// decision act. It is registered behind requireSession, so the subject here
+// was authenticated by a live session cookie: a bearer token and the
+// open-instance subject never reach it, and there is deliberately no CLI verb
+// and no /api/v1 route that decides an approval.
+//
+// The decision itself belongs to the store: DecideApproval checks the row is
+// open, that the decider holds the group required_role names, and that they
+// did not author the change under review. This handler reads the form, maps
+// the outcome, and 303s back to the queue so a reload never decides twice.
+func (s *server) decideApproval(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !s.sameOriginForm(r) {
+		s.observeApprovalDecision(decisionInvalid, decisionInvalid)
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.observeApprovalDecision(decisionInvalid, decisionInvalid)
+		return
+	}
+	decision := r.PostFormValue("decision")
+	if _, ok := store.DecisionState(decision); !ok {
+		s.observeApprovalDecision(decisionInvalid, decisionInvalid)
+		webErr(w, http.StatusUnprocessableEntity,
+			"choose a decision of approve, request changes, or reject")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.observeApprovalDecision(decision, "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	sub := subjectFrom(r)
+	err = s.recordEvent(ctx, "web", "approval.decided", map[string]any{
+		"approval_id": id, "decision": decision, "actor": sub.ActorID,
+	}, func(tx *sql.Tx, _ int64) error {
+		_, err := store.DecideApproval(tx, store.DecideInput{
+			ApprovalID: id,
+			Decision:   decision,
+			ActorID:    sub.ActorID,
+			Groups:     sub.Groups,
+			Now:        s.st.Now(),
+		})
+		return err
+	})
+	s.observeApprovalDecision(decision, approvalDecisionOutcome(err))
+	if err != nil {
+		s.decideApprovalErr(w, err)
+		return
+	}
+	http.Redirect(w, r, "/reviews", http.StatusSeeOther)
+}
+
+// decideApprovalErr turns a refused decision into the page the person sees.
+// Each refusal names the rule that refused, since all three are things they
+// can act on: wait for someone else, ask for the role, or look at what the
+// row already says.
+func (s *server) decideApprovalErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, store.ErrApprovalResolved):
+		webErr(w, http.StatusConflict, "this approval has already been decided")
+	case errors.Is(err, store.ErrSelfApproval):
+		webErr(w, http.StatusForbidden, "you authored this change, so you cannot decide it")
+	case errors.Is(err, store.ErrNotQualified):
+		webErr(w, http.StatusForbidden, "deciding this approval needs a role you do not hold")
+	default:
+		s.webStoreErr(w, err)
+	}
 }

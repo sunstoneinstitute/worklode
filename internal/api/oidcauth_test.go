@@ -31,6 +31,24 @@ func newOIDCServer(t *testing.T, cfg api.Config) (*store.Store, http.Handler, *o
 	return st, h, iss
 }
 
+// newOIDCServerWithAdmin is newOIDCServer plus the admin handler (/metrics),
+// for tests that drive a session-gated route and then read a counter back out.
+func newOIDCServerWithAdmin(t *testing.T) (*store.Store, http.Handler, http.Handler, *oidctest.Issuer) {
+	t.Helper()
+	st := newTestStore(t)
+	iss := oidctest.NewIssuer(t)
+	main, admin, err := api.NewServer(st, api.Config{
+		OIDCIssuer:    iss.URL(),
+		OIDCClientID:  iss.ClientID,
+		PublicURL:     "http://localhost:8080",
+		SessionSecret: "test-session-secret",
+	})
+	if err != nil {
+		t.Fatalf("new oidc server: %v", err)
+	}
+	return st, main, admin, iss
+}
+
 // newOIDCServerAdmin is like newOIDCServer but returns the admin handler
 // (/healthz, /metrics) rather than the public app handler.
 func newOIDCServerAdmin(t *testing.T) http.Handler {

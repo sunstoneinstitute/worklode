@@ -38,6 +38,17 @@ var (
 	// ErrRevisionExists means the document already has an open candidate
 	// revision; 025 §7.2 allows one at a time.
 	ErrRevisionExists = errors.New("revision already open")
+	// ErrApprovalResolved means the approval is no longer open: it has already
+	// been approved, rejected, or (for a decision that would resolve it)
+	// closed. A second decision on the same row is a conflict, not a retry.
+	ErrApprovalResolved = errors.New("approval is already resolved")
+	// ErrNotQualified means the decider does not hold the group the approval's
+	// required_role names (029 §7.1).
+	ErrNotQualified = errors.New("not qualified to decide this approval")
+	// ErrSelfApproval means the decider authored the change under review.
+	// 029 §7.1 refuses this by default; the policy-permitted exception is not
+	// implemented.
+	ErrSelfApproval = errors.New("cannot decide your own change")
 	// ErrUnknownBlob means a task reference names a hash with no blobs row.
 	// Only the insert direction of task_blobs_hash_fkey maps to this: the
 	// delete direction is a GC bug, and must stay a 500.
