@@ -92,6 +92,30 @@ main. `0008` is the current next-free (`0001`–`0005` on main; `0006` and `0007
 claimed by the in-flight `task-hierarchy` and `skills-task3` worktrees), so the
 steps below use it and expect renumbering.
 
+## As executed (WL-31)
+
+All four tasks landed. Four deviations from the text below, all forced by
+drift in the code the plan was written against — read these before trusting a
+code block verbatim:
+
+- **The migration is `0030_reconciliation`, not `0008`** (0008 shipped as
+  `session_cost`), and it is also listed in `deploy/base/kustomization.yaml`.
+- **`applier` carries more than `st`.** `applyFunc` gained a
+  `resolvedCommitish` parameter and the apply methods use the handler's logger
+  and metrics, so the extracted `applier` holds `st`, `log`, `resolveBranch`
+  and `metrics`. `resolveReleaseCommitish` moved with it, and `applyForType`
+  takes a `ctx` because it resolves a release's `target_commitish` before
+  opening the apply's transaction.
+- **A `push.skills` delivery is marked applied too.** The skill-sync path
+  post-dates this plan and routes to a nil apply; without the marker it would
+  sit in the candidate set forever and replay would misroute it to
+  `applyPush`. `*.ignored` is now the only type left unmarked.
+- **The report type is `model.ReplayResult`**, not a hooks-local struct: ADR
+  036 puts a response-body shape in `internal/model`. `ReplayOptions` also
+  carries optional `Log` / `ResolveBranch` / `Metrics` so a caller can give
+  the replayer the same wiring the webhook handler has. Engine 1 records
+  `worklode_reconcile_replay_events_total{outcome}`.
+
 ## File Structure
 
 **New files**
@@ -128,7 +152,7 @@ steps below use it and expect renumbering.
 - Create: `internal/store/reconcile.go`
 - Test: `internal/store/reconcile_test.go`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 `deploy/base/migrations/0008_reconciliation.up.sql`:
 
@@ -160,7 +184,7 @@ ALTER TABLE events DROP COLUMN applied_at;
 ALTER TABLE project_repos DROP COLUMN mapped_at;
 ```
 
-- [ ] **Step 2: Write the failing store test**
+- [x] **Step 2: Write the failing store test**
 
 `internal/store/reconcile_test.go` (`package store`, internal — matching
 `inbox_test.go`):
@@ -245,13 +269,13 @@ func eventIDs(evs []Event) []int64 {
 }
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestMarkEventApplied`
 Expected: FAIL — `undefined: MarkEventApplied` (and the migration is applied
 by `OpenTestStore`, so the SQL itself is exercised too).
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 `internal/store/reconcile.go`:
 
@@ -326,13 +350,13 @@ func (s *Store) UnappliedGitHubEvents(ctx context.Context, f UnappliedFilter) ([
 }
 ```
 
-- [ ] **Step 5: Run the tests, including the migration round trip**
+- [x] **Step 5: Run the tests, including the migration round trip**
 
 Run: `go test ./internal/store/ -run 'TestMarkEventApplied|Migrat'`
 Expected: PASS — the existing up/down round-trip check covers the new
 migration pair (the spec's own testing note).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add deploy/base/migrations/0008_reconciliation.up.sql \
@@ -349,7 +373,7 @@ git commit -m "Add events.applied_at and project_repos.mapped_at"
 - Modify: `internal/hooks/github.go:141-147` (the apply wiring in `ServeHTTP`)
 - Test: `internal/hooks/github_test.go` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `internal/hooks/github_test.go` (helpers `newEnv`, `deliver`,
 `deliverBody`, `e.rawQueryInt` already exist there):
@@ -396,12 +420,12 @@ func TestAppliedAtMarksMappedDeliveries(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/hooks/ -run TestAppliedAtMarks`
 Expected: FAIL — no delivery sets `applied_at` yet (0 rows where 1 wanted).
 
-- [ ] **Step 3: Wrap the apply**
+- [x] **Step 3: Wrap the apply**
 
 In `internal/hooks/github.go`, replace the apply wiring in `ServeHTTP`
 (currently lines 141-147):
@@ -435,12 +459,12 @@ func markApplied(st *store.Store, inner func(tx *sql.Tx, eventID int64) error) f
 }
 ```
 
-- [ ] **Step 4: Run the hooks suite**
+- [x] **Step 4: Run the hooks suite**
 
 Run: `go test ./internal/hooks/...`
 Expected: PASS, including all pre-existing tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/hooks/github.go internal/hooks/github_test.go
@@ -461,7 +485,7 @@ no test changes, the whole hooks suite must stay green.
 - Modify: `internal/hooks/github.go` (handler delegates to `applier`)
 - Modify: `internal/hooks/push.go`, `internal/hooks/deployment.go` (receivers)
 
-- [ ] **Step 1: Create the applier**
+- [x] **Step 1: Create the applier**
 
 `internal/hooks/apply.go`:
 
@@ -497,7 +521,7 @@ func (a *applier) applyForType(typ string, env envelope, body []byte) func(tx *s
 
 (with `"strings"` in the import block).
 
-- [ ] **Step 2: Move the routing and apply methods**
+- [x] **Step 2: Move the routing and apply methods**
 
 Mechanical receiver change, no body edits beyond the receiver variable:
 
@@ -525,13 +549,13 @@ type githubHandler struct {
    In `NewGitHubHandler`: `return &githubHandler{st: st, ap: &applier{st: st}, secret: secret, log: log}`.
    In `ServeHTTP` (the Task 2 wiring): `apply = markApplied(h.st, h.ap.applyFunc(event, env, body))`.
 
-- [ ] **Step 3: Run the full hooks suite to prove behavior is unchanged**
+- [x] **Step 3: Run the full hooks suite to prove behavior is unchanged**
 
 Run: `go build ./... && go test ./internal/hooks/...`
 Expected: PASS with zero test edits. Any test change needed here means the
 refactor altered behavior — stop and fix the refactor instead.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add internal/hooks/apply.go internal/hooks/github.go internal/hooks/push.go internal/hooks/deployment.go
@@ -546,7 +570,7 @@ git commit -m "Extract webhook apply routing onto a transport-independent applie
 - Create: `internal/hooks/replay.go`
 - Test: `internal/hooks/replay_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `internal/hooks/replay_test.go` (`package hooks_test` — reuses the helpers in
 `github_test.go`; the seeding mirrors the existing ignored-row tests at
@@ -720,12 +744,12 @@ If `env` has no `DB()` accessor, use `e.rawQueryInt`-style helpers already in
 `github_test.go` to fetch the id (add a `rawQueryInt64` sibling next to it if
 needed) — do not add a new exported method to `store.Store` just for a test.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/hooks/ -run TestReplay`
 Expected: FAIL — `undefined: hooks.Replay`
 
-- [ ] **Step 3: Write the replayer**
+- [x] **Step 3: Write the replayer**
 
 `internal/hooks/replay.go`:
 
@@ -823,17 +847,17 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*ReplayRe
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `go test ./internal/hooks/ -run TestReplay -v`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Run the full hooks suite**
+- [x] **Step 5: Run the full hooks suite**
 
 Run: `go test ./internal/hooks/...`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/hooks/replay.go internal/hooks/replay_test.go internal/hooks/github_test.go

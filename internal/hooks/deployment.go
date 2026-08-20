@@ -12,7 +12,7 @@ import (
 // applyDeploymentStatus records a successful GitHub deployment as the
 // gh-side watermark for the normalized environment, then advances every
 // task covered by the new confirmed frontier.
-func (h *githubHandler) applyDeploymentStatus(tx *sql.Tx, eventID int64, repo string, body []byte) error {
+func (a *applier) applyDeploymentStatus(tx *sql.Tx, eventID int64, repo string, body []byte) error {
 	var p struct {
 		DeploymentStatus struct {
 			State string `json:"state"`
@@ -43,11 +43,11 @@ func (h *githubHandler) applyDeploymentStatus(tx *sql.Tx, eventID int64, repo st
 		// the frontier, which covers this one too. Logged because a repo that
 		// drops every deploy is otherwise indistinguishable from one that
 		// never deploys.
-		h.log.Info("deployment_status dropped: unknown sha",
+		a.log.Info("deployment_status dropped: unknown sha",
 			"repo", repo, "environment", env, "sha", p.Deployment.SHA)
 		return nil
 	}
-	now := h.st.Now()
+	now := a.st.Now()
 	if err := store.BumpEnvDeployGH(tx, now, repo, env, *mainID); err != nil {
 		return err
 	}
