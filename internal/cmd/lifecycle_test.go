@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -30,6 +31,13 @@ import (
 // authenticated as alice for direct API calls the test needs outside the CLI.
 func lifecycleTestServer(t *testing.T) (*store.Store, *cli.Client) {
 	t.Helper()
+	return testServer(t, api.Config{}, nil)
+}
+
+// testServer is lifecycleTestServer's body, parameterised for the fixtures
+// that need a non-default api.Config or a handler wrapper (wrap may be nil).
+func testServer(t *testing.T, cfg api.Config, wrap func(http.Handler) http.Handler) (*store.Store, *cli.Client) {
+	t.Helper()
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
@@ -39,11 +47,15 @@ func lifecycleTestServer(t *testing.T) (*store.Store, *cli.Client) {
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	h, _, err := api.NewServer(st, api.Config{})
+	h, _, err := api.NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	ts := httptest.NewServer(h)
+	var handler http.Handler = h
+	if wrap != nil {
+		handler = wrap(h)
+	}
+	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
 	t.Setenv("LODE_SERVER", ts.URL)
@@ -92,39 +104,10 @@ func resetFlags(t *testing.T, cmd *cobra.Command) {
 }
 
 // initGitRepo creates a fresh git repo with one commit (so `git worktree add
-// -b` has a commit to branch from) and returns its path, resolved to git's
-// own notion of the toplevel: on macOS t.TempDir() lives under a symlink
-// (/var -> /private/var), and `git rev-parse --show-toplevel` (which
-// worktree.Root uses) resolves it, so comparisons against the raw TempDir
-// path would spuriously fail.
+// -b` has a commit to branch from) in a temp directory of its own.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		// commit.gpgsign=false: the developer's global config may enable
-		// signing, which a temp-repo test commit must not depend on.
-		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init")
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
-
-	root, ok := worktree.Root(dir)
-	if !ok {
-		t.Fatalf("worktree.Root(%s): ok = false", dir)
-	}
-	return root
+	return initGitRepoInDir(t, t.TempDir())
 }
 
 // moveToReview transitions a task from in_progress to in_review directly via
@@ -328,26 +311,8 @@ func TestNextHonorsConfiguredWorktreeDir(t *testing.T) {
 func templateTestServer(t *testing.T, tmpl string) *cli.Client {
 	t.Helper()
 	t.Cleanup(func() { store.SetBranchTemplate("") })
-	st := store.OpenTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	h, _, err := api.NewServer(st, api.Config{BranchTemplate: tmpl})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	ts := httptest.NewServer(h)
-	t.Cleanup(ts.Close)
-
-	t.Setenv("LODE_SERVER", ts.URL)
-	t.Setenv("LODE_TOKEN", token)
-
-	return cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token})
+	_, c := testServer(t, api.Config{BranchTemplate: tmpl}, nil)
+	return c
 }
 
 // dirExists reports whether path is an existing directory.

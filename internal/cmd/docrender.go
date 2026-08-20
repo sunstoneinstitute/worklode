@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
@@ -57,11 +55,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	wd, err := os.Getwd()
-	if err != nil {
-		wd = ""
-	}
-	scope := cli.ResolveScope(ctx, c, cfg, wd)
+	scope := currentScope(ctx, c, cfg)
 
 	list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: scope.Project})
 	if err != nil {
@@ -138,12 +132,7 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 		fmt.Fprintln(cmd.OutOrStdout(), err.Error())
 		return nil
 	}
-	b, jerr := json.Marshal(unresolvedResult{Unresolved: err.Error()})
-	if jerr != nil {
-		return fmt.Errorf("encode result: %w", jerr)
-	}
-	printRaw(cmd, b)
-	return nil
+	return printJSON(cmd, unresolvedResult{Unresolved: err.Error()})
 }
 
 // writeDocShow prints content as raw bytes, or, under --json, as
@@ -154,14 +143,9 @@ func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []b
 		cmd.OutOrStdout().Write(content)
 		return nil
 	}
-	b, err := json.Marshal(docShowResult{
+	return printJSON(cmd, docShowResult{
 		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content),
 	})
-	if err != nil {
-		return fmt.Errorf("encode result: %w", err)
-	}
-	printRaw(cmd, b)
-	return nil
 }
 
 // sectionSubtree returns the exact source text of the section anchored
