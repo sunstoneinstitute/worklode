@@ -172,3 +172,58 @@ func TestPollCandidates(t *testing.T) {
 		t.Fatalf("unlanded after landing = %v; want none", unlanded)
 	}
 }
+
+func TestRepoIngestionHealth(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := s.AddRepo(ctx, "demo", "acme/app"); err != nil {
+		t.Fatalf("map acme/app: %v", err)
+	}
+	if err := s.AddRepo(ctx, "demo", "acme/silent"); err != nil {
+		t.Fatalf("map acme/silent: %v", err)
+	}
+
+	recordGitHubEvent(t, s, "d-1", "issues.opened.ignored", `{"repository":{"full_name":"acme/app"}}`)
+	recordGitHubEvent(t, s, "d-2", "push", `{"repository":{"full_name":"acme/app"}}`)
+	recordGitHubEvent(t, s, "d-3", "push.ignored", `{"repository":{"full_name":"acme/unmapped"}}`)
+
+	all, err := s.RepoIngestionHealth(ctx, "")
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("health rows = %d, want 2 mapped repos", len(all))
+	}
+	app, silent := all[0], all[1] // ordered by repo
+	if app.Repo != "acme/app" || app.LastEventAt == nil || app.Unapplied != 2 {
+		t.Fatalf("acme/app = %+v; want a last event and 2 unapplied", app)
+	}
+	if len(app.EventTypes) != 2 { // issues.opened.ignored, push
+		t.Fatalf("acme/app event types = %v; want 2 distinct types", app.EventTypes)
+	}
+	if silent.Repo != "acme/silent" || silent.LastEventAt != nil || silent.Unapplied != 0 {
+		t.Fatalf("acme/silent = %+v; want no events at all", silent)
+	}
+	if silent.MappedAt.IsZero() {
+		t.Fatalf("mapped_at not populated for a fresh mapping")
+	}
+
+	one, err := s.RepoIngestionHealth(ctx, "acme/app")
+	if err != nil {
+		t.Fatalf("filtered health: %v", err)
+	}
+	if len(one) != 1 || one[0].Repo != "acme/app" {
+		t.Fatalf("filtered health = %+v; want only acme/app", one)
+	}
+
+	senders, err := s.UnmappedSenders(ctx)
+	if err != nil {
+		t.Fatalf("unmapped senders: %v", err)
+	}
+	if len(senders) != 1 || senders[0].Repo != "acme/unmapped" || senders[0].Events != 1 {
+		t.Fatalf("unmapped senders = %+v; want acme/unmapped with 1 event", senders)
+	}
+}
