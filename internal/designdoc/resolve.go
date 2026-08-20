@@ -17,10 +17,7 @@ import (
 // its '#') removed; section is the fragment with the '#' stripped, or "" when
 // ref carried none.
 func SplitFragment(ref string) (base, section string) {
-	base, section, found := strings.Cut(ref, "#")
-	if !found {
-		return ref, ""
-	}
+	base, section, _ = strings.Cut(ref, "#")
 	return base, section
 }
 

@@ -2,7 +2,8 @@ package designdoc
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -31,19 +32,21 @@ type SectionDiff struct {
 //
 // depthLimit governs TooDeep: an anchored candidate section whose Level
 // exceeds it is unaddressable content masquerading as a node (025 §6.1).
+//
+// Both passes walk anchors in sorted order, so every result slice is stable.
 func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff {
 	acc := anchoredSections(accepted)
 	cand := anchoredSections(candidate)
 
 	diff := SectionDiff{renumbers: map[string][2]string{}}
 
-	for _, anchor := range sortedAnchors(acc) {
+	for _, anchor := range slices.Sorted(maps.Keys(acc)) {
 		if _, ok := cand[anchor]; !ok {
 			diff.Removed = append(diff.Removed, anchor)
 		}
 	}
 
-	for _, anchor := range sortedAnchors(cand) {
+	for _, anchor := range slices.Sorted(maps.Keys(cand)) {
 		candSec := cand[anchor]
 		accSec, ok := acc[anchor]
 		if !ok {
@@ -101,15 +104,5 @@ func anchoredSections(d *Document) map[string]*Section {
 		}
 		out[sec.Anchor] = sec
 	}
-	return out
-}
-
-// sortedAnchors returns m's keys in sorted order, so diff output is stable.
-func sortedAnchors(m map[string]*Section) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }
