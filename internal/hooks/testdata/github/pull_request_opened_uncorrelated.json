@@ -1,0 +1,18 @@
+{
+  "action": "opened",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "pull_request": {
+    "number": 99,
+    "title": "Tweak the README",
+    "state": "open",
+    "merged": false,
+    "body": "No task trailer here.",
+    "html_url": "https://github.com/sunstoneinstitute/demo/pull/99",
+    "created_at": "2026-07-19T10:00:00Z",
+    "merge_commit_sha": null,
+    "merged_at": null,
+    "head": {"ref": "contributor/patch-1", "sha": "99912300000000000000000000000000000000ff"},
+    "user": {"login": "dave"},
+    "requested_reviewers": []
+  }
+}

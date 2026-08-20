@@ -1,0 +1,56 @@
+package ui
+
+import "strconv"
+
+// approvals.templ renders the Reviews destination (GET /reviews): the
+// awaiting-approvals queue (spec 029 §7.1), one row per PR-kind approval
+// still in state 'awaiting', oldest first, each with the decide form (029
+// §7.3). The PR title jumps out to GitHub, which stays the review surface;
+// the project name and task id stay in-app links. An empty queue states that
+// honestly rather than showing a fabricated record.
+
+templ Approvals(v ApprovalsView) {
+	@Page(v.Page) {
+		@globalShell(v.Page.ActiveGlobal) {
+			<h1>Reviews</h1>
+			if len(v.Rows) == 0 {
+				<p class="muted">No approvals are waiting.</p>
+			} else {
+				<ul class="approvalq">
+					for _, row := range v.Rows {
+						@approvalRow(row)
+					}
+				</ul>
+			}
+		}
+	}
+}
+
+// approvalRow renders one queue row. rel="noreferrer" on the PR link
+// matches the task page's own jump-out convention for an external source
+// link.
+templ approvalRow(row ApprovalRow) {
+	<li>
+		<div>
+			<a href={ row.PRURL } rel="noreferrer">{ row.PRTitle }</a>
+			{ " " }
+			<span class="mono muted">{ row.EntityID }</span>
+		</div>
+		<div class="muted small">
+			<a href={ "/projects/" + row.ProjectID }>{ row.ProjectName }</a>
+			{ " · " }
+			<a href={ "/tasks/" + row.TaskID }>{ row.TaskID }</a>
+			if row.RequiredActorName != "" {
+				{ " · awaiting " }
+				{ row.RequiredActorName }
+			}
+			{ " · " }
+			{ row.Age }
+		</div>
+		<form method="post" action={ "/approvals/" + strconv.FormatInt(row.ID, 10) + "/decide" } class="decide">
+			<button type="submit" name="decision" value="approve" class="btn primary">Approve</button>
+			<button type="submit" name="decision" value="request_changes" class="btn">Request changes</button>
+			<button type="submit" name="decision" value="reject" class="btn ghost">Reject</button>
+		</form>
+	</li>
+}

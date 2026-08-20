@@ -169,6 +169,14 @@ const (
 	// /api/v1/reconcile (replays/repairs ingestion). Admin-only — both read and
 	// act across every project's repos, not just the caller's own work.
 	permReconcile Permission = "reconcile"
+
+	// permApprovalDecide covers deciding an approval (spec 029 §7.3): POST
+	// /approvals/{id}/decide, the web surface's only decision act. The route
+	// is additionally gated by requireSession, an authentication-method check
+	// that runs ahead of and is orthogonal to this role check, and by the
+	// approval's own required_role, which is a per-row fact the store checks
+	// rather than a role in this table.
+	permApprovalDecide Permission = "approval.decide"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -254,6 +262,12 @@ var grants = map[Permission][]Role{
 	permWhoAmI: {RoleUser, RoleAdmin},
 
 	permReconcile: {RoleAdmin},
+
+	// Every authenticated actor, because who may decide a *given* approval is
+	// not a role question: 029 §7.1 gates it on the approval's own
+	// required_role against the decider's groups, checked in the store. This
+	// permission gates reaching the route at all.
+	permApprovalDecide: {RoleUser, RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say
@@ -283,6 +297,12 @@ type Subject struct {
 	Kind    string // human, agent, service ("" when there is no actor)
 	Roles   []Role
 	Via     authMethod
+	// Groups is the actor row's stored groups claim (store.Actor.Groups),
+	// carried through unfiltered. For a token subject it is only as fresh as
+	// the actor row's last login sync; a session subject is no fresher by
+	// itself — freshness comes from gating the act on Via, not from this
+	// field, which is why requireSession exists. Nil for authOpen/authNone.
+	Groups []string
 }
 
 // Authenticated reports whether the subject presented a credential. An open
@@ -306,7 +326,7 @@ func subjectFromActor(a *store.Actor, via authMethod) Subject {
 	if a.Admin {
 		roles = append(roles, RoleAdmin)
 	}
-	return Subject{ActorID: a.ID, Kind: a.Kind, Roles: roles, Via: via}
+	return Subject{ActorID: a.ID, Kind: a.Kind, Roles: roles, Via: via, Groups: a.Groups}
 }
 
 // openSubject is the subject an unauthenticated-by-configuration web request
@@ -459,6 +479,26 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 			return
 		}
 		webErr(w, http.StatusForbidden, denialMessage(d))
+	}
+}
+
+// requireSession refuses any subject not authenticated by a live OIDC
+// session cookie. Spec 029 §7.3: approving is a web-session act because the
+// session's group claims are at most as old as the login that stored them; a
+// bearer token's are as old as the token. authOpen is refused too — an open
+// instance has no identity to attribute a decision to.
+func (s *server) requireSession(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sub := subjectFrom(r)
+		if sub.Via != authSession {
+			d := Decision{Reason: "session_required"}
+			s.observeAuthz(permApprovalDecide, d)
+			s.logDenial(r, sub, permApprovalDecide, d)
+			webErr(w, http.StatusForbidden,
+				"approving requires a signed-in browser session")
+			return
+		}
+		next(w, r)
 	}
 }
 

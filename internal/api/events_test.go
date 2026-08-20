@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // pollEvents polls GET /api/v1/events{query} until it returns at least want
@@ -34,6 +36,30 @@ func pollEvents(t *testing.T, h http.Handler, token, query string, want int) []a
 			t.Fatalf("GET /api/v1/events%s: got %d events after polling, want %d "+
 				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
 				query, len(events), want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// storeEventsOfType polls the store for the recorded events of one type, newest
+// last, until at least want of them are readable. ListEvents is bounded by
+// the cluster-wide commit horizon (see pollEvents above), so a freshly
+// committed event can take a moment to become visible.
+func storeEventsOfType(t *testing.T, st *store.Store, typ string, want int) []store.Event {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		events, err := st.ListEvents(context.Background(), store.EventFilter{Type: typ})
+		if err != nil {
+			t.Fatalf("list %s events: %v", typ, err)
+		}
+		if len(events) >= want {
+			return events
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s events = %d after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
+				typ, len(events), want)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

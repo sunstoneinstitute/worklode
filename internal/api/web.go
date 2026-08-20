@@ -215,10 +215,22 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "projects page", ui.Projects(view))
 }
 
+// reviewsPage handles GET /reviews: the awaiting-approvals queue (spec 029
+// §7.1), joining migration, store, and shell over real data. Every row
+// renders a decide form posting to the act route (029 §7.3).
+func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.st.ListAwaitingApprovals(r.Context())
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	s.renderWeb(w, r, http.StatusOK, "reviews page", ui.Approvals(approvalsView(rows, s.st.Now())))
+}
+
 // globalPlaceholder returns a handler for a global destination with no
-// implemented capability yet (Intake, Reviews, Deliveries). The
-// rendered page is honest: heading and owning-spec message only, no form,
-// button, count, or fabricated record.
+// implemented capability yet (Intake, Deliveries). The rendered page is
+// honest: heading and owning-spec message only, no form, button, count, or
+// fabricated record.
 func (s *server) globalPlaceholder(destination, heading, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.renderWeb(w, r, http.StatusOK, "placeholder page",

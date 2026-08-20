@@ -74,6 +74,30 @@ type ProjectsView struct {
 	Projects []model.Project
 }
 
+// --- reviews (spec 029 §7.1) -------------------------------------------------
+
+// ApprovalsView is the /reviews queue: every PR-kind approval still awaiting
+// a decision, oldest first. Each row carries the decide form (029 §7.3).
+type ApprovalsView struct {
+	Page PageProps
+	Rows []ApprovalRow
+}
+
+// ApprovalRow is one awaiting-approval queue row: the PR it governs, the
+// task and project it belongs to, who it is awaiting (when known), and how
+// long it has waited. ID is the approvals row id the decide form posts to.
+// Age is pre-formatted (see FmtAge); RequiredActorName is "" when the
+// approval names no actor yet.
+type ApprovalRow struct {
+	ID                int64
+	EntityID          string
+	PRTitle, PRURL    string
+	TaskID, ProjectID string
+	ProjectName       string
+	RequiredActorName string
+	Age               string
+}
+
 // --- task -------------------------------------------------------------------
 
 // TaskView is one task's detail page. Task/Holder/Progress/Attachments embed
@@ -120,10 +144,10 @@ type TimelineRow struct {
 
 // PlaceholderView is an honest "not built yet" page for a global or
 // project-scoped destination whose governing spec section is not implemented.
-// Project is nil for a global destination (Intake, Reviews, Deliveries,
-// Knowledge) and set for a project section (Crew, Deliverables, Reviews,
-// Decisions, Documents, Activity), which renders the same project-local
-// navigation and header as the project overview page.
+// Project is nil for a global destination (Intake, Deliveries) and set for a
+// project section (Crew, Deliverables, Reviews, Decisions, Documents,
+// Activity), which renders the same project-local navigation and header as
+// the project overview page.
 type PlaceholderView struct {
 	Page          PageProps
 	Heading       string
@@ -294,7 +318,7 @@ type CrewView struct {
 
 // CrewWorkItem is one open item a Crew member owns, shown when their
 // removal is refused. Kind is "task" today (internal/store's OwnedWork);
-// approvals and decisions join it when their tables exist.
+// the responsibility review does not yet count a member's open approvals.
 type CrewWorkItem struct {
 	Kind  string
 	ID    string
