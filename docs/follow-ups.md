@@ -39,11 +39,12 @@ outright once it is fixed over annotating it as resolved.
   reader grows table support, or the gate becomes the presence of the corpus
   keys. `lode doc sync` has since been retired unshipped (`f11af04`,
   2026-08-17), withdrawing 025 §16 and §5.1 with it, so nothing reads a
-  `[doc_sync]` block at all; the scalar `spec_corpus`/`plan_corpus` keys
-  survive only as `lode show --spec/--adr`'s corpus locator
-  (`internal/cli/client.go`'s flat parser). The contradiction is now confined
-  to 025 §5/§10's text, and the corpus cutover (025 §12) removes its subject
-  rather than reconciling it.
+  `[doc_sync]` block at all; WL-147 then re-pointed `lode show --spec/--adr`
+  at the backbone and deleted the scalar keys, their reader
+  (`internal/cli.CorporaFrom`) and their entry in `.worklode/config.toml`.
+  Neither shape survives in code. The contradiction is now confined to 025
+  §5/§10's text, and the corpus cutover (025 §12) removes its subject rather
+  than reconciling it.
 - `[P2]` **Per-artifact delivery tracking** (004 §5.3, already deferred there): a
   repo shipping two images plus a CLI binary has one `done_state`. The
   `registry_package` handler mints every image as an artifact, but delivery is
@@ -333,7 +334,10 @@ Design items landed in spec 025. These are the mechanical leftovers.
   §3.1–§3.2) remains unimplemented. `lode doc list` now exists (spec 025),
   carrying the 026 §2 planning-status flags (`--needs-planning` /
   `--needs-execution`); `lode doc sync` was retired unshipped (`f11af04`).
-  `lode doc sections` and `--strict-refs` remain unimplemented.
+  `lode doc sections` and `--strict-refs` remain unimplemented. WL-147 moved
+  the resolution source from the file corpus to the backbone, so the command
+  now needs a reachable server; the `--json` shape's `path` field became
+  `doc` + `slug` with it.
 - `[P4]` **025 (draft; §18 and elsewhere) still spells the command `lode doc show`;
   026 §3 implements the same command spelled `lode show` (2026-08-07).**
   `docs/plans/2026-08-03-design-doc-queries-2-consolidated-show.md`

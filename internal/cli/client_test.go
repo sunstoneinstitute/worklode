@@ -1921,87 +1921,26 @@ func TestClientAssignmentFlow(t *testing.T) {
 	}
 }
 
-// spec_corpus / plan_corpus are repo-scoped like worktree_dir (spec 025 §16.1):
-// CorporaFrom, not LoadConfig, is the sole reader.
-
-func TestCorporaFromRepoConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	repo := filepath.Join(home, "git", "proj")
-	writeRepoConfig(t, repo, ".worklode",
-		"spec_corpus = \"docs/specs\"\nplan_corpus = \"docs/plans\"\n")
-
-	c, err := cli.CorporaFrom(filepath.Join(repo, "sub"))
-	if err != nil {
-		t.Fatalf("CorporaFrom: %v", err)
-	}
-	if c.Root != repo {
-		t.Errorf("Root = %q, want %q", c.Root, repo)
-	}
-	if want := filepath.Join(repo, "docs", "specs"); c.SpecDir != want {
-		t.Errorf("SpecDir = %q, want %q", c.SpecDir, want)
-	}
-	if want := filepath.Join(repo, "docs", "plans"); c.PlanDir != want {
-		t.Errorf("PlanDir = %q, want %q", c.PlanDir, want)
-	}
-}
-
-func TestCorporaFromKeyPresenceEnablesEachCorpus(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	repo := filepath.Join(home, "git", "proj")
-	writeRepoConfig(t, repo, ".worklode", "spec_corpus = \"design\"\n")
-
-	c, err := cli.CorporaFrom(repo)
-	if err != nil {
-		t.Fatalf("CorporaFrom: %v", err)
-	}
-	if want := filepath.Join(repo, "design"); c.SpecDir != want {
-		t.Errorf("SpecDir = %q, want %q", c.SpecDir, want)
-	}
-	if c.PlanDir != "" {
-		t.Errorf("PlanDir = %q, want \"\" (plan_corpus unset)", c.PlanDir)
-	}
-}
-
-func TestCorporaFromNoRepoConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	c, err := cli.CorporaFrom(filepath.Join(home, "git", "bare"))
-	if err != nil {
-		t.Fatalf("CorporaFrom: %v", err)
-	}
-	if c != (cli.Corpora{}) {
-		t.Errorf("CorporaFrom = %+v, want zero Corpora", c)
-	}
-}
-
-func TestCorporaFromRejectsAbsolutePath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	repo := filepath.Join(home, "git", "proj")
-	writeRepoConfig(t, repo, ".worklode", "spec_corpus = \"/etc/specs\"\n")
-	if _, err := cli.CorporaFrom(repo); err == nil {
-		t.Fatal("CorporaFrom accepted an absolute spec_corpus; want error")
-	}
-}
-
-// The keys never reach the merged Config, mirroring
-// TestLoadConfigFromNeverPopulatesWorktreeDir.
-func TestLoadConfigFromNeverPopulatesCorpora(t *testing.T) {
+// The file corpus is retired: documents live in the backbone (spec 025), and
+// nothing reads spec_corpus / plan_corpus any more. They are still accepted
+// and ignored, so a checkout that has not dropped them from its config.toml
+// yet does not fail every command on parseConfig's unknown-key error.
+func TestLoadConfigIgnoresRetiredCorpusKeys(t *testing.T) {
 	home, workDir := repoTestHome(t,
 		"server = \"https://wl.example.com\"\nspec_corpus = \"user-specs\"\n")
 	repo := filepath.Join(home, "git", "proj")
 	writeRepoConfig(t, repo, ".worklode",
-		"spec_corpus = \"repo-specs\"\nplan_corpus = \"repo-plans\"\n")
+		"current_project = \"proj\"\nspec_corpus = \"docs/specs\"\nplan_corpus = \"docs/plans\"\n")
 
 	cfg, err := cli.LoadConfigFromForTest(workDir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.SpecCorpus != "" || cfg.PlanCorpus != "" {
-		t.Fatalf("Config carries corpus keys (%q, %q); want empty — CorporaFrom is the sole reader",
-			cfg.SpecCorpus, cfg.PlanCorpus)
+	if cfg.ServerURL != "https://wl.example.com" {
+		t.Errorf("ServerURL = %q, want the user config's value", cfg.ServerURL)
+	}
+	if cfg.CurrentProject != "proj" {
+		t.Errorf("CurrentProject = %q, want proj", cfg.CurrentProject)
 	}
 }
 

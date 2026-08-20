@@ -6,11 +6,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -48,12 +52,23 @@ func TestClassify(t *testing.T) {
 	}
 }
 
-// setupDocCorpus creates a fake $HOME containing a repo directory with a
-// .worklode/config.toml (current_project and, when projectKey is non-empty,
-// project_key) and docs/specs populated from files, chdirs into the repo, and
-// returns its path. Mirrors setupRepoConfig (currentproject_test.go), plus
-// the corpus FindCorpus/ResolveRef need.
-func setupDocCorpus(t *testing.T, projectKey string, files map[string]string) string {
+// docFixtureNumber reads a document's corpus number off the leading digits of
+// its slug, the same way the corpus import did.
+var docFixtureNumber = regexp.MustCompile(`^(\d+)-`)
+
+// setupDocServer stands up everything a SPEC/ADR `lode show` needs: a fake
+// $HOME holding a repo whose .worklode/config.toml sets current_project (and,
+// when projectKey is non-empty, project_key), chdir'd into, plus a stub
+// backbone serving GET /api/v1/docs and GET /api/v1/docs/{id}. It returns the
+// repo path.
+//
+// files is keyed by the corpus filename a document once had on disk, because
+// that name minus ".md" is exactly the slug the backbone stores (docimport.go)
+// — so the ref forms that key off a filename and off a slug are the same
+// strings here. Kind comes from the body's frontmatter and the number from the
+// filename, as the import derived them. Nothing is written to disk: `lode
+// show` must work in a checkout with no documents in it.
+func setupDocServer(t *testing.T, projectKey string, files map[string]string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -68,17 +83,72 @@ func setupDocCorpus(t *testing.T, projectKey string, files map[string]string) st
 	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"), []byte(content), 0o600); err != nil {
 		t.Fatalf("write repo config: %v", err)
 	}
-	specs := filepath.Join(repo, "docs", "specs")
-	if err := os.MkdirAll(specs, 0o755); err != nil {
-		t.Fatalf("mkdir docs/specs: %v", err)
-	}
-	for name, body := range files {
-		if err := os.WriteFile(filepath.Join(specs, name), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
 	t.Chdir(repo)
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	docs := make([]model.Doc, 0, len(names))
+	bodies := make(map[int64]string, len(names))
+	for i, name := range names {
+		id := int64(i + 1)
+		slug := strings.TrimSuffix(name, ".md")
+		kind := "spec"
+		parsed, err := designdoc.Parse([]byte(files[name]))
+		if err != nil {
+			t.Fatalf("parse fixture %s: %v", name, err)
+		}
+		if parsed.Frontmatter != nil && parsed.Frontmatter.Kind == "adr" {
+			kind = "adr"
+		}
+		number := 0
+		if m := docFixtureNumber.FindStringSubmatch(slug); m != nil {
+			number, _ = strconv.Atoi(m[1])
+		}
+		docs = append(docs, model.Doc{
+			ID: id, Project: "proj", Kind: kind, Number: number,
+			Slug: slug, Title: slug, Status: "accepted", Version: 1,
+		})
+		bodies[id] = files[name]
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
+		// The real list blanks bodies (withoutDocBodies); a resolver that
+		// leaned on them would pass here otherwise.
+		listed := make([]model.Doc, len(docs))
+		copy(listed, docs)
+		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
+	})
+	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		for _, d := range docs {
+			if d.ID != id {
+				continue
+			}
+			d.Body = bodies[id]
+			writeTestJSON(t, w, model.DocDetail{Doc: d})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
 	return repo
+}
+
+// writeTestJSON serializes v as a stub server's JSON response body.
+func writeTestJSON(t *testing.T, w http.ResponseWriter, v any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("encode stub response: %v", err)
+	}
 }
 
 const fixtureSpec = `---
@@ -138,7 +208,7 @@ func TestShowTaskDispatch(t *testing.T) {
 // TestShowSpecFlagEquivalence covers the rework's central equivalence claim:
 // `--spec <n>` must produce exactly what the typed positional id produces.
 func TestShowSpecFlagEquivalence(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	outFlag, err := runLode(t, "show", "--spec", "14")
 	if err != nil {
@@ -166,7 +236,7 @@ func TestShowSpecFlagEquivalence(t *testing.T) {
 }
 
 func TestShowDispatchesSpecToDocShow(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14")
 	if err != nil {
@@ -178,7 +248,7 @@ func TestShowDispatchesSpecToDocShow(t *testing.T) {
 }
 
 func TestDocShowSectionFragmentSugar(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14#sec-1")
 	if err != nil {
@@ -191,7 +261,7 @@ func TestDocShowSectionFragmentSugar(t *testing.T) {
 }
 
 func TestDocShowSectionFlag(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14", "--section", "sec-2")
 	if err != nil {
@@ -222,7 +292,7 @@ func TestDocShowSectionFlag(t *testing.T) {
 }
 
 func TestDocShowFragmentAndFlagDisagree(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14#sec-1", "--section", "sec-2")
 	if err == nil {
@@ -234,7 +304,7 @@ func TestDocShowFragmentAndFlagDisagree(t *testing.T) {
 }
 
 func TestDocShowUnknownSection(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14", "--section", "sec-9")
 	if err == nil {
@@ -246,14 +316,15 @@ func TestDocShowUnknownSection(t *testing.T) {
 }
 
 func TestDocShowJSON(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-14", "--section", "sec-2", "--json")
 	if err != nil {
 		t.Fatalf("lode doc show --json: %v\noutput: %s", err, out)
 	}
 	var got struct {
-		Path    string `json:"path"`
+		Doc     int64  `json:"doc"`
+		Slug    string `json:"slug"`
 		Section string `json:"section"`
 		Content string `json:"content"`
 	}
@@ -263,8 +334,8 @@ func TestDocShowJSON(t *testing.T) {
 	if got.Section != "sec-2" {
 		t.Fatalf("section = %q; want sec-2", got.Section)
 	}
-	if !strings.HasSuffix(got.Path, "014-fixture.md") {
-		t.Fatalf("path = %q; want it to name the fixture file", got.Path)
+	if got.Doc != 1 || got.Slug != "014-fixture" {
+		t.Fatalf("doc/slug = %d/%q; want the fixture document's id and slug", got.Doc, got.Slug)
 	}
 	want := "## 2. Second {#sec-2}\n\nBody of section 2.\n"
 	if got.Content != want {
@@ -273,7 +344,7 @@ func TestDocShowJSON(t *testing.T) {
 }
 
 func TestDocShowForeignKeyUnresolvedExitsZero(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "OT-SPEC-14")
 	if err != nil {
@@ -310,7 +381,7 @@ Trailer body, must not be included.
 `
 
 func TestDocShowSectionStopsAtAnchorlessBoundary(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"015-fixture.md": anchorlessBoundarySpec})
+	setupDocServer(t, "WL", map[string]string{"015-fixture.md": anchorlessBoundarySpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-15", "--section", "sec-1")
 	if err != nil {
@@ -352,7 +423,7 @@ Body of section 2.
 `
 
 func TestDocShowSectionIncludesAnchorlessDescendant(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"016-fixture.md": anchorlessNestedSpec})
+	setupDocServer(t, "WL", map[string]string{"016-fixture.md": anchorlessNestedSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-16", "--section", "sec-1")
 	if err != nil {
@@ -385,7 +456,7 @@ Body of section 1.
 `
 
 func TestDocShowFindsTargetPastAnchorlessSection(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"017-fixture.md": anchorlessBeforeTargetSpec})
+	setupDocServer(t, "WL", map[string]string{"017-fixture.md": anchorlessBeforeTargetSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-17", "--section", "sec-1")
 	if err != nil {
@@ -398,7 +469,7 @@ func TestDocShowFindsTargetPastAnchorlessSection(t *testing.T) {
 }
 
 func TestDocShowForeignKeyUnresolvedJSON(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "OT-SPEC-14", "--json")
 	if err != nil {
@@ -417,7 +488,7 @@ func TestDocShowForeignKeyUnresolvedJSON(t *testing.T) {
 }
 
 func TestShowMilestoneErrors(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "WL-MILE-2")
 	if err == nil {
@@ -434,7 +505,7 @@ func TestShowMilestoneErrors(t *testing.T) {
 // so `lode show` points at the surfaces that read it instead of sending
 // someone to wait for spec 029.
 func TestShowDeliverableErrors(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	for _, tt := range []struct {
 		args []string
@@ -456,7 +527,7 @@ func TestShowDeliverableErrors(t *testing.T) {
 }
 
 func TestShowUnknownTypeErrors(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	out, err := runLode(t, "show", "XX-FOO-3")
 	if err == nil {
@@ -468,9 +539,13 @@ func TestShowUnknownTypeErrors(t *testing.T) {
 	}
 }
 
-func TestDocShowNoCorpus(t *testing.T) {
+// TestDocShowNeedsAServer: documents come from the backbone now, so a
+// checkout with no server configured cannot render one — where the old
+// disk-corpus path failed with "not inside a worklode repo".
+func TestDocShowNeedsAServer(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("LODE_SERVER", "")
 	dir := filepath.Join(home, "outside")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -479,10 +554,10 @@ func TestDocShowNoCorpus(t *testing.T) {
 
 	out, err := runLode(t, "show", "WL-SPEC-14")
 	if err == nil {
-		t.Fatalf("doc show outside any worklode repo succeeded\noutput: %s", out)
+		t.Fatalf("doc show with no server succeeded\noutput: %s", out)
 	}
-	if !strings.Contains(err.Error(), "not inside a worklode repo") {
-		t.Fatalf("err = %v; want the no-corpus message", err)
+	if !strings.Contains(err.Error(), "server URL not set") {
+		t.Fatalf("err = %v; want the no-server message", err)
 	}
 }
 
@@ -498,7 +573,7 @@ Decision body.
 `
 
 func TestShowDispatchesADRToDocShow(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
+	setupDocServer(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
 
 	out, err := runLode(t, "show", "WL-ADR-18")
 	if err != nil {
@@ -516,7 +591,7 @@ func TestShowDispatchesADRToDocShow(t *testing.T) {
 // untyped ref straight to runDocShow, and "NO-SPEC" does not classify as a
 // task or a typed id (TestClassify's targetUnclassified case).
 func TestShowNoSpecSentinelIsNamed(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
 
 	for _, args := range [][]string{
 		{"show", "WL-SPEC-0"},
@@ -548,7 +623,7 @@ const trailingSpaceFrontmatterSpec = "---\nstatus: accepted\nimplements: NO-SPEC
 	"Trailing thematic break, not a frontmatter delimiter.\n"
 
 func TestDocShowSectionSurvivesTrailingSpaceFrontmatterClose(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"018-fixture.md": trailingSpaceFrontmatterSpec})
+	setupDocServer(t, "WL", map[string]string{"018-fixture.md": trailingSpaceFrontmatterSpec})
 
 	out, err := runLode(t, "show", "WL-SPEC-18", "--section", "sec-1")
 	if err != nil {
@@ -564,7 +639,7 @@ func TestDocShowSectionSurvivesTrailingSpaceFrontmatterClose(t *testing.T) {
 
 // TestShowADRFlagEquivalence mirrors TestShowSpecFlagEquivalence for --adr.
 func TestShowADRFlagEquivalence(t *testing.T) {
-	setupDocCorpus(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
+	setupDocServer(t, "WL", map[string]string{"018-fixture-adr.md": fixtureADR})
 
 	outFlag, err := runLode(t, "show", "--adr", "18")
 	if err != nil {
@@ -784,18 +859,18 @@ func TestShowPlanFlagOrdinalShape(t *testing.T) {
 }
 
 // TestShowAdrFlagKeylessStillChecksKind covers a review fix: with no
-// project_key configured, --spec/--adr fall back to ResolveRef's bare-number
-// form (form 2), which never runs CheckKind on its own, unlike the
+// project_key configured, --spec/--adr fall back to resolveDocRef's
+// bare-number form (form 2), which never kind-checks on its own, unlike the
 // <KEY>-SPEC-<n>/<KEY>-ADR-<n> shorthand form (3) the flag path uses when the
 // key IS known — so runDocShow's expectedKind parameter must enforce the
-// kind independently in the keyless case too. --adr pointing at a spec file
-// must still error with the kind mismatch, and --spec must still render
-// normally: a flag always means the local corpus, key or no key, so
-// resolving by number with no key is legitimate for --spec/--adr — unlike a
-// positional shorthand id (WL-SPEC-15), which would instead get 026 §4.2's
-// tier-3 "unresolved" treatment for an unknown foreign key.
+// kind independently in the keyless case too. --adr pointing at a spec must
+// still error with the kind mismatch, and --spec must still render normally:
+// a flag always means this repo's own project, key or no key, so resolving by
+// number with no key is legitimate for --spec/--adr — unlike a positional
+// shorthand id (WL-SPEC-15), which would instead get 026 §4.2's tier-3
+// "unresolved" treatment for an unknown foreign key.
 func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
-	setupDocCorpus(t, "", map[string]string{
+	setupDocServer(t, "", map[string]string{
 		"014-fixture.md":     fixtureSpec,
 		"018-fixture-adr.md": fixtureADR,
 	})

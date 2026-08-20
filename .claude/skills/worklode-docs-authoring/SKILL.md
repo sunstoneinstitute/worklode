@@ -1,24 +1,42 @@
 ---
 name: worklode-docs-authoring
-description: Use when creating or editing any file under docs/specs/ or docs/plans/, or editing ns/*.ttl — "write a new spec", "add a plan", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use splitting-specs-into-plans instead.
+description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc new", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use splitting-specs-into-plans instead.
 ---
 
 # Authoring specs and plans
 
-Everything under `docs/specs/` and `docs/plans/`: frontmatter, section
-anchors, amendment and supersession, the `ns/` ontology the frontmatter keys
-come from, and the spec/plan/task model those documents describe.
+Documents live in the backbone, not in the tree: frontmatter, section anchors,
+amendment and supersession, the `ns/` ontology the frontmatter keys come from,
+and the spec/plan/task model those documents describe.
 
-Read `docs/authoring-design-docs.md` before creating or editing anything here
-— it has the filename rules, the full frontmatter schema, and how to
-amend/supersede.
+Read `docs/authoring-design-docs.md` before creating or editing a document — it
+has the slug rules, the full frontmatter schema, and how to amend/supersede.
+
+## Where a document lives, and how it gets there
+
+`lode doc` is the only authoring path. Draft the markdown — frontmatter
+included — in a scratch file, then:
+
+```bash
+lode doc anchors <file>                             # local lint: anchors, plan ## Tasks
+lode doc new --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
+lode doc edit <id-or-slug> --file <file>            # replace a draft's body
+lode doc revise <id-or-slug> --file <file>          # candidate revision on an accepted doc
+lode doc submit <id-or-slug>                        # mints the review task
+lode doc accept <id-or-slug>                        # assignee-gated; a plan's accept mints its tasks
+```
+
+Read one back with `lode show <ref>` (`WL-SPEC-25`, `WL-SPEC-25#sec-9`, or
+`-s <anchor>`) or `lode doc get <id-or-slug> --json` for the body plus parsed
+sections and edges. The scratch file is an editor buffer, not a copy of record
+— nothing reads it after `lode doc new`.
 
 ## Frontmatter is mandatory
 
-**Every file you create under `docs/specs/` or `docs/plans/` starts with YAML
-frontmatter — no exceptions.** A spec needs `status` and, once accepted,
-`issued`. A plan needs `status` and `covers` — the spec sections it undertakes
-to see built, optionally qualified by a `coverage:` level (026 §5).
+**Every document you create starts with YAML frontmatter — no exceptions.**
+A spec needs `status` and, once accepted, `issued`. A plan needs `status` and
+`covers` — the spec sections it undertakes to see built, optionally qualified
+by a `coverage:` level (026 §5).
 
 It is `covers` rather than `implements` because a plan writes no code:
 `implements` is a component's claim that its code meets a section, and one word
@@ -30,17 +48,20 @@ spec" sentinel, which takes no project key — 026 §4.3) rather than omitting t
 key, because an absent `covers` is indistinguishable from a forgotten one.
 
 Frontmatter keys are ontology property names, ordered lifecycle → `covers` →
-dependency → amendment → supersession. `scripts/secmeta.py` checks all of this
-on commit; it reports and never rewrites, so a failure is yours to decide, not
-to re-run.
+dependency → amendment → supersession. A `covers:` reference the project
+resolves becomes an edge on creation; one it does not is kept verbatim as an
+external reference — a typo therefore reads as an unplanned section rather
+than an error, so check `lode doc get <slug> --json` for the edges you meant.
 
 ## Section anchors are frozen
 
 Spec sections carry `{#sec-N}` anchors that are **frozen once the spec is
-accepted** — amend or supersede a section, never renumber it.
-`scripts/secfmt.py` enforces the numbering (pre-commit hook; docs-only PRs skip
-CI, so the hooks are the real gate). `./scripts/inlinespec.py` regenerates
-`docs/specs/inlined/`.
+accepted** — amend or supersede a section, never renumber it. `lode doc
+anchors <file>` checks the numbering and anchors before you create or edit a
+document. There is no inlined view: what a section says *now* is the section
+plus whatever amends it, and `lode doc get <ref> --json` names that in
+`edges_in` (`amendedBy`, `isReplacedBy`) — follow those before treating the
+body as current.
 
 ## The `ns/` ontology
 
@@ -62,8 +83,7 @@ data.
 
 ## The spec / plan / task model
 
-Spec 025; files under `docs/` are the transitional mirror until it is
-implemented.
+Spec 025, as implemented by the document store.
 
 - A **spec** is a durable document. Writing or revising one is an ordinary
   claimable task (`kind = 'design'`, renamed from `spec` by 025 §10, which also

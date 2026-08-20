@@ -43,14 +43,15 @@ enabled at user scope and injects `using-superpowers` verbatim through a
 this work — it needs a source of facts and a stated destination, and no rewrite
 of its interview logic.
 
-**The symlink already in the tree.** `docs/superpowers` is a committed symlink
-to `.`, so superpowers' hardcoded paths resolve to `docs/specs/` and
-`docs/plans/`. It has been there since the July plan-writing sessions and half
-works: plan filenames match this repo's convention and land correctly, while
-brainstorming writes `YYYY-MM-DD-<topic>-design.md` into a corpus requiring
-`NNN-kebab-slug.md` with frontmatter and frozen `{#sec-N}` anchors, which
-`secfmt.py` and `secmeta.py` reject at commit. The spec half is a manual
-translation a human performs afterwards.
+**The symlink is gone (WL-147).** `docs/superpowers` was a committed symlink to
+`.`, so superpowers' hardcoded paths resolved to `docs/specs/` and
+`docs/plans/`. It half worked — plan filenames matched this repo's convention,
+while brainstorming's `YYYY-MM-DD-<topic>-design.md` did not match a corpus
+requiring `NNN-kebab-slug.md` with frontmatter and frozen `{#sec-N}` anchors —
+and it has been removed ahead of the corpus cutover, since a write target that
+is about to be deleted is worse than none. The authoring path in this repo is
+`lode doc new`; §5's deliverables still stand for the vendored skills
+themselves.
 
 **What `lode` gives us.** Spec 034's sync shipped (folded into 025 by the
 corpus consolidation):
@@ -273,7 +274,8 @@ lifecycle `lode next`/`done` already owns.
 - **Vendored `executing-plans`**, with its plan-file ledger replaced by task
   state — `lode next`/`done` already hold it. Check first whether the existing
   `lode-worker` agent and `working-under-worklode` skill make this redundant.
-- **Retire the `docs/superpowers` symlink** with the file corpus it points at.
+- ~~**Retire the `docs/superpowers` symlink**~~ — done in WL-147, ahead of the
+  corpus cutover rather than with it.
 
 ## 6. Delivery shape
 
