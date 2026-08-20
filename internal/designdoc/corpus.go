@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -227,7 +228,7 @@ func anchorEdges(fm *Frontmatter) []EdgeMeta {
 		for _, k := range keys {
 			srcAnchor := anchorMapSrcAnchor(k)
 			for _, ref := range m[k] {
-				target, targetAnchor := splitFragment(ref)
+				target, targetAnchor := SplitFragment(ref)
 				edges = append(edges, EdgeMeta{
 					SrcAnchor: srcAnchor, Rel: r.rel,
 					Target: target, TargetAnchor: targetAnchor,
@@ -272,7 +273,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 			return nil, err
 		}
 		for _, ref := range doc.Frontmatter.CoverageEntries() {
-			base, frag := splitFragment(ref.Spec)
+			base, frag := SplitFragment(ref.Spec)
 			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "covers", Target: base, TargetAnchor: frag})
 		}
 		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
@@ -297,7 +298,7 @@ func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 	if len(entries) == 0 {
 		return 0, nil
 	}
-	base, _ := splitFragment(entries[0].Spec)
+	base, _ := SplitFragment(entries[0].Spec)
 	if base == "NO-SPEC" {
 		return 0, nil
 	}
@@ -306,4 +307,37 @@ func planSpecOrdinal(fm *Frontmatter, name string) (int, error) {
 		return 0, fmt.Errorf("%s: covers %q has no leading spec number to derive the plan id from (025 §16.3)", name, base)
 	}
 	return n, nil
+}
+
+// leadingNumberPattern extracts a corpus filename's leading document number
+// ("014-design-documents...md" -> "014").
+var leadingNumberPattern = regexp.MustCompile(`^(\d+)-`)
+
+// leadingNumber parses a corpus filename's leading document number, ignoring
+// any zero-padding — "0140-decoy.md" is 140, distinct from "014-x.md"'s 14.
+func leadingNumber(filename string) (int, bool) {
+	m := leadingNumberPattern.FindStringSubmatch(filename)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// corpusFilenames lists a corpus directory's document filenames (*.md),
+// sorted so a load is deterministic.
+func corpusFilenames(corpusDir string) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(corpusDir, "*.md"))
+	if err != nil {
+		return nil, fmt.Errorf("list corpus %s: %w", corpusDir, err)
+	}
+	names := make([]string, len(matches))
+	for i, m := range matches {
+		names[i] = filepath.Base(m)
+	}
+	sort.Strings(names)
+	return names, nil
 }

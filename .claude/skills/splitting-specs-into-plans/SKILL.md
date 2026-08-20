@@ -29,22 +29,22 @@ nothing. `wl:implements` is a component's claim that its code meets a section
 ---
 status: draft
 covers:
-  - spec: docs/specs/032-project-cockpit.md#sec-2
+  - spec: WL-SPEC-32#sec-2
     coverage: full
-  - spec: docs/specs/032-project-cockpit.md#sec-3
+  - spec: WL-SPEC-32#sec-3
     coverage: partial
     fullCoverageWith:
-      - docs/plans/2026-08-10-project-cockpit-2-intake-and-launch.md
-  - spec: docs/specs/032-project-cockpit.md#sec-11
+      - 2026-08-10-project-cockpit-2-intake-and-launch
+  - spec: WL-SPEC-32#sec-11
     coverage: none
 ---
 ```
 
 | Key | Required | Meaning |
 |---|---|---|
-| `spec` | yes | Reference with a `#sec-N` fragment. Same syntax as any reference (`docs/authoring-design-docs.md` §References): bare filename within a directory, repo-relative path across. |
+| `spec` | yes | Document reference with a `#sec-N` fragment — `WL-SPEC-<N>` shorthand, or the document's slug. |
 | `coverage` | yes | `full`, `partial`, or `none` |
-| `fullCoverageWith` | no | Plans that, together with this one, make the section `full`. Repo-relative paths — plans have no shorthand. |
+| `fullCoverageWith` | no | Plans that, together with this one, make the section `full`. Plan slugs — plans have no number shorthand. |
 
 **`full`** — after this plan executes, the section is satisfied. Nothing else
 is owed.
@@ -71,18 +71,25 @@ For a spec section `S`, over accepted plans naming it:
 - only `none` claims → **bound only**;
 - no plan names `S` → **unplanned**.
 
-Anchors come from the spec's own source (`grep -o '{#sec-[^}]*}'`), so
-"which sections has nobody planned" is answerable without reading a plan.
+The backbone runs that query — `lode doc list --needs-planning --json` returns
+each accepted spec's uncovered anchors already classified `unplanned`,
+`partial` or `bound-only` (026 §2.1), so "which sections has nobody planned"
+needs no reading of plans at all.
 
 ### Validator contract
 
-`scripts/secmeta.py` validates this format at commit. A bare `covers` reference
-means `full`; `NO-SPEC` stays bare. The object form requires `spec` with a
-section fragment and one of the three levels. `fullCoverageWith` is valid only
-beside `partial`, must be non-empty, and contains canonical repo-relative paths
-to accepted plans contributing `full` or `partial` to the same section.
-`none` contributes nothing. `implements` remains readable only as a retired
-spelling and is reported; new output always writes `covers`.
+A bare `covers` reference means `full`; `NO-SPEC` stays bare. The object form
+requires `spec` with a section fragment and one of the three levels.
+`fullCoverageWith` is valid only beside `partial`, must be non-empty, and names
+accepted plans contributing `full` or `partial` to the same section. `none`
+contributes nothing. `implements` remains readable only as a retired spelling
+and is reported; new output always writes `covers`.
+
+`lode doc anchors <file>` lints a draft locally before `lode doc new` — anchors,
+and a plan's `## Tasks` definitions. Creating the document is what turns
+`covers:` into edges: a reference no document in the project resolves to is
+kept as an external reference instead, which is a silently unplanned section,
+so check `lode doc get <slug> --json` for `edges` you expected.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
 025 §11's `<component> wl:implements <section>` is **implementation** coverage,
@@ -90,7 +97,8 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split
 
-1. **List the anchors.** `grep -o '{#sec-[^}]*}' docs/specs/NNN-*.md`. Account
+1. **List the anchors.** `lode doc get WL-SPEC-<N> --json | jq -r '.sections[].anchor'`
+   (or read the rendered spec with `lode show WL-SPEC-<N>`). Account
    for every anchor across the series: one or more parts claim `full` or
    `partial`, or the section is deliberately unplanned. A standing constraint
    may repeat as `coverage: none` in every part it governs.
@@ -105,7 +113,7 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
    real data. If part 1 cannot be demonstrated, the split is wrong.
 5. **Write every part's `covers:` block now**, including parts whose bodies
    come later. The blocks are the contract between parts; `fullCoverageWith:`
-   only works if the later filenames are fixed.
+   only works if the later parts' slugs are fixed.
 6. **Claim honestly.** A part that claims `#sec-11` and cannot demonstrate any
    of §11's acceptance bullets should claim `coverage: none` or drop the
    section. Claiming a section you cannot prove is the failure this format
@@ -172,10 +180,11 @@ carrying durable rationale means the spec was incomplete
 
 ## 5. Worklode plan conventions
 
-Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), filename
-and reference syntax: `docs/authoring-design-docs.md` §"Declaring a plan's
-tasks". A series part restarts task numbering at 1; ordering across parts is a
-document-level `blocks` edge, never a task number.
+Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), slug and
+reference syntax: `docs/authoring-design-docs.md` §"Declaring a plan's tasks",
+and the `worklode-docs-authoring` skill for how a document is created. A series
+part restarts task numbering at 1; ordering across parts is a document-level
+`blocks` edge, never a task number.
 
 Constraints every worklode plan inherits — state them once in Global
 Constraints, do not repeat per task:

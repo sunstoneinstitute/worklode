@@ -265,21 +265,18 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 }
 
 // runDocShowByOrdinal resolves a --spec/--adr flag's bare ordinal to a doc
-// ref and renders it through runDocShow — the design choice described in the
-// task brief: a flag can only ever mean this repo's own corpus, so there is
-// no foreign-key tier to consider, and the direct route is used rather than
-// going through the typed-id grammar. When the project key is known (config
-// project_key), the ref is built as the local <KEY>-SPEC-<n>/<KEY>-ADR-<n>
-// shorthand, which resolves through designdoc.ResolveRef's form 3 (and so
-// already runs designdoc.CheckKind there). When the key is unknown, there is
-// no shorthand to build, so the ref falls back to the bare number form
-// (ResolveRef form 2) — a flag always means the local corpus, key or no key,
-// so this fallback is legitimate for --spec/--adr where the typed-id
-// positional shorthand (WL-SPEC-6) would instead get 026 §4.2's tier-3
-// "unresolved" treatment for an unknown foreign key. Either way, expectedKind
-// is passed through to runDocShow, which independently verifies it against
-// the resolved document's frontmatter — so a keyless --adr on a spec (or vice
-// versa) still gets the KindMismatchError, not a silent wrong-kind render.
+// ref and renders it through runDocShow. A flag can only ever mean this
+// repo's own project, so there is no foreign-key tier to consider. When the
+// project key is known (config project_key), the ref is built as the local
+// <KEY>-SPEC-<n>/<KEY>-ADR-<n> shorthand, which resolveDocRef resolves
+// through its form 3 (and so kind-checks there). When the key is unknown
+// there is no shorthand to build, so the ref falls back to the bare number
+// form (form 2) — legitimate for a flag, where the equivalent positional
+// shorthand (WL-SPEC-6) would instead get 026 §4.2's tier-3 "unresolved"
+// treatment for an unknown key. Either way expectedKind is passed through to
+// runDocShow, which verifies it against the resolved document's kind — so a
+// keyless --adr on a spec (or vice versa) still gets the KindMismatchError,
+// not a silent wrong-kind render.
 func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string) error {
 	cfg, err := cli.LoadConfig()
 	if err != nil {

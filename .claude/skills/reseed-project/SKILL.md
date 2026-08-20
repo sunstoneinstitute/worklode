@@ -1,6 +1,6 @@
 ---
 name: reseed-project
-description: Reseed a worklode backbone project's tasks from the docs corpus — after a task wipe or dev-database reset, when seeded tasks have drifted from docs/specs and docs/plans reality, or when spec 025's document store lands and the interim task seeding is redone as documents. Manual invocation only.
+description: Reseed a worklode backbone project's tasks and documents — after a task wipe or dev-database reset, when seeded tasks have drifted from what the document store says, or when importing a git corpus of specs and plans into a fresh server with "lode doc import". Manual invocation only.
 disable-model-invocation: true
 ---
 
@@ -13,23 +13,34 @@ sprint containers, or anything whose state duplicates a coverage query.
 **Prerequisites:** `lode` authenticated against the target server (`lode
 login` or a minted token); for a reset, direct Postgres access to that
 server's database (e.g. `kubectl port-forward` to the CNPG primary) — this is
-the live DSN, not `TEST_POSTGRES_DSN`.
+the live DSN, not `TEST_POSTGRES_DSN`. The server must have the document store
+(`lode doc --help` works); there is no pre-025 path any more.
 
-Two paths — pick by server capability: if `lode doc --help` works, use
-**Full seeding** (3b); otherwise **Interim seeding** (3a).
+## 1. Audit the backbone first
 
-## 1. Audit the corpus first
+The document store answers both audit questions directly. Run them against the
+target server, not a checkout:
 
-Audit against **the commit the server runs**, not your checkout's HEAD: the
-deployed image tag is a git SHA: `kubectl -n <namespace> get deploy -o
-jsonpath='{..image}'` with kubectl pointed at the target cluster (the repo's
-overlay file shows a stale `newTag: latest` — always query the live cluster);
-check out that SHA before auditing. `lode --version`
-reports only the local CLI.
+```bash
+lode doc list --needs-planning --json    # accepted specs with sections no accepted plan covers
+lode doc list --needs-execution --json   # accepted plans whose task set still has an open task
+```
 
-**Unexecuted plans.** Evidence is implementation presence, never plan
-checkboxes (they were never maintained — verified 2026-08-02): a plan is
-executed iff the package, CLI verb, or migration it promises exists.
+`--needs-planning` returns `planning_gaps` alongside `docs`: per spec, its
+section count and the uncovered anchors classified `unplanned`, `partial` or
+`bound-only` (026 §2.1). `--needs-execution` is the backbone's own answer to
+"which plans are unfinished" — a plan's tasks exist because accepting it minted
+them, so plan checkboxes are never the evidence.
+
+**The one case the queries cannot see: imported plans.** `lode doc import`
+lands a plan at its stated status without minting tasks, so an imported plan —
+spent or unexecuted — has no task set and `--needs-execution` omits it by
+design. For those, evidence is implementation presence: a plan is executed iff
+the package, CLI verb, or migration it promises exists. Judge that against
+**the commit the server runs**, not your checkout's HEAD — the deployed image
+tag is a git SHA (`kubectl -n <namespace> get deploy -o jsonpath='{..image}'`
+against the live cluster; the repo's overlay file shows a stale `newTag:
+latest`, and `lode --version` reports only the local CLI):
 
 ```bash
 ls internal/ internal/cmd/ deploy/base/migrations/
@@ -38,24 +49,13 @@ ls internal/ internal/cmd/ deploy/base/migrations/
 Classification rules for plans the binary test doesn't fit:
 
 - **Document-producing plans** (`*-design.md`, requirements gathering): the
-  document existing in `docs/specs/` — or the plan file itself carrying
-  spec-style frontmatter with `status: accepted` (an in-place design record,
-  e.g. `provider-neutral-cli-login-design.md`) — is the evidence. Executed,
-  no task.
+  design document existing in the backbone (`lode doc list --kind spec`) — or
+  the plan itself carrying `status: accepted` as an in-place design record — is
+  the evidence. Executed, no tasks.
 - **Cross-repo plans** (work landing in another repo/cluster): seed a task
   only if this project should track the dependency; say so in the body.
-- **Acceptance/QA companion plans** fold into their primary plan's task.
+- **Acceptance/QA companion plans** fold into their primary plan's task set.
 - **Infra/CI plans**: evidence is the workflow/overlay existing, not a package.
-
-**Unplanned specs.** Only **accepted** specs get planning tasks — a
-draft/proposed spec's pending work is review and acceptance, not planning:
-
-```bash
-grep -ho "docs/specs/[0-9a-z-]*\.md" docs/plans/*.md | sort -u   # specs claimed by a plan
-grep -l "^status: accepted" docs/specs/*.md                      # accepted specs
-```
-
-Accepted-and-unclaimed → one planning task each.
 
 ## 2. Reset (only when wiping)
 
@@ -80,49 +80,49 @@ UPDATE projects SET next_task_num = 1 WHERE id = 'worklode';
 COMMIT;
 ```
 
-## 3a. Interim seeding (pre-025 server: no `lode doc`)
+## 3. Seed
 
-One task per genuine pending item, nothing structural:
+1. **Import the documents**, if the project has none — a git corpus of specs
+   and plans goes in with one command (025 §22):
 
-```bash
-# per accepted-but-unplanned spec (kind renames to 'design' after the 025 migration):
-lode task add --kind design --title "Write implementation plan(s) for spec NNN — <title>" \
-  --body "Spec NNN is accepted but has no plan in docs/plans/. Produce plans per docs/authoring-design-docs.md."
+   ```bash
+   lode doc import --docs <corpus-root> --project <P> --dry-run   # inspect first
+   lode doc import --docs <corpus-root> --project <P>
+   ```
 
-# per unexecuted plan:
-lode task add --kind feature --title "Execute plan: <short title>" \
-  --body "Execute docs/plans/<file> (implements spec NNN). Transitional stand-in for the plan's execution root (spec 025 §9.2). Audit basis: no owning package, CLI verb, or migration at <server commit>."
-```
+   It walks the top level of `<corpus-root>/specs` and `<corpus-root>/plans`,
+   keeps each file's frontmatter status verbatim, wires edges in a second pass,
+   and is safe to re-run (a slug already present is left alone). Stating a
+   status needs the admin-only `doc.import` permission. Import mints nothing.
+2. **Mint the unexecuted plans' tasks.** For each plan the §1 audit found
+   unexecuted, put it through the accept gate rather than hand-writing its
+   tasks — acceptance mints the task set in one transaction (025 §9.2):
 
-Order multi-part series (`…-1-…`, `…-2-…`) with blocks edges, part N on N−1:
+   ```bash
+   lode doc new --kind plan --slug <slug> --file <path|->   # if not already imported; lands draft
+   lode doc accept <id-or-slug>                             # mints the tasks; assignee-gated
+   ```
 
-```bash
-lode task block <part-N-id> --by <part-N-1-id>
-```
+   Do not hand-create execute-tasks. The mint is the seeding.
+3. **Leave spent plans alone.** Imported accepted, no task set, nothing owed.
+4. **Wire series ordering** between the minted tasks — roots are tasks, and
+   blocking stays a task-level verb:
 
-## 3b. Full seeding (post-025 server: `lode doc` exists)
-
-Spec 025 is draft; verb names below follow its §10 and may shift at
-implementation. **First reseed on a post-025 server: reconcile everything
-here that touches `lode doc` — the capability gate above, this section, and
-§4's verify commands — against the implemented CLI, and update this skill in
-the same change.**
-
-1. Import specs/ADRs as accepted documents (corpus import, 025 §22).
-2. Import **unexecuted** plans (§1 audit) and `lode doc accept` each —
-   acceptance mints the `kind='plan'` root plus children in one transaction
-   (025 §9.2). Do not hand-create execute-tasks; the mint is the seeding.
-3. Skip executed plans, or import them closed if history matters.
-4. Wire series ordering as `lode task block` edges between the minted roots
-   (roots are tasks; blocking stays a task-level verb).
-5. Planning gaps need no seeding: `lode doc list --needs-planning` answers
-   from queries; create a `design` task per gap only when someone will pick
-   it up.
+   ```bash
+   lode task block <part-N-id> --by <part-N-1-id>
+   ```
+5. **Planning gaps need no seeding.** `lode doc list --needs-planning` answers
+   from queries; create a `design` task per gap only when someone will pick it
+   up (the `/lode:spec-coverage` skill does exactly that).
 
 ## 4. Verify
 
 ```bash
-lode task list            # expected count; no plan-root in the ready set
-lode task tree            # post-025: roots with children, progress derived
-lode doc list --needs-planning --needs-execution   # post-025: agrees with §1 audit
+lode task list                       # expected count; no plan-root in the ready set
+lode task tree                       # roots with children, progress derived
+lode doc list --needs-planning       # agrees with the §1 audit
+lode doc list --needs-execution      # agrees with the §1 audit
 ```
+
+The three selectors (`--needs-planning`, `--needs-execution`,
+`--bare-superseded`) are mutually exclusive — one per invocation.

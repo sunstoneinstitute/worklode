@@ -3,7 +3,6 @@ package designdoc
 import (
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -75,13 +74,13 @@ Body.
 	}
 }
 
-// TestParseFrontmatterRealSpec keeps one assertion against a shipped
-// document, so a change to the corpus that the parser cannot read still
-// fails a test. It pins the shapes the consolidated corpus actually carries
-// — status, a repo-relative `requires:` list, and the section split — not a
-// particular lifecycle state.
-func TestParseFrontmatterRealSpec(t *testing.T) {
-	src, err := os.ReadFile("../../docs/specs/025-documents-in-the-backbone.md")
+// TestParseFrontmatterWholeFile keeps one assertion against a whole file read
+// off disk rather than an inline source, so a frontmatter block the parser
+// cannot read still fails a test. It reads the `lode doc import` fixture
+// corpus: the backbone owns design documents now (025 §5), so there is no
+// shipped docs/specs tree to pin against.
+func TestParseFrontmatterWholeFile(t *testing.T) {
+	src, err := os.ReadFile("../cmd/testdata/import-corpus/specs/001-forward-spec.md")
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -98,17 +97,16 @@ func TestParseFrontmatterRealSpec(t *testing.T) {
 	default:
 		t.Errorf("Status = %q, want one of draft/accepted/superseded", fm.Status)
 	}
-	if len(fm.Requires) == 0 {
-		t.Error("Requires is empty; spec 025 depends on the backbone")
+	// A section-scoped edge map, the shape a bare list would silently drop.
+	if got := fm.Amends["#sec-2"]; len(got) != 1 || got[0] != "002-target-spec.md#sec-1" {
+		t.Errorf("Amends[#sec-2] = %v", got)
 	}
-	for _, r := range fm.Requires {
-		if !strings.HasPrefix(r, "docs/specs/") {
-			t.Errorf("Requires entry %q is not repo-relative", r)
-		}
+	if doc.Sections[0].Anchor != "sec-1" {
+		t.Errorf("first anchor = %q, want sec-1", doc.Sections[0].Anchor)
 	}
 	// The H1 must not be swallowed into the frontmatter block.
-	if doc.Preamble == "" || doc.Sections[0].Anchor != "sec-0" {
-		t.Errorf("Preamble = %q, first anchor = %q", doc.Preamble, doc.Sections[0].Anchor)
+	if doc.Preamble == "" {
+		t.Error("Preamble is empty; the H1 was swallowed")
 	}
 }
 
