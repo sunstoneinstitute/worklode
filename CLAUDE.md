@@ -21,25 +21,27 @@ non-blocking gaps — check it before filing something as new.
 
 ## Where the rest of the guidance lives
 
-Load the matching reference before starting work in these areas:
+Each area below has a skill that carries its detail; it fires on the work
+itself, but load it by name if it has not:
 
 - **Writing or editing anything under `docs/specs/` or `docs/plans/`** —
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See
-  `references/docs-authoring.md`.
+  the `worklode-docs-authoring` skill.
 - **Adding or changing a database migration** under `deploy/base/migrations/`.
-  See `references/migrations.md`.
+  See the `worklode-migrations` skill.
 - **Touching `obsidian/`** — the TypeScript Obsidian plugin, its pnpm
-  toolchain, and its hand-kept wire types. See `references/obsidian-mirror.md`.
+  toolchain, and its hand-kept wire types. See the
+  `worklode-obsidian-mirror` skill.
 - **Touching `plugins/`** — the `/lode:*` slash commands, the `lode-worker`
   agent, the marketplace, and the generated Codex mirror. See
-  `references/lode-plugin.md`.
+  the `worklode-lode-plugin` skill.
 - **Working on the cockpit UI** — `internal/ui`, `templ` components, the
-  Tailwind build, the `go generate` loop. See `references/cockpit-ui.md`.
+  Tailwind build, the `go generate` loop. See the `worklode-cockpit-ui` skill.
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
   `can-be-tested` label, the subtree-scoped `obsidian` job. See
-  `references/ci-and-layout.md`.
+  the `worklode-ci` skill.
 
 ## Commands
 
@@ -123,7 +125,11 @@ transcript (`internal/transcript`, `store/pricing` — rates are effective-dated
 rows in `model_prices`, never hardcoded), the org skill registry with pgvector
 embeddings (`internal/skillsync`, `skillstore`), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
---follow`).
+--follow`). Its one subscriber, `doc-lifecycle`, mints the review and planning
+tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
+function in `internal/watcher`, the executor that feeds them is
+`internal/api/docwatch.go`, and `NewServer` starts the loop only when the
+caller passes a `BackgroundCtx`.
 
 The backbone (this repo, Postgres) owns execution facts and — once spec 025 is
 implemented — design-document artifacts; derived architecture facts and the
