@@ -270,6 +270,65 @@ type DeliverableRow struct {
 	CreatedAt   time.Time
 }
 
+// --- crew --------------------------------------------------------------------
+
+// CrewView is a project's Crew roster (spec 029 §6.1), the project-local
+// Crew destination. An empty Members slice renders an honest "No Crew yet"
+// state, never a fabricated row.
+type CrewView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	Members      []CrewMember
+
+	// AddAction is where the add-member form POSTs. Add is what the person
+	// typed, preserved so a rejected submit comes back with the form filled
+	// in, and AddError is the one message to fix ("" on first render).
+	AddAction string
+	Add       CrewFormValues
+	AddError  string
+
+	// RemoveAction is where each non-lead member's Remove button POSTs; the
+	// member is named in a hidden field. RemoveError is the one message a
+	// refused removal shows ("" otherwise), and Responsibilities is that
+	// member's open work — spec 032 §6's responsibility review: what has to
+	// be reassigned or closed before the removal can proceed (spec 029 §6.1).
+	RemoveAction     string
+	RemoveError      string
+	Responsibilities []CrewWorkItem
+}
+
+// CrewWorkItem is one open item a Crew member owns, shown when their
+// removal is refused. Kind is "task" today (internal/store's OwnedWork);
+// approvals and decisions join it when their tables exist.
+type CrewWorkItem struct {
+	Kind  string
+	ID    string
+	Title string
+	State string
+}
+
+// CrewFormValues are the add-member form's fields as submitted. Role is a
+// free-form label (spec 029 §6.1), so it is a text field and not a menu:
+// what a person does on a project is org vocabulary, not a closed set this
+// page gets to offer.
+type CrewFormValues struct {
+	Actor string
+	Role  string
+	Lead  bool
+}
+
+// CrewMember is one Crew member: an actor holding at least one role-labelled
+// project_participants row, folded to one row per actor (internal/store's
+// ListParticipants already aggregates this). Exactly one member on a project
+// may have IsLead set (032 §6's "accountable human").
+type CrewMember struct {
+	ActorID     string
+	DisplayName string
+	Roles       []string
+	IsLead      bool
+}
+
 // --- documents ---------------------------------------------------------------
 
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan

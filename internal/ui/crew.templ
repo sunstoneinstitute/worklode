@@ -1,0 +1,152 @@
+package ui
+
+// crew.templ renders a project's Crew destination (GET /projects/{id}/crew):
+// the read-only roster of the time-limited group defined by spec 029 §6.1,
+// presented as "Crew" per spec 032 §6 (never "participants"). Add/remove
+// affordances arrive with later tasks; this page is a projection only.
+//
+// Each row shows what is stored — display name (falling back to the actor
+// id when none is set) and role labels — plus a visually distinct Lead
+// badge on the one accountable human (032 §6). An empty roster states that
+// honestly instead of showing a fabricated record.
+//
+// The add-member form below the roster, and the per-row Remove button, are
+// plain server-rendered <form method="post"> affordances like the cockpit's
+// other writes: no client state, keyboard-usable, and a rejected submit
+// re-renders the page with the message and everything that was typed still
+// in the fields. The lead has no Remove button — lead handoff is not
+// implemented, so offering one would promise something the store refuses.
+//
+// A removal refused because the member still owns open work re-renders with
+// that work listed and linked: spec 032 §6's responsibility review in its
+// minimal honest form — the page names what has to be reassigned or closed
+// rather than reporting a bare refusal.
+
+import "strings"
+
+templ Crew(v CrewView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "crew") {
+			<div class="canvas">
+				<section class="card">
+					<div class="hd">
+						<h3>Crew</h3>
+					</div>
+					<div class="bd">
+						<div aria-live="polite">
+							if v.RemoveError != "" {
+								<p class="formerr" role="alert">{ v.RemoveError }</p>
+								if len(v.Responsibilities) > 0 {
+									@crewResponsibilities(v.Responsibilities)
+								}
+							}
+						</div>
+						if len(v.Members) == 0 {
+							<p class="muted">
+								No Crew yet. Crew is the time-limited group of people
+								contributing to this project (spec 029 §6.1).
+							</p>
+						} else {
+							<div class="dod">
+								for _, m := range v.Members {
+									@crewRow(m, v.RemoveAction)
+								}
+							</div>
+						}
+					</div>
+				</section>
+				@crewAddForm(v)
+			</div>
+		}
+	}
+}
+
+// crewAddForm renders the add-member affordance. The actor id is typed
+// rather than picked from a list: the roster names people who already
+// participate, and offering every actor on the instance as a menu would say
+// more about the instance than this project is entitled to show.
+templ crewAddForm(v CrewView) {
+	<section class="card pad form">
+		<h3>Add a Crew member</h3>
+		<p class="muted small">
+			Crew is the time-limited group contributing to this project (spec 029
+			§6.1). A role is a free-form label; a project has at most one lead.
+		</p>
+		<div aria-live="polite">
+			if v.AddError != "" {
+				<p class="formerr" role="alert">{ v.AddError }</p>
+			}
+		</div>
+		<form method="post" action={ v.AddAction }>
+			<p class="fieldrow">
+				<label for="actor">Actor id</label>
+				<input id="actor" name="actor" type="text" required maxlength="200" value={ v.Add.Actor }/>
+			</p>
+			<p class="fieldrow">
+				<label for="role">Role</label>
+				<input id="role" name="role" type="text" maxlength="100" placeholder="member" value={ v.Add.Role }/>
+				<span class="hint">What this person does on the project. Left empty, it is "member".</span>
+			</p>
+			<p class="fieldrow check">
+				<input id="lead" name="lead" type="checkbox" value="1" checked?={ v.Add.Lead }/>
+				<label for="lead">Project lead &mdash; the one accountable human</label>
+			</p>
+			<div class="btnrow">
+				<button type="submit" class="btn primary">Add member</button>
+			</div>
+		</form>
+	</section>
+}
+
+// crewResponsibilities lists the open work a member still owns, each item
+// linked to the task it names, so the person refusing to lose the work can
+// go and reassign or close it. The store's removal guard reads the same
+// query, so this list is exactly what is blocking the removal.
+templ crewResponsibilities(items []CrewWorkItem) {
+	<ul class="resp">
+		for _, it := range items {
+			<li>
+				<a href={ "/tasks/" + it.ID }>{ it.ID }</a>
+				{ " " }
+				{ it.Title }
+				{ " " }
+				<span class="def">({ it.Kind }, { it.State })</span>
+			</li>
+		}
+	</ul>
+}
+
+// crewRow renders one Crew member. The Lead badge is the only member marked
+// current: 032 §6 requires exactly one project lead be visually distinct as
+// the accountable human. Every other member carries a Remove button; the
+// lead does not, because lead handoff is not implemented.
+templ crewRow(m CrewMember, removeAction string) {
+	<div class="dodrow">
+		<div>
+			<div class="name">
+				if m.DisplayName != "" {
+					{ m.DisplayName }
+				} else {
+					{ m.ActorID }
+				}
+			</div>
+			if m.DisplayName != "" {
+				<div class="def mono">{ m.ActorID }</div>
+			}
+			if len(m.Roles) > 0 {
+				<div class="def">{ strings.Join(m.Roles, ", ") }</div>
+			}
+		</div>
+		<div class="st">
+			if m.IsLead {
+				<span class="chip lead"><span class="cd" aria-hidden="true"></span>Lead</span>
+			} else if removeAction != "" {
+				<form class="rowform" method="post" action={ removeAction }>
+					<input type="hidden" name="actor" value={ m.ActorID }/>
+					<button type="submit" class="btn">Remove</button>
+				</form>
+			}
+		</div>
+	</div>
+}

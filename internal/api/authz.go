@@ -83,6 +83,13 @@ const (
 	permDeliverableRead  Permission = "deliverable.read"
 	permDeliverableWrite Permission = "deliverable.write"
 
+	// permCrewWrite covers changing a project's Crew: who is on it and with
+	// which role labels (spec 029 §6.1). Its own capability rather than a
+	// flavour of project.admin, because Crew is the working group of a
+	// project rather than its configuration — spec 029 §6.1 puts the change
+	// in the hands of the Crew itself, not of an instance administrator.
+	permCrewWrite Permission = "crew.write"
+
 	// permDocRead and permDocWrite cover the backbone's design documents (spec
 	// 025 §5): specs, ADRs and plans. Their own capability rather than a
 	// flavour of task.read/task.write, because a document is a different
@@ -189,6 +196,15 @@ var grants = map[Permission][]Role{
 	// definition of done is one someone will plausibly want.
 	permDeliverableRead:  {RoleUser, RoleAdmin},
 	permDeliverableWrite: {RoleUser, RoleAdmin},
+
+	// Every authenticated actor, which is wider than spec 029 §6.1 asks for:
+	// the spec scopes the change to the project's own Crew ("any Crew member
+	// may add or remove"), and this table has no project scope to express
+	// that in — grants are instance-wide, keyed by role alone. This is a
+	// declared, accepted gap, not an oversight: narrowing it needs
+	// project-scoped authorization, which is a change to the model here
+	// rather than a check inside a handler.
+	permCrewWrite: {RoleUser, RoleAdmin},
 
 	// Authoring the corpus is open to every authenticated actor; who may
 	// *accept* a document is not a role question at all — 025 §7 gates it on

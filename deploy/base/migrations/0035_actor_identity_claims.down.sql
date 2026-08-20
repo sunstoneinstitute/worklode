@@ -1,0 +1,2 @@
+ALTER TABLE actors DROP COLUMN email;
+ALTER TABLE actors DROP COLUMN groups;

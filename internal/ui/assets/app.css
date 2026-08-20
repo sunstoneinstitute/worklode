@@ -187,6 +187,9 @@
   .grid {
     display: grid;
   }
+  .hidden {
+    display: none;
+  }
   .inline {
     display: inline;
   }
@@ -958,6 +961,10 @@ nav.local a .cnt {
   color: var(--ink-2);
   background: var(--sunk);
 }
+.chip.lead {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
 .dossier .q {
   font-size: 17px;
   font-family: "Source Serif 4",serif;
@@ -1056,6 +1063,21 @@ nav.local a .cnt {
 .dodrow .st {
   justify-self: end;
   text-align: right;
+}
+.rowform .btn {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.resp {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.resp li {
+  margin-top: 4px;
 }
 .wl {
   display: flex;

@@ -22,6 +22,32 @@ func TestProjectTableShowsKey(t *testing.T) {
 	}
 }
 
+// TestCrewTableFallsBackToActorID: display_name is a nullable column, so a
+// member added before their actor had one shows a blank NAME cell unless the
+// table falls back to the actor id — matching what internal/ui/crew.templ
+// already does for the web page.
+func TestCrewTableFallsBackToActorID(t *testing.T) {
+	var b strings.Builder
+	CrewTable(&b, []model.CrewMember{
+		{Actor: "ada", DisplayName: "Ada Lovelace", Roles: []string{"editor"}},
+		{Actor: "bob", DisplayName: "", Roles: []string{"reporter"}},
+	})
+	out := b.String()
+	if !strings.Contains(out, "Ada Lovelace") {
+		t.Fatalf("CrewTable output missing the display name for ada:\n%s", out)
+	}
+	var bobLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "bob") {
+			bobLine = line
+		}
+	}
+	fields := strings.Fields(bobLine)
+	if len(fields) < 2 || fields[0] != "bob" || fields[1] != "bob" {
+		t.Fatalf("CrewTable should fall back to the actor id in the NAME column when display_name is empty, got line %q in:\n%s", bobLine, out)
+	}
+}
+
 // TestDocPlanningTableAnnotatesAnchorsWithCoverage: the ANCHORS column
 // renders each gap as anchor(coverage), matching 026 §2.1's sample output
 // line.

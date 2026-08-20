@@ -287,9 +287,8 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	// --- Step 4: honest destinations and embedded assets ---------------------
 
 	honestDestinations := map[string]string{
-		"/projects/proj/crew": "spec 029 §6.1",
-		"/intake":             "spec 032 §5",
-		"/reviews":            "spec 029 §7",
+		"/intake":  "spec 032 §5",
+		"/reviews": "spec 029 §7",
 	}
 	for path, wantSpec := range honestDestinations {
 		code, body := getPage(t, srv.URL+path)
@@ -302,6 +301,24 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		main := mainContent(t, body)
 		if strings.Contains(main, "<form") || strings.Contains(main, "<button") {
 			t.Fatalf("GET %s unexpectedly renders a form or button in its main content:\n%s", path, body)
+		}
+	}
+
+	// Crew is a built, writable destination: it renders the honest empty
+	// state rather than a placeholder message, and it carries the one
+	// affordance the page is entitled to — the add-member form (spec 029
+	// §6.1). Removal is a later task.
+	{
+		code, body := getPage(t, srv.URL+"/projects/proj/crew")
+		if code != http.StatusOK {
+			t.Fatalf("GET /projects/proj/crew: status = %d, want 200", code)
+		}
+		if !strings.Contains(body, "No Crew yet") {
+			t.Fatalf("GET /projects/proj/crew: body missing the empty-state text:\n%s", body)
+		}
+		main := mainContent(t, body)
+		if !strings.Contains(main, `<form method="post" action="/projects/proj/crew">`) {
+			t.Fatalf("GET /projects/proj/crew is missing the add-member form:\n%s", body)
 		}
 	}
 

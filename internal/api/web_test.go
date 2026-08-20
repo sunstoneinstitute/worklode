@@ -373,10 +373,10 @@ func TestProjectSections(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
-	// Deliverables is absent on purpose: it is a built destination now, with
-	// its own page and creation form (see webform_test.go).
+	// Deliverables and Crew are both absent on purpose: they are built
+	// destinations now, with their own pages (see webform_test.go and
+	// TestCrewPage below).
 	sections := map[string]string{
-		"crew":      "spec 029 §6.1",
 		"reviews":   "spec 029 §7",
 		"decisions": "specs 025 and 029",
 		"documents": "specs 025 and 026",
@@ -406,9 +406,69 @@ func TestProjectSections(t *testing.T) {
 		t.Fatalf("unknown section status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/projects/nosuch/crew", "", nil)
+	rr = doReq(t, h, "GET", "/projects/nosuch/reviews", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project section status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestCrewPage checks the Crew destination: an empty roster renders the
+// honest "No Crew yet" state with no fabricated record, a populated roster
+// shows every member with their role labels and exactly one Lead badge
+// (032 §6), and an unknown project 404s the same way every other project
+// route does. The roster is seeded through the real write path, so what the
+// page shows is what a Crew add actually stores.
+func TestCrewPage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj/crew", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "No Crew yet")
+	if strings.Contains(body, "Crew arrives with project participants") {
+		t.Error("the crew destination still renders its old placeholder message")
+	}
+	// The add-member form is the page's one write affordance (029 §6.1).
+	bodyContains(t, mainContent(t, body), `<form method="post" action="/projects/proj/crew">`, `name="actor"`, `name="role"`, `name="lead"`)
+
+	seedCrewActors(t, st, "ada", "bob")
+	for _, add := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+		{"actor": "bob", "role": "data-scientist"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, add); rr.Code != http.StatusCreated {
+			t.Fatalf("seed %v status = %d; body %s", add, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = doReq(t, h, "GET", "/projects/proj/crew", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("populated roster status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body = rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	main := mainContent(t, body)
+	if strings.Contains(main, "No Crew yet") {
+		t.Error("a populated roster still renders the empty state")
+	}
+	// Both members, by display name and id, with their role labels. bob's
+	// two roles are folded into one row, sorted.
+	bodyContains(t, main, "Ada Person", "ada", "editor",
+		"Bob Person", "bob", "data-scientist, reporter")
+	// Exactly one Lead badge: 032 §6's accountable human is one person.
+	if n := strings.Count(main, ">Lead</span>"); n != 1 {
+		t.Fatalf("Lead badges = %d, want exactly 1:\n%s", n, main)
+	}
+
+	if rr := doReq(t, h, "GET", "/projects/nosuch/crew", "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown project status = %d, want 404", rr.Code)
 	}
 }
 

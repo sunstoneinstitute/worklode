@@ -21,7 +21,7 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
 		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectFocusNoteCmd(),
 		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd(),
-		newProjectDoctorCmd())
+		newProjectDoctorCmd(), newProjectCrewCmd())
 	return cmd
 }
 
@@ -118,6 +118,111 @@ func newProjectAddRepoCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&doneState, "done-state", "", doneStateFlagUsage+" (default: server default)")
 	return cmd
+}
+
+// newProjectCrewCmd groups the Crew subcommands: who is on a project and
+// what they do on it (spec 029 §6.1). `lode project crew <project>` on its
+// own lists the roster; `add`/`remove` mutate it. Cobra dispatches to a
+// subcommand whenever the first argument names one, so this RunE only runs
+// for the listing form — a plain ExactArgs(1) parent RunE alongside
+// AddCommand is correct cobra, nothing more is needed to keep the two from
+// colliding.
+func newProjectCrewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "crew <project>",
+		Short: "List, or manage, a project's Crew",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			members, raw, err := c.ListCrew(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.CrewTable(cmd.OutOrStdout(), members)
+			return nil
+		},
+	}
+	cmd.AddCommand(newProjectCrewAddCmd(), newProjectCrewRemoveCmd())
+	return cmd
+}
+
+func newProjectCrewAddCmd() *cobra.Command {
+	var role string
+	var lead bool
+	cmd := &cobra.Command{
+		Use:   "add <project> <actor>",
+		Short: "Add an actor to a project's Crew",
+		Long: "Add an actor to a project's Crew with a role label.\n\n" +
+			"The role is a free-form label describing what the person does on this\n" +
+			"project; one actor may hold several. A project has at most one lead.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			member, raw, err := c.AddCrewMember(cmd.Context(), args[0], args[1], role, lead)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "added %s to project %s as %s\n",
+				member.Actor, args[0], strings.Join(member.Roles, ", "))
+			if member.Lead {
+				fmt.Fprintf(out, "%s is the project lead\n", member.Actor)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&role, "role", "", "role label for this member (default: member)")
+	cmd.Flags().BoolVar(&lead, "lead", false, "make this member the project lead")
+	return cmd
+}
+
+// newProjectCrewRemoveCmd removes a member outright: every role they hold on
+// the project, in one act. Dropping one label of several is remove then
+// re-add, which is why there is no --role flag here.
+func newProjectCrewRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <project> <actor>",
+		Short: "Remove an actor from a project's Crew",
+		Long: "Remove an actor from a project's Crew, dropping every role they hold\n" +
+			"on the project at once.\n\n" +
+			"A member who still owns open work on the project cannot be removed: the\n" +
+			"refusal names each item, which has to be reassigned or closed first. The\n" +
+			"project lead cannot be removed at all while lead handoff is unimplemented.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			// The server's message carries the responsibility list verbatim;
+			// returning it unwrapped is what puts that list in front of the
+			// person who has to act on it.
+			raw, err := c.RemoveCrewMember(cmd.Context(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "removed %s from project %s\n", args[1], args[0])
+			return nil
+		},
+	}
 }
 
 func newProjectSetRepoCmd() *cobra.Command {
