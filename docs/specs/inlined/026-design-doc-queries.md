@@ -121,6 +121,7 @@ lode doc list --kind spec|adr|plan
 lode doc list --status draft|accepted|superseded
 lode doc list --needs-planning      accepted specs with sections not fully planned
 lode doc list --needs-execution     accepted plans with no closed execution task
+lode doc list --bare-superseded     superseded documents whose sections nothing replaces
 ```
 
 Filters compose. `--json` (the root persistent flag) emits the same rows as objects.
@@ -223,6 +224,52 @@ contract, and the script's tests become this command's.
 It is the orientation map for anyone entering the corpus: one screen naming where each
 subject is decided, in place of grepping 26 files, and the entry point to the consolidated
 reading path of §3.2.
+
+### 2.4 `--bare-superseded`
+
+025 §6 rule 2 says a superseded section carries an explanation. This is the selector that finds
+the ones that do not — a detection query rather than an accept-time refusal, for the reason
+025 §6.2 gives.
+
+A section counts as **explained** when a `replaces` edge names it directly, or when a `replaces`
+edge names its whole document: a document with a successor explains all of its sections at
+document granularity, which is coarse but not a broken promise. A section is therefore **bare**
+when its document is `superseded` and nothing replaces either the section or the document.
+
+Two things produce that, and the second is the one worth catching:
+
+- a document **authored or imported** as `superseded` with no `replaces` edge naming it at all;
+- a document the **accept path** superseded while explaining only part of it. Acceptance
+  supersedes every document a `replaces` edge points at from the successor as a whole,
+  irrespective of whether the edge's *target* names a section — so a successor declaring
+  `replaces: {".": [006-old.md#sec-1]}` retires all of `006-old` while explaining `sec-1`
+  alone, leaving its remaining sections bare. This is exactly rule 2's "broken promise to
+  whoever linked to it", produced by an ordinary accept.
+
+The successor's own status is not checked. The edge is the explanation, and requiring an
+accepted successor would report an explained section as bare while its replacement is still in
+review. A `replaces` edge resolving to `to_external` (§14.3 of 025) names no document in this
+backbone and so explains nothing here.
+
+The explanation is read from the **forward** spelling, `replaces` on the successor. Frontmatter
+also carries the inverse on the superseded document for read cost (025 §14.2), but the store
+keeps one row per relation and reads it backward for the mirror, so `isReplacedBy` writes no
+edge of its own. A pair that disagrees — an `isReplacedBy` whose named successor carries no
+matching `replaces` — therefore reports as bare. That is not a false positive: it is the
+disagreement between the two ends that §14.2 already has CI forbid, showing up in a second
+place. Rule 2's `dct:isReplacedBy` is how a `replaces` edge *reads*, never a second way to
+write one.
+
+Like the other two derived selectors this one implies a `status` — `superseded` — and a
+contradicting `--status` is an error rather than an empty result. It differs from them on kind:
+they each imply exactly one, so restating it filters nothing, whereas specs and ADRs both carry
+sections and both qualify here. `--kind spec` and `--kind adr` therefore genuinely narrow the
+answer, as §2's "filters compose" promises, and only `--kind plan` conflicts — a plan carries no
+sections (025 §9) and can never be reported.
+
+```
+docs/specs/013-reconciliation.md          superseded   4/4 bare   sec-1 sec-2 sec-3 sec-4
+```
 
 ## 3. Showing a document: `lode show`
 
