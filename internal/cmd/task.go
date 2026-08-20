@@ -48,6 +48,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskTreeCmd(),
 		newTaskDecomposeCmd(),
 		newTaskBriefCmd(),
+		newTaskCostCmd(),
 		newTaskSkillsCmd(),
 	)
 	return cmd
@@ -987,6 +988,62 @@ func printBrief(cmd *cobra.Command, b model.Brief) {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
 	}
+}
+
+// newTaskCostCmd is `lode task cost <id>`: the tokens billed to a task (spec
+// 025 §15.6, AC31). Unlike `lode project show`, --days defaults to 0 (all
+// history) — a task's life is short, so there is no "recent window" to
+// default to.
+func newTaskCostCmd() *cobra.Command {
+	var days int
+	var children bool
+	cmd := &cobra.Command{
+		Use:   "cost <id>",
+		Short: "Show the token cost billed to a task",
+		Long: "Show the token cost billed to a task: the usage of agent sessions\n" +
+			"that held a lease on the task. A container task reports its own\n" +
+			"sessions unless --children is given, which folds in its child_of\n" +
+			"descendants' sessions too.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			from, to := costWindow(days)
+			tc, raw, err := c.TaskCost(cmd.Context(), id, children, from, to)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			printTaskCost(cmd, tc, costWindowLabel(days))
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&days, "days", 0, "cost window in days, counting today; 0 for all history")
+	cmd.Flags().BoolVar(&children, "children", false, "include the task's child_of descendants' sessions")
+	return cmd
+}
+
+// printTaskCost renders `lode task cost`: which task and scope, how many
+// agent sessions billed usage, then the cost blocks printCost already knows
+// how to render.
+func printTaskCost(cmd *cobra.Command, tc model.TaskCost, window string) {
+	out := cmd.OutOrStdout()
+	if tc.IncludesChildren {
+		fmt.Fprintf(out, "%s (including child tasks)\n", tc.Task)
+	} else {
+		fmt.Fprintf(out, "%s\n", tc.Task)
+	}
+	fmt.Fprintf(out, "sessions: %d\n", tc.Sessions)
+	printCost(out, tc.Cost, window)
 }
 
 func newTaskUnblockCmd() *cobra.Command {

@@ -1262,6 +1262,32 @@ func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Tim
 	return p, raw, nil
 }
 
+// TaskCost calls GET /api/v1/tasks/{id}/cost. A zero from or to leaves that
+// end of the window unbounded.
+func (c *Client) TaskCost(ctx context.Context, id string, children bool,
+	from, to time.Time) (model.TaskCost, []byte, error) {
+
+	q := url.Values{}
+	if children {
+		q.Set("children", "true")
+	}
+	if !from.IsZero() {
+		q.Set("from", from.Format(time.DateOnly))
+	}
+	if !to.IsZero() {
+		q.Set("to", to.Format(time.DateOnly))
+	}
+	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks/"+url.PathEscape(id)+"/cost", q), nil)
+	if err != nil {
+		return model.TaskCost{}, nil, err
+	}
+	var tc model.TaskCost
+	if err := json.Unmarshal(raw, &tc); err != nil {
+		return model.TaskCost{}, nil, fmt.Errorf("decode task cost: %w", err)
+	}
+	return tc, raw, nil
+}
+
 // GetProject returns one project by id, or a *ClientError with Status 404 if
 // no such project exists. There is no single-project GET endpoint, so this
 // filters the project list.

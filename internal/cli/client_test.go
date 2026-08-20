@@ -527,6 +527,73 @@ func TestClientBriefAndRebindWorktree(t *testing.T) {
 	}
 }
 
+// TestClientTaskCost round-trips TaskCost through a real claim, agent
+// session, and priced usage report: --days/--children reach the server as
+// from/to/children, and the returned report matches what was billed.
+func TestClientTaskCost(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Fix the thing", Priority: "high", Kind: "bug"})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if _, _, err := c.ClaimTask(ctx, task.ID, "host:/wt-1", 0); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
+	if _, _, err := c.TouchAgentSession(ctx, task.ID, "claude-code", "", "sess-1", nil); err != nil {
+		t.Fatalf("TouchAgentSession: %v", err)
+	}
+	// Priced by migration 0008's seeded rate for claude-sonnet-5 (standard,
+	// $2/$10 per MTok before 2026-09-01): 1e6 input + 1e5 output = $3.000000.
+	usage := []model.SessionUsageBucket{{
+		Day: "2026-07-31", Model: "claude-sonnet-5", InputTokens: 1_000_000, OutputTokens: 100_000,
+	}}
+	if err := c.EndAgentSession(ctx, task.ID, model.EndAgentSessionInput{
+		Agent: "claude-code", SessionID: "sess-1", Usage: usage,
+	}); err != nil {
+		t.Fatalf("EndAgentSession: %v", err)
+	}
+
+	// Unbounded window: the usage day is inside it.
+	tc, _, err := c.TaskCost(ctx, task.ID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if tc.Task != task.ID || tc.IncludesChildren || tc.Sessions != 1 {
+		t.Fatalf("TaskCost = %+v, want task %s, includes_children=false, sessions=1", tc, task.ID)
+	}
+	if len(tc.Cost.Totals) != 1 || tc.Cost.Totals[0].CostAmount != "3.000000" {
+		t.Fatalf("TaskCost.Cost.Totals = %+v, want one total of 3.000000", tc.Cost.Totals)
+	}
+
+	// children=true reaches the server: no child tasks exist, so the report
+	// is unchanged but the flag echoes back.
+	tc, _, err = c.TaskCost(ctx, task.ID, true, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost (children): %v", err)
+	}
+	if !tc.IncludesChildren {
+		t.Fatalf("TaskCost.IncludesChildren = false, want true")
+	}
+
+	// from/to clip the window past the usage day: an empty report, no error.
+	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	tc, _, err = c.TaskCost(ctx, task.ID, false, from, from)
+	if err != nil {
+		t.Fatalf("TaskCost (clipped window): %v", err)
+	}
+	if len(tc.Cost.Totals) != 0 || tc.Sessions != 0 {
+		t.Fatalf("TaskCost (clipped window) = %+v, want empty", tc)
+	}
+
+	if _, _, err := c.TaskCost(ctx, "nosuch", false, time.Time{}, time.Time{}); err == nil {
+		t.Fatalf("TaskCost unknown id: err = nil, want error")
+	}
+}
+
 func TestClientInboxFlow(t *testing.T) {
 	st, c, _ := newTestServer(t)
 	ctx := context.Background()

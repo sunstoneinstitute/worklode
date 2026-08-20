@@ -87,6 +87,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/tasks":                         guarded(permTaskRead),
 	"GET /api/v1/tasks/{id}":                    guarded(permTaskRead),
 	"GET /api/v1/tasks/{id}/brief":              guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/cost":               guarded(permTaskRead),
 	"GET /api/v1/tasks/{id}/timeline":           guarded(permTaskRead),
 	"PATCH /api/v1/tasks/{id}":                  guarded(permTaskWrite),
 	"PUT /api/v1/tasks/{id}/skills":             guarded(permTaskWrite),
