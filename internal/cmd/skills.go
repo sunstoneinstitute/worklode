@@ -182,9 +182,14 @@ func unsupportedLinkError(id string) error {
 // skill's link (skillstore.PublishOneSkill), any other target becomes a
 // symlink to the whole store (skillstore.PublishDirLink). Personal targets
 // only (harness.ScopeLocal) — there is no repo here to scope a project-level
-// target to.
+// target to. A publish error on one target — or a harness whose own
+// SkillTargets resolution fails — is reported on stderr and the loop
+// continues: install.go's installSkills takes the same record-and-continue
+// stance for the equivalent `install --skills` loop, and one bad target
+// (or adapter) must not stop `--link all` from reaching the rest.
 func publishLinked(cmd *cobra.Command, dirs skillstore.Dirs, ids []string, name string) error {
 	out := cmd.OutOrStdout()
+	errOut := cmd.ErrOrStderr()
 	for _, id := range ids {
 		h, ok := harness.Get(id)
 		if !ok {
@@ -192,7 +197,8 @@ func publishLinked(cmd *cobra.Command, dirs skillstore.Dirs, ids []string, name 
 		}
 		targets, err := h.SkillTargets("", harness.ScopeLocal)
 		if err != nil {
-			return fmt.Errorf("skill targets for %s: %w", id, err)
+			fmt.Fprintf(errOut, "%s: skill targets: %v\n", id, err)
+			continue
 		}
 		for _, t := range targets {
 			var (
@@ -205,7 +211,8 @@ func publishLinked(cmd *cobra.Command, dirs skillstore.Dirs, ids []string, name 
 				pr, perr = skillstore.PublishDirLink(dirs, t.Dir)
 			}
 			if perr != nil {
-				return fmt.Errorf("publish %s to %s: %w", name, id, perr)
+				fmt.Fprintf(errOut, "%s: publish %s to %s: %v\n", id, name, t.Dir, perr)
+				continue
 			}
 			fmt.Fprintf(out, "%s: %s %s\n", id, pr.Action, pr.Path)
 		}

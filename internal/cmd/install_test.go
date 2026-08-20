@@ -223,6 +223,20 @@ func TestResolveHookTargetsRejectsNothingToDo(t *testing.T) {
 	}
 }
 
+// --skills is independent of vcs/agents (it writes outside the hook config),
+// so --no-vcs --no-agent --skills — the natural way to publish skills
+// without touching hook config at all — must not trip the nothing-to-do
+// guard.
+func TestResolveHookTargetsSkillsAloneIsNotNothingToDo(t *testing.T) {
+	got, err := targetsFor(t, "--no-vcs", "--no-agent", "--skills")
+	if err != nil {
+		t.Fatalf("--no-vcs --no-agent --skills: want acceptance, got %v", err)
+	}
+	if got.vcs != "" || len(got.agents) != 0 || !got.skills {
+		t.Fatalf("targets = %+v, want vcs empty, agents empty, skills true", got)
+	}
+}
+
 func TestResolveHookTargetsRejectsUnsupportedNames(t *testing.T) {
 	_, err := targetsFor(t, "--vcs", "svn")
 	if err == nil {
@@ -1227,5 +1241,50 @@ func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
 		default:
 			t.Fatalf("second run action = %q for %s, want a stable no-op result", s.Action, s.Path)
 		}
+	}
+}
+
+// TestInstallSkillsStandaloneWithoutVCSOrAgent covers `lode install --no-vcs
+// --no-agent --skills`: the natural way to publish skills without touching
+// hook config at all. Regression test for the nothing-to-do guard once
+// having rejected --skills-only runs outright.
+func TestInstallSkillsStandaloneWithoutVCSOrAgent(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	skillsRoot := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", skillsRoot)
+
+	dirs, err := skillstore.DefaultDirs()
+	if err != nil {
+		t.Fatalf("DefaultDirs: %v", err)
+	}
+	content := "# tdd\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	hash := skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
+	if _, err := skillstore.Ensure(dirs, "tdd", hash, func() ([]byte, error) { return archive, nil }); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+
+	root := initGitRepo(t)
+	targets, err := targetsFor(t, "--no-vcs", "--no-agent", "--skills")
+	if err != nil {
+		t.Fatalf("targetsFor --no-vcs --no-agent --skills: %v", err)
+	}
+	res, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --no-vcs --no-agent --skills: %v", err)
+	}
+	if res.VCS != nil {
+		t.Fatalf("VCS result = %+v, want nil (--no-vcs)", res.VCS)
+	}
+	if len(res.Agents) != 0 {
+		t.Fatalf("agent results = %+v, want none (--no-agent)", res.Agents)
+	}
+	if len(res.Skills) == 0 {
+		t.Fatal("Skills report is empty, want --skills to still publish with no vcs/agent side")
+	}
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	if _, err := os.Lstat(claudeSkill); err != nil {
+		t.Fatalf("stat %s: %v, want it published despite --no-vcs --no-agent", claudeSkill, err)
 	}
 }

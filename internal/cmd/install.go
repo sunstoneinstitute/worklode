@@ -122,8 +122,13 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 			return hookTargets{}, unsupportedAgentError("")
 		}
 	}
-	if vcs == "" && len(agents) == 0 {
-		return hookTargets{}, errors.New("nothing to do: --no-vcs and --no-agent were both given")
+	// --skills is independent of vcs/agents (it writes outside the hook
+	// config), so it counts toward "there is something to do" too — --no-vcs
+	// --no-agent --skills is exactly how to publish skills without touching
+	// hook config at all, and must not be rejected as a no-op.
+	if vcs == "" && len(agents) == 0 && !skills {
+		return hookTargets{}, errors.New(
+			"nothing to do: --no-vcs and --no-agent were both given (add --skills to publish the skill store)")
 	}
 	if noStatusLine || len(agents) == 0 {
 		statusLine = false
@@ -359,10 +364,14 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 // directories — harness.IDs(), not just those detected or named by --agent:
 // acceptance 9 (spec 008) wants every doorway open from one command, the
 // links are inert for a harness that is not installed, and one installed
-// later then just works. Deduped by Dir since three of the four adapters
-// share ~/.agents/skills.
+// later then just works. Deduped by Dir, first-seen wins: today three of the
+// four adapters report ~/.agents/skills with PerSkill=false and claude-code
+// alone reports a distinct Dir with PerSkill=true, so no two adapters ever
+// disagree about the same Dir's PerSkill-ness — first-seen-wins is safe only
+// because that invariant holds. The check below turns a future adapter that
+// broke it into an error here rather than a silently wrong publish action.
 func skillTargets(dir string) ([]harness.SkillTarget, error) {
-	seen := map[string]bool{}
+	seen := map[string]bool{} // Dir -> the PerSkill value it was first seen with
 	var out []harness.SkillTarget
 	for _, id := range harness.IDs() {
 		h, ok := harness.Get(id)
@@ -374,10 +383,15 @@ func skillTargets(dir string) ([]harness.SkillTarget, error) {
 			return nil, fmt.Errorf("skill targets for %s: %w", id, err)
 		}
 		for _, t := range targets {
-			if seen[t.Dir] {
+			if perSkill, ok := seen[t.Dir]; ok {
+				if perSkill != t.PerSkill {
+					return nil, fmt.Errorf(
+						"skill target %s: %s reports PerSkill=%v, disagreeing with an earlier adapter",
+						t.Dir, id, t.PerSkill)
+				}
 				continue
 			}
-			seen[t.Dir] = true
+			seen[t.Dir] = t.PerSkill
 			out = append(out, t)
 		}
 	}
