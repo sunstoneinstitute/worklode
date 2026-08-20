@@ -181,8 +181,8 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	return a, nil
 }
 
-// prEntityIDSQL renders a pull_requests row's approvals entity_id in SQL, the
-// spelling PREntityID and prEntityJoin both use.
+// prEntityIDSQL renders a pull_requests row's approvals entity_id in SQL,
+// unaliased (no "pr." table prefix); prAuthorForEntity uses it directly.
 const prEntityIDSQL = `repo || '#' || number`
 
 // prAuthorForEntity returns the GitHub login that opened the pull request
@@ -338,7 +338,8 @@ func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, 
 }
 
 // ApprovalCount is one project's tally of awaiting approvals that name an
-// actor, for the Home page's per-project badge.
+// actor or a required_role the actor's groups contain, for the Home page's
+// per-project badge.
 type ApprovalCount struct {
 	ProjectID string
 	Count     int
@@ -346,9 +347,8 @@ type ApprovalCount struct {
 
 // ApprovalsAwaiting counts awaiting approvals whose required_actor is
 // actorID or whose required_role names a group actorID belongs to, grouped
-// by project. actorID == "" with no groups is the open-instance subject: it
-// matches nothing, by design — this is a security-relevant default refusal,
-// not an oversight, so it never falls through to "count everything".
+// by project. An empty actorID with no groups (the open-instance subject)
+// matches nothing, by design.
 func (s *Store) ApprovalsAwaiting(ctx context.Context,
 	actorID string, groups []string) ([]ApprovalCount, error) {
 	if actorID == "" && len(groups) == 0 {

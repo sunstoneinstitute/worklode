@@ -49,7 +49,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		// the queue).
 		approvals: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_approvals_ingest_total",
-			Help: "Approval rows written by the GitHub webhook ingest, by action.",
+			Help: "Approval-relevant actions taken by the GitHub webhook ingest, by action.",
 		}, []string{"action"}),
 	}
 	reg.MustRegister(m.events, m.truncatedPush, m.branchResolve, m.replay, m.approvals)

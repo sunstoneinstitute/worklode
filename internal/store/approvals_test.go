@@ -392,6 +392,7 @@ func TestListAwaitingApprovals(t *testing.T) {
 
 	older := taskTestNow.Add(-2 * time.Hour)
 	newer := taskTestNow.Add(-1 * time.Hour)
+	actorStig := "stig"
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -402,7 +403,7 @@ func TestListAwaitingApprovals(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := InsertAwaitingApproval(tx, older, "pr",
-		PREntityID(prOld.Repo, prOld.Number), "sha-old", nil, nil); err != nil {
+		PREntityID(prOld.Repo, prOld.Number), "sha-old", nil, &actorStig); err != nil {
 		t.Fatal(err)
 	}
 	if err := InsertAwaitingApproval(tx, older.Add(-time.Hour), "pr",
@@ -430,5 +431,43 @@ func TestListAwaitingApprovals(t *testing.T) {
 	if got[0].PRTitle != "old pr" || got[1].PRTitle != "new pr" {
 		t.Errorf("got order %q, %q; want oldest first: old pr, new pr",
 			got[0].PRTitle, got[1].PRTitle)
+	}
+
+	// Assert the rest of the SELECT list too: title/url/author,
+	// task/project, and required-actor columns are same-typed strings, so a
+	// transposition in the SELECT or scan would pass silently if only
+	// PRTitle were checked.
+	oldRow := got[0]
+	if oldRow.TaskID != task.ID {
+		t.Errorf("got TaskID %q, want %q", oldRow.TaskID, task.ID)
+	}
+	if oldRow.ProjectID != "horndb" {
+		t.Errorf("got ProjectID %q, want horndb", oldRow.ProjectID)
+	}
+	if oldRow.ProjectName != "HornDB" {
+		t.Errorf("got ProjectName %q, want HornDB", oldRow.ProjectName)
+	}
+	if oldRow.PRURL != prOld.URL {
+		t.Errorf("got PRURL %q, want %q", oldRow.PRURL, prOld.URL)
+	}
+	if oldRow.RequiredActorName == nil || *oldRow.RequiredActorName != "Stig" {
+		t.Errorf("got RequiredActorName %v, want Stig", oldRow.RequiredActorName)
+	}
+
+	newRow := got[1]
+	if newRow.TaskID != task.ID {
+		t.Errorf("got TaskID %q, want %q", newRow.TaskID, task.ID)
+	}
+	if newRow.ProjectID != "horndb" {
+		t.Errorf("got ProjectID %q, want horndb", newRow.ProjectID)
+	}
+	if newRow.ProjectName != "HornDB" {
+		t.Errorf("got ProjectName %q, want HornDB", newRow.ProjectName)
+	}
+	if newRow.PRURL != prNew.URL {
+		t.Errorf("got PRURL %q, want %q", newRow.PRURL, prNew.URL)
+	}
+	if newRow.RequiredActorName != nil {
+		t.Errorf("got RequiredActorName %v, want nil", newRow.RequiredActorName)
 	}
 }

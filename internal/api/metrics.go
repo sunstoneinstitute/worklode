@@ -490,8 +490,11 @@ func (s *server) observeApprovalDecision(decision, outcome string) {
 }
 
 // approvalDecisionOutcome classifies a DecideApproval error for the outcome
-// label. It mirrors decideApproval's status mapping: the two are read
-// together, so a new sentinel cannot get a status without getting a label.
+// label. It mostly mirrors decideApprovalErr's status mapping, but not for
+// ErrInvalidInput: that case is unreachable through decideApproval today (the
+// decision string is validated before the store is called), and if it ever
+// did fire, decideApprovalErr's default case would route it to webStoreErr,
+// which reports 500 ("error"), not this function's "invalid".
 func approvalDecisionOutcome(err error) string {
 	switch {
 	case err == nil:

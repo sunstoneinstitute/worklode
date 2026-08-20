@@ -107,8 +107,8 @@ func TestDecideApprovalRefusesBearerAndOpenSubjects(t *testing.T) {
 	rr = doForm(t, hOIDC, fmt.Sprintf("/approvals/%d/decide", seededOIDC.ID),
 		url.Values{"decision": {"approve"}},
 		map[string]string{"Authorization": "Bearer " + token})
-	if rr.Code == http.StatusSeeOther {
-		t.Fatalf("a bearer token decided an approval (status %d)", rr.Code)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("a bearer token with no session cookie = %d, want 302 (webGuard login redirect)", rr.Code)
 	}
 	assertUntouched(t, stOIDC, seededOIDC.ID)
 }
