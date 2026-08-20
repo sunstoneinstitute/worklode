@@ -293,14 +293,12 @@ type docAnchorsReport struct {
 }
 
 // lintDocFile collects every finding for one parsed file. The anchor lint and
-// the depth gate are the store's own checks (designdoc.LintAnchors and the
-// accept-time section diff), reused rather than restated.
+// the depth gate are the store's own accept-time checks (designdoc.LintAnchors
+// and designdoc.DepthViolations), reused rather than restated. The rest of the
+// accept-time diff needs a prior version, which a file on disk does not have.
 func lintDocFile(doc *designdoc.Document) []string {
 	findings := designdoc.LintAnchors(doc)
-	// Diffing against an empty accepted document leaves TooDeep as the only
-	// violation that can fire: Removed and Renumbered need a prior version.
-	findings = append(findings,
-		designdoc.CompareSections(&designdoc.Document{}, doc, designdoc.DepthLimit).Violations()...)
+	findings = append(findings, designdoc.DepthViolations(doc, designdoc.DepthLimit)...)
 	if isPlanFile(doc) {
 		if _, err := designdoc.PlanTasks(doc); err != nil {
 			findings = append(findings, err.Error())
