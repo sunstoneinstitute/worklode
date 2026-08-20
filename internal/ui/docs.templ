@@ -12,7 +12,7 @@ package ui
 
 templ Docs(v DocsView) {
 	@Page(v.Page) {
-		@globalShell("") {
+		@globalShell("knowledge") {
 			<section class="card">
 				<div class="hd"><h3>Documents</h3></div>
 				<div class="bd">
@@ -43,7 +43,7 @@ templ Docs(v DocsView) {
 
 templ Doc(v DocView) {
 	@Page(v.Page) {
-		@globalShell("") {
+		@globalShell("knowledge") {
 			<section class="card pad">
 				<h1>{ v.Doc.Title }</h1>
 				<p>
@@ -120,6 +120,9 @@ templ docEdges(heading string, edges []DocEdgeRow) {
 						<span class="mono">{ "#" + e.Anchor }</span>{ " " }
 					}
 					<span class="chip plain">{ e.Type }</span>{ " " }
+					if e.Ref != "" {
+						<span class="chip plain">{ e.Ref }</span>{ " " }
+					}
 					if e.URL != "" {
 						<a href={ e.URL }>{ e.Label }</a>
 					} else {

@@ -289,7 +289,7 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	honestDestinations := map[string]string{
 		"/projects/proj/crew": "spec 029 §6.1",
 		"/intake":             "spec 032 §5",
-		"/knowledge":          "specs 025",
+		"/reviews":            "spec 029 §7",
 	}
 	for path, wantSpec := range honestDestinations {
 		code, body := getPage(t, srv.URL+path)

@@ -2649,6 +2649,8 @@ func TestDocListSections(t *testing.T) {
 // TestDocListEdgesBothDirections: the same row is read forward out of the
 // document that declared it and backward into the document it names, where it
 // carries its inverse spelling and points back at the other end (025 §14).
+// Every resolved far end also carries the other document's slug, kind and
+// number, so a reader can name it; an unresolved reference carries none.
 func TestDocListEdgesBothDirections(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -2666,10 +2668,14 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	}
 	// Ordered by the stored columns with NULL coalesced away, so an
 	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
+	specFar := func(e model.DocEdge) model.DocEdge {
+		e.ToDoc, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, spec.Slug, "spec", 25
+		return e
+	}
 	wantOut := []model.DocEdge{
 		{Type: "covers", ToExternal: "999-nowhere.md#sec-1"},
-		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
-		{Type: "wasDerivedFrom", ToDoc: spec.ID},
+		specFar(model.DocEdge{Type: "covers", ToAnchor: "sec-5"}),
+		specFar(model.DocEdge{Type: "wasDerivedFrom"}),
 	}
 	if len(out) != len(wantOut) {
 		t.Fatalf("plan edges out = %+v, want %+v", out, wantOut)
@@ -2692,9 +2698,15 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	}
 	// The covers edge lands on the spec's #sec-5, so from the spec's end that
 	// is the near anchor and the plan is the far end.
+	planFar := func(e model.DocEdge) model.DocEdge {
+		// A plan carries no corpus number (025 §14.3), so its far end names
+		// its kind and slug alone.
+		e.ToDoc, e.ToSlug, e.ToKind = plan.ID, plan.Slug, "plan"
+		return e
+	}
 	wantIn := []model.DocEdge{
-		{Type: "isCoveredBy", FromAnchor: "sec-5", ToDoc: plan.ID},
-		{Type: "hadDerivation", ToDoc: plan.ID},
+		planFar(model.DocEdge{Type: "isCoveredBy", FromAnchor: "sec-5"}),
+		planFar(model.DocEdge{Type: "hadDerivation"}),
 	}
 	if len(in) != len(wantIn) {
 		t.Fatalf("spec edges in = %+v, want %+v", in, wantIn)
