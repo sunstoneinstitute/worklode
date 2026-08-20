@@ -15,6 +15,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // docEntityKind is the state_log entity_kind every document mutation is
@@ -28,10 +29,11 @@ const docDateLayout = "2006-01-02"
 
 // validDocKinds and validDocStatuses mirror the docs CHECK constraints, so a
 // bad input is ErrInvalidInput rather than a Postgres error the caller has to
-// decode.
+// decode. The status set is generated from wlc:DesignDocStatus (025 §17); the
+// kinds mirror the wl:Spec/wl:ADR/wl:Plan classes, which are not a SKOS scheme.
 var (
 	validDocKinds    = map[string]bool{"spec": true, "adr": true, "plan": true}
-	validDocStatuses = map[string]bool{"draft": true, "accepted": true, "superseded": true}
+	validDocStatuses = ns.Set(ns.DesignDocStatuses)
 )
 
 // DocInput carries the fields for creating a document. Number is 0 for plans,

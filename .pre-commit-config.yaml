@@ -63,6 +63,16 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+      # Rewrites like inlined-specs above: internal/ns/gen.go is a function of
+      # ns/concept.ttl, so the author who edits the Turtle should get the Go
+      # regenerated for them rather than a CI failure. Stdlib only, so there is
+      # nothing to install before the hook can run.
+      - id: ns-codegen
+        name: ns concept codegen
+        entry: scripts/nsgen.py
+        language: script
+        files: ^ns/concept\.ttl$
+        pass_filenames: false
       # The Codex manifests are generated from the Claude ones. Checking rather
       # than rewriting: an author who edited the generated file by hand should
       # be told, not silently overwritten.

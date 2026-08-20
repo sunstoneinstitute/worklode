@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // mustParsePlan parses a plan body with a minimal H1 title prepended, the
@@ -474,30 +476,15 @@ Nothing here.
 }
 
 // TestPlanMintableKindsMatchLiveKindSet guards the invariant 025 §9.1 wants:
-// the plan-mintable kind subset cannot silently drift from the live kind
-// set. The canonical source is meant to be ns.TaskKinds (internal/ns,
-// generated from ns/concept.ttl's wlc:TaskKind scheme) — but internal/ns
-// does not exist yet; building it is WL-40 part 1 Task 1, unbuilt and
-// blocked as WL-70 on an unresolved decision about where the wl: vocabulary
-// lives. This test instead mirrors internal/api's validKinds
-// (internal/api/tasks.go), the live hand-kept mirror of the tasks.kind
-// CHECK constraint added by migration 0025 — the closest thing to a single
-// source of truth that exists in the tree today. validKinds is unexported
-// and internal/api cannot be imported from here without a real dependency
-// (internal/api already imports internal/designdoc's sibling packages one
-// layer up the stack, so the reverse import would risk a cycle), so the
-// constraint is reproduced verbatim from its two sources instead of
-// imported: internal/api/tasks.go's validKinds map and migration 0025's own
-// CHECK list, which a repo-level test (TestTaskKindsAgreeAcrossSources)
-// already holds in sync with each other.
+// the plan-mintable kind subset cannot silently drift from the live kind set.
+// ns.TaskKinds is that set — generated from ns/concept.ttl's wlc:TaskKind
+// scheme, which the tasks.kind CHECK constraint and internal/api's validKinds
+// also mirror (TestTaskKindsAgreeAcrossSources holds those together). A plan
+// may mint every kind except the two that are not plannable units of the
+// plan's own work.
 func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
-	// internal/api/tasks.go:20-25 (migration 0025's CHECK constraint mirror).
-	liveKinds := map[string]bool{
-		"feature": true, "bug": true, "chore": true, "design": true,
-		"review": true, "spike": true,
-	}
-	want := make([]string, 0, len(liveKinds))
-	for k := range liveKinds {
+	want := make([]string, 0, len(ns.TaskKinds))
+	for _, k := range ns.TaskKinds {
 		if k == "review" || k == "spike" {
 			continue
 		}

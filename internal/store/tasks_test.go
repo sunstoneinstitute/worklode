@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -14,6 +17,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // extSeq feeds unique external ids so every RecordEvent call in the tests is
@@ -1790,5 +1794,69 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 		})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("create with bad secret name: %v; want ErrInvalidInput", err)
+	}
+}
+
+// TestKindCheckConstraintMatchesGeneratedKinds closes the direction the API's
+// TestTaskKindsAgreeAcrossSources cannot see. That test creates a task of
+// every ns.TaskKind, which proves the CHECK admits at least the generated
+// set; it cannot prove the CHECK admits nothing else, so a kind deleted from
+// ns/concept.ttl would leave the constraint quietly wider than the Go. Here
+// the constraint's own definition is read back and compared, so the two are
+// pinned in both directions.
+func TestKindCheckConstraintMatchesGeneratedKinds(t *testing.T) {
+	s := OpenTestStore(t)
+
+	var def string
+	err := s.db.QueryRow(
+		`SELECT pg_get_constraintdef(oid) FROM pg_constraint
+		  WHERE conrelid = 'tasks'::regclass AND conname = 'tasks_kind_check'`,
+	).Scan(&def)
+	if err != nil {
+		t.Fatalf("read tasks_kind_check: %v", err)
+	}
+
+	inCheck := regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(def, -1)
+	got := make([]string, 0, len(inCheck))
+	for _, m := range inCheck {
+		got = append(got, m[1])
+	}
+	slices.Sort(got)
+
+	if !slices.Equal(got, ns.TaskKinds) {
+		t.Errorf("tasks_kind_check = %v, want %v\n"+
+			"the CHECK constraint and ns/concept.ttl's wlc:TaskKind disagree; "+
+			"a migration must move with the Turtle (025 §17)\nconstraint: %s",
+			got, ns.TaskKinds, def)
+	}
+}
+
+// TestTaskStateShapeMatchesStateMachine pins ns/shapes.ttl's wl:taskState
+// sh:in list to the states legalTransitions can reach. The shape is
+// hand-written Turtle with no generator behind it — the state machine is Go,
+// not an enum in ns/concept.ttl — so this test is what keeps the duplicate
+// honest. docs/follow-ups.md flagged exactly this drift.
+func TestTaskStateShapeMatchesStateMachine(t *testing.T) {
+	shapes, err := os.ReadFile(filepath.Join("..", "..", "ns", "shapes.ttl"))
+	if err != nil {
+		t.Fatalf("read ns/shapes.ttl: %v", err)
+	}
+
+	// The sh:in list on the property shape whose sh:path is wl:taskState.
+	// [^]]*? keeps the match inside that one property shape's brackets.
+	re := regexp.MustCompile(`sh:path wl:taskState ;[^\]]*?sh:in \(([^)]*)\)`)
+	m := re.FindSubmatch(shapes)
+	if m == nil {
+		t.Fatal("no `sh:path wl:taskState` property shape with an sh:in list in ns/shapes.ttl")
+	}
+	inShape := strings.FieldsFunc(string(m[1]), func(r rune) bool {
+		return r == '"' || r == ' ' || r == '\n' || r == '\t' || r == '\r'
+	})
+	slices.Sort(inShape)
+
+	if want := allStates(); !slices.Equal(inShape, want) {
+		t.Errorf("wl:taskState sh:in = %v, want %v\n"+
+			"ns/shapes.ttl and legalTransitions disagree; widen both together",
+			inShape, want)
 	}
 }

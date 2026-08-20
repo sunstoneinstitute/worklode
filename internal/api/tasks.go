@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -35,15 +36,14 @@ func validSecretNames(names []string) bool {
 const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
 
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0025) and
-// wlc:TaskKind in ns/concept.ttl; all three carry the same six kinds.
-var validKinds = map[string]bool{
-	"feature": true, "bug": true, "chore": true, "design": true,
-	"review": true, "spike": true,
-}
+// wlc:TaskKind in ns/concept.ttl. The list is generated from the Turtle by
+// scripts/nsgen.py, so adding a kind is one commit over ns/concept.ttl, the
+// regenerated internal/ns/gen.go, and the migration (025 §17).
+var validKinds = ns.Set(ns.TaskKinds)
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
-// message cannot drift from the map when a kind is added.
-const invalidKindMsg = "invalid kind: must be feature, bug, chore, design, review, or spike"
+// message cannot drift from the set when a kind is added.
+var invalidKindMsg = "invalid kind: must be " + ns.OrList(ns.TaskKinds)
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,

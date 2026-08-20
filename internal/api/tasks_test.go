@@ -8,11 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -20,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -855,19 +852,22 @@ func TestSetTaskSkills(t *testing.T) {
 	}
 }
 
-// TestTaskKindsAgreeAcrossSources pins the three places the kind enum is
-// spelled — the API's validKinds, the tasks.kind CHECK constraint, and
-// wlc:TaskKind in ns/concept.ttl — to the same set. Each is exercised by
-// creating a task of every kind: the handler rejects anything outside
-// validKinds, and the insert rejects anything outside the CHECK, so a
-// disagreement between those two fails here. The .ttl is read directly,
-// since nothing else in the Go build knows it exists.
+// TestTaskKindsAgreeAcrossSources proves the tasks.kind CHECK constraint and
+// validKinds both admit every generated kind: validKinds derives from
+// ns.TaskKinds, the handler rejects anything outside it, and the insert
+// rejects anything outside the CHECK, so creating one task per kind fails
+// here if either is missing one.
+//
+// That is containment, not equality. The two directions it cannot see are
+// pinned elsewhere: a CHECK wider than ns.TaskKinds by internal/store's
+// TestKindCheckConstraintMatchesGeneratedKinds, which reads the constraint
+// back, and a stale internal/ns/gen.go by internal/ns's
+// TestTaskKindsMatchTurtle, which re-reads ns/concept.ttl independently.
 func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	kinds := []string{"feature", "bug", "chore", "design", "review", "spike"}
-	for _, k := range kinds {
+	for _, k := range ns.TaskKinds {
 		t.Run(k, func(t *testing.T) {
 			rr := doReq(t, h, "POST", "/api/v1/tasks", token,
 				map[string]any{"project": "proj", "title": "t", "priority": "high", "kind": k})
@@ -875,23 +875,6 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 				t.Fatalf("create kind %q status = %d, want 201; body %s", k, rr.Code, rr.Body.String())
 			}
 		})
-	}
-
-	ttl, err := os.ReadFile(filepath.Join("..", "..", "ns", "concept.ttl"))
-	if err != nil {
-		t.Fatalf("read ns/concept.ttl: %v", err)
-	}
-	// Every wlc:<name> declared in scheme wlc:TaskKind.
-	re := regexp.MustCompile(`wlc:(\w+) a skos:Concept ; skos:inScheme wlc:TaskKind`)
-	var inTTL []string
-	for _, m := range re.FindAllStringSubmatch(string(ttl), -1) {
-		inTTL = append(inTTL, m[1])
-	}
-	sort.Strings(inTTL)
-	want := append([]string(nil), kinds...)
-	sort.Strings(want)
-	if !slices.Equal(inTTL, want) {
-		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with validKinds and the CHECK constraint)", inTTL, want)
 	}
 }
 

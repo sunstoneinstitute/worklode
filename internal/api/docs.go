@@ -28,6 +28,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -36,17 +37,18 @@ import (
 // this is here so a typo is a named 422 rather than a generic one.
 var validDocKinds = map[string]bool{"spec": true, "adr": true, "plan": true}
 
-// validDocStatuses mirrors the docs.status CHECK constraint. Only the corpus
-// importer may state one (see createDoc); the store re-checks.
-var validDocStatuses = map[string]bool{"draft": true, "accepted": true, "superseded": true}
+// validDocStatuses mirrors the docs.status CHECK constraint, derived from
+// wlc:DesignDocStatus in ns/concept.ttl (025 §17). Only the corpus importer
+// may state a status (see createDoc); the store re-checks.
+var validDocStatuses = ns.Set(ns.DesignDocStatuses)
 
 // invalidDocKindMsg is what createDoc — today the only handler that gates on
 // validDocKinds — answers with. It is a constant so a second write path names
 // the kinds the same way this one does.
 const invalidDocKindMsg = "invalid kind: must be spec, adr, or plan"
 
-// invalidDocStatusMsg names the three statuses a corpus import may assert.
-const invalidDocStatusMsg = "invalid status: must be draft, accepted, or superseded"
+// invalidDocStatusMsg names the statuses a corpus import may assert.
+var invalidDocStatusMsg = "invalid status: must be " + ns.OrList(ns.DesignDocStatuses)
 
 // importOnlyStatusMsg is the refusal every caller without doc.import gets for
 // a non-empty status. The field is declared on the wire so the refusal can
