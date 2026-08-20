@@ -117,10 +117,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := ""
-	if a := actorFrom(r); a != nil {
-		actorID = a.ID
-	}
+	actorID := actorIDFrom(r)
 	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, actorID)
 	if msg != "" {
 		writeErr(w, http.StatusUnprocessableEntity, msg)

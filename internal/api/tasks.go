@@ -111,7 +111,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	now := s.st.Now()
 
 	var created *model.Task
@@ -124,7 +124,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				Priority:  req.Priority,
 				Kind:      req.Kind,
 				Concern:   req.Concern,
-				CreatedBy: actor.ID,
+				CreatedBy: actorID,
 				Draft:     req.Draft,
 				Skills:    req.Skills,
 				Secrets:   req.Secrets,

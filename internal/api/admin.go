@@ -533,7 +533,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
 	var created *model.Task
 	err = s.recordEvent(r.Context(), "cli", "issue.promoted", req,
@@ -552,7 +552,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Priority:  req.Priority,
 				Kind:      req.Kind,
-				CreatedBy: actor.ID,
+				CreatedBy: actorID,
 				Draft:     req.Draft,
 			}, req.AppliesToVersions, eventID)
 			if err != nil {

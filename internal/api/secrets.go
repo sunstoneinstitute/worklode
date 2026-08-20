@@ -81,11 +81,7 @@ func (s *server) secretsMaterialized(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	actor := actorFrom(r)
-	var actorID string
-	if actor != nil {
-		actorID = actor.ID
-	}
+	actorID := actorIDFrom(r)
 	err := s.recordEvent(r.Context(), "cli", "secrets_materialized",
 		map[string]any{"task": id, "actor": actorID, "names": req.Names},
 		func(tx *sql.Tx, eventID int64) error {

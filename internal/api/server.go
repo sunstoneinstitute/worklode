@@ -273,6 +273,20 @@ func validatePublicURL(publicURL string) error {
 	return nil
 }
 
+// requireWebSecrets checks the two settings every browser-facing login
+// provider needs, naming the feature in the refusal. Both providers stated
+// these checks identically before, which also meant parsing PublicURL twice
+// when both were configured.
+func (cfg Config) requireWebSecrets(feature string) error {
+	if cfg.SessionSecret == "" {
+		return fmt.Errorf("LODE_SESSION_SECRET is required when %s is enabled", feature)
+	}
+	if cfg.PublicURL == "" {
+		return fmt.Errorf("LODE_PUBLIC_URL is required when %s is enabled", feature)
+	}
+	return validatePublicURL(cfg.PublicURL)
+}
+
 // NewServer builds the worklode HTTP handlers. It returns two handlers: the
 // public app handler (web UI, API, webhooks) and a separate admin handler
 // (/healthz, /metrics). The admin handler is served on its own listener so
@@ -302,13 +316,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
-		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when OIDC is enabled")
-		}
-		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when OIDC is enabled")
-		}
-		if err := validatePublicURL(cfg.PublicURL); err != nil {
+		if err := cfg.requireWebSecrets("OIDC"); err != nil {
 			return nil, nil, err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -321,13 +329,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 
 	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
-		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when GitHub auth is enabled")
-		}
-		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when GitHub auth is enabled")
-		}
-		if err := validatePublicURL(cfg.PublicURL); err != nil {
+		if err := cfg.requireWebSecrets("GitHub auth"); err != nil {
 			return nil, nil, err
 		}
 		key, err := hex.DecodeString(cfg.TokenEncKey)
@@ -610,7 +612,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
 				Store:   st,
 				Name:    docLifecycleSubscriber,
-				Handler: s.docLifecycleHandler(),
+				Handler: s.handleDocLifecycle,
 				Poll:    cfg.EventPoll,
 				Metrics: busMetrics,
 				Log:     s.log,
@@ -625,7 +627,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}()
 	}
 
-	return s.logging(s.metrics(mux)), admin, nil
+	return s.observe(mux), admin, nil
 }
 
 // runSkillSync serializes full syncs via skillSyncMu. A trigger that arrives
@@ -692,10 +694,10 @@ func (w *statusWriter) WriteHeader(code int) {
 //
 // Without it, nothing served by this server can stream. Embedding an
 // interface promotes only that interface's methods, so *statusWriter is not
-// an http.Flusher no matter what it wraps — and logging and metrics wrap
-// every single request in one, twice over. A handler that flushed would
-// silently buffer instead, which for a server-sent-event stream means the
-// client sees nothing until the connection closes.
+// an http.Flusher no matter what it wraps — and observe wraps every single
+// request in one. A handler that flushed would silently buffer instead,
+// which for a server-sent-event stream means the client sees nothing until
+// the connection closes.
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // routeLabel returns the matched mux pattern without its method prefix
@@ -711,38 +713,31 @@ func routeLabel(r *http.Request) string {
 	return p
 }
 
-func (s *server) logging(next http.Handler) http.Handler {
+// observe logs and counts one request. Logging and metrics were two
+// middlewares, so every request — SSE streams included — was wrapped in a
+// statusWriter and timed twice for what is one measurement.
+func (s *server) observe(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 		next.ServeHTTP(sw, r)
+		elapsed := time.Since(start)
+		route := routeLabel(r)
+		s.requests.WithLabelValues(r.Method, route, strconv.Itoa(sw.status)).Inc()
+		s.durations.WithLabelValues(r.Method, route).Observe(elapsed.Seconds())
 		s.log.Info("http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", sw.status,
-			"duration", time.Since(start),
+			"duration", elapsed,
 		)
 	})
 }
 
-func (s *server) metrics(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		start := time.Now()
-		next.ServeHTTP(sw, r)
-		route := routeLabel(r)
-		s.requests.WithLabelValues(r.Method, route, strconv.Itoa(sw.status)).Inc()
-		s.durations.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
-	})
-}
-
-// actorKey is the context key for the authenticated actor.
-type actorKey struct{}
-
 // auth wraps an /api/v1 handler with bearer-token authentication: it is the
-// authentication half only, and puts both the actor (for handlers that
-// attribute a write) and the derived Subject (for the policy check) into the
-// request context. Authorization is requirePerm's job, which the router
+// authentication half only, and puts the derived Subject — the one identity
+// a handler reads, for the policy check and for attributing a write — into
+// the request context. Authorization is requirePerm's job, which the router
 // always composes inside this — see authz.go.
 func (s *server) auth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -760,22 +755,9 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 			s.mapStoreErr(w, err)
 			return
 		}
-		r = r.WithContext(context.WithValue(r.Context(), actorKey{}, actor))
 		next(w, withSubject(r, subjectFromActor(actor, authToken)))
 	})
 }
-
-// actorFrom returns the authenticated actor, or nil outside the auth
-// middleware.
-func actorFrom(r *http.Request) *store.Actor {
-	a, _ := r.Context().Value(actorKey{}).(*store.Actor)
-	return a
-}
-
-// requireAdmin is gone: "admin only" is now a property of a permission in
-// authz.go's grants table (permProjectAdmin, permActorAdmin, permSkillAdmin,
-// permInboxAdmin), applied by requirePerm to whichever routes routeGuards
-// names. The refusal is unchanged, message included — see denialMessage.
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -4,7 +4,7 @@
 // global destinations and the project-local destinations spec 032 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
 // from internal/ui — see assetHandler). When OIDC is configured every page
-// route except /assets/ is gated by s.webAuth (see oidcweb.go), which
+// route except /assets/ is gated by webGuard (see authz.go), which
 // requires a valid session cookie; /assets/ stays open unconditionally and,
 // when OIDC is unconfigured, every route stays open and the bind address is
 // the only access control. Each handler maps the read model into a ui view
@@ -27,7 +27,7 @@ import (
 )
 
 // assetHandler serves internal/ui's embedded /assets/ tree (stylesheet and
-// self-hosted fonts) outside webAuth: they carry no project data, so an
+// self-hosted fonts) outside webGuard: they carry no project data, so an
 // OIDC-gated deployment must not redirect them to login (a stylesheet
 // request has no session to attach a redirect to). Cache-Control is bounded
 // (an hour) rather than immutable/forever, since asset filenames are not

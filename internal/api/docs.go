@@ -112,7 +112,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	now := s.st.Now()
 
 	// Document id 0 in the payload: the row does not exist until CreateDoc
@@ -127,7 +127,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Slug:      req.Slug,
 				Body:      req.Body,
 				Assignee:  req.Assignee,
-				CreatedBy: actor.ID,
+				CreatedBy: actorID,
 				Status:    req.Status,
 			}, eventID)
 			if err != nil {
@@ -449,17 +449,17 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	now := s.st.Now()
 	var accepted *model.Doc
 	var minted []model.Task
 	ev := eventbus.DocumentAccepted{
-		Doc: store.DocIRI(*doc), Actor: actor.ID, At: now,
+		Doc: store.DocIRI(*doc), Actor: actorID, At: now,
 		Version: doc.Version, From: "wlc:draft", To: "wlc:accepted",
 	}
 	_, inserted, err := eventbus.Emit(r.Context(), s.st, docSource, ev,
 		func(tx *sql.Tx, eventID int64) error {
-			d, tasks, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
+			d, tasks, err := store.AcceptDoc(tx, now, id, actorID, eventID)
 			if err != nil {
 				return err
 			}
@@ -481,7 +481,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		// not even admit, so the refusal AcceptDoc would have raised is raised
 		// here instead. Typing the event must not quietly change what the
 		// endpoint answers.
-		err := s.st.CheckDocAcceptable(r.Context(), id, actor.ID)
+		err := s.st.CheckDocAcceptable(r.Context(), id, actorID)
 		if err == nil {
 			// Unreachable by construction: a failed accept rolls its event
 			// back with it, so an event at this version implies the document
@@ -517,7 +517,7 @@ func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ev := eventbus.DocumentSubmitted{
-		Doc: store.DocIRI(*d), Actor: actorFrom(r).ID, At: s.st.Now(), Version: d.Version,
+		Doc: store.DocIRI(*d), Actor: actorIDFrom(r), At: s.st.Now(), Version: d.Version,
 	}
 	_, _, err = eventbus.Emit(r.Context(), s.st, docSource, ev, nil)
 	s.st.RecordDocOp("submit", err)
@@ -535,11 +535,11 @@ func (s *server) reviseDoc(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	now := s.st.Now()
 	err := s.recordDocEvent(w, r, "revise", "doc.revised", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.ReviseDoc(tx, now, id, actor.ID, eventID)
+			return store.ReviseDoc(tx, now, id, actorID, eventID)
 		})
 	if err != nil {
 		return
@@ -578,12 +578,12 @@ func (s *server) acceptDocRevision(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	now := s.st.Now()
 	var landed *model.Doc
 	err := s.recordDocEvent(w, r, "accept", "doc.revision_accepted", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.AcceptRevision(tx, now, id, actor.ID, eventID)
+			d, err := store.AcceptRevision(tx, now, id, actorID, eventID)
 			if err != nil {
 				return err
 			}
@@ -620,7 +620,7 @@ func (s *server) recordDocEvent(
 	// internal/model declaration is owed (ADR 036 §3).
 	payload, err := json.Marshal(map[string]any{
 		"doc":     id,
-		"actor":   actorFrom(r).ID,
+		"actor":   actorIDFrom(r),
 		"request": req,
 	})
 	if err != nil {

@@ -57,9 +57,9 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "worktree is required")
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
-	lease, err := s.st.Claim(r.Context(), id, actor.ID, req.Worktree,
+	lease, err := s.st.Claim(r.Context(), id, actorID, req.Worktree,
 		time.Duration(req.TTLSeconds)*time.Second)
 	if errors.Is(err, store.ErrLeased) {
 		body := model.ClaimConflictResponse{Error: "task already leased"}
@@ -133,7 +133,7 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
 	res, err := s.st.ClaimNext(r.Context(), store.ClaimNextOpts{
 		ProjectID:   req.Project,
@@ -141,7 +141,7 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		StrictFocus: req.StrictFocus,
 		DryRun:      req.DryRun,
 		Worktree:    req.Worktree,
-		ActorID:     actor.ID,
+		ActorID:     actorID,
 		TTL:         time.Duration(req.TTLSeconds) * time.Second,
 	})
 	if err != nil {
@@ -170,9 +170,9 @@ func (s *server) renewLease(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
-	lease, err := s.st.Renew(r.Context(), id, actor.ID, time.Duration(req.TTLSeconds)*time.Second)
+	lease, err := s.st.Renew(r.Context(), id, actorID, time.Duration(req.TTLSeconds)*time.Second)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -183,8 +183,8 @@ func (s *server) renewLease(w http.ResponseWriter, r *http.Request) {
 // releaseLease handles POST /api/v1/tasks/{id}/release.
 func (s *server) releaseLease(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	actor := actorFrom(r)
-	if err := s.st.Release(r.Context(), id, actor.ID); err != nil {
+	actorID := actorIDFrom(r)
+	if err := s.st.Release(r.Context(), id, actorID); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}

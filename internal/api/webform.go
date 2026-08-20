@@ -104,15 +104,6 @@ func (s *server) sameOriginForm(r *http.Request) bool {
 	return false
 }
 
-// webActor returns the actor id to attribute a form write to, or "" when
-// there is none: a deployment with no login provider configured, where the
-// subject is permitted but anonymous (authOpen). webGuard already resolved
-// and validated the subject — including confirming the actor row still
-// exists — so this is a context read, not a second authentication.
-func (s *server) webActor(r *http.Request) string {
-	return subjectFrom(r).ActorID
-}
-
 // projectHeader loads the project identity the project-scoped shell needs
 // (name and key beside the local navigation). ErrNotFound propagates, so an
 // unknown project 404s the same way every other project route does.
@@ -208,7 +199,7 @@ func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := s.recordFormTask(ctx, project.ID, values, s.webActor(r))
+	created, err := s.recordFormTask(ctx, project.ID, values, actorIDFrom(r))
 	if err != nil {
 		s.observeFormSubmission("task", formOutcome(err))
 		s.webStoreErr(w, err)
@@ -335,7 +326,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, s.webActor(r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",

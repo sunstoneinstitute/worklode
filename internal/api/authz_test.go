@@ -65,8 +65,7 @@ func withSession(t *testing.T, h http.Handler, method, path, session string, bod
 // TestAPIDeniesWithoutPermission checks the enforcement point on /api/v1: a
 // perfectly valid non-admin token is refused on every admin-gated route, with
 // the message the policy derives, and is allowed on the ordinary ones. This
-// is the same guarantee requireAdmin used to give per route, now given by the
-// permission each route declares.
+// is the guarantee the permission each route declares now gives.
 func TestAPIDeniesWithoutPermission(t *testing.T) {
 	st, h, adminToken := newTestServer(t)
 	ctx := context.Background()
@@ -177,7 +176,7 @@ func TestWebGuardAllowsLoggedInUser(t *testing.T) {
 
 // TestWebGuardRedirectsAnonymous checks that a session-gated deployment sends
 // an unauthenticated visitor to login rather than serving or 403ing — the
-// behaviour the former webAuth had, preserved through the policy path.
+// behaviour the policy path gives every session-gated page.
 func TestWebGuardRedirectsAnonymous(t *testing.T) {
 	st, h, _ := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")

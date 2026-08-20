@@ -599,15 +599,14 @@ func TestAdminGatedEndpoints(t *testing.T) {
 // TestAdminGatedEndpoints cannot fold into its shared gated slice: POST
 // /api/v1/inbox/import needs s.appAuth configured to succeed, which
 // newTestServer's zero-value Config does not provide, so an admin-token call
-// would 503 before ever exercising requireAdmin — breaking that test's
+// would 503 before ever exercising the admin gate — breaking that test's
 // shared "admin succeeds" loop for every other route in it. This test
 // isolates the assertion that actually matters for the admin gate: a
 // non-admin token must be rejected with 403 before importInbox ever runs,
-// proving requireAdmin is still wired on this route (rather than relying on
-// importInbox's own checks to reject it). It goes through the real mux —
-// s.auth(requireAdmin(s.importInbox)) — unlike inbox_import_test.go's
-// fixtures, which call s.importInbox directly and so never exercise this
-// wrapper.
+// proving the gate is still wired on this route (rather than relying on
+// importInbox's own checks to reject it). It goes through the real mux,
+// unlike inbox_import_test.go's fixtures, which call s.importInbox directly
+// and so never exercise the guard.
 func TestImportRouteRequiresAdmin(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	ctx := context.Background()

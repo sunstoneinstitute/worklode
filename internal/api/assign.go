@@ -42,7 +42,7 @@ func (s *server) assignTask(w http.ResponseWriter, r *http.Request) {
 	}
 	assignee := req.Assignee
 	if assignee == "" {
-		assignee = actorFrom(r).ID
+		assignee = actorIDFrom(r)
 	}
 	s.assignmentAction(w, r, id, "task.assigned", "assign",
 		map[string]string{"task": id, "assignee": assignee},
@@ -67,11 +67,11 @@ func (s *server) unassignTask(w http.ResponseWriter, r *http.Request) {
 // the caller when the task is unassigned (see store.StartTask). No body.
 func (s *server) startTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	s.assignmentAction(w, r, id, "task.started", "start",
-		map[string]string{"task": id, "actor": actor.ID},
+		map[string]string{"task": id, "actor": actorID},
 		func(tx *sql.Tx, eventID int64) error {
-			_, err := store.StartTask(tx, s.st.Now(), id, actor.ID, eventID)
+			_, err := store.StartTask(tx, s.st.Now(), id, actorID, eventID)
 			return err
 		})
 }
@@ -83,10 +83,10 @@ func (s *server) startTask(w http.ResponseWriter, r *http.Request) {
 // lease. No body.
 func (s *server) stopTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 	s.assignmentAction(w, r, id, "task.stopped", "stop",
-		map[string]string{"task": id, "actor": actor.ID},
+		map[string]string{"task": id, "actor": actorID},
 		func(tx *sql.Tx, eventID int64) error {
-			return store.StopTask(tx, s.st.Now(), id, actor.ID, eventID)
+			return store.StopTask(tx, s.st.Now(), id, actorID, eventID)
 		})
 }
