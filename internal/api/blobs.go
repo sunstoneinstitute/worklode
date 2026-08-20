@@ -27,6 +27,19 @@ import (
 // maxAPIBody does not apply, since this route takes a raw body.
 const maxBlobBytes = 100 << 20
 
+// uploadCap is the cap this server enforces: maxBlobBytes unless a test
+// lowered it. Tests need a small cap because the streaming path spools every
+// byte the client sends before MaxBytesReader can refuse it, so asserting the
+// 413 at the real cap writes 100 MiB to the spool directory on every run —
+// which on a runner with a small or tmpfs /tmp fails with ENOSPC (a 500)
+// instead of the 413 it means to assert.
+func (s *server) uploadCap() int64 {
+	if s.cfg.MaxBlobBytesForTest > 0 {
+		return s.cfg.MaxBlobBytesForTest
+	}
+	return maxBlobBytes
+}
+
 // sniffLen is what http.DetectContentType reads.
 const sniffLen = 512
 
@@ -75,7 +88,7 @@ func (s *server) uploadBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body := http.MaxBytesReader(w, r.Body, maxBlobBytes)
+	body := http.MaxBytesReader(w, r.Body, s.uploadCap())
 
 	f, err := os.CreateTemp(s.cfg.BlobSpoolDir, "lode-blob-")
 	if err != nil {
@@ -102,8 +115,12 @@ func (s *server) uploadBlob(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusRequestEntityTooLarge, "blob too large")
 			return
 		}
+		// Whatever went wrong reading the body is a fact about this server's
+		// plumbing (a spool write failure, a reset connection), so it goes to
+		// the log and the client gets the category only.
+		s.log.Error("blob body", "err", err)
 		s.observeBlobUpload("error")
-		writeErr(w, http.StatusBadRequest, "read body: "+err.Error())
+		writeErr(w, http.StatusBadRequest, "could not read request body")
 		return
 	}
 	if size == 0 {
