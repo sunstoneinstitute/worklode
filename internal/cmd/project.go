@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -253,16 +251,6 @@ func newProjectSetRepoCmd() *cobra.Command {
 	return cmd
 }
 
-// printFocus writes the human-readable "focus: a, b" (or "focus: (none)")
-// line for a project's focus list.
-func printFocus(w io.Writer, focus []string) {
-	if len(focus) == 0 {
-		fmt.Fprintln(w, "focus: (none)")
-		return
-	}
-	fmt.Fprintf(w, "focus: %s\n", strings.Join(focus, ", "))
-}
-
 func newProjectFocusCmd() *cobra.Command {
 	var clear bool
 	cmd := &cobra.Command{
@@ -293,7 +281,7 @@ func newProjectFocusCmd() *cobra.Command {
 					printRaw(cmd, raw)
 					return nil
 				}
-				printFocus(cmd.OutOrStdout(), p.Focus)
+				cli.FocusLine(cmd.OutOrStdout(), p.Focus)
 				return nil
 			default:
 				p, err := c.GetProject(cmd.Context(), id)
@@ -303,7 +291,7 @@ func newProjectFocusCmd() *cobra.Command {
 				if jsonOut(cmd) {
 					return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
 				}
-				printFocus(cmd.OutOrStdout(), p.Focus)
+				cli.FocusLine(cmd.OutOrStdout(), p.Focus)
 				return nil
 			}
 		},
@@ -442,7 +430,7 @@ func newProjectResolveCmd() *cobra.Command {
 				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
 				return nil
 			}
-			fmt.Fprintf(o, "%s%s — from %s\n", sc.Project, keySuffix(sc.Key), scopeOrigin(sc))
+			fmt.Fprintf(o, "%s%s — from %s\n", sc.Project, cli.KeySuffix(sc.Key), scopeOrigin(sc))
 			return nil
 		},
 	}
@@ -500,7 +488,7 @@ func runProjectShow(cmd *cobra.Command, project string, days int) error {
 		printRaw(cmd, raw)
 		return nil
 	}
-	printProjectDetail(cmd.OutOrStdout(), detail, costWindowLabel(days))
+	cli.ProjectDetailRender(cmd.OutOrStdout(), detail, costWindowLabel(days))
 	return nil
 }
 
@@ -519,55 +507,6 @@ func costWindowLabel(days int) string {
 		return "all time"
 	}
 	return fmt.Sprintf("last %d days", days)
-}
-
-// printProjectDetail renders `lode project show`: the project's identity,
-// focus, and repos, then one cost block per currency.
-func printProjectDetail(out io.Writer, d model.ProjectDetail, window string) {
-	fmt.Fprintf(out, "%s%s — %s\n", d.ID, keySuffix(d.Key), d.Name)
-	printFocus(out, d.Focus)
-	if len(d.Repos) > 0 {
-		fmt.Fprintln(out, "repos:")
-		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-		for _, r := range d.Repos {
-			fmt.Fprintf(tw, "  %s\tdone: %s\n", r.Repo, r.DoneState)
-		}
-		tw.Flush()
-	}
-	printCost(out, d.Cost, window)
-}
-
-// printCost writes one block per currency: a headline total, a row per day,
-// and — when some tokens were billed on a model with no price on file — the
-// shortfall that headline therefore omits.
-func printCost(out io.Writer, cost model.CostReport, window string) {
-	if len(cost.Totals) == 0 {
-		fmt.Fprintf(out, "\ncost, %s: none recorded\n", window)
-		return
-	}
-	// No currency symbol: a vendor need not bill in dollars, and one block per
-	// currency already names it in the header. "$12.000000 EUR" is the kind of
-	// wrong a symbol table earns you.
-	for _, total := range cost.Totals {
-		fmt.Fprintf(out, "\ncost, %s: %s %s\n", window, cli.Money(total.CostAmount), total.Currency)
-		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-		for _, d := range cost.Days {
-			if d.Currency != total.Currency {
-				continue
-			}
-			fmt.Fprintf(tw, "  %s\t%s\tin %s\tcache-w %s\tcache-r %s\tout %s\n",
-				d.Day, cli.Money(d.CostAmount),
-				cli.HumanTokens(d.InputTokens),
-				cli.HumanTokens(d.CacheWrite5mTokens+d.CacheWrite1hTokens),
-				cli.HumanTokens(d.CacheReadTokens),
-				cli.HumanTokens(d.OutputTokens))
-		}
-		tw.Flush()
-		if total.UnpricedTokens > 0 {
-			fmt.Fprintf(out, "note: %s tokens from models with no price on file are excluded from the total.\n",
-				cli.HumanTokens(total.UnpricedTokens))
-		}
-	}
 }
 
 // newProjectDoctorCmd builds `lode project doctor [repo]`: is ingestion
@@ -594,46 +533,10 @@ func newProjectDoctorCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			for _, r := range resp.Repos {
-				// A nil app_installed means the check did not run; the
-				// reason is in app_error when there is one, and its absence
-				// means no GitHub App is configured at all.
-				app := "unchecked (no GitHub App configured)"
-				switch {
-				case r.AppInstalled == nil && r.AppError != "":
-					app = "unchecked (" + r.AppError + ")"
-				case r.AppInstalled != nil && *r.AppInstalled:
-					app = "installed"
-				case r.AppInstalled != nil:
-					app = "NOT INSTALLED (" + r.AppError + ")"
-				}
-				last := "never"
-				if r.LastEventAt != nil {
-					last = r.LastEventAt.Format(time.RFC3339)
-				}
-				cmd.Printf("%s (project %s)\n", r.Repo, r.Project)
-				cmd.Printf("  app:        %s\n", app)
-				cmd.Printf("  last event: %s (types: %s)\n", last, strings.Join(r.EventTypes, ", "))
-				cmd.Printf("  unapplied:  %d\n", r.UnappliedEvents)
-				if r.Stale {
-					cmd.Printf("  STALE: no delivery since mapping — run `lode reconcile --repo %s`\n", r.Repo)
-				}
-			}
-			for _, u := range resp.UnmappedSenders {
-				cmd.Printf("unmapped sender: %s (%d events, last %s)\n",
-					u.Repo, u.Events, u.LastEventAt.Format(time.RFC3339))
-			}
+			cli.ReposDoctorRender(cmd.OutOrStdout(), resp)
 			return nil
 		},
 	}
-}
-
-// keySuffix renders " (WL)" for a known task-id key, or nothing.
-func keySuffix(key string) string {
-	if key == "" {
-		return ""
-	}
-	return " (" + key + ")"
 }
 
 // scopeOrigin describes where a scope came from, for humans.

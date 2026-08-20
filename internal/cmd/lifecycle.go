@@ -326,7 +326,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 
 	o := cmd.OutOrStdout()
 	fmt.Fprintf(o, "claimed %s\n\n", taskID)
-	printBrief(cmd, brief)
+	cli.BriefRender(o, brief)
 	fmt.Fprintf(o, "\nworktree: %s\n\n", dir)
 	fmt.Fprintf(o, "  cd %s\n", dir)
 	return nil
@@ -409,7 +409,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 		printRaw(cmd, raw)
 		return nil
 	}
-	printBrief(cmd, brief)
+	cli.BriefRender(cmd.OutOrStdout(), brief)
 	return nil
 }
 
@@ -613,12 +613,12 @@ func runStatus(cmd *cobra.Command) error {
 		fmt.Fprintf(o, "lease: held elsewhere (%s)\n", brief.Lease.Worktree)
 	case "expired":
 		fmt.Fprintf(o, "lease: expired at %s (renewed %s)\n",
-			brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
+			cli.LocalTime(brief.Lease.ExpiresAt), cli.LocalTime(brief.Lease.RenewedAt))
 	default:
 		fmt.Fprintf(o, "lease: held, expires %s (renewed %s)\n",
-			brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
+			cli.LocalTime(brief.Lease.ExpiresAt), cli.LocalTime(brief.Lease.RenewedAt))
 	}
-	printBlockers(o, brief.OpenBlockers, brief.BlockingPlans)
+	cli.BlockersRender(o, brief.OpenBlockers, brief.BlockingPlans)
 	marker := "absent"
 	if sessionPresent {
 		marker = "present"

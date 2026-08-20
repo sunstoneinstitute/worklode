@@ -501,7 +501,7 @@ func newTaskSkillsCmd() *cobra.Command {
 				if err := json.Unmarshal(raw, &resp); err != nil {
 					return fmt.Errorf("decode skills: %w", err)
 				}
-				printSkills(cmd, resp.Skills)
+				cli.PinnedSkillList(cmd.OutOrStdout(), resp.Skills)
 				return nil
 			}
 			t, raw, err := c.GetTask(cmd.Context(), id)
@@ -512,22 +512,12 @@ func newTaskSkillsCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			printSkills(cmd, t.Skills)
+			cli.PinnedSkillList(cmd.OutOrStdout(), t.Skills)
 			return nil
 		},
 	}
 	cmd.Flags().StringSliceVar(&set, "set", nil, "replace pinned skills (comma-separated)")
 	return cmd
-}
-
-// printSkills renders a task's pinned skills, one per line, or a note when
-// there are none — a bare blank line reads as a rendering bug, not "no pins".
-func printSkills(cmd *cobra.Command, skills []string) {
-	if len(skills) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "(no pinned skills)")
-		return
-	}
-	fmt.Fprintln(cmd.OutOrStdout(), strings.Join(skills, "\n"))
 }
 
 func newTaskEditCmd() *cobra.Command {
@@ -702,7 +692,7 @@ func newTaskClaimCmd() *cobra.Command {
 					return nil
 				}
 				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "claimed %s, lease expires %s\n", id, resp.Lease.ExpiresAt.Local().Format(time.RFC3339))
+				fmt.Fprintf(out, "claimed %s, lease expires %s\n", id, cli.LocalTime(resp.Lease.ExpiresAt))
 				fmt.Fprintf(out, "branch: %s\n\n", resp.Branch)
 				fmt.Fprintf(out, "  git switch -c %s\n", resp.Branch)
 				return nil
@@ -790,7 +780,7 @@ func newTaskRenewCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "renewed %s, lease now expires %s\n", id, l.ExpiresAt.Local().Format(time.RFC3339))
+			fmt.Fprintf(cmd.OutOrStdout(), "renewed %s, lease now expires %s\n", id, cli.LocalTime(l.ExpiresAt))
 			return nil
 		},
 	}
@@ -968,46 +958,11 @@ func newTaskBriefCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			printBrief(cmd, b)
+			cli.BriefRender(cmd.OutOrStdout(), b)
 			return nil
 		},
 	}
 	return cmd
-}
-
-// printBrief renders a Brief as a readable summary, shared by `lode task
-// brief` and `lode next`.
-func printBrief(cmd *cobra.Command, b model.Brief) {
-	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%s: %s\n", b.Task.ID, b.Task.Title)
-	fmt.Fprintf(out, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
-	fmt.Fprintf(out, "branch: %s\n", b.Branch)
-	if len(b.Task.Secrets) > 0 {
-		fmt.Fprintf(out, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
-	}
-	if b.Lease != nil {
-		fmt.Fprintf(out, "lease: %s (expires %s)\n", b.Lease.Worktree, b.Lease.ExpiresAt.Local().Format(time.RFC3339))
-	}
-	printBlockers(out, b.OpenBlockers, b.BlockingPlans)
-	if b.Body != "" {
-		fmt.Fprintln(out)
-		cli.Markdown(out, b.Body)
-	}
-	// Warnings alone still print the section: a user who misspelled every pin
-	// would otherwise see nothing at all, which is exactly the case the
-	// warnings exist for.
-	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 || len(b.Skills.Warnings) > 0 {
-		fmt.Fprintln(out, "\nSkills:")
-		for _, p := range b.Skills.Pinned {
-			fmt.Fprintf(out, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
-		}
-		for _, m := range b.Skills.Matches {
-			fmt.Fprintf(out, "  %.2f    %s — %s\n", m.Score, m.Name, m.Description)
-		}
-		for _, w := range b.Skills.Warnings {
-			fmt.Fprintf(out, "  warning: %s\n", w)
-		}
-	}
 }
 
 // newTaskCostCmd is `lode task cost <id>`: the tokens billed to a task (spec
@@ -1043,44 +998,13 @@ func newTaskCostCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			printTaskCost(cmd, tc, costWindowLabel(days))
+			cli.TaskCostRender(cmd.OutOrStdout(), tc, costWindowLabel(days))
 			return nil
 		},
 	}
 	cmd.Flags().IntVar(&days, "days", 0, "cost window in days, counting today; 0 for all history")
 	cmd.Flags().BoolVar(&children, "children", false, "include the task's child_of descendants' sessions")
 	return cmd
-}
-
-// printTaskCost renders `lode task cost`: which task and scope, how many
-// agent sessions billed usage, then the cost blocks printCost already knows
-// how to render.
-func printTaskCost(cmd *cobra.Command, tc model.TaskCost, window string) {
-	out := cmd.OutOrStdout()
-	if tc.IncludesChildren {
-		fmt.Fprintf(out, "%s (including child tasks)\n", tc.Task)
-	} else {
-		fmt.Fprintf(out, "%s\n", tc.Task)
-	}
-	fmt.Fprintf(out, "sessions with recorded usage: %d\n", tc.Sessions)
-	printCost(out, tc.Cost, window)
-}
-
-// printBlockers renders what is holding a task up, shared by `lode task
-// brief`, `lode next` and `lode status`. Each section is omitted when empty.
-func printBlockers(out io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
-	if len(blockers) > 0 {
-		fmt.Fprintln(out, "blocked by:")
-		for _, blk := range blockers {
-			fmt.Fprintf(out, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
-		}
-	}
-	if len(plans) > 0 {
-		fmt.Fprintln(out, "blocked by plans:")
-		for _, p := range plans {
-			fmt.Fprintf(out, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
-		}
-	}
 }
 
 func newTaskUnblockCmd() *cobra.Command {

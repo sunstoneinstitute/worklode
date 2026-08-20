@@ -98,6 +98,23 @@ The cockpit's web pages render with `templ` components in `internal/ui`, which
 depends on nothing beyond stdlib, `internal/model`, and the templ runtime —
 `internal/api` imports `internal/ui`, never the reverse.
 
+**`internal/cmd` decides, `internal/cli` renders.** The seam is "does it know
+what cobra is", and it holds in both directions. `internal/cli` never imports
+cobra — that is what lets `internal/hookrun` and `internal/worktree` reuse it.
+Going the other way: every human-readable view of an `internal/model` shape —
+list *or* detail — is a `cli.*Table`/`cli.*Render` function in
+`internal/cli/render.go` taking an `io.Writer`, and a cobra `RunE` fetches,
+picks `--json` or human, and calls exactly one of them. So nothing under
+`internal/cmd` builds a `tabwriter` or formats a timestamp itself; a one-line
+confirmation that needs a time uses `cli.LocalTime`, and cell formatters
+(`cli.Money`, `cli.HumanTokens`, `cli.DocNumber`, `cli.KeySuffix`) are shared,
+never re-derived. What legitimately renders in `internal/cmd` is output over
+values that never cross the API: `lode doc import`'s dry run over walked corpus
+files, `lode hook`'s list of hook names, `lode next`'s no-work guidance.
+`internal/cmd/renderrule_test.go` catches the two tells a view has drifted back
+— a hand-built tabwriter, a hand-formatted timestamp — but it is a tripwire,
+not the rule; this paragraph is.
+
 **One model, not one per package (ADR 036).** Every shape that crosses the
 HTTP boundary — entities, response projections, request bodies — is declared
 once in `internal/model` (stdlib imports only). `internal/store` scans into

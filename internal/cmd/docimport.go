@@ -318,11 +318,8 @@ func importRefs(fm *designdoc.Frontmatter) []string {
 func printImportCorpus(w io.Writer, docs []importDoc) {
 	var specs, adrs, plans int
 	for _, d := range docs {
-		number := "-"
-		if d.number != 0 {
-			number = strconv.Itoa(d.number)
-		}
-		fmt.Fprintf(w, "%-4s %4s  %-56s %-10s %s\n", d.kind, number, d.slug, d.status, d.title)
+		fmt.Fprintf(w, "%-4s %4s  %-56s %-10s %s\n",
+			d.kind, cli.DocNumber(d.number), d.slug, d.status, d.title)
 		switch d.kind {
 		case "spec":
 			specs++
