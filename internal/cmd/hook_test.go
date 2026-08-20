@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/hookrun"
 )
 
@@ -31,18 +32,24 @@ func TestHookListNamesEveryEvent(t *testing.T) {
 }
 
 // Every Claude Code binding `lode install` writes must show up as the trigger
-// of the event it invokes; anything else means the two lists have drifted.
+// of the event it invokes, named alongside the adapter that binds it;
+// anything else means the listing and the adapter have drifted.
 func TestHookTriggersCoverClaudeBindings(t *testing.T) {
+	adapter := harness.ClaudeCode{}
 	triggers := hookTriggers()
-	for _, b := range claudeBindings {
-		event := strings.TrimPrefix(b.Command, lodeHookPrefix)
-		trigger, ok := triggers[event]
+	for event, natives := range adapter.Events() {
+		trigger, ok := triggers[string(event)]
 		if !ok {
-			t.Errorf("binding %s -> %q has no trigger entry", b.Event, b.Command)
+			t.Errorf("event %s -> %v has no trigger entry", event, natives)
 			continue
 		}
-		if !strings.Contains(trigger, b.Event) {
-			t.Errorf("trigger for %s = %q, want it to name %s", event, trigger, b.Event)
+		if !strings.Contains(trigger, adapter.ID()) {
+			t.Errorf("trigger for %s = %q, want it to name %s", event, trigger, adapter.ID())
+		}
+		for _, native := range natives {
+			if !strings.Contains(trigger, native) {
+				t.Errorf("trigger for %s = %q, want it to name %s", event, trigger, native)
+			}
 		}
 	}
 	if got := triggers["pre-commit"]; !strings.Contains(got, "git") {

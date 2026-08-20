@@ -1,4 +1,4 @@
-package cmd
+package harness
 
 import (
 	"encoding/json"
@@ -57,24 +57,37 @@ func commandsFor(t *testing.T, settings map[string]any, event string) []string {
 	return out
 }
 
+// statusLineCommand returns the command string in a settings file's statusLine,
+// or "" when there is none.
+func statusLineCommand(t *testing.T, path string) string {
+	t.Helper()
+	settings := readSettings(t, path)
+	entry, ok := settings["statusLine"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	command, _ := entry["command"].(string)
+	return command
+}
+
 func TestClaudeInstallScopes(t *testing.T) {
 	root := t.TempDir()
 
-	local, err := claudeSettingsPath(root, scopeLocal)
+	local, err := ClaudeSettingsPath(root, ScopeLocal)
 	if err != nil {
 		t.Fatalf("local path: %v", err)
 	}
 	if want := filepath.Join(root, ".claude", "settings.local.json"); local != want {
 		t.Fatalf("local scope path: got %s, want %s", local, want)
 	}
-	project, err := claudeSettingsPath(root, scopeProject)
+	project, err := ClaudeSettingsPath(root, ScopeProject)
 	if err != nil {
 		t.Fatalf("project path: %v", err)
 	}
 	if want := filepath.Join(root, ".claude", "settings.json"); project != want {
 		t.Fatalf("project scope path: got %s, want %s", project, want)
 	}
-	if _, err := claudeSettingsPath(root, "global"); err == nil {
+	if _, err := ClaudeSettingsPath(root, "global"); err == nil {
 		t.Fatal("unknown scope was accepted")
 	}
 }
@@ -179,8 +192,8 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	if action != hookActionRemoved {
-		t.Fatalf("uninstall action = %q, want %q", action, hookActionRemoved)
+	if action != ActionRemoved {
+		t.Fatalf("uninstall action = %q, want %q", action, ActionRemoved)
 	}
 	settings = readSettings(t, path)
 	if _, ok := settings["permissions"]; !ok {
@@ -205,7 +218,7 @@ func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
 		t.Fatalf("propagate: %v", err)
 	}
 
@@ -224,7 +237,7 @@ func TestPropagateClaudeHooksToWorktreeSkipsWhenRootNeverOptedIn(t *testing.T) {
 	root := t.TempDir()
 	dir := t.TempDir()
 
-	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
 		t.Fatalf("propagate: %v", err)
 	}
 
@@ -242,12 +255,12 @@ func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T
 	}
 	rootSettings := readSettings(t, rootPath)
 	rootSettings["statusLine"] = map[string]any{"type": "command", "command": "my-own-statusline"}
-	if err := writeSettingsFile(rootPath, rootSettings); err != nil {
+	if err := WriteJSONFile(rootPath, rootSettings); err != nil {
 		t.Fatalf("seed foreign status line: %v", err)
 	}
 
 	dir := t.TempDir()
-	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
 		t.Fatalf("propagate: %v", err)
 	}
 
@@ -264,8 +277,8 @@ func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstall with no settings file: %v, want nil", err)
 	}
-	if action != hookActionNone {
-		t.Fatalf("action = %q, want %q", action, hookActionNone)
+	if action != ActionNone {
+		t.Fatalf("action = %q, want %q", action, ActionNone)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("uninstall created a settings file")
@@ -274,7 +287,7 @@ func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 
 // TestClaudeUninstallNoopLeavesFileUntouched covers the case where the
 // settings file exists but has no `lode hook` entries to strip: the action
-// must be hookActionNone (not the false "removed"), and the file must not be
+// must be ActionNone (not the false "removed"), and the file must not be
 // rewritten at all — a no-op uninstall reformatting someone's hand-edited
 // JSON or bumping its mtime would be its own kind of lie.
 func TestClaudeUninstallNoopLeavesFileUntouched(t *testing.T) {
@@ -303,8 +316,8 @@ func TestClaudeUninstallNoopLeavesFileUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	if action != hookActionNone {
-		t.Fatalf("action = %q, want %q (no lode hooks were present)", action, hookActionNone)
+	if action != ActionNone {
+		t.Fatalf("action = %q, want %q (no lode hooks were present)", action, ActionNone)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -319,5 +332,183 @@ func TestClaudeUninstallNoopLeavesFileUntouched(t *testing.T) {
 	}
 	if !info.ModTime().Equal(past) {
 		t.Fatalf("no-op uninstall updated mtime: got %v, want unchanged %v", info.ModTime(), past)
+	}
+}
+
+func TestInstallStatusLineWritesTheCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+
+	action, err := installStatusLine(path)
+	if err != nil {
+		t.Fatalf("installStatusLine: %v", err)
+	}
+	if action != ActionInstalled {
+		t.Fatalf("action = %q, want %q", action, ActionInstalled)
+	}
+	if got := statusLineCommand(t, path); got != StatusLineCommand {
+		t.Fatalf("statusLine command = %q, want %q", got, StatusLineCommand)
+	}
+}
+
+// The slot holds exactly one command, so an install that finds someone else's
+// status line must decline rather than replace it.
+func TestInstallStatusLineKeepsAnExistingOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+	if err := WriteJSONFile(path, map[string]any{
+		"statusLine": map[string]any{"type": "command", "command": "~/bin/my-statusline"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	action, err := installStatusLine(path)
+	if err != nil {
+		t.Fatalf("installStatusLine: %v", err)
+	}
+	if action != ActionKept {
+		t.Fatalf("action = %q, want %q", action, ActionKept)
+	}
+	if got := statusLineCommand(t, path); got != "~/bin/my-statusline" {
+		t.Fatalf("statusLine command = %q, want it untouched", got)
+	}
+}
+
+func TestInstallStatusLineIsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+	if _, err := installStatusLine(path); err != nil {
+		t.Fatal(err)
+	}
+	action, err := installStatusLine(path)
+	if err != nil {
+		t.Fatalf("second installStatusLine: %v", err)
+	}
+	if action != ActionInstalled {
+		t.Fatalf("action = %q, want a converging re-install", action)
+	}
+	if got := statusLineCommand(t, path); got != StatusLineCommand {
+		t.Fatalf("statusLine command = %q", got)
+	}
+}
+
+func TestInstallStatusLinePreservesOtherSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+	if err := WriteJSONFile(path, map[string]any{"model": "opus"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installStatusLine(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSettings(t, path)["model"]; got != "opus" {
+		t.Fatalf("model = %v, want it preserved", got)
+	}
+}
+
+func TestUninstallStatusLineRemovesOnlyOurs(t *testing.T) {
+	tests := []struct {
+		name        string
+		settings    map[string]any
+		wantAction  string
+		wantCommand string
+	}{
+		{
+			name:       "ours",
+			settings:   map[string]any{"statusLine": map[string]any{"type": "command", "command": StatusLineCommand}},
+			wantAction: ActionRemoved,
+		},
+		{
+			name:        "someone else's",
+			settings:    map[string]any{"statusLine": map[string]any{"type": "command", "command": "starship prompt"}},
+			wantAction:  ActionKept,
+			wantCommand: "starship prompt",
+		},
+		{
+			name:       "no status line at all",
+			settings:   map[string]any{"model": "opus"},
+			wantAction: ActionNone,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+			if err := WriteJSONFile(path, tt.settings); err != nil {
+				t.Fatal(err)
+			}
+			action, err := uninstallStatusLine(path)
+			if err != nil {
+				t.Fatalf("uninstallStatusLine: %v", err)
+			}
+			if action != tt.wantAction {
+				t.Fatalf("action = %q, want %q", action, tt.wantAction)
+			}
+			if got := statusLineCommand(t, path); got != tt.wantCommand {
+				t.Fatalf("statusLine command = %q, want %q", got, tt.wantCommand)
+			}
+		})
+	}
+}
+
+// A no-op uninstall must not rewrite the file — that would reformat someone's
+// settings JSON and bump its mtime for nothing.
+func TestUninstallStatusLineLeavesAMissingFileAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
+	action, err := uninstallStatusLine(path)
+	if err != nil {
+		t.Fatalf("uninstallStatusLine: %v", err)
+	}
+	if action != ActionNone {
+		t.Fatalf("action = %q, want %q", action, ActionNone)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("uninstall created a settings file")
+	}
+}
+
+// The binary may be invoked by absolute path or carry flags, so recognizing
+// our own entry cannot be string equality.
+func TestIsLodeStatusLine(t *testing.T) {
+	tests := []struct {
+		command string
+		want    bool
+	}{
+		{"lode statusline", true},
+		{"/usr/local/bin/lode statusline", true},
+		{"  lode   statusline  ", true},
+		{"lode hook heartbeat", false},
+		{"lode", false},
+		{"my-lode statusline", false},
+		{"starship prompt", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			got := isLodeStatusLine(map[string]any{"type": "command", "command": tt.command})
+			if got != tt.want {
+				t.Fatalf("isLodeStatusLine(%q) = %v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+	if isLodeStatusLine("a bare string") {
+		t.Fatal("a non-object statusLine is not ours")
+	}
+	if isLodeStatusLine(map[string]any{"type": "command"}) {
+		t.Fatal("a statusLine with no command is not ours")
+	}
+}
+
+// BoundNames must use the same native-event spelling Events() reports, so a
+// report of what was bound lines up with the event table.
+func TestBoundNamesMatchEvents(t *testing.T) {
+	bound := map[string]bool{}
+	for _, n := range boundNames() {
+		bound[n] = true
+	}
+	if len(bound) != len(claudeBindings) {
+		t.Fatalf("boundNames() = %v, want one entry per binding", boundNames())
+	}
+	for event, natives := range (ClaudeCode{}).Events() {
+		for _, n := range natives {
+			if !bound[n] {
+				t.Errorf("%s maps to %q, which no binding writes", event, n)
+			}
+		}
 	}
 }

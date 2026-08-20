@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/hookrun"
 )
 
@@ -95,25 +96,28 @@ func parseHookArgs(argv []string) (event string, args, next []string, err error)
 const unboundTrigger = "(unbound — callable from scripts)"
 
 // hookTriggers maps each Worklode event to what a default `lode install` binds
-// it to. Derived from claudeBindings and from gitHooks — the same lists
-// installation walks — rather than restated, so the listing cannot drift from
-// what installation actually wires up.
+// it to. Derived from the harness registry and from gitHooks — the same
+// tables installation walks — rather than restated, so the listing cannot
+// drift from what installation actually wires up. Adapters are walked in
+// harness.IDs() order so an event several harnesses bind renders the same way
+// every run.
 func hookTriggers() map[string]string {
-	claude := map[string][]string{}
-	for _, b := range claudeBindings {
-		event := strings.TrimPrefix(b.Command, lodeHookPrefix)
-		name := b.Event
-		if b.Matcher != "" {
-			name += "[" + b.Matcher + "]"
+	byEvent := map[string][]string{}
+	for _, id := range harness.IDs() {
+		h, ok := harness.Get(id)
+		if !ok {
+			continue
 		}
-		claude[event] = append(claude[event], name)
+		for event, natives := range h.Events() {
+			byEvent[string(event)] = append(byEvent[string(event)], id+" "+strings.Join(natives, ", "))
+		}
 	}
 	triggers := map[string]string{}
 	for _, h := range gitHooks {
 		triggers[h.name] = "git " + h.name
 	}
-	for event, names := range claude {
-		triggers[event] = "Claude Code " + strings.Join(names, ", ")
+	for event, entries := range byEvent {
+		triggers[event] = strings.Join(entries, "; ")
 	}
 	return triggers
 }

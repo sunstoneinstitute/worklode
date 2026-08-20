@@ -19,6 +19,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -598,7 +599,7 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 	task := createTestTask(t, c, "Mirror hooks")
 
 	root := initGitRepo(t)
-	if err := installClaudeHooks(filepath.Join(root, ".claude", "settings.local.json")); err != nil {
+	if _, err := (harness.ClaudeCode{}).InstallHooks(root, harness.ScopeLocal); err != nil {
 		t.Fatalf("install claude hooks at root: %v", err)
 	}
 	t.Chdir(root)

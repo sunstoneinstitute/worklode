@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -36,7 +37,7 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("statusline", true,
 		"manage the agent's status line, pointing it at 'lode statusline'")
 	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
-	cmd.Flags().String("scope", scopeLocal,
+	cmd.Flags().String("scope", harness.ScopeLocal,
 		"which agent settings file to write: local (settings.local.json) or project (settings.json)")
 }
 
@@ -172,21 +173,18 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: chains}
 	}
 	if targets.agent != "" {
-		path, err := settingsPathForScope(dir, scope)
+		hooks, err := harness.ClaudeCode{}.InstallHooks(dir, scope)
 		if err != nil {
 			return res, err
 		}
-		if err := installClaudeHooks(path); err != nil {
-			return res, err
-		}
-		res.Agent = &agentInstall{Agent: targets.agent, Path: path}
+		res.Agent = &agentInstall{Agent: targets.agent, Path: hooks.Path}
 
 		if targets.statusLine {
-			action, err := installStatusLine(path)
+			sl, err := harness.ClaudeCode{}.InstallStatusLine(dir, scope)
 			if err != nil {
 				return res, err
 			}
-			res.StatusLine = &statusLineInstall{Agent: targets.agent, Path: path, Action: action}
+			res.StatusLine = &statusLineInstall{Agent: targets.agent, Path: sl.Path, Action: sl.Action}
 		}
 	}
 	return res, nil
@@ -206,22 +204,18 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: removals}
 	}
 	if targets.agent != "" {
-		path, err := settingsPathForScope(dir, scope)
+		hooks, err := harness.ClaudeCode{}.UninstallHooks(dir, scope)
 		if err != nil {
 			return res, err
 		}
-		action, err := uninstallClaudeHooks(path)
-		if err != nil {
-			return res, err
-		}
-		res.Agent = &agentUninstall{Agent: targets.agent, Path: path, Action: action}
+		res.Agent = &agentUninstall{Agent: targets.agent, Path: hooks.Path, Action: hooks.Action}
 
 		if targets.statusLine {
-			slAction, err := uninstallStatusLine(path)
+			sl, err := harness.ClaudeCode{}.UninstallStatusLine(dir, scope)
 			if err != nil {
 				return res, err
 			}
-			res.StatusLine = &statusLineUninstall{Agent: targets.agent, Path: path, Action: slAction}
+			res.StatusLine = &statusLineUninstall{Agent: targets.agent, Path: sl.Path, Action: sl.Action}
 		}
 	}
 	return res, nil
@@ -335,9 +329,9 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 	}
 	if sl := res.StatusLine; sl != nil {
 		switch sl.Action {
-		case hookActionInstalled:
-			fmt.Fprintf(out, "%s: status line set to `%s` in %s\n", sl.Agent, lodeStatusLineCommand, sl.Path)
-		case hookActionKept:
+		case harness.ActionInstalled:
+			fmt.Fprintf(out, "%s: status line set to `%s` in %s\n", sl.Agent, harness.StatusLineCommand, sl.Path)
+		case harness.ActionKept:
 			fmt.Fprintf(out, "%s: kept the status line already configured in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
@@ -370,9 +364,9 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	}
 	if res.Agent != nil {
 		switch res.Agent.Action {
-		case hookActionRemoved:
+		case harness.ActionRemoved:
 			fmt.Fprintf(out, "%s: removed hooks from %s\n", res.Agent.Agent, res.Agent.Path)
-		case hookActionNone:
+		case harness.ActionNone:
 			fmt.Fprintf(out, "%s: no Worklode hooks in %s\n", res.Agent.Agent, res.Agent.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.Agent.Agent, res.Agent.Action, res.Agent.Path)
@@ -380,11 +374,11 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	}
 	if sl := res.StatusLine; sl != nil {
 		switch sl.Action {
-		case hookActionRemoved:
+		case harness.ActionRemoved:
 			fmt.Fprintf(out, "%s: removed the status line from %s\n", sl.Agent, sl.Path)
-		case hookActionKept:
+		case harness.ActionKept:
 			fmt.Fprintf(out, "%s: left the status line in %s alone (not ours)\n", sl.Agent, sl.Path)
-		case hookActionNone:
+		case harness.ActionNone:
 			fmt.Fprintf(out, "%s: no status line in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)

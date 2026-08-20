@@ -1,7 +1,6 @@
-package cmd
+package harness
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,30 +9,15 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// Settings scopes. Local settings are the developer's own and are normally
-// git-ignored; project settings are committed and shared by the whole repo.
-const (
-	scopeLocal   = "local"
-	scopeProject = "project"
-)
-
 // lodeHookPrefix marks a settings entry as Worklode's. JSON has no comments,
 // so the command itself is the marker: install strips every entry with this
 // prefix before writing the current set, which makes a re-run converge rather
 // than duplicate.
 const lodeHookPrefix = "lode hook "
 
-// lodeStatusLineCommand is what the status-line install binds, and — by the
+// StatusLineCommand is what the status-line install binds, and — by the
 // same command-as-marker trick — how uninstall recognizes its own entry.
-const lodeStatusLineCommand = "lode statusline"
-
-// What an install or uninstall did to the status line. A status line is a
-// personal choice, so both directions refuse to touch one that is not ours;
-// hookActionKept is that refusal, reported rather than swallowed.
-const (
-	hookActionInstalled = "installed" // we wrote our status line
-	hookActionKept      = "kept"      // someone else's status line was left alone
-)
+const StatusLineCommand = "lode statusline"
 
 // claudeBinding is one Claude Code hook binding. An empty Matcher means the
 // binding applies to every occurrence of the event.
@@ -65,6 +49,120 @@ var claudeBindings = []claudeBinding{
 	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
 }
 
+// ClaudeCode is the claude-code adapter: JSON hook bindings in
+// .claude/settings*.json. Its command strings stay `lode hook <event>` with
+// no --harness flag: claude-code is the default harness, and the bare
+// prefix is what makes uninstall recognize bindings from installs that
+// predate this package.
+type ClaudeCode struct{}
+
+var _ StatusLiner = ClaudeCode{}
+
+func init() { register(ClaudeCode{}) }
+
+func (ClaudeCode) ID() string { return "claude-code" }
+
+// Detect: a .claude directory in the repo, or Claude Code configured for
+// the user (~/.claude exists).
+func (ClaudeCode) Detect(repoDir string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(repoDir, ".claude")); err == nil {
+		return true, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(filepath.Join(home, ".claude"))
+	return err == nil, nil
+}
+
+// SkillTargets: ~/.claude/skills, per-skill — the directory is user-owned
+// (spec 008 §17.3). Claude Code reads no project-scope shared dir.
+func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []SkillTarget{{Dir: filepath.Join(home, ".claude", "skills"), PerSkill: true}}, nil
+}
+
+func (ClaudeCode) Events() map[Event][]string {
+	return map[Event][]string{
+		SessionStart:  {"SessionStart"},
+		SessionEnd:    {"SessionEnd"},
+		Heartbeat:     {"Stop", "StopFailure", "SubagentStop", "Notification"},
+		WorktreeEnter: {"PostToolUse:EnterWorktree"},
+	}
+}
+
+// InstallHooks writes Worklode's bindings into the scope's settings file for
+// the repo containing repoDir. Every Worklode event claude-code can express
+// is bound, so nothing is reported unbound.
+func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
+	path, err := settingsPathForScope(repoDir, scope)
+	if err != nil {
+		return HookInstall{}, err
+	}
+	if err := installClaudeHooks(path); err != nil {
+		return HookInstall{}, err
+	}
+	return HookInstall{Path: path, Bound: boundNames()}, nil
+}
+
+// UninstallHooks removes Worklode's bindings from the scope's settings file
+// for the repo containing repoDir.
+func (ClaudeCode) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
+	path, err := settingsPathForScope(repoDir, scope)
+	if err != nil {
+		return HookUninstall{}, err
+	}
+	action, err := uninstallClaudeHooks(path)
+	if err != nil {
+		return HookUninstall{}, err
+	}
+	return HookUninstall{Path: path, Action: action}, nil
+}
+
+// InstallStatusLine points the scope's settings file at `lode statusline`.
+func (ClaudeCode) InstallStatusLine(repoDir, scope string) (StatusLineAction, error) {
+	path, err := settingsPathForScope(repoDir, scope)
+	if err != nil {
+		return StatusLineAction{}, err
+	}
+	action, err := installStatusLine(path)
+	if err != nil {
+		return StatusLineAction{}, err
+	}
+	return StatusLineAction{Path: path, Action: action}, nil
+}
+
+// UninstallStatusLine removes our status line from the scope's settings file.
+func (ClaudeCode) UninstallStatusLine(repoDir, scope string) (StatusLineAction, error) {
+	path, err := settingsPathForScope(repoDir, scope)
+	if err != nil {
+		return StatusLineAction{}, err
+	}
+	action, err := uninstallStatusLine(path)
+	if err != nil {
+		return StatusLineAction{}, err
+	}
+	return StatusLineAction{Path: path, Action: action}, nil
+}
+
+// boundNames lists the harness-native event names an install writes, using
+// the same `Event:Matcher` spelling Events() reports.
+func boundNames() []string {
+	out := make([]string, 0, len(claudeBindings))
+	for _, b := range claudeBindings {
+		name := b.Event
+		if b.Matcher != "" {
+			name += ":" + b.Matcher
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
 // settingsPathForScope resolves the settings file for scope, relative to the
 // git worktree root containing dir.
 func settingsPathForScope(dir, scope string) (string, error) {
@@ -72,65 +170,26 @@ func settingsPathForScope(dir, scope string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("not inside a git repository: %s", dir)
 	}
-	return claudeSettingsPath(root, scope)
+	return ClaudeSettingsPath(root, scope)
 }
 
-// claudeSettingsPath maps a scope to its settings file under root.
-func claudeSettingsPath(root, scope string) (string, error) {
+// ClaudeSettingsPath maps a scope to its settings file under root.
+func ClaudeSettingsPath(root, scope string) (string, error) {
 	switch scope {
-	case scopeLocal:
+	case ScopeLocal:
 		return filepath.Join(root, ".claude", "settings.local.json"), nil
-	case scopeProject:
+	case ScopeProject:
 		return filepath.Join(root, ".claude", "settings.json"), nil
 	default:
-		return "", fmt.Errorf("unknown scope %q: want %q or %q", scope, scopeLocal, scopeProject)
+		return "", fmt.Errorf("unknown scope %q: want %q or %q", scope, ScopeLocal, ScopeProject)
 	}
-}
-
-// readSettingsFile reads path as generic JSON. A missing file is an empty
-// settings object, not an error — installing into a repo that has never had
-// Claude Code settings is the common case.
-func readSettingsFile(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return map[string]any{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	if len(strings.TrimSpace(string(data))) == 0 {
-		return map[string]any{}, nil
-	}
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return settings, nil
-}
-
-// writeSettingsFile writes settings back to path, creating the .claude
-// directory if needed. Output is indented and newline-terminated so a
-// committed settings file stays readable and diffs cleanly.
-func writeSettingsFile(path string, settings map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-	}
-	b, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode %s: %w", path, err)
-	}
-	b = append(b, '\n')
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
 }
 
 // installClaudeHooks writes Worklode's bindings into the settings file at
 // path, replacing any bindings a previous install left behind and preserving
 // every other setting.
 func installClaudeHooks(path string) error {
-	settings, err := readSettingsFile(path)
+	settings, err := ReadJSONFile(path)
 	if err != nil {
 		return err
 	}
@@ -139,10 +198,10 @@ func installClaudeHooks(path string) error {
 		hooks[b.Event] = appendBinding(hooks[b.Event], b)
 	}
 	settings["hooks"] = hooks
-	return writeSettingsFile(path, settings)
+	return WriteJSONFile(path, settings)
 }
 
-// propagateClaudeHooksToWorktree mirrors root's local-scope Claude Code
+// PropagateToWorktree mirrors root's local-scope Claude Code
 // bindings — and, if it is ours, the status line — into a freshly created
 // worktree at dir. Local scope is a developer's own opt-in file
 // (settings.local.json), and git does not track it, so a linked worktree's
@@ -150,19 +209,19 @@ func installClaudeHooks(path string) error {
 // This only ever mirrors a choice the developer already made at root: a repo
 // where `lode install` was never run locally is left alone, so `lode next`
 // never opts a worktree into Claude Code hooks on its own.
-func propagateClaudeHooksToWorktree(root, dir string) error {
-	rootPath, err := claudeSettingsPath(root, scopeLocal)
+func (ClaudeCode) PropagateToWorktree(root, dir string) error {
+	rootPath, err := ClaudeSettingsPath(root, ScopeLocal)
 	if err != nil {
 		return err
 	}
-	rootSettings, err := readSettingsFile(rootPath)
+	rootSettings, err := ReadJSONFile(rootPath)
 	if err != nil {
 		return err
 	}
 	if _, installed := stripLodeHooks(settingsHooks(rootSettings)); !installed {
 		return nil
 	}
-	dirPath, err := claudeSettingsPath(dir, scopeLocal)
+	dirPath, err := ClaudeSettingsPath(dir, ScopeLocal)
 	if err != nil {
 		return err
 	}
@@ -178,81 +237,81 @@ func propagateClaudeHooksToWorktree(root, dir string) error {
 }
 
 // uninstallClaudeHooks removes Worklode's bindings from the settings file at
-// path, reporting hookActionNone or hookActionRemoved (the same vocabulary
-// uninstallGitHooks uses). A missing file, or one with no `lode hook` entries
-// to strip, is hookActionNone and leaves the file untouched — a no-op must
-// not reformat someone's settings JSON or bump its mtime.
+// path, reporting ActionNone or ActionRemoved (the same vocabulary the git
+// hooks use). A missing file, or one with no `lode hook` entries to strip, is
+// ActionNone and leaves the file untouched — a no-op must not reformat
+// someone's settings JSON or bump its mtime.
 func uninstallClaudeHooks(path string) (action string, err error) {
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		return hookActionNone, nil
+		return ActionNone, nil
 	}
-	settings, err := readSettingsFile(path)
+	settings, err := ReadJSONFile(path)
 	if err != nil {
 		return "", err
 	}
 	hooks, changed := stripLodeHooks(settingsHooks(settings))
 	if !changed {
-		return hookActionNone, nil
+		return ActionNone, nil
 	}
 	if len(hooks) == 0 {
 		delete(settings, "hooks")
 	} else {
 		settings["hooks"] = hooks
 	}
-	if err := writeSettingsFile(path, settings); err != nil {
+	if err := WriteJSONFile(path, settings); err != nil {
 		return "", err
 	}
-	return hookActionRemoved, nil
+	return ActionRemoved, nil
 }
 
 // installStatusLine points the settings file at `lode statusline`, but only
 // when no status line is configured. A status line is a personal choice and a
 // slot that holds exactly one command, so replacing one the user chose would
-// be a silent theft rather than an install; that case reports hookActionKept
+// be a silent theft rather than an install; that case reports ActionKept
 // and leaves the file untouched. A re-run over our own entry rewrites it in
 // place, so install converges.
 func installStatusLine(path string) (action string, err error) {
-	settings, err := readSettingsFile(path)
+	settings, err := ReadJSONFile(path)
 	if err != nil {
 		return "", err
 	}
 	if existing, ok := settings["statusLine"]; ok && !isLodeStatusLine(existing) {
-		return hookActionKept, nil
+		return ActionKept, nil
 	}
 	settings["statusLine"] = map[string]any{
 		"type":    "command",
-		"command": lodeStatusLineCommand,
+		"command": StatusLineCommand,
 	}
-	if err := writeSettingsFile(path, settings); err != nil {
+	if err := WriteJSONFile(path, settings); err != nil {
 		return "", err
 	}
-	return hookActionInstalled, nil
+	return ActionInstalled, nil
 }
 
 // uninstallStatusLine removes our status line from the settings file at path.
 // A missing file, no status line at all, or someone else's is left exactly as
-// found — hookActionNone and hookActionKept respectively — because a no-op
+// found — ActionNone and ActionKept respectively — because a no-op
 // must not reformat someone's settings JSON or bump its mtime.
 func uninstallStatusLine(path string) (action string, err error) {
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		return hookActionNone, nil
+		return ActionNone, nil
 	}
-	settings, err := readSettingsFile(path)
+	settings, err := ReadJSONFile(path)
 	if err != nil {
 		return "", err
 	}
 	existing, ok := settings["statusLine"]
 	if !ok {
-		return hookActionNone, nil
+		return ActionNone, nil
 	}
 	if !isLodeStatusLine(existing) {
-		return hookActionKept, nil
+		return ActionKept, nil
 	}
 	delete(settings, "statusLine")
-	if err := writeSettingsFile(path, settings); err != nil {
+	if err := WriteJSONFile(path, settings); err != nil {
 		return "", err
 	}
-	return hookActionRemoved, nil
+	return ActionRemoved, nil
 }
 
 // isLodeStatusLine reports whether a statusLine setting runs `lode statusline`.

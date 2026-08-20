@@ -11,7 +11,58 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 )
+
+// readSettings reads a settings file as generic JSON, failing the test if it
+// is missing or malformed.
+func readSettings(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return out
+}
+
+// commandsFor returns every hook command registered for a Claude Code event.
+func commandsFor(t *testing.T, settings map[string]any, event string) []string {
+	t.Helper()
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	groups, ok := hooks[event].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, g := range groups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		entries, ok := group["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := entry["command"].(string); ok {
+				out = append(out, cmd)
+			}
+		}
+	}
+	return out
+}
 
 // discardCmd is a throwaway command supplying the streams installHooks writes
 // warnings to, for tests that do not inspect them. Tests that do assert on a
@@ -132,8 +183,8 @@ func TestResolveHookTargetsScopeDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scope: %v", err)
 	}
-	if scope != scopeLocal {
-		t.Fatalf("scope default = %q, want %q", scope, scopeLocal)
+	if scope != harness.ScopeLocal {
+		t.Fatalf("scope default = %q, want %q", scope, harness.ScopeLocal)
 	}
 }
 
@@ -158,7 +209,7 @@ func TestInstallUninstallCmdFlags(t *testing.T) {
 
 func TestInstallHooksEnablesWorktreeConfigExtension(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 	out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").Output()
@@ -170,7 +221,7 @@ func TestInstallHooksEnablesWorktreeConfigExtension(t *testing.T) {
 	}
 
 	// Re-running must stay idempotent — no error, still true.
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks (second run): %v", err)
 	}
 }
@@ -191,7 +242,7 @@ func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(&stderr)
 
-	res, err := installHooks(cmd, root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(cmd, root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v (a refused worktree config extension must not abort the run)", err)
 	}
@@ -218,7 +269,7 @@ func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
 // on by default and pulls the extension in with it.
 func TestInstallHooksSkipsWorktreeConfigExtensionWhenNothingNeedsIt(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 	if out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
@@ -230,7 +281,7 @@ func TestInstallHooksSkipsWorktreeConfigExtensionWhenNothingNeedsIt(t *testing.T
 func TestInstallHooksBothIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -255,7 +306,7 @@ func TestInstallHooksBothIntegrations(t *testing.T) {
 func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --no-agent: %v", err)
 	}
@@ -267,7 +318,7 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	}
 
 	root2 := initGitRepo(t)
-	res2, err := installHooks(discardCmd(), root2, hookTargets{agent: agentClaudeCode}, scopeLocal)
+	res2, err := installHooks(discardCmd(), root2, hookTargets{agent: agentClaudeCode}, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --no-vcs: %v", err)
 	}
@@ -286,11 +337,11 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 func TestUninstallHooksUndoesInstall(t *testing.T) {
 	root := initGitRepo(t)
 	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
-	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 
-	res, err := uninstallHooks(root, targets, scopeLocal)
+	res, err := uninstallHooks(root, targets, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("uninstallHooks: %v", err)
 	}
@@ -316,7 +367,7 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 // below for the real end-to-end check.
 func TestInstallHooksJSONOmitsSkippedIntegration(t *testing.T) {
 	root := initGitRepo(t)
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit}, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -339,8 +390,8 @@ func TestInstallHooksJSONOmitsSkippedIntegration(t *testing.T) {
 // --- ISSUE 1: partial failure still reports what already landed -----------
 
 // writeCorruptSettings seeds root's local Claude settings file with invalid
-// JSON, so installClaudeHooks/uninstallClaudeHooks fail on the agent step
-// while leaving any prior VCS step's result standing.
+// JSON, so the claude-code adapter's hook install/uninstall fails on the agent
+// step while leaving any prior VCS step's result standing.
 func writeCorruptSettings(t *testing.T, root string) {
 	t.Helper()
 	dir := filepath.Join(root, ".claude")
@@ -357,7 +408,7 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
 	writeCorruptSettings(t, root)
 
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
 	if err == nil {
 		t.Fatal("installHooks with corrupt settings: err = nil, want a parse error")
 	}
@@ -375,12 +426,12 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
 	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
-	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	writeCorruptSettings(t, root)
 
-	res, err := uninstallHooks(root, targets, scopeLocal)
+	res, err := uninstallHooks(root, targets, harness.ScopeLocal)
 	if err == nil {
 		t.Fatal("uninstallHooks with corrupt settings: err = nil, want a parse error")
 	}
@@ -418,7 +469,7 @@ func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 
 func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	writeCorruptSettings(t, root)
@@ -666,7 +717,7 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 // output, not just in the struct.
 func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, scopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	t.Chdir(root)
