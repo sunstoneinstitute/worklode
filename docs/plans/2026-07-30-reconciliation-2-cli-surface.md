@@ -32,12 +32,27 @@ PostgreSQL via `database/sql`, standard-library testing.
 built.** See part 1's header for the full series scope, prior-art map, and
 what is owned elsewhere.
 
-**Prerequisites (landed by part 1):** the `0008` migration
+**Prerequisites (landed by part 1):** the `0030_reconciliation` migration
 (`events.applied_at`, `project_repos.mapped_at` — existing `project_repos`
 rows backfilled to epoch, new rows default `now()`), the transport-independent
 `applier` (`internal/hooks/apply.go`), engine 1 (`hooks.Replay`), and
 `internal/store/reconcile.go` with `MarkEventApplied` /
 `UnappliedGitHubEvents`.
+
+**Two corrections to the code below, from part 1 as executed (WL-31):**
+
+- The replay report is **`model.ReplayResult`** (`internal/model/reconcile.go`),
+  not `hooks.ReplayResult`. ADR 036 puts it there because it is a section of
+  this plan's `POST /api/v1/reconcile` response body, and `internal/model`
+  imports stdlib only, so it cannot name a `hooks` type.
+- For the same reason, `reconcileRequest`, `reconcileResponse` and the
+  doctor-report shapes below must be **declared in `internal/model`**, not in
+  `internal/api`: `internal/model/rule_test.go` scans `internal/api` in
+  `modeWire` and fails any json-tagged struct declared there.
+- `hooks.ReplayOptions` also carries `Log`, `ResolveBranch` and `Metrics`
+  (all optional) alongside `Repo`/`Since`/`DryRun`. Pass `s.appAuth.BranchSHA`
+  and the webhook `*hooks.Metrics` so a replayed `release.published` resolves
+  its `target_commitish` and the run is observable.
 
 Design calls this plan inherits (recorded in part 1, restated because they
 shape Tasks 8–9):
