@@ -149,9 +149,9 @@ func buildPolicy() *bluemonday.Policy {
 // three orders of magnitude: 64 KiB of input measured at 48 MB of output and
 // half a gigabyte of allocation. A browser parsing the unbalanced fragment
 // would build the same DOM, so the expansion is not new work for the client —
-// the harm is that balance turns it into a server-side string, recomputed on
-// every uncached page view. 1 MiB is 16x maxBody, far past anything ordinary
-// markdown expands to, and cheap enough to pay per view.
+// the harm is that balance turns it into a server-side string. 1 MiB is 16x
+// maxBody, far past anything ordinary markdown expands to, and Cache means it
+// is paid once per body rather than once per view.
 const maxRendered = 1 << 20
 
 var errTooLarge = errors.New("mdrender: rendered output over maxRendered")
@@ -218,30 +218,50 @@ func balance(fragment []byte) ([]byte, error) {
 // GitHub's own issue-body limit and therefore the largest body spec 020's
 // inbox import can produce; the API's 1 MiB request cap sizes a request, not a
 // body a human wrote. The cap does not make a hostile 64 KiB body cheap, it
-// only stops the cost from growing: caching the rendered HTML per revision is
-// the real fix.
+// only stops the cost from growing; Cache is what stops it from being paid
+// again on every view.
 const maxBody = 64 << 10
+
+// Render outcomes, reported by the cache as the "outcome" label of
+// worklode_mdrender_renders_total. outcomeOversize means the body was refused
+// before the parser saw it; outcomeFallback means the pipeline ran and one of
+// its bounds rejected the result.
+const (
+	outcomeOK       = "ok"
+	outcomeOversize = "oversize"
+	outcomeFallback = "fallback"
+)
 
 // Body renders an untrusted markdown body to sanitised HTML.
 //
 // Callers pass the result to templ.Raw, which takes a string, so the
 // template.HTML type is erased at that boundary: the safety contract is this
 // function, not the return type.
+//
+// Body renders on every call. A cockpit serving the same body to many readers
+// wants (*Cache).Body instead — see cache.go for why paying this per view is
+// not affordable.
 func Body(body string) template.HTML {
+	html, _ := render(body)
+	return html
+}
+
+// render is Body plus the outcome label the cache reports.
+func render(body string) (template.HTML, string) {
 	if len(body) > maxBody {
-		return template.HTML(template.HTMLEscapeString(body))
+		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
 	var buf bytes.Buffer
 	if err := md.Convert([]byte(body), &buf); err != nil {
 		// Defensive: goldmark cannot fail writing into a bytes.Buffer. Kept so
 		// that a future sink which can fail does not lose the body.
-		return template.HTML(template.HTMLEscapeString(body))
+		return template.HTML(template.HTMLEscapeString(body)), outcomeFallback
 	}
 	out, err := balance(policy.SanitizeBytes(buf.Bytes()))
 	if err != nil {
 		// Escaped source reads badly, but it is the only safe fallback: the
 		// unbalanced fragment is exactly what balance exists to suppress.
-		return template.HTML(template.HTMLEscapeString(body))
+		return template.HTML(template.HTMLEscapeString(body)), outcomeFallback
 	}
-	return template.HTML(out)
+	return template.HTML(out), outcomeOK
 }
