@@ -15,19 +15,16 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 )
 
-// readSettings reads a settings file as generic JSON, failing the test if it
-// is missing or malformed.
+// readSettings reads a settings file through the same reader the adapter
+// uses, failing the test if it is malformed. A missing file reads as empty
+// settings, as it does for an install.
 func readSettings(t *testing.T, path string) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	settings, err := harness.ReadJSONFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		t.Fatalf("parse %s: %v", path, err)
-	}
-	return out
+	return settings
 }
 
 // commandsFor returns every hook command registered for a Claude Code event.

@@ -86,13 +86,16 @@ func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	return []SkillTarget{{Dir: filepath.Join(home, ".claude", "skills"), PerSkill: true}}, nil
 }
 
+// Events is claudeBindings read the other way round: the command a binding
+// runs names the Worklode event, so the event table cannot restate — and so
+// cannot drift from — what install actually writes (spec 008 §17.1).
 func (ClaudeCode) Events() map[Event][]string {
-	return map[Event][]string{
-		SessionStart:  {"SessionStart"},
-		SessionEnd:    {"SessionEnd"},
-		Heartbeat:     {"Stop", "StopFailure", "SubagentStop", "Notification"},
-		WorktreeEnter: {"PostToolUse:EnterWorktree"},
+	out := map[Event][]string{}
+	for _, b := range claudeBindings {
+		event := Event(strings.TrimPrefix(b.Command, lodeHookPrefix))
+		out[event] = append(out[event], nativeName(b))
 	}
+	return out
 }
 
 // InstallHooks writes Worklode's bindings into the scope's settings file for
@@ -149,18 +152,22 @@ func (ClaudeCode) UninstallStatusLine(repoDir, scope string) (StatusLineAction, 
 	return StatusLineAction{Path: path, Action: action}, nil
 }
 
-// boundNames lists the harness-native event names an install writes, using
-// the same `Event:Matcher` spelling Events() reports.
+// boundNames lists the harness-native event names an install writes.
 func boundNames() []string {
 	out := make([]string, 0, len(claudeBindings))
 	for _, b := range claudeBindings {
-		name := b.Event
-		if b.Matcher != "" {
-			name += ":" + b.Matcher
-		}
-		out = append(out, name)
+		out = append(out, nativeName(b))
 	}
 	return out
+}
+
+// nativeName is how one binding is spelled outside the adapter: the Claude
+// Code event, qualified by its matcher when it has one.
+func nativeName(b claudeBinding) string {
+	if b.Matcher == "" {
+		return b.Event
+	}
+	return b.Event + ":" + b.Matcher
 }
 
 // settingsPathForScope resolves the settings file for scope, relative to the

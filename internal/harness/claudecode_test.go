@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -494,9 +496,13 @@ func TestIsLodeStatusLine(t *testing.T) {
 	}
 }
 
-// BoundNames must use the same native-event spelling Events() reports, so a
-// report of what was bound lines up with the event table.
+// Events() and boundNames() are both derived from claudeBindings, so what this
+// pins is that the derivation is faithful: every binding install writes is
+// reachable through the event it runs and through the bound-name list, in the
+// same spelling. Heartbeat is checked by hand because its fan-out to four
+// native events is the part a careless edit to claudeBindings would thin out.
 func TestBoundNamesMatchEvents(t *testing.T) {
+	events := (ClaudeCode{}).Events()
 	bound := map[string]bool{}
 	for _, n := range boundNames() {
 		bound[n] = true
@@ -504,11 +510,21 @@ func TestBoundNamesMatchEvents(t *testing.T) {
 	if len(bound) != len(claudeBindings) {
 		t.Fatalf("boundNames() = %v, want one entry per binding", boundNames())
 	}
-	for event, natives := range (ClaudeCode{}).Events() {
-		for _, n := range natives {
-			if !bound[n] {
-				t.Errorf("%s maps to %q, which no binding writes", event, n)
-			}
+	for _, b := range claudeBindings {
+		if !strings.HasPrefix(b.Command, lodeHookPrefix) {
+			t.Errorf("binding %s runs %q, which is not a `lode hook` command", b.Event, b.Command)
+			continue
 		}
+		event := Event(strings.TrimPrefix(b.Command, lodeHookPrefix))
+		name := nativeName(b)
+		if !slices.Contains(events[event], name) {
+			t.Errorf("Events()[%s] = %v, want it to name %s", event, events[event], name)
+		}
+		if !bound[name] {
+			t.Errorf("boundNames() = %v, want it to name %s", boundNames(), name)
+		}
+	}
+	if got := events[Heartbeat]; len(got) != 4 {
+		t.Errorf("Heartbeat natives = %v, want all four", got)
 	}
 }
