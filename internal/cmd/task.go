@@ -140,7 +140,7 @@ func newTaskAddCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
-	var priority, parent, assignee, plan string
+	var priority, kind, parent, assignee, plan string
 	var statuses []string
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -162,8 +162,8 @@ func newTaskListCmd() *cobra.Command {
 				}
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-				Project: sc.Project, States: states, Priority: priority, Parent: parent, Assignee: assignee,
-				PlanDoc: planDoc,
+				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,
+				Assignee: assignee, PlanDoc: planDoc,
 			})
 			if err != nil {
 				return err
@@ -180,6 +180,7 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
+	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike")
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")

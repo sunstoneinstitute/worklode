@@ -1,6 +1,6 @@
 ---
 name: worklode-lode-plugin
-description: Use when working in plugins/ — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Not for the lode Go CLI itself.
+description: Use when working in plugins/ — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Also use after changing the lode CLI — "renamed a lode command", "removed a flag", "changed --json output", "TestAgentSurfaces failed", "the skills reference a command that no longer exists" — because the plugin skills hardcode invocations. Not for implementing the Go CLI itself.
 ---
 
 # The lode plugin
@@ -49,3 +49,15 @@ adding a Python stack to a Go repo.
 
 Markdown under `plugins/` is exempt from the docs-only CI skip — it is input,
 not prose.
+
+## Keeping up with the CLI
+
+Every skill here spells out `lode` commands and flags, so a CLI change rots
+them. `go test -trimpath ./internal/cmd -run TestAgentSurfaces` walks the cobra
+tree and names each invocation across `plugins/`, `.claude/skills/` and
+`CLAUDE.md` that no longer resolves.
+
+This marketplace is not the only surface that breaks. `docs/agent-surfaces.md`
+is the register of all of them — including `worklode-onboarding` in the
+`sunstoneinstitute/claude-plugins` repo, which the test cannot see — plus the
+rules for when a skill should be added or retired.
