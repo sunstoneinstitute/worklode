@@ -188,13 +188,13 @@ func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGloba
 		s.webStoreErr(w, err)
 		return
 	}
-	issues, err := s.st.ListIssues(ctx, "new", "")
+	newIssues, err := s.st.CountIssues(ctx, "new")
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
 	}
 
-	view := boardView(board, len(issues), activeGlobal == "home", title, activeGlobal)
+	view := boardView(board, newIssues, activeGlobal == "home", title, activeGlobal)
 	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
 }
 
@@ -272,7 +272,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	blocked, err := s.st.BlockedTaskIDs(ctx)
+	blocked, err := s.st.IsTaskBlocked(ctx, id)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
@@ -295,7 +295,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		refs[i].URL = "/blob/" + refs[i].Hash
 	}
 
-	view := taskView(s.mdcache, t, blocked[id], entries, out, in)
+	view := taskView(s.mdcache, t, blocked, entries, out, in)
 	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)

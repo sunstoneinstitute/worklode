@@ -316,6 +316,54 @@ func TestDismissIssue(t *testing.T) {
 	}
 }
 
+// TestCountIssues pins CountIssues against ListIssues' length — the board
+// badge reads the count, the inbox page reads the rows, and the two must not
+// disagree about how many issues are untriaged.
+func TestCountIssues(t *testing.T) {
+	s := openInboxStore(t)
+	ctx := t.Context()
+
+	want := func(label, triageState string, n int) {
+		t.Helper()
+		got, err := s.CountIssues(ctx, triageState)
+		if err != nil {
+			t.Fatalf("CountIssues(%q) %s: %v", triageState, label, err)
+		}
+		if got != n {
+			t.Fatalf("CountIssues(%q) %s: got %d, want %d", triageState, label, got, n)
+		}
+		list, err := s.ListIssues(ctx, triageState, "")
+		if err != nil {
+			t.Fatalf("ListIssues(%q) %s: %v", triageState, label, err)
+		}
+		if len(list) != got {
+			t.Fatalf("CountIssues(%q) %s: got %d, ListIssues returned %d rows",
+				triageState, label, got, len(list))
+		}
+	}
+
+	want("empty inbox", "new", 0)
+
+	first := defaultIssue()
+	second := defaultIssue()
+	second.Number = 2
+	for _, is := range []model.Issue{first, second} {
+		if err := upsertIssue(t, s, is); err != nil {
+			t.Fatalf("upsert issue %d: %v", is.Number, err)
+		}
+	}
+	want("two new", "new", 2)
+	want("two new, unfiltered", "", 2)
+
+	// Triaging one moves it out of the "new" count but not out of the total.
+	if err := dismissIssue(t, s, second.Repo, second.Number); err != nil {
+		t.Fatalf("DismissIssue: %v", err)
+	}
+	want("one dismissed", "new", 1)
+	want("one dismissed", "dismissed", 1)
+	want("one dismissed, unfiltered", "", 2)
+}
+
 func TestDismissIssueNotFound(t *testing.T) {
 	s := openInboxStore(t)
 	if err := dismissIssue(t, s, "sunstoneinstitute/demo", 999); !errors.Is(err, ErrNotFound) {
