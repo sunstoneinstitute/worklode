@@ -79,9 +79,13 @@ export LODE_BLOB_ACCESS_KEY=...
 export LODE_BLOB_SECRET_KEY=...
 ```
 
-`LODE_BLOB_SPOOL_DIR` is optional too: it is where uploads are
-spooled while being hashed, and defaults to the system temp
-directory when unset.
+`LODE_BLOB_SPOOL_DIR` is where uploads are spooled while being
+hashed; it defaults to the system temp directory. It must be
+writable — the server refuses to start if blob storage is
+configured and it is not, since otherwise every upload fails at
+runtime. Containers running with a read-only root filesystem need
+a writable volume mounted there; `deploy/base/deployment.yaml`
+mounts one and sizes it.
 
 The bucket must stay private: presigned URLs are the only anonymous
 read path, and they expire after five minutes.
