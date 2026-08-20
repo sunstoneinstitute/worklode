@@ -1547,6 +1547,50 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	if err != nil || string(got) != diagContent {
 		t.Fatalf("content at match location %s = %q, %v; want %q", matchLoc, got, err, diagContent)
 	}
+
+	// Project-scope delivery (spec 008 §17.3): the worktree now carries
+	// .agents/skills/<name> resolving to the store version dir, so a
+	// harness opened in wtDir reads this task's skills without a `lode
+	// install`.
+	storeDir := filepath.Join(filepath.Dir(os.Getenv("LODE_SKILLS_DIR")), "store")
+	link := filepath.Join(wtDir, ".agents", "skills", "tdd")
+	resolved, err := filepath.EvalSymlinks(link)
+	if err != nil || !strings.HasPrefix(resolved, storeDir) {
+		t.Fatalf("worktree link = %s (%v), want it under the store dir %s", resolved, err, storeDir)
+	}
+
+	// …and .agents/ is excluded via info/exclude, not .gitignore — the
+	// links are machine-local and must never become a commit.
+	exclPath, err := worktree.ExcludeFile(root)
+	if err != nil {
+		t.Fatalf("ExcludeFile: %v", err)
+	}
+	excl, err := os.ReadFile(exclPath)
+	if err != nil || !strings.Contains(string(excl), ".agents/") {
+		t.Fatalf("info/exclude missing .agents/: %s (%v)", excl, err)
+	}
+	if _, err := os.Stat(filepath.Join(wtDir, ".gitignore")); err == nil {
+		t.Fatal("a .gitignore appeared")
+	}
+
+	// The links must not show up as untracked — the real user-visible
+	// property info/exclude (not .gitignore) is meant to guarantee.
+	clean, err := worktree.IsClean(wtDir)
+	if err != nil || !clean {
+		out, _ := exec.Command("git", "-C", wtDir, "status", "--porcelain").CombinedOutput()
+		t.Fatalf("git status not clean after linking: %v\n%s", err, out)
+	}
+
+	// Idempotent: a second session-start leaves exactly one .agents/ line
+	// in info/exclude, not a duplicate.
+	runSessionStart(t, wtDir, "s-skills-happy-2")
+	excl2, err := os.ReadFile(exclPath)
+	if err != nil {
+		t.Fatalf("read info/exclude after second session-start: %v", err)
+	}
+	if n := strings.Count(string(excl2), ".agents/\n"); n != 1 {
+		t.Fatalf("info/exclude has %d .agents/ lines after two session-starts, want exactly 1: %s", n, excl2)
+	}
 }
 
 // TestSessionStartSkillsArchiveFetchFailure covers the warn-only discipline:

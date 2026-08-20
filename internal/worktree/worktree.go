@@ -319,6 +319,25 @@ func DefaultBranch(root string) (string, error) {
 	return strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/remotes/origin/"), nil
 }
 
+// ExcludeFile returns the repo's info/exclude path (creating its parent),
+// via `git rev-parse --git-path info/exclude` — which resolves to the
+// common dir for linked worktrees, exactly where per-machine excludes
+// belong.
+func ExcludeFile(root string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--git-path", "info/exclude").Output()
+	if err != nil {
+		return "", fmt.Errorf("%s is not inside a git worktree: %w", root, err)
+	}
+	p := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(root, p)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
 // IsClean reports whether root's working tree has no uncommitted changes,
 // untracked files included — `git status --porcelain` prints nothing (025 §16.2).
 func IsClean(root string) (bool, error) {
