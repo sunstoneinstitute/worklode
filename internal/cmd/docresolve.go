@@ -3,23 +3,12 @@ package cmd
 import (
 	"fmt"
 	"path"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
-
-// numberFormPattern recognizes ref form 2 (026 §3): a bare document number,
-// with or without zero-padding, optionally followed by more of the slug
-// ("14", "014", "014-design-documents").
-var numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
-
-// shorthandPattern is 025 §14.3's <KEY>-<TYPE>-<n> grammar, fragment already
-// split off by designdoc.SplitFragment.
-var shorthandPattern = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
 
 // resolveDocRef resolves ref against docs — the documents the backbone
 // serves — and returns the one it names plus the section its "#sec-..."
@@ -53,16 +42,12 @@ func resolveDocRef(docs []model.Doc, projectKey, ref string) (model.Doc, string,
 	}
 
 	// Form 2: document number / slug prefix.
-	if m := numberFormPattern.FindStringSubmatch(base); m != nil {
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			return model.Doc{}, "", fmt.Errorf("ref %q: %w", ref, err)
-		}
-		if n == 0 {
+	if nf, ok := designdoc.ParseNumberForm(base); ok {
+		if nf.Number == 0 {
 			return model.Doc{}, "", designdoc.NoSpecError(ref)
 		}
-		matches := matchNumber(candidates, n)
-		if strings.Contains(base, "-") {
+		matches := matchNumber(candidates, nf.Number)
+		if nf.Rest != "" {
 			matches = append(matches, matchSlugPrefix(candidates, base)...)
 		}
 		return finishDocRef(ref, matches, section)
@@ -72,23 +57,18 @@ func resolveDocRef(docs []model.Doc, projectKey, ref string) (model.Doc, string,
 	if base == "NO-SPEC" {
 		return model.Doc{}, "", designdoc.NoSpecError(ref)
 	}
-	if m := shorthandPattern.FindStringSubmatch(base); m != nil {
-		key, typ, numStr := m[1], m[2], m[3]
-		num, err := strconv.Atoi(numStr)
-		if err != nil {
-			return model.Doc{}, "", fmt.Errorf("ref %q: %w", ref, err)
-		}
-		if typ == "SPEC" && num == 0 {
+	if sh, ok := designdoc.ParseShorthand(base); ok {
+		if sh.Type == "SPEC" && sh.Number == 0 {
 			return model.Doc{}, "", designdoc.NoSpecError(ref)
 		}
-		if projectKey == "" || key != projectKey {
-			return model.Doc{}, "", &designdoc.UnresolvedError{Key: key}
+		if projectKey == "" || sh.Key != projectKey {
+			return model.Doc{}, "", &designdoc.UnresolvedError{Key: sh.Key}
 		}
-		doc, sec, err := finishDocRef(ref, matchNumber(candidates, num), section)
+		doc, sec, err := finishDocRef(ref, matchNumber(candidates, sh.Number), section)
 		if err != nil {
 			return model.Doc{}, "", err
 		}
-		if err := checkDocKind(doc, typ); err != nil {
+		if err := checkDocKind(doc, sh.Type); err != nil {
 			return model.Doc{}, "", err
 		}
 		return doc, sec, nil

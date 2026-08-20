@@ -3,14 +3,17 @@ package designdoc
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
 // This file holds the vocabulary of document-reference resolution: the
-// fragment split every ref form allows, and the errors a resolver reports.
-// Resolution itself lives in internal/cmd, which matches a ref against the
-// documents the backbone serves (spec 026 §3, 025 §14.3) rather than against
-// files on disk.
+// fragment split every ref form allows, the grammar of the forms themselves,
+// and the errors a resolver reports. Resolution itself has two callers with
+// different corpora to match against — internal/cmd against the documents the
+// backbone serves, internal/store against the rows it holds (spec 026 §3, 025
+// §14.3) — so the grammar lives here, once, and each of them applies it.
 
 // SplitFragment separates a trailing "#sec-..." fragment from ref, per 026
 // §4's "narrows any of them to an anchor". base is ref with the fragment (and
@@ -19,6 +22,67 @@ import (
 func SplitFragment(ref string) (base, section string) {
 	base, section, _ = strings.Cut(ref, "#")
 	return base, section
+}
+
+// shorthandPattern is 025 §14.3's <KEY>-<TYPE>-<n> grammar, and
+// numberFormPattern is 026 §3's form 2: a document number, with or without
+// zero-padding, optionally followed by the rest of a slug. Both are anchored
+// end to end and expect a base — a ref with any fragment already removed.
+var (
+	shorthandPattern  = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
+	numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
+)
+
+// Shorthand is a parsed <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-25".
+type Shorthand struct {
+	Key    string // the project key the number is scoped to, e.g. "WL"
+	Type   string // "SPEC" or "ADR", as written
+	Number int
+}
+
+// Kind is the document kind Type names, in the spelling documents declare:
+// "spec" or "adr".
+func (s Shorthand) Kind() string {
+	return strings.ToLower(s.Type)
+}
+
+// ParseShorthand parses base as the 025 §14.3 shorthand. It reports false when
+// base is some other ref form, which includes 026 §4.3's NO-SPEC sentinel:
+// that names no document, so it is the caller's case to answer, not a
+// shorthand with an absent number.
+func ParseShorthand(base string) (Shorthand, bool) {
+	m := shorthandPattern.FindStringSubmatch(base)
+	if m == nil {
+		return Shorthand{}, false
+	}
+	n, err := strconv.Atoi(m[3])
+	if err != nil {
+		return Shorthand{}, false // a number too large to be a document number
+	}
+	return Shorthand{Key: m[1], Type: m[2], Number: n}, true
+}
+
+// NumberForm is a parsed ref form 2: a corpus number and whatever slug text
+// followed it.
+type NumberForm struct {
+	Number int
+	Rest   string // slug text after the number ("-design-documents"), "" when base was bare
+}
+
+// ParseNumberForm parses base as 026 §3's number form. A caller that resolves
+// only *bare* numbers checks Rest == "": a number-prefixed reference is a
+// filename, and matching "025-documents-2.md" to spec 025 on the shared prefix
+// would name the wrong document rather than none.
+func ParseNumberForm(base string) (NumberForm, bool) {
+	m := numberFormPattern.FindStringSubmatch(base)
+	if m == nil {
+		return NumberForm{}, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return NumberForm{}, false // a number too large to be a document number
+	}
+	return NumberForm{Number: n, Rest: m[2]}, true
 }
 
 // AmbiguousRefError reports a ref that matched more than one document. Error
