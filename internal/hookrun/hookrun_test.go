@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,72 +65,18 @@ func TestMain(m *testing.M) {
 // taken from the exported listing so a new event cannot skip these tests.
 var allEvents = EventNames()
 
-// recordingServer stands in for the backbone and flags ANY inbound request.
-// The guard-NOP tests assert it is never hit.
-type recordingServer struct {
-	mu       sync.Mutex
-	requests []string
-}
-
-func (r *recordingServer) hit() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.requests) > 0
-}
-
-// newRecordingServer starts a server that records every request and points
-// LODE_SERVER/LODE_TOKEN at it.
-func newRecordingServer(t *testing.T) *recordingServer {
-	t.Helper()
-	rec := &recordingServer{}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		rec.mu.Lock()
-		rec.requests = append(rec.requests, req.Method+" "+req.URL.Path)
-		rec.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("{}"))
-	}))
-	t.Cleanup(ts.Close)
-	t.Setenv("LODE_SERVER", ts.URL)
-	t.Setenv("LODE_TOKEN", "test-token")
-	return rec
-}
-
-// pathRecorder wraps a handler and records the method+path of every request,
-// so a test can assert a specific endpoint was hit.
+// pathRecorder records the method+path of every request a fake backbone
+// receives, so a test can assert which endpoints were hit — or, for the
+// guard-NOP tests, that none were.
 type pathRecorder struct {
 	mu    sync.Mutex
 	paths []string
 }
 
-func (p *pathRecorder) hitAny(substr string) bool {
+func (p *pathRecorder) record(req *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for _, s := range p.paths {
-		if strings.Contains(s, substr) {
-			return true
-		}
-	}
-	return false
-}
-
-// reset drops everything recorded so far, so a test can set up state through
-// the API and then assert that the code under test made no calls at all.
-func (p *pathRecorder) reset() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.paths = nil
-}
-
-// testLayout is the default (.worktrees) layout, for tests that need to ask
-// the guard the same question the handlers do.
-func testLayout(t *testing.T) worktree.Layout {
-	t.Helper()
-	l, err := worktree.NewLayout("")
-	if err != nil {
-		t.Fatalf("NewLayout: %v", err)
-	}
-	return l
+	p.paths = append(p.paths, req.Method+" "+req.URL.Path)
 }
 
 func (p *pathRecorder) count(substr string) int {
@@ -142,6 +89,52 @@ func (p *pathRecorder) count(substr string) int {
 		}
 	}
 	return n
+}
+
+// list returns everything recorded so far, for failure messages.
+func (p *pathRecorder) list() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.paths)
+}
+
+func (p *pathRecorder) hit() bool { return p.count("") > 0 }
+
+func (p *pathRecorder) hitAny(substr string) bool { return p.count(substr) > 0 }
+
+// reset drops everything recorded so far, so a test can set up state through
+// the API and then assert that the code under test made no calls at all.
+func (p *pathRecorder) reset() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.paths = nil
+}
+
+// newRecordingServer starts a server that records every request, answers
+// everything with "{}", and points LODE_SERVER/LODE_TOKEN at it.
+func newRecordingServer(t *testing.T) *pathRecorder {
+	t.Helper()
+	rec := &pathRecorder{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		rec.record(req)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	return rec
+}
+
+// testLayout is the default (.worktrees) layout, for tests that need to ask
+// the guard the same question the handlers do.
+func testLayout(t *testing.T) worktree.Layout {
+	t.Helper()
+	l, err := worktree.NewLayout("")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	return l
 }
 
 // newRealServer starts a real store-backed API server (admin actor "alice")
@@ -164,9 +157,7 @@ func newRealServer(t *testing.T) (*store.Store, *cli.Client, *pathRecorder) {
 	}
 	rec := &pathRecorder{}
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		rec.mu.Lock()
-		rec.paths = append(rec.paths, req.Method+" "+req.URL.Path)
-		rec.mu.Unlock()
+		rec.record(req)
 		h.ServeHTTP(w, req)
 	})
 	ts := httptest.NewServer(wrapped)
@@ -176,35 +167,48 @@ func newRealServer(t *testing.T) (*store.Store, *cli.Client, *pathRecorder) {
 	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token}), rec
 }
 
+// gitRepo is a throwaway git repo driven through git itself. Every command
+// runs with commit.gpgsign=false and a fixed identity, so a test never depends
+// on (or is broken by) the developer's global git config.
+type gitRepo struct {
+	t    *testing.T
+	root string
+}
+
+func (r *gitRepo) git(args ...string) string {
+	r.t.Helper()
+	c := exec.Command("git", append([]string{"-C", r.root, "-c", "commit.gpgsign=false"}, args...)...)
+	c.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		r.t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func (r *gitRepo) commit(name, content, msg string) {
+	r.t.Helper()
+	if err := os.WriteFile(filepath.Join(r.root, name), []byte(content), 0o644); err != nil {
+		r.t.Fatalf("write %s: %v", name, err)
+	}
+	r.git("add", name)
+	r.git("commit", "-m", msg)
+}
+
 // initGitRepo creates a fresh git repo with one commit and returns its path
 // resolved to git's own toplevel (macOS /var symlink; see the identical helper
 // in internal/cmd/lifecycle_test.go).
 func initGitRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		// commit.gpgsign=false: the developer's global config may enable
-		// signing, which a temp-repo test commit must not depend on.
-		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init")
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
+	r := &gitRepo{t: t, root: t.TempDir()}
+	r.git("init")
+	r.commit("README.md", "test\n", "initial commit")
 
-	root, ok := worktree.Root(dir)
+	root, ok := worktree.Root(r.root)
 	if !ok {
-		t.Fatalf("worktree.Root(%s): ok = false", dir)
+		t.Fatalf("worktree.Root(%s): ok = false", r.root)
 	}
 	return root
 }
@@ -262,20 +266,10 @@ func TestGuardNOPForEveryEvent(t *testing.T) {
 		t.Run(event, func(t *testing.T) {
 			rec := newRecordingServer(t)
 			root := initGitRepo(t) // plain repo, no worktree dir
-			payload := payloadJSON(t, Payload{Cwd: root, SessionID: "s1"})
 
-			var stdout, stderr bytes.Buffer
-			code := Run(context.Background(), Options{
-				Event:  event,
-				Stdin:  bytes.NewReader(payload),
-				Stdout: &stdout,
-				Stderr: &stderr,
-			})
-			if code != 0 {
-				t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-			}
+			runHook(t, event, Payload{Cwd: root, SessionID: "s1"})
 			if rec.hit() {
-				t.Fatalf("backbone was called during a guard-NOP: %v", rec.requests)
+				t.Fatalf("backbone was called during a guard-NOP: %v", rec.list())
 			}
 		})
 	}
@@ -288,14 +282,8 @@ func TestGuardNOPForEveryEvent(t *testing.T) {
 func TestEventsAreDispatched(t *testing.T) {
 	newRecordingServer(t)
 	run := func(event string) string {
-		var stdout, stderr bytes.Buffer
-		Run(context.Background(), Options{
-			Event:  event,
-			Stdin:  strings.NewReader(`{"cwd":"` + t.TempDir() + `"}`),
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		return stderr.String()
+		_, stderr := runHookOutput(t, event, Payload{Cwd: t.TempDir()})
+		return stderr
 	}
 	for _, event := range allEvents {
 		if got := run(event); strings.Contains(got, "unknown hook event") {
@@ -387,19 +375,9 @@ func TestPreCommitRenewsInsideWorktree(t *testing.T) {
 		t.Fatalf("get task: %v", err)
 	}
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir, HookEventName: "PreToolUse"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "pre-commit",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "pre-commit", Payload{Cwd: wtDir, HookEventName: "PreToolUse"})
 	if !rec.hitAny("/renew") {
-		t.Fatalf("renew endpoint was not hit; paths: %v", rec.paths)
+		t.Fatalf("renew endpoint was not hit; paths: %v", rec.list())
 	}
 	after, _, err := c.GetTask(context.Background(), taskID)
 	if err != nil {
@@ -428,25 +406,15 @@ func TestPreCommitWithoutLeaseIsSilent(t *testing.T) {
 		t.Fatalf("write marker: %v", err) // a zero heartbeat makes one due
 	}
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir, HookEventName: "PreToolUse"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "pre-commit",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty (a missing lease is not a warning)", stderr.String())
+	_, stderr := runHookOutput(t, "pre-commit", Payload{Cwd: wtDir, HookEventName: "PreToolUse"})
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty (a missing lease is not a warning)", stderr)
 	}
 	if rec.hitAny("/renew") {
-		t.Fatalf("renew endpoint was hit with no lease held; paths: %v", rec.paths)
+		t.Fatalf("renew endpoint was hit with no lease held; paths: %v", rec.list())
 	}
 	if rec.hitAny("/agent-session") {
-		t.Fatalf("agent-session endpoint was hit with no lease held; paths: %v", rec.paths)
+		t.Fatalf("agent-session endpoint was hit with no lease held; paths: %v", rec.list())
 	}
 }
 
@@ -477,32 +445,22 @@ func TestPreCommitResolvesTaskIDFromGitConfigAfterWorktreeRename(t *testing.T) {
 		t.Fatalf("ParseDir(%s) = (%q, true), want ok=false — the renamed directory must not carry an id", renamed, id)
 	}
 
-	payload := payloadJSON(t, Payload{Cwd: renamed, HookEventName: "PreToolUse"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "pre-commit",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	_, stderr := runHookOutput(t, "pre-commit", Payload{Cwd: renamed, HookEventName: "PreToolUse"})
 	// Reaching the brief is the assertion: the handler only gets that far
 	// once the task id resolved, and the directory name can no longer supply
 	// it.
 	if !rec.hitAny("/tasks/" + taskID + "/brief") {
-		t.Fatalf("brief for %s was not fetched, so the task id did not resolve; paths: %v", taskID, rec.paths)
+		t.Fatalf("brief for %s was not fetched, so the task id did not resolve; paths: %v", taskID, rec.list())
 	}
 	// The lease is not renewed, and that is correct rather than a gap here:
 	// lease ownership is keyed on worktree.Identity, which is the worktree's
 	// absolute path, so a moved worktree no longer holds the lease it claimed.
 	// Resolving the task id and owning the lease are separate questions.
 	if rec.hitAny("/renew") {
-		t.Fatalf("renew endpoint was hit for a lease bound to the pre-move path; paths: %v", rec.paths)
+		t.Fatalf("renew endpoint was hit for a lease bound to the pre-move path; paths: %v", rec.list())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty (a lease bound elsewhere is not a warning)", stderr.String())
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty (a lease bound elsewhere is not a warning)", stderr)
 	}
 }
 
@@ -531,22 +489,12 @@ func TestPreCommitIgnoresStampedWorktreeOutsideTheBase(t *testing.T) {
 	}
 
 	rec.reset()
-	payload := payloadJSON(t, Payload{Cwd: outside, HookEventName: "PreToolUse"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "pre-commit",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
+	_, stderr := runHookOutput(t, "pre-commit", Payload{Cwd: outside, HookEventName: "PreToolUse"})
+	if paths := rec.list(); len(paths) != 0 {
+		t.Fatalf("backbone was called for a path outside %s; paths: %v", worktree.DefaultBase, paths)
 	}
-	if len(rec.paths) != 0 {
-		t.Fatalf("backbone was called for a path outside %s; paths: %v", worktree.DefaultBase, rec.paths)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty (a path outside the base is a silent NOP)", stderr.String())
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty (a path outside the base is a silent NOP)", stderr)
 	}
 }
 
@@ -557,17 +505,7 @@ func TestSessionStartEmitsAdditionalContext(t *testing.T) {
 	root := initGitRepo(t)
 	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Brief context")
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir, SessionID: "s-emit", HookEventName: "SessionStart"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "session-start",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	stdout, _ := runSessionStart(t, wtDir, "s-emit")
 
 	var out struct {
 		HookSpecificOutput struct {
@@ -575,8 +513,8 @@ func TestSessionStartEmitsAdditionalContext(t *testing.T) {
 			AdditionalContext string `json:"additionalContext"`
 		} `json:"hookSpecificOutput"`
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("stdout is not valid additionalContext JSON: %v\nstdout: %s", err, stdout.String())
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("stdout is not valid additionalContext JSON: %v\nstdout: %s", err, stdout)
 	}
 	if out.HookSpecificOutput.HookEventName != "SessionStart" {
 		t.Fatalf("hookEventName = %q, want SessionStart", out.HookSpecificOutput.HookEventName)
@@ -676,28 +614,11 @@ func TestOfferScanIgnoresLegacyWtDir(t *testing.T) {
 // additionalContext it emitted ("" when it emitted nothing).
 func offerScanContext(t *testing.T, dir string) string {
 	t.Helper()
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "session-start",
-		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: dir, SessionID: "s-scan", HookEventName: "SessionStart"})),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("session-start exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
-	if stdout.Len() == 0 {
+	stdout, _ := runSessionStart(t, dir, "s-scan")
+	if stdout == "" {
 		return ""
 	}
-	var out struct {
-		HookSpecificOutput struct {
-			AdditionalContext string `json:"additionalContext"`
-		} `json:"hookSpecificOutput"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("stdout is not valid additionalContext JSON: %v\nstdout: %s", err, stdout.String())
-	}
-	return out.HookSpecificOutput.AdditionalContext
+	return additionalContext(t, stdout)
 }
 
 // --- worktree_dir resolution -------------------------------------------------
@@ -711,17 +632,7 @@ func TestLayoutCustomBaseHonored(t *testing.T) {
 	t.Setenv("LODE_WORKTREE_DIR", "custom-base")
 	wtDir := addWorktreeAt(t, root, "custom-base", "PROJ-1", "custom")
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir, SessionID: "s-custom-base"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "heartbeat",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "s-custom-base"})
 	if !rec.hit() {
 		t.Fatalf("guard did not fire for a worktree under the configured custom base dir")
 	}
@@ -736,22 +647,12 @@ func TestLayoutMalformedWorktreeDirDegradesToDefault(t *testing.T) {
 	t.Setenv("LODE_WORKTREE_DIR", "/not/relative/to/the/repo")
 	wtDir := addWorktree(t, root, "PROJ-1", "degrade")
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir, SessionID: "s-degrade"})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "heartbeat",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	_, stderr := runHookOutput(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "s-degrade"})
 	if !rec.hit() {
-		t.Fatalf("malformed worktree_dir should degrade to the default .worktrees layout, not NOP (stderr: %s)", stderr.String())
+		t.Fatalf("malformed worktree_dir should degrade to the default .worktrees layout, not NOP (stderr: %s)", stderr)
 	}
-	if !strings.Contains(stderr.String(), "resolve worktree layout") {
-		t.Fatalf("expected a warning about the malformed worktree_dir, got stderr=%q", stderr.String())
+	if !strings.Contains(stderr, "resolve worktree layout") {
+		t.Fatalf("expected a warning about the malformed worktree_dir, got stderr=%q", stderr)
 	}
 }
 
@@ -769,17 +670,7 @@ func TestSessionEndRemovesMarker(t *testing.T) {
 		t.Fatalf("precondition: marker should be fresh")
 	}
 
-	payload := payloadJSON(t, Payload{Cwd: wtDir})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "session-end",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "session-end", Payload{Cwd: wtDir})
 	if sessionMarkerFresh(wtDir) {
 		t.Fatalf("session marker still present after session-end")
 	}
@@ -793,21 +684,9 @@ func TestWorktreeRemoveReleasesLease(t *testing.T) {
 	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Remove me")
 
 	// tool_input carries the removed path; parse it out defensively.
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
-	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
-
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "worktree-remove",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "worktree-remove", Payload{Cwd: root, ToolInput: pathToolInput(t, wtDir)})
 	if !rec.hitAny("/release") {
-		t.Fatalf("release endpoint was not hit; paths: %v", rec.paths)
+		t.Fatalf("release endpoint was not hit; paths: %v", rec.list())
 	}
 	detail, _, err := c.GetTask(context.Background(), taskID)
 	if err != nil {
@@ -837,21 +716,9 @@ func TestWorktreeRemovePurgesSecrets(t *testing.T) {
 		t.Fatalf("manifest: %v", err)
 	}
 
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
-	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
-
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "worktree-remove",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "worktree-remove", Payload{Cwd: root, ToolInput: pathToolInput(t, wtDir)})
 	if !rec.hitAny("/release") {
-		t.Fatalf("release endpoint was not hit; paths: %v", rec.paths)
+		t.Fatalf("release endpoint was not hit; paths: %v", rec.list())
 	}
 	if _, err := secrets.Fetch(taskID, "A_TOKEN"); err == nil {
 		t.Fatal("secret survived worktree removal")
@@ -882,13 +749,10 @@ func TestWorktreeRemovePurgesSecretsRegardlessOfBackbone(t *testing.T) {
 	root := initGitRepo(t)
 	wtDir := addWorktree(t, root, taskID, "fix")
 
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
-	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
-
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), Options{
 		Event:  "worktree-remove",
-		Stdin:  bytes.NewReader(payload),
+		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: root, ToolInput: pathToolInput(t, wtDir)})),
 		Stdout: &stdout,
 		Stderr: &stderr,
 		// No backbone: the release call will warn, but the local purge must
@@ -931,13 +795,10 @@ func TestWorktreeExitKeepsSecrets(t *testing.T) {
 		t.Fatalf("write session marker: %v", err)
 	}
 
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
-	payload := payloadJSON(t, Payload{Cwd: root, SessionID: "sess-1", ToolInput: toolInput})
-
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), Options{
 		Event:     "worktree-exit",
-		Stdin:     bytes.NewReader(payload),
+		Stdin:     bytes.NewReader(payloadJSON(t, Payload{Cwd: root, SessionID: "sess-1", ToolInput: pathToolInput(t, wtDir)})),
 		Stdout:    &stdout,
 		Stderr:    &stderr,
 		NewClient: func() (*cli.Client, error) { return nil, errors.New("no config") },
@@ -971,9 +832,7 @@ func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
 	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Adopt me")
 
 	// Sweep the lease so the task is back in ready with no lease.
-	if _, err := st.ExpireLeases(context.Background(), time.Now().Add(3*time.Hour)); err != nil {
-		t.Fatalf("expire leases: %v", err)
-	}
+	expireLease(t, st, taskID)
 	detail, _, err := c.GetTask(context.Background(), taskID)
 	if err != nil {
 		t.Fatalf("get task: %v", err)
@@ -982,20 +841,9 @@ func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
 		t.Fatalf("precondition: lease should be swept, got %+v", detail.Lease)
 	}
 
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDir})
-	payload := payloadJSON(t, Payload{Cwd: root, ToolInput: toolInput})
-	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "worktree-create",
-		Stdin:  bytes.NewReader(payload),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-	}
+	runHook(t, "worktree-create", Payload{Cwd: root, ToolInput: pathToolInput(t, wtDir)})
 	if !rec.hitAny("/claim") {
-		t.Fatalf("claim endpoint was not hit for auto-resume; paths: %v", rec.paths)
+		t.Fatalf("claim endpoint was not hit for auto-resume; paths: %v", rec.list())
 	}
 	after, _, err := c.GetTask(context.Background(), taskID)
 	if err != nil {
@@ -1061,20 +909,41 @@ func TestSessionMarkerHeartbeat(t *testing.T) {
 	}
 }
 
-// runHook drives one hook invocation the way the existing tests do inline,
-// and fails the test on a non-zero exit code.
-func runHook(t *testing.T, event string, p Payload) {
+// runHookOutput drives one hook invocation and returns what it wrote, failing
+// the test on a non-zero exit code — a hook never fails its own event. Tests
+// that need to vary anything else about Options (--next, NewClient, Now) still
+// call Run directly.
+func runHookOutput(t *testing.T, event string, p Payload) (stdout, stderr string) {
 	t.Helper()
-	var stdout, stderr bytes.Buffer
+	var outBuf, errBuf bytes.Buffer
 	code := Run(context.Background(), Options{
 		Event:  event,
 		Stdin:  bytes.NewReader(payloadJSON(t, p)),
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Stdout: &outBuf,
+		Stderr: &errBuf,
 	})
 	if code != 0 {
-		t.Fatalf("%s exit code = %d, want 0 (stderr: %s)", event, code, stderr.String())
+		t.Fatalf("%s exit code = %d, want 0 (stderr: %s)", event, code, errBuf.String())
 	}
+	return outBuf.String(), errBuf.String()
+}
+
+// runHook is runHookOutput for the tests that assert on the backbone or the
+// filesystem rather than on the hook's own output.
+func runHook(t *testing.T, event string, p Payload) {
+	t.Helper()
+	runHookOutput(t, event, p)
+}
+
+// pathToolInput is the tool_input a worktree hook carries: the path it acted
+// on.
+func pathToolInput(t *testing.T, dir string) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]string{"path": dir})
+	if err != nil {
+		t.Fatalf("marshal tool_input: %v", err)
+	}
+	return raw
 }
 
 func TestHeartbeatReportsAgentSession(t *testing.T) {
@@ -1252,7 +1121,7 @@ func TestWorktreeEnterExitSwitchesLease(t *testing.T) {
 	}
 
 	// Enter the second worktree: a new row opens under B's lease.
-	toolInput, _ := json.Marshal(map[string]string{"path": wtDirB})
+	toolInput := pathToolInput(t, wtDirB)
 	runHook(t, "worktree-enter", Payload{Cwd: wtDirA, SessionID: "sess-1", ToolInput: toolInput})
 
 	leaseB, err := st.ActiveLease(t.Context(), taskB)
@@ -1457,17 +1326,8 @@ func buildSkillArchive(t *testing.T, content string) (archive []byte, hash strin
 // stdout/stderr, requiring exit 0 (the package's never-fail invariant).
 func runSessionStart(t *testing.T, wtDir, sessionID string) (stdout, stderr string) {
 	t.Helper()
-	var outBuf, errBuf bytes.Buffer
-	code := Run(context.Background(), Options{
-		Event:  "session-start",
-		Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDir, SessionID: sessionID, HookEventName: "SessionStart"})),
-		Stdout: &outBuf,
-		Stderr: &errBuf,
-	})
-	if code != 0 {
-		t.Fatalf("session-start exit code = %d, want 0 (stderr: %s)", code, errBuf.String())
-	}
-	return outBuf.String(), errBuf.String()
+	return runHookOutput(t, "session-start",
+		Payload{Cwd: wtDir, SessionID: sessionID, HookEventName: "SessionStart"})
 }
 
 // additionalContext extracts the additionalContext string from a session-start
@@ -2046,16 +1906,7 @@ func TestSessionEndWithoutTranscriptStillEndsSession(t *testing.T) {
 			root := initGitRepo(t)
 			wtDir := addWorktree(t, root, "WL-2", "no-transcript")
 
-			var stdout, stderr bytes.Buffer
-			code := Run(context.Background(), Options{
-				Event:  "session-end",
-				Stdin:  bytes.NewReader(payloadJSON(t, Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: tc.path})),
-				Stdout: &stdout,
-				Stderr: &stderr,
-			})
-			if code != 0 {
-				t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr.String())
-			}
+			runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: tc.path})
 			body := rec.only(t)
 			if got := string(body["usage"]); got != "null" {
 				t.Fatalf("usage = %s, want null (nil must leave stored usage alone)", got)
