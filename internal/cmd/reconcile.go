@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -36,24 +37,7 @@ func newReconcileCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			verb := "repaired"
-			if resp.DryRun {
-				verb = "would repair"
-			}
-			cmd.Printf("run %s\n", resp.RunID)
-			if resp.Replay != nil {
-				cmd.Printf("replay: %s %d of %d candidate event(s), %d still unmapped\n",
-					verb, resp.Replay.Replayed, resp.Replay.Candidates, resp.Replay.StillUnmapped)
-				for _, e := range resp.Replay.Errors {
-					cmd.Printf("  error: %s\n", e)
-				}
-			}
-			switch {
-			case resp.PollSkipped != "":
-				cmd.Printf("poll: skipped (%s)\n", resp.PollSkipped)
-			case resp.Poll != nil:
-				cmd.Printf("poll: %v\n", resp.Poll)
-			}
+			cli.ReconcileRender(cmd.OutOrStdout(), resp)
 			return nil
 		},
 	}

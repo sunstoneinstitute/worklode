@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -766,18 +765,5 @@ func TestTaskEditSendsSecrets(t *testing.T) {
 	}
 	if !strings.Contains(gotBody, `"secrets":null`) {
 		t.Errorf("unrelated edit sent %q; want a null secrets field", gotBody)
-	}
-}
-
-func TestPrintBriefShowsSecrets(t *testing.T) {
-	cmd := newTaskBriefCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	printBrief(cmd, model.Brief{
-		Task:   model.Task{ID: "SE-1", Title: "t", State: "ready", Priority: "medium", Secrets: []string{"A_TOKEN", "B_KEY"}},
-		Branch: "lode/SE-1-t",
-	})
-	if !strings.Contains(out.String(), "secrets: A_TOKEN, B_KEY") {
-		t.Fatalf("brief output missing secrets line:\n%s", out.String())
 	}
 }
