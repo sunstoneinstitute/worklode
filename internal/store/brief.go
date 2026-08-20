@@ -64,11 +64,8 @@ type BriefOptions struct {
 // bounded, fixed number of queries — one more only when pins are asked for and
 // the task has some — and never returns unbounded lists.
 //
-// A tombstoned task still briefs, since this is a fetch by id (044 §4): the
-// brief carries Task.Tombstone, and an agent holding the id learns it was
-// deleted, by whom and why, rather than "not found". What it will not do is
-// hand the task to anyone — Claim refuses it, and the blocker and plan lists
-// below read live rows only.
+// A tombstoned task still briefs — this is a fetch by id, 044 §4 — and Claim
+// still refuses it.
 func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -210,9 +207,9 @@ func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []stri
 // openBlockers returns the open tasks holding taskID: the from_task of a
 // 'blocks' edge pointing at it, and the open tasks of any plan ordered before
 // its plan (025 §9.3). "Open" uses the same predicate as blockedCondition and
-// planBlockedCondition: the blocker has not reached its repo's done_state
-// (taskClosed). Only ID, Title, and State are populated (the brief surfaces no
-// more than that). Ordered by numeric id for a stable payload.
+// planBlockedCondition: the blocker is live and has not reached its repo's
+// done_state (taskClosed). Only ID, Title, and State are populated (the brief
+// surfaces no more than that). Ordered by numeric id for a stable payload.
 //
 // A blocking plan still draft has minted no task and so names none here; the
 // brief reports it through blockingPlans instead.
@@ -224,6 +221,7 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 		     JOIN tasks b ON b.id = e.from_task
 		    WHERE e.to_task = $1
 		      AND e.type = 'blocks'
+		      AND b.deleted_at IS NULL
 		      AND NOT `+taskClosed("b")+`
 		   UNION
 		   SELECT b.id, b.title, b.state
@@ -231,6 +229,7 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 		     JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
 		     JOIN tasks b ON b.plan_doc = de.from_doc
 		    WHERE dep.id = $1
+		      AND b.deleted_at IS NULL
 		      AND NOT `+taskClosed("b")+`
 		 ) t
 		  ORDER BY CAST(split_part(t.id, '-', 2) AS INTEGER)`, taskID)

@@ -15,8 +15,15 @@ ALTER TABLE docs
     ADD COLUMN deleted_by           text REFERENCES actors(id),
     ADD COLUMN delete_justification text;
 
--- Every list, ranking and pickup path adds "deleted_at IS NULL", so the live
--- set is what nearly every read wants. Partial indexes keep those reads on the
--- same plan they had before the column existed.
-CREATE INDEX tasks_live ON tasks (project_id, state) WHERE deleted_at IS NULL;
-CREATE INDEX docs_live  ON docs  (project_id, kind)  WHERE deleted_at IS NULL;
+-- A tombstoned document releases its slug and its corpus number. `lode doc
+-- delete` exists for a wrong corpus number or a duplicate import (044 §0), and
+-- both fixes mean re-creating the document: an unconditional unique index would
+-- refuse that with a collision against a row the operator cannot see. The index
+-- names are unchanged, so CreateDoc's ErrDocExists mapping still fires.
+DROP INDEX docs_project_slug;
+DROP INDEX docs_project_kind_number;
+
+CREATE UNIQUE INDEX docs_project_slug
+    ON docs (project_id, slug) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX docs_project_kind_number
+    ON docs (project_id, kind, number) WHERE number IS NOT NULL AND deleted_at IS NULL;

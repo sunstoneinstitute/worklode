@@ -582,7 +582,11 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
 	}
 	if f.HasChildren {
+		// Only live children make a container, exactly as hasChildren reads
+		// it (044 §4) — otherwise a task whose only children are tombstoned
+		// would list as a container the claim path treats as an ordinary task.
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
+		                              JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
 	}
 	if f.Repo != "" {
@@ -924,17 +928,18 @@ func deliveryRank(expr string) string {
 // gate on and closes at merged too. Only *live* children make a container: a
 // tombstoned child does not count.
 //
-// A tombstoned task is closed outright, whatever state it holds. That is what
-// makes a deleted blocker stop blocking without retracting its edge, and it
-// lands here rather than at each blocking query so the ready set, the brief,
-// the cockpit and Claim cannot disagree about it.
+// Deleted is deliberately *not* folded in here. The tombstone is orthogonal to
+// state (044 §1), and this predicate is what ClosedTaskIDs answers `Closed`
+// with on the wire: a tombstoned draft is a hidden draft, not a closed one.
+// Each caller that means "live and open" adds `deleted_at IS NULL` itself —
+// blockedCondition, planUnfinished, the open-blocker queries, OpenTaskForDoc —
+// and the roll-up queries filter their children before they get here.
 //
 // The rendered subqueries bind `ch`, `cht`, `tc`, `mc` and `pr`; an enclosing
 // query must not reuse those aliases.
 func taskClosed(alias string) string {
 	state := alias + ".state"
-	return `(` + alias + `.deleted_at IS NOT NULL
-	     OR ` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
+	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
 	     AND (EXISTS (SELECT 1 FROM task_edges ch
 	                  JOIN tasks cht ON cht.id = ch.from_task AND cht.deleted_at IS NULL
 	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'child_of')
@@ -947,10 +952,13 @@ func taskClosed(alias string) string {
 }
 
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
-// open, i.e. the edge currently blocks its to_task.
+// open, i.e. the edge currently blocks its to_task. The blocker must also be
+// live: a deleted blocker stops blocking without its edge being retracted
+// (044 §4), which is why the filter sits here and not in taskClosed.
 var blockedCondition = `e.type = 'blocks'
 	 AND EXISTS (SELECT 1 FROM tasks b
 	             WHERE b.id = e.from_task
+	               AND b.deleted_at IS NULL
 	               AND NOT ` + taskClosed("b") + `)`
 
 // planUnfinished renders "the plan document aliased as alias still has work
@@ -964,13 +972,15 @@ var blockedCondition = `e.type = 'blocks'
 // — planBlockedCondition for the gate, the blocking-plan queries for the
 // cockpit and the brief — so no surface can disagree with Claim.
 //
-// A tombstoned plan holds nothing: it is out of the picture entirely, the same
-// way taskClosed treats a tombstoned task.
+// A tombstoned plan holds nothing: it is out of the picture entirely. Its
+// tasks are filtered the same way — a deleted task is not outstanding work,
+// even though taskClosed alone would still call it open.
 func planUnfinished(alias string) string {
 	return `(` + alias + `.deleted_at IS NULL
 	     AND (` + alias + `.status = 'draft'
 	          OR EXISTS (SELECT 1 FROM tasks bt
 	                     WHERE bt.plan_doc = ` + alias + `.id
+	                       AND bt.deleted_at IS NULL
 	                       AND NOT ` + taskClosed("bt") + `)))`
 }
 
@@ -1023,8 +1033,10 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 // requires closure be the server's answer since a client cannot evaluate a
 // predicate over other repos' done_state and landed-commit facts). An empty
 // ids returns an empty map without touching the database. A tombstoned id is
-// answered honestly rather than skipped — taskClosed reports it closed, which
-// is what GetTask should say about a row nothing can still be waiting on.
+// answered on its state like any other: the tombstone is orthogonal to state
+// (044 §1), so a deleted draft answers Closed false and a deleted merged task
+// answers what its repos say. What stops a deleted task blocking or holding a
+// plan open is the live filter at those queries, not this verdict.
 func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(ids) == 0 {
@@ -1073,14 +1085,17 @@ func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 
 // OpenTaskForDoc returns the id of an open task of the given kind that
 // references doc, or "" — the §5 suppression guard of spec 025 §15.4,
-// computed rather than stored (025 §1). Open means taskClosed's complement,
-// the same notion the ready set and the blocks predicate share, so this guard
-// cannot disagree with either about what "still open" means.
+// computed rather than stored (025 §1). Open means live and taskClosed's
+// complement, the same notion the ready set and the blocks predicate share, so
+// this guard cannot disagree with either about what "still open" means. A
+// tombstoned task suppresses nothing (044 §4): the lifecycle should mint the
+// replacement the operator deleted the old one to make room for.
 func (s *Store) OpenTaskForDoc(ctx context.Context, docID int64, kind string) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id FROM tasks
-		  WHERE about_doc = $1 AND kind = $2 AND NOT `+taskClosed("tasks")+`
+		  WHERE about_doc = $1 AND kind = $2 AND deleted_at IS NULL
+		    AND NOT `+taskClosed("tasks")+`
 		  ORDER BY created_at, id LIMIT 1`, docID, kind,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

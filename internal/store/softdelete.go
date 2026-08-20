@@ -34,19 +34,20 @@ func tombstoneFrom(deletedAt sql.NullTime, deletedBy, justification sql.NullStri
 	}
 }
 
-// lockTaskTombstone reads a task's tombstone state under a row lock, so two
-// deletes of one task serialise rather than racing. A missing task is
+// lockTaskTombstone reads a task's tombstone flag and state under a row lock,
+// so two deletes of one task serialise rather than racing. A missing task is
 // ErrNotFound.
-func lockTaskTombstone(tx *sql.Tx, id string) (deleted bool, err error) {
+func lockTaskTombstone(tx *sql.Tx, id string) (deleted bool, state string, err error) {
 	var deletedAt sql.NullTime
-	err = tx.QueryRow(`SELECT deleted_at FROM tasks WHERE id = $1 FOR UPDATE`, id).Scan(&deletedAt)
+	err = tx.QueryRow(
+		`SELECT deleted_at, state FROM tasks WHERE id = $1 FOR UPDATE`, id).Scan(&deletedAt, &state)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, fmt.Errorf("task %s: %w", id, ErrNotFound)
+		return false, "", fmt.Errorf("task %s: %w", id, ErrNotFound)
 	}
 	if err != nil {
-		return false, fmt.Errorf("lock task %s: %w", id, err)
+		return false, "", fmt.Errorf("lock task %s: %w", id, err)
 	}
-	return deletedAt.Valid, nil
+	return deletedAt.Valid, state, nil
 }
 
 // lockDocTombstone is lockTaskTombstone for a document.
@@ -78,7 +79,7 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 	if err := requireActor(tx, actorID); err != nil {
 		return err
 	}
-	deleted, err := lockTaskTombstone(tx, id)
+	deleted, state, err := lockTaskTombstone(tx, id)
 	if err != nil {
 		return err
 	}
@@ -97,9 +98,26 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 	if err := CloseActiveLease(tx, now, id); err != nil {
 		return err
 	}
-	return LogChange(tx, "task", id, eventID, map[string]string{
+	if err := LogChange(tx, "task", id, eventID, map[string]string{
 		"field": "deleted", "old": "false", "new": "true", "justification": justification,
-	})
+	}); err != nil {
+		return err
+	}
+	// CloseActiveLease never touches task state — its callers do. Without this
+	// an in_progress task would be left with no lease and no sweeper watching
+	// it, so undelete would hand back a row Claim refuses forever. Same move
+	// closeLease makes, and it must precede the roll-up below so the parent
+	// resolves against the state the child actually ends on.
+	if state == "in_progress" {
+		if err := Transition(tx, now, id, "in_progress", "ready", eventID); err != nil {
+			return err
+		}
+	}
+	// The child just left its parent's roll-up (childStates reads live children
+	// only), and only Transition otherwise re-runs the resolver — so deleting
+	// the last unfinished child would leave the parent where that child put it
+	// until some unrelated transition happened along.
+	return resolveParent(tx, now, id, eventID)
 }
 
 // UndeleteTask clears a task's tombstone inside the given transaction and
@@ -108,7 +126,7 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 // (044 §3): deleting hides the record, undeleting restores it, and only the
 // first is worth making someone stop and type.
 func UndeleteTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
-	deleted, err := lockTaskTombstone(tx, id)
+	deleted, _, err := lockTaskTombstone(tx, id)
 	if err != nil {
 		return err
 	}
@@ -121,8 +139,14 @@ func UndeleteTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 	); err != nil {
 		return fmt.Errorf("undelete task %s: %w", id, err)
 	}
-	return LogChange(tx, "task", id, eventID,
-		map[string]string{"field": "deleted", "old": "true", "new": "false"})
+	if err := LogChange(tx, "task", id, eventID,
+		map[string]string{"field": "deleted", "old": "true", "new": "false"}); err != nil {
+		return err
+	}
+	// The parent's roll-up gains a child back, which is the mirror of the
+	// re-resolve DeleteTask does: a parent closed while this child was hidden
+	// has to reopen.
+	return resolveParent(tx, now, id, eventID)
 }
 
 // DeleteDoc tombstones a document inside the given transaction and appends a

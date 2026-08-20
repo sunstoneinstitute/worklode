@@ -152,10 +152,10 @@ SELECT `+taskColumnsT+`,
 // task id) with the open tasks holding a dependent in scope for projectID (""
 // meaning every project): the from_task of a 'blocks' edge, and the open tasks
 // of any plan ordered before the dependent's plan (025 §9.3). "Open" uses the
-// same predicate as blockedCondition and planBlockedCondition: the blocker has
-// not reached its repo's done_state (taskClosed). The blocker itself need not
-// be in the same project as its dependent — 'blocks' edges, unlike child_of,
-// are not project-scoped (see AddEdge).
+// same predicate as blockedCondition and planBlockedCondition: the blocker is
+// live and has not reached its repo's done_state (taskClosed). The blocker
+// itself need not be in the same project as its dependent — 'blocks' edges,
+// unlike child_of, are not project-scoped (see AddEdge).
 //
 // A blocking plan still draft has minted no task and so names none here; it
 // reaches the fact through attachBlockingPlans instead.
@@ -166,6 +166,7 @@ SELECT e.to_task, b.id, b.title, b.state
   JOIN tasks b ON b.id = e.from_task
   JOIN tasks dep ON dep.id = e.to_task
  WHERE e.type = 'blocks'
+   AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
    AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
@@ -175,6 +176,7 @@ SELECT dep.id, b.id, b.title, b.state
   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
   JOIN tasks b ON b.plan_doc = de.from_doc
  WHERE dep.plan_doc IS NOT NULL
+   AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
    AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)`, projectID)

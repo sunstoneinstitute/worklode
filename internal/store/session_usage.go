@@ -246,6 +246,10 @@ func projectForSessionTx(ctx context.Context, tx *sql.Tx, sessionID int64) (stri
 // days, from scratch. Recomputing rather than adjusting is what keeps the
 // rollup incapable of drifting away from the usage rows it summarizes: it can
 // be rerun at any time, and a replaced session's old numbers cannot linger.
+//
+// Deliberately not filtered on tasks.deleted_at: the tokens were spent, and
+// dropping a tombstoned task's usage would stop the rollup reconciling against
+// agent_session_usage.
 func recomputeProjectDailyCostTx(ctx context.Context, tx *sql.Tx, projectID string, days []time.Time) error {
 	for _, day := range days {
 		if _, err := tx.ExecContext(ctx,
@@ -314,7 +318,9 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 // task's child_of descendants (spec 004 §6.1) — a container task holds no
 // lease itself, so without it a container's cost always reads as zero.
 // Returns ErrNotFound when taskID does not exist, so a typo'd id reports as
-// an error rather than a silent zero.
+// an error rather than a silent zero. The scope is deliberately not filtered on
+// deleted_at: this is a fetch by id (044 §4), and a tombstoned descendant's
+// tokens were still spent.
 func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren bool,
 	from, to time.Time) (*TaskCost, error) {
 
