@@ -22,12 +22,10 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -304,34 +302,13 @@ func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 }
 
 // importRefs lists the frontmatter references one document would become edges
-// from, mirroring store.frontmatterEdges: the acting-direction relations only,
-// since the inverse spellings write no row.
+// from: the same walk and the same acting-direction rel set the server records
+// (designdoc.ActingRels), so the dry run reports what the import will write.
 func importRefs(fm *designdoc.Frontmatter) []string {
-	if fm == nil {
-		return nil
-	}
-	var out []string
-	add := func(ref string) {
-		if ref = strings.TrimSpace(ref); ref != "" {
-			out = append(out, ref)
-		}
-	}
-	for _, entry := range fm.CoverageEntries() {
-		add(entry.Spec)
-	}
-	for _, ref := range fm.Requires {
-		add(ref)
-	}
-	for _, ref := range fm.Blocks {
-		add(ref)
-	}
-	add(fm.WasDerivedFrom)
-	for _, m := range []designdoc.AnchorMap{fm.Amends, fm.Replaces} {
-		for _, k := range slices.Sorted(maps.Keys(m)) {
-			for _, ref := range m[k] {
-				add(ref)
-			}
-		}
+	refs := fm.RefsFor(designdoc.ActingRels...)
+	out := make([]string, len(refs))
+	for i, r := range refs {
+		out[i] = r.Ref
 	}
 	return out
 }
