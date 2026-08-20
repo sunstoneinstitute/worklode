@@ -1085,6 +1085,19 @@ func TestAcceptDocEmitsTypedEvent(t *testing.T) {
 	if dotted := eventsOfType(t, h, token, "doc.accepted"); len(dotted) != 0 {
 		t.Errorf("doc.accepted events = %v, want none: accept is typed now", dotted)
 	}
+
+	// A second accept records no second event — the deterministic external id
+	// collapses it — and still answers 422, exactly as it did before the event
+	// was typed. Emit skips apply on that conflict, so the store's draft-only
+	// gate never runs and the handler raises the refusal in its place;
+	// answering 200 would report an accept that did not happen.
+	rr := doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("second accept status = %d, want 422, body %s", rr.Code, rr.Body.String())
+	}
+	if again := eventsOfType(t, h, token, "wl:DocumentAccepted"); len(again) != 1 {
+		t.Errorf("wl:DocumentAccepted events after a second accept = %d, want 1", len(again))
+	}
 }
 
 // TestSubmitDoc walks POST /api/v1/docs/{id}/submit, 025 §15.4's "submission is

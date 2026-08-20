@@ -443,12 +443,25 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !inserted {
-		// One document at one version accepted twice is one fact, already in
-		// the log, so Emit skipped apply and left accepted nil. The pre-read
-		// above is that already-accepted row, read in this request — answer
-		// with it. A retry is a 200, not a conflict about a document that is
-		// exactly where the caller asked to put it.
-		accepted = doc
+		// The (source, external_id) conflict means this document at this
+		// version was already accepted, so Emit skipped apply and AcceptDoc's
+		// gates never ran — accepted is nil. Answering 200 here would report
+		// an accept that did not happen, to an actor the assignee gate might
+		// not even admit, so the refusal AcceptDoc would have raised is raised
+		// here instead. Typing the event must not quietly change what the
+		// endpoint answers.
+		err := s.st.CheckDocAcceptable(r.Context(), id, actor.ID)
+		if err == nil {
+			// Unreachable by construction: a failed accept rolls its event
+			// back with it, so an event at this version implies the document
+			// left draft. Named rather than ignored — silently returning the
+			// pre-read row would hide a broken invariant behind a 200.
+			err = fmt.Errorf("internal: doc %d accepted at version %d has no event effect but is still draft",
+				id, doc.Version)
+		}
+		s.st.RecordDocOp("accept", err)
+		s.mapStoreErr(w, err)
+		return
 	}
 	s.st.RecordPlanTasksMinted(len(minted))
 	writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *accepted, Tasks: minted})
