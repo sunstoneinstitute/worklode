@@ -68,6 +68,11 @@ type TaskFilter struct {
 	// AboutDoc narrows to the tasks that reference this document (0 = none)
 	// — the review/design task set a document's lifecycle minted (025 §15.4).
 	AboutDoc int64
+	// Deleted switches the list from live tasks to tombstoned ones (044 §5).
+	// It is a switch, not an addition: a list mixing the two invites acting on
+	// a row that is not there. The zero value lists live tasks, which is what
+	// every caller that predates the tombstone meant.
+	Deleted bool
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -383,9 +388,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // unaffected by their addition. skills and secrets are "jsonb NOT NULL
 // DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
-// 0027 and 0028), scanned into sql.NullInt64. prefixedTaskColumns below
-// requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc`
+// 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
+// (migration 0033) are last for the same reason, and are all-null or all-set
+// together. prefixedTaskColumns below requires each entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -400,10 +406,14 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
 	var planDoc, aboutDoc sql.NullInt64
+	var deletedAt sql.NullTime
+	var deletedBy, justification sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
+		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
+	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	t.PlanDoc = planDoc.Int64
 	t.AboutDoc = aboutDoc.Int64
 	t.Body = body.String
@@ -540,6 +550,12 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
 	var args sqlArgs
+	// 044 §4: a tombstoned task is out of every list by default.
+	if f.Deleted {
+		conds = append(conds, `deleted_at IS NOT NULL`)
+	} else {
+		conds = append(conds, `deleted_at IS NULL`)
+	}
 	if f.Project != "" {
 		conds = append(conds, `project_id = `+args.next(f.Project))
 	}

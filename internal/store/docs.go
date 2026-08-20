@@ -58,6 +58,9 @@ type DocFilter struct {
 	Project string
 	Kind    string
 	Status  string
+	// Deleted switches the list from live documents to tombstoned ones
+	// (044 §5). See TaskFilter.Deleted for why it is a switch.
+	Deleted bool
 }
 
 // logDocChange records one document mutation in the state log. Nine write
@@ -1484,8 +1487,10 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	return 0, false, nil
 }
 
-// docColumns is the SELECT list scanDoc expects, in order.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at`
+// docColumns is the SELECT list scanDoc expects, in order. The three
+// tombstone columns (migration 0033) are last so positional scans elsewhere
+// are unaffected by their addition; they are all-null or all-set together.
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -1496,10 +1501,14 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var number sql.NullInt64
 	var issued sql.NullTime
 	var assignee, createdBy sql.NullString
+	var deletedAt sql.NullTime
+	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
+	d.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	d.Number = int(number.Int64)
 	if issued.Valid {
 		d.Issued = issued.Time.Format(docDateLayout)
@@ -1540,7 +1549,11 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 // ListDocs returns the matching documents in corpus order: kind, then number
 // (plans, which have none, last within their kind), then slug.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) {
-	where := "TRUE"
+	// 044 §4: a tombstoned document is out of every list by default.
+	where := "deleted_at IS NULL"
+	if f.Deleted {
+		where = "deleted_at IS NOT NULL"
+	}
 	var args []any
 	for _, c := range []struct {
 		column string
