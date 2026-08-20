@@ -49,17 +49,12 @@ type claudeBinding struct {
 // covers a long subagent fan-out, and Notification covers a session blocked on
 // a human.
 //
-// WorktreeCreate and WorktreeRemove are deliberately absent. They are
-// delegation hooks, not notifications: binding one makes it *the* worktree
-// creator, replacing Claude Code's built-in `git worktree add`, and
-// EnterWorktree then fails unless the hook prints the path it created.
-// Worklode observes rather than creates, so binding them broke EnterWorktree
-// outright. Nothing is lost by dropping them — Claude Code creates worktrees
-// under .claude/worktrees/, which the default layout rejects, so both
-// handlers were unreachable NOPs on that path. Worklode's own worktrees
-// are covered by session-start (which auto-resumes an abandoned lease) and by
-// the worktree-enter binding below; `lode hook worktree-create` and
-// `worktree-remove` remain available for scripts that do create them.
+// WorktreeCreate and WorktreeRemove are deliberately absent: they are
+// delegation hooks, so binding one makes Worklode *the* worktree creator in
+// place of Claude Code's own. Worklode observes rather than creates. Its
+// worktrees are covered by session-start and the worktree-enter binding
+// below; `lode hook worktree-create`/`worktree-remove` stay callable from
+// scripts.
 var claudeBindings = []claudeBinding{
 	{Event: "SessionStart", Command: "lode hook session-start"},
 	{Event: "SessionEnd", Command: "lode hook session-end"},
@@ -147,17 +142,6 @@ func installClaudeHooks(path string) error {
 	return writeSettingsFile(path, settings)
 }
 
-// hasClaudeHooksInstalled reports whether path's settings file already
-// carries Worklode's Claude Code bindings, without writing anything back.
-func hasClaudeHooksInstalled(path string) (bool, error) {
-	settings, err := readSettingsFile(path)
-	if err != nil {
-		return false, err
-	}
-	_, present := stripLodeHooks(settingsHooks(settings))
-	return present, nil
-}
-
 // propagateClaudeHooksToWorktree mirrors root's local-scope Claude Code
 // bindings — and, if it is ours, the status line — into a freshly created
 // worktree at dir. Local scope is a developer's own opt-in file
@@ -171,19 +155,18 @@ func propagateClaudeHooksToWorktree(root, dir string) error {
 	if err != nil {
 		return err
 	}
-	installed, err := hasClaudeHooksInstalled(rootPath)
-	if err != nil || !installed {
+	rootSettings, err := readSettingsFile(rootPath)
+	if err != nil {
 		return err
+	}
+	if _, installed := stripLodeHooks(settingsHooks(rootSettings)); !installed {
+		return nil
 	}
 	dirPath, err := claudeSettingsPath(dir, scopeLocal)
 	if err != nil {
 		return err
 	}
 	if err := installClaudeHooks(dirPath); err != nil {
-		return err
-	}
-	rootSettings, err := readSettingsFile(rootPath)
-	if err != nil {
 		return err
 	}
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
