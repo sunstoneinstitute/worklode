@@ -91,6 +91,31 @@ func TestSecretsCatalogUnconfigured(t *testing.T) {
 	}
 }
 
+// The catalog volume is an optional Secret projected per environment, so a
+// configured path with no file behind it is a normal state — an environment
+// that has not provisioned the catalog item — and must read as 404, not as a
+// server fault.
+func TestSecretsCatalogMissingFile(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "catalog.toml") // never written
+	h, _, err := api.NewServer(st, api.Config{SecretsCatalogPath: path})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	rec := doReq(t, h, http.MethodGet, "/api/v1/secrets/catalog", token, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing catalog file: %d %s; want 404", rec.Code, rec.Body.String())
+	}
+}
+
 func TestSecretsMaterializedEvent(t *testing.T) {
 	st, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,

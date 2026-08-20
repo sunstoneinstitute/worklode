@@ -71,6 +71,14 @@ protection.
 
 ## 2. Catalog declaration
 
+> Pending `043-secrets-catalog-home.md#sec-2` (not yet effective)
+
+> **Amended by ADR 043 §2.** A `template` names a sibling key of the projected
+> `worklode-secrets-catalog` **Secret**, not of a ConfigMap: the catalog and
+> its templates are field labels on a 1Password item, extracted into that
+> Secret per environment. The mechanism below is otherwise unchanged — only the
+> object kind and how it gets provisioned.
+
 Amends 017 §1. A templated entry replaces `ref` with a `template` key naming a
 sibling file and one `cred.<PLACEHOLDER>` key per credential:
 

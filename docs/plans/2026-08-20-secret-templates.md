@@ -55,8 +55,9 @@ skills:
 `internal/secrets`: teach the catalog model the templated entry shape and add
 the template scan/validate/render primitives (spec 042 §2).
 
-- `catalog.go`: `Entry` gains `Template string` (the sibling ConfigMap key
-  named by the `template` TOML key), `Env string`, and
+- `catalog.go`: `Entry` gains `Template string` (the sibling key in the
+  projected `worklode-secrets-catalog` Secret named by the `template` TOML
+  key), `Env string`, and
   `Creds []Cred` (`Cred{Placeholder, Ref string}`, file order).
   `ParseCatalog` accepts `template = "..."`, `env = "..."`, and
   `cred.<PLACEHOLDER> = "op://..."` keys (`strings.Cut` on `.` — no dotted-key
@@ -108,7 +109,8 @@ Wire shape and server side (spec 042 §2 "Serving").
   `secrets.ValidateTemplate`; any missing file or mismatch is a 500 with a
   log line naming the entry (admin-controlled input fails loudly, spec 042
   §5). Reject a `template` value containing a path separator or `..` — it
-  names a ConfigMap key, never a path. Populate the new wire fields.
+  names a key in the projected Secret, never a path. Populate the new wire
+  fields.
 - Check `obsidian/src/api/types.ts`: if it hand-mirrors
   `SecretCatalogEntry`, update the mirror (worklode-obsidian-mirror skill);
   if it does not, this step is a no-op.
@@ -219,10 +221,12 @@ blockedBy: [4]
 
 Roll the new shape out to the surfaces that describe the old one.
 
-- `deploy/base/secrets-catalog.yaml`: extend the commented placeholder with a
-  templated example — the spec 042 §2 TOML plus a commented sibling
-  `kubeconfig-hzdev.yaml` key — so the admin adding WL-103's real entry has
-  the shape in front of them.
+- `deploy/secrets-catalog.example.toml`: extend the commented, never-deployed
+  example with a templated entry — the spec 042 §2 TOML plus a commented
+  sibling `kubeconfig-hzdev.yaml` key — so the admin adding WL-103's real
+  entry has the shape in front of them. Per ADR 043, the real templated entry
+  and its sibling template key are added as fields on the
+  `worklode-secrets-catalog` 1Password item, not committed here.
 - `plugins/claude/lode/skills/lode-secrets/SKILL.md`: the "capped at
   ~2.5-3 KB, has to be split" paragraph now states the mechanism exists —
   declare the entry name as usual; exec exports the entry's env name pointing

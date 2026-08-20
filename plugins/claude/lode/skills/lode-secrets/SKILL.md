@@ -13,9 +13,12 @@ materialized into the OS keystore at claim time; you never see or handle them.
 - Every plan task lists the catalog secret names its executor will need.
   Browse them with `lode secrets catalog`.
 - Put the names on the task: `lode task add --secrets NAME1,NAME2 ...`.
-- A needed secret with no catalog entry is a plan-level finding: add the
-  entry via a deployment-repo PR before the task is executable. Do not invent
-  names — they are org-unique and env-var style (`^[A-Z][A-Z0-9_]*$`).
+- A needed secret with no catalog entry is a plan-level finding. The entry is
+  added to the `worklode-secrets-catalog` 1Password item by an operator with
+  access to it — there is no PR to open and no repo file to edit, so do not
+  attempt it yourself. Mint a task and block, per "Executing tasks" below. Do
+  not invent names — they are org-unique and env-var style
+  (`^[A-Z][A-Z0-9_]*$`).
 - A catalog entry holds a credential, not a whole credentialed asset — on
   macOS and Windows a keystore item is capped at ~2.5-3 KB, so an asset like a
   full kubeconfig has to be split into a plaintext template plus the client

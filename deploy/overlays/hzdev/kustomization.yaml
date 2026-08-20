@@ -5,6 +5,7 @@ namespace: worklode
 resources:
   - ../../base
   - externalsecret-worklode-secrets.yaml
+  - externalsecret-worklode-secrets-catalog.yaml
 patches:
   - patch: |-
       apiVersion: v1

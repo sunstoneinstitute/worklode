@@ -40,3 +40,4 @@ These files do that resolution once.
 - [`040-corpus-indexing-and-hybrid-search.md`](040-corpus-indexing-and-hybrid-search.md) — Spec 040 — Corpus indexing and hybrid search (draft)
 - [`041-pi-agent-integration.md`](041-pi-agent-integration.md) — Spec 041 — Pi agent integration (draft)
 - [`042-secret-templates.md`](042-secret-templates.md) — Spec 042 — Secret templates (draft)
+- [`043-secrets-catalog-home.md`](043-secrets-catalog-home.md) — ADR 043 — Where the secrets catalog lives (draft)

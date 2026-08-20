@@ -82,10 +82,11 @@ type Config struct {
 	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
 
 	// SecretsCatalogPath (LODE_SECRETS_CATALOG_PATH) points at the org
-	// secrets catalog TOML (a mounted ConfigMap in the deployment). Empty
-	// disables the catalog endpoint (404). The file maps names to op:// refs
-	// — it holds no values, but vault/item names are mildly sensitive, so it
-	// is only ever served authenticated.
+	// secrets catalog TOML (a mounted Secret, projected per environment by an
+	// ExternalSecret and mounted optional). Empty — or an absent file, in an
+	// environment with no catalog — disables the endpoint (404). It maps
+	// names to op:// refs and holds no values, but vault/item names are
+	// mildly sensitive, so it is only ever served authenticated.
 	SecretsCatalogPath string
 
 	// SkillSources configures org skill source repos, comma-separated
