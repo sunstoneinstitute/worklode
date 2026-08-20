@@ -127,6 +127,13 @@ Two deliberate consequences:
   deleted stops blocking, because the blocking check reads live tasks, and the
   edge itself stays for the undelete.
 
+A tombstone hides a row; it does not freeze it. An edit or a state change
+addressed to a deleted row by id still applies, because the caller naming an id
+it already holds is being explicit, and refusing would mean teaching every
+mutation a rule that only `undelete` then repeats. What a tombstone does stop is
+everything that *finds* the row for you — pickup, ranking, roll-up, and the
+delivery resolver that would otherwise advance a task nobody can see.
+
 ## 5. Surfaces
 
 **API.** `DELETE /api/v1/tasks/{id}` and `DELETE /api/v1/docs/{id}`, each taking
@@ -136,9 +143,10 @@ permission the task's and document's other mutations need — delete is not an
 admin-only act, and a per-role delete permission would be the first of a real
 RBAC model this repo does not have yet (001 §9.2).
 
-A prod instance refusing a justification-less delete answers `400`, naming the
-missing field and the instance environment, so the client can tell it apart from
-a malformed request.
+A prod instance refusing a justification-less delete answers `422`, the status
+this repo already gives a field that failed validation, and names the instance
+environment in the message — the request is well-formed, and would have been
+accepted by the same server configured the other way.
 
 **CLI.** `lode task delete <id> [--justification …]` and `lode doc delete
 <ref> [--justification …]`, with `lode task undelete` / `lode doc undelete`
