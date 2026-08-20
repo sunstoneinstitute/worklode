@@ -25,7 +25,7 @@ type DomainEvent interface {
 
 // DocumentSubmitted records a document entering review (025 §15.3).
 type DocumentSubmitted struct {
-	Doc     string // subject IRI, e.g. wlid:doc/spec-025
+	Doc     string // subject IRI, e.g. wlid:doc/spec-worklode-025 (025 §4.1)
 	Actor   string // actor id; rendered wlid:actor/<id>
 	At      time.Time
 	Version int

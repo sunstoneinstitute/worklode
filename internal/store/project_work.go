@@ -243,7 +243,7 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
-	var planDoc sql.NullInt64
+	var planDoc, aboutDoc sql.NullInt64
 
 	var parentID, parentTitle, parentState sql.NullString
 
@@ -258,7 +258,7 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	if err := row.Scan(
 		&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy,
-		&t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc,
+		&t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
 		&parentID, &parentTitle, &parentState,
 		&leaseID, &leaseTaskID, &leaseActorID, &leaseWorktree,
 		&leaseAcquiredAt, &leaseRenewedAt, &leaseExpiresAt, &leaseReleasedAt,
@@ -275,6 +275,9 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	t.UpdatedAt = t.UpdatedAt.UTC()
 	if planDoc.Valid {
 		t.PlanDoc = planDoc.Int64
+	}
+	if aboutDoc.Valid {
+		t.AboutDoc = aboutDoc.Int64
 	}
 	if err := json.Unmarshal([]byte(skillsJSON), &t.Skills); err != nil {
 		return nil, fmt.Errorf("unmarshal task %s skills: %w", t.ID, err)

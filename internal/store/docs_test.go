@@ -2607,3 +2607,50 @@ func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
 		t.Fatalf("needs execution in p2 = %v, want empty", got)
 	}
 }
+
+// TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
+// subject IRI for a spec, an ADR, and a plan in the same project, and
+// DocBySubjectIRI resolves each back to its row. An unknown IRI is
+// ErrNotFound.
+func TestDocIRIRoundTrip(t *testing.T) {
+	s := openDocStore(t)
+	ctx := t.Context()
+
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	adr := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 7,
+		Slug: "007-some-decision", Body: specBody, CreatedBy: "stig",
+	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan",
+		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
+	})
+
+	cases := []struct {
+		doc  *model.Doc
+		want string
+	}{
+		{spec, "wlid:doc/spec-p1-025"},
+		{adr, "wlid:doc/adr-p1-007"},
+		{plan, "wlid:doc/plan-p1-025-documents-in-the-backbone-2"},
+	}
+	for _, tc := range cases {
+		if got := DocIRI(*tc.doc); got != tc.want {
+			t.Errorf("DocIRI(%s) = %q, want %q", tc.doc.Slug, got, tc.want)
+		}
+		resolved, err := s.DocBySubjectIRI(ctx, tc.want)
+		if err != nil {
+			t.Fatalf("DocBySubjectIRI(%q): %v", tc.want, err)
+		}
+		if resolved.ID != tc.doc.ID {
+			t.Fatalf("DocBySubjectIRI(%q) = doc %d, want doc %d", tc.want, resolved.ID, tc.doc.ID)
+		}
+	}
+
+	if _, err := s.DocBySubjectIRI(ctx, "wlid:doc/spec-p1-999"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("DocBySubjectIRI unknown iri: got %v, want ErrNotFound", err)
+	}
+}
