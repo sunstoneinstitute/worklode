@@ -143,7 +143,9 @@ func TestGlobalNavOrder(t *testing.T) {
 func TestGlobalDestinations(t *testing.T) {
 	_, h, _ := newTestServer(t)
 
-	for _, path := range []string{"/", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/knowledge"} {
+	// Knowledge lands on /docs, the document corpus (spec 032 §2's
+	// "documents and graph-backed expert views"); /knowledge redirects there.
+	for _, path := range []string{"/", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/docs"} {
 		t.Run(path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", path, "", nil)
 			if rr.Code != http.StatusOK {
@@ -157,7 +159,30 @@ func TestGlobalDestinations(t *testing.T) {
 	}
 }
 
-// TestGlobalPlaceholdersAreHonest checks the four not-yet-implemented global
+// TestKnowledgeIsTheDocumentCorpus checks the Knowledge destination is the
+// document corpus rather than a placeholder: the primary nav links to /docs,
+// /docs marks Knowledge as the current page, and the spec's own spelling of
+// the URL still resolves.
+func TestKnowledgeIsTheDocumentCorpus(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	bodyContains(t, body, `href="/docs"`)
+	if strings.Contains(body, `href="/knowledge"`) {
+		t.Error("primary nav still links Knowledge at the placeholder URL")
+	}
+
+	docs := doReq(t, h, "GET", "/docs", "", nil).Body.String()
+	assertOneAriaCurrent(t, docs)
+	bodyContains(t, docs, `<a href="/docs" class="active" aria-current="page">Knowledge</a>`)
+
+	rr := doReq(t, h, "GET", "/knowledge", "", nil)
+	if rr.Code != http.StatusFound || rr.Header().Get("Location") != "/docs" {
+		t.Errorf("GET /knowledge = %d %q, want 302 to /docs", rr.Code, rr.Header().Get("Location"))
+	}
+}
+
+// TestGlobalPlaceholdersAreHonest checks the not-yet-implemented global
 // destinations name their owning spec and render no form, button, or fake
 // state implying the workflow exists.
 func TestGlobalPlaceholdersAreHonest(t *testing.T) {
@@ -170,7 +195,6 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 		{"/intake", "spec 032 §5"},
 		{"/reviews", "spec 029 §7"},
 		{"/deliveries", "spec 029 §3"},
-		{"/knowledge", "specs 025"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", tt.path, "", nil)
@@ -302,7 +326,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/", global, true}, {"/intake", global, true},
 		{"/projects", global, true}, {"/work", global, true},
 		{"/reviews", global, true}, {"/deliveries", global, true},
-		{"/knowledge", global, true},
+		{"/docs", global, true},
 		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
 		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},

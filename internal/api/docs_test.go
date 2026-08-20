@@ -854,7 +854,21 @@ func TestDocPage(t *testing.T) {
 		"Scope",
 		"isCoveredBy",       // the plan's covers, read backward
 		docPageURL(plan.ID), // linked to the other end
+		"025-part-2",        // named by slug, not as "document 42"
 		"Model body.",       // the body, rendered verbatim in a <pre>
+	)
+	if strings.Contains(body, "document "+strconv.FormatInt(plan.ID, 10)) {
+		t.Errorf("relation names the far end by id rather than by slug:\n%s", body)
+	}
+
+	// The far end's corpus reference tells a plan from the spec it covers.
+	rr = doReq(t, h, "GET", docPageURL(plan.ID), "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("plan page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(),
+		"025-documents-in-the-backbone#sec-1", // the covered section, by slug
+		">spec 25<",                           // and what kind of document that is
 	)
 
 	if rr := doReq(t, h, "GET", "/docs/4711", "", nil); rr.Code != http.StatusNotFound {

@@ -174,16 +174,22 @@ func docView(d *model.DocDetail) ui.DocView {
 	}
 }
 
-// docEdgeRows resolves each edge's far end for rendering: a link to the
-// document it names, or the verbatim reference when it names something outside
-// this backbone.
+// docEdgeRows renders each edge's far end: a link labelled with the other
+// document's slug and corpus reference — the store resolved both alongside
+// the id — or the verbatim reference when the edge names something outside
+// this backbone. The id is the last resort, for a row whose join found no
+// document to name.
 func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 	out := make([]ui.DocEdgeRow, 0, len(edges))
 	for _, e := range edges {
 		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
 		if e.ToDoc != 0 {
 			row.URL = docPageURL(e.ToDoc)
-			row.Label = "document " + strconv.FormatInt(e.ToDoc, 10)
+			row.Label = e.ToSlug
+			if row.Label == "" {
+				row.Label = "document " + strconv.FormatInt(e.ToDoc, 10)
+			}
+			row.Ref = docEdgeRef(e)
 			if e.ToAnchor != "" {
 				row.Label += "#" + e.ToAnchor
 			}
@@ -191,6 +197,15 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 		out = append(out, row)
 	}
 	return out
+}
+
+// docEdgeRef is the far end's corpus reference for display, in docRef's
+// spelling: "spec 25", or the kind alone for a plan.
+func docEdgeRef(e model.DocEdge) string {
+	if e.ToNumber == 0 {
+		return e.ToKind
+	}
+	return e.ToKind + " " + strconv.Itoa(e.ToNumber)
 }
 
 // docRef is a document's corpus reference for display: "spec 25", or the kind
