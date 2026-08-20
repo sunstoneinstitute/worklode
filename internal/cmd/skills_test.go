@@ -320,7 +320,8 @@ func TestSkillsInstallHashMismatch(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(root, "tdd")); err == nil {
 		t.Fatalf("skills install left a symlink at %s despite the hash mismatch", filepath.Join(root, "tdd"))
 	}
-	entries, _ := os.ReadDir(filepath.Join(root, ".store"))
+	storeDir := filepath.Join(filepath.Dir(root), "store")
+	entries, _ := os.ReadDir(storeDir)
 	for _, e := range entries {
 		if e.Name() == badHash {
 			t.Fatalf("skills install left a store dir for the mismatched hash: %s", e.Name())

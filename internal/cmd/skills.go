@@ -129,11 +129,11 @@ func newSkillsInstallCmd() *cobra.Command {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was removed from its source repo\n", name)
 				}
 			}
-			root, err := skillstore.Root()
+			dirs, err := skillstore.DefaultDirs()
 			if err != nil {
 				return err
 			}
-			p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
+			p, err := skillstore.Ensure(dirs, name, hash, func() ([]byte, error) {
 				return c.SkillArchive(cmd.Context(), name, hash)
 			})
 			if err != nil {

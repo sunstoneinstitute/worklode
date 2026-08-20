@@ -106,15 +106,31 @@ func manyEntries(n int) []tarEntry {
 	return entries
 }
 
-func TestEnsure(t *testing.T) {
+// testDirs builds a links/store pair under a fresh temp dir, mirroring the
+// sibling relationship DefaultDirs computes for the real ~/.worklode tree.
+func testDirs(t *testing.T) Dirs {
+	t.Helper()
 	root := t.TempDir()
+	return Dirs{Links: filepath.Join(root, "skills"), Store: filepath.Join(root, "store")}
+}
+
+func TestDefaultDirs(t *testing.T) {
+	t.Setenv("LODE_SKILLS_DIR", "/x/skills")
+	d, err := DefaultDirs()
+	if err != nil || d.Links != "/x/skills" || d.Store != "/x/store" {
+		t.Fatalf("dirs = %+v, %v", d, err)
+	}
+}
+
+func TestEnsure(t *testing.T) {
+	dirs := testDirs(t)
 	files1 := map[string]string{"SKILL.md": "body", "references/notes.md": "n"}
 	arch := gzTar(t, files1)
 	hash1 := hashFiles(files1)
 	fetches := 0
 	fetch := func() ([]byte, error) { fetches++; return arch, nil }
 
-	p, err := Ensure(root, "tdd", hash1, fetch)
+	p, err := Ensure(dirs, "tdd", hash1, fetch)
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -122,21 +138,21 @@ func TestEnsure(t *testing.T) {
 		t.Fatalf("content: %q", got)
 	}
 	// Second ensure with the same hash: cache hit, no fetch.
-	if _, err := Ensure(root, "tdd", hash1, fetch); err != nil || fetches != 1 {
+	if _, err := Ensure(dirs, "tdd", hash1, fetch); err != nil || fetches != 1 {
 		t.Fatalf("cache: fetches=%d err=%v", fetches, err)
 	}
 	// New hash: fetch again, symlink follows.
 	files2 := map[string]string{"SKILL.md": "v2"}
 	arch2 := gzTar(t, files2)
 	hash2 := hashFiles(files2)
-	if _, err := Ensure(root, "tdd", hash2, func() ([]byte, error) { return arch2, nil }); err != nil {
+	if _, err := Ensure(dirs, "tdd", hash2, func() ([]byte, error) { return arch2, nil }); err != nil {
 		t.Fatalf("upgrade: %v", err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(root, "tdd", "SKILL.md")); string(got) != "v2" {
+	if got, _ := os.ReadFile(filepath.Join(dirs.Links, "tdd", "SKILL.md")); string(got) != "v2" {
 		t.Fatalf("after upgrade: %q", got)
 	}
 	// Old version still present in the store for concurrent worktrees.
-	if _, err := os.Stat(filepath.Join(root, ".store", hash1, "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(dirs.Store, hash1, "SKILL.md")); err != nil {
 		t.Fatalf("old version gone: %v", err)
 	}
 
@@ -147,16 +163,126 @@ func TestEnsure(t *testing.T) {
 		{"/abs.md": "x"},
 	} {
 		b := bad
-		if _, err := Ensure(root, "evil", "eeff03", func() ([]byte, error) { return gzTar(t, b), nil }); err == nil {
+		if _, err := Ensure(dirs, "evil", "eeff03", func() ([]byte, error) { return gzTar(t, b), nil }); err == nil {
 			t.Fatalf("want traversal error for %v", b)
 		}
 	}
 	// Bad identifiers rejected.
-	if _, err := Ensure(root, "a/b", hash1, fetch); err == nil {
+	if _, err := Ensure(dirs, "a/b", hash1, fetch); err == nil {
 		t.Fatal("want name error")
 	}
-	if _, err := Ensure(root, "ok", "not hex!", fetch); err == nil {
+	if _, err := Ensure(dirs, "ok", "not hex!", fetch); err == nil {
 		t.Fatal("want hash error")
+	}
+}
+
+// TestEnsurePlacesVersionsInStoreDir is the split's point: harnesses walk the
+// links dir looking for skill names, so it must hold name symlinks and
+// nothing else — no ".store", no hash-named dirs (spec 024 acceptance 2).
+func TestEnsurePlacesVersionsInStoreDir(t *testing.T) {
+	dirs := testDirs(t)
+	files := map[string]string{"SKILL.md": "body"}
+	arch := gzTar(t, files)
+	hash := hashFiles(files)
+
+	p, err := Ensure(dirs, "tdd", hash, func() ([]byte, error) { return arch, nil })
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	wantPath := filepath.Join(dirs.Store, hash)
+	if p != wantPath {
+		t.Fatalf("returned path = %q, want %q", p, wantPath)
+	}
+
+	target, err := os.Readlink(filepath.Join(dirs.Links, "tdd"))
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+	wantTarget := filepath.Join("..", "store", hash)
+	if target != wantTarget {
+		t.Fatalf("symlink target = %q, want %q", target, wantTarget)
+	}
+
+	entries, err := os.ReadDir(dirs.Links)
+	if err != nil {
+		t.Fatalf("read links dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name() == ".store" {
+			t.Fatalf("links dir still holds a .store entry")
+		}
+		if e.Type()&os.ModeSymlink == 0 {
+			t.Fatalf("links dir holds a non-symlink entry %q", e.Name())
+		}
+	}
+}
+
+// TestEnsureMigratesLegacyStore covers the pre-spec-024 layout: hash dirs and
+// name symlinks under <links>/.store. Ensure must migrate it, silently, on
+// its way to installing an unrelated skill.
+func TestEnsureMigratesLegacyStore(t *testing.T) {
+	base := t.TempDir()
+	links := filepath.Join(base, "skills")
+	dirs := Dirs{Links: links, Store: filepath.Join(base, "store")}
+
+	// Build the legacy layout by hand: links/.store/<hash>/SKILL.md plus
+	// links/<name> -> .store/<hash>.
+	legacyFiles := map[string]string{"SKILL.md": "legacy body"}
+	legacyHash := hashFiles(legacyFiles)
+	legacyDir := filepath.Join(links, ".store", legacyHash)
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("setup legacy store dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "SKILL.md"), []byte("legacy body"), 0o644); err != nil {
+		t.Fatalf("setup legacy skill file: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(".store", legacyHash), filepath.Join(links, "legacy")); err != nil {
+		t.Fatalf("setup legacy symlink: %v", err)
+	}
+
+	// Run Ensure for a DIFFERENT skill.
+	otherFiles := map[string]string{"SKILL.md": "other body"}
+	otherArch := gzTar(t, otherFiles)
+	otherHash := hashFiles(otherFiles)
+	if _, err := Ensure(dirs, "other", otherHash, func() ([]byte, error) { return otherArch, nil }); err != nil {
+		t.Fatalf("ensure other: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(links, ".store")); !os.IsNotExist(err) {
+		t.Fatalf("links/.store should be gone, stat err=%v", err)
+	}
+
+	migrated, err := os.ReadFile(filepath.Join(dirs.Store, legacyHash, "SKILL.md"))
+	if err != nil || string(migrated) != "legacy body" {
+		t.Fatalf("migrated content = %q, %v", migrated, err)
+	}
+
+	target, err := os.Readlink(filepath.Join(links, "legacy"))
+	if err != nil {
+		t.Fatalf("readlink legacy: %v", err)
+	}
+	wantTarget := filepath.Join("..", "store", legacyHash)
+	if target != wantTarget {
+		t.Fatalf("legacy symlink target = %q, want %q", target, wantTarget)
+	}
+	resolved, err := os.Readlink(filepath.Join(links, "legacy"))
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(links, filepath.Dir(resolved))); err != nil {
+		t.Fatalf("resolved legacy symlink target missing: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(links, "legacy", "SKILL.md")); err != nil || string(got) != "legacy body" {
+		t.Fatalf("legacy symlink does not resolve: %q, %v", got, err)
+	}
+
+	// A second Ensure run finds nothing left to migrate (idempotent).
+	migrateLegacyStore(dirs)
+	if _, err := os.Stat(filepath.Join(links, ".store")); !os.IsNotExist(err) {
+		t.Fatalf("second migration should be a no-op, stat err=%v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(links, "legacy", "SKILL.md")); err != nil || string(got) != "legacy body" {
+		t.Fatalf("legacy symlink broken after second migration: %q, %v", got, err)
 	}
 }
 
@@ -167,15 +293,15 @@ func TestEnsure(t *testing.T) {
 // addressed one; returning the symlink made the second install silently
 // repoint the first worktree's path at the other version.
 func TestEnsureTwoVersionsResolveSimultaneously(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	v1 := map[string]string{"SKILL.md": "version one"}
 	v2 := map[string]string{"SKILL.md": "version two"}
 
-	p1, err := Ensure(root, "tdd", hashFiles(v1), func() ([]byte, error) { return gzTar(t, v1), nil })
+	p1, err := Ensure(dirs, "tdd", hashFiles(v1), func() ([]byte, error) { return gzTar(t, v1), nil })
 	if err != nil {
 		t.Fatalf("ensure v1: %v", err)
 	}
-	p2, err := Ensure(root, "tdd", hashFiles(v2), func() ([]byte, error) { return gzTar(t, v2), nil })
+	p2, err := Ensure(dirs, "tdd", hashFiles(v2), func() ([]byte, error) { return gzTar(t, v2), nil })
 	if err != nil {
 		t.Fatalf("ensure v2: %v", err)
 	}
@@ -192,7 +318,7 @@ func TestEnsureTwoVersionsResolveSimultaneously(t *testing.T) {
 		}
 	}
 	// The by-name symlink is the convenience pointer: last install wins.
-	if got, err := os.ReadFile(filepath.Join(Path(root, "tdd"), "SKILL.md")); err != nil || string(got) != "version two" {
+	if got, err := os.ReadFile(filepath.Join(Path(dirs.Links, "tdd"), "SKILL.md")); err != nil || string(got) != "version two" {
 		t.Fatalf("by-name symlink = %q err=%v, want the most recent install", got, err)
 	}
 }
@@ -201,7 +327,7 @@ func TestEnsureTwoVersionsResolveSimultaneously(t *testing.T) {
 // executable bit: skillsync.buildArchive carries mode into the tar header
 // and folds it into the content hash specifically so scripts stay runnable.
 func TestExtractPreservesExecBit(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	entries := []tarEntry{
 		{Name: "run.sh", Content: "#!/bin/sh\necho hi\n", Mode: 0o755, Typeflag: tar.TypeReg},
 		{Name: "SKILL.md", Content: "body", Mode: 0o644, Typeflag: tar.TypeReg},
@@ -209,7 +335,7 @@ func TestExtractPreservesExecBit(t *testing.T) {
 	arch := buildTar(t, entries)
 	hash := hashEntries(entries)
 
-	p, err := Ensure(root, "exec", hash, func() ([]byte, error) { return arch, nil })
+	p, err := Ensure(dirs, "exec", hash, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -235,12 +361,12 @@ func TestExtractPreservesExecBit(t *testing.T) {
 // the false positive of rejecting a legitimate file merely starting with
 // "..", as opposed to an actual "../" escape.
 func TestExtractDotDotPrefixedNameAccepted(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	files := map[string]string{"..notes.md": "hidden notes"}
 	arch := gzTar(t, files)
 	hash := hashFiles(files)
 
-	p, err := Ensure(root, "dotdot", hash, func() ([]byte, error) { return arch, nil })
+	p, err := Ensure(dirs, "dotdot", hash, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -258,7 +384,7 @@ func TestExtractDotDotPrefixedNameAccepted(t *testing.T) {
 // TestExtractDotDotPrefixedNameAccepted. The traversal check fires before
 // content is hashed, so an arbitrary well-formed hash is fine here.
 func TestExtractGenuineTraversalRejected(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	cases := map[string]map[string]string{
 		"parent-relative": {"../escape.md": "x"},
 		"nested-parent":   {"sub/../../escape.md": "x"},
@@ -269,7 +395,7 @@ func TestExtractGenuineTraversalRejected(t *testing.T) {
 		files := files
 		t.Run(name, func(t *testing.T) {
 			arch := gzTar(t, files)
-			if _, err := Ensure(root, "evil-"+name, "aabbcc12", func() ([]byte, error) { return arch, nil }); err == nil {
+			if _, err := Ensure(dirs, "evil-"+name, "aabbcc12", func() ([]byte, error) { return arch, nil }); err == nil {
 				t.Fatalf("want traversal error for %v", files)
 			}
 		})
@@ -285,15 +411,15 @@ func TestExtractOverCapRejected(t *testing.T) {
 	maxExtracted = 16
 	defer func() { maxExtracted = orig }()
 
-	root := t.TempDir()
+	dirs := testDirs(t)
 	arch := gzTar(t, map[string]string{"big.txt": strings.Repeat("x", 64)})
 
 	// The byte cap trips mid-archive, before content is ever hashed, so an
 	// arbitrary well-formed hash is fine here.
-	if _, err := Ensure(root, "big", "aa00bb", func() ([]byte, error) { return arch, nil }); err == nil {
+	if _, err := Ensure(dirs, "big", "aa00bb", func() ([]byte, error) { return arch, nil }); err == nil {
 		t.Fatal("want error for over-cap archive")
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".store", "aa00bb")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(dirs.Store, "aa00bb")); !os.IsNotExist(statErr) {
 		t.Fatalf("store dir should not exist after failed extract: %v", statErr)
 	}
 }
@@ -311,11 +437,11 @@ func TestExtractEntryCountCapped(t *testing.T) {
 	arch := buildTar(t, entries)
 	hash := hashEntries(entries)
 
-	root := t.TempDir()
-	if _, err := Ensure(root, "toomany", hash, func() ([]byte, error) { return arch, nil }); err == nil {
+	dirs := testDirs(t)
+	if _, err := Ensure(dirs, "toomany", hash, func() ([]byte, error) { return arch, nil }); err == nil {
 		t.Fatal("want error for archive exceeding the entry cap")
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".store", hash)); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(dirs.Store, hash)); !os.IsNotExist(statErr) {
 		t.Fatalf("store dir should not exist after rejected extract: %v", statErr)
 	}
 }
@@ -325,7 +451,7 @@ func TestExtractEntryCountCapped(t *testing.T) {
 // (name, hash) must all succeed and land identical content. Run with
 // -race.
 func TestEnsureConcurrent(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	files := map[string]string{"SKILL.md": "concurrent body", "helper.sh": "x"}
 	arch := gzTar(t, files)
 	hash := hashFiles(files)
@@ -342,7 +468,7 @@ func TestEnsureConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := Ensure(root, "race", hash, fetch); err != nil {
+			if _, err := Ensure(dirs, "race", hash, fetch); err != nil {
 				errs <- err
 			}
 		}()
@@ -353,7 +479,7 @@ func TestEnsureConcurrent(t *testing.T) {
 		t.Errorf("ensure: %v", err)
 	}
 
-	got, err := os.ReadFile(filepath.Join(root, "race", "SKILL.md"))
+	got, err := os.ReadFile(filepath.Join(dirs.Links, "race", "SKILL.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -366,7 +492,7 @@ func TestEnsureConcurrent(t *testing.T) {
 // materializes a symlink entry. skillsync.skillDirs drops symlinks at ingest,
 // but the extractor should not be the weak link if that ever changes.
 func TestExtractSkipsSymlink(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	entries := []tarEntry{
 		{Name: "SKILL.md", Content: "body", Mode: 0o644, Typeflag: tar.TypeReg},
 		{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"},
@@ -374,7 +500,7 @@ func TestExtractSkipsSymlink(t *testing.T) {
 	arch := buildTar(t, entries)
 	hash := hashEntries(entries) // the symlink entry does not contribute to the hash
 
-	p, err := Ensure(root, "symlink", hash, func() ([]byte, error) { return arch, nil })
+	p, err := Ensure(dirs, "symlink", hash, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -386,12 +512,13 @@ func TestExtractSkipsSymlink(t *testing.T) {
 // TestEnsureCreatesMissingRoot covers first run on a clean machine, where
 // ~/.worklode/skills (or LODE_SKILLS_DIR) doesn't exist yet.
 func TestEnsureCreatesMissingRoot(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "nested", "does-not-exist-yet")
+	base := filepath.Join(t.TempDir(), "nested", "does-not-exist-yet")
+	dirs := Dirs{Links: filepath.Join(base, "skills"), Store: filepath.Join(base, "store")}
 	files := map[string]string{"SKILL.md": "fresh"}
 	arch := gzTar(t, files)
 	hash := hashFiles(files)
 
-	p, err := Ensure(root, "fresh", hash, func() ([]byte, error) { return arch, nil })
+	p, err := Ensure(dirs, "fresh", hash, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -406,11 +533,9 @@ func TestEnsureCreatesMissingRoot(t *testing.T) {
 
 // TestEnsureRelativeRoot guards against a symlink target computed relative
 // to the wrong base. A symlink's relative target resolves against the
-// link's own directory, which is always root — so the stored target must
-// be store-relative (".store/<hash>"), never root-prefixed, or a relative
-// root produces a dangling link (root="skills" would resolve
-// "skills/.store/<hash>" against "skills/tdd"'s directory "skills",
-// landing on "skills/skills/.store/<hash>").
+// link's own directory, which is always dirs.Links — so the stored target
+// must be relative to the links dir ("../store/<hash>"), never
+// links-prefixed, or a relative links dir produces a dangling link.
 func TestEnsureRelativeRoot(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -419,8 +544,10 @@ func TestEnsureRelativeRoot(t *testing.T) {
 	arch := gzTar(t, files)
 	hash := hashFiles(files)
 
-	root := "skills" // relative to the test's cwd, not absolute
-	p, err := Ensure(root, "tdd", hash, func() ([]byte, error) { return arch, nil })
+	// Both relative to the test's cwd, not absolute — mirrors DefaultDirs'
+	// Links/Store sibling relationship for a relative LODE_SKILLS_DIR.
+	dirs := Dirs{Links: "skills", Store: "store"}
+	p, err := Ensure(dirs, "tdd", hash, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -453,8 +580,8 @@ func TestExtractHashRoundTrip(t *testing.T) {
 	arch := buildTar(t, entries)
 	want := hashEntries(entries)
 
-	root := t.TempDir()
-	p, err := Ensure(root, "roundtrip", want, func() ([]byte, error) { return arch, nil })
+	dirs := testDirs(t)
+	p, err := Ensure(dirs, "roundtrip", want, func() ([]byte, error) { return arch, nil })
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -474,14 +601,14 @@ func TestExtractHashRoundTrip(t *testing.T) {
 // proxied response, a stale cache, or server/client skew must not be
 // stored under a hash it doesn't match.
 func TestEnsureRejectsContentHashMismatch(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	arch := gzTar(t, map[string]string{"SKILL.md": "authentic"})
 	wrong := hashFiles(map[string]string{"SKILL.md": "tampered"})
 
-	if _, err := Ensure(root, "evil-fetch", wrong, func() ([]byte, error) { return arch, nil }); err == nil {
+	if _, err := Ensure(dirs, "evil-fetch", wrong, func() ([]byte, error) { return arch, nil }); err == nil {
 		t.Fatal("want error: fetched content does not hash to the requested version")
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".store", wrong)); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(dirs.Store, wrong)); !os.IsNotExist(statErr) {
 		t.Fatalf("mismatched content should not be committed to the store: %v", statErr)
 	}
 }
@@ -509,17 +636,17 @@ func TestSwapSymlinkCleansUpTmpOnFailure(t *testing.T) {
 	}
 }
 
-// TestEnsureRejectsNonDirStoreEntry covers a <root>/.store/<hash> that
-// exists but is a plain file, not a directory — e.g. a partial write from
-// an incompatible process. Ensure must neither treat it as a cache hit
-// (skip the fetch) nor let extract's concurrent-loser fallback swallow the
-// rename failure and report success having committed nothing.
+// TestEnsureRejectsNonDirStoreEntry covers a <store>/<hash> that exists but
+// is a plain file, not a directory — e.g. a partial write from an
+// incompatible process. Ensure must neither treat it as a cache hit (skip
+// the fetch) nor let extract's concurrent-loser fallback swallow the rename
+// failure and report success having committed nothing.
 func TestEnsureRejectsNonDirStoreEntry(t *testing.T) {
-	root := t.TempDir()
+	dirs := testDirs(t)
 	files := map[string]string{"SKILL.md": "x"}
 	hash := hashFiles(files)
 
-	storePath := filepath.Join(root, ".store", hash)
+	storePath := filepath.Join(dirs.Store, hash)
 	if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -532,7 +659,7 @@ func TestEnsureRejectsNonDirStoreEntry(t *testing.T) {
 		fetches++
 		return gzTar(t, files), nil
 	}
-	if _, err := Ensure(root, "conflict", hash, fetch); err == nil {
+	if _, err := Ensure(dirs, "conflict", hash, fetch); err == nil {
 		t.Fatal("want error: store entry is a file, not a directory")
 	}
 	if fetches != 1 {

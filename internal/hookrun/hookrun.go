@@ -550,7 +550,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 // recommended skills degrade to an install hint. Returns name -> local path
 // for the ones that are present.
 func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brief) map[string]string {
-	root, err := skillstore.Root()
+	dirs, err := skillstore.DefaultDirs()
 	if err != nil {
 		warn(opts, "skill store: %v", err)
 		return nil
@@ -571,7 +571,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 		g.Go(func() error {
 			actx, cancel := context.WithTimeout(gctx, archiveTimeout)
 			defer cancel()
-			p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
+			p, err := skillstore.Ensure(dirs, name, hash, func() ([]byte, error) {
 				return c.SkillArchive(actx, name, hash)
 			})
 			// mu also guards opts.Stderr: warn's writer (a *bytes.Buffer in

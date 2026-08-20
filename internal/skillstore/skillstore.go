@@ -1,13 +1,20 @@
-// Package skillstore manages the local content-addressed skill cache.
+// Package skillstore manages the local content-addressed skill cache, split
+// across two directories (Dirs):
 //
-// <root>/.store/<hash>/ holds unpacked skill dirs and is the canonical
-// location: immutable once extracted, one dir per version, so worktrees
-// briefed against different versions of one skill never collide. That is the
-// path Ensure returns and the path a brief should carry.
+// Store/<hash>/ holds unpacked skill dirs and is the canonical location:
+// immutable once extracted, one dir per version, so worktrees briefed
+// against different versions of one skill never collide. That is the path
+// Ensure returns and the path a brief should carry.
 //
-// <root>/<name> is a symlink to the most recently installed version — a
-// convenience for humans browsing the cache. It holds one version at a time,
-// so nothing that needs a specific version may depend on it.
+// Links/<name> is a symlink to the most recently installed version — a
+// convenience for humans and the path every coding-agent harness walks to
+// discover skills. It holds one name symlink per skill and nothing else: a
+// hash dir living there too would surface every version as a duplicate
+// skill (spec 024 §3.3). It holds one version at a time, so nothing that
+// needs a specific version may depend on it.
+//
+// A pre-split layout (Store nested under Links, as <links>/.store/<hash>)
+// migrates to the split layout silently and best-effort on first Ensure.
 package skillstore
 
 import (
@@ -46,6 +53,26 @@ func Root() (string, error) {
 	return filepath.Join(home, ".worklode", "skills"), nil
 }
 
+// Dirs locates the two halves of the local skill cache. Links holds one
+// symlink per skill name and nothing else — harnesses walk it, so a hash
+// dir here would surface every version as a duplicate skill (spec 024
+// §3.3). Store holds the immutable content-addressed version dirs.
+type Dirs struct {
+	Links string // ~/.worklode/skills
+	Store string // ~/.worklode/store
+}
+
+// DefaultDirs resolves the cache location: $LODE_SKILLS_DIR (links; the
+// store is its parent's "store" sibling) or ~/.worklode/{skills,store}. It
+// is a pure path computation — neither directory is created here.
+func DefaultDirs() (Dirs, error) {
+	links, err := Root()
+	if err != nil {
+		return Dirs{}, err
+	}
+	return Dirs{Links: links, Store: filepath.Join(filepath.Dir(links), "store")}, nil
+}
+
 // Path returns the by-name symlink <root>/<name>, whether or not it exists
 // yet. It points at whichever version was installed last, so it is for humans
 // only; anything needing a particular version uses the path Ensure returns.
@@ -68,21 +95,22 @@ func validHash(hash string) bool {
 
 // Ensure makes the version identified by hash available locally, calling
 // fetch for the tar.gz only when it is not already in the store. It returns
-// the canonical <root>/.store/<hash> path: spec 016 requires two worktrees
+// the canonical dirs.Store/<hash> path: spec 016 requires two worktrees
 // briefed against different hashes of one skill to resolve valid paths
-// simultaneously, and the single <root>/<name> symlink cannot do that — the
-// second install would repoint the first's path at the other version.
+// simultaneously, and the single dirs.Links/<name> symlink cannot do that —
+// the second install would repoint the first's path at the other version.
 //
-// <root>/<name> is still repointed here, as the human-facing pointer to the
-// most recent install.
-func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, error) {
+// dirs.Links/<name> is still repointed here, as the human-facing pointer to
+// the most recent install.
+func Ensure(dirs Dirs, name, hash string, fetch func() ([]byte, error)) (string, error) {
 	if !skillhash.ValidName(name) {
 		return "", fmt.Errorf("skill name %q: invalid", name)
 	}
 	if !validHash(hash) {
 		return "", fmt.Errorf("skill hash %q: invalid", hash)
 	}
-	dst := filepath.Join(root, ".store", hash)
+	migrateLegacyStore(dirs)
+	dst := filepath.Join(dirs.Store, hash)
 	if info, err := os.Stat(dst); err != nil || !info.IsDir() {
 		data, err := fetch()
 		if err != nil {
@@ -92,15 +120,59 @@ func Ensure(root, name, hash string, fetch func() ([]byte, error)) (string, erro
 			return "", fmt.Errorf("extract skill %s@%s: %w", name, hash, err)
 		}
 	}
-	link := Path(root, name)
-	// The symlink target is store-relative (".store/<hash>", not the
-	// absolute or root-prefixed dst): a symlink resolves relative to its
-	// own directory, which is always root — so this works whether root
-	// itself is relative or absolute, and keeps the store relocatable.
-	if err := swapSymlink(filepath.Join(".store", hash), link); err != nil {
+	link := Path(dirs.Links, name)
+	if err := swapSymlink(relTarget(dirs, hash), link); err != nil {
 		return "", fmt.Errorf("link skill %s: %w", name, err)
 	}
 	return dst, nil
+}
+
+// relTarget is the symlink target from the links dir to a store version,
+// relative so the ~/.worklode tree stays relocatable as a unit.
+func relTarget(dirs Dirs, hash string) string {
+	rel, err := filepath.Rel(dirs.Links, filepath.Join(dirs.Store, hash))
+	if err != nil {
+		return filepath.Join(dirs.Store, hash) // disjoint roots: absolute
+	}
+	return rel
+}
+
+// migrateLegacyStore moves a pre-spec-024 <links>/.store/ into dirs.Store
+// (Q024.2: silent, by rename — content-addressed dirs are immutable, so a
+// rename either fully succeeds or leaves the version to be re-fetched) and
+// repoints name symlinks that still target ".store/<hash>". Best-effort:
+// any failure leaves Ensure to fetch as if the version were absent.
+func migrateLegacyStore(dirs Dirs) {
+	legacy := filepath.Join(dirs.Links, ".store")
+	entries, err := os.ReadDir(legacy)
+	if err != nil {
+		return // no legacy store — the common case, one cheap ReadDir
+	}
+	_ = os.MkdirAll(dirs.Store, 0o755)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dst := filepath.Join(dirs.Store, e.Name())
+		if _, err := os.Stat(dst); err == nil {
+			_ = os.RemoveAll(filepath.Join(legacy, e.Name()))
+			continue
+		}
+		_ = os.Rename(filepath.Join(legacy, e.Name()), dst)
+	}
+	links, err := os.ReadDir(dirs.Links)
+	if err != nil {
+		return
+	}
+	for _, e := range links {
+		p := filepath.Join(dirs.Links, e.Name())
+		target, err := os.Readlink(p)
+		if err != nil || !strings.HasPrefix(target, ".store"+string(filepath.Separator)) {
+			continue
+		}
+		_ = swapSymlink(relTarget(dirs, filepath.Base(target)), p)
+	}
+	_ = os.RemoveAll(legacy)
 }
 
 // extract unpacks tgz into a sibling tmp dir, verifies its content hashes to
