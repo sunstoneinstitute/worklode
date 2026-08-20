@@ -155,6 +155,74 @@ func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 	return out
 }
 
+// docCoverageEdge is one covers edge id and level, for tests exercising
+// 026 §2.1's three-valued coverage that model.DocEdge's plain columns do not
+// carry (WL-141 part 1; the read path is a separate task).
+type docCoverageEdge struct {
+	id       int64
+	toDoc    int64
+	toAnchor string
+	coverage string
+}
+
+// docCoverageEdges reads a document's outbound covers edges with their
+// ids and levels, ordered by target so tests can address them positionally.
+func docCoverageEdges(t *testing.T, s *Store, docID int64) []docCoverageEdge {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT id, coalesce(to_doc,0), coalesce(to_anchor,''), coalesce(coverage,'')
+		   FROM doc_edges WHERE from_doc = $1 AND type = 'covers'
+		  ORDER BY coalesce(to_doc,0), coalesce(to_anchor,'')`, docID)
+	if err != nil {
+		t.Fatalf("read covers edges: %v", err)
+	}
+	defer rows.Close()
+	var out []docCoverageEdge
+	for rows.Next() {
+		var e docCoverageEdge
+		if err := rows.Scan(&e.id, &e.toDoc, &e.toAnchor, &e.coverage); err != nil {
+			t.Fatalf("scan covers edge: %v", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read covers edges: %v", err)
+	}
+	return out
+}
+
+// docCompletedWithRow is one doc_coverage_completed_with row.
+type docCompletedWithRow struct {
+	position   int
+	toDoc      int64
+	toExternal string
+}
+
+// docCompletedWith reads a covers edge's fullCoverageWith closure in
+// authored order.
+func docCompletedWith(t *testing.T, s *Store, edgeID int64) []docCompletedWithRow {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT position, coalesce(to_doc,0), coalesce(to_external,'')
+		   FROM doc_coverage_completed_with WHERE edge_id = $1 ORDER BY position`, edgeID)
+	if err != nil {
+		t.Fatalf("read doc_coverage_completed_with: %v", err)
+	}
+	defer rows.Close()
+	var out []docCompletedWithRow
+	for rows.Next() {
+		var r docCompletedWithRow
+		if err := rows.Scan(&r.position, &r.toDoc, &r.toExternal); err != nil {
+			t.Fatalf("scan doc_coverage_completed_with: %v", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read doc_coverage_completed_with: %v", err)
+	}
+	return out
+}
+
 // specBody is a well-formed spec: frontmatter, an H1 title, and three
 // anchored sections whose anchors agree with their numbers.
 const specBody = `---
@@ -351,8 +419,8 @@ func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
-		 VALUES ($1, 'covers', $2, 'sec-5')`,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor, coverage)
+		 VALUES ($1, 'covers', $2, 'sec-5', 'full')`,
 		planID, specID)
 	if err != nil {
 		t.Fatalf("insert covers edge: %v", err)
@@ -958,6 +1026,323 @@ func TestDocCreateSkipsEmptyRefs(t *testing.T) {
 	})
 	if edges := docEdges(t, s, plan.ID); len(edges) != 0 {
 		t.Fatalf("edges = %+v, want none", edges)
+	}
+}
+
+// TestDocCoverageLevels: a full, a partial with a resolvable
+// fullCoverageWith, and a none entry each land with their authored level on
+// the covers edge, and only the partial entry writes a
+// doc_coverage_completed_with row (026 §2.1, §5).
+func TestDocCoverageLevels(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	other := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "other-plan",
+		Body: "---\nstatus: draft\n---\n\n# Other plan\n", CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: full
+  - spec: 025-documents-in-the-backbone.md#sec-2
+    coverage: partial
+    fullCoverageWith:
+      - other-plan.md
+  - spec: 025-documents-in-the-backbone.md#sec-2.1
+    coverage: none
+---
+
+# Main plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	want := []docCoverageEdge{
+		{toDoc: spec.ID, toAnchor: "sec-1", coverage: "full"},
+		{toDoc: spec.ID, toAnchor: "sec-2", coverage: "partial"},
+		{toDoc: spec.ID, toAnchor: "sec-2.1", coverage: "none"},
+	}
+	if len(edges) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", edges, want)
+	}
+	for i, e := range edges {
+		if e.toDoc != want[i].toDoc || e.toAnchor != want[i].toAnchor || e.coverage != want[i].coverage {
+			t.Errorf("edge %d = %+v, want %+v", i, e, want[i])
+		}
+	}
+
+	if cw := docCompletedWith(t, s, edges[0].id); len(cw) != 0 {
+		t.Errorf("full edge completedWith = %+v, want none", cw)
+	}
+	wantCW := []docCompletedWithRow{{position: 0, toDoc: other.ID}}
+	if cw := docCompletedWith(t, s, edges[1].id); len(cw) != 1 || cw[0] != wantCW[0] {
+		t.Errorf("partial edge completedWith = %+v, want %+v", cw, wantCW)
+	}
+	if cw := docCompletedWith(t, s, edges[2].id); len(cw) != 0 {
+		t.Errorf("none edge completedWith = %+v, want none", cw)
+	}
+}
+
+// TestDocCoverageFullCoverageWithUnresolved: a fullCoverageWith reference
+// this project cannot resolve lands verbatim in to_external, to_doc NULL —
+// unresolvable, it closes nothing (026 §2.1).
+func TestDocCoverageFullCoverageWithUnresolved(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - nowhere-plan.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 {
+		t.Fatalf("edges = %+v, want 1", edges)
+	}
+	cw := docCompletedWith(t, s, edges[0].id)
+	want := []docCompletedWithRow{{position: 0, toExternal: "nowhere-plan.md"}}
+	if len(cw) != 1 || cw[0] != want[0] {
+		t.Errorf("completedWith = %+v, want %+v", cw, want)
+	}
+}
+
+// TestDocCoverageFullCoverageWithBesideFullWritesNoRows: fullCoverageWith is
+// only meaningful on a partial entry (026 §5.1); beside full it is dropped
+// rather than written.
+func TestDocCoverageFullCoverageWithBesideFullWritesNoRows(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "other-plan",
+		Body: "---\nstatus: draft\n---\n\n# Other plan\n", CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: full
+    fullCoverageWith:
+      - other-plan.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 || edges[0].coverage != "full" {
+		t.Fatalf("edges = %+v, want one full edge", edges)
+	}
+	if cw := docCompletedWith(t, s, edges[0].id); len(cw) != 0 {
+		t.Errorf("completedWith = %+v, want none", cw)
+	}
+}
+
+// TestDocCoverageBareStringIsFull: a bare-string covers entry has no level
+// to author, so it stores full — the decoder's default (026 §5.1).
+func TestDocCoverageBareStringIsFull(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := "---\nstatus: draft\ncovers: 025-documents-in-the-backbone.md#sec-1\n---\n\n# Plan\n"
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 || edges[0].coverage != "full" {
+		t.Fatalf("edges = %+v, want one full edge", edges)
+	}
+}
+
+// TestDocCoverageRewriteReplacesCompletedWith: editing the body rebuilds
+// doc_coverage_completed_with from the new source with no orphaned or
+// duplicated rows, the same as it rebuilds doc_edges.
+func TestDocCoverageRewriteReplacesCompletedWith(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	other := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "other-plan",
+		Body: "---\nstatus: draft\n---\n\n# Other plan\n", CreatedBy: "stig",
+	})
+	third := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "third-plan",
+		Body: "---\nstatus: draft\n---\n\n# Third plan\n", CreatedBy: "stig",
+	})
+
+	firstBody := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-2
+    coverage: partial
+    fullCoverageWith:
+      - other-plan.md
+---
+
+# Main plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: firstBody, CreatedBy: "stig",
+	})
+	firstEdges := docCoverageEdges(t, s, plan.ID)
+	if len(firstEdges) != 1 {
+		t.Fatalf("edges = %+v, want 1", firstEdges)
+	}
+	firstEdgeID := firstEdges[0].id
+
+	secondBody := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-2
+    coverage: partial
+    fullCoverageWith:
+      - third-plan.md
+      - other-plan.md
+---
+
+# Main plan
+`
+	if _, err := updateDocBody(t, s, plan.ID, secondBody); err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+
+	// The old edge row (and its FK-cascaded completedWith rows) is gone.
+	if cw := docCompletedWith(t, s, firstEdgeID); len(cw) != 0 {
+		t.Errorf("stale completedWith rows for the deleted edge = %+v, want none", cw)
+	}
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 {
+		t.Fatalf("edges after rewrite = %+v, want 1", edges)
+	}
+	got := docCompletedWith(t, s, edges[0].id)
+	want := []docCompletedWithRow{
+		{position: 0, toDoc: third.ID},
+		{position: 1, toDoc: other.ID},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("completedWith = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("completedWith[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestDocCoverageSameSectionTwiceRejectsDifferentLevels: two entries naming
+// the same spec section at different levels contradict each other (026
+// §2.1), so the write is refused rather than silently picking one.
+func TestDocCoverageSameSectionTwiceRejectsDifferentLevels(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: full
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocCoverageSameSectionTwiceSameLevelDeduped: two entries naming the
+// same spec section at the same level are one edge, same as any other
+// repeated resolved target.
+func TestDocCoverageSameSectionTwiceSameLevelDeduped(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: full
+  - 025-documents-in-the-backbone.md#sec-1
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if edges := docCoverageEdges(t, s, plan.ID); len(edges) != 1 || edges[0].coverage != "full" {
+		t.Fatalf("edges = %+v, want one full edge", edges)
+	}
+}
+
+// TestDocCoverageUnknownLevelRejected: a coverage level outside
+// full/partial/none must never reach the CHECK constraint as a raw Postgres
+// error — it is ErrInvalidInput at the write.
+func TestDocCoverageUnknownLevelRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: mostly
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
 }
 
@@ -2219,9 +2604,15 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 
 	types := []string{"covers", "implements", "amends", "replaces", "requires", "wasDerivedFrom", "blocks"}
 	for _, typ := range types {
+		// Only a covers edge carries a coverage level
+		// (doc_edges_coverage_on_covers).
+		var coverage sql.NullString
+		if typ == "covers" {
+			coverage = sql.NullString{String: "full", Valid: true}
+		}
 		if _, err := s.db.ExecContext(t.Context(),
-			`INSERT INTO doc_edges (from_doc, type, to_doc) VALUES ($1, $2, $3)`,
-			from.ID, typ, to.ID); err != nil {
+			`INSERT INTO doc_edges (from_doc, type, to_doc, coverage) VALUES ($1, $2, $3, $4)`,
+			from.ID, typ, to.ID, coverage); err != nil {
 			t.Fatalf("insert %s edge: %v", typ, err)
 		}
 	}

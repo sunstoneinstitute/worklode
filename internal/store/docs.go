@@ -852,16 +852,23 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 }
 
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
-// fragment included; fromAnchor is "" for a document-level edge.
+// fragment included; fromAnchor is "" for a document-level edge. coverage and
+// completedWith carry a covers entry's authored level and, for a partial
+// entry, its fullCoverageWith closure (026 §2.1, §5); every other relation
+// leaves both zero.
 type docEdgeRef struct {
-	fromAnchor string
-	typ        string
-	ref        string
+	fromAnchor    string
+	typ           string
+	ref           string
+	coverage      string
+	completedWith []string
 }
 
 // docEdgeRow is one edge after resolution — exactly the tuple
 // doc_edges_unique keys, so equality here is the collision the index would
 // report. toDoc is 0 and toExternal non-empty for an unresolved reference.
+// The coverage level is not part of this tuple — doc_edges_unique does not
+// cover it — so rebuildEdges tracks it alongside the row in its dedupe map.
 type docEdgeRow struct {
 	fromAnchor string
 	typ        string
@@ -871,18 +878,30 @@ type docEdgeRow struct {
 }
 
 // rebuildEdges replaces a document's outbound edges from its frontmatter. It
-// deletes and re-inserts, so doc_edges_unique is satisfied across calls.
+// deletes and re-inserts, so doc_edges_unique is satisfied across calls;
+// doc_coverage_completed_with cascades off doc_edges, so clearing the parent
+// clears it too.
 //
 // Within one frontmatter it dedupes on the *resolved* row rather than on the
 // reference: two spellings of one target ("004-x.md" and
 // "docs/specs/004-x.md", or a filename and its <KEY>-SPEC-<n> shorthand) are
 // one edge, and inserting both would abort a legal document on a raw unique
-// violation.
+// violation. The dedupe map carries the coverage level alongside the row: a
+// repeated resolved target at the *same* level is still one edge, but the
+// same section covered twice at different levels is a contradiction the
+// frontmatter cannot mean (026 §2.1), so that is ErrInvalidInput rather than
+// a raw unique-index violation.
+//
+// A covers edge's level is normalised here — an empty entry means full (the
+// bare-string frontmatter form already decodes to "full") — and validated:
+// anything other than full/partial/none is ErrInvalidInput. A partial edge's
+// fullCoverageWith closure is resolved the same way doc_edges resolves its
+// own targets and stored in doc_coverage_completed_with, in authored order.
 func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
-	seen := map[docEdgeRow]bool{}
+	seen := map[docEdgeRow]string{}
 	for _, e := range frontmatterEdges(fm) {
 		base, fragment := cutFragment(e.ref)
 		toDoc, resolved, err := resolveDocRef(tx, project, base)
@@ -894,6 +913,19 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 				return err
 			}
 		}
+
+		level := ""
+		if e.typ == "covers" {
+			level = strings.TrimSpace(e.coverage)
+			if level == "" {
+				level = "full"
+			}
+			if level != "full" && level != "partial" && level != "none" {
+				return fmt.Errorf("doc %d covers %q with unknown coverage level %q (026 §5.1): %w",
+					docID, e.ref, level, ErrInvalidInput)
+			}
+		}
+
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
 			row.toDoc, row.toAnchor = toDoc, fragment
@@ -902,17 +934,60 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 			// included, since nothing here can say what its anchor names.
 			row.toExternal = e.ref
 		}
-		if seen[row] {
+		if prior, ok := seen[row]; ok {
+			if prior != level {
+				return fmt.Errorf("doc %d %s %q twice, as %s and %s (026 §5.1): %w",
+					docID, e.typ, e.ref, prior, level, ErrInvalidInput)
+			}
 			continue
 		}
-		seen[row] = true
-		if _, err := tx.Exec(
-			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc, to_anchor, to_external)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
+		seen[row] = level
+
+		var coverageCol sql.NullString
+		if e.typ == "covers" {
+			coverageCol = sql.NullString{String: level, Valid: true}
+		}
+		var edgeID int64
+		if err := tx.QueryRow(
+			`INSERT INTO doc_edges (from_doc, from_anchor, type, to_doc, to_anchor, to_external, coverage)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 RETURNING id`,
 			docID, nullText(row.fromAnchor), row.typ, nullID(row.toDoc),
-			nullText(row.toAnchor), nullText(row.toExternal),
-		); err != nil {
+			nullText(row.toAnchor), nullText(row.toExternal), coverageCol,
+		).Scan(&edgeID); err != nil {
 			return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, docID, e.ref, err)
+		}
+
+		if level != "partial" {
+			continue
+		}
+		for pos, ref := range e.completedWith {
+			ref = strings.TrimSpace(ref)
+			if ref == "" {
+				continue
+			}
+			cwBase, _ := cutFragment(ref) // plans take no anchors
+			cwDoc, cwResolved, err := resolveDocRef(tx, project, cwBase)
+			if err != nil {
+				return err
+			}
+			var toDocCol sql.NullInt64
+			var toExternalCol sql.NullString
+			if cwResolved {
+				toDocCol = nullID(cwDoc)
+			} else {
+				// Unresolvable: kept verbatim, same as doc_edges' to_external —
+				// and being unresolvable, it closes nothing (026 §2.1).
+				toExternalCol = nullText(ref)
+			}
+			if _, err := tx.Exec(
+				`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
+				 VALUES ($1, $2, $3, $4)`,
+				edgeID, pos, toDocCol, toExternalCol,
+			); err != nil {
+				return fmt.Errorf("insert fullCoverageWith[%d] of doc %d covers %q: %w",
+					pos, docID, e.ref, err)
+			}
 		}
 	}
 	return nil
@@ -981,9 +1056,25 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 		}
 	}
 	// covers reads the retired `implements` spelling too (026 §5.1); the
-	// implements edge type stays reserved for components.
+	// implements edge type stays reserved for components. Each entry's level
+	// and, for a partial entry, its fullCoverageWith closure ride along with
+	// the ref; rebuildEdges normalises and validates the level and resolves
+	// the closure. fullCoverageWith beside full or none is invalid (026
+	// §5.1) and contributes nothing to any outcome, so it is dropped here
+	// rather than carried to a level that cannot use it.
 	for _, entry := range fm.CoverageEntries() {
-		add("", "covers", entry.Spec)
+		ref := strings.TrimSpace(entry.Spec)
+		if ref == "" {
+			continue
+		}
+		level := strings.TrimSpace(entry.Coverage)
+		var completedWith []string
+		if level == "partial" {
+			completedWith = entry.FullCoverageWith
+		}
+		out = append(out, docEdgeRef{
+			typ: "covers", ref: ref, coverage: level, completedWith: completedWith,
+		})
 	}
 	for _, ref := range fm.Requires {
 		add("", "requires", ref)
