@@ -1036,6 +1036,27 @@ func TestPROpenedMaterializesAwaitingApproval(t *testing.T) {
 	}
 }
 
+// TestReadyForReviewAfterHeadMoveKeepsOneApproval: a draft whose head sha
+// moves between opened and ready_for_review must not leave two open rows —
+// a review resolves only one, and the other would sit on /reviews forever.
+func TestReadyForReviewAfterHeadMoveKeepsOneApproval(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+	deliverOK(t, e, "pull_request", "d-appr-2", "pull_request_ready_for_review.json")
+
+	if n := e.approvalCount(t); n != 1 {
+		t.Fatalf("approval rows after a head move = %d, want 1", n)
+	}
+	if rev := e.rawQueryString(t,
+		`SELECT subject_revision FROM approvals WHERE entity_id = $1`,
+		store.PREntityID(demoRepo, 42)); rev != prHeadSHA {
+		t.Errorf("subject_revision = %q, want the first-bound head sha %q", rev, prHeadSHA)
+	}
+}
+
 // TestPROpenedUncorrelatedWritesNoApproval: a PR that names no task has no
 // task to hold up, and failing to correlate must never fail the delivery.
 func TestPROpenedUncorrelatedWritesNoApproval(t *testing.T) {

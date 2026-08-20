@@ -71,10 +71,9 @@ func scanApproval(row rowScanner) (*Approval, error) {
 
 // OpenApprovalForEntity returns the open row for (entityKind, entityID) —
 // state 'awaiting' or 'changes_requested', both counting as open —
-// ErrNotFound otherwise. A draft PR can legally carry two open rows under
-// different subject_revision (opened at head A, then ready_for_review at
-// head B before A resolves): ORDER BY id DESC picks the newest revision,
-// matching 029 §7.1's "each decision binds the exact governed revision".
+// ErrNotFound otherwise. The ingest keeps at most one open row per entity,
+// so ORDER BY id DESC is a deterministic tiebreak rather than a lane
+// selector; part 2 revisits it when one entity needs several open lanes.
 func OpenApprovalForEntity(tx *sql.Tx, entityKind, entityID string) (*Approval, error) {
 	a, err := scanApproval(tx.QueryRow(
 		`SELECT `+approvalColumns+` FROM approvals

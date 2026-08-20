@@ -318,7 +318,7 @@ type CrewView struct {
 
 // CrewWorkItem is one open item a Crew member owns, shown when their
 // removal is refused. Kind is "task" today (internal/store's OwnedWork);
-// approvals and decisions join it when their tables exist.
+// the responsibility review does not yet count a member's open approvals.
 type CrewWorkItem struct {
 	Kind  string
 	ID    string

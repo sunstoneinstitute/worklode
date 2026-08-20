@@ -216,9 +216,8 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // reviewsPage handles GET /reviews: the awaiting-approvals queue (spec 029
-// §7.1) — the tracer bullet, the first page joining migration, store, and
-// shell over real data. Read-only: the decide route arrives with spec 029
-// §7.2, so no row here renders a control that points at it.
+// §7.1), joining migration, store, and shell over real data. Every row
+// renders a decide form posting to the act route (029 §7.3).
 func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.st.ListAwaitingApprovals(r.Context())
 	if err != nil {

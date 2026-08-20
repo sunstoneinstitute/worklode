@@ -23,5 +23,8 @@ CREATE TABLE approvals (
     UNIQUE (entity_kind, entity_id, subject_revision)
 );
 
+-- Covers the hot ingest read (store.OpenApprovalForEntity), which looks up
+-- an entity's open row in either open state.
 CREATE INDEX approvals_awaiting_idx
-    ON approvals (entity_kind, entity_id) WHERE state = 'awaiting';
+    ON approvals (entity_kind, entity_id)
+    WHERE state IN ('awaiting', 'changes_requested');

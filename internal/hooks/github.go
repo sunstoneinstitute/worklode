@@ -474,13 +474,24 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 // required_actor is best effort: the first requested reviewer that maps to an
 // actor, NULL when none does. A redelivery conflicts on (kind, id, revision)
 // and writes nothing.
+//
+// A PR that already has an open row gets no second one: the requirement
+// stands regardless of revision, and one review resolves it however far the
+// head has moved since. A second row would be left unclearable.
 func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number int64, headSHA string, reviewerLogins []string) error {
+	entityID := store.PREntityID(repo, number)
+	switch _, err := store.OpenApprovalForEntity(tx, "pr", entityID); {
+	case err == nil:
+		return nil
+	case !errors.Is(err, store.ErrNotFound):
+		return err
+	}
 	requiredActor, err := firstKnownActor(tx, reviewerLogins)
 	if err != nil {
 		return err
 	}
 	if err := store.InsertAwaitingApproval(tx, now, "pr",
-		store.PREntityID(repo, number), headSHA, nil, requiredActor); err != nil {
+		entityID, headSHA, nil, requiredActor); err != nil {
 		return err
 	}
 	a.metrics.approvalIngest("opened")
