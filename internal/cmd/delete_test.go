@@ -179,6 +179,31 @@ func TestDocDeleteListUndeleteRoundTrip(t *testing.T) {
 	}
 }
 
+// TestDocUndeleteResolvesSlugOfDeletedDoc pins resolveDocID's fallback: a
+// tombstoned document has left the live list, so without the second pass the
+// one command that exists to restore it could never name it by slug.
+func TestDocUndeleteResolvesSlugOfDeletedDoc(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	doc, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 1, Slug: "deletable-spec", Body: docTestBody,
+	})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if out, err := runLode(t, "doc", "delete", "deletable-spec",
+		"--justification", "wrong corpus number"); err != nil {
+		t.Fatalf("doc delete by slug: %v\noutput: %s", err, out)
+	}
+	// The slug now resolves only through the tombstoned list.
+	if out, err := runLode(t, "doc", "undelete", "deletable-spec"); err != nil {
+		t.Fatalf("doc undelete by slug: %v\noutput: %s", err, out)
+	}
+	if ids := docListIDs(t); !reflect.DeepEqual(ids, []int64{doc.ID}) {
+		t.Fatalf("live doc list after undelete by slug = %v, want [%d]", ids, doc.ID)
+	}
+}
+
 // docListIDs runs `lode doc list --json` with extra args and returns the ids.
 func docListIDs(t *testing.T, args ...string) []int64 {
 	t.Helper()
