@@ -551,3 +551,13 @@ docs/specs/041-pi-agent-integration.md:
     sec-5: "## 5. Discovery criteria"
     sec-6: "## 6. Testing and acceptance criteria"
     sec-7: "## 7. Dependencies and sources"
+docs/specs/042-secret-templates.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. The split model"
+    sec-2: "## 2. Catalog declaration"
+    sec-3: "## 3. Materialization"
+    sec-4: "## 4. Rendering & execution"
+    sec-4.1: "### 4.1 Rendered-file lifetime"
+    sec-5: "## 5. Degradation"
+    sec-6: "## 6. Acceptance criteria"

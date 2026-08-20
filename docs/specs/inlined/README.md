@@ -39,3 +39,4 @@ These files do that resolution once.
 - [`039-worklode-prod-in-the-admin-cluster.md`](039-worklode-prod-in-the-admin-cluster.md) — Spec 039 — Worklode prod in the admin cluster (draft)
 - [`040-corpus-indexing-and-hybrid-search.md`](040-corpus-indexing-and-hybrid-search.md) — Spec 040 — Corpus indexing and hybrid search (draft)
 - [`041-pi-agent-integration.md`](041-pi-agent-integration.md) — Spec 041 — Pi agent integration (draft)
+- [`042-secret-templates.md`](042-secret-templates.md) — Spec 042 — Secret templates (draft)
