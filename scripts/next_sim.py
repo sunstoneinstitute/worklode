@@ -22,17 +22,18 @@ What makes this worth simulating rather than reasoning about: the term is
 front, which changes the ranking for the next claim. A greedy replay is the
 only way to see whether the loop actually converges on one spec at a time.
 
-Two honest limits, both consequences of the same missing column:
+Two limits, both about what the task list can say:
 
-  - `plan_doc` (025 §9.2) does not exist yet, so a task's plan is recovered by
-    regex over its body. Roughly half of tasks carry no such reference; each
-    becomes its own singleton group here. Real data would group them properly.
+  - A task names the plan whose acceptance minted it (`plan_doc`, 025 §9.2)
+    and the plan's `covers` edges name its spec, so grouping is exact for
+    minted tasks. Tasks filed by hand carry no plan and become singleton
+    groups here; the header prints how many.
   - `blocking_fan_out` needs the `blocks` graph, which the task list endpoint
     does not return. It sits *below* the new term in both keys, so it cannot
     change which spec is picked -- only the order inside one. Ties that would
     fall to fan_out fall to created_at here instead.
 
-Usage: next_sim.py [--repo-root DIR] [--project ID] [--picks N]
+Usage: next_sim.py [--project ID] [--picks N]
 """
 
 import argparse
@@ -49,13 +50,13 @@ PRIORITY = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
 def group_tasks(plans, tasks):
-    """{task id: group key}. The group is the task's spec where one is
+    """{task id: group key}. The group is the spec its plan covers where one is
     recoverable, else a singleton keyed by the task itself -- an unlinked task
     is a front of one, which is what it behaves like."""
     by_plan, _ = health.plan_task_counts(plans, tasks)
     group = {}
-    for plan_path, plan_tasks in by_plan.items():
-        spec = spec_of_plan(plans[plan_path]) or f"plan:{plan_path}"
+    for plan_id, plan_tasks in by_plan.items():
+        spec = spec_of_plan(plans[plan_id]) or f"plan:{plan_id}"
         for task in plan_tasks:
             group.setdefault(task["id"], spec)
     for task in tasks:
@@ -137,7 +138,9 @@ def switches(fronts):
     return sum(1 for a, b in zip(fronts, fronts[1:]) if a != b)
 
 
-def render(tasks, group, picks, out):
+def render(tasks, group, picks, out, names=None):
+    """`names` maps a group key to the slug to print; keys it does not cover
+    (the `plan:`/`task:` singletons) print as-is."""
     w = out.write
     rows = {
         "current  (is_critical, concern, priority, fan_out)": replay(tasks, group, picks, False),
@@ -149,7 +152,7 @@ def render(tasks, group, picks, out):
         w(f"{label}\n")
         for i, task in enumerate(order, 1):
             key = group[task["id"]]
-            name = Path(key).name if key.startswith("docs/") else key
+            name = str((names or {}).get(key, key))
             w(f"  {i:2d}. {task['id']:<7} {task['priority']:<8} {name[:44]:<44}"
               f" {task['title'][:30]}\n")
         stats = {"distinct": len(set(fronts)), "switches": switches(fronts)}
@@ -161,20 +164,28 @@ def render(tasks, group, picks, out):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--repo-root", default=".", type=Path)
-    ap.add_argument("--project", default=None)
+    ap.add_argument("--project", default=None, help="project id (default: this repo's)")
     ap.add_argument("--picks", default=10, type=int)
     args = ap.parse_args()
 
-    root = args.repo_root.resolve()
-    plans = health.load_plans(root)
-    tasks = health.fetch_tasks(root, args.project)
-    group = group_tasks(plans, tasks)
+    # Only plans need their detail fetched: the grouping runs off `covers`
+    # edges, and spec slugs are just labels, so the section counts health.py
+    # pays for are not needed here.
+    spec_docs = health.fetch_docs(args.project, "spec")
+    plan_docs = health.fetch_docs(args.project, "plan")
+    live = [d["id"] for d in plan_docs if d["status"] != "superseded"]
+    plans = health.build_plans(plan_docs, health.fetch_details(live))
+    tasks = health.fetch_tasks(args.project)
 
-    linked = sum(1 for t in tasks if not group[t["id"]].startswith("task:"))
+    group = group_tasks(plans, tasks)
+    names = {d["id"]: d["slug"] for d in spec_docs}
+
+    # A group key is a spec's doc id, or the "plan:"/"task:" string a
+    # singleton falls back to.
+    linked = sum(1 for t in tasks if not str(group[t["id"]]).startswith("task:"))
     print(f"{len(tasks)} tasks, {linked} grouped by spec, "
           f"{len(tasks) - linked} unlinked (each its own front)\n")
-    render(tasks, group, args.picks, sys.stdout)
+    render(tasks, group, args.picks, sys.stdout, names)
     print("fan_out is omitted: it ranks below the new term in both keys, so it\n"
           "cannot change which spec is picked, only the order within one.")
 
