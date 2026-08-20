@@ -111,6 +111,24 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:            true,
 }
 
+// AllStates returns every state the task machine can occupy, sorted. It is
+// derived from legalTransitions rather than listed, so it cannot fall behind
+// the machine; ns/shapes.ttl's wl:taskState sh:in list is pinned against it
+// (internal/ns), which is the only reason it is exported.
+func AllStates() []string {
+	seen := make(map[string]bool, 16)
+	for pair := range legalTransitions {
+		seen[pair[0]] = true
+		seen[pair[1]] = true
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	slices.Sort(out)
+	return out
+}
+
 // containerForbiddenStates are the delivery states a task with children can
 // never occupy. They are earned by observed deploy facts about a specific
 // commit (spec 004 §5.2) and a container has no commit of its own. Checked on
