@@ -5,10 +5,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -50,25 +54,69 @@ func (s *server) reposDoctor(w http.ResponseWriter, r *http.Request) {
 		if rj.EventTypes == nil {
 			rj.EventTypes = []string{}
 		}
-		if s.appAuth != nil {
-			// Confirmed by minting an installation token (the spec's check);
-			// bounded per repo like addRepo's discovery.
-			ctx, cancel := context.WithTimeout(r.Context(), discoveryTimeout)
-			_, tokErr := s.appAuth.InstallationToken(ctx, ri.Repo)
-			cancel()
-			installed := tokErr == nil
-			rj.AppInstalled = &installed
-			if tokErr != nil {
-				rj.AppError = tokErr.Error()
-			}
-		}
 		resp.Repos = append(resp.Repos, rj)
+	}
+	if s.appAuth != nil {
+		s.checkAppInstalls(r.Context(), resp.Repos)
 	}
 	for _, u := range senders {
 		resp.UnmappedSenders = append(resp.UnmappedSenders,
 			model.UnmappedSender{Repo: u.Repo, Events: u.Events, LastEventAt: u.LastEventAt})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// appCheckConcurrency caps the GitHub round trips reposDoctor has in flight
+// at once, so a large org's doctor run is neither serialized nor a burst of
+// hundreds of requests at GitHub's rate limiter.
+const appCheckConcurrency = 8
+
+// appCheckBudget bounds the whole App-install phase, not each call: with only
+// a per-call timeout, repo count still multiplies the worst case (a hundred
+// repos × discoveryTimeout held the handler open for minutes). It sits well
+// inside the CLI's 30s request timeout, so an unreachable GitHub costs the
+// operator a partial report rather than a client-side failure. A var only so
+// the timeout test can shrink it instead of waiting it out.
+var appCheckBudget = 15 * time.Second
+
+// checkAppInstalls fills in each repo's AppInstalled/AppError from GitHub.
+//
+// One GET /repos/{repo}/installation per repo: that endpoint alone answers
+// the only question the report asks, so the token mint the check used to do
+// on top of it was a second round trip — and a credential nothing read.
+//
+// AppInstalled stays nil for a repo whose check could not run (budget spent,
+// GitHub 5xx, transport failure); false is reserved for GitHub actually
+// saying the App is not installed. "We could not tell" must not read as "not
+// installed" in an operator's diagnosis.
+func (s *server) checkAppInstalls(ctx context.Context, repos []model.RepoDoctor) {
+	ctx, cancel := context.WithTimeout(ctx, appCheckBudget)
+	defer cancel()
+
+	// No error path: every outcome is recorded on its own repo, so a failing
+	// check never cancels its siblings or fails the report.
+	var g errgroup.Group
+	g.SetLimit(appCheckConcurrency)
+	for i := range repos {
+		g.Go(func() error {
+			cctx, ccancel := context.WithTimeout(ctx, discoveryTimeout)
+			defer ccancel()
+			_, err := s.appAuth.InstallationID(cctx, repos[i].Repo)
+			switch {
+			case err == nil:
+				installed := true
+				repos[i].AppInstalled = &installed
+			case errors.Is(err, githubauth.ErrAppNotInstalled):
+				installed := false
+				repos[i].AppInstalled = &installed
+				repos[i].AppError = err.Error()
+			default:
+				repos[i].AppError = err.Error()
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
 }
 
 // parseSince resolves a --since value against now: an RFC 3339 timestamp is

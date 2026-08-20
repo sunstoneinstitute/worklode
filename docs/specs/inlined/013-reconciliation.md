@@ -68,7 +68,11 @@ Exits non-zero if any check fails, so it is usable from a hook or CI step.
 
 Per mapped repo, reported from the server:
 
-- **App installed** — confirmed by minting an installation token (`githubauth.AppAuth`).
+- **App installed** — read from `GET /repos/{owner}/{name}/installation` (`githubauth.AppAuth`),
+  one round trip per repo. Reported as installed / not installed / unchecked: GitHub's own 404 is
+  the only "not installed", and a failed or un-run check says so rather than reading as absence.
+  The checks run concurrently under one deadline for the whole report, so an org's repo count
+  cannot multiply into the response time.
 - **Last webhook received**, and the event types seen, from the `events` table.
 - **Unapplied events** — count of `*.ignored` and nil-apply events still awaiting replay.
 - **Unmapped senders** — repos that have sent events but map to no project.
