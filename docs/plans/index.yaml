@@ -1027,3 +1027,14 @@ docs/plans/2026-08-20-secret-templates.md:
     task-3-ceremony-and-pack-materialize-credential-items: "### Task 3 — Ceremony and pack materialize credential items"
     task-4-exec-renders-purge-unlinks-status-reports: "### Task 4 — Exec renders, purge unlinks, status reports"
     task-5-deployment-example-skill-and-surfaces: "### Task 5 — Deployment example, skill, and surfaces"
+docs/plans/2026-08-21-per-project-workflows.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-vocabulary-core-edges-entry-table-and-the-workflow-type: "### Task 1 — Vocabulary, core edges, entry table, and the workflow type"
+    task-2-migration-0038-and-the-workflow-aware-guard: "### Task 2 — Migration 0038 and the workflow-aware guard"
+    task-3-store-crud-for-workflows-and-the-task-override: "### Task 3 — Store CRUD for workflows and the task override"
+    task-4-api-endpoints-guard-table-metrics: "### Task 4 — API endpoints, guard table, metrics"
+    task-5-watcher-rule-review-on-workflow-change: "### Task 5 — Watcher rule: review on workflow change"
+    task-6-cli-surface-and-help-text-sweep: "### Task 6 — CLI surface and help-text sweep"
+    task-7-resolver-and-hooks-resolve-against-the-workflow: "### Task 7 — Resolver and hooks resolve against the workflow"
+    task-8-e2e-a-custom-workflow-project-through-the-public-surface: "### Task 8 — e2e: a custom-workflow project through the public surface"
