@@ -29,9 +29,9 @@ that decided which task to pick up — stay unattributed by design.
 `cd` into the worktree the claim printed. Everything below happens there.
 
 **Step 2: read the spec, not the plan of it.** The task's `about_doc` names the
-accepted spec. Read it with `lode doc get <id>` — and read it from
-`docs/specs/inlined/` if the corpus is also on disk, since that view folds in
-every in-force amendment.
+accepted spec. `lode show <ref>` renders it, `-s <anchor>` one section;
+`lode doc get <id-or-slug> --json` gives the same body plus the parsed section
+anchors and edges. The backbone is the only copy — there is no corpus on disk.
 
 **Step 3: write the plans.** Load `splitting-specs-into-plans` if the spec is
 large enough to need a numbered series, and `superpowers:writing-plans` for
@@ -39,9 +39,11 @@ each plan document. A plan's `covers:` frontmatter must name the spec sections
 it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
 `lode doc list --needs-planning` would keep reporting the spec as unplanned.
 
-Create each plan in the backbone rather than only on disk:
+Draft each plan in a scratch file, lint it, then create the document — the
+backbone is where the plan lives, the scratch file is just the editor buffer:
 
 ```bash
+lode doc anchors <path>                      # local lint: anchors and ## Tasks
 lode doc new --kind plan --slug <slug> --file <path>
 ```
 

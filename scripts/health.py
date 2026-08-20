@@ -12,43 +12,44 @@ never clear.
 The report is deliberately not a single score. Which stage is stuck is the
 only actionable part, and an average over the stages hides exactly that.
 
-Sources:
-  docs/specs/*.md   section inventory and status (superseded specs excluded)
-  docs/plans/*.md   status and `covers:`, parsed by secmeta.coverage_of
-  lode task list    the live task rows
-  lode timeline     per-task state_log transitions -- real completion times,
-                    so throughput and lead time are measured, not guessed
-  git log           last-touch date per doc, for the stall list
+Every source is the worklode backbone, read through the `lode` CLI:
 
-Asymmetry worth knowing about: tasks carry real history, docs do not. The
-task half of this report has a weekly trend; the doc half is a snapshot with
-git dates for age. Faking a doc-side trend would mean replaying git over the
-whole corpus, which is slow and still wrong for anything predating the file.
+  lode doc list --kind spec       spec inventory and status
+  lode doc list --kind plan       plan inventory and status
+  lode doc list --needs-planning  the backbone's own verdict on which spec
+                                  sections no accepted plan discharges
+                                  (026 sec-2.1), each classified unplanned,
+                                  partial or bound-only
+  lode doc get <id>               a spec's section count and a plan's `covers`
+                                  edges -- one round trip per document, so it
+                                  is issued only where a list cannot answer
+  lode task list                  the live task rows, each naming the plan it
+                                  was minted from (plan_doc, 025 sec-9.2)
+  lode timeline                   per-task state_log transitions -- real
+                                  completion times, so throughput and lead
+                                  time are measured, not guessed
 
-Usage: health.py [--repo-root DIR] [--project ID] [--weeks N] [--json]
+Coverage comes from --needs-planning rather than from recomputing it over
+`covers` edges. The wire form of an edge carries no coverage level, so a plan
+declaring `coverage: none` -- stating that it deliberately does *not* discharge
+a section -- would be indistinguishable from one that does. Asking the backbone
+also means this report and the backbone cannot disagree about what is planned.
+
+Asymmetry worth knowing about: tasks carry real history, documents carry only a
+last touch. The task half of this report is a trend; the doc half is a
+snapshot, aged by each document's updated_at.
+
+Usage: health.py [--project ID] [--weeks N] [--json]
 """
 
 import argparse
 import concurrent.futures
 import json
-import re
 import statistics
 import subprocess
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-sys.dont_write_bytecode = True  # importing secmeta must not litter scripts/
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from secfmt import generated, split_front_matter  # noqa: E402
-from secindex import sections_of  # noqa: E402
-from secmeta import coverage_of  # noqa: E402
-
-try:
-    import yaml
-except ImportError:  # pragma: no cover - same guard secmeta.py uses
-    sys.exit("health: needs PyYAML (pip install pyyaml)")
 
 # Task states. Read as data where possible, but the done/queued/in-flight
 # split is a judgement the report has to make, so it is named here.
@@ -62,113 +63,189 @@ ABANDONED = {"abandoned"}
 # upkeep set is fixed, because that is the question being asked.
 UPKEEP = {"bug", "chore"}
 
-ANCHOR_KEY = re.compile(r"^sec-[\w.]+$")
-SPEC_FILE_RE = re.compile(r"^\d+-.*\.md$")
-PLAN_REF_RE = re.compile(r"docs/plans/([\w.\-]+\.md)")
+
+# --- backbone reads ----------------------------------------------------
 
 
-# --- loading -----------------------------------------------------------
+def run_lode(args):
+    """The one place this script shells out. Tests stub it."""
+    proc = subprocess.run(["lode", *args], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"lode {' '.join(args)} failed")
+    return json.loads(proc.stdout)
 
 
-def frontmatter(path):
-    """(data, body) for one document; data is {} when absent or malformed."""
-    text = path.read_text(encoding="utf-8")
-    fm, body = split_front_matter(text)
-    if not fm:
-        return {}, body
-    try:
-        data = yaml.safe_load(fm[4:-5]) or {}
-    except yaml.YAMLError:
-        return {}, body
-    return (data if isinstance(data, dict) else {}), body
+def scoped(args, project):
+    return [*args, "--project", project] if project else list(args)
 
 
-def load_specs(root):
-    """{repo-relative path: {"status", "sections"}} for every live spec."""
-    out = {}
-    for path in sorted((root / "docs" / "specs").glob("*.md")):
-        if generated(path) or not SPEC_FILE_RE.match(path.name):
-            continue
-        data, _ = frontmatter(path)
-        if data.get("status") == "superseded":
-            continue
-        rel = str(path.relative_to(root))
-        out[rel] = {
-            "status": data.get("status", "unknown"),
-            # secindex.sections_of, not a regex over the text: it skips fenced
-            # code, so a spec quoting `{#sec-N}` in an example does not inflate
-            # the denominator of the headline coverage metric.
-            "sections": {key for key, _ in sections_of(path) if ANCHOR_KEY.match(key)},
-        }
-    return out
+def fetch_docs(project, kind):
+    """The document rows of one kind. Bodies are blanked server-side."""
+    return run_lode(scoped(["doc", "list", "--kind", kind, "--json"], project))["docs"]
 
 
-def load_plans(root):
-    """{repo-relative path: {"status", "entries"}} for every plan."""
-    out = {}
-    for path in sorted((root / "docs" / "plans").glob("*.md")):
-        if generated(path) or path.name == "index.yaml":
-            continue
-        rel = str(path.relative_to(root))
-        data, _ = frontmatter(path)
-        out[rel] = {
-            "status": data.get("status", "unknown"),
-            "entries": coverage_of(rel, data),
-        }
-    return out
+def fetch_planning_gaps(project):
+    """{spec doc id: planning gap} for accepted specs with an open section.
 
-
-# --- coverage ----------------------------------------------------------
-
-
-def covered_sections(specs, plans):
-    """Section anchors a live plan claims, as {"spec path": {anchor}}.
-
-    A bare `docs/specs/NNN.md` reference covers every section of that spec; an
-    anchored one covers just that section. `coverage: none` is a plan stating
-    it does *not* cover the section -- declared debt, so it does not count as
-    covered here. That is a deliberate divergence from find_gaps.py, which
-    counts `none` because it asks a different question ("has a human looked at
-    this spec at all?").
+    A spec absent from the payload is the backbone saying "fully planned".
     """
-    hit = defaultdict(set)
-    for plan in plans.values():
-        if plan["status"] == "superseded":
+    resp = run_lode(scoped(["doc", "list", "--needs-planning", "--json"], project))
+    return {gap["doc"]: gap for gap in resp.get("planning_gaps") or []}
+
+
+def fetch_details(ids, workers=8):
+    """{doc id: detail}. A document whose fetch fails is simply absent."""
+    def one(doc_id):
+        try:
+            return doc_id, run_lode(["doc", "get", str(doc_id), "--json"])
+        except Exception:
+            return doc_id, None
+
+    out = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for doc_id, detail in pool.map(one, list(ids)):
+            if detail is not None:
+                out[doc_id] = detail
+    return out
+
+
+def fetch_tasks(project):
+    return run_lode(scoped(["task", "list", "--status", "all", "--json"], project))["tasks"]
+
+
+def fetch_timelines(ids, workers=8):
+    """{task id: [entry]}. A task whose timeline fails is simply absent."""
+    def one(task_id):
+        try:
+            return task_id, run_lode(["timeline", task_id, "--json"])["timeline"]
+        except Exception:
+            return task_id, None
+
+    out = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for task_id, timeline in pool.map(one, list(ids)):
+            if timeline is not None:
+                out[task_id] = timeline
+    return out
+
+
+def collect(project, workers=8):
+    """Every backbone read, in one place: (specs, plans, tasks, timelines).
+
+    Three list calls answer most of it. `lode doc get` is a round trip per
+    document, so it is issued only where a list cannot answer: a plan's
+    `covers` edges, and the section count of a live spec that --needs-planning
+    did not already report one for.
+    """
+    spec_docs = fetch_docs(project, "spec")
+    plan_docs = fetch_docs(project, "plan")
+    gaps = fetch_planning_gaps(project)
+
+    wanted = [d["id"] for d in spec_docs
+              if d["status"] != "superseded" and d["id"] not in gaps]
+    wanted += [d["id"] for d in plan_docs if d["status"] != "superseded"]
+    details = fetch_details(wanted, workers)
+
+    counts = {i: len(d.get("sections") or []) for i, d in details.items()}
+    specs = build_specs(spec_docs, gaps, counts)
+    plans = build_plans(plan_docs, details)
+
+    tasks = fetch_tasks(project)
+    timelines = fetch_timelines([t["id"] for t in tasks], workers)
+    return specs, plans, tasks, timelines
+
+
+# --- document model ----------------------------------------------------
+
+
+def build_specs(docs, gaps, section_counts):
+    """{doc id: {...}} for every spec still in force.
+
+    Sections are counted, not enumerated: the backbone already decided which
+    anchors are undischarged, so this only has to total them. An accepted spec
+    absent from `gaps` is fully planned. A draft spec has every section
+    unplanned -- 026 sec-2.1 defines the planning gap over accepted specs only,
+    and dropping drafts from the denominator would flatter a corpus precisely
+    as it accumulates unaccepted design.
+    """
+    out = {}
+    for doc in docs:
+        if doc["status"] == "superseded":
             continue
-        for ref, _bare, level, _ in plan["entries"]:
-            if not ref:
-                continue  # NO-SPEC, cross-project shorthand, or prose
-            path, _, anchor = ref.partition("#")
-            if path not in specs:
-                continue  # points at a superseded spec, or another repo
-            # Only the object form can say `none`; coverage_of reports every
-            # string entry as "full", whether or not it carries an anchor.
-            if level == "none":
-                continue
-            if anchor:
-                hit[path].add(anchor)
-            else:
-                hit[path] |= specs[path]["sections"]
-    return hit
+        gap = gaps.get(doc["id"])
+        if gap:
+            total = gap["sections"]
+            reasons = Counter(g["coverage"] for g in gap.get("gaps") or [])
+        else:
+            total = section_counts.get(doc["id"], 0)
+            reasons = Counter({"unplanned": total}) if total and doc["status"] != "accepted" else Counter()
+        out[doc["id"]] = {
+            "slug": doc["slug"],
+            "status": doc["status"],
+            "updated_at": doc.get("updated_at") or "",
+            "sections": total,
+            "unplanned": sum(reasons.values()),
+            "reasons": reasons,
+        }
+    return out
+
+
+def build_plans(docs, details):
+    """{doc id: {...}} for every plan, with the documents its `covers` edges hit.
+
+    A reference the backbone could not resolve -- the NO-SPEC sentinel, a
+    cross-project path -- arrives as `to_external` with no `to_doc`, and is
+    dropped: it names no document to group a front around. One edge per
+    coverage entry, so a plan naming three sections of a spec counts three
+    times, which is what makes spec_of_plan's "mostly covers" meaningful.
+    """
+    out = {}
+    for doc in docs:
+        detail = details.get(doc["id"]) or {}
+        out[doc["id"]] = {
+            "slug": doc["slug"],
+            "status": doc["status"],
+            "updated_at": doc.get("updated_at") or "",
+            "covers": [e["to_doc"] for e in detail.get("edges") or []
+                       if e.get("type") == "covers" and e.get("to_doc")],
+        }
+    return out
 
 
 def spec_of_plan(plan):
-    """The spec a plan mostly covers, or None when it covers none.
+    """The document a plan mostly covers, or None when it covers none.
 
     A plan may name sections of several specs; the one it references most is
-    the series it belongs to. Ties break on path so the grouping is stable.
+    the series it belongs to. Ties break on document id so grouping is stable.
     """
-    counts = Counter()
-    for ref, _bare, _level, _ in plan["entries"]:
-        if ref:
-            counts[ref.partition("#")[0]] += 1
+    counts = Counter(plan["covers"])
     if not counts:
         return None
-    return min(counts, key=lambda path: (-counts[path], path))
+    return min(counts, key=lambda doc_id: (-counts[doc_id], doc_id))
+
+
+def plan_task_counts(plans, tasks):
+    """({plan doc id: [task]}, linked count) from each task's plan_doc.
+
+    A plan's acceptance mints its tasks and stamps plan_doc on them (025
+    sec-9.2). Tasks filed by hand carry none, so this is a lower bound on
+    linkage and therefore an upper bound on "dormant plans"; the report prints
+    the link rate so the number can be discounted.
+    """
+    out = defaultdict(list)
+    linked = 0
+    for task in tasks:
+        plan = task.get("plan_doc")
+        if not plan:
+            continue
+        linked += 1
+        if plan in plans:
+            out[plan].append(task)
+    return out, linked
 
 
 def fronts(plans, tasks):
-    """Per-spec progress, as {spec: {done, left, started}}.
+    """Per-spec progress, as {spec doc id: {done, left, started}}.
 
     An *open front* is a spec with work both finished and unfinished -- begun
     and not closed. Each one costs an agent context to re-enter, and unlike a
@@ -176,13 +253,13 @@ def fronts(plans, tasks):
     the spec closes. Untouched specs are cheap by comparison: nothing is
     invested in them yet.
 
-    Tasks with no recoverable plan are excluded rather than counted as fronts
-    of one; the report prints the link rate so the omission is visible.
+    Tasks with no plan are excluded rather than counted as fronts of one; the
+    report prints the link rate so the omission is visible.
     """
     by_plan, _ = plan_task_counts(plans, tasks)
     spec_of_task = {}
-    for plan_path, plan_tasks in by_plan.items():
-        spec = spec_of_plan(plans[plan_path])
+    for plan_id, plan_tasks in by_plan.items():
+        spec = spec_of_plan(plans[plan_id])
         if not spec:
             continue
         for task in plan_tasks:
@@ -205,12 +282,18 @@ def fronts(plans, tasks):
     return dict(out)
 
 
-def classify_fronts(per_spec):
-    """Split specs into open / untouched / finished, open ones listed."""
+def classify_fronts(per_spec, names=None):
+    """Split specs into open / untouched / finished, open ones listed.
+
+    `names` maps a doc id to the slug the report prints; an id it does not
+    cover is printed as-is, so a plan covering something other than a live spec
+    is still visible rather than silently renamed.
+    """
+    label = lambda key: (names or {}).get(key, key)  # noqa: E731
     open_, untouched, finished = [], [], []
-    for spec, rec in sorted(per_spec.items()):
+    for spec, rec in sorted(per_spec.items(), key=lambda kv: str(label(kv[0]))):
         if rec["left"] and rec["started"]:
-            open_.append({"spec": spec, "done": rec["done"], "left": rec["left"]})
+            open_.append({"spec": label(spec), "done": rec["done"], "left": rec["left"]})
         elif rec["left"]:
             untouched.append(spec)
         elif rec["done"]:
@@ -225,59 +308,7 @@ def classify_fronts(per_spec):
     }
 
 
-def plan_task_counts(plans, tasks):
-    """{plan path: [task]} from plan paths named in task bodies.
-
-    Tasks reference their plan in prose, not through a column, so this is a
-    lower bound on linkage and therefore an upper bound on "dormant plans".
-    The report prints the link rate so the number can be discounted.
-    """
-    by_name = {Path(p).name: p for p in plans}
-    out = defaultdict(list)
-    linked = 0
-    for task in tasks:
-        names = set(PLAN_REF_RE.findall(task.get("body") or ""))
-        matched = [by_name[n] for n in names if n in by_name]
-        if matched:
-            linked += 1
-        for plan in matched:
-            out[plan].append(task)
-    return out, linked
-
-
 # --- task history ------------------------------------------------------
-
-
-def run_lode(args, cwd):
-    proc = subprocess.run(
-        ["lode", *args], capture_output=True, text=True, cwd=cwd
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or f"lode {' '.join(args)} failed")
-    return json.loads(proc.stdout)
-
-
-def fetch_tasks(cwd, project):
-    args = ["task", "list", "--status", "all", "--json"]
-    if project:
-        args += ["--project", project]
-    return run_lode(args, cwd)["tasks"]
-
-
-def fetch_timelines(cwd, ids, workers=8):
-    """{task id: [entry]}. A task whose timeline fails is simply absent."""
-    def one(task_id):
-        try:
-            return task_id, run_lode(["timeline", task_id, "--json"], cwd)["timeline"]
-        except Exception:
-            return task_id, None
-
-    out = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        for task_id, timeline in pool.map(one, ids):
-            if timeline is not None:
-                out[task_id] = timeline
-    return out
 
 
 def parse_time(value):
@@ -330,16 +361,19 @@ def pct(num, den):
     return None if not den else 100.0 * num / den
 
 
-def build_report(root, specs, plans, tasks, timelines, now, weeks):
-    hit = covered_sections(specs, plans)
-    total_sections = sum(len(s["sections"]) for s in specs.values())
-    covered = sum(len(hit.get(p, set()) & s["sections"]) for p, s in specs.items())
+def build_report(specs, plans, tasks, timelines, now, weeks):
+    total_sections = sum(s["sections"] for s in specs.values())
+    unplanned = sum(s["unplanned"] for s in specs.values())
+    reasons = Counter()
+    for spec in specs.values():
+        reasons.update(spec["reasons"])
+    covered = total_sections - unplanned
 
-    live_plans = {p: v for p, v in plans.items() if v["status"] != "superseded"}
-    accepted = {p for p, v in live_plans.items() if v["status"] == "accepted"}
-    draft_plans = {p for p, v in live_plans.items() if v["status"] == "draft"}
+    live_plans = {i: v for i, v in plans.items() if v["status"] != "superseded"}
+    accepted = {i for i, v in live_plans.items() if v["status"] == "accepted"}
+    draft_plans = {i for i, v in live_plans.items() if v["status"] == "draft"}
     by_plan, linked = plan_task_counts(live_plans, tasks)
-    dormant = sorted(p for p in accepted if not by_plan.get(p))
+    dormant = sorted(i for i in accepted if not by_plan.get(i))
 
     stages = Counter(stage_of(t["state"]) for t in tasks)
     done_at, fallback = completion_times(tasks, timelines)
@@ -394,7 +428,8 @@ def build_report(root, specs, plans, tasks, timelines, now, weeks):
         "generated_at": now.isoformat(),
         "counts": {"specs": len(specs), "plans": len(plans), "tasks": len(tasks)},
         "stages": {
-            "unplanned_sections": total_sections - covered,
+            "unplanned_sections": unplanned,
+            "unplanned_sections_by_coverage": dict(reasons),
             "total_sections": total_sections,
             "plans_awaiting_acceptance": len(draft_plans),
             "accepted_plans_without_tasks": len(dormant),
@@ -416,7 +451,9 @@ def build_report(root, specs, plans, tasks, timelines, now, weeks):
             "queue_age_days_median": statistics.median(queue_ages) if queue_ages else None,
             "abandonment_pct": pct(stages["abandoned"], resolved),
         },
-        "fronts": classify_fronts(fronts(live_plans, tasks)),
+        "fronts": classify_fronts(
+            fronts(live_plans, tasks), {i: s["slug"] for i, s in specs.items()}
+        ),
         "kinds": kind_rows,
         "upkeep_share_pct": {
             "unfinished": upkeep_share("unfinished"),
@@ -424,9 +461,9 @@ def build_report(root, specs, plans, tasks, timelines, now, weeks):
             "all_time": upkeep_share("all_time"),
         },
         "trend": trend,
-        "stalls": stalls(root, specs, hit, draft_plans, dormant, tasks, now),
+        "stalls": stalls(specs, plans, draft_plans, dormant, tasks, now),
         "caveats": {
-            "tasks_linked_to_a_plan": [linked, len(tasks)],
+            "tasks_minted_by_a_plan": [linked, len(tasks)],
             "completion_time_fallbacks": fallback,
             "task_history_days": history_span(tasks),
         },
@@ -462,47 +499,29 @@ def history_span(tasks):
     return round((max(stamps) - min(stamps)).total_seconds() / 86400.0, 1)
 
 
-def git_dates(root):
-    """{repo-relative path: last-touch ISO date}, in one git pass."""
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(root), "log", "--format=%x00%aI", "--name-only",
-             "--", "docs/specs", "docs/plans"],
-            capture_output=True, text=True, check=True,
-        ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return {}
-    dates, current = {}, None
-    for line in out.splitlines():
-        if line.startswith("\x00"):
-            current = line[1:]
-        elif line.strip() and current and line not in dates:
-            dates[line] = current  # first sighting is the most recent commit
-    return dates
-
-
-def stalls(root, specs, hit, draft_plans, dormant, tasks, now, top=3):
+def stalls(specs, plans, draft_plans, dormant, tasks, now, top=3):
     """The oldest or largest unfinished item at each stage.
 
-    Docs are ranked by git last-touch, which is the closest thing they have to
-    an age -- a plan sitting in `draft` since June is a different problem from
-    one written yesterday. Unplanned specs rank by how many sections are
-    unplanned instead, because every spec's file date moves whenever any
-    section of it is edited.
+    Plans are ranked by the backbone's `updated_at`, the closest thing a
+    document has to an age -- one sitting in `draft` since June is a different
+    problem from one written yesterday. Specs rank by how many sections are
+    unplanned instead, because a spec's updated_at moves whenever any section
+    of it is edited.
     """
-    dates = git_dates(root)
-    oldest = lambda paths: sorted(paths, key=lambda p: (dates.get(p, "9999"), p))
+    touched = lambda i: (plans[i]["updated_at"] or "unknown")[:10]  # noqa: E731
+    oldest = lambda ids: sorted(ids, key=lambda i: (plans[i]["updated_at"] or "9999", i))  # noqa: E731
 
     return {
         "unplanned_specs": sorted(
-            ({"file": p, "unplanned_sections": len(s["sections"] - hit.get(p, set()))}
-             for p, s in specs.items() if s["sections"] - hit.get(p, set())),
-            key=lambda r: -r["unplanned_sections"],
+            ({"doc": s["slug"], "unplanned_sections": s["unplanned"],
+              "by_coverage": dict(s["reasons"])}
+             for s in specs.values() if s["unplanned"]),
+            key=lambda r: (-r["unplanned_sections"], r["doc"]),
         )[:top],
-        "draft_plans": [{"file": p, "touched": dates.get(p, "unknown")[:10]}
-                        for p in oldest(draft_plans)[:top]],
-        "dormant_plans": [{"file": p, "touched": dates.get(p, "unknown")[:10]}
-                          for p in oldest(dormant)[:top]],
+        "draft_plans": [{"doc": plans[i]["slug"], "touched": touched(i)}
+                        for i in oldest(draft_plans)[:top]],
+        "dormant_plans": [{"doc": plans[i]["slug"], "touched": touched(i)}
+                          for i in oldest(dormant)[:top]],
         "oldest_queued": sorted(
             ({"id": t["id"], "kind": t["kind"],
               "age_days": round((now - parse_time(t["created_at"])).total_seconds() / 86400.0, 1),
@@ -531,6 +550,10 @@ def render(report, out):
     w("UNFINISHED WORK BY STAGE\n")
     w(f"  design    unplanned spec sections     {s['unplanned_sections']:5d}"
       f"  of {s['total_sections']}\n")
+    by = s["unplanned_sections_by_coverage"]
+    if by:
+        w("            " + ", ".join(f"{n} {reason}" for reason, n in sorted(by.items()))
+          + "  (026 sec-2.1)\n")
     w(f"  design    plans awaiting acceptance   {s['plans_awaiting_acceptance']:5d}\n")
     w(f"  design    accepted plans, no tasks    {s['accepted_plans_without_tasks']:5d}\n")
     w(f"  delivery  tasks queued                {s['tasks_queued']:5d}\n")
@@ -561,7 +584,7 @@ def render(report, out):
     w(f"  untouched, work queued      {fr['untouched_count']:5d}\n")
     w(f"  finished                    {fr['finished_count']:5d}\n")
     for row in fr["open"]:
-        w(f"    {row['done']:2d} done /{row['left']:3d} left  {Path(row['spec']).name}\n")
+        w(f"    {row['done']:2d} done /{row['left']:3d} left  {row['spec']}\n")
     w(f"  Starting every untouched spec before closing one would put this at\n"
       f"  {fr['worst_case']} open fronts. Each is effort spent that returns nothing\n"
       "  until its spec closes.\n\n")
@@ -586,49 +609,45 @@ def render(report, out):
     st = report["stalls"]
     w("STALLS  (oldest or largest unfinished, per stage)\n")
     for row in st["unplanned_specs"]:
-        w(f"  unplanned  {row['unplanned_sections']:3d} sections  {row['file']}\n")
+        w(f"  unplanned  {row['unplanned_sections']:3d} sections  {row['doc']}\n")
     for row in st["dormant_plans"]:
-        w(f"  dormant     {row['touched']}  {row['file']}\n")
+        w(f"  dormant     {row['touched']}  {row['doc']}\n")
     for row in st["draft_plans"]:
-        w(f"  unaccepted  {row['touched']}  {row['file']}\n")
+        w(f"  unaccepted  {row['touched']}  {row['doc']}\n")
     for row in st["oldest_queued"]:
         w(f"  queued     {row['age_days']:5.1f}d  {row['id']:<7} {row['title']}\n")
     w("\n")
 
     cav = report["caveats"]
-    linked, total = cav["tasks_linked_to_a_plan"]
+    linked, total = cav["tasks_minted_by_a_plan"]
     w("NOTES\n")
-    w(f"  {linked}/{total} tasks name a plan in their body, so \"accepted plans,\n"
-      "  no tasks\" is an upper bound.\n")
+    w(f"  {linked}/{total} tasks were minted by a plan (plan_doc, 025 sec-9.2), so\n"
+      "  \"accepted plans, no tasks\" is an upper bound.\n")
     if cav["completion_time_fallbacks"]:
         w(f"  {cav['completion_time_fallbacks']} done tasks had no state_log transition;\n"
           "  their completion time fell back to updated_at.\n")
     w(f"  Task history spans {cav['task_history_days']} days -- weekly rows before that\n"
       "  are empty because the data does not exist, not because nothing happened.\n")
-    w("  Specs and plans have no history here: their half of the report is a\n"
-      "  snapshot, only the task half is a trend.\n")
+    w("  Specs and plans have no trend here: their half of the report is a\n"
+      "  snapshot, aged by each document's updated_at.\n")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--repo-root", default=".", type=Path)
     ap.add_argument("--project", default=None, help="project id (default: this repo's)")
     ap.add_argument("--weeks", default=8, type=int)
     ap.add_argument("--json", action="store_true", dest="as_json")
     args = ap.parse_args()
 
-    root = args.repo_root.resolve()
-    specs = load_specs(root)
-    plans = load_plans(root)
-
+    # Documents and tasks now come from the same server, so there is no
+    # doc-only degraded mode left to fall back to: if the backbone is
+    # unreachable there is no report.
     try:
-        tasks = fetch_tasks(root, args.project)
-        timelines = fetch_timelines(root, [t["id"] for t in tasks])
+        specs, plans, tasks, timelines = collect(args.project)
     except Exception as e:
-        print(f"health: no task data ({e}); reporting the doc side only", file=sys.stderr)
-        tasks, timelines = [], {}
+        sys.exit(f"health: {e}")
 
-    report = build_report(root, specs, plans, tasks, timelines,
+    report = build_report(specs, plans, tasks, timelines,
                           datetime.now(timezone.utc), args.weeks)
     if args.as_json:
         json.dump(report, sys.stdout, indent=2, default=str)

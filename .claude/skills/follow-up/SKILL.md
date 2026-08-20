@@ -47,16 +47,25 @@ registry_package webhooks`) are not — regardless of their priority tag.
 
 **If it is too big, do not attempt it.** Instead:
 
-1. Write `docs/plans/YYYY-MM-DD-<slug>.md` per `docs/authoring-design-docs.md`
-   — frontmatter first, keys ordered lifecycle → `covers` → dependency:
+1. Draft the plan in a scratch file per `docs/authoring-design-docs.md` —
+   frontmatter first, keys ordered lifecycle → `covers` → dependency:
    `status: draft`, then `covers:` naming the spec sections it undertakes, or
    `covers: NO-SPEC` when nothing governs it. Load
-   `superpowers:writing-plans` to write the body.
+   `superpowers:writing-plans` to write the body. Then create the document in
+   the backbone, which is where plans live:
+
+   ```bash
+   lode doc anchors <scratch.md>                                  # local lint
+   lode doc new --kind plan --slug YYYY-MM-DD-<slug> --file <scratch.md>
+   ```
+
+   Leave it draft: accepting it mints its tasks, which is a decision for
+   whoever picks the work up.
 2. Replace the follow-ups entry with one that keeps the original priority tag
-   and title, whose body is a single sentence pointing at the new plan,
+   and title, whose body is a single sentence naming the new plan by slug,
    and that it should be executed with subagents.
-3. Land that as the change. It is docs-only; the frontmatter hook is what
-   checks it.
+3. Land that entry as the change. The plan itself is already in the backbone,
+   so the commit is the follow-ups edit alone — docs-only.
 
 This is a normal outcome, not a failure — say plainly that the item was
 converted to a plan rather than fixed.

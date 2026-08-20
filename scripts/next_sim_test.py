@@ -16,29 +16,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import next_sim  # noqa: E402
 
 
-def task(tid, state="ready", priority="medium", created="2026-08-01T00:00:00Z"):
-    return {
+def task(tid, state="ready", priority="medium", created="2026-08-01T00:00:00Z", plan=0):
+    row = {
         "id": tid, "state": state, "priority": priority, "kind": "feature",
         "title": f"task {tid}", "body": "", "created_at": created,
         "updated_at": created,
     }
+    if plan:
+        row["plan_doc"] = plan
+    return row
+
+
+def plan(covers, status="accepted"):
+    """The loaded-plan shape health.build_plans produces: one `covers` entry
+    per coverage edge, each the doc id the edge resolved to."""
+    return {"status": status, "covers": list(covers)}
 
 
 class SpecOfPlanTest(unittest.TestCase):
-    def plan(self, refs):
-        return {"entries": [(r, True, "full", []) for r in refs]}
-
     def test_plan_belongs_to_the_spec_it_references_most(self):
-        plan = self.plan(["docs/specs/001-a.md#sec-1", "docs/specs/001-a.md#sec-2",
-                          "docs/specs/002-b.md#sec-1"])
-        self.assertEqual(next_sim.spec_of_plan(plan), "docs/specs/001-a.md")
+        self.assertEqual(next_sim.spec_of_plan(plan([1, 1, 2])), 1)
 
-    def test_ties_break_on_path_so_grouping_is_stable(self):
-        plan = self.plan(["docs/specs/002-b.md#sec-1", "docs/specs/001-a.md#sec-1"])
-        self.assertEqual(next_sim.spec_of_plan(plan), "docs/specs/001-a.md")
+    def test_ties_break_on_doc_id_so_grouping_is_stable(self):
+        self.assertEqual(next_sim.spec_of_plan(plan([2, 1])), 1)
 
     def test_plan_covering_no_spec_has_no_group(self):
-        self.assertIsNone(next_sim.spec_of_plan({"entries": [(None, True, "full", [])]}))
+        self.assertIsNone(next_sim.spec_of_plan(plan([])))
+
+
+class GroupTasksTest(unittest.TestCase):
+    def test_a_minted_task_is_grouped_by_the_spec_its_plan_covers(self):
+        group = next_sim.group_tasks({10: plan([1])}, [task("WL-1", plan=10)])
+        self.assertEqual(group, {"WL-1": 1})
+
+    def test_a_plan_covering_no_spec_groups_its_tasks_under_the_plan(self):
+        group = next_sim.group_tasks({10: plan([])}, [task("WL-1", plan=10)])
+        self.assertEqual(group, {"WL-1": "plan:10"})
+
+    def test_a_task_no_plan_minted_is_a_front_of_one(self):
+        group = next_sim.group_tasks({10: plan([1])}, [task("WL-1")])
+        self.assertEqual(group, {"WL-1": "task:WL-1"})
 
 
 class GroupStateTest(unittest.TestCase):
@@ -166,6 +183,12 @@ class RenderTest(unittest.TestCase):
         self.assertIn("current", out.getvalue())
         self.assertIn("proposed", out.getvalue())
         self.assertEqual(len(stats), 2)
+
+    def test_doc_ids_are_printed_as_slugs_when_names_are_given(self):
+        tasks = [task("WL-1", "merged"), task("WL-2")]
+        out = io.StringIO()
+        next_sim.render(tasks, {"WL-1": 1, "WL-2": 1}, 1, out, {1: "001-a"})
+        self.assertIn("001-a", out.getvalue())
 
 
 if __name__ == "__main__":

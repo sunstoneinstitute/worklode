@@ -7,12 +7,19 @@ import (
 	"testing"
 )
 
-// TestRoundTripCorpus is the byte-for-byte guarantee, checked against every
-// document the repo actually has. A parser that normalises anything — line
-// endings, trailing whitespace, heading spacing — fails here.
+// TestRoundTripCorpus is the byte-for-byte guarantee, checked against a
+// corpus on disk. A parser that normalises anything — line endings, trailing
+// whitespace, heading spacing — fails here.
+//
+// The corpus is the `lode doc import` fixture rather than a live docs/ tree:
+// the backbone owns design documents now (025 §5), so this repo holds no
+// document corpus of its own to check against.
 func TestRoundTripCorpus(t *testing.T) {
 	var files []string
-	for _, dir := range []string{"../../docs/specs", "../../docs/plans"} {
+	for _, dir := range []string{
+		"../cmd/testdata/import-corpus/specs",
+		"../cmd/testdata/import-corpus/plans",
+	} {
 		matches, err := filepath.Glob(filepath.Join(dir, "*.md"))
 		if err != nil {
 			t.Fatalf("glob %s: %v", dir, err)
@@ -23,12 +30,13 @@ func TestRoundTripCorpus(t *testing.T) {
 		t.Fatal("no documents found; corpus test would pass vacuously")
 	}
 
+	withSections := 0
 	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			src, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read: %v", err)
-			}
 			doc, err := Parse(src)
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
@@ -36,13 +44,17 @@ func TestRoundTripCorpus(t *testing.T) {
 			if got := doc.Bytes(); !bytes.Equal(got, src) {
 				t.Errorf("round-trip differs (%d bytes in, %d out)", len(src), len(got))
 			}
-			// Without this the round-trip passes vacuously: a scanner that
-			// finds no headings puts the whole file in Preamble and emits it
-			// back unchanged. Every document in the corpus has sections.
-			if len(doc.Sections) == 0 {
-				t.Error("no sections parsed; round-trip proves nothing")
+			if len(doc.Sections) > 0 {
+				withSections++
 			}
 		})
+	}
+	// Without this the round-trip passes vacuously: a scanner that finds no
+	// headings puts the whole file in Preamble and emits it back unchanged.
+	// The check is corpus-wide, not per file — a plan legitimately carries no
+	// section at all (025 §9).
+	if withSections == 0 {
+		t.Error("no sections parsed anywhere; round-trip proves nothing")
 	}
 }
 
