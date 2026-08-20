@@ -66,6 +66,11 @@ func navOutcome(status int) string {
 // pre-initialise exactly the series the registered routes can emit — the list
 // used to be restated by hand in metrics.go, where a new page silently
 // shipped without its zero-series.
+//
+// Registration-time only: the append to s.navDestinations is unsynchronised
+// and not idempotent, which is safe because registerRoutes is the sole caller
+// and runs once per NewServer, before any request is served. Calling this from
+// a request path would both race and grow the slice without bound.
 func (s *server) navWrap(destination string, next http.HandlerFunc) http.HandlerFunc {
 	s.navDestinations = append(s.navDestinations, destination)
 	return func(w http.ResponseWriter, r *http.Request) {
