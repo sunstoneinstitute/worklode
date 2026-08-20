@@ -112,28 +112,13 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
 	actor := actorFrom(r)
-	// Same {doc, actor, request} shape recordDocEvent emits, built inline
-	// because the id does not exist until CreateDoc runs: doc is 0 for a
-	// create, and the created row is the event's own consequence.
-	payload, err := json.Marshal(map[string]any{
-		"doc":     0,
-		"actor":   actor.ID,
-		"request": req,
-	})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
 	now := s.st.Now()
 
+	// Document id 0 in the payload: the row does not exist until CreateDoc
+	// runs, and it is the event's own consequence.
 	var created *model.Doc
-	_, _, err = s.st.RecordDocEvent(r.Context(), "create", docSource, extID, "doc.created", payload,
+	err := s.recordDocEvent(w, r, "create", "doc.created", 0, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, err := store.CreateDoc(tx, now, store.DocInput{
 				Project:   req.Project,
@@ -152,7 +137,6 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 	if err != nil {
-		s.mapStoreErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)

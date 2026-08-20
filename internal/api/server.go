@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -846,6 +847,27 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		s.log.Error("internal error", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+// recordEvent is the shared body of every non-document mutation: a random
+// external id, v marshalled as the event payload, and apply inside
+// RecordEvent so the write and its event commit together. It returns the
+// error for the caller to map with mapStoreErr — a failed id or marshal is
+// the same internal error it was when each handler spelled the three steps
+// out itself. Document mutations use recordDocEvent, which additionally names
+// the op and wraps the payload with the acting subject.
+func (s *server) recordEvent(ctx context.Context, source, eventType string, v any,
+	apply func(tx *sql.Tx, eventID int64) error) error {
+	extID, err := randomExternalID()
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, _, err = s.st.RecordEvent(ctx, source, extID, eventType, payload, apply)
+	return err
 }
 
 // randomExternalID returns a random hex string used as the (source,

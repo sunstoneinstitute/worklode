@@ -6,7 +6,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -141,17 +140,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "inbox.imported", payload,
+	err = s.recordEvent(r.Context(), "cli", "inbox.imported", req,
 		func(tx *sql.Tx, _ int64) error {
 			if err := count(tx); err != nil {
 				return err

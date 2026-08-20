@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -25,20 +24,10 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
 	actor := actorFrom(r)
 
 	var children []model.Task
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.decomposed", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.decomposed", req,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
 			children, err = store.Decompose(tx, s.st.Now(), id, req.Into, actor.ID, eventID)
@@ -54,9 +43,6 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	resp := model.DecomposeResponse{Parent: *parent, Children: make([]model.Task, 0, len(children))}
-	for i := range children {
-		resp.Children = append(resp.Children, children[i])
-	}
+	resp := model.DecomposeResponse{Parent: *parent, Children: children}
 	writeJSON(w, http.StatusCreated, resp)
 }

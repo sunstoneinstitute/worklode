@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -510,7 +509,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPriorities[req.Priority] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
+		writeErr(w, http.StatusUnprocessableEntity, invalidPriorityMsg)
 		return
 	}
 	req.Kind = s.normalizeTaskKind(req.Kind, "promote")
@@ -534,20 +533,10 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
 	actor := actorFrom(r)
 
 	var created *model.Task
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.promoted", payload,
+	err = s.recordEvent(r.Context(), "cli", "issue.promoted", req,
 		func(tx *sql.Tx, eventID int64) error {
 			title := req.Title
 			if strings.TrimSpace(title) == "" {
@@ -598,17 +587,7 @@ func (s *server) dismissInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.dismissed", payload,
+	err := s.recordEvent(r.Context(), "cli", "issue.dismissed", req,
 		func(tx *sql.Tx, _ int64) error {
 			return store.DismissIssue(tx, req.Repo, req.Number)
 		})
@@ -643,17 +622,7 @@ func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "issue.linked", payload,
+	err := s.recordEvent(r.Context(), "cli", "issue.linked", req,
 		func(tx *sql.Tx, _ int64) error {
 			return store.LinkIssue(tx, req.Repo, req.Number, req.TaskID)
 		})

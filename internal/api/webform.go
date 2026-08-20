@@ -25,7 +25,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -251,39 +250,30 @@ const (
 // recordFormTask writes the task through the same RecordEvent + CreateTask
 // path POST /api/v1/tasks uses, under the "web" event source.
 func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFormValues, actorID string) (*model.Task, error) {
-	extID, err := randomExternalID()
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(map[string]any{
-		"project": projectID, "title": v.Title, "body": v.Body,
-		"priority": v.Priority, "kind": v.Kind, "concern": v.Concern,
-		"draft": v.Draft, "created_by": actorID,
-	})
-	if err != nil {
-		return nil, err
-	}
 	now := s.st.Now()
 
 	var created *model.Task
-	if _, _, err := s.st.RecordEvent(ctx, "web", extID, "task.created", payload,
-		func(tx *sql.Tx, eventID int64) error {
-			t, err := store.CreateTask(tx, now, store.TaskInput{
-				ProjectID: projectID,
-				Title:     v.Title,
-				Body:      v.Body,
-				Priority:  v.Priority,
-				Kind:      v.Kind,
-				Concern:   v.Concern,
-				CreatedBy: actorID,
-				Draft:     v.Draft,
-			}, eventID)
-			if err != nil {
-				return err
-			}
-			created = t
-			return nil
-		}); err != nil {
+	if err := s.recordEvent(ctx, "web", "task.created", map[string]any{
+		"project": projectID, "title": v.Title, "body": v.Body,
+		"priority": v.Priority, "kind": v.Kind, "concern": v.Concern,
+		"draft": v.Draft, "created_by": actorID,
+	}, func(tx *sql.Tx, eventID int64) error {
+		t, err := store.CreateTask(tx, now, store.TaskInput{
+			ProjectID: projectID,
+			Title:     v.Title,
+			Body:      v.Body,
+			Priority:  v.Priority,
+			Kind:      v.Kind,
+			Concern:   v.Concern,
+			CreatedBy: actorID,
+			Draft:     v.Draft,
+		}, eventID)
+		if err != nil {
+			return err
+		}
+		created = t
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	return created, nil

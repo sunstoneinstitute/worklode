@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"regexp"
 	"strings"
@@ -60,19 +59,9 @@ func (s *server) reportMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(map[string]any{"repo": repo, "sha": sha, "tasks": req.Tasks})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-
 	var outcomes []store.LocalMergeOutcome
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "merge.local", payload,
+	err = s.recordEvent(r.Context(), "cli", "merge.local",
+		map[string]any{"repo": repo, "sha": sha, "tasks": req.Tasks},
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
 			outcomes, err = store.RecordLocalMerge(tx, s.st.Now(), repo, sha, req.Tasks, eventID)

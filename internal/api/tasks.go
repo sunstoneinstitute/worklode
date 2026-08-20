@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -19,6 +18,14 @@ import (
 var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
+
+// invalidPriorityMsg and invalidConcernMsg are shared by every handler that
+// gates on validPriorities / store.ValidConcern, for invalidKindMsg's reason:
+// the message cannot drift from the set it describes.
+const (
+	invalidPriorityMsg = "invalid priority: must be critical, high, medium, or low"
+	invalidConcernMsg  = "invalid concern: must be completeness, performance, usability, or security"
+)
 
 // validSecretNames rejects the request early with a clean message; the store
 // re-checks (defense in depth for non-HTTP callers).
@@ -63,7 +70,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPriorities[req.Priority] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
+		writeErr(w, http.StatusUnprocessableEntity, invalidPriorityMsg)
 		return
 	}
 	req.Kind = s.normalizeTaskKind(req.Kind, "create")
@@ -72,7 +79,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Concern != "" && !store.ValidConcern(req.Concern) {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
+		writeErr(w, http.StatusUnprocessableEntity, invalidConcernMsg)
 		return
 	}
 	if !validSecretNames(req.Secrets) {
@@ -104,21 +111,11 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
 	actor := actorFrom(r)
 	now := s.st.Now()
 
 	var created *model.Task
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.created", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.created", req,
 		func(tx *sql.Tx, eventID int64) error {
 			t, err := store.CreateTask(tx, now, store.TaskInput{
 				ProjectID: req.Project,
@@ -157,9 +154,6 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
-// the task has an active lease, so a CLI `show` can display the holder
-// without a second request.
 // edgesToJSON converts a task's outgoing and incoming store edges to their
 // wire types, shared by getTask and listTasks' detail expansion so the two
 // projections cannot drift. Always returns non-nil slices, even for nil
@@ -176,6 +170,9 @@ func edgesToJSON(out, in []store.Edge) ([]model.TaskEdgeOut, []model.TaskEdgeIn)
 	return outJSON, inJSON
 }
 
+// getTask handles GET /api/v1/tasks/{id}. The response includes "lease" when
+// the task has an active lease, so a CLI `show` can display the holder
+// without a second request.
 func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := s.st.GetTask(r.Context(), id)
@@ -422,11 +419,11 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
+		writeErr(w, http.StatusUnprocessableEntity, invalidPriorityMsg)
 		return
 	}
 	if req.Concern != nil && *req.Concern != "" && *req.Concern != "none" && !store.ValidConcern(*req.Concern) {
-		writeErr(w, http.StatusUnprocessableEntity, "invalid concern: must be completeness, performance, usability, or security")
+		writeErr(w, http.StatusUnprocessableEntity, invalidConcernMsg)
 		return
 	}
 	if req.Secrets != nil && !validSecretNames(*req.Secrets) {
@@ -444,18 +441,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.updated", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.updated", req,
 		func(tx *sql.Tx, eventID int64) error {
 			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition); err != nil {
 				return err
@@ -536,17 +522,8 @@ func (s *server) addEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(map[string]string{"from": from, "to": to, "type": req.Type})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.edge_added", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.edge_added",
+		map[string]string{"from": from, "to": to, "type": req.Type},
 		func(tx *sql.Tx, eventID int64) error {
 			return store.AddEdge(tx, s.st.Now(), from, to, req.Type, eventID)
 		})
@@ -570,17 +547,8 @@ func (s *server) removeEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(map[string]string{"from": from, "to": to, "type": req.Type})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.edge_removed", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.edge_removed",
+		map[string]string{"from": from, "to": to, "type": req.Type},
 		func(tx *sql.Tx, eventID int64) error {
 			return store.RemoveEdge(tx, from, to, req.Type, eventID)
 		})
@@ -602,17 +570,7 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "task.skills_set", payload,
+	err := s.recordEvent(r.Context(), "cli", "task.skills_set", req,
 		func(tx *sql.Tx, _ int64) error {
 			return store.SetTaskSkills(tx, s.st.Now(), id, req.Skills)
 		})

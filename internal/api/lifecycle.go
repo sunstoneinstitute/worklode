@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -199,17 +198,7 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 	transition func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error) {
 	id := r.PathValue("id")
 
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	payload, err := json.Marshal(map[string]string{"task": id})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, eventType, payload,
+	err := s.recordEvent(r.Context(), "cli", eventType, map[string]string{"task": id},
 		func(tx *sql.Tx, eventID int64) error {
 			now := s.st.Now()
 			if err := transition(tx, now, id, eventID); err != nil {
@@ -229,6 +218,26 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 	writeJSON(w, http.StatusOK, t)
 }
 
+// transitionTo builds the finishTask transition that reads the task's current
+// state inside the transaction — so a concurrent change cannot be raced — and
+// moves it to target. legalTransitions inside store.Transition stays the gate
+// on which from-states are allowed.
+func transitionTo(target string) func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
+	return func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
+		cur, err := store.TaskState(tx, taskID)
+		if err != nil {
+			return err
+		}
+		return store.Transition(tx, now, taskID, cur, target, eventID)
+	}
+}
+
+// reopenableStates are the states reopenTask accepts as the from-state.
+var reopenableStates = map[string]bool{
+	"merged": true, "deployed_dev": true, "deployed_prod": true,
+	"released": true, "abandoned": true,
+}
+
 // doneTask handles POST /api/v1/tasks/{id}/done: current state -> merged,
 // closing any active lease in the same transaction. The from-state is read
 // inside the transaction so a concurrent change cannot be raced, exactly as
@@ -242,14 +251,7 @@ func (s *server) finishTask(w http.ResponseWriter, r *http.Request, eventType st
 // and only close for those. legalTransitions is the gate that remains: draft
 // and the terminal states still 422.
 func (s *server) doneTask(w http.ResponseWriter, r *http.Request) {
-	s.finishTask(w, r, "task.done",
-		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
-			cur, err := store.TaskState(tx, taskID)
-			if err != nil {
-				return err
-			}
-			return store.Transition(tx, now, taskID, cur, "merged", eventID)
-		})
+	s.finishTask(w, r, "task.done", transitionTo("merged"))
 }
 
 // abandonTask handles POST /api/v1/tasks/{id}/abandon: current state ->
@@ -257,14 +259,7 @@ func (s *server) doneTask(w http.ResponseWriter, r *http.Request) {
 // transaction. The from-state is read inside the transaction so a concurrent
 // change cannot be raced.
 func (s *server) abandonTask(w http.ResponseWriter, r *http.Request) {
-	s.finishTask(w, r, "task.abandoned",
-		func(tx *sql.Tx, now time.Time, taskID string, eventID int64) error {
-			cur, err := store.TaskState(tx, taskID)
-			if err != nil {
-				return err
-			}
-			return store.Transition(tx, now, taskID, cur, "abandoned", eventID)
-		})
+	s.finishTask(w, r, "task.abandoned", transitionTo("abandoned"))
 }
 
 // reopenTask handles POST /api/v1/tasks/{id}/reopen: any delivered state
@@ -289,9 +284,7 @@ func (s *server) reopenTask(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			reopenable := map[string]bool{"merged": true, "deployed_dev": true,
-				"deployed_prod": true, "released": true, "abandoned": true}
-			if !reopenable[cur] {
+			if !reopenableStates[cur] {
 				return fmt.Errorf("task %s is in state %s, not reopenable: %w",
 					taskID, cur, store.ErrBadTransition)
 			}
