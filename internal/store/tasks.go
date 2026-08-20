@@ -921,14 +921,22 @@ func deliveryRank(expr string) string {
 // repo. It is checked explicitly rather than left to "a container has no
 // commits", since AddEdge can give children to a task that already landed some.
 // A task with no landed commit at all — marked merged by hand — has no repo to
-// gate on and closes at merged too.
+// gate on and closes at merged too. Only *live* children make a container: a
+// tombstoned child does not count.
 //
-// The rendered subqueries bind `ch`, `tc`, `mc` and `pr`; an enclosing query
-// must not reuse those aliases.
+// A tombstoned task is closed outright, whatever state it holds. That is what
+// makes a deleted blocker stop blocking without retracting its edge, and it
+// lands here rather than at each blocking query so the ready set, the brief,
+// the cockpit and Claim cannot disagree about it.
+//
+// The rendered subqueries bind `ch`, `cht`, `tc`, `mc` and `pr`; an enclosing
+// query must not reuse those aliases.
 func taskClosed(alias string) string {
 	state := alias + ".state"
-	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
+	return `(` + alias + `.deleted_at IS NOT NULL
+	     OR ` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
 	     AND (EXISTS (SELECT 1 FROM task_edges ch
+	                  JOIN tasks cht ON cht.id = ch.from_task AND cht.deleted_at IS NULL
 	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'child_of')
 	          OR NOT EXISTS (SELECT 1 FROM task_commits tc
 	                         JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
@@ -955,11 +963,15 @@ var blockedCondition = `e.type = 'blocks'
 // Every surface that reports plan-to-plan blocking renders this one predicate
 // — planBlockedCondition for the gate, the blocking-plan queries for the
 // cockpit and the brief — so no surface can disagree with Claim.
+//
+// A tombstoned plan holds nothing: it is out of the picture entirely, the same
+// way taskClosed treats a tombstoned task.
 func planUnfinished(alias string) string {
-	return `(` + alias + `.status = 'draft'
-	     OR EXISTS (SELECT 1 FROM tasks bt
-	                WHERE bt.plan_doc = ` + alias + `.id
-	                  AND NOT ` + taskClosed("bt") + `))`
+	return `(` + alias + `.deleted_at IS NULL
+	     AND (` + alias + `.status = 'draft'
+	          OR EXISTS (SELECT 1 FROM tasks bt
+	                     WHERE bt.plan_doc = ` + alias + `.id
+	                       AND NOT ` + taskClosed("bt") + `)))`
 }
 
 // planBlockedCondition holds a task while its plan is ordered after another
@@ -982,9 +994,11 @@ var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
 // as pickable that Claim then refuses is worse than no badge at all.
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition+`
+		`SELECT DISTINCT e.to_task FROM task_edges e
+		   JOIN tasks d ON d.id = e.to_task AND d.deleted_at IS NULL
+		  WHERE `+blockedCondition+`
 		 UNION
-		 SELECT t.id FROM tasks t WHERE `+planBlockedCondition)
+		 SELECT t.id FROM tasks t WHERE t.deleted_at IS NULL AND `+planBlockedCondition)
 	if err != nil {
 		return nil, fmt.Errorf("blocked task ids: %w", err)
 	}
@@ -1008,7 +1022,9 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 // per-repo predicate in taskClosed (004 §1.3; see also 026 §2.5, which
 // requires closure be the server's answer since a client cannot evaluate a
 // predicate over other repos' done_state and landed-commit facts). An empty
-// ids returns an empty map without touching the database.
+// ids returns an empty map without touching the database. A tombstoned id is
+// answered honestly rather than skipped — taskClosed reports it closed, which
+// is what GetTask should say about a row nothing can still be waiting on.
 func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(ids) == 0 {

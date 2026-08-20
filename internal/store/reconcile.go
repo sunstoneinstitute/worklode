@@ -66,7 +66,8 @@ type PollCandidate struct {
 // (the same advanceable set TasksBelowFrontier uses) paired with each repo
 // they have recorded activity in — a PR or a task commit; a task with
 // neither has nothing to poll. repo/task/since bound the set (spec 013);
-// since compares tasks.updated_at against the server clock.
+// since compares tasks.updated_at against the server clock. A tombstoned task
+// is never polled (044 §4) — its delivery state has nowhere to go.
 //
 // Spec 013 open question 1: this set may be too large for an unscoped
 // org-wide run; --since/--repo are the intended controls.
@@ -76,7 +77,8 @@ func (s *Store) PollCandidates(ctx context.Context, repo, task string, since *ti
 	      JOIN (SELECT task_id, repo FROM pull_requests WHERE task_id IS NOT NULL
 	            UNION
 	            SELECT task_id, repo FROM task_commits) x ON x.task_id = t.id
-	      WHERE t.state IN ('ready','in_progress','in_review','merged','deployed_dev')`
+	      WHERE t.deleted_at IS NULL
+	        AND t.state IN ('ready','in_progress','in_review','merged','deployed_dev')`
 	var args []any
 	if repo != "" {
 		args = append(args, repo)

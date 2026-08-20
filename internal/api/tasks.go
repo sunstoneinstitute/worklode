@@ -287,13 +287,14 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&detail=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
 // plan_doc narrows to the tasks minted from that plan document — the query
 // that is the plan's task set (025 §9.2, §1); about_doc narrows to the tasks
-// that reference that document (025 §15.4); detail=true adds "blocked" and
+// that reference that document (025 §15.4); deleted=true switches the list
+// from live tasks to tombstoned ones (044 §5); detail=true adds "blocked" and
 // "edges" to each row (see model.TaskListDetail) at the cost of two extra
 // bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
@@ -352,6 +353,15 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A switch, not an addition (044 §5): ?deleted=true lists the tombstoned
+	// rows instead of the live ones, because a list mixing the two invites
+	// acting on a row that is not there. A non-boolean value is named rather
+	// than read as off, the same stance queryBool takes everywhere else.
+	deleted, err := queryBool(q, "deleted")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  q.Get("project"),
 		States:   states,
@@ -365,6 +375,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		UpdatedSince: updatedSince,
 		PlanDoc:      planDoc,
 		AboutDoc:     aboutDoc,
+		Deleted:      deleted,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

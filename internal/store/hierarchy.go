@@ -26,12 +26,15 @@ const maxHierarchyDepth = 2
 // container predicate every guard keys off, container-ness being inferred
 // rather than declared: with decompose creating parent-hood and its children
 // in one transaction, "has children" is exactly as sharp as a column
-// (004 §6.1).
+// (004 §6.1). Only live children count (044 §4) — deleting the last child
+// makes its parent an ordinary task again, which is what keeps the parent
+// claimable and lets it advance past merged.
 // Served by the task_edges_children partial index.
 func hasChildren(tx *sql.Tx, id string) (bool, error) {
 	var one int
 	err := tx.QueryRow(
-		`SELECT 1 FROM task_edges WHERE to_task = $1 AND type = 'child_of' LIMIT 1`,
+		`SELECT 1 FROM task_edges e JOIN tasks c ON c.id = e.from_task
+		  WHERE e.to_task = $1 AND e.type = 'child_of' AND c.deleted_at IS NULL LIMIT 1`,
 		id).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -172,13 +175,15 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 // ChildProgress returns the closed/total counts over taskID's direct children:
 // a parent's derived roll-up, computed on read and never stored — there is no
 // resolver, no migration, and no event-log noise behind it. A task with no
-// children reports a zero value.
+// children reports a zero value. Tombstoned children are out of the count
+// entirely — counting one as closed would report deleted work as delivered.
 func (s *Store) ChildProgress(ctx context.Context, taskID string) (model.TaskProgress, error) {
 	var p model.TaskProgress
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COUNT(*) FILTER (WHERE `+taskClosed("t")+`)
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.Total, &p.Closed)
+		  WHERE e.to_task = $1 AND e.type = 'child_of'
+		    AND t.deleted_at IS NULL`, taskID).Scan(&p.Total, &p.Closed)
 	if err != nil {
 		return model.TaskProgress{}, fmt.Errorf("child progress of %s: %w", taskID, err)
 	}
@@ -193,7 +198,8 @@ func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error
 	err := s.db.QueryRowContext(ctx,
 		`SELECT t.id, t.title, t.state
 		   FROM task_edges e JOIN tasks t ON t.id = e.to_task
-		  WHERE e.from_task = $1 AND e.type = 'child_of'`, taskID).Scan(&p.ID, &p.Title, &p.State)
+		  WHERE e.from_task = $1 AND e.type = 'child_of'
+		    AND t.deleted_at IS NULL`, taskID).Scan(&p.ID, &p.Title, &p.State)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -209,8 +215,11 @@ func (s *Store) ParentOf(ctx context.Context, taskID string) (*model.Task, error
 func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT e.from_task, e.to_task
-		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.type = 'child_of' AND ($1 = '' OR t.project_id = $1)`, projectID)
+		   FROM task_edges e
+		   JOIN tasks t ON t.id = e.from_task
+		   JOIN tasks p ON p.id = e.to_task
+		  WHERE e.type = 'child_of' AND ($1 = '' OR t.project_id = $1)
+		    AND t.deleted_at IS NULL AND p.deleted_at IS NULL`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("parent map: %w", err)
 	}

@@ -47,6 +47,14 @@ type Config struct {
 	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
 	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
+	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
+	// or "prod", nothing else, empty meaning prod (039 §3). It is not
+	// ClusterEnvMap, which describes the deployments worklode observes. Today
+	// it decides only whether a delete must carry a justification (044 §3).
+	// NewServer normalises and validates it, so an unrecognised value fails
+	// the boot rather than being read as either answer.
+	InstanceEnv string
+
 	// BranchTemplate (LODE_BRANCH_TEMPLATE) renders the task-branch names the
 	// server hands out and correlates pushes by; empty means
 	// store.DefaultBranchTemplate. An invalid template fails NewServer.
@@ -329,6 +337,13 @@ type server struct {
 	// caller action.
 	taskBlobRefs *prometheus.CounterVec
 
+	// deletes counts spec 044's tombstone operations by entity, op and
+	// outcome; see softdelete.go and observeDelete. http_requests_total cannot
+	// stand in for the outcome that matters: a prod instance refusing a
+	// justification-less delete and a delete of a row that does not exist are
+	// both 4xx, and only the first says a client has not learned the rule.
+	deletes *prometheus.CounterVec
+
 	// kindAliasUses counts requests naming a deprecated task kind that was
 	// normalised to its current name, by alias and surface; see
 	// kindalias.go. A sustained zero across these surfaces is not the whole
@@ -478,6 +493,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
 	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
+	r.api("DELETE /api/v1/tasks/{id}", s.deleteTask)
+	r.api("POST /api/v1/tasks/{id}/undelete", s.undeleteTask)
 	r.api("GET /api/v1/tasks/{id}/blobs", s.listTaskBlobs)
 	r.api("POST /api/v1/tasks/{id}/blobs", s.attachTaskBlob)
 	r.api("DELETE /api/v1/tasks/{id}/blobs/{hash}", s.detachTaskBlob)
@@ -492,6 +509,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
 	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
 	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
+	r.api("DELETE /api/v1/docs/{id}", s.deleteDoc)
+	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
 
 	r.api("GET /api/v1/skills", s.listSkills)
 	r.api("GET /api/v1/skills/{name}", s.getSkill)
@@ -579,6 +598,16 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
+
+	// Normalised here as well as in serve.go, so an embedder that builds a
+	// Config in Go — every test in this package included — cannot end up with
+	// an unset or bogus environment. Empty becomes prod; anything but dev or
+	// prod refuses the boot (039 §3).
+	instanceEnv, err := ParseInstanceEnv(cfg.InstanceEnv)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.cfg.InstanceEnv = instanceEnv
 
 	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
 		return nil, nil, err

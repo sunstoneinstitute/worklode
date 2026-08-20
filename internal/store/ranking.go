@@ -17,13 +17,21 @@ import (
 // task absent from the returned map has fan-out 0. The count is unit-weight
 // over all 'blocks' edges regardless of the blocked task's state (matches
 // spec D12; this deliberately does not filter by blocked-task state).
+//
+// It does filter tombstoned tasks off both ends of every edge (044 §4): the
+// count is a ranking input, and a deleted task neither waits on anything nor
+// lends weight to whatever blocks it.
 func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		WITH RECURSIVE closure(root, task) AS (
-		    SELECT from_task, to_task FROM task_edges WHERE type = 'blocks'
+		    SELECT e.from_task, e.to_task FROM task_edges e
+		      JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
+		      JOIN tasks b ON b.id = e.to_task   AND b.deleted_at IS NULL
+		     WHERE e.type = 'blocks'
 		  UNION
 		    SELECT c.root, e.to_task
 		    FROM closure c JOIN task_edges e ON e.from_task = c.task AND e.type = 'blocks'
+		      JOIN tasks b ON b.id = e.to_task AND b.deleted_at IS NULL
 		)
 		SELECT root, COUNT(DISTINCT task) FROM closure GROUP BY root`)
 	if err != nil {
@@ -52,12 +60,16 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 // by a plan-to-plan ordering edge (planBlockedCondition, 025 §9.3). An empty
 // projectID matches every project; an empty kind matches every kind. A task
 // with children is excluded because the worktree is the unit of Worklode work
-// and a container has nothing to check out (spec 004 §6.3).
+// and a container has nothing to check out (spec 004 §6.3). A tombstoned task
+// is never handed out, and a tombstoned child does not make its parent a
+// container (044 §4).
 func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+taskColumnsT+` FROM tasks t
 		WHERE t.state = 'ready'
+		  AND t.deleted_at IS NULL
 		  AND NOT EXISTS (SELECT 1 FROM task_edges c
+		                  JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
 		  AND NOT t.needs_decomposition
 		  AND ($1 = '' OR t.project_id = $1)

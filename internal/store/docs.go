@@ -1597,7 +1597,9 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
 //   - Only accepted documents on both ends participate: a draft spec is not
-//     yet owed planning, and a draft plan has not yet undertaken work.
+//     yet owed planning, and a draft plan has not yet undertaken work. A
+//     tombstoned document participates on neither end (044 §4) — it is neither
+//     owed planning nor able to discharge a section.
 //
 // A plan naming itself in its own `fullCoverageWith` closes its own section.
 // §2.1's closure test is only that each named plan is accepted and
@@ -1614,6 +1616,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status = 'accepted'
+		        AND p.deleted_at IS NULL
 		 ),
 		 closed AS (
 		     SELECT c.id
@@ -1650,6 +1653,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
 		 HAVING count(*) FILTER (WHERE r.discharged IS NOT TRUE) > 0
@@ -1698,8 +1702,10 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 //
 // The successor's own status is deliberately not required: the edge itself is
 // the explanation 025 §3.3 asks for, and demanding an accepted successor would
-// report an explained section as bare. A `to_external` edge names no local
-// row and so explains nothing, whatever it once pointed at. Plans carry no
+// report an explained section as bare. Its *liveness* is required, though — a
+// tombstoned successor explains nothing, the same way it is not itself
+// reported here. A `to_external` edge names no local row and so explains
+// nothing, whatever it once pointed at. Plans carry no
 // sections (025 §9), so the JOIN against doc_sections excludes them
 // structurally, independent of the kind predicate below.
 //
@@ -1715,11 +1721,13 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 		`WITH replaced_section AS (
 		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
 		       FROM doc_edges e
+		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
 		      WHERE e.type = 'replaces'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		 ), replaced_doc AS (
 		     SELECT DISTINCT e.to_doc AS doc_id
 		       FROM doc_edges e
+		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
 		      WHERE e.type = 'replaces'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NULL
 		 )
@@ -1730,6 +1738,7 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN replaced_section rs ON rs.doc_id = sec.doc_id AND rs.anchor = sec.anchor
 		  WHERE d.status = 'superseded'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		    AND ($2 = '' OR d.kind = $2)
 		    AND NOT EXISTS (SELECT 1 FROM replaced_doc rd WHERE rd.doc_id = d.id)
@@ -1779,6 +1788,7 @@ func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc
 		`SELECT `+docColumnsD+`
 		   FROM docs d
 		  WHERE d.kind = 'plan' AND d.status = 'accepted'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		    AND EXISTS (SELECT 1 FROM tasks t
 		                 WHERE t.plan_doc = d.id AND NOT `+taskClosed("t")+`)
@@ -1850,6 +1860,11 @@ var docEdgeInverse = map[string]string{
 // unresolved outbound edge (to_external) joins to nothing and leaves them
 // empty.
 //
+// Inbound edges from a tombstoned document are not listed: the edge is that
+// document's own declaration, so hiding the document hides what it declared.
+// Outbound edges are unfiltered — they are this document's frontmatter, and a
+// deleted target is still resolvable by id.
+//
 // Both lists are fully ordered, so a caller may compare them as sequences.
 func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.DocEdge, err error) {
 	outRows, err := s.db.QueryContext(ctx,
@@ -1875,7 +1890,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
 		        d.slug, d.kind, coalesce(d.number,0)
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
-		  WHERE e.to_doc = $1
+		  WHERE e.to_doc = $1 AND d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)

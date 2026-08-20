@@ -63,6 +63,12 @@ type BriefOptions struct {
 // pinned skills. Returns ErrNotFound if the task does not exist. It runs a
 // bounded, fixed number of queries — one more only when pins are asked for and
 // the task has some — and never returns unbounded lists.
+//
+// A tombstoned task still briefs, since this is a fetch by id (044 §4): the
+// brief carries Task.Tombstone, and an agent holding the id learns it was
+// deleted, by whom and why, rather than "not found". What it will not do is
+// hand the task to anyone — Claim refuses it, and the blocker and plan lists
+// below read live rows only.
 func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*Brief, error) {
 	t, err := s.GetTask(ctx, taskID)
 	if err != nil {

@@ -110,6 +110,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(kindAliasSurfaces, ", ") +
 			"). Pre-initialised, so a flat zero means no request has used a retired spelling.",
 	}, []string{"alias", "surface"})
+	s.deletes = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_deletes_total",
+		Help: "Tombstone operations on tasks and design documents (044 §6), by entity (" +
+			strings.Join(deleteEntities, ", ") + "), op (" +
+			strings.Join(deleteOps, ", ") + ") and outcome (" +
+			strings.Join(deleteOutcomes, ", ") +
+			"). justification_required is the one worth a dashboard: a prod instance counting them is watching a client that has not learned the rule.",
+	}, []string{"entity", "op", "outcome"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
 	// operator moves a subscriber's offsets backwards (025 §18), and how
@@ -154,7 +162,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors,
-		s.kindAliasUses)
+		s.kindAliasUses, s.deletes)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -209,6 +217,17 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range imageMirrorOutcomes {
 		s.imageMirrors.WithLabelValues(outcome)
+	}
+	// Every entity/op/outcome combination, so an instance where nobody has
+	// deleted anything reads as a flat zero rather than as no-data — which is
+	// the difference between "no delete was refused" and "refusals are not
+	// being counted".
+	for _, entity := range deleteEntities {
+		for _, op := range deleteOps {
+			for _, outcome := range deleteOutcomes {
+				s.deletes.WithLabelValues(entity, op, outcome)
+			}
+		}
 	}
 	// Every alias on every surface, because the whole point of this counter is
 	// to prove nothing still sends the deprecated spelling before the alias is
@@ -556,4 +575,38 @@ func (s *server) observeBlobGCObjects(action string, n int) {
 		return
 	}
 	s.blobGCObjects.WithLabelValues(action).Add(float64(n))
+}
+
+// The complete, bounded label sets for worklode_deletes_total (044 §6). The
+// entity id is deliberately not a label: it is unbounded, and which rows were
+// deleted is a question for the events log, not for a counter.
+var (
+	deleteEntities = []string{entityTask, entityDoc}
+	deleteOps      = []string{opDelete, opUndelete}
+	deleteOutcomes = []string{deleteOK, deleteJustificationRequired, deleteNotFound, deleteError}
+)
+
+const (
+	entityTask = "task"
+	entityDoc  = "doc"
+
+	opDelete   = "delete"
+	opUndelete = "undelete"
+
+	deleteOK                    = "ok"
+	deleteJustificationRequired = "justification_required"
+	deleteNotFound              = "not_found"
+	deleteError                 = "error"
+)
+
+// observeDelete records one delete or undelete attempt, called exactly once on
+// every exit path of the four handlers in softdelete.go — including the
+// prod-instance refusal, which is an outcome of the delete op and not an
+// absence of one.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeDelete(entity, op, outcome string) {
+	if s.deletes == nil {
+		return
+	}
+	s.deletes.WithLabelValues(entity, op, outcome).Inc()
 }

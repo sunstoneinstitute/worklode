@@ -65,7 +65,8 @@ func (f ProjectWorkFact) Blocked() bool {
 // ListProjectWorkFacts returns a ProjectWorkFact for every task in
 // projectID, ordered the same way ListTasks orders its results (priority
 // rank, then the id's project-key prefix, then its numeric suffix).
-// projectID == "" returns every task across every project.
+// projectID == "" returns every task across every project. Tombstoned tasks
+// are out, and a tombstoned parent is not named (044 §4).
 //
 // Parent, Lease, and StateEvent come from a single joined query (a task has
 // at most one child_of parent — task_edges_single_parent — at most one
@@ -89,7 +90,7 @@ SELECT `+taskColumnsT+`,
   FROM tasks t
   LEFT JOIN task_edges pe
     ON pe.from_task = t.id AND pe.type = 'child_of'
-  LEFT JOIN tasks parent ON parent.id = pe.to_task
+  LEFT JOIN tasks parent ON parent.id = pe.to_task AND parent.deleted_at IS NULL
   LEFT JOIN leases l ON l.task_id = t.id AND l.released_at IS NULL
   LEFT JOIN LATERAL (
     SELECT sl.id, e.source, e.type, sl.at
@@ -103,6 +104,7 @@ SELECT `+taskColumnsT+`,
      LIMIT 1
   ) se ON true
  WHERE ($1 = '' OR t.project_id = $1)
+   AND t.deleted_at IS NULL
  ORDER BY CASE t.priority
             WHEN 'critical' THEN 0 WHEN 'high' THEN 1
             WHEN 'medium' THEN 2 ELSE 3
@@ -165,6 +167,7 @@ SELECT e.to_task, b.id, b.title, b.state
   JOIN tasks dep ON dep.id = e.to_task
  WHERE e.type = 'blocks'
    AND NOT `+taskClosed("b")+`
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
 UNION
 SELECT dep.id, b.id, b.title, b.state
@@ -173,6 +176,7 @@ SELECT dep.id, b.id, b.title, b.state
   JOIN tasks b ON b.plan_doc = de.from_doc
  WHERE dep.plan_doc IS NOT NULL
    AND NOT `+taskClosed("b")+`
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)`, projectID)
 	if err != nil {
 		return fmt.Errorf("open blockers: %w", err)
@@ -208,6 +212,7 @@ SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
   JOIN docs bd ON bd.id = de.from_doc
  WHERE dep.plan_doc IS NOT NULL
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
    AND `+planUnfinished("bd")+`
  ORDER BY 2`, projectID)
