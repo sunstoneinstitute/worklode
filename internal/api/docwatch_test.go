@@ -125,7 +125,7 @@ func (f *docWatchFixture) accepted(t *testing.T, version int) store.Event {
 // handle runs the handler on one event and fails on any error.
 func (f *docWatchFixture) handle(t *testing.T, ev store.Event) eventbus.Outcome {
 	t.Helper()
-	outcome, err := f.srv.docLifecycleHandler()(t.Context(), ev)
+	outcome, err := f.srv.handleDocLifecycle(t.Context(), ev)
 	if err != nil {
 		t.Fatalf("handler on event %d (%s): %v", ev.ID, ev.Type, err)
 	}
@@ -318,7 +318,7 @@ func TestDocWatchUnknownSubjectIsAnError(t *testing.T) {
 	ev := f.emit(t, eventbus.DocumentSubmitted{
 		Doc: "wlid:doc/spec-proj-999", Actor: "alice", At: f.st.Now(), Version: 1,
 	})
-	_, err := f.srv.docLifecycleHandler()(t.Context(), ev)
+	_, err := f.srv.handleDocLifecycle(t.Context(), ev)
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("err = %v, want store.ErrNotFound", err)
 	}

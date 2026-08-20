@@ -65,18 +65,10 @@ func withSession(t *testing.T, h http.Handler, method, path, session string, bod
 // TestAPIDeniesWithoutPermission checks the enforcement point on /api/v1: a
 // perfectly valid non-admin token is refused on every admin-gated route, with
 // the message the policy derives, and is allowed on the ordinary ones. This
-// is the same guarantee requireAdmin used to give per route, now given by the
-// permission each route declares.
+// is the guarantee the permission each route declares now gives.
 func TestAPIDeniesWithoutPermission(t *testing.T) {
 	st, h, adminToken := newTestServer(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create worker: %v", err)
-	}
-	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
-	if err != nil {
-		t.Fatalf("create worker token: %v", err)
-	}
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 	createProject(t, st, "proj")
 
 	// Admin-gated: the permission is granted to RoleAdmin alone.
@@ -177,7 +169,7 @@ func TestWebGuardAllowsLoggedInUser(t *testing.T) {
 
 // TestWebGuardRedirectsAnonymous checks that a session-gated deployment sends
 // an unauthenticated visitor to login rather than serving or 403ing — the
-// behaviour the former webAuth had, preserved through the policy path.
+// behaviour the policy path gives every session-gated page.
 func TestWebGuardRedirectsAnonymous(t *testing.T) {
 	st, h, _ := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
@@ -307,14 +299,7 @@ func TestAuthzDecisionsCounted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create worker: %v", err)
-	}
-	workerToken, tokErr := st.CreateToken(ctx, "worker", "worker token", nil)
-	if tokErr != nil {
-		t.Fatalf("create worker token: %v", tokErr)
-	}
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
 	doReq(t, main, "GET", "/api/v1/tasks", workerToken, nil)                // allow
 	doReq(t, main, "POST", "/api/v1/actors", workerToken, map[string]any{}) // deny

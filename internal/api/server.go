@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -188,6 +189,11 @@ type server struct {
 	// when unset. It is not the request context of any HTTP call.
 	bgCtx context.Context
 
+	// navDestinations are the web navigation destinations the registered
+	// routes wrap, collected by navWrap and pre-initialised by
+	// initNavMetrics once registration is complete.
+	navDestinations []string
+
 	// watcherMetrics counts doc-lifecycle rule outcomes (docwatch.go). Nil
 	// in every server that starts no subscriber; *watcher.Metrics is
 	// nil-safe, so the handler is still callable directly in tests.
@@ -272,136 +278,30 @@ func validatePublicURL(publicURL string) error {
 	return nil
 }
 
-// NewServer builds the worklode HTTP handlers. It returns two handlers: the
-// public app handler (web UI, API, webhooks) and a separate admin handler
-// (/healthz, /metrics). The admin handler is served on its own listener so
-// health and metrics are never exposed through the public ingress; probes and
-// in-cluster scraping hit the admin port directly.
+// requireWebSecrets checks the two settings every browser-facing login
+// provider needs, naming the feature in the refusal. Both providers stated
+// these checks identically before, which also meant parsing PublicURL twice
+// when both were configured.
+func (cfg Config) requireWebSecrets(feature string) error {
+	if cfg.SessionSecret == "" {
+		return fmt.Errorf("LODE_SESSION_SECRET is required when %s is enabled", feature)
+	}
+	if cfg.PublicURL == "" {
+		return fmt.Errorf("LODE_PUBLIC_URL is required when %s is enabled", feature)
+	}
+	return validatePublicURL(cfg.PublicURL)
+}
+
+// registerRoutes builds the public mux: the whole route table in one place,
+// separate from NewServer's config validation and background startup.
 //
-// If cfg.BootstrapToken is set and the actors table is empty, it creates the
-// initial admin actor (idempotent). A bootstrap failure is fatal: the server
-// must not start half-configured.
-func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) {
-	s := &server{
-		st: st, cfg: cfg, log: slog.Default(),
-	}
-	s.cliCodes = newCLICodeStore(st.Now)
-	s.bgCtx = cfg.BackgroundCtx
-	if s.bgCtx == nil {
-		s.bgCtx = context.Background()
-	}
-
-	reg := cfg.Metrics
-	if reg == nil {
-		reg = prometheus.NewRegistry()
-	}
-
-	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
-		return nil, nil, err
-	}
-
-	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
-		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when OIDC is enabled")
-		}
-		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when OIDC is enabled")
-		}
-		if err := validatePublicURL(cfg.PublicURL); err != nil {
-			return nil, nil, err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		v, err := oidc.New(ctx, cfg.OIDCIssuer, cfg.OIDCClientID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("configure oidc: %w", err)
-		}
-		s.oidc = v
-	}
-
-	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
-		if cfg.SessionSecret == "" {
-			return nil, nil, fmt.Errorf("LODE_SESSION_SECRET is required when GitHub auth is enabled")
-		}
-		if cfg.PublicURL == "" {
-			return nil, nil, fmt.Errorf("LODE_PUBLIC_URL is required when GitHub auth is enabled")
-		}
-		if err := validatePublicURL(cfg.PublicURL); err != nil {
-			return nil, nil, err
-		}
-		key, err := hex.DecodeString(cfg.TokenEncKey)
-		if err != nil || len(key) != 32 {
-			return nil, nil, fmt.Errorf("LODE_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
-		}
-		tc, err := tokencrypt.New(key)
-		if err != nil {
-			return nil, nil, fmt.Errorf("configure token cipher: %w", err)
-		}
-		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret)
-		s.tokenCipher = tc
-	}
-
-	if s.oidc == nil && cfg.WebOpen {
-		s.log.Warn("web UI is serving unauthenticated: no login provider is " +
-			"configured and LODE_WEB_OPEN is set; every page and every " +
-			"creation form is reachable by anyone who can reach this port")
-	}
-
-	appAuth, err := newAppAuth(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	s.appAuth = appAuth
-
-	s.skillFloor = 0.35
-	if cfg.SkillScoreFloor != "" {
-		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
-		if err != nil || math.IsNaN(f) || f < 0 || f > 1 {
-			return nil, nil, fmt.Errorf("LODE_SKILL_SCORE_FLOOR: want a float in [0,1], got %q", cfg.SkillScoreFloor)
-		}
-		s.skillFloor = f
-	}
-	if cfg.EmbeddingURL != "" {
-		if cfg.EmbeddingModel == "" {
-			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
-		}
-		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey, Metrics: embed.NewMetrics(reg)}
-		// At boot, before the first request and regardless of whether skill
-		// sources are configured. Vectors from a previous provider are not
-		// comparable with this one's, and dropping the sources (or swapping the
-		// model on an instance that has none) leaves no sync to notice. Fatal
-		// like the bootstrap below: refusing to start beats serving matches
-		// from the wrong embedding space.
-		if err := skillsync.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
-			return nil, nil, fmt.Errorf("invalidate skill embeddings: %w", err)
-		}
-	}
-	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
-	if err != nil {
-		return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES: %w", err)
-	}
-	if len(skillSources) > 0 {
-		if appAuth == nil {
-			return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
-		}
-		s.skillSources = skillSources
-		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Embed: s.embedder, Log: s.log}
-	}
-
-	if cfg.BootstrapToken != "" {
-		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
-			return nil, nil, fmt.Errorf("bootstrap admin: %w", err)
-		}
-	}
-
-	s.initMetrics(reg)
-
+// Every route is registered through r, which looks its guard up in
+// routeGuards (router.go) and panics on a pattern the table does not name.
+// The permission a route requires is therefore stated as data, in one
+// reviewable place, rather than implied by how its handler is wrapped; see
+// authz.go for the policy it is checked against.
+func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
-	// Every route below is registered through r, which looks its guard up in
-	// routeGuards (router.go) and panics on a pattern the table does not
-	// name. The permission a route requires is therefore stated as data, in
-	// one reviewable place, rather than implied by how its handler is
-	// wrapped; see authz.go for the policy it is checked against.
 	r := newRouter(s, mux)
 
 	// Read-mostly web UI. These resolve a session cookie to a subject and
@@ -456,8 +356,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return true
 	}
 	hookMetrics := hooks.NewMetrics(reg)
-	r.public("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
-	r.public("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
+	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
@@ -557,6 +457,126 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// registered is dead policy that reads like a guard, so it fails the boot
 	// rather than sitting in the file looking enforced.
 	if err := r.checkComplete(); err != nil {
+		return nil, err
+	}
+	s.initNavMetrics()
+	return mux, nil
+}
+
+// NewServer builds the worklode HTTP handlers. It returns two handlers: the
+// public app handler (web UI, API, webhooks) and a separate admin handler
+// (/healthz, /metrics). The admin handler is served on its own listener so
+// health and metrics are never exposed through the public ingress; probes and
+// in-cluster scraping hit the admin port directly.
+//
+// If cfg.BootstrapToken is set and the actors table is empty, it creates the
+// initial admin actor (idempotent). A bootstrap failure is fatal: the server
+// must not start half-configured.
+func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) {
+	s := &server{
+		st: st, cfg: cfg, log: slog.Default(),
+	}
+	s.cliCodes = newCLICodeStore(st.Now)
+	s.bgCtx = cfg.BackgroundCtx
+	if s.bgCtx == nil {
+		s.bgCtx = context.Background()
+	}
+
+	reg := cfg.Metrics
+	if reg == nil {
+		reg = prometheus.NewRegistry()
+	}
+
+	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
+		return nil, nil, err
+	}
+
+	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
+		if err := cfg.requireWebSecrets("OIDC"); err != nil {
+			return nil, nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		v, err := oidc.New(ctx, cfg.OIDCIssuer, cfg.OIDCClientID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("configure oidc: %w", err)
+		}
+		s.oidc = v
+	}
+
+	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
+		if err := cfg.requireWebSecrets("GitHub auth"); err != nil {
+			return nil, nil, err
+		}
+		key, err := hex.DecodeString(cfg.TokenEncKey)
+		if err != nil || len(key) != 32 {
+			return nil, nil, fmt.Errorf("LODE_TOKEN_ENC_KEY must be 64 hex chars (32 bytes)")
+		}
+		tc, err := tokencrypt.New(key)
+		if err != nil {
+			return nil, nil, fmt.Errorf("configure token cipher: %w", err)
+		}
+		s.gh = githubauth.New(cfg.GitHubClientID, cfg.GitHubClientSecret)
+		s.tokenCipher = tc
+	}
+
+	if s.oidc == nil && cfg.WebOpen {
+		s.log.Warn("web UI is serving unauthenticated: no login provider is " +
+			"configured and LODE_WEB_OPEN is set; every page and every " +
+			"creation form is reachable by anyone who can reach this port")
+	}
+
+	appAuth, err := newAppAuth(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.appAuth = appAuth
+
+	s.skillFloor = 0.35
+	if cfg.SkillScoreFloor != "" {
+		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
+		if err != nil || math.IsNaN(f) || f < 0 || f > 1 {
+			return nil, nil, fmt.Errorf("LODE_SKILL_SCORE_FLOOR: want a float in [0,1], got %q", cfg.SkillScoreFloor)
+		}
+		s.skillFloor = f
+	}
+	if cfg.EmbeddingURL != "" {
+		if cfg.EmbeddingModel == "" {
+			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
+		}
+		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey, Metrics: embed.NewMetrics(reg)}
+		// At boot, before the first request and regardless of whether skill
+		// sources are configured. Vectors from a previous provider are not
+		// comparable with this one's, and dropping the sources (or swapping the
+		// model on an instance that has none) leaves no sync to notice. Fatal
+		// like the bootstrap below: refusing to start beats serving matches
+		// from the wrong embedding space.
+		if err := skillsync.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
+			return nil, nil, fmt.Errorf("invalidate skill embeddings: %w", err)
+		}
+	}
+	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
+	if err != nil {
+		return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES: %w", err)
+	}
+	if len(skillSources) > 0 {
+		if appAuth == nil {
+			return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
+		}
+		s.skillSources = skillSources
+		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Embed: s.embedder, Log: s.log}
+	}
+
+	if cfg.BootstrapToken != "" {
+		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
+			return nil, nil, fmt.Errorf("bootstrap admin: %w", err)
+		}
+	}
+
+	s.initMetrics(reg)
+
+	mux, err := s.registerRoutes(reg)
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -609,7 +629,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
 				Store:   st,
 				Name:    docLifecycleSubscriber,
-				Handler: s.docLifecycleHandler(),
+				Handler: s.handleDocLifecycle,
 				Poll:    cfg.EventPoll,
 				Metrics: busMetrics,
 				Log:     s.log,
@@ -624,7 +644,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}()
 	}
 
-	return s.logging(s.metrics(mux)), admin, nil
+	return s.observe(mux), admin, nil
 }
 
 // runSkillSync serializes full syncs via skillSyncMu. A trigger that arrives
@@ -691,10 +711,10 @@ func (w *statusWriter) WriteHeader(code int) {
 //
 // Without it, nothing served by this server can stream. Embedding an
 // interface promotes only that interface's methods, so *statusWriter is not
-// an http.Flusher no matter what it wraps — and logging and metrics wrap
-// every single request in one, twice over. A handler that flushed would
-// silently buffer instead, which for a server-sent-event stream means the
-// client sees nothing until the connection closes.
+// an http.Flusher no matter what it wraps — and observe wraps every single
+// request in one. A handler that flushed would silently buffer instead,
+// which for a server-sent-event stream means the client sees nothing until
+// the connection closes.
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // routeLabel returns the matched mux pattern without its method prefix
@@ -710,38 +730,31 @@ func routeLabel(r *http.Request) string {
 	return p
 }
 
-func (s *server) logging(next http.Handler) http.Handler {
+// observe logs and counts one request. Logging and metrics were two
+// middlewares, so every request — SSE streams included — was wrapped in a
+// statusWriter and timed twice for what is one measurement.
+func (s *server) observe(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 		next.ServeHTTP(sw, r)
+		elapsed := time.Since(start)
+		route := routeLabel(r)
+		s.requests.WithLabelValues(r.Method, route, strconv.Itoa(sw.status)).Inc()
+		s.durations.WithLabelValues(r.Method, route).Observe(elapsed.Seconds())
 		s.log.Info("http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", sw.status,
-			"duration", time.Since(start),
+			"duration", elapsed,
 		)
 	})
 }
 
-func (s *server) metrics(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		start := time.Now()
-		next.ServeHTTP(sw, r)
-		route := routeLabel(r)
-		s.requests.WithLabelValues(r.Method, route, strconv.Itoa(sw.status)).Inc()
-		s.durations.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
-	})
-}
-
-// actorKey is the context key for the authenticated actor.
-type actorKey struct{}
-
 // auth wraps an /api/v1 handler with bearer-token authentication: it is the
-// authentication half only, and puts both the actor (for handlers that
-// attribute a write) and the derived Subject (for the policy check) into the
-// request context. Authorization is requirePerm's job, which the router
+// authentication half only, and puts the derived Subject — the one identity
+// a handler reads, for the policy check and for attributing a write — into
+// the request context. Authorization is requirePerm's job, which the router
 // always composes inside this — see authz.go.
 func (s *server) auth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -759,22 +772,9 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 			s.mapStoreErr(w, err)
 			return
 		}
-		r = r.WithContext(context.WithValue(r.Context(), actorKey{}, actor))
 		next(w, withSubject(r, subjectFromActor(actor, authToken)))
 	})
 }
-
-// actorFrom returns the authenticated actor, or nil outside the auth
-// middleware.
-func actorFrom(r *http.Request) *store.Actor {
-	a, _ := r.Context().Value(actorKey{}).(*store.Actor)
-	return a
-}
-
-// requireAdmin is gone: "admin only" is now a property of a permission in
-// authz.go's grants table (permProjectAdmin, permActorAdmin, permSkillAdmin,
-// permInboxAdmin), applied by requirePerm to whichever routes routeGuards
-// names. The refusal is unchanged, message included — see denialMessage.
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -846,6 +846,27 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		s.log.Error("internal error", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+// recordEvent is the shared body of every non-document mutation: a random
+// external id, v marshalled as the event payload, and apply inside
+// RecordEvent so the write and its event commit together. It returns the
+// error for the caller to map with mapStoreErr — a failed id or marshal is
+// the same internal error it was when each handler spelled the three steps
+// out itself. Document mutations use recordDocEvent, which additionally names
+// the op and wraps the payload with the acting subject.
+func (s *server) recordEvent(ctx context.Context, source, eventType string, v any,
+	apply func(tx *sql.Tx, eventID int64) error) error {
+	extID, err := randomExternalID()
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, _, err = s.st.RecordEvent(ctx, source, extID, eventType, payload, apply)
+	return err
 }
 
 // randomExternalID returns a random hex string used as the (source,

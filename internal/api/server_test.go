@@ -23,27 +23,46 @@ func newTestStore(t *testing.T) *store.Store {
 	return store.OpenTestStore(t)
 }
 
-// newTestServer returns a store, a server handler, and a valid bearer token
-// for admin actor "alice".
-func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
+// seedActor creates an actor and returns a bearer token for it. Every test
+// that needs an identity used to spell out the create-actor, create-token,
+// fatal-on-each block itself.
+func seedActor(t *testing.T, st *store.Store, id, kind, displayName string, admin bool) string {
+	t.Helper()
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, id, kind, displayName, admin); err != nil {
+		t.Fatalf("create actor %s: %v", id, err)
+	}
+	token, err := st.CreateToken(ctx, id, id+" token", nil)
+	if err != nil {
+		t.Fatalf("create token for %s: %v", id, err)
+	}
+	return token
+}
+
+// newTestServerWithConfig is newTestServer with the caller's Config, for the
+// tests that need a login provider, an embedding provider, or the closed web
+// surface wired in.
+func newTestServerWithConfig(t *testing.T, cfg api.Config) (*store.Store, http.Handler, string) {
 	t.Helper()
 	st := newTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	// Web tests drive pages anonymously; they are the deliberate open case.
-	// The refusal itself is tested through newTestServerWithConfig in
-	// authz_test.go, which does not go through this helper.
-	h, _, err := api.NewServer(st, api.Config{WebOpen: true})
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+	h, _, err := api.NewServer(st, cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
 	return st, h, token
+}
+
+// newTestServer returns a store, a server handler, and a valid bearer token
+// for admin actor "alice".
+//
+// Web tests drive pages anonymously, so WebOpen is set: they are the
+// deliberate open case. The refusal itself is tested through
+// newTestServerWithConfig in authz_test.go, which does not go through this
+// helper.
+func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
+	t.Helper()
+	return newTestServerWithConfig(t, api.Config{WebOpen: true})
 }
 
 // newTestServerAdmin returns both the public app handler and the admin handler

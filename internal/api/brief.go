@@ -98,9 +98,9 @@ func (s *server) rebindWorktree(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "worktree is required")
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
-	lease, err := s.st.RebindLeaseWorktree(r.Context(), id, actor.ID, req.Worktree)
+	lease, err := s.st.RebindLeaseWorktree(r.Context(), id, actorID, req.Worktree)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return

@@ -365,3 +365,36 @@ func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 	}
 	return out
 }
+
+// taskView maps one task, its edges and its timeline into the task page's
+// view. The edge loops classify by type rather than by direction, so an
+// outgoing child_of names the parent while an incoming one names a child.
+func taskView(t *model.Task, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
+	view := ui.TaskView{
+		Page:     ui.PageProps{Title: "worklode: " + t.ID},
+		Task:     *t,
+		Blocked:  blocked,
+		Timeline: timelineRows(entries),
+	}
+	for _, e := range out {
+		switch e.Type {
+		case "blocks":
+			view.Blocks = append(view.Blocks, e.ToTask)
+		case "child_of":
+			view.Parent = e.ToTask
+		case "follow_up_to":
+			view.FollowUpTo = e.ToTask
+		}
+	}
+	for _, e := range in {
+		switch e.Type {
+		case "blocks":
+			view.BlockedBy = append(view.BlockedBy, e.FromTask)
+		case "child_of":
+			view.Children = append(view.Children, e.FromTask)
+		case "follow_up_to":
+			view.FollowUps = append(view.FollowUps, e.FromTask)
+		}
+	}
+	return view
+}

@@ -34,26 +34,6 @@ func seedSkill(t *testing.T, st *store.Store, name, description string) {
 	}
 }
 
-// newTestServerWithConfig is newTestServer with a caller-supplied Config, for
-// tests that need an embedding provider wired in.
-func newTestServerWithConfig(t *testing.T, cfg api.Config) (*store.Store, http.Handler, string) {
-	t.Helper()
-	st := newTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	h, _, err := api.NewServer(st, cfg)
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	return st, h, token
-}
-
 func TestSkillsEndpoints(t *testing.T) {
 	st, h, token := newTestServer(t)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
@@ -137,14 +117,7 @@ func TestSkillsEndpoints(t *testing.T) {
 	}
 
 	// Sync as non-admin: 403.
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
-		t.Fatalf("create actor bob: %v", err)
-	}
-	userToken, err := st.CreateToken(ctx, "bob", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token bob: %v", err)
-	}
+	userToken := seedActor(t, st, "bob", "human", "Bob", false)
 	rr = doReq(t, h, "POST", "/api/v1/skills/sync", userToken, nil)
 	if rr.Code != 403 {
 		t.Fatalf("sync non-admin: %d", rr.Code)

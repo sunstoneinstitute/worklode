@@ -188,33 +188,32 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*model.
 	}
 	secondary := []model.SecondaryConcern{}
 
+	// The bucket a fact lands in is the only thing that varies here; mapping
+	// it and its error plumbing are the same in all four cases.
 	for _, f := range facts {
-		switch {
-		case f.Task.State == "in_progress":
-			item, err := mapWorkItem(f, false, resolveActor)
-			if err != nil {
-				return nil, err
+		var bucket *[]model.CockpitWorkItem
+		blocked := false
+		switch f.Task.State {
+		case "in_progress":
+			bucket = &work.InProgress
+		case "in_review":
+			bucket = &work.InReview
+		case "ready":
+			if f.Blocked() {
+				bucket, blocked = &work.Blocked, true
+			} else {
+				bucket = &work.Ready
 			}
-			work.InProgress = append(work.InProgress, item)
-		case f.Task.State == "in_review":
-			item, err := mapWorkItem(f, false, resolveActor)
-			if err != nil {
-				return nil, err
-			}
-			work.InReview = append(work.InReview, item)
-		case f.Task.State == "ready" && f.Blocked():
-			item, err := mapWorkItem(f, true, resolveActor)
-			if err != nil {
-				return nil, err
-			}
-			work.Blocked = append(work.Blocked, item)
+		default:
+			continue
+		}
+		item, err := mapWorkItem(f, blocked, resolveActor)
+		if err != nil {
+			return nil, err
+		}
+		*bucket = append(*bucket, item)
+		if blocked {
 			secondary = append(secondary, blockerConcerns(f)...)
-		case f.Task.State == "ready":
-			item, err := mapWorkItem(f, false, resolveActor)
-			if err != nil {
-				return nil, err
-			}
-			work.Ready = append(work.Ready, item)
 		}
 	}
 

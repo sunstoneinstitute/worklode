@@ -41,9 +41,9 @@ func (s *server) touchAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
-	sess, err := s.st.TouchAgentSession(r.Context(), id, actor.ID,
+	sess, err := s.st.TouchAgentSession(r.Context(), id, actorID,
 		req.Agent, req.AgentVersion, req.SessionID, buckets)
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -105,9 +105,9 @@ func (s *server) endAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	actor := actorFrom(r)
+	actorID := actorIDFrom(r)
 
-	err = s.st.EndAgentSession(r.Context(), id, actor.ID, req.Agent, req.SessionID,
+	err = s.st.EndAgentSession(r.Context(), id, actorID, req.Agent, req.SessionID,
 		store.SessionUsage{
 			InputTokens:  req.InputTokens,
 			OutputTokens: req.OutputTokens,

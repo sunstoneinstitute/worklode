@@ -8,7 +8,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,32 +67,23 @@ func validateDeliverable(projectID, name, description, rawURL, createdBy string)
 // the event log carries the fact and the source names the surface it came
 // from ("cli" for the JSON API, "web" for a cockpit form).
 func (s *server) recordDeliverable(ctx context.Context, source string, in store.DeliverableInput) (*model.Deliverable, error) {
-	extID, err := randomExternalID()
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(map[string]string{
+	now := s.st.Now()
+
+	var created *model.Deliverable
+	if err := s.recordEvent(ctx, source, "deliverable.created", map[string]string{
 		"project":     in.ProjectID,
 		"name":        in.Name,
 		"description": in.Description,
 		"url":         in.URL,
 		"created_by":  in.CreatedBy,
-	})
-	if err != nil {
-		return nil, err
-	}
-	now := s.st.Now()
-
-	var created *model.Deliverable
-	if _, _, err := s.st.RecordEvent(ctx, source, extID, "deliverable.created", payload,
-		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.CreateDeliverable(tx, now, in)
-			if err != nil {
-				return err
-			}
-			created = d
-			return nil
-		}); err != nil {
+	}, func(tx *sql.Tx, _ int64) error {
+		d, err := store.CreateDeliverable(tx, now, in)
+		if err != nil {
+			return err
+		}
+		created = d
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -127,10 +117,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := ""
-	if a := actorFrom(r); a != nil {
-		actorID = a.ID
-	}
+	actorID := actorIDFrom(r)
 	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, actorID)
 	if msg != "" {
 		writeErr(w, http.StatusUnprocessableEntity, msg)
