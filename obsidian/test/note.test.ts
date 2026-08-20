@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stringify as stringifyYaml } from "yaml";
 import {
   computeEtag,
   conflictToNote,
@@ -42,23 +43,32 @@ function fixtureTask(overrides: Partial<TaskListDetail> = {}): TaskListDetail {
   };
 }
 
+/** Renders a frontmatter object as a `---`-fenced YAML block, the shape a
+ *  doc body carries its own frontmatter in (internal/model.Doc.Body: "the
+ *  full markdown, frontmatter included"). */
+function withFrontmatter(frontmatter: Record<string, unknown>, body: string): string {
+  return `---\n${stringifyYaml(frontmatter)}---\n${body}`;
+}
+
 function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
   return {
-    id: "WL-SPEC-025",
+    id: 25,
     project: "worklode",
     kind: "spec",
-    ordinal: "025",
+    number: 25,
+    slug: "documents-in-the-backbone",
     status: "draft",
     title: "Documents in the backbone",
     version: 3,
-    source_branch: "main",
-    source_dirty: false,
-    synced_at: "2026-08-16T09:12:00Z",
-    body: "body markdown verbatim",
-    frontmatter: {
-      status: "draft",
-      covers: "docs/specs/025-documents-in-the-backbone.md",
-    },
+    issued: "2026-06-01",
+    assignee: "stig",
+    created_by: "stig",
+    created_at: "2026-06-01T09:00:00Z",
+    updated_at: "2026-08-16T09:12:00Z",
+    body: withFrontmatter(
+      { status: "draft", covers: "docs/specs/025-documents-in-the-backbone.md" },
+      "body markdown verbatim",
+    ),
     ...overrides,
   };
 }
@@ -230,7 +240,7 @@ describe("docToNote", () => {
       list: ["x", "y"],
       unknown_key: "surprise",
     };
-    const d = fixtureDoc({ frontmatter });
+    const d = fixtureDoc({ body: withFrontmatter(frontmatter, "body text\n") });
     const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
@@ -245,7 +255,7 @@ describe("docToNote", () => {
       status: "draft",
       aliases: ["Custom Alias"],
     };
-    const d = fixtureDoc({ frontmatter });
+    const d = fixtureDoc({ body: withFrontmatter(frontmatter, "body text\n") });
     const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
@@ -253,12 +263,16 @@ describe("docToNote", () => {
     expect(parsed.frontmatter.aliases).toEqual(["Custom Alias"]);
   });
 
-  it("keeps ordinal a string", async () => {
-    const d = fixtureDoc({ ordinal: "025" });
+  it("does not render a duplicate --- fence when the body carries its own frontmatter", async () => {
+    const frontmatter = { status: "draft" };
+    const body = "Some body text.\n";
+    const d = fixtureDoc({ body: withFrontmatter(frontmatter, body) });
     const note = await docToNote(d);
 
-    expect(note.content).toContain('ordinal: "025"');
-    expect(note.content).not.toMatch(/ordinal: 025\b/);
+    // Exactly the two fences renderNote itself writes -- none left over from
+    // the doc's own block.
+    expect(note.content.match(/^---$/gm)).toHaveLength(2);
+    expect(parseNote(note.content).body).toBe(body);
   });
 
   it("reports a wl key collision instead of dropping either", async () => {
@@ -266,11 +280,11 @@ describe("docToNote", () => {
       status: "draft",
       wl: { author_note: "this collides with the reserved block" },
     };
-    const d = fixtureDoc({ frontmatter });
+    const d = fixtureDoc({ body: withFrontmatter(frontmatter, "body text\n") });
     const note = await docToNote(d);
 
     expect(note.conflict).toBeDefined();
-    expect(note.conflict).toContain(d.id);
+    expect(note.conflict).toContain(d.slug);
     // the backbone block is kept, with its own reserved shape
     expect(note.content).toContain("type: doc");
     expect(note.content).toContain(`etag: ${note.etag}`);
@@ -282,31 +296,37 @@ describe("docToNote", () => {
     expect(note.conflict).toContain(JSON.stringify(frontmatter.wl));
   });
 
-  it("reports a conflict and ignores non-object frontmatter instead of corrupting the note", async () => {
-    const d = fixtureDoc({ frontmatter: "not an object" as unknown as Doc["frontmatter"] });
+  it("reports a conflict and ignores non-mapping frontmatter instead of corrupting the note", async () => {
+    const d = fixtureDoc({ body: "---\nnot a mapping\n---\nbody text\n" });
     const note = await docToNote(d);
 
     expect(note.conflict).toBeDefined();
-    expect(note.conflict).toContain(d.id);
+    expect(note.conflict).toContain(d.slug);
     // rendered as if there were no author frontmatter at all, never as
     // spread-out garbage keys.
     expect(note.content).not.toContain('"0":');
     expect(note.content).toContain("aliases:");
     expect(note.content).toContain("wl:");
+    expect(parseNote(note.content).body).toBe("body text\n");
   });
 
-  // The backbone bumps docs.synced_at on every `lode doc sync`, unchanged
-  // content included. An etag covering it would make every sync rewrite
-  // every doc note -- and every project note, whose etag covers its docs.
-  it("ignores synced_at in the etag, and carries no synced_at in the note", async () => {
-    const d = fixtureDoc();
-    const resynced = fixtureDoc({ synced_at: "2026-09-01T00:00:00Z" });
+  it("reports a conflict and ignores unparseable frontmatter instead of throwing", async () => {
+    const d = fixtureDoc({ body: "---\nkey: [unclosed\n---\nbody text\n" });
+    const note = await docToNote(d);
 
-    expect((await docToNote(resynced)).etag).toBe((await docToNote(d)).etag);
-    expect((await docToNote(d)).content).not.toContain("synced_at");
-    expect((await projectToNote(fixtureProject(), [resynced], [])).etag).toBe(
-      (await projectToNote(fixtureProject(), [d], [])).etag,
-    );
+    expect(note.conflict).toBeDefined();
+    expect(note.conflict).toContain(d.slug);
+    expect(parseNote(note.content).body).toBe("body text\n");
+  });
+
+  it("treats an empty frontmatter block as absent, not a conflict", async () => {
+    const d = fixtureDoc({ body: "---\n\n---\nbody text\n" });
+    const note = await docToNote(d);
+
+    expect(note.conflict).toBeUndefined();
+    // the empty fence is stripped, not left to render as a duplicate.
+    expect(note.content.match(/^---$/gm)).toHaveLength(2);
+    expect(parseNote(note.content).body).toBe("body text\n");
   });
 
   it("still changes the etag when the body or the version changes", async () => {
@@ -323,12 +343,31 @@ describe("docToNote", () => {
       aliases: ["Documents in the backbone"],
     };
     const body = "# Documents in the backbone\n\nSome body text.\n";
-    const d = fixtureDoc({ frontmatter, body });
+    const d = fixtureDoc({ body: withFrontmatter(frontmatter, body) });
     const note = await docToNote(d);
     const parsed = parseNote(note.content);
 
     expect(parsed.frontmatter).toEqual(frontmatter);
     expect(parsed.body).toBe(body);
+  });
+
+  it("uses the doc's slug for the note path and its wl block's id", async () => {
+    const d = fixtureDoc({ slug: "documents-in-the-backbone", id: 25 });
+    const note = await docToNote(d);
+    const parsed = parseNote(note.content);
+
+    expect(note.path).toBe("worklode/docs/documents-in-the-backbone.md");
+    expect(parsed.wl.slug).toBe("documents-in-the-backbone");
+    expect(parsed.wl.id).toBe(25);
+  });
+
+  it("emits number only for a numbered document, never 0 for a plan", async () => {
+    const spec = fixtureDoc({ number: 25 });
+    const plan = fixtureDoc({ kind: "plan", number: 0, slug: "025-1-something" });
+
+    expect(parseNote((await docToNote(spec)).content).wl.number).toBe(25);
+    expect(parseNote((await docToNote(plan)).content).wl.number).toBeUndefined();
+    expect((await docToNote(plan)).content).not.toMatch(/^\s*number:/m);
   });
 });
 
@@ -456,11 +495,29 @@ describe("projectToNote / indexToNote", () => {
 
     const projectNote = await projectToNote(p, docs, tasks);
     expect(projectNote.path).toBe("worklode/worklode.md");
-    expect(projectNote.content).toContain("[[WL-SPEC-025]]");
+    expect(projectNote.content).toContain("[[worklode/docs/documents-in-the-backbone|documents-in-the-backbone]]");
     expect(projectNote.content).toContain("[[WL-42]]");
     expect(projectNote.content).toContain(
       "> Generated by the Worklode plugin. Edits here are overwritten on sync.",
     );
+  });
+
+  // A doc's slug is unique only within its project (docs_project_slug), so a
+  // bare wikilink to it would be ambiguous across projects. Task ids are
+  // globally unique and keep the bare form.
+  it("path-qualifies doc links so a same-slugged doc in another project can't collide", async () => {
+    const alpha = fixtureProject({ id: "alpha" });
+    const beta = fixtureProject({ id: "beta" });
+    const docInAlpha = fixtureDoc({ slug: "overview", project: "alpha" });
+    const docInBeta = fixtureDoc({ slug: "overview", project: "beta" });
+
+    const alphaNote = await projectToNote(alpha, [docInAlpha], []);
+    const betaNote = await projectToNote(beta, [docInBeta], []);
+
+    expect(alphaNote.content).toContain("[[alpha/docs/overview|overview]]");
+    expect(betaNote.content).toContain("[[beta/docs/overview|overview]]");
+    expect(alphaNote.content).not.toContain("[[beta/docs/overview|overview]]");
+    expect(betaNote.content).not.toContain("[[alpha/docs/overview|overview]]");
   });
 
   it("does not double-blank the body when a project has no docs", async () => {
@@ -478,7 +535,7 @@ describe("projectToNote / indexToNote", () => {
       [
         "worklode",
         {
-          docs: [fixtureDoc({ id: "WL-SPEC-025" }), fixtureDoc({ id: "WL-SPEC-026" })],
+          docs: [fixtureDoc({ slug: "doc-a" }), fixtureDoc({ slug: "doc-b" })],
           tasks: [
             fixtureTask({ id: "WL-42" }),
             fixtureTask({ id: "WL-43" }),
@@ -611,9 +668,9 @@ describe("computeEtag", () => {
 describe("golden note etags", () => {
   it("hashes the same payload it always has, per note kind", async () => {
     expect((await taskToNote(fixtureTask())).etag).toBe("9cf7929f46269e43");
-    expect((await docToNote(fixtureDoc())).etag).toBe("ab506e628af51f3b");
+    expect((await docToNote(fixtureDoc())).etag).toBe("7cb835063c8dc0a8");
     expect((await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()])).etag).toBe(
-      "dad9be294b40224b",
+      "54a5e9210790c806",
     );
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
     expect(
