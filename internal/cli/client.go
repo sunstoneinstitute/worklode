@@ -1183,6 +1183,18 @@ func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string,
 		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead}, "crew member")
 }
 
+// ListCrew calls GET /api/v1/projects/{id}/participants: every member of a
+// project's Crew (spec 029 §6.1), lead-first then by when they were added.
+// An empty roster is an empty slice, not nil.
+func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMember, []byte, error) {
+	resp, raw, err := doJSON[model.ParticipantListResponse](ctx, c, http.MethodGet,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants", nil, "participant list")
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp.Participants, raw, nil
+}
+
 // RemoveCrewMember calls DELETE /api/v1/projects/{id}/participants/{actor},
 // removing every role that actor holds on the project in one act (spec 029
 // §6.1). The server answers 204 with no body. A removal refused because the

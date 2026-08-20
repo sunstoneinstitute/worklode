@@ -556,6 +556,71 @@ func TestRemoveCrewMemberFormBlocked(t *testing.T) {
 	}
 }
 
+// TestListCrewMembersAPI covers GET /api/v1/projects/{id}/participants: the
+// roster comes back lead-first, each member's roles sorted, the empty case is
+// an empty list (never null), and an unknown project 404s.
+func TestListCrewMembersAPI(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "empty")
+	seedCrewActors(t, st, "ada", "bob")
+
+	// An empty roster is [] on the wire, not null.
+	rr := doReq(t, h, "GET", "/api/v1/projects/empty/participants", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("empty roster status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	if got := strings.TrimSpace(rr.Body.String()); got != `{"participants":[]}` {
+		t.Fatalf("empty roster body = %s, want {\"participants\":[]}", got)
+	}
+
+	for _, body := range []map[string]any{
+		{"actor": "bob", "role": "reporter"},
+		{"actor": "bob", "role": "editor"},
+		{"actor": "ada", "role": "lead-role", "lead": true},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/projects/proj/participants", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var resp model.ParticipantListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode body %q: %v", rr.Body.String(), err)
+	}
+	if len(resp.Participants) != 2 {
+		t.Fatalf("participants = %+v, want 2 members", resp.Participants)
+	}
+	// Lead first, regardless of add order.
+	lead, other := resp.Participants[0], resp.Participants[1]
+	if lead.Actor != "ada" || !lead.Lead || lead.DisplayName != "Ada Person" {
+		t.Fatalf("first member = %+v, want ada, lead, Ada Person", lead)
+	}
+	if len(lead.Roles) != 1 || lead.Roles[0] != "lead-role" {
+		t.Fatalf("lead roles = %v, want [lead-role]", lead.Roles)
+	}
+	if other.Actor != "bob" || other.Lead || other.DisplayName != "Bob Person" {
+		t.Fatalf("second member = %+v, want bob, not lead, Bob Person", other)
+	}
+	// Roles come back sorted, not in add order (editor before reporter).
+	if strings.Join(other.Roles, ",") != "editor,reporter" {
+		t.Fatalf("bob roles = %v, want [editor reporter] sorted", other.Roles)
+	}
+	if lead.AddedAt.IsZero() || other.AddedAt.IsZero() {
+		t.Errorf("added_at is zero: lead=%+v other=%+v", lead, other)
+	}
+
+	// Unknown project 404s.
+	rr = doReq(t, h, "GET", "/api/v1/projects/nosuch/participants", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown project status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestRemoveCrewMemberFormCrossOrigin checks the removal route is same-origin
 // only, like every other cockpit form.
 func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {

@@ -443,6 +443,91 @@ func TestProjectCrewAdd(t *testing.T) {
 	}
 }
 
+// TestProjectCrewList covers `lode project crew <project>` (no subcommand):
+// the roster renders as a table (name, roles comma-joined, a lead marker),
+// --json prints the server's envelope verbatim, and an empty roster still
+// prints the header row rather than erroring.
+func TestProjectCrewList(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead"); err != nil {
+		t.Fatalf("seed lead: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("seed member: %v\noutput: %s", err, out)
+	}
+
+	out, err := runLode(t, "project", "crew", "proj")
+	if err != nil {
+		t.Fatalf("crew list: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "ada") || !strings.Contains(out, "editor") || !strings.Contains(out, "lead") {
+		t.Fatalf("crew list output = %q, want ada/editor/lead", out)
+	}
+	if !strings.Contains(out, "bob") || !strings.Contains(out, "reporter") {
+		t.Fatalf("crew list output = %q, want bob/reporter", out)
+	}
+
+	out, err = runLode(t, "project", "crew", "proj", "--json")
+	if err != nil {
+		t.Fatalf("crew list --json: %v\noutput: %s", err, out)
+	}
+	var resp model.ParticipantListResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if len(resp.Participants) != 2 {
+		t.Fatalf("participants = %+v, want 2", resp.Participants)
+	}
+}
+
+// TestProjectCrewDispatch checks the parent `crew` command's own RunE (the
+// listing form) does not swallow the `add`/`remove` subcommands: cobra must
+// still dispatch to them when the first argument names one, which is the one
+// thing giving the parent its own RunE risks silently breaking.
+func TestProjectCrewDispatch(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "ada", "human", "Ada", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada"); err != nil {
+		t.Fatalf("crew add: %v\noutput: %s", err, out)
+	} else if !strings.Contains(out, "added ada to project proj") {
+		t.Fatalf("crew add output = %q, want the add subcommand's own message, not a listing", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 {
+		t.Fatalf("crew = %+v, want ada added by the subcommand", crew)
+	}
+
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "ada"); err != nil {
+		t.Fatalf("crew remove: %v\noutput: %s", err, out)
+	} else if !strings.Contains(out, "removed ada from project proj") {
+		t.Fatalf("crew remove output = %q, want the remove subcommand's own message, not a listing", out)
+	}
+
+	crew, err = st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 0 {
+		t.Fatalf("crew = %+v, want ada removed by the subcommand", crew)
+	}
+}
+
 // TestProjectCrewRemove covers `lode project crew remove` end to end: the
 // open-work guard's item list reaches the terminal verbatim, the lead cannot
 // be removed, and a clean removal drops every role the member held.

@@ -121,12 +121,33 @@ func newProjectAddRepoCmd() *cobra.Command {
 }
 
 // newProjectCrewCmd groups the Crew subcommands: who is on a project and
-// what they do on it (spec 029 §6.1). Listing the Crew arrives with the read
-// endpoint; adding and removing are here.
+// what they do on it (spec 029 §6.1). `lode project crew <project>` on its
+// own lists the roster; `add`/`remove` mutate it. Cobra dispatches to a
+// subcommand whenever the first argument names one, so this RunE only runs
+// for the listing form — a plain ExactArgs(1) parent RunE alongside
+// AddCommand is correct cobra, nothing more is needed to keep the two from
+// colliding.
 func newProjectCrewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "crew",
-		Short: "Manage a project's Crew",
+		Use:   "crew <project>",
+		Short: "List, or manage, a project's Crew",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			members, raw, err := c.ListCrew(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.CrewTable(cmd.OutOrStdout(), members)
+			return nil
+		},
 	}
 	cmd.AddCommand(newProjectCrewAddCmd(), newProjectCrewRemoveCmd())
 	return cmd

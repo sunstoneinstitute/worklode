@@ -16,6 +16,13 @@ type CrewMember struct {
 	AddedAt     time.Time `json:"added_at"`
 }
 
+// ParticipantListResponse is the response body of GET
+// /api/v1/projects/{id}/participants. An empty roster is an empty list, not
+// null.
+type ParticipantListResponse struct {
+	Participants []CrewMember `json:"participants"`
+}
+
 // AddCrewMemberInput is the request body of POST
 // /api/v1/projects/{id}/participants. Actor is required; an empty Role
 // defaults to "member" server-side, so adding someone to the Crew without an

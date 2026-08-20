@@ -387,6 +387,21 @@ func ProjectTable(w io.Writer, projects []model.Project) {
 	tw.Flush()
 }
 
+// CrewTable renders a project's Crew roster: name, roles comma-joined, and a
+// "lead" marker on the row of the project's one lead, if any.
+func CrewTable(w io.Writer, members []model.CrewMember) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "ACTOR\tNAME\tROLES\tLEAD")
+	for _, m := range members {
+		lead := ""
+		if m.Lead {
+			lead = "lead"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", m.Actor, m.DisplayName, strings.Join(m.Roles, ", "), lead)
+	}
+	tw.Flush()
+}
+
 // Skill table layout. A skill description is a paragraph of trigger prose, not
 // a table cell — several run past 400 characters — so the description column
 // wraps to the terminal instead of overflowing it. The name column is capped

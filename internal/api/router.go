@@ -188,6 +188,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/cockpit":                 guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/deliverables":            guarded(permDeliverableRead),
 	"POST /api/v1/projects/{id}/deliverables":           guarded(permDeliverableWrite),
+	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
 	"POST /api/v1/projects":                             guarded(permProjectAdmin),

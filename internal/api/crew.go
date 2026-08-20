@@ -114,6 +114,24 @@ func (s *server) recordCrewAdd(ctx context.Context, source, projectID, actorID, 
 	return model.CrewMember{}, fmt.Errorf("crew member %s vanished from project %s after the add", actorID, projectID)
 }
 
+// listCrewMembers handles GET /api/v1/projects/{id}/participants: the whole
+// roster, mapped from store.Participant with toCrewMember. An empty roster
+// answers with an empty list (never null — a nil []model.CrewMember marshals
+// to null, so the slice is always allocated); an unknown project 404s the
+// same way store.ListParticipants's own ErrNotFound does everywhere else.
+func (s *server) listCrewMembers(w http.ResponseWriter, r *http.Request) {
+	crew, err := s.st.ListParticipants(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	members := make([]model.CrewMember, 0, len(crew))
+	for _, p := range crew {
+		members = append(members, toCrewMember(p))
+	}
+	writeJSON(w, http.StatusOK, model.ParticipantListResponse{Participants: members})
+}
+
 // toCrewMember is the one conversion point from the store's aggregated
 // Participant to the wire shape (ADR 036).
 func toCrewMember(p store.Participant) model.CrewMember {
