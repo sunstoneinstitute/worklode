@@ -32,6 +32,12 @@ func TestMain(m *testing.M) {
 // rather than a relative path, which the chdir below would break.
 var packageDir string
 
+// isolationHome is the temp HOME runTests installs. Kept in a package var so
+// TestIsolationHomeHoldsNoGoCache can assert against the HOME the package was
+// started with, not whatever HOME an individual test has scoped with
+// t.Setenv.
+var isolationHome string
+
 func runTests(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "lode-cmd-test")
 	if err != nil {
@@ -84,6 +90,7 @@ func runTests(m *testing.M) int {
 		fmt.Fprintf(os.Stderr, "set HOME: %v\n", err)
 		return 1
 	}
+	isolationHome = home
 	if packageDir, err = os.Getwd(); err != nil {
 		fmt.Fprintf(os.Stderr, "read the package directory: %v\n", err)
 		return 1
@@ -98,4 +105,51 @@ func runTests(m *testing.M) int {
 		os.RemoveAll(filepath.Dir(lodeBinary.path))
 	}
 	return code
+}
+
+// TestIsolationHomeHoldsNoGoCache guards the cache pinning above. Unpinning
+// either cache breaks no assertion on its own — the tests still pass, just
+// slower — while `go build` quietly fills the temp HOME with a module cache
+// it writes read-only and the deferred RemoveAll then cannot delete. That is
+// invisible locally and fatal on the self-hosted runner, whose tmpfs /tmp is
+// capped by inode count: ~18k inodes leaked per run exhausted it after a few
+// dozen runs and failed unrelated tests with "no space left on device"
+// (WL-190). So assert the invariant directly, after a real build has had its
+// chance to write.
+func TestIsolationHomeHoldsNoGoCache(t *testing.T) {
+	if isolationHome == "" {
+		t.Fatal("runTests did not record the isolation HOME")
+	}
+	// The child `go build` resolves these from the environment it inherits,
+	// so ask the toolchain rather than reading the variables: an empty pin
+	// resolves back under HOME and must fail here too.
+	for _, key := range []string{"GOCACHE", "GOMODCACHE"} {
+		out, err := exec.Command("go", "env", key).Output()
+		if err != nil {
+			t.Fatalf("go env %s: %v", key, err)
+		}
+		cache := strings.TrimSpace(string(out))
+		if cache == "" {
+			t.Fatalf("%s resolves to nothing; runTests must pin it before HOME moves", key)
+		}
+		if under(cache, isolationHome) {
+			t.Fatalf("%s is %s, inside the isolation HOME %s: pin it to the real cache before HOME moves", key, cache, isolationHome)
+		}
+	}
+	// buildLodeBinary is what actually writes; run it before looking.
+	buildLodeBinary(t)
+	for _, rel := range []string{filepath.Join("go", "pkg", "mod"), filepath.Join(".cache", "go-build")} {
+		if _, err := os.Stat(filepath.Join(isolationHome, rel)); err == nil {
+			t.Errorf("the build populated %s inside the isolation HOME", rel)
+		}
+	}
+}
+
+// under reports whether path is dir or sits beneath it.
+func under(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
