@@ -427,20 +427,11 @@ func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]Age
 	if err != nil {
 		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
 	}
-	defer rows.Close()
-
-	sessions := make([]AgentSession, 0)
-	for rows.Next() {
-		a, err := scanAgentSession(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan agent session for lease %d: %w", leaseID, err)
-		}
-		sessions = append(sessions, *a)
+	sessions, err := collectRows(rows, fmt.Sprintf("list agent sessions for lease %d", leaseID), byValue(scanAgentSession))
+	if err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
-	}
-	return sessions, nil
+	return nonNil(sessions), nil
 }
 
 // AgentSession returns one session row by its natural key, or ErrNotFound.

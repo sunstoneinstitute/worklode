@@ -711,17 +711,9 @@ func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error
 	if err != nil {
 		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
 	}
-	defer rows.Close()
-	var targets []int64
-	for rows.Next() {
-		var target int64
-		if err := rows.Scan(&target); err != nil {
-			return fmt.Errorf("scan replaces edge of doc %d: %w", docID, err)
-		}
-		targets = append(targets, target)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
+	targets, err := scanColumn[int64](rows, fmt.Sprintf("read replaces edges of doc %d", docID))
+	if err != nil {
+		return err
 	}
 
 	for _, target := range targets {
@@ -1291,6 +1283,10 @@ func cutFragment(ref string) (base, fragment string) {
 // docColumns is the SELECT list scanDoc expects, in order.
 const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at`
 
+// docColumnsD is docColumns under the `d` alias, for the queries that join
+// docs against a table carrying a column of the same name (doc_sections.number).
+var docColumnsD = qualifyColumns(docColumns, "d")
+
 func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
 	var number sql.NullInt64
@@ -1358,20 +1354,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	if err != nil {
 		return nil, fmt.Errorf("list docs: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Doc
-	for rows.Next() {
-		d, err := scanDoc(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan doc: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list docs: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list docs", byValue(scanDoc))
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no
@@ -1438,7 +1421,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       LEFT JOIN closed cl ON cl.id = c.id
 		      GROUP BY c.doc_id, c.anchor
 		 )
-		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
+		 SELECT `+docColumnsD+`, count(*)::int,
 		        coalesce(json_agg(json_build_object(
 		                     'anchor', sec.anchor,
 		                     'coverage', CASE WHEN r.doc_id IS NULL   THEN 'unplanned'
@@ -1523,7 +1506,7 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 		      WHERE e.type = 'replaces'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NULL
 		 )
-		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
+		 SELECT `+docColumnsD+`, count(*)::int,
 		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
 		                 FILTER (WHERE rs.anchor IS NULL), '[]')::text
 		   FROM docs d
@@ -1576,7 +1559,7 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 // the plan-to-plan blocks predicate (planBlockedCondition).
 func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+qualifiedDocColumns("d")+`
+		`SELECT `+docColumnsD+`
 		   FROM docs d
 		  WHERE d.kind = 'plan' AND d.status = 'accepted'
 		    AND ($1 = '' OR d.project_id = $1)
@@ -1586,20 +1569,7 @@ func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc
 	if err != nil {
 		return nil, fmt.Errorf("list plans needing execution: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Doc
-	for rows.Next() {
-		d, err := scanDoc(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan plan needing execution: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list plans needing execution: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list plans needing execution", byValue(scanDoc))
 }
 
 // appendScan lets scanDoc read a row that carries extra trailing columns: it
@@ -1615,17 +1585,6 @@ func (a appendScan) Scan(dest ...any) error {
 	return a.rowScanner.Scan(append(dest, a.extra...)...)
 }
 
-// qualifiedDocColumns renders docColumns with every name prefixed by alias,
-// for queries that join docs against a table carrying a column of the same
-// name (doc_sections.number).
-func qualifiedDocColumns(alias string) string {
-	cols := strings.Split(docColumns, ", ")
-	for i, c := range cols {
-		cols[i] = alias + "." + c
-	}
-	return strings.Join(cols, ", ")
-}
-
 // ListDocSections returns a document's sections in document order. A plan
 // carries none (025 §9), which is an empty result rather than an error.
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
@@ -1635,20 +1594,14 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 	if err != nil {
 		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
 	}
-	defer rows.Close()
-	var out []model.DocSection
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("list sections of doc %d", docID), func(r rowScanner) (model.DocSection, error) {
 		var sec model.DocSection
-		if err := rows.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
+		if err := r.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
 			&sec.Position, &sec.LastRevisedIn, &sec.Published); err != nil {
-			return nil, fmt.Errorf("scan section of doc %d: %w", docID, err)
+			return model.DocSection{}, err
 		}
-		out = append(out, sec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
-	}
-	return out, nil
+		return sec, nil
+	})
 }
 
 // docEdgeInverse names the reading of each edge type from the far end (025

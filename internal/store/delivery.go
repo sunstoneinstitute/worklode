@@ -58,19 +58,7 @@ func TaskIDsForSHA(tx *sql.Tx, repo, sha string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan task for sha %s %s: %w", repo, sha, err)
-		}
-		out = append(out, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
-	}
-	return out, nil
+	return scanColumn[string](rows, fmt.Sprintf("tasks for sha %s %s", repo, sha))
 }
 
 // ClearTaskCommits drops every commit attributed to taskID. Reopening a task

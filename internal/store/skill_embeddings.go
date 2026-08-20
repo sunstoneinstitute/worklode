@@ -117,17 +117,11 @@ func (s *Store) RecommendSkills(ctx context.Context, query []float32, limit int,
 	if err != nil {
 		return nil, fmt.Errorf("recommend skills: %w", err)
 	}
-	defer rows.Close()
-	var out []SkillMatch
-	for rows.Next() {
+	return collectRows(rows, "recommend skills", func(r rowScanner) (SkillMatch, error) {
 		var m SkillMatch
-		if err := rows.Scan(&m.Name, &m.Description, &m.ContentHash, &m.Score); err != nil {
-			return nil, fmt.Errorf("recommend skills: %w", err)
+		if err := r.Scan(&m.Name, &m.Description, &m.ContentHash, &m.Score); err != nil {
+			return SkillMatch{}, err
 		}
-		out = append(out, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("recommend skills: %w", err)
-	}
-	return out, nil
+		return m, nil
+	})
 }

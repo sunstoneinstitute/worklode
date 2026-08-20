@@ -1,12 +1,12 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math"
-	"sort"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -46,17 +46,6 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 	return out, nil
 }
 
-// prefixedTaskColumns returns taskColumns with each column qualified by
-// alias, for queries that join tasks against other tables. Splits naively on
-// ", ", so every taskColumns entry must stay comma-free.
-func prefixedTaskColumns(alias string) string {
-	cols := strings.Split(taskColumns, ", ")
-	for i, c := range cols {
-		cols[i] = alias + "." + c
-	}
-	return strings.Join(cols, ", ")
-}
-
 // readyCandidates returns every task eligible for pickup: state ready, no
 // child_of children, not needs_decomposition, unleased, not blocked by an
 // open 'blocks' edge from a task that is not in a closed state, and not held
@@ -66,7 +55,7 @@ func prefixedTaskColumns(alias string) string {
 // and a container has nothing to check out (spec 004 §6.3).
 func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT `+prefixedTaskColumns("t")+` FROM tasks t
+		SELECT `+taskColumnsT+` FROM tasks t
 		WHERE t.state = 'ready'
 		  AND NOT EXISTS (SELECT 1 FROM task_edges c
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
@@ -81,20 +70,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("ready candidates: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Task
-	for rows.Next() {
-		t, err := scanTask(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan ready candidate: %w", err)
-		}
-		out = append(out, *t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("ready candidates: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "ready candidates", byValue(scanTask))
 }
 
 // projectFocusMap returns each project's focus, keyed by project id, for the
@@ -153,6 +129,16 @@ func concernRank(concern string, focus []string) int {
 	return math.MaxInt
 }
 
+// criticalRank lifts critical-priority tasks above everything else in the
+// default order. Strict focus drops the arm entirely (every task ranks the
+// same), so focus alone decides the head of the queue.
+func criticalRank(priority string, strictFocus bool) int {
+	if !strictFocus && priority == "critical" {
+		return 0
+	}
+	return 1
+}
+
 // priorityRank maps a task priority to its sort weight, lower first.
 func priorityRank(p string) int {
 	switch p {
@@ -187,30 +173,16 @@ func numericTaskID(id string) int {
 // tiebreak: created_at asc, then numeric id asc. The sort is stable and its
 // inputs are pure, so identical input always yields identical output.
 func rankTasks(in []rankInput, strictFocus bool) []model.Task {
-	ranked := make([]rankInput, len(in))
-	copy(ranked, in)
-	sort.SliceStable(ranked, func(i, j int) bool {
-		a, b := ranked[i], ranked[j]
-		if !strictFocus {
-			aCrit := a.Task.Priority == "critical"
-			bCrit := b.Task.Priority == "critical"
-			if aCrit != bCrit {
-				return aCrit
-			}
-		}
-		if aConcern, bConcern := concernRank(a.Task.Concern, a.Focus), concernRank(b.Task.Concern, b.Focus); aConcern != bConcern {
-			return aConcern < bConcern
-		}
-		if aPrio, bPrio := priorityRank(a.Task.Priority), priorityRank(b.Task.Priority); aPrio != bPrio {
-			return aPrio < bPrio
-		}
-		if a.FanOut != b.FanOut {
-			return a.FanOut > b.FanOut
-		}
-		if !a.Task.CreatedAt.Equal(b.Task.CreatedAt) {
-			return a.Task.CreatedAt.Before(b.Task.CreatedAt)
-		}
-		return numericTaskID(a.Task.ID) < numericTaskID(b.Task.ID)
+	ranked := slices.Clone(in)
+	slices.SortStableFunc(ranked, func(a, b rankInput) int {
+		return cmp.Or(
+			cmp.Compare(criticalRank(a.Task.Priority, strictFocus), criticalRank(b.Task.Priority, strictFocus)),
+			cmp.Compare(concernRank(a.Task.Concern, a.Focus), concernRank(b.Task.Concern, b.Focus)),
+			cmp.Compare(priorityRank(a.Task.Priority), priorityRank(b.Task.Priority)),
+			cmp.Compare(b.FanOut, a.FanOut), // higher fan-out first
+			a.Task.CreatedAt.Compare(b.Task.CreatedAt),
+			cmp.Compare(numericTaskID(a.Task.ID), numericTaskID(b.Task.ID)),
+		)
 	})
 	out := make([]model.Task, len(ranked))
 	for i, r := range ranked {

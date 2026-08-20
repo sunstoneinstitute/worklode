@@ -398,6 +398,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // requires each entry to be comma-free.
 const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc`
 
+// taskColumnsT is taskColumns under the `t` alias, for the queries that join
+// tasks against another table.
+var taskColumnsT = qualifyColumns(taskColumns, "t")
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -622,20 +626,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if err != nil {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Task
-	for rows.Next() {
-		t, err := scanTask(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan task: %w", err)
-		}
-		out = append(out, *t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list tasks: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list tasks", byValue(scanTask))
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given

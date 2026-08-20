@@ -82,7 +82,7 @@ func (s *Store) ListProjectWorkFacts(ctx context.Context, projectID string) (out
 	defer func() { s.metrics.projectWorkRead(err) }()
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT `+prefixedTaskColumns("t")+`,
+SELECT `+taskColumnsT+`,
        parent.id, parent.title, parent.state,
        l.id, l.task_id, l.actor_id, l.worktree, l.acquired_at, l.renewed_at,
        l.expires_at, l.released_at,

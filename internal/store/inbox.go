@@ -247,18 +247,5 @@ func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) (
 	if err != nil {
 		return nil, fmt.Errorf("list issues: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Issue
-	for rows.Next() {
-		is, err := scanIssue(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan issue: %w", err)
-		}
-		out = append(out, *is)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list issues: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list issues", byValue(scanIssue))
 }

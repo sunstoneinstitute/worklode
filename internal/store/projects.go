@@ -343,18 +343,11 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMa
 	if err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
 	}
-	defer rows.Close()
-
-	var out []model.RepoMapping
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("list repos for project %s", projectID), func(r rowScanner) (model.RepoMapping, error) {
 		var m model.RepoMapping
-		if err := rows.Scan(&m.Repo, &m.DoneState); err != nil {
-			return nil, fmt.Errorf("scan repo: %w", err)
+		if err := r.Scan(&m.Repo, &m.DoneState); err != nil {
+			return model.RepoMapping{}, err
 		}
-		out = append(out, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
-	}
-	return out, nil
+		return m, nil
+	})
 }

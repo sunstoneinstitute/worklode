@@ -101,20 +101,7 @@ func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifac
 	if err != nil {
 		return nil, fmt.Errorf("artifacts by source sha %s: %w", sha, err)
 	}
-	defer rows.Close()
-
-	var out []Artifact
-	for rows.Next() {
-		a, err := scanArtifact(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan artifact: %w", err)
-		}
-		out = append(out, *a)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("artifacts by source sha %s: %w", sha, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("artifacts by source sha %s", sha), byValue(scanArtifact))
 }
 
 // ArtifactIDBySourceSHA looks up an artifact by source_sha inside the given
@@ -290,20 +277,7 @@ func (s *Store) DeploymentsForArtifact(ctx context.Context, artifactID int64) ([
 	if err != nil {
 		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
 	}
-	defer rows.Close()
-
-	var out []Deployment
-	for rows.Next() {
-		d, err := scanDeployment(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan deployment: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("deployments for artifact %d", artifactID), byValue(scanDeployment))
 }
 
 // ListDeployments returns deployments, optionally filtered by environment
@@ -321,18 +295,5 @@ func (s *Store) ListDeployments(ctx context.Context, environment string) ([]Depl
 	if err != nil {
 		return nil, fmt.Errorf("list deployments: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Deployment
-	for rows.Next() {
-		d, err := scanDeployment(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan deployment: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list deployments: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list deployments", byValue(scanDeployment))
 }
