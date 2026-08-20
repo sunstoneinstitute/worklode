@@ -250,6 +250,15 @@ type server struct {
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
 	listExpansions *prometheus.CounterVec
+
+	// kindAliasUses counts requests naming a deprecated task kind that was
+	// normalised to its current name, by alias and surface; see
+	// kindalias.go. A sustained zero across these surfaces is not the whole
+	// picture: plan-document bodies (internal/designdoc/plantasks.go) are a
+	// stored input normalised the same way but not counted here, since they
+	// are discoverable by querying the documents themselves rather than by
+	// watching a request-shaped metric (WL-138).
+	kindAliasUses *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,

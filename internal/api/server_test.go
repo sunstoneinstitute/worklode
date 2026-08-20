@@ -58,6 +58,28 @@ func newTestServerAdmin(t *testing.T) (main, admin http.Handler) {
 	return main, admin
 }
 
+// newTestServerWithAdmin is newTestServer plus the admin handler (/metrics),
+// for tests that need to read a counter back out as well as drive the app
+// through both the JSON API and the web form (WebOpen: true, matching
+// newTestServer).
+func newTestServerWithAdmin(t *testing.T) (st *store.Store, main, admin http.Handler, token string) {
+	t.Helper()
+	st = newTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	token, err := st.CreateToken(ctx, "alice", "test token", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	main, admin, err = api.NewServer(st, api.Config{WebOpen: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return st, main, admin, token
+}
+
 // doReq performs a request against the handler. A non-nil body is JSON-encoded.
 // An empty token omits the Authorization header.
 func doReq(t *testing.T, h http.Handler, method, path, token string, body any) *httptest.ResponseRecorder {

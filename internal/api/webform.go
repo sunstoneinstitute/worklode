@@ -190,6 +190,7 @@ func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 		Concern:  r.PostFormValue("concern"),
 		Draft:    r.PostFormValue("draft") != "",
 	}
+	values.Kind = s.normalizeTaskKind(values.Kind, "web_form")
 	if msg := validateTaskForm(&values); msg != "" {
 		s.observeFormSubmission("task", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new task page",

@@ -204,6 +204,7 @@ func slugFromBranch(branch, id string) string {
 }
 
 func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, strictFocus bool) error {
+	warnDeprecatedTaskKind(cmd, kind)
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err
