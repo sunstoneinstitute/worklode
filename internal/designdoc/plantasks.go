@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // PlanTask is one task definition in a plan document's ## Tasks section —
@@ -146,6 +148,10 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 	if meta.Kind == "" {
 		return PlanTask{}, fmt.Errorf("task %d: kind is required", number)
 	}
+	// Normalise without counting an alias use: a plan body is stored input,
+	// discoverable by querying the documents themselves, unlike a request
+	// (see kindAliasUses in internal/api/server.go).
+	meta.Kind, _ = ns.NormalizeTaskKind(meta.Kind)
 	if !planMintableKindSet[meta.Kind] {
 		return PlanTask{}, fmt.Errorf(
 			"task %d: kind %q is not plan-mintable; want one of %s",

@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -64,6 +66,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_list_expansions_total",
 		Help: "List endpoint requests that asked for an expansion, by endpoint (tasks, docs) and expansion (detail, body).",
 	}, []string{"endpoint", "expansion"})
+	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_task_kind_alias_uses_total",
+		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
+			strings.Join(kindAliasSurfaces, ", ") +
+			"). Pre-initialised, so a flat zero means no request has used a retired spelling.",
+	}, []string{"alias", "surface"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
 	// operator moves a subscriber's offsets backwards (025 §18), and how
@@ -102,7 +110,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.localMerges,
-		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions)
+		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
+		s.kindAliasUses)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -143,6 +152,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, form := range []string{"task", "deliverable"} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
+		}
+	}
+	// Every alias on every surface, because the whole point of this counter is
+	// to prove nothing still sends the deprecated spelling before the alias is
+	// dropped, and an absent series cannot prove that.
+	for alias := range ns.DeprecatedTaskKinds {
+		for _, surface := range kindAliasSurfaces {
+			s.kindAliasUses.WithLabelValues(alias, surface)
 		}
 	}
 }

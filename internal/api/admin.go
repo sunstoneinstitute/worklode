@@ -513,6 +513,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid priority: must be critical, high, medium, or low")
 		return
 	}
+	req.Kind = s.normalizeTaskKind(req.Kind, "promote")
 	if !validKinds[req.Kind] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
 		return
