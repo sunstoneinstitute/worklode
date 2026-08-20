@@ -66,7 +66,7 @@ var mainSHATrailer = regexp.MustCompile(`(?mi)^main-sha:\s*([0-9a-f]{7,40})`)
 // the task, default-branch pushes append main_commits and advance landed
 // tasks, last-deploy/* pushes map deploy shas back to main commits. Every
 // other ref (feature branches, tags) is a no-op.
-func (h *githubHandler) applyPush(tx *sql.Tx, eventID int64, repo, defaultBranch string, body []byte) error {
+func (a *applier) applyPush(tx *sql.Tx, eventID int64, repo, defaultBranch string, body []byte) error {
 	var p pushPayload
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse push payload: %w", err)
@@ -79,12 +79,12 @@ func (h *githubHandler) applyPush(tx *sql.Tx, eventID int64, repo, defaultBranch
 	// does contain, and dropping the delivery would lose that too. The
 	// commits we never saw are recoverable only by reconciliation (spec 013).
 	if p.truncated() {
-		h.metrics.truncatedPushDelivery()
-		h.log.Warn("push payload truncated; some commits were not attributed",
+		a.metrics.truncatedPushDelivery()
+		a.log.Warn("push payload truncated; some commits were not attributed",
 			"repo", repo, "ref", p.Ref, "before", p.Before, "after", p.After,
 			"commits_received", len(p.Commits))
 	}
-	now := h.st.Now()
+	now := a.st.Now()
 
 	if taskID := store.TaskIDFromRef(branch); taskID != "" {
 		for _, c := range p.Commits {

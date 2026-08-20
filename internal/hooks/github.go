@@ -38,12 +38,12 @@ const maxGitHubBody = 5 << 20
 const branchResolveTimeout = 4 * time.Second
 
 type githubHandler struct {
-	st            *store.Store
-	secret        string
-	log           *slog.Logger
-	onSkillPush   func(repo, branch string) bool
-	resolveBranch func(ctx context.Context, repo, branch string) (string, error)
-	metrics       *Metrics
+	st          *store.Store
+	ap          *applier
+	secret      string
+	log         *slog.Logger
+	onSkillPush func(repo, branch string) bool
+	metrics     *Metrics
 }
 
 // NewGitHubHandler returns the POST /hooks/github handler. It verifies the
@@ -76,7 +76,10 @@ func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillP
 	if log == nil {
 		log = slog.Default()
 	}
-	return &githubHandler{st: st, secret: secret, log: log, onSkillPush: onSkillPush, resolveBranch: resolveBranch, metrics: m}
+	return &githubHandler{
+		st: st, secret: secret, log: log, onSkillPush: onSkillPush, metrics: m,
+		ap: &applier{st: st, log: log, resolveBranch: resolveBranch, metrics: m},
+	}
 }
 
 // envelope is the part of every GitHub webhook payload the router needs.
@@ -215,7 +218,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resolvedCommitish := ""
 	if event == "release" && env.Action == "published" && !ignored {
 		ctx, cancel := context.WithTimeout(r.Context(), branchResolveTimeout)
-		resolvedCommitish = h.resolveReleaseCommitish(ctx, env.Repository.FullName, body)
+		resolvedCommitish = h.ap.resolveReleaseCommitish(ctx, env.Repository.FullName, body)
 		cancel()
 	}
 
@@ -233,7 +236,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Mapped-repo deliveries always get an apply — at minimum the
 		// applied_at marker — so a nil-routed event (unknown type, unhandled
 		// action) is recorded as done rather than awaiting replay.
-		apply = markApplied(h.st, h.applyFunc(event, env, body, resolvedCommitish))
+		apply = markApplied(h.st, h.ap.applyFunc(event, env, body, resolvedCommitish))
 	}
 
 	_, inserted, err := h.st.RecordEvent(r.Context(), "github", delivery, typ, body, apply)
@@ -278,61 +281,6 @@ func eventLabel(event string) string {
 	return "other"
 }
 
-// applyFunc routes a mapped-repo event to its per-event apply callback.
-// Unknown events (and unhandled actions) get a nil apply: the event is still
-// recorded, with no typed-table effect.
-func (h *githubHandler) applyFunc(event string, env envelope, body []byte, resolvedCommitish string) func(tx *sql.Tx, eventID int64) error {
-	if !slices.Contains(handledEvents, event) {
-		return nil
-	}
-	repo := env.Repository.FullName
-	switch event {
-	case "issues":
-		return func(tx *sql.Tx, _ int64) error {
-			return applyIssue(tx, repo, body)
-		}
-	case "push":
-		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyPush(tx, eventID, repo, env.Repository.DefaultBranch, body)
-		}
-	case "pull_request":
-		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyPullRequest(tx, eventID, repo, env.Action, body)
-		}
-	case "deployment_status":
-		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyDeploymentStatus(tx, eventID, repo, body)
-		}
-	case "pull_request_review":
-		if env.Action != "submitted" {
-			return nil
-		}
-		return func(tx *sql.Tx, _ int64) error {
-			return h.applyReview(tx, repo, body)
-		}
-	case "workflow_run":
-		return func(tx *sql.Tx, _ int64) error {
-			return h.applyWorkflowRun(tx, repo, body)
-		}
-	case "release":
-		if env.Action != "published" {
-			return nil
-		}
-		return func(tx *sql.Tx, eventID int64) error {
-			return h.applyRelease(tx, eventID, repo, body, resolvedCommitish)
-		}
-	case "registry_package":
-		if env.Action != "published" && env.Action != "updated" {
-			return nil
-		}
-		return func(tx *sql.Tx, _ int64) error {
-			return h.applyRegistryPackage(tx, repo, body)
-		}
-	default:
-		return nil
-	}
-}
-
 // markApplied wraps an apply (possibly nil) so the event's applied_at is set
 // in the same transaction, by the webhook path and replayer alike. Only
 // *.ignored deliveries are left unmarked: they are the replay candidates.
@@ -345,57 +293,6 @@ func markApplied(st *store.Store, inner func(tx *sql.Tx, eventID int64) error) f
 		}
 		return store.MarkEventApplied(tx, eventID, st.Now())
 	}
-}
-
-// resolveReleaseCommitish turns a release's target_commitish into a commit
-// sha when it names a branch. Returns "" when there is nothing to resolve, no
-// App is configured, or the lookup fails — every one of which leaves
-// applyRelease on its existing fallback.
-func (h *githubHandler) resolveReleaseCommitish(ctx context.Context, repo string, body []byte) string {
-	var p struct {
-		Release struct {
-			TargetCommitish string `json:"target_commitish"`
-		} `json:"release"`
-	}
-	if err := json.Unmarshal(body, &p); err != nil {
-		return ""
-	}
-	commitish := p.Release.TargetCommitish
-	if commitish == "" || isCommitSHA(commitish) {
-		return ""
-	}
-	if h.resolveBranch == nil {
-		h.metrics.branchResolved("skipped")
-		return ""
-	}
-	sha, err := h.resolveBranch(ctx, repo, commitish)
-	switch {
-	case err != nil:
-		h.log.Warn("release target_commitish resolution failed",
-			"repo", repo, "branch", commitish, "err", err)
-		h.metrics.branchResolved("error")
-		return ""
-	case sha == "":
-		h.metrics.branchResolved("unknown")
-		return ""
-	default:
-		h.metrics.branchResolved("resolved")
-		return sha
-	}
-}
-
-// isCommitSHA reports whether s is a full 40-character hex commit sha, the
-// form target_commitish takes when a release was cut from an explicit commit.
-func isCommitSHA(s string) bool {
-	if len(s) != 40 {
-		return false
-	}
-	for _, c := range s {
-		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
-			return false
-		}
-	}
-	return true
 }
 
 func applyIssue(tx *sql.Tx, repo string, body []byte) error {
@@ -419,7 +316,7 @@ func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 	})
 }
 
-func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
+func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
 	var p struct {
 		PullRequest struct {
 			Number         int64      `json:"number"`
@@ -441,7 +338,7 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		return fmt.Errorf("parse pull_request payload: %w", err)
 	}
 	gh := p.PullRequest
-	now := h.st.Now()
+	now := a.st.Now()
 
 	state := "open"
 	if gh.State == "closed" {
@@ -517,7 +414,7 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 	return nil
 }
 
-func (h *githubHandler) applyReview(tx *sql.Tx, repo string, body []byte) error {
+func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 	var p struct {
 		PullRequest struct {
 			Number int64 `json:"number"`
@@ -541,7 +438,7 @@ func (h *githubHandler) applyReview(tx *sql.Tx, repo string, body []byte) error 
 	}
 	submittedAt := p.Review.SubmittedAt
 	if submittedAt.IsZero() {
-		submittedAt = h.st.Now()
+		submittedAt = a.st.Now()
 	}
 	return store.UpsertReview(tx, store.Review{
 		Repo:        repo,
@@ -552,7 +449,7 @@ func (h *githubHandler) applyReview(tx *sql.Tx, repo string, body []byte) error 
 	})
 }
 
-func (h *githubHandler) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
+func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 	var p struct {
 		WorkflowRun struct {
 			Name         string    `json:"name"`
@@ -570,7 +467,7 @@ func (h *githubHandler) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) e
 	run := p.WorkflowRun
 	startedAt := run.RunStartedAt
 	if startedAt.IsZero() {
-		startedAt = h.st.Now()
+		startedAt = a.st.Now()
 	}
 	var completedAt *time.Time
 	if run.Status == "completed" && !run.UpdatedAt.IsZero() {
@@ -588,7 +485,7 @@ func (h *githubHandler) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) e
 	})
 }
 
-func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {
+func (a *applier) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {
 	var p struct {
 		Release struct {
 			TagName         string    `json:"tag_name"`
@@ -599,7 +496,7 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse release payload: %w", err)
 	}
-	now := h.st.Now()
+	now := a.st.Now()
 	publishedAt := p.Release.PublishedAt
 	if publishedAt.IsZero() {
 		publishedAt = now
@@ -667,7 +564,7 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 // The artifact is keyed by (image name, tag) so FindArtifactByImage and the
 // Flux digest correlation can both reach it; a version with no container tag
 // has no key to store under and is recorded as an event only.
-func (h *githubHandler) applyRegistryPackage(tx *sql.Tx, repo string, body []byte) error {
+func (a *applier) applyRegistryPackage(tx *sql.Tx, repo string, body []byte) error {
 	var p struct {
 		RegistryPackage struct {
 			Name           string `json:"name"`
@@ -722,7 +619,7 @@ func (h *githubHandler) applyRegistryPackage(tx *sql.Tx, repo string, body []byt
 	}
 	builtAt := pkg.PackageVersion.CreatedAt
 	if builtAt.IsZero() {
-		builtAt = h.st.Now()
+		builtAt = a.st.Now()
 	}
 
 	_, err := store.CreateArtifact(tx, store.Artifact{
