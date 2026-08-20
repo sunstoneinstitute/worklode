@@ -89,15 +89,27 @@ jobs:
           # Docs/site-only skip. www/ is the static marketing site; it has its
           # own deploy workflow and shares no code with the Go build.
           #
-          # docs/specs/, docs/plans/ and plugins/ are excluded from the skip:
-          # their markdown is input, not just prose. internal/designdoc parses
-          # every real file in both docs directories, and a plugin's SKILL.md
-          # is shipped content whose manifests the Codex mirror check reads —
-          # so a markdown-only change there can break something with no CI
-          # signal.
+          # Some markdown is input, not prose, and is excluded from the skip
+          # because a markdown-only change to it can break something with no
+          # CI signal:
+          #
+          #   docs/specs/, docs/plans/  internal/designdoc parses every real
+          #                             file in both, and _lint.yml runs
+          #                             secfmt and inlinespec --check over them
+          #   plugins/                  shipped content whose manifests the
+          #                             Codex mirror check reads
+          #   CLAUDE.md, internal/cmd/CLAUDE.md, .claude/skills/,
+          #   docs/agent-surfaces.md    the remaining agent surfaces
+          #                             TestAgentSurfaces checks for stale lode
+          #                             invocations (docs/agent-surfaces.md is
+          #                             the register of all of them)
+          #
+          # This is a correctness gate, not a review one: nothing CI runs reads
+          # prose for injected instructions, so do not add paths here on that
+          # basis.
           if [ -n "$CHANGED" ] && ! echo "$CHANGED" | grep -qvE '(^docs/|^www/|\.md$)' \
-             && ! echo "$CHANGED" | grep -qE '^docs/(specs|plans)/|^plugins/'; then
-            echo "::notice::PR touches only docs/, www/ and markdown files (and no docs/specs/, docs/plans/ or plugins/) — skipping the checks. Apply the 'can-be-tested' label to force a full run."
+             && ! echo "$CHANGED" | grep -qE '^(docs/(specs|plans)/|docs/agent-surfaces\.md|plugins/|\.claude/skills/|CLAUDE\.md|internal/cmd/CLAUDE\.md)'; then
+            echo "::notice::PR touches only docs/, www/ and markdown files, and none of the agent-surface or spec/plan paths that are exempt from the skip — skipping the checks. Apply the 'can-be-tested' label to force a full run."
             echo "run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

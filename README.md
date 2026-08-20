@@ -621,9 +621,22 @@ outside contributor cannot self-authorise; the workflow listens for the
 `labeled` PR event so adding the label re-triggers the run.
 
 The gate also skips the checks for **docs-only PRs** — every changed file
-markdown (`*.md`) or under `docs/`. The `can-be-tested` label overrides this.
-Jobs skipped via `if:` count as satisfied for branch-protection required
-checks, so a skipped run does not block merging.
+markdown (`*.md`) or under `docs/` or `www/`. The `can-be-tested` label
+overrides this. Jobs skipped via `if:` count as satisfied for
+branch-protection required checks, so a skipped run does not block merging.
+
+Some markdown is input rather than prose, and is **exempt** from that skip
+because changing it can break something no other job would catch:
+
+| Exempt path | What would go unchecked |
+|---|---|
+| `docs/specs/`, `docs/plans/` | the `internal/designdoc` parser, `secfmt.py -l`, `inlinespec.py --check` |
+| `plugins/` | the Codex marketplace mirror check |
+| `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `.claude/skills/`, `docs/agent-surfaces.md` | `TestAgentSurfaces`, which catches agent instructions naming `lode` commands or flags that no longer exist |
+
+The skip is a CI-correctness gate, not a review one. Nothing CI runs reads
+prose for injected instructions, so exempting a path here does not make its
+content trustworthy — that is what review at merge is for.
 
 ## License
 
