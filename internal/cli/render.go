@@ -331,24 +331,29 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
 		for _, e := range d.Edges {
-			fmt.Fprintf(w, "  %d %s %s\n", d.ID, e.Type, docEdgeTarget(e))
+			fmt.Fprintf(w, "  %s %s %s\n", d.Slug, e.Type, docEdgeTarget(e))
 		}
 		for _, e := range d.EdgesIn {
-			fmt.Fprintf(w, "  %d %s %d\n", e.ToDoc, e.Type, d.ID)
+			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, d.Slug)
 		}
 	}
 }
 
-// docEdgeTarget renders one outbound edge's far end: a document id and
-// optional anchor, or the external reference an unresolved edge carries.
+// docEdgeTarget renders one edge's far end: the document's slug and optional
+// anchor — the id only when a read did not resolve the slug — or the external
+// reference an unresolved edge carries.
 func docEdgeTarget(e model.DocEdge) string {
-	if e.ToDoc != 0 {
-		if e.ToAnchor != "" {
-			return strconv.FormatInt(e.ToDoc, 10) + "#" + e.ToAnchor
-		}
-		return strconv.FormatInt(e.ToDoc, 10)
+	if e.ToDoc == 0 {
+		return e.ToExternal
 	}
-	return e.ToExternal
+	name := e.ToSlug
+	if name == "" {
+		name = strconv.FormatInt(e.ToDoc, 10)
+	}
+	if e.ToAnchor != "" {
+		return name + "#" + e.ToAnchor
+	}
+	return name
 }
 
 // IssueTable prints one row per inbox issue: repo, number, triage state,

@@ -146,7 +146,7 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // globalPlaceholder returns a handler for a global destination with no
-// implemented capability yet (Intake, Reviews, Deliveries, Knowledge). The
+// implemented capability yet (Intake, Reviews, Deliveries). The
 // rendered page is honest: heading and owning-spec message only, no form,
 // button, count, or fabricated record.
 func (s *server) globalPlaceholder(destination, heading, message string) http.HandlerFunc {

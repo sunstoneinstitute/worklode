@@ -293,12 +293,17 @@ type DocView struct {
 
 // DocEdgeRow is one typed link with its far end resolved for rendering.
 // Anchor is the anchor in the document being read that the edge attaches to
-// ("" for a document-level edge); Label names the other end; URL links to it
-// and is "" for a cross-corpus reference this backbone cannot resolve, which
-// is rendered as text rather than as a dead link.
+// ("" for a document-level edge); Label names the other end by slug rather
+// than by id, the way the corpus spells a reference ("025-documents#sec-5");
+// Ref is that document's corpus reference ("spec 25"), shown as a chip so a
+// plan and the spec it covers are told apart, and is "" for an unresolved
+// reference. URL links to the other end and is "" for a cross-corpus
+// reference this backbone cannot resolve, which is rendered as text rather
+// than as a dead link.
 type DocEdgeRow struct {
 	Type   string
 	Anchor string
+	Ref    string
 	Label  string
 	URL    string
 }

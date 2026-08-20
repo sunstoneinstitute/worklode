@@ -69,6 +69,11 @@ templ navLink(href, label, key, active string) {
 // everywhere (spec 032 §2). Project-scoped pages pass "" — matching none of
 // these — since their project-local nav carries the current-page marker
 // instead; every page sets aria-current="page" exactly once.
+//
+// Knowledge lands on /docs: spec 032 §2 defines that destination as
+// "documents and graph-backed expert views", and the document corpus is the
+// half of it this backbone holds (025 §5). The graph-backed views join it
+// there when they exist rather than taking a destination of their own.
 templ primaryNav(active string) {
 	<nav aria-label="Primary" class="global">
 		@navLink("/", "Home", "home", active)
@@ -77,7 +82,7 @@ templ primaryNav(active string) {
 		@navLink("/work", "Work", "work", active)
 		@navLink("/reviews", "Reviews", "reviews", active)
 		@navLink("/deliveries", "Deliveries", "deliveries", active)
-		@navLink("/knowledge", "Knowledge", "knowledge", active)
+		@navLink("/docs", "Knowledge", "knowledge", active)
 	</nav>
 }
 
