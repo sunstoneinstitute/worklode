@@ -499,3 +499,66 @@ one pass.
   the same EROFS way WL-207 just fixed. Pointing `TMPDIR` at the spool mount
   would close the class rather than the instance, at the cost of letting
   unrelated temp writes consume the blob spool's budget.
+
+## From the 2026-08-19 doc-todo-rollup plan
+
+`lode doc todo <ref> [--deps] [--json]` (`internal/designdoc`,
+`internal/cmd/doctodo.go`) landed. These are the mechanical leftovers surfaced
+while dogfooding it against the real corpus.
+
+- `[P1]` **`scripts/secmeta.py` has drifted from the amended 026 §2.1.** It is
+  a second implementation of the same plan-coverage rule `designdoc.PlanIndex`
+  now implements in Go, and it now lags in two ways: it does not treat
+  `superseded` plans as discharging a section (the amendment this plan made to
+  026 §2.1), and its `resolve_ref` implements only the bare-filename arm of
+  §4, not the `./` or `../` relative-path arms the Go side handles. Two
+  implementations of one spec rule disagreeing is what produced two separate
+  defects during this plan's execution. `secmeta.py` reports and never
+  rewrites (by design), so this is a script fix, not a data fix — but it
+  should happen before the next amendment to 026 §2.1 has to be applied
+  twice.
+- `[P2]` **`TodoItem` should carry structured `Blockers []string`** instead of
+  `internal/cmd/doctodo.go`'s `shortenPlanRefs` doing `strings.ReplaceAll` over
+  prose that `internal/designdoc/todo.go` wrote into `Detail`. The rendering
+  is correct today, but the seam is wrong: it works only because `todo.go`
+  happens to emit repo-relative plan paths into that prose, and would fail
+  silently — wrong or unshortened paths in `blocked` rows, not a crash — the
+  day `Detail`'s wording changes without a matching edit to
+  `shortenPlanRefs`'s pattern.
+- `[P4]` **A `TaskExists` helper for the six `GetTask` callers that use it
+  purely as an existence check**: `internal/api/tasks.go:90,:99`,
+  `internal/api/secrets.go:72`, `internal/api/admin.go:524,:639`, and
+  `internal/store/brief.go:57`. `GetTask` now returns the full `model.Task`
+  (including `Closed`, which costs a second round trip in `store.GetTask`'s
+  implementation), and none of these six callers read anything but the
+  not-found error.
+- `[P4]` **`obsidian/src/api/types.ts`'s hand-kept `Task` interface lacks
+  `closed`** (`internal/model/task.go`'s `Closed bool`), and already lacked
+  `secrets`. Pre-existing drift, not introduced here — WL-76 (generate
+  `obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
+  is the real fix; noting it here because this plan's `model.Task.Closed`
+  read is what surfaced the gap.
+- `[P4]` **Every spec in `docs/specs/` is `status: draft`** — all 24 files,
+  including several long since built (e.g. 004, 005, 017, 022). This is why
+  `lode doc todo` leads every answer with a `plan-draft (document)`
+  acceptance item: with no spec ever marked `accepted`, the "document is
+  draft: acceptance is the first act" gap fires universally rather than
+  distinguishing built specs from unwritten ones. Backfilling `status` per
+  spec is a deliberate human act (025 §7 — acceptance is a status transition,
+  not something to automate), not a script; recording it here so the question
+  is visible rather than rediscovered the next time `doc todo`'s output looks
+  noisier than expected.
+
+- `[P2]` **`resolveDoc`'s bare-filename arm builds its key by concatenation.**
+  `internal/designdoc/coverage.go` joins with `dir + "/" + name` there while
+  every other arm uses `path.Join`, so a corpus directory of `"."` derives
+  `"./x.md"` on one arm and `"x.md"` on the others and the two keys never
+  meet — every section then reads `unplanned`, with no diagnostic. Unreachable
+  from `lode doc todo`, which feeds the walk the canonical `docs/specs` and
+  `docs/plans` paths `designdoc.CorpusPath` builds, so this is latent rather
+  than live; `path.Join` on that one line fixes it.
+
+- `[P3]` **026 §1 still describes an unbuilt `--docs <dir>` flag.** Its "no new
+  config key" claim is true again — WL-147 made `spec_corpus`/`plan_corpus`
+  accepted-and-ignored — but the flag it offers in their place was never built,
+  and the corpus location is no longer a client-side question at all.

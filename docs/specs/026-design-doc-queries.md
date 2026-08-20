@@ -88,18 +88,25 @@ backbone `docs` tables, graph projection.
 | What amends or replaces a section | `amends`/`amendedBy`/`replaces`/`isReplacedBy` maps | `doc_edges` |
 | Whether a claim is in force yet | `status` of the *claiming* document (§3.1) | `docs.status` |
 
-Only the third needs the server, and it uses the existing task API. Everything else is local
-file reading and answers offline.
+The "After 025" column is now the present tense: 025 shipped the `docs` tables, and WL-147
+moved reference resolution off the git tree onto them. Every query here needs the server —
+the corpus is one of the things it serves — and only the third needs anything beyond it, the
+existing task API.
 
 **This spec is a stated exception to the metrics rule** (022; `CLAUDE.md`), which requires
 `worklode_*` metrics of any change adding an HTTP endpoint, background loop, outbound call, or
 store operation with meaningful outcomes. `--needs-execution`'s task-state fetch is an outbound
 call, and is the one thing here that reads as a trigger — but the rule governs **server-side**
-changes, and everything this spec adds runs in the CLI, where no `prometheus.Registerer` is
-threaded: it reaches `lode serve` alone. So no endpoint, no background loop, no store
-operation, and no metric. An implementer who adds one has misread this section; the exception
-is recorded here rather than left to be re-derived, because the absence otherwise reads as an
-oversight to every later reviewer.
+changes, and nearly everything this spec adds runs in the CLI, where no `prometheus.Registerer`
+is threaded: it reaches `lode serve` alone. So no endpoint and no background loop.
+
+One half of §2.4 is server-side and does add a store operation: the `closed` boolean §2.4
+requires on `model.Task` is computed by a task-closure read that `ListTasks` and `GetTask`
+call. It still takes no metric — its outcome space is success or error, not the meaningful
+outcomes the rule names, and instrumenting it while the two list reads it hangs off, and the
+blocked-task read beside it, stay uninstrumented would measure the accessory and not the
+operation. The exception is recorded here rather than left to be re-derived, because the
+absence otherwise reads as an oversight to every later reviewer.
 
 The corpus root is the directory holding the repo-local `.worklode/config.toml` (spec 019's
 walk, which already ran to resolve the project), with `specs/` and `plans/` under `docs/`.
@@ -125,19 +132,19 @@ document without one is a defect (§4), reported rather than quietly rendered as
 ### 2.1 `--needs-planning` {#sec-2.1}
 
 Plans and sections are many-to-many, and coverage is the qualified, three-valued
-`covers` relation of §5. For an accepted spec section `S`, over every accepted
-plan naming that exact `#sec-N` anchor in `covers`:
+`covers` relation of §5. For an accepted spec section `S`, over every plan that is accepted **or
+superseded** naming that exact `#sec-N` anchor in `covers`:
 
 | Outcome | Rule |
 |---|---|
-| **fully planned** | some accepted plan claims `coverage: full`; **or** an accepted plan claims `partial` with a non-empty `fullCoverageWith: [P…]` where every `P` is accepted and contributes `full` or `partial` to `S` |
+| **fully planned** | some such plan claims `coverage: full`; **or** one claims `partial` with a non-empty `fullCoverageWith: [P…]` where every `P` is itself accepted or superseded, is not the claiming plan, and contributes `full` or `partial` to `S` |
 | **partially planned** | `S` is claimed only `partial`, and no `fullCoverageWith` closes it |
 | **bound only** | `S` is claimed only `none` |
-| **unplanned** | no accepted plan covers `S` |
+| **unplanned** | no such plan covers `S` |
 
 `fullCoverageWith` is checked, never taken on trust: an empty list, a draft
-target, a `none` target, or a target that does not itself cover `S` leaves the
-section `partially planned` and is reported. A plan may otherwise assert closure
+target, a `none` target, the claiming plan itself, or a target that does not
+itself cover `S` leaves the section `partially planned` and is reported. A plan may otherwise assert closure
 against a sibling that never undertook usable work on the section, which is the
 same defect in a new place.
 
@@ -147,6 +154,15 @@ nothing to coverage by construction — it records that the section was read.
 The acceptance test applies to both ends: a draft spec is not yet owed planning,
 and a draft plan has not yet undertaken work. Counting a draft plan would let an
 unapproved split hide a real gap.
+
+**A superseded plan discharges what it covered.** §2.2 defines the status on a
+plan as *spent* — 025 §9's "a plan is spent once executed" — so a superseded
+plan is one that was accepted and then carried out. Reading the discharging set
+as `accepted` alone inverts the answer on every section that has already
+shipped: a third of this corpus is superseded, and the whole of it would report
+as unplanned work. The set is therefore "not `draft`", and the two statuses
+differ only in what §2.4 owes the caller afterwards — an accepted plan may still
+need executing, a superseded one is done.
 
 The rest of 025 §9.3 is untouched: ordering between plans stays a document-level
 `blocks` edge, "all of spec N is done" is still not an event, and no container is
@@ -263,6 +279,150 @@ sections (025 §9) and can never be reported.
 ```
 docs/specs/013-reconciliation.md          superseded   4/4 bare   sec-1 sec-2 sec-3 sec-4
 ```
+
+### 2.5 `lode doc todo` {#sec-2.5}
+
+§2.1 and §2.2 each answer half of one question and neither answers it for a
+named document. "What is left before spec 025 is fully implemented?" needs the
+planning gap, the unexecuted plans, and the ordering between them, joined and
+scoped to one spec. Composing it out of two corpus-wide list filters puts the
+join back in the caller's head, which is the cost §0 set out to remove.
+
+```
+lode doc todo <ref> [--deps] [--json]
+```
+
+`<ref>` is any reference §4 resolves — a filename, a repo-relative path, or the
+`WL-SPEC-25` shorthand. The command walks three levels in one pass:
+
+```
+spec -> its current sections (§2.3's "still states the design" set)
+     -> plans whose covers names each section, with the §2.1 outcome
+     -> each plan's execution task, and whether it is closed
+```
+
+and emits one ordered work list. Every item is typed by **the act that
+discharges it**, because the act decides who can perform it:
+
+| Type | Condition | Discharged by |
+|---|---|---|
+| `unplanned` | no plan covers the section | writing a plan |
+| `partial` | covered only `partial`, no `fullCoverageWith` closes it | writing a plan |
+| `plan-draft` | a plan covers it at `full` or `partial`, `status: draft` | a human accepting the plan (025 §7) |
+| `unexecuted` | covering plan accepted, task absent or open | executing the plan |
+| `blocked` | covering plan accepted, a plan it `requires` is not discharged | the blocking plan |
+
+A section covered `none` contributes no item, at any plan status: §5 gives the
+level exactly that meaning, and a bound-only section is not owed work. A draft
+plan claiming `none` is likewise no `plan-draft` item — accepting it would
+discharge nothing about that section, so no decision is pending there.
+
+A draft plan claiming `full` on a section suppresses that section's `partial`
+item as well as its `unplanned` one, for the reason the `plan-draft` row exists:
+the pending act is accepting that plan, and reporting the section as still
+needing planning would send the reader to write one that is already written.
+
+**One document's planning gaps collapse to one item.** A spec with fifty-five
+unplanned sections is not fifty-five pieces of work — the act that discharges
+them is writing a plan, and one plan covers many sections, exactly as executing
+a plan is one act however many sections it covers. The `unplanned` and `partial`
+items for a document are therefore emitted as a single item per type naming
+their anchors, ranked ahead of that document's plan items because nothing blocks
+writing a plan. Emitting one per section buries the executable tail: on this
+corpus it turned spec 025's answer into fifty-nine lines and its `--deps` answer
+into two hundred and seventy-two, of which the actionable remainder was the last
+five.
+
+A **superseded** covering plan emits no item either. §2.1 reads the status as
+spent, so the work it covered is done, and there is no task state left to
+consult.
+
+**`blocked` keys on `requires`, not on `blocks`.** §2.1 records 025 §9.3's
+document-level `blocks` edge as the way plans are ordered, but 025 §14's
+frontmatter table carries `requires` in the dependency slot and no `blocks` at
+all: sixteen plans in this corpus write `requires` and none writes `blocks`.
+This walk therefore reads `requires`, in the direction the documents are
+actually written; keying on `blocks` would find every plan unordered and emit
+no `blocked` item ever.
+
+**`plan-draft` is a distinct type because it is not agent work.** Acceptance is
+a deliberate human act, and folding a draft plan into `unexecuted` would invite
+an agent to execute a split nobody approved. Reporting it as `unplanned` is the
+opposite error: the plan exists and rewriting it wastes the drafting.
+
+**The list is ordered, not merely collected.** Items sort topologically over
+plan `requires`, so the output is an execution queue rather than a set the
+caller must sequence. Within a rank, document order over the spec's sections
+breaks the tie, so two runs over an unchanged corpus agree exactly.
+
+**`--deps` follows `requires` transitively.** A spec's own sections are rarely
+the whole answer — 025 `requires` 026, so "fully implement 025" includes
+landing 026. Without the flag the walk stops at the named document and says so
+in a footer naming the unfollowed edges, so the narrower answer is never
+mistaken for the whole one. The `requires` graph **may contain cycles** — 025
+and 026 require each other — so the walk marks visited documents and reports a
+cycle in the footer instead of failing: two specs that need each other are a
+real and legitimate state of the corpus, and refusing to answer would make the
+flag useless on exactly the pair that motivates it.
+
+**Closure is the server's answer, never a state string.** A plan's `task`
+(§5.2) is closed per 004 §1.3's per-repo predicate, which no client can
+evaluate: the same `merged` task is closed where `done_state = 'merged'` and
+open where the repo gates on `released`. `model.Task` therefore carries a
+server-computed `closed` boolean, and this command reads it. Deriving closure
+from `state` client-side would report shipped work as outstanding in one repo
+and outstanding work as shipped in another.
+
+**The corpus is the backbone's, and there is no offline answer.** An earlier
+draft of this section read the documents off disk and carried an `--offline`
+flag that dropped the task level and kept the planning half, so commit hooks,
+CI, and a fresh checkout could still answer. §3 has since moved document
+resolution off the filesystem, and the `docs/specs` and `docs/plans` trees are
+being retired: there is no longer a corpus a client can read without the
+server, so there is no half of this question to answer offline. Both levels
+come from one source, an unreachable server is an error per §2.2, and a walk
+reading files would answer about a corpus a checkout is about to stop having.
+
+The cost is a request per document: only `GET /docs/{id}` carries a body, and
+frontmatter — a plan's `covers` levels, its `requires`, its `task` — is what
+the walk reads. The fetches are issued concurrently, and the alternative is
+worse: the backbone's own section and edge rows are its index of that same
+frontmatter, and reading them instead would put two readings of one document in
+the tree, free to disagree. Task closure stays one request for the whole
+project, never one per plan.
+
+**An empty list means the spec is finished, and nothing else may print one.**
+A spec whose own `status` is `draft` is not yet owed planning (§2.1), so the
+walk could legitimately find no gap and print nothing, which reads as "done".
+It instead emits a `plan-draft` item against the document itself, ranked
+first: the first act is a human acceptance decision. `NO-SPEC` (§4.3) resolves
+to no document and is an error here rather than an empty run.
+
+**That item leads the list; it does not replace it.** An earlier draft of this
+section stopped the walk at a draft spec, on the reasoning that §2.1 owes an
+unaccepted document no planning. Running it proved that wrong: every one of
+this corpus's 24 specs is `draft`, several of them long since built, so the
+command answered "accept this first" and nothing else for every input it will
+ever be given. The rule was written to stop an empty list reading as "done" and
+had over-corrected into hiding the answer the caller asked for.
+
+§2.1's acceptance test is the right rule for `--needs-planning`, which sweeps
+the corpus and must not invent obligations against documents nobody has adopted.
+It is the wrong rule here: naming one document is itself the statement that this
+spec is worth asking about, and the caller wants the sections whatever the
+header says. The distinction is between a query that decides *which* documents
+are owed work and one that is told.
+
+`--json` emits the same items as objects, with the footer's diagnostics as a
+sibling key so a consumer reads both from one document. The exit status is `0`
+whether or not work remains: this is a report, and a non-zero exit would make
+"there is work left" indistinguishable from "the query failed" to every caller
+that checks it.
+
+Nothing here evaluates implementation. Whether the code satisfies a section is
+`lode doc coverage`'s question (025 §18, §11 below), it needs
+`.worklode/implements.yaml` and a repo scan, and the two must not be conflated:
+a section can be fully planned, fully executed, and still unimplemented.
 
 ## 3. Showing a document: `lode show` {#sec-3}
 

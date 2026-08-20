@@ -84,6 +84,19 @@ func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	if err != nil {
 		return nil, CorpusDoc{}, fmt.Errorf("read %s: %w", p, err)
 	}
+	doc, cd, err := docFromSource(name, src)
+	if err != nil {
+		return nil, CorpusDoc{}, err
+	}
+	cd.Path = p
+	return doc, cd, nil
+}
+
+// docFromSource derives the kind-independent fields from a document's bytes,
+// wherever they came from: status, title, FrontmatterJSON. name is used only
+// to name the document in an error. Path is left to the caller, which is the
+// one thing a file and a backbone row disagree about.
+func docFromSource(name string, src []byte) (*Document, CorpusDoc, error) {
 	doc, err := Parse(src)
 	if err != nil {
 		return nil, CorpusDoc{}, fmt.Errorf("%s: %w", name, err)
@@ -103,10 +116,61 @@ func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 		return nil, CorpusDoc{}, fmt.Errorf("%s: %w", name, err)
 	}
 	return doc, CorpusDoc{
-		Path: p, Filename: name,
-		Status: doc.Frontmatter.Status, Title: title,
+		Filename: name,
+		Status:   doc.Frontmatter.Status, Title: title,
 		Source: src, FrontmatterJSON: fmJSON,
 	}, nil
+}
+
+// CorpusPath is the corpus path a document of the given kind and slug is
+// written at (025 §16.1), and so the form every covers/requires reference in
+// the corpus names it by. It is the bridge for a caller reading documents
+// from the backbone rather than from disk: the backbone stores kind and slug,
+// while the references between documents are still written as paths.
+func CorpusPath(kind, slug string) string {
+	return path.Join(CorpusDir(kind), slug+".md")
+}
+
+// CorpusDir is the corpus directory documents of the given kind live in
+// (025 §16.1): specs and ADRs share one, plans have their own.
+func CorpusDir(kind string) string {
+	if kind == "plan" {
+		return planCanonDefault
+	}
+	return specCanonDefault
+}
+
+// CorpusDocFromBody builds a CorpusDoc from a document body held in memory —
+// the copy the backbone serves — rather than from a file. docPath is the
+// corpus path its references are written against (see CorpusPath) and kind is
+// "spec", "adr" or "plan".
+//
+// It derives everything LoadSyncCorpus does except Ordinal, which is a
+// corpus-position fact no single document carries: the backbone assigns
+// document identity itself, so nothing reading from it needs one.
+func CorpusDocFromBody(docPath, kind string, body []byte) (CorpusDoc, error) {
+	name := path.Base(docPath)
+	doc, cd, err := docFromSource(name, body)
+	if err != nil {
+		return CorpusDoc{}, err
+	}
+	cd.Path, cd.Kind = docPath, kind
+	if kind == "plan" {
+		// Sections deliberately unset: plans carry none (025 §9).
+		for _, ref := range doc.Frontmatter.CoverageEntries() {
+			base, frag := SplitFragment(ref.Spec)
+			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "covers", Target: base, TargetAnchor: frag})
+		}
+		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
+		return cd, nil
+	}
+	sections, err := sectionMetas(doc, name)
+	if err != nil {
+		return CorpusDoc{}, err
+	}
+	cd.Sections = sections
+	cd.Edges = anchorEdges(doc.Frontmatter)
+	return cd, nil
 }
 
 // Title is the document's H1 title — the preamble's first "# …" line, hash
