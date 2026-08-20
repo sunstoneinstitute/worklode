@@ -120,17 +120,26 @@ type DocRef struct {
 	Status string `json:"status"`
 }
 
+// DocSectionGap is one section of a spec that no accepted plan discharges,
+// with the reason 026 §2.1 gives: "partial" when a plan covers part of it and
+// no fullCoverageWith set closes it, "bound-only" when every accepted plan
+// naming it claims `none`, "unplanned" when none names it at all.
+type DocSectionGap struct {
+	Anchor   string `json:"anchor"`
+	Coverage string `json:"coverage"` // partial | bound-only | unplanned
+}
+
 // DocPlanningGap names the sections of one accepted spec that no accepted
-// plan undertakes (026 §2.1). It is keyed by document id rather than
-// embedding the document, so GET /api/v1/docs answers with one listing shape
-// whatever selector produced it.
+// plan discharges, each classified by why (026 §2.1). It is keyed by
+// document id rather than embedding the document, so GET /api/v1/docs
+// answers with one listing shape whatever selector produced it.
 //
 // Sections is the spec's current section count, so a caller can render the
 // "2/9" ratio 026 §2.1 shows without a second request.
 type DocPlanningGap struct {
-	Doc       int64    `json:"doc"`
-	Sections  int      `json:"sections"`
-	Unplanned []string `json:"unplanned"` // anchors, in document order
+	Doc      int64           `json:"doc"`
+	Sections int             `json:"sections"`
+	Gaps     []DocSectionGap `json:"gaps"` // in document order
 }
 
 // DocSupersessionGap names the sections of one superseded document that

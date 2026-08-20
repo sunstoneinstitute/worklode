@@ -69,3 +69,5 @@ configMapGenerator:
       - migrations/0027_docs.down.sql
       - migrations/0028_task_doc_ref.up.sql
       - migrations/0028_task_doc_ref.down.sql
+      - migrations/0029_doc_edge_coverage.up.sql
+      - migrations/0029_doc_edge_coverage.down.sql
