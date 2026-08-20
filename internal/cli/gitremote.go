@@ -2,8 +2,9 @@ package cli
 
 import (
 	"context"
-	"os/exec"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 )
 
 // gitRemoteURL returns the origin remote URL of the repo containing dir, or
@@ -13,8 +14,7 @@ import (
 // remote to resolve" and falls through to an unscoped command, so a missing
 // remote is never an error.
 func gitRemoteURL(ctx context.Context, dir string) string {
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "remote", "get-url", "origin")
-	out, err := cmd.Output()
+	out, err := gitexec.CmdContext(ctx, dir, "remote", "get-url", "origin").Output()
 	if err != nil {
 		return ""
 	}
