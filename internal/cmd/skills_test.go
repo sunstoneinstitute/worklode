@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,36 +27,20 @@ import (
 // client, archive-hit counter, and the skills-dir root.
 func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32, string) {
 	t.Helper()
-	st := store.OpenTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	h, _, err := api.NewServer(st, api.Config{})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
 	var archiveHits int32
-	counted := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/archive/") {
-			atomic.AddInt32(&archiveHits, 1)
-		}
-		h.ServeHTTP(w, r)
+	st, c := testServer(t, api.Config{}, func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/archive/") {
+				atomic.AddInt32(&archiveHits, 1)
+			}
+			h.ServeHTTP(w, r)
+		})
 	})
-	ts := httptest.NewServer(counted)
-	t.Cleanup(ts.Close)
-
-	t.Setenv("LODE_SERVER", ts.URL)
-	t.Setenv("LODE_TOKEN", token)
 
 	root := t.TempDir()
 	t.Setenv("LODE_SKILLS_DIR", root)
 
-	return st, cli.NewClient(cli.Config{ServerURL: ts.URL, Token: token}), &archiveHits, root
+	return st, c, &archiveHits, root
 }
 
 // seedSkill upserts one skill with a deterministic hash and a fake (non-tar)
