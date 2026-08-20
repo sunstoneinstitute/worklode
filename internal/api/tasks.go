@@ -229,6 +229,48 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// getTaskCost handles
+// GET /api/v1/tasks/{id}/cost?from=&to=&children=: a task's accounted usage
+// and cost (spec 025 §15.6, AC31). children=true widens the scope to the
+// task's child_of descendants, so a container task's own report is not
+// always zero. No dedicated metric: this is an ordinary read with no derived
+// outcome, so the generic http_requests_total / http_request_duration_seconds
+// middleware (022 §0) is sufficient and 022 §8's add-a-metric rule is
+// deliberately not triggered.
+func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	from, err := dayParam(r, "from")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	to, err := dayParam(r, "to")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var children bool
+	if raw := r.URL.Query().Get("children"); raw != "" {
+		children, err = strconv.ParseBool(raw)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid children: want true or false")
+			return
+		}
+	}
+
+	tc, err := s.st.TaskCost(r.Context(), id, children, from, to)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.TaskCost{
+		Task:             id,
+		IncludesChildren: children,
+		Sessions:         tc.Sessions,
+		Cost:             toCostReportJSON(&tc.CostReport),
+	})
+}
+
 // listTasks handles
 // GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to

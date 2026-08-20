@@ -460,7 +460,7 @@ func printProjectDetail(cmd *cobra.Command, d model.ProjectDetail, window string
 // printCost writes one block per currency: a headline total, a row per day,
 // and — when some tokens were billed on a model with no price on file — the
 // shortfall that headline therefore omits.
-func printCost(out io.Writer, cost model.ProjectCost, window string) {
+func printCost(out io.Writer, cost model.CostReport, window string) {
 	if len(cost.Totals) == 0 {
 		fmt.Fprintf(out, "\ncost, %s: none recorded\n", window)
 		return

@@ -34,9 +34,10 @@ type CostTotals struct {
 	UnpricedTokens int64  `json:"unpriced_tokens"`
 }
 
-// ProjectCost is a project's cost over a window: one row per day (ascending)
-// plus per-currency totals. Currencies are never summed together.
-type ProjectCost struct {
+// CostReport is a cost over a window: one row per day (ascending) plus
+// per-currency totals. Currencies are never summed together. Shared by a
+// project's cost (ProjectDetail) and a task's (TaskCost).
+type CostReport struct {
 	Days   []CostDay    `json:"days"`
 	Totals []CostTotals `json:"totals"`
 }
@@ -46,5 +47,13 @@ type ProjectCost struct {
 // endpoints cannot drift apart.
 type ProjectDetail struct {
 	Project
-	Cost ProjectCost `json:"cost"`
+	Cost CostReport `json:"cost"`
+}
+
+// TaskCost is the wire form of GET /api/v1/tasks/{id}/cost.
+type TaskCost struct {
+	Task             string     `json:"task"`
+	IncludesChildren bool       `json:"includes_children"`
+	Sessions         int        `json:"sessions"`
+	Cost             CostReport `json:"cost"`
 }

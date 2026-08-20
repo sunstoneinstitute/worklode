@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -22,8 +23,9 @@ type SessionUsageBucket struct {
 	Tokens TokenCounts
 }
 
-// ProjectDayCost is one project's usage and cost for one day, in one currency.
-type ProjectDayCost struct {
+// CostDay is one day's usage and cost, in one currency. Shared by a
+// project's and a task's cost report.
+type CostDay struct {
 	Day      time.Time
 	Currency string
 	Tokens   TokenCounts
@@ -35,20 +37,28 @@ type ProjectDayCost struct {
 	UnpricedTokens int64
 }
 
-// ProjectCost is a project's cost over a window: one row per day (ascending)
-// plus per-currency totals. Currencies are never summed together — that needs
-// a dated conversion rate this package has no business owning.
-type ProjectCost struct {
-	Days   []ProjectDayCost
-	Totals []ProjectCostTotal
+// CostReport is a cost over a window: one row per day (ascending) plus
+// per-currency totals. Currencies are never summed together — that needs a
+// dated conversion rate this package has no business owning. Shared by a
+// project's cost (ProjectCost) and a task's (TaskCost).
+type CostReport struct {
+	Days   []CostDay
+	Totals []CostTotal
 }
 
-// ProjectCostTotal is the window total for one currency.
-type ProjectCostTotal struct {
+// CostTotal is the window total for one currency.
+type CostTotal struct {
 	Currency       string
 	Tokens         TokenCounts
 	Cost           string
 	UnpricedTokens int64
+}
+
+// TaskCost is one task's usage and cost: the same per-day, per-currency
+// report a project gets, plus the number of agent sessions behind it.
+type TaskCost struct {
+	CostReport
+	Sessions int
 }
 
 // usageColumns is the token-class column list shared by the usage table and
@@ -274,7 +284,7 @@ func recomputeProjectDailyCostTx(ctx context.Context, tx *sql.Tx, projectID stri
 // inclusive on both ends, plus per-currency totals. A zero from or to is
 // unbounded on that side. Days with no recorded usage are omitted rather than
 // returned as zeroes.
-func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time.Time) (*ProjectCost, error) {
+func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time.Time) (*CostReport, error) {
 	where := "project_id = $1"
 	args := []any{projectID}
 	if !from.IsZero() {
@@ -295,20 +305,107 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 	if err != nil {
 		return nil, fmt.Errorf("read cost for project %s: %w", projectID, err)
 	}
-	defer rows.Close()
+	return scanCostReport(rows, "project "+projectID)
+}
 
-	pc := &ProjectCost{}
+// TaskCost reports a task's usage and cost per day over [from, to], inclusive
+// on both ends, plus per-currency totals and the number of agent sessions
+// that billed usage in the window. includeChildren widens the scope to the
+// task's child_of descendants (spec 004 §6.1) — a container task holds no
+// lease itself, so without it a container's cost always reads as zero.
+// Returns ErrNotFound when taskID does not exist, so a typo'd id reports as
+// an error rather than a silent zero.
+func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren bool,
+	from, to time.Time) (*TaskCost, error) {
+
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = $1`, taskID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check task %s exists: %w", taskID, err)
+	}
+
+	scope := `WITH scope(task) AS (SELECT $1::text)`
+	if includeChildren {
+		scope = `WITH RECURSIVE scope(task) AS (
+			SELECT $1::text
+			UNION
+			SELECT e.from_task FROM task_edges e JOIN scope sc ON e.to_task = sc.task AND e.type = 'child_of'
+		)`
+	}
+
+	where := "l.task_id IN (SELECT task FROM scope)"
+	args := []any{taskID}
+	if !from.IsZero() {
+		args = append(args, from.UTC().Truncate(24*time.Hour))
+		where += fmt.Sprintf(" AND u.usage_day >= $%d", len(args))
+	}
+	if !to.IsZero() {
+		args = append(args, to.UTC().Truncate(24*time.Hour))
+		where += fmt.Sprintf(" AND u.usage_day <= $%d", len(args))
+	}
+
+	fromJoin := `FROM agent_session_usage u
+		    JOIN agent_sessions s ON s.id = u.agent_session_id
+		    JOIN leases l ON l.id = s.lease_id
+		   WHERE ` + where
+
+	// ::numeric(14,6) pins the six-digit shape: without it an all-unpriced
+	// group's SUM renders as "0" and a mixed-scale sum as e.g. "1.5", instead
+	// of the shape cost_amount always carries on the wire.
+	rows, err := s.db.QueryContext(ctx,
+		scope+`
+		SELECT u.usage_day, u.cost_currency,
+		       SUM(u.input_tokens), SUM(u.cache_write_5m_tokens), SUM(u.cache_write_1h_tokens),
+		       SUM(u.cache_read_tokens), SUM(u.output_tokens),
+		       SUM(COALESCE(u.cost_amount, 0))::numeric(14,6)::text,
+		       SUM(CASE WHEN u.cost_amount IS NULL
+		                THEN u.input_tokens + u.cache_write_5m_tokens +
+		                     u.cache_write_1h_tokens + u.cache_read_tokens +
+		                     u.output_tokens
+		                ELSE 0 END)
+		  `+fromJoin+`
+		 GROUP BY u.usage_day, u.cost_currency
+		 ORDER BY u.usage_day, u.cost_currency`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read cost for task %s: %w", taskID, err)
+	}
+	report, err := scanCostReport(rows, "task "+taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	var sessions int
+	if err := s.db.QueryRowContext(ctx,
+		scope+`
+		SELECT COUNT(DISTINCT s.id) `+fromJoin, args...).Scan(&sessions); err != nil {
+		return nil, fmt.Errorf("count sessions for task %s: %w", taskID, err)
+	}
+
+	return &TaskCost{CostReport: *report, Sessions: sessions}, nil
+}
+
+// scanCostReport scans a usage_day/cost_currency query in the CostReport
+// column shape — used by both ProjectCost (from the project_daily_cost
+// rollup) and TaskCost (aggregated live from agent_session_usage) — into
+// per-day rows plus per-currency totals. desc names the caller for error
+// messages. Closes rows.
+func scanCostReport(rows *sql.Rows, desc string) (*CostReport, error) {
+	defer rows.Close()
+	report := &CostReport{}
 	totals := map[string]*costTotal{}
 	var order []string
 	for rows.Next() {
-		var d ProjectDayCost
+		var d CostDay
 		if err := rows.Scan(&d.Day, &d.Currency, &d.Tokens.Input, &d.Tokens.CacheWrite5m,
 			&d.Tokens.CacheWrite1h, &d.Tokens.CacheRead, &d.Tokens.Output,
 			&d.Cost, &d.UnpricedTokens); err != nil {
-			return nil, fmt.Errorf("scan project cost row: %w", err)
+			return nil, fmt.Errorf("scan cost row for %s: %w", desc, err)
 		}
 		d.Day = d.Day.UTC()
-		pc.Days = append(pc.Days, d)
+		report.Days = append(report.Days, d)
 
 		t, ok := totals[d.Currency]
 		if !ok {
@@ -323,19 +420,19 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 		t.unpriced += d.UnpricedTokens
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read cost for project %s: %w", projectID, err)
+		return nil, fmt.Errorf("read cost for %s: %w", desc, err)
 	}
 
 	for _, c := range order {
 		t := totals[c]
-		pc.Totals = append(pc.Totals, ProjectCostTotal{
+		report.Totals = append(report.Totals, CostTotal{
 			Currency:       c,
 			Tokens:         t.tokens,
 			Cost:           t.amount.String(),
 			UnpricedTokens: t.unpriced,
 		})
 	}
-	return pc, nil
+	return report, nil
 }
 
 type costTotal struct {

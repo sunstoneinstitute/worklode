@@ -354,7 +354,7 @@ func cockpitRepos(items []model.Repository) []ui.CockpitRepo {
 
 // cockpitCostTotals maps the per-currency cost totals for the cockpit's cost
 // window.
-func cockpitCostTotals(c model.ProjectCost) []ui.CockpitCostTotal {
+func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 	out := make([]ui.CockpitCostTotal, 0, len(c.Totals))
 	for _, t := range c.Totals {
 		out = append(out, ui.CockpitCostTotal{
