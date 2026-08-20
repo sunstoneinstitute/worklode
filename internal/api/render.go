@@ -99,6 +99,10 @@ func placeholderProjectView(c *model.CockpitProjection, heading, message, sectio
 }
 
 // cockpitView maps the project cockpit projection into the ui overview view.
+// It drops the projection's RankingFocus and Repositories: mode B renders no
+// ranking-focus list and no repositories panel, and mapping a fact no markup
+// reads only makes the view look richer than the page is (WL-164). Both stay
+// on the JSON cockpit, which is where they are contracted.
 func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	return ui.CockpitView{
 		Page:         ui.PageProps{Title: title},
@@ -108,7 +112,6 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 		ModeName:     c.Mode.Name,
 		ModeBasis:    c.Mode.Basis.Summary,
 		PinnedFocus:  cockpitFocus(c.PinnedFocus),
-		RankingFocus: c.RankingFocus,
 		NextDecision: cockpitDecision(c.NextDecision),
 		Work: ui.CockpitWork{
 			InProgress: workRows(c.Work.InProgress),
@@ -117,7 +120,6 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 			Blocked:    workRows(c.Work.Blocked),
 		},
 		SecondaryConcerns: cockpitConcerns(c.SecondaryConcerns),
-		Repositories:      cockpitRepos(c.Repositories),
 		CostTotals:        cockpitCostTotals(c.Cost),
 	}
 }
@@ -349,20 +351,6 @@ func cockpitConcerns(items []model.SecondaryConcern) []ui.CockpitConcern {
 			Title:           c.Title,
 			URL:             c.URL,
 			EvidenceSummary: c.Evidence.Summary,
-		})
-	}
-	return out
-}
-
-// cockpitRepos maps the mapped repositories and their declared done-state
-// evidence.
-func cockpitRepos(items []model.Repository) []ui.CockpitRepo {
-	out := make([]ui.CockpitRepo, 0, len(items))
-	for _, r := range items {
-		out = append(out, ui.CockpitRepo{
-			Repo:             r.Repo,
-			DoneState:        r.DoneState,
-			EvidenceCategory: r.StatusEvidence.Category,
 		})
 	}
 	return out
