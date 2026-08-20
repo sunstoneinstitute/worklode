@@ -205,12 +205,14 @@ outright once it is fixed over annotating it as resolved.
   saying the annotations must sit on the *Service* (the hzdev collector's
   `k8s-service-endpoints` job) and that no Prometheus operator exists — exactly
   the trap worklode fell into before spec 022 §9.
-- `[gated]` **Three shapes duplicate a backbone enum** in `ns/shapes.ttl` (`sh:in`):
-  `wl:taskState` mirrors `tasks.state`, `wl:priority` mirrors the `tasks.priority`
-  CHECK and `wl:concern` the `tasks.concern` CHECK. Widening any of those CHECKs
-  in a migration means widening the matching shape. The state transitions are not
-  duplicated — they stay in `internal/store/tasks.go`. Worth a check in CI if the
-  graph ever ships.
+- `[gated]` **Two shapes still duplicate a backbone enum** in `ns/shapes.ttl`
+  (`sh:in`): `wl:priority` mirrors the `tasks.priority` CHECK and `wl:concern`
+  the `tasks.concern` CHECK, so widening either CHECK in a migration means
+  widening the matching shape by hand. The third, `wl:taskState`, is **done**:
+  `internal/ns`'s `TestTaskStateShapeMatchesStateMachine` pins its list to
+  `store.AllStates()`, derived from `legalTransitions`. The transitions
+  themselves are still not duplicated into RDF — they stay in
+  `internal/store/tasks.go`.
 - `[gated]` **`ns/` changes still owed at spec 029's acceptance**: `wl:Milestone`
   (subsuming 006's reserved term) and the participants/approvals vocabulary.
   Two halves are **done** — the task kinds (the `0017` CHECK, `validKinds`, and

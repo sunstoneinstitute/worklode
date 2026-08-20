@@ -20,6 +20,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -857,16 +858,17 @@ func TestSetTaskSkills(t *testing.T) {
 
 // TestTaskKindsAgreeAcrossSources pins the three places the kind enum is
 // spelled — the API's validKinds, the tasks.kind CHECK constraint, and
-// wlc:TaskKind in ns/concept.ttl — to the same set. Each is exercised by
-// creating a task of every kind: the handler rejects anything outside
-// validKinds, and the insert rejects anything outside the CHECK, so a
-// disagreement between those two fails here. The .ttl is read directly,
-// since nothing else in the Go build knows it exists.
+// wlc:TaskKind in ns/concept.ttl — to the same set. validKinds now derives
+// from ns.TaskKinds, so the loop drives off that: creating a task of every
+// kind proves the CHECK admits the generated set, since the insert rejects
+// anything outside it. The .ttl is then read directly as well, so `go test`
+// alone still catches a stale internal/ns/gen.go — scripts/nsgen.py --check
+// in CI is the other half of that guard.
 func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	kinds := []string{"feature", "bug", "chore", "design", "review", "spike"}
+	kinds := ns.TaskKinds
 	for _, k := range kinds {
 		t.Run(k, func(t *testing.T) {
 			rr := doReq(t, h, "POST", "/api/v1/tasks", token,
@@ -891,7 +893,7 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	want := append([]string(nil), kinds...)
 	sort.Strings(want)
 	if !slices.Equal(inTTL, want) {
-		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with validKinds and the CHECK constraint)", inTTL, want)
+		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with internal/ns/gen.go — run ./scripts/nsgen.py)", inTTL, want)
 	}
 }
 

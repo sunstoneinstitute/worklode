@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -24,6 +25,24 @@ func doForm(t *testing.T, h http.Handler, path string, form url.Values, headers 
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	return rr
+}
+
+// kindSelect returns the markup of the new-task form's `kind` <select>, so an
+// assertion about the kinds on offer cannot be satisfied by an option in some
+// other menu on the page.
+func kindSelect(t *testing.T, main string) string {
+	t.Helper()
+	const open = `<select id="kind" name="kind">`
+	i := strings.Index(main, open)
+	if i < 0 {
+		t.Fatal("no kind <select> in the new-task form")
+	}
+	rest := main[i+len(open):]
+	j := strings.Index(rest, "</select>")
+	if j < 0 {
+		t.Fatal("unterminated kind <select> in the new-task form")
+	}
+	return rest[:j]
 }
 
 // --- new task ---------------------------------------------------------------
@@ -47,12 +66,19 @@ func TestNewTaskFormRenders(t *testing.T) {
 		`name="concern"`, `name="draft"`,
 	)
 	main := mainContent(t, body)
-	// The six kinds of 025 §10, all of which name a nature of work. Anything
-	// the form offers beyond them the API would reject on submit.
-	for _, kind := range []string{"feature", "bug", "chore", "design", "review", "spike"} {
-		if !strings.Contains(main, `value="`+kind+`"`) {
+	// webTaskKinds keeps its own menu order, so it stays a literal rather than
+	// deriving from ns.TaskKinds — but the menu must offer that set and no
+	// more, or the API rejects on submit what the form offered. The option
+	// count catches the "more" half that a presence loop alone would miss.
+	kindMenu := kindSelect(t, main)
+	for _, kind := range ns.TaskKinds {
+		if !strings.Contains(kindMenu, `value="`+kind+`"`) {
 			t.Errorf("the new-task form is missing kind %q", kind)
 		}
+	}
+	if got, want := strings.Count(kindMenu, "<option value="), len(ns.TaskKinds); got != want {
+		t.Errorf("kind options = %d, want %d (%v) — the form offers a kind the API would reject",
+			got, want, ns.TaskKinds)
 	}
 	if got := strings.Count(main, `name="kind"`); got != 1 {
 		t.Errorf("kind inputs = %d, want 1", got)
