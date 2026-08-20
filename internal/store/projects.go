@@ -321,3 +321,28 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMa
 		return m, nil
 	})
 }
+
+// ListReposForProjects is the bulk form of ListRepos: the repos mapped to
+// every project in one query, keyed by project id. A list endpoint reporting
+// repos by calling ListRepos per row would issue one query per project.
+// Projects with no repos are absent from the map; ids is empty-safe.
+func (s *Store) ListReposForProjects(ctx context.Context, ids []string) (map[string][]model.RepoMapping, error) {
+	if len(ids) == 0 {
+		return map[string][]model.RepoMapping{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT project_id, repo, done_state FROM project_repos WHERE project_id = ANY($1)
+		 ORDER BY project_id, repo`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list repos for %d projects: %w", len(ids), err)
+	}
+	return groupRows(rows, fmt.Sprintf("list repos for %d projects", len(ids)),
+		func(r rowScanner) (string, model.RepoMapping, error) {
+			var projectID string
+			var m model.RepoMapping
+			if err := r.Scan(&projectID, &m.Repo, &m.DoneState); err != nil {
+				return "", model.RepoMapping{}, err
+			}
+			return projectID, m, nil
+		})
+}

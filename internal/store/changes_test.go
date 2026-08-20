@@ -577,3 +577,113 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 		t.Fatalf("reviews count after second reviewer: got %d, want 2", count)
 	}
 }
+
+// TestCIRunsForSHAs covers the bulk reader: one query answers every
+// (repo, head_sha) key, and each group matches what CIRunsForSHA returns.
+func TestCIRunsForSHAs(t *testing.T) {
+	s := openChangesStore(t)
+
+	run := func(repo, sha, workflow string, offset time.Duration) CIRun {
+		return CIRun{
+			Repo: repo, HeadSHA: sha, Workflow: workflow, Status: "completed",
+			URL:       "https://ci/" + workflow,
+			StartedAt: changesTestNow.Add(offset), UpdatedAt: changesTestNow.Add(offset),
+		}
+	}
+	seeded := []CIRun{
+		run("sunstoneinstitute/demo", "sha-a", "build", 2*time.Minute),
+		run("sunstoneinstitute/demo", "sha-a", "lint", time.Minute),
+		run("sunstoneinstitute/demo", "sha-b", "build", time.Minute),
+		run("sunstoneinstitute/other", "sha-a", "build", time.Minute),
+	}
+	for _, r := range seeded {
+		if err := upsertCIRun(t, s, r); err != nil {
+			t.Fatalf("upsertCIRun %s %s %s: %v", r.Repo, r.HeadSHA, r.Workflow, err)
+		}
+	}
+
+	keys := []RepoSHA{
+		{Repo: "sunstoneinstitute/demo", SHA: "sha-a"},
+		{Repo: "sunstoneinstitute/demo", SHA: "sha-b"},
+		{Repo: "sunstoneinstitute/demo", SHA: "sha-absent"},
+	}
+	got, err := s.CIRunsForSHAs(t.Context(), keys)
+	if err != nil {
+		t.Fatalf("CIRunsForSHAs: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("CIRunsForSHAs: got %d keys, want 2 (sha-absent must be absent)", len(got))
+	}
+	// The other repo's run shares sha-a and must not leak into the demo group.
+	for _, k := range keys {
+		want, err := s.CIRunsForSHA(t.Context(), k.Repo, k.SHA)
+		if err != nil {
+			t.Fatalf("CIRunsForSHA %s %s: %v", k.Repo, k.SHA, err)
+		}
+		if !reflect.DeepEqual(got[k], want) {
+			t.Fatalf("CIRunsForSHAs[%v] = %v, want %v", k, got[k], want)
+		}
+	}
+
+	empty, err := s.CIRunsForSHAs(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("CIRunsForSHAs(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("CIRunsForSHAs(nil): got %v, want empty non-nil map", empty)
+	}
+}
+
+// TestReviewsForPRs covers the bulk reader: one query answers every
+// (repo, number) key, and each group matches what ReviewsForPR returns.
+func TestReviewsForPRs(t *testing.T) {
+	s := openChangesStore(t)
+
+	review := func(repo string, number int64, reviewer string, offset time.Duration) Review {
+		return Review{
+			Repo: repo, PRNumber: number, Reviewer: reviewer, State: "approved",
+			SubmittedAt: changesTestNow.Add(offset),
+		}
+	}
+	seeded := []Review{
+		review("sunstoneinstitute/demo", 1, "bob", 2*time.Minute),
+		review("sunstoneinstitute/demo", 1, "alice", time.Minute),
+		review("sunstoneinstitute/demo", 2, "bob", time.Minute),
+		review("sunstoneinstitute/other", 1, "bob", time.Minute),
+	}
+	for _, rv := range seeded {
+		if err := upsertReview(t, s, rv); err != nil {
+			t.Fatalf("upsertReview %s#%d %s: %v", rv.Repo, rv.PRNumber, rv.Reviewer, err)
+		}
+	}
+
+	keys := []RepoPR{
+		{Repo: "sunstoneinstitute/demo", Number: 1},
+		{Repo: "sunstoneinstitute/demo", Number: 2},
+		{Repo: "sunstoneinstitute/demo", Number: 99},
+	}
+	got, err := s.ReviewsForPRs(t.Context(), keys)
+	if err != nil {
+		t.Fatalf("ReviewsForPRs: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ReviewsForPRs: got %d keys, want 2 (PR 99 must be absent)", len(got))
+	}
+	for _, k := range keys {
+		want, err := s.ReviewsForPR(t.Context(), k.Repo, k.Number)
+		if err != nil {
+			t.Fatalf("ReviewsForPR %s#%d: %v", k.Repo, k.Number, err)
+		}
+		if !reflect.DeepEqual(got[k], want) {
+			t.Fatalf("ReviewsForPRs[%v] = %v, want %v", k, got[k], want)
+		}
+	}
+
+	empty, err := s.ReviewsForPRs(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("ReviewsForPRs(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("ReviewsForPRs(nil): got %v, want empty non-nil map", empty)
+	}
+}

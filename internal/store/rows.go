@@ -31,6 +31,30 @@ func collectRows[T any](rows *sql.Rows, what string, scan func(rowScanner) (T, e
 	return out, nil
 }
 
+// groupRows is collectRows for a bulk reader: it drains rows into a map of
+// key to slice, preserving row order within each key. scan hands back the key
+// the row belongs to alongside the value, so a query that batches N singular
+// reads into one can regroup the result by whatever the singular reader was
+// keyed on.
+//
+// Keys with no rows are absent from the map — callers get a nil slice for
+// them, which is what the singular reader returns for an empty set.
+func groupRows[K comparable, T any](rows *sql.Rows, what string, scan func(rowScanner) (K, T, error)) (map[K][]T, error) {
+	defer rows.Close()
+	out := map[K][]T{}
+	for rows.Next() {
+		k, v, err := scan(rows)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", what, err)
+		}
+		out[k] = append(out[k], v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	return out, nil
+}
+
 // byValue adapts a scanX function that hands back *T into the form
 // collectRows wants, for the entities whose scanner returns a pointer.
 func byValue[T any](scan func(rowScanner) (*T, error)) func(rowScanner) (T, error) {

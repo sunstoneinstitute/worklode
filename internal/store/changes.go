@@ -278,48 +278,95 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 	return collectRows(rows, fmt.Sprintf("PRs for task %s", taskID), byValue(scanPR))
 }
 
+// ciRunColumns is the SELECT list scanCIRun expects, in order.
+const ciRunColumns = `repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at`
+
+func scanCIRun(r rowScanner) (CIRun, error) {
+	var run CIRun
+	var status, conclusion, url sql.NullString
+	var startedAt, completedAt, updatedAt sql.NullTime
+	if err := r.Scan(&run.Repo, &run.HeadSHA, &run.Workflow, &status, &conclusion,
+		&url, &startedAt, &completedAt, &updatedAt); err != nil {
+		return CIRun{}, err
+	}
+	run.Status = status.String
+	run.URL = url.String
+	if conclusion.Valid {
+		run.Conclusion = &conclusion.String
+	}
+	if startedAt.Valid {
+		run.StartedAt = startedAt.Time.UTC()
+	}
+	if completedAt.Valid {
+		t := completedAt.Time.UTC()
+		run.CompletedAt = &t
+	}
+	if updatedAt.Valid {
+		run.UpdatedAt = updatedAt.Time.UTC()
+	}
+	return run, nil
+}
+
 // CIRunsForSHA returns the CI runs recorded for (repo, headSHA), oldest
 // first.
 func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at
-		 FROM ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
+		`SELECT `+ciRunColumns+` FROM ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
 		repo, headSHA)
 	if err != nil {
 		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
 	}
-	defer rows.Close()
+	return collectRows(rows, fmt.Sprintf("ci runs for %s %s", repo, headSHA), scanCIRun)
+}
 
-	var out []CIRun
-	for rows.Next() {
-		var r CIRun
-		var status, conclusion, url sql.NullString
-		var startedAt, completedAt, updatedAt sql.NullTime
-		if err := rows.Scan(&r.Repo, &r.HeadSHA, &r.Workflow, &status, &conclusion,
-			&url, &startedAt, &completedAt, &updatedAt); err != nil {
-			return nil, fmt.Errorf("scan ci run: %w", err)
-		}
-		r.Status = status.String
-		r.URL = url.String
-		if conclusion.Valid {
-			r.Conclusion = &conclusion.String
-		}
-		if startedAt.Valid {
-			r.StartedAt = startedAt.Time.UTC()
-		}
-		if completedAt.Valid {
-			t := completedAt.Time.UTC()
-			r.CompletedAt = &t
-		}
-		if updatedAt.Valid {
-			r.UpdatedAt = updatedAt.Time.UTC()
-		}
-		out = append(out, r)
+// RepoSHA names a commit in a repo: the key CI runs are recorded under.
+type RepoSHA struct {
+	Repo string
+	SHA  string
+}
+
+// CIRunsForSHAs is the bulk form of CIRunsForSHA: the runs for every key in
+// one query, keyed by (repo, head_sha). A caller reporting CI for a list of
+// PRs would otherwise issue one query per PR. Keys with no runs are absent
+// from the map; keys is empty-safe. Order within each slice matches
+// CIRunsForSHA.
+func (s *Store) CIRunsForSHAs(ctx context.Context, keys []RepoSHA) (map[RepoSHA][]CIRun, error) {
+	if len(keys) == 0 {
+		return map[RepoSHA][]CIRun{}, nil
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("ci runs for %s %s: %w", repo, headSHA, err)
+	repos, shas := splitRepoSHAs(keys)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+ciRunColumns+` FROM ci_runs
+		 WHERE (repo, head_sha) IN (SELECT * FROM unnest($1::text[], $2::text[]))
+		 ORDER BY repo, head_sha, started_at, id`,
+		repos, shas)
+	if err != nil {
+		return nil, fmt.Errorf("ci runs for %d shas: %w", len(keys), err)
 	}
-	return out, nil
+	return groupRows(rows, fmt.Sprintf("ci runs for %d shas", len(keys)),
+		func(r rowScanner) (RepoSHA, CIRun, error) {
+			run, err := scanCIRun(r)
+			return RepoSHA{Repo: run.Repo, SHA: run.HeadSHA}, run, err
+		})
+}
+
+func splitRepoSHAs(keys []RepoSHA) (repos, shas []string) {
+	repos = make([]string, 0, len(keys))
+	shas = make([]string, 0, len(keys))
+	for _, k := range keys {
+		repos = append(repos, k.Repo)
+		shas = append(shas, k.SHA)
+	}
+	return repos, shas
+}
+
+func scanReview(r rowScanner) (Review, error) {
+	var rv Review
+	if err := r.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &rv.SubmittedAt); err != nil {
+		return Review{}, err
+	}
+	rv.SubmittedAt = rv.SubmittedAt.UTC()
+	return rv, nil
 }
 
 // ReviewsForPR returns the reviews submitted on (repo, prNumber), oldest
@@ -332,14 +379,41 @@ func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) (
 	if err != nil {
 		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
 	}
-	return collectRows(rows, fmt.Sprintf("reviews for %s#%d", repo, prNumber), func(r rowScanner) (Review, error) {
-		var rv Review
-		if err := r.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &rv.SubmittedAt); err != nil {
-			return Review{}, err
-		}
-		rv.SubmittedAt = rv.SubmittedAt.UTC()
-		return rv, nil
-	})
+	return collectRows(rows, fmt.Sprintf("reviews for %s#%d", repo, prNumber), scanReview)
+}
+
+// RepoPR names a pull request: the key reviews are recorded under.
+type RepoPR struct {
+	Repo   string
+	Number int64
+}
+
+// ReviewsForPRs is the bulk form of ReviewsForPR: the reviews on every key in
+// one query, keyed by (repo, number). Keys with no reviews are absent from the
+// map; keys is empty-safe. Order within each slice matches ReviewsForPR.
+func (s *Store) ReviewsForPRs(ctx context.Context, keys []RepoPR) (map[RepoPR][]Review, error) {
+	if len(keys) == 0 {
+		return map[RepoPR][]Review{}, nil
+	}
+	repos := make([]string, 0, len(keys))
+	numbers := make([]int64, 0, len(keys))
+	for _, k := range keys {
+		repos = append(repos, k.Repo)
+		numbers = append(numbers, k.Number)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, pr_number, reviewer, state, submitted_at FROM reviews
+		 WHERE (repo, pr_number) IN (SELECT * FROM unnest($1::text[], $2::bigint[]))
+		 ORDER BY repo, pr_number, submitted_at, id`,
+		repos, numbers)
+	if err != nil {
+		return nil, fmt.Errorf("reviews for %d prs: %w", len(keys), err)
+	}
+	return groupRows(rows, fmt.Sprintf("reviews for %d prs", len(keys)),
+		func(r rowScanner) (RepoPR, Review, error) {
+			rv, err := scanReview(r)
+			return RepoPR{Repo: rv.Repo, Number: rv.PRNumber}, rv, err
+		})
 }
 
 // UpsertCIRun inserts or, on redelivery, updates a CI run row. The natural
