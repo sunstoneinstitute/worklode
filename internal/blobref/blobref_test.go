@@ -42,6 +42,75 @@ func TestExtractIgnoresMalformed(t *testing.T) {
 	}
 }
 
+// TestExtractRawHTML covers plan 3's sanitiser: a body that never uses
+// markdown image syntax but cites a blob through raw HTML must still pin it.
+func TestExtractRawHTML(t *testing.T) {
+	h := strings.Repeat("f", 64)
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "html block img", body: "before\n\n<img src=\"/blob/" + h + "\">\n\nafter\n"},
+		{name: "inline raw html img in prose", body: "see <img src=\"/blob/" + h + "\"/> below\n"},
+		{name: "inline img inside a block-tag paragraph", body: "<p>see <img src=\"/blob/" + h + "\"/></p>\n"},
+		{name: "single-quoted src", body: "<img src='/blob/" + h + "'>\n"},
+		{name: "unquoted src", body: "<img src=/blob/" + h + ">\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := blobref.Extract(c.body)
+			want := []string{h}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("Extract(%q) = %v, want %v", c.body, got, want)
+			}
+		})
+	}
+}
+
+func TestExtractRawHTMLVideoAndSource(t *testing.T) {
+	h1 := strings.Repeat("1", 64)
+	h2 := strings.Repeat("2", 64)
+	body := "<video src=\"/blob/" + h1 + "\" controls></video>\n\n" +
+		"<source src=\"/blob/" + h2 + "\">\n"
+	got := blobref.Extract(body)
+	want := []string{h1, h2}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Extract = %v, want %v", got, want)
+	}
+}
+
+func TestExtractDedupesRawHTMLAndMarkdown(t *testing.T) {
+	h := strings.Repeat("3", 64)
+	body := "![md](/blob/" + h + ")\n\n<img src=\"/blob/" + h + "\">\n"
+	got := blobref.Extract(body)
+	want := []string{h}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Extract = %v, want %v (one entry, not two)", got, want)
+	}
+}
+
+// TestExtractIgnoresRawHTMLInCode: a raw-HTML-looking tag inside a fenced
+// code block or inline code span is source text, not a raw-HTML AST node --
+// it must not count any more than a markdown image would (see
+// TestExtractIgnoresNonImages).
+func TestExtractIgnoresRawHTMLInCode(t *testing.T) {
+	h := strings.Repeat("e", 64)
+	body := "```\n<img src=\"/blob/" + h + "\">\n```\n\n" +
+		"`<img src=\"/blob/" + h + "\">` inline\n"
+	if got := blobref.Extract(body); len(got) != 0 {
+		t.Fatalf("Extract = %v, want none", got)
+	}
+}
+
+func TestExtractIgnoresMalformedRawHTML(t *testing.T) {
+	body := "<img src=\"/blob/" + strings.Repeat("a", 65) + "\">\n\n" + // too long
+		"<img src=\"/blob/" + strings.Repeat("b", 63) + "\">\n\n" + // too short
+		"<img src=\"/blob/" + strings.Repeat("C", 64) + "\">\n" // uppercase
+	if got := blobref.Extract(body); len(got) != 0 {
+		t.Fatalf("Extract = %v, want none", got)
+	}
+}
+
 func TestLocalImages(t *testing.T) {
 	body := "![a](./shots/one.png)\n\n![b](two.png)\n\n" +
 		"![abs](/etc/passwd)\n\n![remote](https://x.example/y.png)\n\n" +

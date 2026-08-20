@@ -84,6 +84,19 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(taskBlobRefActions, ", ") +
 			"). Only the declared half of the reference graph: embedded references follow the task body and are not counted here.",
 	}, []string{"action"})
+	s.blobGCRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_blob_gc_runs_total",
+		Help: "GC sweeps (POST /api/v1/blobs/gc), by mode (" +
+			strings.Join(blobGCModes, ", ") +
+			") and outcome (" + strings.Join(blobGCOutcomes, ", ") +
+			"). A dry_run rate near zero means operators are applying sweeps without previewing them first.",
+	}, []string{"mode", "outcome"})
+	s.blobGCObjects = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_blob_gc_objects_total",
+		Help: "Blobs and objects a GC sweep found or acted on, by action (" +
+			strings.Join(blobGCObjectActions, ", ") +
+			"). A steady 'orphan' rate outside the upload path's expected partial-failure rate means something else is leaving objects with no index row.",
+	}, []string{"action"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -130,6 +143,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
+		s.blobGCRuns, s.blobGCObjects,
 		s.kindAliasUses)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -174,6 +188,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, action := range taskBlobRefActions {
 		s.taskBlobRefs.WithLabelValues(action)
+	}
+	for _, mode := range blobGCModes {
+		for _, outcome := range blobGCOutcomes {
+			s.blobGCRuns.WithLabelValues(mode, outcome)
+		}
+	}
+	for _, action := range blobGCObjectActions {
+		s.blobGCObjects.WithLabelValues(action)
 	}
 	// Every alias on every surface, because the whole point of this counter is
 	// to prove nothing still sends the deprecated spelling before the alias is
@@ -423,6 +445,15 @@ var (
 	// taskBlobRefActions is the complete, bounded label set for
 	// worklode_task_blob_refs_total.
 	taskBlobRefActions = []string{"attached", "detached"}
+	// blobGCModes and blobGCOutcomes are the complete, bounded label sets for
+	// worklode_blob_gc_runs_total.
+	blobGCModes    = []string{"dry_run", "apply"}
+	blobGCOutcomes = []string{"ok", "error"}
+	// blobGCObjectActions is the complete, bounded label set for
+	// worklode_blob_gc_objects_total: what sweep 1 found (unreferenced) and
+	// what sweep 2 found (orphan), plus how many of either were actually
+	// deleted outside dry-run.
+	blobGCObjectActions = []string{"unreferenced", "orphan", "deleted"}
 )
 
 // observeBlobUpload records one POST /api/v1/blobs, called exactly once on
@@ -455,4 +486,27 @@ func (s *server) observeTaskBlobRef(action string) {
 		return
 	}
 	s.taskBlobRefs.WithLabelValues(action).Inc()
+}
+
+// observeBlobGCRun records one GC sweep's mode and outcome. Called exactly
+// once per invocation of blobGC. Nil-safe: tests build a *server directly
+// without initMetrics.
+func (s *server) observeBlobGCRun(dryRun bool, outcome string) {
+	if s.blobGCRuns == nil {
+		return
+	}
+	mode := "apply"
+	if dryRun {
+		mode = "dry_run"
+	}
+	s.blobGCRuns.WithLabelValues(mode, outcome).Inc()
+}
+
+// observeBlobGCObjects adds n to the named action's count. Nil-safe: tests
+// build a *server directly without initMetrics.
+func (s *server) observeBlobGCObjects(action string, n int) {
+	if s.blobGCObjects == nil || n == 0 {
+		return
+	}
+	s.blobGCObjects.WithLabelValues(action).Add(float64(n))
 }

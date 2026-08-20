@@ -287,6 +287,12 @@ type server struct {
 	blobUploads *prometheus.CounterVec
 	blobServes  *prometheus.CounterVec
 
+	// blobGCRuns counts POST /api/v1/blobs/gc invocations by mode (dry_run,
+	// apply) and outcome; blobGCObjects counts what each run found or acted
+	// on, by action. See blobgc.go and observeBlobGC.
+	blobGCRuns    *prometheus.CounterVec
+	blobGCObjects *prometheus.CounterVec
+
 	// taskBlobRefs counts the explicit half of a task's blob reference graph
 	// changed by the attach/detach endpoints, by action; see blobs.go and
 	// observeTaskBlobRef. The embedded half follows the task body via
@@ -466,6 +472,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
 
 	r.api("POST /api/v1/blobs", s.uploadBlob)
+	r.api("POST /api/v1/blobs/gc", s.blobGC)
 
 	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
 	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)

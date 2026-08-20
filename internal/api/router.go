@@ -146,8 +146,9 @@ var routeGuards = map[string]routeGuard{
 	// registered with r.asset, which takes either a bearer token or a web
 	// session, since a task page's <img> and an agent's fetch both land here
 	// (see eitherGuard in authz.go).
-	"POST /api/v1/blobs": guarded(permBlobWrite),
-	"GET /blob/{hash}":   guarded(permBlobRead),
+	"POST /api/v1/blobs":    guarded(permBlobWrite),
+	"GET /blob/{hash}":      guarded(permBlobRead),
+	"POST /api/v1/blobs/gc": guarded(permBlobAdmin),
 
 	// --- secrets (spec 017) ---------------------------------------------------
 	// Metadata only — names, purposes and op:// references, never values —
