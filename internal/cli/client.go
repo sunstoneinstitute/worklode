@@ -1124,6 +1124,12 @@ func (c *Client) ReposDoctor(ctx context.Context, repo string) (model.ReposDocto
 	return doJSON[model.ReposDoctorResponse](ctx, c, http.MethodGet, withQuery("/api/v1/repos/doctor", q), nil, "repos doctor")
 }
 
+// Reconcile calls POST /api/v1/reconcile and returns the run report.
+// Admin-only on the server; synchronous.
+func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.ReconcileResponse, []byte, error) {
+	return doJSON[model.ReconcileResponse](ctx, c, http.MethodPost, "/api/v1/reconcile", in, "reconcile")
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {

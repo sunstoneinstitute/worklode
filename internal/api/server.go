@@ -188,6 +188,12 @@ type server struct {
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
 
+	// hookMetrics is the webhook/replay instrument set (internal/hooks),
+	// shared by the webhook handlers and POST /api/v1/reconcile's replay
+	// call. Never nil once initMetrics has run — the registration code sets
+	// it right after creating it.
+	hookMetrics *hooks.Metrics
+
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. skillSyncer is nil unless skill sources are
 	// configured; sync then 422s. skillSyncMu serializes concurrent sync
@@ -431,6 +437,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 		return true
 	}
 	hookMetrics := hooks.NewMetrics(reg)
+	s.hookMetrics = hookMetrics
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 
@@ -536,6 +543,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
 
 	r.api("GET /api/v1/whoami", s.whoami)
+	r.api("POST /api/v1/reconcile", s.reconcile)
 
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot

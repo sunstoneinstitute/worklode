@@ -54,3 +54,24 @@ type ReposDoctorResponse struct {
 	Repos           []RepoDoctor     `json:"repos"`
 	UnmappedSenders []UnmappedSender `json:"unmapped_senders"`
 }
+
+// ReconcileInput is the request body of POST /api/v1/reconcile, and what
+// the CLI (`lode reconcile`) sends. Repo and Task are mutually exclusive
+// bounds; Since accepts RFC 3339 or a Go duration, resolved against the
+// server clock.
+type ReconcileInput struct {
+	Repo   string `json:"repo,omitempty"`
+	Task   string `json:"task,omitempty"`
+	Since  string `json:"since,omitempty"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+// ReconcileResponse is one reconcile run's report, one section per engine.
+// Poll is null when polling did not run; PollSkipped says why.
+type ReconcileResponse struct {
+	RunID       string        `json:"run_id"`
+	DryRun      bool          `json:"dry_run"`
+	Replay      *ReplayResult `json:"replay"`
+	Poll        any           `json:"poll"` // *PollResult once a later plan adds engine 2 to this endpoint
+	PollSkipped string        `json:"poll_skipped,omitempty"`
+}

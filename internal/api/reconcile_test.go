@@ -112,6 +112,70 @@ func TestReposDoctorRequiresAdmin(t *testing.T) {
 	}
 }
 
+func TestReconcileReplaysIgnoredEvents(t *testing.T) {
+	st, h, token := newTestServer(t)
+	// Delivery recorded before mapping...
+	seedGitHubEvent(t, st, "d-1", "issues.opened.ignored", `{
+		"action": "opened",
+		"repository": {"full_name": "acme/app"},
+		"issue": {"number": 7, "title": "late", "state": "open", "html_url": "u"}
+	}`)
+	// ...then the repo is mapped.
+	mapRepo(t, h, token, "demo", "WL", "acme/app")
+
+	rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", token, map[string]any{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reconcile: %d %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		RunID  string `json:"run_id"`
+		DryRun bool   `json:"dry_run"`
+		Replay struct {
+			Candidates int `json:"candidates"`
+			Replayed   int `json:"replayed"`
+		} `json:"replay"`
+		PollSkipped string `json:"poll_skipped"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.RunID == "" || resp.Replay.Replayed != 1 {
+		t.Fatalf("response = %+v; want a run id and 1 replayed", resp)
+	}
+	if resp.PollSkipped == "" {
+		t.Fatalf("poll_skipped empty; want the no-github-app explanation")
+	}
+}
+
+func TestReconcileValidation(t *testing.T) {
+	_, h, token := newTestServer(t)
+	cases := []struct {
+		name string
+		body map[string]any
+		want int
+	}{
+		{"repo and task together", map[string]any{"repo": "a/b", "task": "WL-1"}, http.StatusUnprocessableEntity},
+		{"bad since", map[string]any{"since": "yesterday-ish"}, http.StatusUnprocessableEntity},
+		{"duration since", map[string]any{"since": "720h", "dry_run": true}, http.StatusOK},
+		{"rfc3339 since", map[string]any{"since": "2026-07-01T00:00:00Z", "dry_run": true}, http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", token, tc.body); rec.Code != tc.want {
+				t.Fatalf("%s: %d %s; want %d", tc.name, rec.Code, rec.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestReconcileRequiresAdmin(t *testing.T) {
+	st, h, token := newTestServer(t)
+	nonAdmin := makeNonAdminToken(t, st, h, token)
+	if rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", nonAdmin, map[string]any{}); rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin: %d; want 403", rec.Code)
+	}
+}
+
 // seedGitHubEvent records one github event with a nil apply (applied_at NULL).
 func seedGitHubEvent(t *testing.T, st *store.Store, externalID, typ, payload string) {
 	t.Helper()
