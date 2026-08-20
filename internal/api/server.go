@@ -287,6 +287,13 @@ type server struct {
 	blobUploads *prometheus.CounterVec
 	blobServes  *prometheus.CounterVec
 
+	// taskBlobRefs counts the explicit half of a task's blob reference graph
+	// changed by the attach/detach endpoints, by action; see blobs.go and
+	// observeTaskBlobRef. The embedded half follows the task body via
+	// ReconcileEmbedded and is not counted here — it is not a distinct
+	// caller action.
+	taskBlobRefs *prometheus.CounterVec
+
 	// kindAliasUses counts requests naming a deprecated task kind that was
 	// normalised to its current name, by alias and surface; see
 	// kindalias.go. A sustained zero across these surfaces is not the whole
@@ -429,6 +436,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
 	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
+	r.api("GET /api/v1/tasks/{id}/blobs", s.listTaskBlobs)
+	r.api("POST /api/v1/tasks/{id}/blobs", s.attachTaskBlob)
+	r.api("DELETE /api/v1/tasks/{id}/blobs/{hash}", s.detachTaskBlob)
 
 	r.api("POST /api/v1/docs", s.createDoc)
 	r.api("GET /api/v1/docs", s.listDocs)

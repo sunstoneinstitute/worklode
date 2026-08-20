@@ -1,8 +1,9 @@
-// blobs.go implements spec 021's two blob endpoints: POST /api/v1/blobs,
-// which stores a content-addressed payload, and GET /blob/{hash}, which
-// redirects to a short-lived presigned URL for one. The bytes never transit
-// this process on the way out, which is what makes a 100 MiB screen recording
-// affordable to serve.
+// blobs.go implements spec 021's blob endpoints: POST /api/v1/blobs, which
+// stores a content-addressed payload, GET /blob/{hash}, which redirects to a
+// short-lived presigned URL for one, and the task blob reference endpoints
+// (list, attach, detach) that manage a task's row in the reference graph.
+// The bytes never transit this process on the way out, which is what makes a
+// 100 MiB screen recording affordable to serve.
 package api
 
 import (
@@ -232,4 +233,66 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	s.observeBlobServe("redirect")
 	http.Redirect(w, r, url, http.StatusFound)
+}
+
+// listTaskBlobs handles GET /api/v1/tasks/{id}/blobs: a task's full
+// reference graph row, embedded and attached alike (spec 021 §3).
+func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
+	refs, err := s.st.ListTaskBlobs(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	out := make([]model.TaskBlob, 0, len(refs))
+	for _, b := range refs {
+		b.URL = "/blob/" + b.Hash
+		out = append(out, b)
+	}
+	writeJSON(w, http.StatusOK, model.TaskBlobsResponse{Blobs: out})
+}
+
+// attachTaskBlob handles POST /api/v1/tasks/{id}/blobs: declares an explicit
+// reference to an already-uploaded blob, distinct from the embedded
+// references ReconcileEmbedded derives from the body (spec 021 §3). Both the
+// task and the blob are checked to exist before the write, so a bad id or
+// hash comes back as a clean 404 rather than an FK violation surfacing as a
+// 500.
+func (s *server) attachTaskBlob(w http.ResponseWriter, r *http.Request) {
+	var req model.AttachBlobInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.Hash == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "hash is required")
+		return
+	}
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if _, err := s.st.GetBlob(r.Context(), req.Hash); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if err := s.st.AttachBlob(r.Context(), id, req.Hash, req.Filename, actorIDFrom(r)); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeTaskBlobRef("attached")
+	writeJSON(w, http.StatusOK, model.AttachBlobResponse{Status: "attached"})
+}
+
+// detachTaskBlob handles DELETE /api/v1/tasks/{id}/blobs/{hash}: clears the
+// explicit reference. A row the body still embeds survives with only its
+// declared half cleared (DetachBlob); a row with neither half left is
+// deleted.
+func (s *server) detachTaskBlob(w http.ResponseWriter, r *http.Request) {
+	if err := s.st.DetachBlob(r.Context(), r.PathValue("id"), r.PathValue("hash")); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeTaskBlobRef("detached")
+	w.WriteHeader(http.StatusNoContent)
 }

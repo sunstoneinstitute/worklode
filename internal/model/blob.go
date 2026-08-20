@@ -40,3 +40,21 @@ type TaskBlob struct {
 	Attached  bool   `json:"attached"`
 	URL       string `json:"url"`
 }
+
+// TaskBlobsResponse is the response body of GET /api/v1/tasks/{id}/blobs.
+// Blobs is always an array, never null.
+type TaskBlobsResponse struct {
+	Blobs []TaskBlob `json:"blobs"`
+}
+
+// AttachBlobInput is the request body of POST /api/v1/tasks/{id}/blobs:
+// an already-uploaded hash, plus the filename to display and serve it under.
+type AttachBlobInput struct {
+	Hash     string `json:"hash"`
+	Filename string `json:"filename"`
+}
+
+// AttachBlobResponse is the response body of POST /api/v1/tasks/{id}/blobs.
+type AttachBlobResponse struct {
+	Status string `json:"status"`
+}
