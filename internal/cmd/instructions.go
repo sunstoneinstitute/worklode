@@ -114,31 +114,97 @@ func ensureAgentsMD(root string) (string, error) {
 	return instrUpdated, nil
 }
 
-// spliceAgentsBlock returns existing with the managed block current: replacing
-// the marked region if it is there, appending it otherwise. A file whose end
-// marker was deleted has its region taken as running to EOF, so the result
-// still holds exactly one block.
-func spliceAgentsBlock(existing string) string {
-	out := existing
-	if i := strings.Index(existing, agentsBlockBegin); i >= 0 {
-		end := len(existing)
-		after := i + len(agentsBlockBegin)
-		if j := strings.Index(existing[after:], agentsBlockEnd); j >= 0 {
-			end = after + j + len(agentsBlockEnd)
+// blockRegion is one managed region's byte range in a file, from the first
+// byte of its begin-marker line to the byte after its end-marker line.
+type blockRegion struct{ start, end int }
+
+// findBlockRegions locates every managed region in body.
+//
+// A marker counts only on a line of its own and outside a fenced code block,
+// so an AGENTS.md that quotes the markers in an example is not mistaken for a
+// managed file. A begin marker with no end marker bounds its region at the end
+// of its own line: the missing marker never claimed the bytes below it, and
+// swallowing them to EOF would delete authored prose.
+func findBlockRegions(body string) []blockRegion {
+	var out []blockRegion
+	inFence := false
+	open, openEnd := -1, -1
+
+	for pos := 0; pos <= len(body); {
+		nl := strings.IndexByte(body[pos:], '\n')
+		line, lineEnd := body[pos:], len(body)
+		if nl >= 0 {
+			line, lineEnd = body[pos:pos+nl], pos+nl+1
 		}
-		out = existing[:i] + strings.TrimSuffix(agentsBlock, "\n") + existing[end:]
-	} else if strings.TrimSpace(existing) == "" {
-		out = agentsBlock
-	} else {
-		if !strings.HasSuffix(out, "\n") {
-			out += "\n"
+		switch trimmed := strings.TrimSpace(line); {
+		case strings.HasPrefix(trimmed, "```"):
+			inFence = !inFence
+		case inFence:
+			// A marker inside a fence is quoted text, not a marker.
+		case trimmed == agentsBlockBegin:
+			// A second begin before any end closes the first at its own line.
+			if open >= 0 {
+				out = append(out, blockRegion{open, openEnd})
+			}
+			open, openEnd = pos, lineEnd
+		case trimmed == agentsBlockEnd && open >= 0:
+			out = append(out, blockRegion{open, lineEnd})
+			open = -1
 		}
-		out += "\n" + agentsBlock
+		if nl < 0 {
+			break
+		}
+		pos = lineEnd
 	}
-	if !strings.HasSuffix(out, "\n") {
-		out += "\n"
+	if open >= 0 {
+		out = append(out, blockRegion{open, openEnd})
 	}
 	return out
+}
+
+// rebuild reassembles body with every managed region removed and, when block
+// is non-empty, block put back where the first region was. A file that somehow
+// carries two blocks converges to one without losing what sat between them.
+//
+// The authored chunks between regions keep their interior bytes; only the
+// blank lines that separated a chunk from a region are normalized, which is
+// what makes an appended block round-trip byte-for-byte through install and
+// uninstall.
+func rebuild(body string, regions []blockRegion, block string) string {
+	chunks := make([]string, 0, len(regions)+1)
+	prev := 0
+	for _, r := range regions {
+		chunks = append(chunks, body[prev:r.start])
+		prev = r.end
+	}
+	chunks = append(chunks, body[prev:])
+
+	parts := make([]string, 0, len(chunks)+1)
+	for i, c := range chunks {
+		if i == 1 && block != "" {
+			parts = append(parts, block)
+		}
+		if t := strings.Trim(c, "\n"); strings.TrimSpace(t) != "" {
+			parts = append(parts, t)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n") + "\n"
+}
+
+// spliceAgentsBlock returns existing with the managed block current: replacing
+// the marked region where there is one, appending it otherwise.
+func spliceAgentsBlock(existing string) string {
+	regions := findBlockRegions(existing)
+	if len(regions) == 0 {
+		if strings.TrimSpace(existing) == "" {
+			return agentsBlock
+		}
+		return strings.TrimRight(existing, "\n") + "\n\n" + agentsBlock
+	}
+	return rebuild(existing, regions, strings.TrimSuffix(agentsBlock, "\n"))
 }
 
 // ensureClaudeMD bootstraps the CLAUDE.md import Claude Code needs. It writes
@@ -183,10 +249,11 @@ func removeAgentsBlock(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
-	if !strings.Contains(string(old), agentsBlockBegin) {
+	regions := findBlockRegions(string(old))
+	if len(regions) == 0 {
 		return instrNone, nil
 	}
-	rest := stripAgentsBlock(string(old))
+	rest := rebuild(string(old), regions, "")
 	if strings.TrimSpace(rest) == "" {
 		regular, err := isRegularFile(path)
 		if err != nil {
@@ -238,30 +305,6 @@ func removeClaudeMD(root string) (string, error) {
 		return "", fmt.Errorf("remove %s: %w", claudePath, err)
 	}
 	return instrRemoved, nil
-}
-
-// stripAgentsBlock removes the marked region and the blank line that separated
-// it, so a file the block was appended to comes back byte-identical.
-func stripAgentsBlock(existing string) string {
-	i := strings.Index(existing, agentsBlockBegin)
-	if i < 0 {
-		return existing
-	}
-	after := i + len(agentsBlockBegin)
-	end := len(existing)
-	if j := strings.Index(existing[after:], agentsBlockEnd); j >= 0 {
-		end = after + j + len(agentsBlockEnd)
-	}
-	head := strings.TrimRight(existing[:i], "\n")
-	tail := strings.TrimLeft(existing[end:], "\n")
-	switch {
-	case head == "":
-		return tail
-	case tail == "":
-		return head + "\n"
-	default:
-		return head + "\n\n" + tail
-	}
 }
 
 // hasImportLine reports whether body already imports AGENTS.md.

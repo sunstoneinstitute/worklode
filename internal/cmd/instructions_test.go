@@ -40,20 +40,36 @@ func TestEnsureAgentsMDCreatesAndConverges(t *testing.T) {
 func TestEnsureAgentsMDPreservesForeignContent(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, agentsFile)
-	const prose = "# Ours\n\nHand-written.\n"
-	if err := os.WriteFile(path, []byte(prose), 0o644); err != nil {
+	// Head and tail both: the block is appended below the head here, but a
+	// hand-placed block has authored prose on both sides of it, and only a
+	// fixture with a tail can catch a splice that runs to EOF.
+	const head = "# Ours\n\nHand-written.\n"
+	const tail = "## Tail\n\nProse the user wrote after the block.\n"
+	if err := os.WriteFile(path, []byte(head), 0o644); err != nil {
 		t.Fatalf("seed %s: %v", path, err)
 	}
 
 	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
 		t.Fatalf("first run: %s %v", action, err)
 	}
+	// Move the tail below the block, which is where a hand-edited file has it.
+	withTail := readFile(t, path) + "\n" + tail
+	if err := os.WriteFile(path, []byte(withTail), 0o644); err != nil {
+		t.Fatalf("add tail: %v", err)
+	}
+	if action, err := ensureAgentsMD(root); err != nil || action != instrUnchanged {
+		t.Fatalf("run with a tail: %s %v", action, err)
+	}
 	got := readFile(t, path)
-	if !strings.HasPrefix(got, prose) {
-		t.Fatalf("foreign content lost: %q", got)
+	if !strings.HasPrefix(got, head) {
+		t.Fatalf("head lost: %q", got)
+	}
+	if !strings.HasSuffix(got, tail) {
+		t.Fatalf("tail lost: %q", got)
 	}
 
-	// A stale block is replaced in place, not duplicated.
+	// A stale block is replaced in place, not duplicated, and the prose on
+	// both sides of it survives.
 	stale := strings.Replace(got, "lode next", "lode obsolete", 1)
 	if stale == got {
 		t.Fatal("could not corrupt the block body")
@@ -70,6 +86,139 @@ func TestEnsureAgentsMDPreservesForeignContent(t *testing.T) {
 	}
 	if refreshed != got {
 		t.Fatalf("refresh did not converge:\n%q\nwant\n%q", refreshed, got)
+	}
+
+	// Uninstall gives back exactly the authored bytes, head and tail.
+	if action, err := removeAgentsBlock(root); err != nil || action != instrRemoved {
+		t.Fatalf("removeAgentsBlock: %s %v", action, err)
+	}
+	if stripped := readFile(t, path); stripped != head+"\n"+tail {
+		t.Fatalf("stripped file = %q, want %q", stripped, head+"\n"+tail)
+	}
+}
+
+// TestAgentsBlockOrphanBeginMarkerKeepsProse is the data-loss regression: a
+// begin marker whose end marker was lost to a bad merge or a hand edit must
+// not take the rest of the file with it. The region stops at the end of the
+// marker's own line, on both the install and the uninstall side.
+func TestAgentsBlockOrphanBeginMarkerKeepsProse(t *testing.T) {
+	const orphan = "# Head\n\n" + agentsBlockBegin + "\nold body\n\n## Tail\n\nIMPORTANT USER PROSE\n"
+
+	root := t.TempDir()
+	path := filepath.Join(root, agentsFile)
+	if err := os.WriteFile(path, []byte(orphan), 0o644); err != nil {
+		t.Fatalf("seed %s: %v", path, err)
+	}
+	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+		t.Fatalf("ensureAgentsMD: %s %v", action, err)
+	}
+	got := readFile(t, path)
+	for _, want := range []string{"# Head", "old body", "## Tail", "IMPORTANT USER PROSE"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("install lost %q:\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, agentsBlockBegin); n != 1 {
+		t.Fatalf("begin marker appears %d times:\n%s", n, got)
+	}
+	if !strings.Contains(got, agentsBlockEnd) {
+		t.Fatalf("install did not repair the missing end marker:\n%s", got)
+	}
+
+	// The removal side has the same fallback and so needs the same guarantee.
+	bare := t.TempDir()
+	barePath := filepath.Join(bare, agentsFile)
+	if err := os.WriteFile(barePath, []byte(orphan), 0o644); err != nil {
+		t.Fatalf("seed %s: %v", barePath, err)
+	}
+	if action, err := removeAgentsBlock(bare); err != nil || action != instrRemoved {
+		t.Fatalf("removeAgentsBlock: %s %v", action, err)
+	}
+	stripped := readFile(t, barePath)
+	for _, want := range []string{"# Head", "old body", "## Tail", "IMPORTANT USER PROSE"} {
+		if !strings.Contains(stripped, want) {
+			t.Fatalf("uninstall lost %q:\n%s", want, stripped)
+		}
+	}
+	if strings.Contains(stripped, agentsBlockBegin) {
+		t.Fatalf("orphan marker survived uninstall:\n%s", stripped)
+	}
+}
+
+// A file that ended up with two blocks — a bad merge, a copy-paste — converges
+// to one, and uninstall leaves no residue behind.
+func TestAgentsBlockDuplicateRegionsConverge(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, agentsFile)
+	const middle = "## Between\n\nProse between the two blocks.\n"
+	doubled := agentsBlock + "\n" + middle + "\n" + agentsBlock
+	if err := os.WriteFile(path, []byte(doubled), 0o644); err != nil {
+		t.Fatalf("seed %s: %v", path, err)
+	}
+
+	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+		t.Fatalf("ensureAgentsMD: %s %v", action, err)
+	}
+	got := readFile(t, path)
+	if n := strings.Count(got, agentsBlockBegin); n != 1 {
+		t.Fatalf("begin marker appears %d times:\n%s", n, got)
+	}
+	if !strings.Contains(got, "Prose between the two blocks.") {
+		t.Fatalf("prose between the blocks lost:\n%s", got)
+	}
+	if action, err := ensureAgentsMD(root); err != nil || action != instrUnchanged {
+		t.Fatalf("second run: %s %v", action, err)
+	}
+
+	if action, err := removeAgentsBlock(root); err != nil || action != instrRemoved {
+		t.Fatalf("removeAgentsBlock: %s %v", action, err)
+	}
+	if stripped := readFile(t, path); strings.Contains(stripped, agentsBlockBegin) {
+		t.Fatalf("uninstall left residue:\n%s", stripped)
+	}
+}
+
+// Markers quoted inside a fenced code block are documentation, not a managed
+// region: a file that only mentions them is appended to, not spliced, and
+// uninstall does not treat it as ours.
+func TestAgentsBlockIgnoresMarkersInsideAFence(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, agentsFile)
+	quoted := "# Docs\n\nWorklode delimits its block like this:\n\n```\n" +
+		agentsBlockBegin + "\n...\n" + agentsBlockEnd + "\n```\n"
+	if err := os.WriteFile(path, []byte(quoted), 0o644); err != nil {
+		t.Fatalf("seed %s: %v", path, err)
+	}
+
+	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+		t.Fatalf("ensureAgentsMD: %s %v", action, err)
+	}
+	got := readFile(t, path)
+	if !strings.HasPrefix(got, quoted) {
+		t.Fatalf("the quoted example was spliced instead of preserved:\n%s", got)
+	}
+	if action, err := removeAgentsBlock(root); err != nil || action != instrRemoved {
+		t.Fatalf("removeAgentsBlock: %s %v", action, err)
+	}
+	if stripped := readFile(t, path); stripped != quoted {
+		t.Fatalf("uninstall did not restore the quoted example:\n%q\nwant\n%q", stripped, quoted)
+	}
+}
+
+// TestAgentsBlockInvocationsResolve puts the managed block under the same
+// drift net as the markdown surfaces. The block ships into every user repo, so
+// a renamed command or flag rots it exactly the way TestAgentSurfaces exists
+// to prevent — but surfaceFiles scans .md, and this text lives in a .go const.
+func TestAgentsBlockInvocationsResolve(t *testing.T) {
+	invocations := findInvocations(agentsFile, agentsBlock)
+	if len(invocations) < 4 {
+		t.Fatalf("found %d lode invocations in the block, want the four entry commands",
+			len(invocations))
+	}
+	for _, inv := range invocations {
+		if reason := checkInvocation(rootCmd, inv.text); reason != "" {
+			t.Errorf("%s block: %s\n\t%s", agentsFile, reason, inv.text)
+		}
 	}
 }
 
@@ -312,11 +461,19 @@ func TestReportInstallInstructionLines(t *testing.T) {
 		t.Fatalf("reportInstall: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, agentsFile+":") || !strings.Contains(out, claudeFile+":") {
-		t.Fatalf("report = %q, want one line per instruction file", out)
+	// Naming the file is not enough: the "unexpected result" arm does that
+	// too. Pin the sentence each action is supposed to produce.
+	for _, want := range []string{
+		agentsFile + ": created with the Worklode block",
+		claudeFile + ": claude-code reads this file",
+		claudeImportLine,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("report = %q, want it to contain %q", out, want)
+		}
 	}
-	if !strings.Contains(out, claudeImportLine) {
-		t.Fatalf("report = %q, want the suggestion to name %q", out, claudeImportLine)
+	if strings.Contains(out, "unexpected result") {
+		t.Fatalf("report = %q, want no unexpected-result line", out)
 	}
 }
 
@@ -330,7 +487,15 @@ func TestReportUninstallInstructionLines(t *testing.T) {
 		t.Fatalf("reportUninstall: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, agentsFile+":") || !strings.Contains(out, claudeFile+":") {
-		t.Fatalf("report = %q, want one line per instruction file", out)
+	for _, want := range []string{
+		agentsFile + ": removed the Worklode block",
+		claudeFile + ": left alone (authored prose)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("report = %q, want it to contain %q", out, want)
+		}
+	}
+	if strings.Contains(out, "unexpected result") {
+		t.Fatalf("report = %q, want no unexpected-result line", out)
 	}
 }
