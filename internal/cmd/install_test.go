@@ -815,9 +815,9 @@ func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 // --- the harness dimension: auto, per-agent stanzas, unbound events --------
 
 // TestInstallReportsPerAgentWithUnboundEvents pins the report's list shape: one
-// stanza per agent, self-describing, with unbound_events present as a key even
-// though claude-code binds everything. HOME is redirected so detection depends
-// only on the repo.
+// stanza per agent, self-describing, and — since claude-code binds every event
+// — with unbound_events omitted rather than rendered empty. HOME is redirected
+// so detection depends only on the repo.
 func TestInstallReportsPerAgentWithUnboundEvents(t *testing.T) {
 	root := initGitRepo(t)
 	t.Setenv("HOME", t.TempDir())
@@ -905,6 +905,96 @@ func TestInstallHooksNamedAgentInstallsUndetected(t *testing.T) {
 	}
 	if len(res.Agents) != 1 {
 		t.Fatalf("agents = %+v, want the named harness installed anyway", res.Agents)
+	}
+}
+
+// registeredAgent names an adapter a test needs by behaviour, failing loudly
+// rather than silently skipping if the registry no longer carries it.
+func registeredAgent(t *testing.T, id string) string {
+	t.Helper()
+	if _, ok := harness.Get(id); !ok {
+		t.Fatalf("test needs the %q adapter; registry has %v", id, harness.IDs())
+	}
+	return id
+}
+
+// isolateHarnessConfig points every adapter's config location at scratch
+// directories, so an install driven by these tests can never reach the
+// developer's own harness config.
+func isolateHarnessConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("COPILOT_HOME", t.TempDir())
+	t.Setenv("AMP_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.json"))
+}
+
+// Agents are installed in the order named, one stanza each — the report reads
+// as the run happened rather than in registry order.
+func TestInstallHooksWalksAgentsInTheOrderGiven(t *testing.T) {
+	root := initGitRepo(t)
+	isolateHarnessConfig(t)
+	want := []string{registeredAgent(t, "codex"), registeredAgent(t, claudeCode)}
+
+	res, err := installHooks(discardCmd(), root, hookTargets{agents: want}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks: %v", err)
+	}
+	if len(res.Agents) != len(want) {
+		t.Fatalf("agents = %+v, want one stanza per named agent %v", res.Agents, want)
+	}
+	for i, id := range want {
+		if res.Agents[i].Agent != id {
+			t.Fatalf("agents = %+v, want them in the order given %v", res.Agents, want)
+		}
+	}
+}
+
+// A failure on the second agent keeps the first agent's stanza: uninstall and
+// install both report what actually landed rather than discarding it.
+func TestInstallHooksReturnsEarlierAgentsWhenALaterOneFails(t *testing.T) {
+	root := initGitRepo(t)
+	isolateHarnessConfig(t)
+	// The codex adapter refuses to rewrite a config it cannot parse, which is
+	// the natural way to fail the second agent and only the second.
+	corrupt := filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json")
+	if err := os.WriteFile(corrupt, []byte("not json"), 0o644); err != nil {
+		t.Fatalf("seed corrupt codex config: %v", err)
+	}
+	first, second := registeredAgent(t, claudeCode), registeredAgent(t, "codex")
+
+	res, err := installHooks(discardCmd(), root, hookTargets{agents: []string{first, second}}, harness.ScopeLocal)
+	if err == nil {
+		t.Fatal("installHooks with a corrupt codex config: err = nil, want a parse error")
+	}
+	if len(res.Agents) != 1 || res.Agents[0].Agent != first {
+		t.Fatalf("agents = %+v, want the first agent's stanza kept", res.Agents)
+	}
+	if got, err := os.ReadFile(corrupt); err != nil || string(got) != "not json" {
+		t.Fatalf("the unparseable config was rewritten: %s %v", got, err)
+	}
+}
+
+// An adapter with no status-line slot contributes no stanza at all — not one
+// carrying an empty action.
+func TestInstallHooksSkipsStatusLineForAdapterWithoutOne(t *testing.T) {
+	root := initGitRepo(t)
+	isolateHarnessConfig(t)
+	id := registeredAgent(t, "amp")
+	h, _ := harness.Get(id)
+	if _, ok := h.(harness.StatusLiner); ok {
+		t.Fatalf("%s gained a status line; this test needs an adapter without one", id)
+	}
+
+	res, err := installHooks(discardCmd(), root, hookTargets{agents: []string{id}, statusLine: true}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks: %v", err)
+	}
+	if len(res.Agents) != 1 {
+		t.Fatalf("agents = %+v, want one stanza", res.Agents)
+	}
+	if len(res.StatusLine) != 0 {
+		t.Fatalf("status_line = %+v, want no stanza for an adapter without the slot", res.StatusLine)
 	}
 }
 
