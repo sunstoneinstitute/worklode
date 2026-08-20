@@ -37,6 +37,7 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 		 JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
 		 JOIN tasks t ON t.id = tc.task_id
 		 WHERE tc.repo = $1 AND mc.id <= $2
+		   AND t.deleted_at IS NULL
 		   AND t.state IN ('ready','in_progress','in_review','merged','deployed_dev')`,
 		repo, frontier)
 	if err != nil {
@@ -72,9 +73,11 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	// A task with children has no commit of its own (004 §6.4), and an
 	// unknown task id is a correlation miss that must not fail the delivery
 	// (InsertTaskCommit's contract); both return nil here rather than an
-	// error.
+	// error. A tombstoned task joins them (044 §4): its commits still land,
+	// but nothing advances a row nothing can see.
 	var state string
-	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state); err != nil {
+	if err := tx.QueryRow(
+		`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&state); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}

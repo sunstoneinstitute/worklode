@@ -41,3 +41,4 @@ These files do that resolution once.
 - [`041-pi-agent-integration.md`](041-pi-agent-integration.md) — Spec 041 — Pi agent integration (draft)
 - [`042-secret-templates.md`](042-secret-templates.md) — Spec 042 — Secret templates (draft)
 - [`043-secrets-catalog-home.md`](043-secrets-catalog-home.md) — ADR 043 — Where the secrets catalog lives (draft)
+- [`044-deleting-tasks-and-documents.md`](044-deleting-tasks-and-documents.md) — Spec 044 — Deleting tasks and documents (draft)

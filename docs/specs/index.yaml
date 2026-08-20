@@ -570,3 +570,12 @@ docs/specs/043-secrets-catalog-home.md:
     sec-2: "## 2. Where the catalog lives"
     sec-3: "## 3. What ships in this repo"
     sec-4: "## 4. Consequences"
+docs/specs/044-deleting-tasks-and-documents.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. Delete is not abandon"
+    sec-2: "## 2. The tombstone"
+    sec-3: "## 3. Justification, by instance environment"
+    sec-4: "## 4. What a tombstone hides"
+    sec-5: "## 5. Surfaces"
+    sec-6: "## 6. Metrics"

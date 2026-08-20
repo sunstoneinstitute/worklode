@@ -91,17 +91,24 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/tasks/{id}/timeline": guarded(permTaskRead),
 	// A task's blob references (spec 021 §3). Listing is a task read; both
 	// halves of the reference graph are task writes.
-	"GET /api/v1/tasks/{id}/blobs":              guarded(permTaskRead),
-	"POST /api/v1/tasks/{id}/blobs":             guarded(permTaskWrite),
-	"DELETE /api/v1/tasks/{id}/blobs/{hash}":    guarded(permTaskWrite),
-	"PATCH /api/v1/tasks/{id}":                  guarded(permTaskWrite),
-	"PUT /api/v1/tasks/{id}/skills":             guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/edges":             guarded(permTaskWrite),
-	"DELETE /api/v1/tasks/{id}/edges":           guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/decompose":         guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/done":              guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/abandon":           guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/reopen":            guarded(permTaskWrite),
+	"GET /api/v1/tasks/{id}/blobs":           guarded(permTaskRead),
+	"POST /api/v1/tasks/{id}/blobs":          guarded(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/blobs/{hash}": guarded(permTaskWrite),
+	"PATCH /api/v1/tasks/{id}":               guarded(permTaskWrite),
+	"PUT /api/v1/tasks/{id}/skills":          guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/edges":          guarded(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/edges":        guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/decompose":      guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/done":           guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/abandon":        guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/reopen":         guarded(permTaskWrite),
+	// Delete and undelete are task writes like the rest (044 §5). Deliberately
+	// not admin-only: a per-role delete permission would be the first of an
+	// RBAC model this repo does not have (001 §9.2). What stops a careless
+	// delete on a prod instance is the justification 044 §3 demands, not a
+	// narrower role.
+	"DELETE /api/v1/tasks/{id}":                 guarded(permTaskWrite),
+	"POST /api/v1/tasks/{id}/undelete":          guarded(permTaskWrite),
 	"POST /api/v1/tasks/claim-next":             guarded(permTaskClaim),
 	"POST /api/v1/tasks/{id}/claim":             guarded(permTaskClaim),
 	"POST /api/v1/tasks/{id}/renew":             guarded(permTaskClaim),
@@ -130,6 +137,9 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
+	// The document half of 044 §5; see the task entries above.
+	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
 	// --- skills --------------------------------------------------------------
 	"GET /api/v1/skills":                       guarded(permSkillRead),

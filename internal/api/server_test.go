@@ -330,6 +330,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 		"worklode_skill_sync_runs_total",
 		"worklode_skill_sync_duration_seconds",
 		"worklode_event_log_horizon_id",
+		"worklode_deletes_total",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %s", want)

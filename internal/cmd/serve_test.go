@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
 )
 
 // TestParseClusterEnvMap: only dev and prod are accepted. env_deploys holds
@@ -186,5 +187,23 @@ func TestGraphProjector(t *testing.T) {
 				t.Fatal("graphProjector() = nil, want a non-nil projector")
 			}
 		})
+	}
+}
+
+// TestRunServeRejectsBadInstanceEnv: LODE_INSTANCE_ENV is validated before the
+// store is opened (039 §3), like LODE_WEB_OPEN and LODE_CLUSTER_ENV_MAP, so an
+// operator sees the typo in the setting rather than a connection error. The
+// DSN below is deliberately unreachable: if the check ever moved after
+// store.Open, this test would fail with a connection error instead.
+func TestRunServeRejectsBadInstanceEnv(t *testing.T) {
+	t.Setenv("LODE_INSTANCE_ENV", "staging")
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runServe(cmd, "postgres://nobody@127.0.0.1:1/nowhere?sslmode=disable", "127.0.0.1:0", "127.0.0.1:0")
+	if err == nil {
+		t.Fatal("runServe accepted LODE_INSTANCE_ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "LODE_INSTANCE_ENV") {
+		t.Fatalf("error = %q, want it to name LODE_INSTANCE_ENV", err)
 	}
 }

@@ -34,8 +34,9 @@ func (s *Store) SetProjectionCheckpoint(ctx context.Context, id int64) error {
 // even after a long outage.
 //
 // The LEFT JOIN keeps the watermark advancing even over a log row whose
-// task no longer resolves (no delete path exists today; this is a guard,
-// not a feature). state_log ids are assigned at insert time, so two
+// task no longer resolves. No path *removes* a task row — delete is a
+// tombstone (044 §2), which still joins — so this is a guard, not a feature.
+// state_log ids are assigned at insert time, so two
 // concurrent transactions within one process can commit out of order: a
 // slow transaction can commit a lower id after a projector scan already read
 // past it and checkpointed, and that row is never scanned. Acceptable for

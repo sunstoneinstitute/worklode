@@ -22,6 +22,9 @@ type Doc struct {
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Tombstone carries the delete record (044 §2) and is nil on a live
+	// document. See Task.Tombstone.
+	Tombstone *Tombstone `json:"tombstone,omitempty"`
 }
 
 // DocSection is one addressable section of a spec or ADR (025 §3). Plans have

@@ -135,7 +135,7 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     ordered before the task's plan is unfinished (025 §9.3).
 //   - ErrBadTransition: the task has children, or is not in state ready
 //     (draft, merged, ...).
-//   - ErrNotFound: the task or actor does not exist.
+//   - ErrNotFound: the task or actor does not exist, or the task is deleted.
 //
 // ttl <= 0 means DefaultLeaseTTL.
 func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl time.Duration) (*Lease, error) {
@@ -153,9 +153,11 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			now := s.nowFn().UTC().Truncate(time.Second)
 
 			// Lock the task row first so concurrent claims serialize here.
+			// A tombstoned task is outside the claimable universe (044 §4),
+			// so it reads as ErrNotFound rather than as some other refusal.
 			var state string
 			if err := tx.QueryRow(
-				`SELECT state FROM tasks WHERE id = $1 FOR UPDATE`, taskID,
+				`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, taskID,
 			).Scan(&state); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("task %s: %w", taskID, ErrNotFound)

@@ -68,6 +68,11 @@ type TaskFilter struct {
 	// AboutDoc narrows to the tasks that reference this document (0 = none)
 	// — the review/design task set a document's lifecycle minted (025 §15.4).
 	AboutDoc int64
+	// Deleted switches the list from live tasks to tombstoned ones (044 §5).
+	// It is a switch, not an addition: a list mixing the two invites acting on
+	// a row that is not there. The zero value lists live tasks, which is what
+	// every caller that predates the tombstone meant.
+	Deleted bool
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -383,9 +388,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // unaffected by their addition. skills and secrets are "jsonb NOT NULL
 // DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
-// 0027 and 0028), scanned into sql.NullInt64. prefixedTaskColumns below
-// requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc`
+// 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
+// (migration 0034) are last for the same reason, and are all-null or all-set
+// together. prefixedTaskColumns below requires each entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -400,10 +406,14 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
 	var planDoc, aboutDoc sql.NullInt64
+	var deletedAt sql.NullTime
+	var deletedBy, justification sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
+		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
+	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	t.PlanDoc = planDoc.Int64
 	t.AboutDoc = aboutDoc.Int64
 	t.Body = body.String
@@ -540,6 +550,12 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
 	var args sqlArgs
+	// 044 §4: a tombstoned task is out of every list by default.
+	if f.Deleted {
+		conds = append(conds, `deleted_at IS NOT NULL`)
+	} else {
+		conds = append(conds, `deleted_at IS NULL`)
+	}
 	if f.Project != "" {
 		conds = append(conds, `project_id = `+args.next(f.Project))
 	}
@@ -566,7 +582,11 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
 	}
 	if f.HasChildren {
+		// Only live children make a container, exactly as hasChildren reads
+		// it (044 §4) — otherwise a task whose only children are tombstoned
+		// would list as a container the claim path treats as an ordinary task.
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
+		                              JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
 	}
 	if f.Repo != "" {
@@ -905,14 +925,23 @@ func deliveryRank(expr string) string {
 // repo. It is checked explicitly rather than left to "a container has no
 // commits", since AddEdge can give children to a task that already landed some.
 // A task with no landed commit at all — marked merged by hand — has no repo to
-// gate on and closes at merged too.
+// gate on and closes at merged too. Only *live* children make a container: a
+// tombstoned child does not count.
 //
-// The rendered subqueries bind `ch`, `tc`, `mc` and `pr`; an enclosing query
-// must not reuse those aliases.
+// Deleted is deliberately *not* folded in here. The tombstone is orthogonal to
+// state (044 §1), and this predicate is what ClosedTaskIDs answers `Closed`
+// with on the wire: a tombstoned draft is a hidden draft, not a closed one.
+// Each caller that means "live and open" adds `deleted_at IS NULL` itself —
+// blockedCondition, planUnfinished, the open-blocker queries, OpenTaskForDoc —
+// and the roll-up queries filter their children before they get here.
+//
+// The rendered subqueries bind `ch`, `cht`, `tc`, `mc` and `pr`; an enclosing
+// query must not reuse those aliases.
 func taskClosed(alias string) string {
 	state := alias + ".state"
 	return `(` + state + ` = 'abandoned' OR (` + deliveryRank(state) + ` > 0
 	     AND (EXISTS (SELECT 1 FROM task_edges ch
+	                  JOIN tasks cht ON cht.id = ch.from_task AND cht.deleted_at IS NULL
 	                  WHERE ch.to_task = ` + alias + `.id AND ch.type = 'child_of')
 	          OR NOT EXISTS (SELECT 1 FROM task_commits tc
 	                         JOIN main_commits mc ON mc.repo = tc.repo AND mc.sha = tc.sha
@@ -923,10 +952,13 @@ func taskClosed(alias string) string {
 }
 
 // blockedCondition matches 'blocks' edges whose blocker (from_task) is still
-// open, i.e. the edge currently blocks its to_task.
+// open, i.e. the edge currently blocks its to_task. The blocker must also be
+// live: a deleted blocker stops blocking without its edge being retracted
+// (044 §4), which is why the filter sits here and not in taskClosed.
 var blockedCondition = `e.type = 'blocks'
 	 AND EXISTS (SELECT 1 FROM tasks b
 	             WHERE b.id = e.from_task
+	               AND b.deleted_at IS NULL
 	               AND NOT ` + taskClosed("b") + `)`
 
 // planUnfinished renders "the plan document aliased as alias still has work
@@ -939,11 +971,17 @@ var blockedCondition = `e.type = 'blocks'
 // Every surface that reports plan-to-plan blocking renders this one predicate
 // — planBlockedCondition for the gate, the blocking-plan queries for the
 // cockpit and the brief — so no surface can disagree with Claim.
+//
+// A tombstoned plan holds nothing: it is out of the picture entirely. Its
+// tasks are filtered the same way — a deleted task is not outstanding work,
+// even though taskClosed alone would still call it open.
 func planUnfinished(alias string) string {
-	return `(` + alias + `.status = 'draft'
-	     OR EXISTS (SELECT 1 FROM tasks bt
-	                WHERE bt.plan_doc = ` + alias + `.id
-	                  AND NOT ` + taskClosed("bt") + `))`
+	return `(` + alias + `.deleted_at IS NULL
+	     AND (` + alias + `.status = 'draft'
+	          OR EXISTS (SELECT 1 FROM tasks bt
+	                     WHERE bt.plan_doc = ` + alias + `.id
+	                       AND bt.deleted_at IS NULL
+	                       AND NOT ` + taskClosed("bt") + `)))`
 }
 
 // planBlockedCondition holds a task while its plan is ordered after another
@@ -966,9 +1004,11 @@ var planBlockedCondition = `t.plan_doc IS NOT NULL AND EXISTS (
 // as pickable that Claim then refuses is worse than no badge at all.
 func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT e.to_task FROM task_edges e WHERE `+blockedCondition+`
+		`SELECT DISTINCT e.to_task FROM task_edges e
+		   JOIN tasks d ON d.id = e.to_task AND d.deleted_at IS NULL
+		  WHERE `+blockedCondition+`
 		 UNION
-		 SELECT t.id FROM tasks t WHERE `+planBlockedCondition)
+		 SELECT t.id FROM tasks t WHERE t.deleted_at IS NULL AND `+planBlockedCondition)
 	if err != nil {
 		return nil, fmt.Errorf("blocked task ids: %w", err)
 	}
@@ -992,7 +1032,11 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 // per-repo predicate in taskClosed (004 §1.3; see also 026 §2.5, which
 // requires closure be the server's answer since a client cannot evaluate a
 // predicate over other repos' done_state and landed-commit facts). An empty
-// ids returns an empty map without touching the database.
+// ids returns an empty map without touching the database. A tombstoned id is
+// answered on its state like any other: the tombstone is orthogonal to state
+// (044 §1), so a deleted draft answers Closed false and a deleted merged task
+// answers what its repos say. What stops a deleted task blocking or holding a
+// plan open is the live filter at those queries, not this verdict.
 func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(ids) == 0 {
@@ -1041,14 +1085,17 @@ func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 
 // OpenTaskForDoc returns the id of an open task of the given kind that
 // references doc, or "" — the §5 suppression guard of spec 025 §15.4,
-// computed rather than stored (025 §1). Open means taskClosed's complement,
-// the same notion the ready set and the blocks predicate share, so this guard
-// cannot disagree with either about what "still open" means.
+// computed rather than stored (025 §1). Open means live and taskClosed's
+// complement, the same notion the ready set and the blocks predicate share, so
+// this guard cannot disagree with either about what "still open" means. A
+// tombstoned task suppresses nothing (044 §4): the lifecycle should mint the
+// replacement the operator deleted the old one to make room for.
 func (s *Store) OpenTaskForDoc(ctx context.Context, docID int64, kind string) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id FROM tasks
-		  WHERE about_doc = $1 AND kind = $2 AND NOT `+taskClosed("tasks")+`
+		  WHERE about_doc = $1 AND kind = $2 AND deleted_at IS NULL
+		    AND NOT `+taskClosed("tasks")+`
 		  ORDER BY created_at, id LIMIT 1`, docID, kind,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

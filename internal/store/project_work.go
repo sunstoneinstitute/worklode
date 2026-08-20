@@ -65,7 +65,8 @@ func (f ProjectWorkFact) Blocked() bool {
 // ListProjectWorkFacts returns a ProjectWorkFact for every task in
 // projectID, ordered the same way ListTasks orders its results (priority
 // rank, then the id's project-key prefix, then its numeric suffix).
-// projectID == "" returns every task across every project.
+// projectID == "" returns every task across every project. Tombstoned tasks
+// are out, and a tombstoned parent is not named (044 §4).
 //
 // Parent, Lease, and StateEvent come from a single joined query (a task has
 // at most one child_of parent — task_edges_single_parent — at most one
@@ -89,7 +90,7 @@ SELECT `+taskColumnsT+`,
   FROM tasks t
   LEFT JOIN task_edges pe
     ON pe.from_task = t.id AND pe.type = 'child_of'
-  LEFT JOIN tasks parent ON parent.id = pe.to_task
+  LEFT JOIN tasks parent ON parent.id = pe.to_task AND parent.deleted_at IS NULL
   LEFT JOIN leases l ON l.task_id = t.id AND l.released_at IS NULL
   LEFT JOIN LATERAL (
     SELECT sl.id, e.source, e.type, sl.at
@@ -103,6 +104,7 @@ SELECT `+taskColumnsT+`,
      LIMIT 1
   ) se ON true
  WHERE ($1 = '' OR t.project_id = $1)
+   AND t.deleted_at IS NULL
  ORDER BY CASE t.priority
             WHEN 'critical' THEN 0 WHEN 'high' THEN 1
             WHEN 'medium' THEN 2 ELSE 3
@@ -150,10 +152,10 @@ SELECT `+taskColumnsT+`,
 // task id) with the open tasks holding a dependent in scope for projectID (""
 // meaning every project): the from_task of a 'blocks' edge, and the open tasks
 // of any plan ordered before the dependent's plan (025 §9.3). "Open" uses the
-// same predicate as blockedCondition and planBlockedCondition: the blocker has
-// not reached its repo's done_state (taskClosed). The blocker itself need not
-// be in the same project as its dependent — 'blocks' edges, unlike child_of,
-// are not project-scoped (see AddEdge).
+// same predicate as blockedCondition and planBlockedCondition: the blocker is
+// live and has not reached its repo's done_state (taskClosed). The blocker
+// itself need not be in the same project as its dependent — 'blocks' edges,
+// unlike child_of, are not project-scoped (see AddEdge).
 //
 // A blocking plan still draft has minted no task and so names none here; it
 // reaches the fact through attachBlockingPlans instead.
@@ -164,7 +166,9 @@ SELECT e.to_task, b.id, b.title, b.state
   JOIN tasks b ON b.id = e.from_task
   JOIN tasks dep ON dep.id = e.to_task
  WHERE e.type = 'blocks'
+   AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
 UNION
 SELECT dep.id, b.id, b.title, b.state
@@ -172,7 +176,9 @@ SELECT dep.id, b.id, b.title, b.state
   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
   JOIN tasks b ON b.plan_doc = de.from_doc
  WHERE dep.plan_doc IS NOT NULL
+   AND b.deleted_at IS NULL
    AND NOT `+taskClosed("b")+`
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)`, projectID)
 	if err != nil {
 		return fmt.Errorf("open blockers: %w", err)
@@ -208,6 +214,7 @@ SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
   JOIN docs bd ON bd.id = de.from_doc
  WHERE dep.plan_doc IS NOT NULL
+   AND dep.deleted_at IS NULL
    AND ($1 = '' OR dep.project_id = $1)
    AND `+planUnfinished("bd")+`
  ORDER BY 2`, projectID)
