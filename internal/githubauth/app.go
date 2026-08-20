@@ -111,10 +111,47 @@ func repoPath(repo string) (string, error) {
 	return url.PathEscape(owner) + "/" + url.PathEscape(name), nil
 }
 
-// InstallationToken mints a short-lived installation token scoped to the
-// installation that owns repo ("owner/name").
-func (a *AppAuth) InstallationToken(ctx context.Context, repo string) (string, error) {
+// ErrAppNotInstalled reports that the App is not installed on a repo: GitHub
+// answers GET /repos/{repo}/installation with 404. It is a fact about the
+// repo, unlike a transport failure or a 5xx, which leave the answer unknown —
+// callers reporting installation status must keep the two apart.
+var ErrAppNotInstalled = errors.New("github app is not installed on this repo")
+
+// InstallationID returns the id of the installation that owns repo
+// ("owner/name"), or ErrAppNotInstalled when the App is not installed there.
+// One round trip: this is the whole check for "is the App installed", so a
+// caller that only needs that answer must not mint a token to get it.
+func (a *AppAuth) InstallationID(ctx context.Context, repo string) (int64, error) {
 	path, err := repoPath(repo)
+	if err != nil {
+		return 0, err
+	}
+	jwtStr, err := a.appJWT()
+	if err != nil {
+		return 0, err
+	}
+	var inst struct {
+		ID int64 `json:"id"`
+	}
+	code, err := githubJSON(ctx, http.MethodGet, a.BaseURL+"/repos/"+path+"/installation", "Bearer "+jwtStr, &inst)
+	if err != nil {
+		return 0, err
+	}
+	switch code {
+	case http.StatusOK:
+		return inst.ID, nil
+	case http.StatusNotFound:
+		return 0, fmt.Errorf("%s: %w", repo, ErrAppNotInstalled)
+	default:
+		return 0, fmt.Errorf("github app installation for %s: status %d", repo, code)
+	}
+}
+
+// InstallationToken mints a short-lived installation token scoped to the
+// installation that owns repo ("owner/name"). Two round trips — prefer
+// InstallationID when the token itself is not needed.
+func (a *AppAuth) InstallationToken(ctx context.Context, repo string) (string, error) {
+	instID, err := a.InstallationID(ctx, repo)
 	if err != nil {
 		return "", err
 	}
@@ -124,22 +161,11 @@ func (a *AppAuth) InstallationToken(ctx context.Context, repo string) (string, e
 	}
 	appAuth := "Bearer " + jwtStr
 
-	var inst struct {
-		ID int64 `json:"id"`
-	}
-	code, err := githubJSON(ctx, http.MethodGet, a.BaseURL+"/repos/"+path+"/installation", appAuth, &inst)
-	if err != nil {
-		return "", err
-	}
-	if code != http.StatusOK {
-		return "", fmt.Errorf("github app installation for %s: status %d", repo, code)
-	}
-
 	var tok struct {
 		Token string `json:"token"`
 	}
-	mintURL := fmt.Sprintf("%s/app/installations/%d/access_tokens", a.BaseURL, inst.ID)
-	code, err = githubJSON(ctx, http.MethodPost, mintURL, appAuth, &tok)
+	mintURL := fmt.Sprintf("%s/app/installations/%d/access_tokens", a.BaseURL, instID)
+	code, err := githubJSON(ctx, http.MethodPost, mintURL, appAuth, &tok)
 	if err != nil {
 		return "", err
 	}

@@ -25,8 +25,10 @@ type WhoAmI struct {
 
 // RepoDoctor is one mapped repo's ingestion health, from GET
 // /api/v1/repos/doctor (spec 013 §lode project doctor). AppInstalled is nil
-// when the server has no GitHub App configured — the check cannot run,
-// which is different from "not installed".
+// when the check could not run — no GitHub App configured, GitHub unreachable
+// or erroring, or the report's time budget spent before this repo's turn —
+// which is different from "not installed". AppError says which, and is set
+// alongside a false AppInstalled too (GitHub's own "not installed" answer).
 type RepoDoctor struct {
 	Repo            string     `json:"repo"`
 	Project         string     `json:"project"`

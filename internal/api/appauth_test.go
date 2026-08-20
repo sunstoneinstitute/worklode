@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -342,5 +344,212 @@ func TestAddRepoSubscriptionCheckFailureStillMapsRepoNoWarnings(t *testing.T) {
 	json.Unmarshal(rr.Body.Bytes(), &got)
 	if len(got.Warnings) != 0 {
 		t.Fatalf("warnings = %v, want none when GitHub fails the check", got.Warnings)
+	}
+}
+
+// installationProbe is a GitHub stand-in for the doctor's App-install check:
+// it serves GET /repos/{owner}/{name}/installation after delay, and records
+// how many calls it saw and how many were in flight at once.
+type installationProbe struct {
+	delay    time.Duration
+	notFound map[string]bool // repos the App is "not installed" on
+
+	mu       sync.Mutex
+	calls    int
+	paths    []string
+	inFlight int
+	peak     int
+}
+
+func (p *installationProbe) enter(path string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls++
+	p.paths = append(p.paths, path)
+	p.inFlight++
+	if p.inFlight > p.peak {
+		p.peak = p.inFlight
+	}
+}
+
+func (p *installationProbe) leave() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.inFlight--
+}
+
+func (p *installationProbe) start(t *testing.T) *githubauth.AppAuth {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p.enter(r.URL.Path)
+		defer p.leave()
+		if p.delay > 0 {
+			select {
+			case <-time.After(p.delay):
+			case <-r.Context().Done():
+				return
+			}
+		}
+		repo := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/repos/"), "/installation")
+		if p.notFound[repo] {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"id": 7})
+	}))
+	t.Cleanup(srv.Close)
+	return &githubauth.AppAuth{AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}
+}
+
+// doctorServer maps repos under project "proj" and returns a helper that runs
+// GET /api/v1/repos/doctor against a server holding the given App auth.
+func doctorServer(t *testing.T, app *githubauth.AppAuth, repos []string) func() model.ReposDoctorResponse {
+	t.Helper()
+	ctx := context.Background()
+	st := store.OpenTestStore(t)
+	if err := st.CreateProject(ctx, "proj", "Proj", "PR"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	for _, repo := range repos {
+		if err := st.AddRepo(ctx, "proj", repo); err != nil {
+			t.Fatalf("map %s: %v", repo, err)
+		}
+	}
+	s := &server{st: st, cfg: Config{}, log: slog.Default(), appAuth: app}
+	return func() model.ReposDoctorResponse {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		s.reposDoctor(rr, httptest.NewRequest("GET", "/api/v1/repos/doctor", nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("repos doctor: status %d, body %s", rr.Code, rr.Body.String())
+		}
+		var resp model.ReposDoctorResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode %q: %v", rr.Body.String(), err)
+		}
+		return resp
+	}
+}
+
+func doctorRepoNames(n int) []string {
+	repos := make([]string, n)
+	for i := range repos {
+		repos[i] = fmt.Sprintf("acme/repo%02d", i)
+	}
+	return repos
+}
+
+// The App-install check costs one GitHub call per repo — not two — and the
+// calls run concurrently under appCheckConcurrency, so wall clock tracks the
+// number of waves rather than the number of repos. Sequentially these would
+// take repos×delay; the ceiling asserts they did not.
+func TestReposDoctorAppCheckIsConcurrentAndSingleCall(t *testing.T) {
+	const repos = 24
+	const delay = 100 * time.Millisecond
+	probe := &installationProbe{delay: delay}
+	doctor := doctorServer(t, probe.start(t), doctorRepoNames(repos))
+
+	start := time.Now()
+	resp := doctor()
+	elapsed := time.Since(start)
+
+	if len(resp.Repos) != repos {
+		t.Fatalf("reported %d repos, want %d", len(resp.Repos), repos)
+	}
+	for _, r := range resp.Repos {
+		if r.AppInstalled == nil || !*r.AppInstalled {
+			t.Fatalf("%s: app_installed = %v (%s), want true", r.Repo, r.AppInstalled, r.AppError)
+		}
+	}
+
+	probe.mu.Lock()
+	calls, peak, paths := probe.calls, probe.peak, probe.paths
+	probe.mu.Unlock()
+
+	if calls != repos {
+		t.Errorf("GitHub calls = %d, want %d (one per repo — no token mint)", calls, repos)
+	}
+	for _, p := range paths {
+		if !strings.HasSuffix(p, "/installation") {
+			t.Errorf("unexpected GitHub call %q; the check needs only the installation lookup", p)
+		}
+	}
+	if peak < 2 {
+		t.Errorf("peak in-flight calls = %d; the checks ran sequentially", peak)
+	}
+	if peak > appCheckConcurrency {
+		t.Errorf("peak in-flight calls = %d, want <= %d; the fan-out is unbounded", peak, appCheckConcurrency)
+	}
+	// Sequential would be repos×delay = 2.4s; the bounded fan-out needs
+	// ceil(24/8)=3 waves ≈ 300ms. Half the sequential cost is a ceiling loose
+	// enough for a loaded CI box and still failing on a serial regression.
+	if ceiling := repos * delay / 2; elapsed > ceiling {
+		t.Errorf("doctor took %s, want < %s; wall clock is growing with repo count", elapsed, ceiling)
+	}
+}
+
+// GitHub's 404 is the one answer that means "not installed"; anything else
+// leaves the question open and must report unchecked, not absent.
+func TestReposDoctorAppCheckDistinguishesNotInstalledFromUnchecked(t *testing.T) {
+	probe := &installationProbe{notFound: map[string]bool{"acme/missing": true}}
+	doctor := doctorServer(t, probe.start(t), []string{"acme/ok", "acme/missing"})
+
+	byRepo := map[string]model.RepoDoctor{}
+	for _, r := range doctor().Repos {
+		byRepo[r.Repo] = r
+	}
+	if r := byRepo["acme/ok"]; r.AppInstalled == nil || !*r.AppInstalled {
+		t.Errorf("acme/ok: app_installed = %v, want true", r.AppInstalled)
+	}
+	r := byRepo["acme/missing"]
+	if r.AppInstalled == nil || *r.AppInstalled {
+		t.Fatalf("acme/missing: app_installed = %v, want false — GitHub answered 404", r.AppInstalled)
+	}
+	if r.AppError == "" {
+		t.Error("acme/missing: app_error is empty; the report must say why it is not installed")
+	}
+}
+
+// A GitHub that never answers must not hold the doctor response open for
+// repo-count × per-call timeout: the whole check phase shares one budget, and
+// repos it does not reach report unchecked (nil) rather than not-installed.
+func TestReposDoctorAppCheckBudgetBoundsHang(t *testing.T) {
+	prev := appCheckBudget
+	appCheckBudget = 300 * time.Millisecond
+	t.Cleanup(func() { appCheckBudget = prev })
+
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-block:
+		case <-r.Context().Done():
+		}
+	}))
+	// Cleanups run LIFO: unblock the handler before Close waits on it.
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(block) })
+
+	doctor := doctorServer(t, &githubauth.AppAuth{
+		AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}, doctorRepoNames(40))
+
+	done := make(chan model.ReposDoctorResponse, 1)
+	go func() { done <- doctor() }()
+
+	select {
+	case resp := <-done:
+		if len(resp.Repos) != 40 {
+			t.Fatalf("reported %d repos, want 40 — a stuck check must not drop repos", len(resp.Repos))
+		}
+		for _, r := range resp.Repos {
+			if r.AppInstalled != nil {
+				t.Fatalf("%s: app_installed = %v, want null — the check never got an answer",
+					r.Repo, *r.AppInstalled)
+			}
+			if r.AppError == "" {
+				t.Fatalf("%s: app_error is empty; unchecked must say why", r.Repo)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("repos doctor did not return while GitHub hung; the App check is not bounded")
 	}
 }

@@ -490,13 +490,17 @@ func newProjectDoctorCmd() *cobra.Command {
 				return nil
 			}
 			for _, r := range resp.Repos {
+				// A nil app_installed means the check did not run; the
+				// reason is in app_error when there is one, and its absence
+				// means no GitHub App is configured at all.
 				app := "unchecked (no GitHub App configured)"
-				if r.AppInstalled != nil {
-					if *r.AppInstalled {
-						app = "installed"
-					} else {
-						app = "NOT INSTALLED (" + r.AppError + ")"
-					}
+				switch {
+				case r.AppInstalled == nil && r.AppError != "":
+					app = "unchecked (" + r.AppError + ")"
+				case r.AppInstalled != nil && *r.AppInstalled:
+					app = "installed"
+				case r.AppInstalled != nil:
+					app = "NOT INSTALLED (" + r.AppError + ")"
 				}
 				last := "never"
 				if r.LastEventAt != nil {
