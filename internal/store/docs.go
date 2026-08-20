@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -939,7 +940,7 @@ func closureEqual(a, b []closureRef) bool {
 			return 1
 		}
 		if x.toDoc != y.toDoc {
-			return int(x.toDoc - y.toDoc)
+			return cmp.Compare(x.toDoc, y.toDoc)
 		}
 		return strings.Compare(x.toExternal, y.toExternal)
 	}
