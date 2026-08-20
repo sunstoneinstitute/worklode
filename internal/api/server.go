@@ -534,6 +534,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
 	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
 
+	r.api("GET /api/v1/whoami", s.whoami)
+
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
 	// rather than sitting in the file looking enforced.

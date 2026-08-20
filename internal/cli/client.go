@@ -1438,3 +1438,18 @@ func (c *Client) BlobGC(ctx context.Context, dryRun bool, graceHours *int) (mode
 	return doJSON[model.BlobGCResponse](ctx, c, http.MethodPost, "/api/v1/blobs/gc",
 		model.BlobGCRequest{DryRun: dryRun, GraceHours: graceHours}, "blob gc result")
 }
+
+// WhoAmI is the response of GET /api/v1/whoami.
+type WhoAmI struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Admin bool   `json:"admin"`
+}
+
+// WhoAmI calls GET /api/v1/whoami: which actor the configured token belongs
+// to. A *ClientError with Status 401 means the token is not accepted; a
+// transport error means the server is unreachable — lode doctor tells those
+// two failures apart.
+func (c *Client) WhoAmI(ctx context.Context) (WhoAmI, []byte, error) {
+	return doJSON[WhoAmI](ctx, c, http.MethodGet, "/api/v1/whoami", nil, "whoami")
+}

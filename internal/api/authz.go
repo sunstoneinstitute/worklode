@@ -151,6 +151,11 @@ const (
 	// query open for as long as the client watches, which is a resource an
 	// instance hands out deliberately.
 	permEventStream Permission = "event.stream"
+
+	// permWhoAmI covers GET /api/v1/whoami: any authenticated actor may ask
+	// which identity their token resolves to. No admin gate — this is how
+	// the CLI (and lode doctor) confirms a token is accepted and whose it is.
+	permWhoAmI Permission = "whoami"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -223,6 +228,8 @@ var grants = map[Permission][]Role{
 	permEventRead:   {RoleUser, RoleAdmin},
 	permEventAdmin:  {RoleAdmin},
 	permEventStream: {RoleAdmin},
+
+	permWhoAmI: {RoleUser, RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say
