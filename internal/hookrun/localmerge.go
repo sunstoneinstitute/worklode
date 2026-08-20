@@ -165,7 +165,7 @@ func (p *mergeProbe) replayLanded(branch string) bool {
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "+") {
 			return false
 		}
@@ -249,7 +249,7 @@ func gitPatchIDs(root string, stdin []byte, args ...string) []string {
 		return nil
 	}
 	var ids []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		// Each line is "<patch id> <commit id>"; the commit id is zero for a
 		// diff fed in without its commit header.
 		if id, _, found := strings.Cut(strings.TrimSpace(line), " "); found && id != "" {
@@ -294,7 +294,7 @@ func localBranches(root string) map[string]bool {
 		return nil
 	}
 	set := map[string]bool{}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if name := strings.TrimSpace(line); name != "" {
 			set[name] = true
 		}
