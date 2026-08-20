@@ -72,6 +72,7 @@ func newDocCmd() *cobra.Command {
 		newDocGetCmd(),
 		newDocEditCmd(),
 		newDocAcceptCmd(),
+		newDocSubmitCmd(),
 		newDocReviseCmd(),
 		newDocAnchorsCmd(),
 		newDocImportCmd(),
@@ -402,6 +403,38 @@ func newDocAcceptCmd() *cobra.Command {
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "minted tasks: %s\n", strings.Join(ids, ", "))
 			}
+			return nil
+		},
+	}
+	return cmd
+}
+
+// newDocSubmitCmd puts a document up for review. Submission is an event, not a
+// status (025 §15.4): the document does not move, and what the event means —
+// minting a review task, say — is the doc-lifecycle watcher's to decide.
+func newDocSubmitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "submit <id-or-slug>",
+		Short: "Submit a document for review (records a review event; the document's status does not change)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.SubmitDoc(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "submitted doc %d for review\n", d.ID)
 			return nil
 		},
 	}

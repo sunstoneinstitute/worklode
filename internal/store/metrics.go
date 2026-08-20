@@ -110,8 +110,8 @@ func (m *storeMetrics) projectWorkRead(err error) {
 }
 
 // docOp records one document mutation by op and outcome. op is the caller's
-// fixed verb (create|update|accept|revise|edges), never a doc id or project —
-// those are unbounded.
+// fixed verb (create|update|accept|revise|edges|submit), never a doc id or
+// project — those are unbounded.
 func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return
