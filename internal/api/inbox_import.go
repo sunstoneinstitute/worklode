@@ -124,7 +124,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 					Title:  is.Title,
 					State:  is.State,
 					URL:    is.HTMLURL,
-				}); err != nil {
+				}, is.UpdatedAt); err != nil {
 					return err
 				}
 			}
@@ -148,16 +148,17 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 					mergedAt = pr.MergedAt
 				}
 				if _, err := store.UpsertPR(tx, store.PullRequest{
-					Repo:     req.Repo,
-					Number:   pr.Number,
-					Title:    pr.Title,
-					State:    state,
-					HeadRef:  pr.HeadRef,
-					HeadSHA:  pr.HeadSHA,
-					MergeSHA: pr.MergeCommitSHA,
-					URL:      pr.HTMLURL,
-					OpenedAt: pr.CreatedAt,
-					MergedAt: mergedAt,
+					Repo:      req.Repo,
+					Number:    pr.Number,
+					Title:     pr.Title,
+					State:     state,
+					HeadRef:   pr.HeadRef,
+					HeadSHA:   pr.HeadSHA,
+					MergeSHA:  pr.MergeCommitSHA,
+					URL:       pr.HTMLURL,
+					OpenedAt:  pr.CreatedAt,
+					MergedAt:  mergedAt,
+					UpdatedAt: pr.UpdatedAt,
 				}, pr.Body); err != nil {
 					return err
 				}

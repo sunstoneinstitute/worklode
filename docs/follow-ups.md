@@ -461,3 +461,16 @@ one pass.
   `deploy/base/migrations/0001_baseline.up.sql`) exists, so `Store.TaskCost`
   (`internal/store/session_usage.go`) scans released leases too when reading
   a task's cost. Small today, a migration when lease volume grows.
+
+## From WL-198 — non-regressing github fact upserts (2026-08-20)
+
+- `[P3]` **`main_commits` orders by insertion id, so a replayed push lands out
+  of order.** `AppendMainCommit` (`internal/store/delivery.go`) gives each
+  default-branch commit the next serial id, and the frontier ids a release or
+  deploy captured (`LatestMainID`) are compared against it. A backlogged push
+  replayed after those facts landed gets a *higher* id than commits already
+  recorded, so an existing frontier no longer covers it and a task behind that
+  frontier reads as not-yet-delivered. The direction is safe — it under-reports
+  rather than corrupts — so it was out of scope for the non-regressing-upsert
+  fix, which guards fact columns and not this ordering. Reconcile engine 2
+  (013 §2.2, WL-33) repairs facts against GitHub's current truth and heals it.

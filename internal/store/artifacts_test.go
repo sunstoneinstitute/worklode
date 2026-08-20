@@ -93,6 +93,67 @@ func TestCreateArtifactUpsertReturnsSameID(t *testing.T) {
 	}
 }
 
+// TestCreateArtifactNonRegressing covers the guard on artifacts.built_at: a
+// stale delivery must not overwrite a newer build, and must still report the
+// existing row's id — the guarded DO UPDATE returns no row, so that id comes
+// from the fallback SELECT (WL-198).
+func TestCreateArtifactNonRegressing(t *testing.T) {
+	s := openArtifactsStore(t)
+
+	newDigest := "sha256:newer"
+	a := defaultArtifact()
+	a.BuiltAt = artifactsTestNow.Add(time.Hour)
+	a.Digest = &newDigest
+	a.SourceSHA = "newer-sha"
+	id, err := createArtifact(t, s, a)
+	if err != nil {
+		t.Fatalf("seed artifact: %v", err)
+	}
+
+	staleDigest := "sha256:older"
+	stale := defaultArtifact()
+	stale.BuiltAt = artifactsTestNow
+	stale.Digest = &staleDigest
+	stale.SourceSHA = "older-sha"
+	staleID, err := createArtifact(t, s, stale)
+	if err != nil {
+		t.Fatalf("stale CreateArtifact: %v", err)
+	}
+	if staleID != id {
+		t.Fatalf("stale CreateArtifact id: got %d, want the existing %d", staleID, id)
+	}
+
+	var gotDigest, gotSourceSHA string
+	if err := s.db.QueryRow(`SELECT digest, source_sha FROM artifacts WHERE id = $1`, id).
+		Scan(&gotDigest, &gotSourceSHA); err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+	if gotDigest != newDigest || gotSourceSHA != "newer-sha" {
+		t.Fatalf("artifact after stale upsert: digest=%q source_sha=%q, want %q and newer-sha", gotDigest, gotSourceSHA, newDigest)
+	}
+
+	// A newer build applies.
+	newestDigest := "sha256:newest"
+	newest := defaultArtifact()
+	newest.BuiltAt = artifactsTestNow.Add(2 * time.Hour)
+	newest.Digest = &newestDigest
+	newest.SourceSHA = "newest-sha"
+	newestID, err := createArtifact(t, s, newest)
+	if err != nil {
+		t.Fatalf("newer CreateArtifact: %v", err)
+	}
+	if newestID != id {
+		t.Fatalf("newer CreateArtifact id: got %d, want %d", newestID, id)
+	}
+	if err := s.db.QueryRow(`SELECT digest, source_sha FROM artifacts WHERE id = $1`, id).
+		Scan(&gotDigest, &gotSourceSHA); err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+	if gotDigest != newestDigest || gotSourceSHA != "newest-sha" {
+		t.Fatalf("artifact after newer upsert: digest=%q source_sha=%q, want %q and newest-sha", gotDigest, gotSourceSHA, newestDigest)
+	}
+}
+
 func TestArtifactsBySourceSHA(t *testing.T) {
 	s := openArtifactsStore(t)
 	a1 := defaultArtifact()
