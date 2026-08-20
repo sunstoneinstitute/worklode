@@ -101,57 +101,59 @@ func (s *server) now() time.Time {
 	return time.Now()
 }
 
+// cliIntentFrom returns the verified CLI-login intent carried by the request's
+// cookie, if it carries one.
+func (s *server) cliIntentFrom(r *http.Request) (cliIntent, bool) {
+	c, err := r.Cookie(cliCookieName)
+	if err != nil {
+		return cliIntent{}, false
+	}
+	return verifyCLIIntent(s.cfg.SessionSecret, c.Value, s.now())
+}
+
 // finishLogin ends a successful web login for actorID. When the CLI-intent
 // cookie is present (a server-mediated `lode login`), it mints a one-time code
 // and redirects to the loopback redirect_uri instead of establishing a browser
 // session. Otherwise it delegates to finishLoginWeb.
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID, next string) {
-	if c, err := r.Cookie(cliCookieName); err == nil {
-		if ci, ok := verifyCLIIntent(s.cfg.SessionSecret, c.Value, s.now()); ok {
-			code, err := s.cliCodes.mint(actorID, ci.State)
-			if err != nil {
-				s.log.Error("mint cli code", "err", err)
-				webErr(w, http.StatusInternalServerError, "internal error")
-				return
-			}
-			// Clear both transient cookies.
-			http.SetCookie(w, &http.Cookie{Name: cliCookieName, Path: "/auth/", MaxAge: -1})
-			http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
-			// Manual mode (§8.7) has no loopback to redirect to: show the code
-			// so the user can carry it to the terminal themselves.
-			if ci.Mode == cliModeManual {
-				s.renderCLICode(w, r, actorID, code)
-				return
-			}
-			// Build the loopback URL with net/url so an eventual path or query in
-			// redirect_uri is preserved rather than corrupted by concatenation.
-			u, err := url.Parse(ci.Redirect)
-			if err != nil {
-				s.log.Error("parse cli redirect", "err", err)
-				webErr(w, http.StatusInternalServerError, "internal error")
-				return
-			}
-			u.RawQuery = url.Values{"code": {code}, "state": {ci.State}}.Encode()
-			http.Redirect(w, r, u.String(), http.StatusFound)
-			return
-		}
+	ci, ok := s.cliIntentFrom(r)
+	if !ok {
+		s.finishLoginWeb(w, r, actorID, next)
+		return
 	}
-	s.finishLoginWeb(w, r, actorID, next)
+	code, err := s.cliCodes.mint(actorID, ci.State)
+	if err != nil {
+		s.log.Error("mint cli code", "err", err)
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Clear both transient cookies.
+	clearAuthCookie(w, cliCookieName)
+	clearAuthCookie(w, oauthCookieName)
+	// Manual mode (§8.7) has no loopback to redirect to: show the code
+	// so the user can carry it to the terminal themselves.
+	if ci.Mode == cliModeManual {
+		s.renderCLICode(w, r, actorID, code)
+		return
+	}
+	// Build the loopback URL with net/url so an eventual path or query in
+	// redirect_uri is preserved rather than corrupted by concatenation.
+	u, err := url.Parse(ci.Redirect)
+	if err != nil {
+		s.log.Error("parse cli redirect", "err", err)
+		webErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	u.RawQuery = url.Values{"code": {code}, "state": {ci.State}}.Encode()
+	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
 // finishLoginWeb sets the browser session cookie and redirects to next. This is
 // the original tail shared by both web callbacks.
 func (s *server) finishLoginWeb(w http.ResponseWriter, r *http.Request, actorID, next string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    signSession(s.cfg.SessionSecret, actorID, s.st.Now().Add(sessionLifetime)),
-		Path:     "/",
-		MaxAge:   int(sessionLifetime.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	http.SetCookie(w, &http.Cookie{Name: oauthCookieName, Path: "/auth/", MaxAge: -1})
+	setAuthCookie(w, sessionCookieName, "/",
+		signSession(s.cfg.SessionSecret, actorID, s.st.Now().Add(sessionLifetime)), sessionLifetime)
+	clearAuthCookie(w, oauthCookieName)
 	http.Redirect(w, r, safeNext(next), http.StatusFound)
 }
 
@@ -239,15 +241,9 @@ func (s *server) cliLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid redirect_uri or state")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     cliCookieName,
-		Value:    signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
-		Path:     "/auth/",
-		MaxAge:   int(oauthStateMaxAge.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setAuthCookie(w, cliCookieName, "/auth/",
+		signCLIIntent(s.cfg.SessionSecret, cliIntent{Redirect: redirect, State: state, Mode: mode, Exp: s.now().Add(oauthStateMaxAge).Unix()}),
+		oauthStateMaxAge)
 	http.Redirect(w, r, s.loginTarget("/"), http.StatusFound)
 }
 
@@ -271,11 +267,7 @@ func (s *server) cliToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusCreated, model.MintedToken{
-		Token:     token,
-		ActorID:   actorID,
-		ExpiresAt: exp.UTC().Format(time.RFC3339),
-	})
+	writeMintedToken(w, token, actorID, exp)
 }
 
 // wellKnownLogin handles GET /.well-known/lode-login: tells the CLI where to

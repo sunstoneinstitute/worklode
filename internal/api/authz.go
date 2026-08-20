@@ -332,6 +332,18 @@ func subjectFrom(r *http.Request) Subject {
 	return sub
 }
 
+// actorIDFrom returns the id of the acting actor to attribute a write to, or
+// "" when there is none: an unauthenticated request, or a web request on an
+// instance with no login provider, where the subject is permitted but
+// anonymous (openSubject/authOpen). The guard already resolved and validated
+// the subject — including confirming the actor row still exists — so this is
+// a context read, not a second authentication. It is the one way a handler
+// names who is acting: the request carried both a *store.Actor and a Subject
+// before, and every handler read the same id off one of them.
+func actorIDFrom(r *http.Request) string {
+	return subjectFrom(r).ActorID
+}
+
 // --- enforcement ------------------------------------------------------------
 
 // requirePerm is the /api/v1 policy enforcement point. It runs inside auth,
@@ -353,7 +365,7 @@ func (s *server) requirePerm(perm Permission, next http.HandlerFunc) http.Handle
 }
 
 // webGuard is the web UI's combined authentication and policy enforcement
-// point, replacing the former webAuth. It resolves the session cookie to a
+// point. It resolves the session cookie to a
 // subject (loading the actor, so the web surface knows who is acting and not
 // merely that the cookie verifies), decides, and then either serves the page,
 // refuses on an instance with no login provider, sends an unauthenticated

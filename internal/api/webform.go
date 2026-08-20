@@ -25,7 +25,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -105,15 +104,6 @@ func (s *server) sameOriginForm(r *http.Request) bool {
 	return false
 }
 
-// webActor returns the actor id to attribute a form write to, or "" when
-// there is none: a deployment with no login provider configured, where the
-// subject is permitted but anonymous (authOpen). webGuard already resolved
-// and validated the subject — including confirming the actor row still
-// exists — so this is a context read, not a second authentication.
-func (s *server) webActor(r *http.Request) string {
-	return subjectFrom(r).ActorID
-}
-
 // projectHeader loads the project identity the project-scoped shell needs
 // (name and key beside the local navigation). ErrNotFound propagates, so an
 // unknown project 404s the same way every other project route does.
@@ -135,6 +125,28 @@ func parseWebForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// beginFormPost runs the three gates every creation-form POST shares —
+// same origin, a resolvable project, a readable body — counting the refusal
+// under the named form. A false ok means the response is already written.
+func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form string) (ui.CockpitProject, bool) {
+	if !s.sameOriginForm(r) {
+		s.observeFormSubmission(form, "forbidden")
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return ui.CockpitProject{}, false
+	}
+	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.observeFormSubmission(form, formOutcome(err))
+		s.webStoreErr(w, err)
+		return ui.CockpitProject{}, false
+	}
+	if !parseWebForm(w, r) {
+		s.observeFormSubmission(form, "invalid")
+		return ui.CockpitProject{}, false
+	}
+	return project, true
 }
 
 // renderWeb writes one rendered page with the given status. Form pages use it
@@ -166,19 +178,8 @@ func (s *server) newTaskPage(w http.ResponseWriter, r *http.Request) {
 // 303 to it, or re-render the form at 422 with the one thing to fix.
 func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.sameOriginForm(r) {
-		s.observeFormSubmission("task", "forbidden")
-		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
-		return
-	}
-	project, err := s.projectHeader(ctx, r.PathValue("id"))
-	if err != nil {
-		s.observeFormSubmission("task", formOutcome(err))
-		s.webStoreErr(w, err)
-		return
-	}
-	if !parseWebForm(w, r) {
-		s.observeFormSubmission("task", "invalid")
+	project, ok := s.beginFormPost(w, r, "task")
+	if !ok {
 		return
 	}
 
@@ -198,7 +199,7 @@ func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := s.recordFormTask(ctx, project.ID, values, s.webActor(r))
+	created, err := s.recordFormTask(ctx, project.ID, values, actorIDFrom(r))
 	if err != nil {
 		s.observeFormSubmission("task", formOutcome(err))
 		s.webStoreErr(w, err)
@@ -251,39 +252,30 @@ const (
 // recordFormTask writes the task through the same RecordEvent + CreateTask
 // path POST /api/v1/tasks uses, under the "web" event source.
 func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFormValues, actorID string) (*model.Task, error) {
-	extID, err := randomExternalID()
-	if err != nil {
-		return nil, err
-	}
-	payload, err := json.Marshal(map[string]any{
-		"project": projectID, "title": v.Title, "body": v.Body,
-		"priority": v.Priority, "kind": v.Kind, "concern": v.Concern,
-		"draft": v.Draft, "created_by": actorID,
-	})
-	if err != nil {
-		return nil, err
-	}
 	now := s.st.Now()
 
 	var created *model.Task
-	if _, _, err := s.st.RecordEvent(ctx, "web", extID, "task.created", payload,
-		func(tx *sql.Tx, eventID int64) error {
-			t, err := store.CreateTask(tx, now, store.TaskInput{
-				ProjectID: projectID,
-				Title:     v.Title,
-				Body:      v.Body,
-				Priority:  v.Priority,
-				Kind:      v.Kind,
-				Concern:   v.Concern,
-				CreatedBy: actorID,
-				Draft:     v.Draft,
-			}, eventID)
-			if err != nil {
-				return err
-			}
-			created = t
-			return nil
-		}); err != nil {
+	if err := s.recordEvent(ctx, "web", "task.created", map[string]any{
+		"project": projectID, "title": v.Title, "body": v.Body,
+		"priority": v.Priority, "kind": v.Kind, "concern": v.Concern,
+		"draft": v.Draft, "created_by": actorID,
+	}, func(tx *sql.Tx, eventID int64) error {
+		t, err := store.CreateTask(tx, now, store.TaskInput{
+			ProjectID: projectID,
+			Title:     v.Title,
+			Body:      v.Body,
+			Priority:  v.Priority,
+			Kind:      v.Kind,
+			Concern:   v.Concern,
+			CreatedBy: actorID,
+			Draft:     v.Draft,
+		}, eventID)
+		if err != nil {
+			return err
+		}
+		created = t
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -324,19 +316,8 @@ func (s *server) newDeliverablePage(w http.ResponseWriter, r *http.Request) {
 // the deliverable and 303 back to the list, or re-render at 422.
 func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.sameOriginForm(r) {
-		s.observeFormSubmission("deliverable", "forbidden")
-		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
-		return
-	}
-	project, err := s.projectHeader(ctx, r.PathValue("id"))
-	if err != nil {
-		s.observeFormSubmission("deliverable", formOutcome(err))
-		s.webStoreErr(w, err)
-		return
-	}
-	if !parseWebForm(w, r) {
-		s.observeFormSubmission("deliverable", "invalid")
+	project, ok := s.beginFormPost(w, r, "deliverable")
+	if !ok {
 		return
 	}
 
@@ -345,7 +326,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, s.webActor(r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",

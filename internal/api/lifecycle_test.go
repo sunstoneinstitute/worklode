@@ -12,18 +12,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// secondActor creates another actor and returns a bearer token for it.
+// secondActor creates another agent actor and returns a bearer token for it.
 func secondActor(t *testing.T, st *store.Store, id string) string {
 	t.Helper()
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, id, "agent", id, false); err != nil {
-		t.Fatalf("create actor %s: %v", id, err)
-	}
-	token, err := st.CreateToken(ctx, id, "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for %s: %v", id, err)
-	}
-	return token
+	return seedActor(t, st, id, "agent", id, false)
 }
 
 // moveToReview transitions a task from in_progress to in_review via the store,
@@ -83,14 +75,7 @@ func TestSlugifyTitle(t *testing.T) {
 func TestClaimBranchTemplate(t *testing.T) {
 	t.Cleanup(func() { store.SetBranchTemplate("") })
 	st := newTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
+	token := seedActor(t, st, "alice", "human", "Alice", true)
 	h, _, err := api.NewServer(st, api.Config{BranchTemplate: "team/{{ .id }}-{{ .slug }}"})
 	if err != nil {
 		t.Fatalf("new server: %v", err)

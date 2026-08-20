@@ -100,12 +100,8 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID, err := s.provisionActor(r.Context(), claims)
-	if errors.Is(err, errNoUserRole) {
-		writeErr(w, http.StatusForbidden, "the worklode user role is required")
-		return
-	}
-	if errors.Is(err, errActorKindConflict) {
-		writeErr(w, http.StatusConflict, "actor id conflicts with an existing non-human actor")
+	if code, msg, refused := provisionRefusal(err); refused {
+		writeErr(w, code, msg)
 		return
 	}
 	if err != nil {
@@ -121,6 +117,26 @@ func (s *server) oidcTokenExchange(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	writeMintedToken(w, token, actorID, exp)
+}
+
+// provisionRefusal maps a provisionActor sentinel to the status and message
+// both login surfaces answer with, so the JSON and web paths cannot drift.
+// refused is false for anything else — that is the caller's store-error
+// mapper's to handle.
+func provisionRefusal(err error) (code int, msg string, refused bool) {
+	switch {
+	case errors.Is(err, errNoUserRole):
+		return http.StatusForbidden, "the worklode user role is required", true
+	case errors.Is(err, errActorKindConflict):
+		return http.StatusConflict, "actor id conflicts with an existing non-human actor", true
+	}
+	return 0, "", false
+}
+
+// writeMintedToken answers a successful token mint. Both the SSO exchange and
+// the CLI code redemption end this way.
+func writeMintedToken(w http.ResponseWriter, token, actorID string, exp time.Time) {
 	writeJSON(w, http.StatusCreated, model.MintedToken{
 		Token:     token,
 		ActorID:   actorID,

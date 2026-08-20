@@ -44,7 +44,7 @@ const watcherActorID = "watcher"
 // same outstanding work.
 const watcherEventSource = "watcher"
 
-// docLifecycleHandler is the doc-lifecycle subscriber of spec 025 §15.4: it
+// handleDocLifecycle is the doc-lifecycle subscriber of spec 025 §15.4: it
 // parses the event, fetches the guard facts, lets the pure rules decide
 // (internal/watcher), and performs whatever they return. The action event's
 // payload carries prov:wasInformedBy back to the triggering event, so the
@@ -53,73 +53,71 @@ const watcherEventSource = "watcher"
 // The action events are dotted types (task.created, task.updated), so
 // eventbus's JSON-LD payload validation does not apply to them — they are
 // backbone bookkeeping, not RDF the knowledge graph consumes.
-func (s *server) docLifecycleHandler() eventbus.Handler {
-	return func(ctx context.Context, ev store.Event) (eventbus.Outcome, error) {
-		if ev.Type != eventbus.TypeDocumentSubmitted && ev.Type != eventbus.TypeDocumentAccepted {
-			// The vendor/webhook population of the log passes through
-			// untouched: it carries dotted types (push, pod.crashloop, …;
-			// 025 §15.2) that are not RDF and that these rules say nothing
-			// about. Acking them is what keeps the offset moving.
-			return eventbus.OutcomeApplied, nil
-		}
-
-		// Every error path below returns OutcomeApplied alongside the error:
-		// Run ignores the outcome whenever the error is non-nil (it counts
-		// outcome="error" itself), and 025 §15.7 forbids a handler from
-		// returning OutcomeError.
-		subject, err := eventSubject(ev)
-		if err != nil {
-			return eventbus.OutcomeApplied, err
-		}
-		// A wl:subject that resolves to no row is an error, not a skip.
-		// Redelivery retries it, which is right while the doc is merely
-		// not visible yet; if the document is really gone, the operator
-		// steps the subscriber past it with `lode event seek` — that is
-		// what the verb is for.
-		doc, err := s.st.DocBySubjectIRI(ctx, subject)
-		if err != nil {
-			return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
-		}
-
-		in := watcher.Input{
-			EventID:   ev.ID,
-			EventType: ev.Type,
-			DocID:     doc.ID,
-			DocIRI:    subject,
-			DocKind:   doc.Kind,
-			DocTitle:  doc.Title,
-			Version:   doc.Version,
-			Project:   doc.Project,
-		}
-		// Only the guard the rule for this event type can consult: a
-		// submission never looks at design tasks and an acceptance never at
-		// review tasks, so fetching both would be a wasted round trip on
-		// every event.
-		switch ev.Type {
-		case eventbus.TypeDocumentSubmitted:
-			in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
-		case eventbus.TypeDocumentAccepted:
-			in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
-		}
-		if err != nil {
-			return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
-		}
-
-		outcome := eventbus.OutcomeApplied
-		for _, act := range watcher.Evaluate(in) {
-			if err := s.performDocAction(ctx, ev, doc, act); err != nil {
-				s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeError))
-				return outcome, err
-			}
-			if act.Suppressed {
-				s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeSuppressed))
-				outcome = eventbus.OutcomeSuppressed
-				continue
-			}
-			s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeApplied))
-		}
-		return outcome, nil
+func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventbus.Outcome, error) {
+	if ev.Type != eventbus.TypeDocumentSubmitted && ev.Type != eventbus.TypeDocumentAccepted {
+		// The vendor/webhook population of the log passes through
+		// untouched: it carries dotted types (push, pod.crashloop, …;
+		// 025 §15.2) that are not RDF and that these rules say nothing
+		// about. Acking them is what keeps the offset moving.
+		return eventbus.OutcomeApplied, nil
 	}
+
+	// Every error path below returns OutcomeApplied alongside the error:
+	// Run ignores the outcome whenever the error is non-nil (it counts
+	// outcome="error" itself), and 025 §15.7 forbids a handler from
+	// returning OutcomeError.
+	subject, err := eventSubject(ev)
+	if err != nil {
+		return eventbus.OutcomeApplied, err
+	}
+	// A wl:subject that resolves to no row is an error, not a skip.
+	// Redelivery retries it, which is right while the doc is merely
+	// not visible yet; if the document is really gone, the operator
+	// steps the subscriber past it with `lode event seek` — that is
+	// what the verb is for.
+	doc, err := s.st.DocBySubjectIRI(ctx, subject)
+	if err != nil {
+		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
+	}
+
+	in := watcher.Input{
+		EventID:   ev.ID,
+		EventType: ev.Type,
+		DocID:     doc.ID,
+		DocIRI:    subject,
+		DocKind:   doc.Kind,
+		DocTitle:  doc.Title,
+		Version:   doc.Version,
+		Project:   doc.Project,
+	}
+	// Only the guard the rule for this event type can consult: a
+	// submission never looks at design tasks and an acceptance never at
+	// review tasks, so fetching both would be a wasted round trip on
+	// every event.
+	switch ev.Type {
+	case eventbus.TypeDocumentSubmitted:
+		in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
+	case eventbus.TypeDocumentAccepted:
+		in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
+	}
+	if err != nil {
+		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
+	}
+
+	outcome := eventbus.OutcomeApplied
+	for _, act := range watcher.Evaluate(in) {
+		if err := s.performDocAction(ctx, ev, doc, act); err != nil {
+			s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeError))
+			return outcome, err
+		}
+		if act.Suppressed {
+			s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeSuppressed))
+			outcome = eventbus.OutcomeSuppressed
+			continue
+		}
+		s.watcherMetrics.Action(act.Rule, string(eventbus.OutcomeApplied))
+	}
+	return outcome, nil
 }
 
 // performDocAction carries out one rule decision.

@@ -392,14 +392,7 @@ func TestProjectCockpitOwnerAndDelegate(t *testing.T) {
 func TestProjectCockpitHumanLeaseIsNotDelegate(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
-		t.Fatalf("create actor bob: %v", err)
-	}
-	bobToken, err := st.CreateToken(ctx, "bob", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for bob: %v", err)
-	}
+	bobToken := seedActor(t, st, "bob", "human", "Bob", false)
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Human-leased", "priority": "medium", "kind": "feature",
 	})
@@ -509,14 +502,7 @@ func TestProjectCockpitObservedGithubEvent(t *testing.T) {
 func TestProjectCockpitUserReportedHumanStart(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "erin", "human", "Erin", false); err != nil {
-		t.Fatalf("create actor erin: %v", err)
-	}
-	erinToken, err := st.CreateToken(ctx, "erin", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for erin: %v", err)
-	}
+	erinToken := seedActor(t, st, "erin", "human", "Erin", false)
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Human-started", "priority": "medium", "kind": "feature",
 	})

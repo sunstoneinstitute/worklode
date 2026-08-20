@@ -1,8 +1,8 @@
 // oidcweb.go gates the read-only web UI behind Keycloak, worklode's sole
 // interactive login provider (spec 001 §3):
-//   - webAuth wraps each web page and, when unauthenticated, 302s to
-//     loginTarget (/auth/login). It is a passthrough only when OIDC is
-//     unconfigured (the UI stays open, as in v1).
+//   - webGuard (authz.go) wraps each web page and, when unauthenticated,
+//     302s to loginTarget (/auth/login). It is a passthrough only when OIDC
+//     is unconfigured (the UI stays open, as in v1).
 //   - GET /auth/login starts an auth-code + PKCE flow: it sets a signed
 //     oauth-state cookie and redirects to Keycloak's authorize URL.
 //   - GET /auth/callback redeems the code, verifies the ID token, provisions
@@ -15,7 +15,6 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -51,19 +50,12 @@ func (s *server) callbackURL() string {
 	return strings.TrimRight(s.cfg.PublicURL, "/") + "/auth/callback"
 }
 
-// loginTarget returns where webAuth sends unauthenticated users. Keycloak is
+// loginTarget returns where webGuard sends unauthenticated users. Keycloak is
 // worklode's only interactive login provider (spec 001 §3); the dormant
 // GitHub App OAuth client (s.gh, spec 001 §9.3) never affects this.
 func (s *server) loginTarget(next string) string {
 	return "/auth/login?next=" + url.QueryEscape(next)
 }
-
-// Session enforcement for web pages moved to webGuard (authz.go), which does
-// what webAuth did — resolve the session cookie, 302 to loginTarget when
-// there is none, pass everything through when no login provider is configured
-// — and then additionally applies the route's permission. It resolves the
-// cookie to an actor rather than merely checking the signature, so the web
-// surface knows who is acting.
 
 // authLogin handles GET /auth/login: begin the auth-code + PKCE flow.
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
@@ -82,15 +74,9 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 	verifier := oauth2.GenerateVerifier()
 	now := s.st.Now()
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     oauthCookieName,
-		Value:    signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Exp: now.Add(oauthStateMaxAge).Unix()}),
-		Path:     "/auth/",
-		MaxAge:   int(oauthStateMaxAge.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setAuthCookie(w, oauthCookieName, "/auth/",
+		signOAuthState(s.cfg.SessionSecret, oauthState{State: state, Verifier: verifier, Next: next, Exp: now.Add(oauthStateMaxAge).Unix()}),
+		oauthStateMaxAge)
 
 	cfg := s.oidc.OAuth2Config(s.callbackURL(), oidcScopes)
 	http.Redirect(w, r, cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier)), http.StatusFound)
@@ -147,12 +133,8 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username, err := s.provisionActor(r.Context(), claims)
-	if errors.Is(err, errNoUserRole) {
-		webErr(w, http.StatusForbidden, "the worklode user role is required")
-		return
-	}
-	if errors.Is(err, errActorKindConflict) {
-		webErr(w, http.StatusConflict, "actor id conflicts with an existing non-human actor")
+	if code, msg, refused := provisionRefusal(err); refused {
+		webErr(w, code, msg)
 		return
 	}
 	if err != nil {

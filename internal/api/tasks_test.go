@@ -1073,15 +1073,8 @@ type listDetailRow struct {
 // order is preserved, and that worklode_list_expansions_total{tasks,detail}
 // increments only on the expanded request.
 func TestListTasksDetailExpansion(t *testing.T) {
-	ctx := context.Background()
 	st := newTestStore(t)
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
+	token := seedActor(t, st, "alice", "human", "Alice", true)
 	h, admin, err := api.NewServer(st, api.Config{})
 	if err != nil {
 		t.Fatalf("new server: %v", err)

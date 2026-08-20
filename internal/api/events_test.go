@@ -158,13 +158,7 @@ func TestListEventSubscribers(t *testing.T) {
 func TestSeekEventSubscriber(t *testing.T) {
 	st, h, adminToken := newTestServer(t)
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create worker: %v", err)
-	}
-	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
-	if err != nil {
-		t.Fatalf("create worker token: %v", err)
-	}
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 	if err := st.EnsureEventSubscriber(ctx, "seek-api-sub"); err != nil {
 		t.Fatal(err)
 	}

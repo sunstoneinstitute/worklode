@@ -41,54 +41,51 @@ func (s *server) assembleTimeline(ctx context.Context, id string) (*model.Task, 
 	// response body's "timeline", and a nil one marshals to null rather than
 	// the empty array a task with no history has to answer with.
 	entries := []model.TimelineEntry{}
+	// add appends one source's entries, or reports its error. Append order is
+	// what the stable sort below tie-breaks on, so the sequence of calls is
+	// significant: keep each source's entries contiguous.
+	add := func(src []model.TimelineEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		entries = append(entries, src...)
+		return nil
+	}
 
-	se, err := s.stateEntries(ctx, id)
-	if err != nil {
+	if err := add(s.stateEntries(ctx, id)); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, se...)
 
 	prs, err := s.st.PRsForTask(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, prEntries(prs)...)
-
-	ce, err := s.ciEntries(ctx, prs)
-	if err != nil {
+	if err := add(prEntries(prs), nil); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, ce...)
-
-	rve, err := s.reviewEntries(ctx, prs)
-	if err != nil {
+	if err := add(s.ciEntries(ctx, prs)); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, rve...)
+	if err := add(s.reviewEntries(ctx, prs)); err != nil {
+		return nil, nil, err
+	}
 
 	artifacts, err := s.mergedArtifacts(ctx, prs)
 	if err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, artifactEntries(artifacts)...)
-
-	de, err := s.deploymentEntries(ctx, artifacts)
-	if err != nil {
+	if err := add(artifactEntries(artifacts), nil); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, de...)
-
-	rte, err := s.runtimeEntries(ctx, artifacts)
-	if err != nil {
+	if err := add(s.deploymentEntries(ctx, artifacts)); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, rte...)
-
-	dle, err := s.deliveryEntries(ctx, id)
-	if err != nil {
+	if err := add(s.runtimeEntries(ctx, artifacts)); err != nil {
 		return nil, nil, err
 	}
-	entries = append(entries, dle...)
+	if err := add(s.deliveryEntries(ctx, id)); err != nil {
+		return nil, nil, err
+	}
 
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].At.Before(entries[j].At) })
 	return t, entries, nil
