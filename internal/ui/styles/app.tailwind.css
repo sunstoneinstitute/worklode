@@ -380,11 +380,35 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .btnrow{display:flex;gap:10px;margin-top:22px}
 .btnrow .btn{width:auto;min-height:40px;padding:9px 18px}
 
-/* ---------- the decide form on a Reviews queue row (029 §7.3) ---------- */
+/* ---------- the Reviews queue and its decide form (029 §7.1, §7.3) ---------- */
 /* Three native submit buttons wrapping onto a second line on a narrow
- * viewport rather than shrinking below WCAG 2.5.8's target size. */
+ * viewport rather than shrinking below WCAG 2.5.8's target size. Each button
+ * names its decision in text — approve, request changes, reject are never
+ * distinguished by colour alone. */
 .decide{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .decide .btn{width:auto;min-height:40px;padding:9px 14px}
+
+/* A queue row pairs its metadata block with the decide form. The two stacked
+ * metadata lines fill column 1 and the form spans both rows in column 2, so
+ * the row reads left-to-right while there is room for it. */
+.approvalq{list-style:none;margin:0;padding:0}
+.approvalq li{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;
+  align-items:center;column-gap:16px;padding:12px 0;border-top:1px solid var(--line);
+}
+.approvalq li:first-child{border-top:0}
+.approvalq li > div{grid-column:1;min-width:0;overflow-wrap:anywhere}
+.approvalq .decide{grid-column:2;grid-row:1/-1;margin-top:0}
+
+/* Below 720px the row stacks instead of compressing (spec 032 §10: reduced
+ * columns, not a squeezed desktop grid). The form drops under the metadata
+ * and its buttons go full-width in source order — Approve, Request changes,
+ * Reject — keeping their 40px height. */
+@media (max-width:720px){
+  .approvalq li{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
+  .approvalq .decide{grid-column:1;grid-row:auto;flex-direction:column;margin-top:10px}
+  .approvalq .decide .btn{width:100%}
+}
 
 /* ---------- rendered task body (sanitised markdown) and attachments ---------- */
 /* .prose is the one subtree whose markup comes from an untrusted task body
