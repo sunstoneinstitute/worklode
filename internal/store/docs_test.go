@@ -2867,6 +2867,86 @@ func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
 	}
 }
 
+// blockingPlanBody renders a draft plan ordering itself before blocked.
+func blockingPlanBody(blocked string) string {
+	return "---\nstatus: draft\nblocks: " + blocked + "\n---\n\n# Plan\n"
+}
+
+// TestDocEdgesRejectBlocksCycleBetweenPlans: a cycle through two or more plans
+// wedges every plan in it — each plan's tasks are held by the next plan's open
+// set, so no set can ever close and Claim answers ErrBlocked forever. Plans
+// stay mutable at any status, so it is the write that closes the cycle that
+// has to refuse it, and the refusal names the cycle (WL-144).
+func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
+	s := openDocStore(t)
+
+	// a blocks b blocks c, written back to front so every reference resolves.
+	c := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-c", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n\n# Plan\n",
+	})
+	b := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-b", CreatedBy: "stig",
+		Body: blockingPlanBody("plan-c"),
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-a", CreatedBy: "stig",
+		Body: blockingPlanBody("plan-b"),
+	})
+
+	// Two hops back to plan-a: the whole cycle is named, in order.
+	_, err := updateDocBody(t, s, c.ID, blockingPlanBody("plan-a"))
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("plan-c blocks plan-a = %v, want ErrInvalidInput", err)
+	}
+	if want := "plan-c blocks plan-a blocks plan-b blocks plan-c"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("plan-c blocks plan-a = %v, want it to name the cycle %q", err, want)
+	}
+	// The refused write left plan-c's edges alone, cycle or not.
+	if edges := docEdges(t, s, c.ID); len(edges) != 0 {
+		t.Fatalf("edges of plan-c = %+v, want none", edges)
+	}
+
+	// One hop back: the two-plan cycle the self-block guard never saw.
+	_, err = updateDocBody(t, s, b.ID, blockingPlanBody("plan-a"))
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("plan-b blocks plan-a = %v, want ErrInvalidInput", err)
+	}
+	if want := "plan-b blocks plan-a blocks plan-b"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("plan-b blocks plan-a = %v, want it to name the cycle %q", err, want)
+	}
+}
+
+// TestDocEdgesAllowConvergingBlocks: the cycle guard refuses cycles, not
+// re-convergence. A plan reachable by two distinct paths is an ordinary DAG
+// and every task in it can still close.
+func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
+	s := openDocStore(t)
+
+	last := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-last", CreatedBy: "stig",
+		Body: "---\nstatus: draft\n---\n\n# Plan\n",
+	})
+	mid := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-mid", CreatedBy: "stig",
+		Body: blockingPlanBody("plan-last"),
+	})
+	first := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-first", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nblocks:\n  - plan-mid\n  - plan-last\n---\n\n# Plan\n",
+	})
+
+	got := docEdges(t, s, first.ID)
+	want := []model.DocEdge{
+		{Type: "blocks", ToDoc: mid.ID},
+		{Type: "blocks", ToDoc: last.ID},
+	}
+	slices.SortFunc(want, func(x, y model.DocEdge) int { return cmp.Compare(x.ToDoc, y.ToDoc) })
+	if !slices.Equal(got, want) {
+		t.Fatalf("edges of plan-first = %+v, want %+v", got, want)
+	}
+}
+
 // --- NeedsPlanning / NeedsExecution (026 §2) -----------------------------
 
 // planCoveringBody renders a plan whose frontmatter covers refs and whose
