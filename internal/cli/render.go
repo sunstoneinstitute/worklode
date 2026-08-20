@@ -143,8 +143,10 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 
 // TaskDetailRender prints one task with its edges, blocked status, and lease
 // holder — worktree and agent sessions included when leased — the
-// `lode task show` view.
-func TaskDetailRender(w io.Writer, t model.TaskDetail) {
+// `lode task show` view. server is the API base URL, used to absolutize
+// /blob/ references in the rendered body (MarkdownWithBase); pass "" when
+// none is known.
+func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	fmt.Fprintf(w, "%s  %s\n", t.ID, t.Title)
 	fmt.Fprintf(w, "  project:  %s\n", t.Project)
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
@@ -185,7 +187,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	}
 	if t.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, t.Body)
+		MarkdownWithBase(w, t.Body, server)
 	}
 	if len(t.Edges.Out) > 0 || len(t.Edges.In) > 0 {
 		fmt.Fprintln(w, "\nedges:")
@@ -195,6 +197,24 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 		for _, e := range t.Edges.In {
 			fmt.Fprintf(w, "  %s %s %s\n", e.From, e.Type, t.ID)
 		}
+	}
+	if len(t.Blobs) > 0 {
+		fmt.Fprintln(w, "\nattachments:")
+		tw := newTabwriter(w)
+		fmt.Fprintln(tw, "  FILE\tTYPE\tSIZE\tWHERE\tURL")
+		for _, b := range t.Blobs {
+			where := "attached"
+			if b.Embedded {
+				where = "in body"
+			}
+			name := b.Filename
+			if name == "" {
+				name = b.Hash[:12]
+			}
+			fmt.Fprintf(tw, "  %s\t%s\t%d\t%s\t%s\n",
+				name, b.MediaType, b.Size, where, b.URL)
+		}
+		tw.Flush()
 	}
 }
 

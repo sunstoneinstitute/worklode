@@ -38,6 +38,10 @@ var (
 	// ErrRevisionExists means the document already has an open candidate
 	// revision; 025 §7.2 allows one at a time.
 	ErrRevisionExists = errors.New("revision already open")
+	// ErrUnknownBlob means a task reference names a hash with no blobs row.
+	// Only the insert direction of task_blobs_hash_fkey maps to this: the
+	// delete direction is a GC bug, and must stay a 500.
+	ErrUnknownBlob = errors.New("body references an unknown blob")
 )
 
 // pgViolation reports whether err is a Postgres error with the given

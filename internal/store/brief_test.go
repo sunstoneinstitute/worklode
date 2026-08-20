@@ -1,8 +1,12 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestBrief(t *testing.T) {
@@ -502,5 +506,62 @@ func TestBriefBlockedByDraftPlan(t *testing.T) {
 	if len(b.BlockingPlans) != 1 || b.BlockingPlans[0].Slug != "plan-c" ||
 		b.BlockingPlans[0].Status != "draft" {
 		t.Errorf("BlockingPlans = %#v, want draft plan-c", b.BlockingPlans)
+	}
+}
+
+// TestBriefBlobs checks Brief surfaces a task's blobs -- one embedded (via
+// ReconcileEmbedded, as a body edit would produce) and one attached (via
+// AttachBlob) -- with their reference-graph flags and metadata intact.
+func TestBriefBlobs(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+
+	embeddedHash := "a1" + strings.Repeat("0", 62)
+	attachedHash := "b2" + strings.Repeat("0", 62)
+	for _, h := range []string{embeddedHash, attachedHash} {
+		if _, err := s.InsertBlob(ctx, h, "image/png", 1024); err != nil {
+			t.Fatalf("insert blob %s: %v", h, err)
+		}
+	}
+
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), task.ID, []string{embeddedHash}, "alice")
+	}); err != nil {
+		t.Fatalf("reconcile embedded: %v", err)
+	}
+	if err := s.AttachBlob(ctx, task.ID, attachedHash, "crash.log", "alice"); err != nil {
+		t.Fatalf("attach blob: %v", err)
+	}
+
+	b, err := s.Brief(ctx, task.ID, BriefOptions{})
+	if err != nil {
+		t.Fatalf("Brief: %v", err)
+	}
+	if len(b.Blobs) != 2 {
+		t.Fatalf("blobs = %+v, want 2", b.Blobs)
+	}
+	byHash := make(map[string]model.TaskBlob, len(b.Blobs))
+	for _, blob := range b.Blobs {
+		byHash[blob.Hash] = blob
+	}
+	embedded, ok := byHash[embeddedHash]
+	if !ok || !embedded.Embedded || embedded.Attached {
+		t.Fatalf("embedded blob = %+v, want embedded=true attached=false", embedded)
+	}
+	if embedded.MediaType != "image/png" {
+		t.Fatalf("embedded blob media type = %q, want image/png", embedded.MediaType)
+	}
+	attached, ok := byHash[attachedHash]
+	if !ok || attached.Embedded || !attached.Attached {
+		t.Fatalf("attached blob = %+v, want embedded=false attached=true", attached)
+	}
+	if attached.Filename != "crash.log" {
+		t.Fatalf("attached blob filename = %q, want crash.log", attached.Filename)
 	}
 }
