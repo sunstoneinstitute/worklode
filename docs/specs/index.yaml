@@ -375,6 +375,7 @@ docs/specs/026-design-doc-queries.md:
     sec-2.2: "### 2.2 `--needs-execution`"
     sec-2.3: "### 2.3 `lode doc sections`"
     sec-2.4: "### 2.4 `--bare-superseded`"
+    sec-2.5: "### 2.5 `lode doc todo`"
     sec-3: "## 3. Showing a document: `lode show`"
     sec-3.1: "### 3.1 A claim takes effect when its author is accepted"
     sec-3.2: "### 3.2 Consolidation is a fixpoint, not a depth-bounded walk"

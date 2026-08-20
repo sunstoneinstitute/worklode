@@ -908,13 +908,11 @@ func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
 // `lode doc` and into `lode show`'s kind flags (026 §3), and guards against
 // it creeping back in as `lode doc show`.
 //
-// `lode doc` itself is currently absent: the git→backbone sync (025 §16) was
-// retired with the §5.1 store it populated, and the authoring verbs that
-// replace it (new/submit/accept, 025 §7/§9.2) are unbuilt. So the assertion
-// is conditional — whenever a "doc" command exists, it must not own "show".
-// (An unrecognized subcommand of a non-root parent, e.g. `lode doc show`,
-// prints help and exits 0 by cobra default — see `lode task bogus` — so that
-// path isn't asserted here.)
+// `lode doc` exists (it owns `todo`, 026 §2.4); the assertion stays
+// conditional so it survives the verb set changing again. (An unrecognized
+// subcommand of a non-root parent, e.g. `lode doc show`, prints help and
+// exits 0 by cobra default — see `lode task bogus` — so that path isn't
+// asserted here.)
 func TestDocHasNoShowVerb(t *testing.T) {
 	var doc *cobra.Command
 	for _, c := range rootCmd.Commands() {
