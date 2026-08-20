@@ -157,7 +157,7 @@ func docEdges(t *testing.T, s *Store, docID int64) []model.DocEdge {
 
 // docCoverageEdge is one covers edge id and level, for tests exercising
 // 026 §2.1's three-valued coverage that model.DocEdge's plain columns do not
-// carry (WL-141 part 1; the read path is a separate task).
+// carry.
 type docCoverageEdge struct {
 	id       int64
 	toDoc    int64
@@ -1126,6 +1126,45 @@ covers:
 	}
 }
 
+// TestDocCoverageFullCoverageWithBlankEntryKeepsPositionsContiguous: a blank
+// fullCoverageWith entry is dropped rather than stored, and the surviving
+// rows' positions stay a contiguous 0-based rank rather than skipping the
+// dropped entry's index.
+func TestDocCoverageFullCoverageWithBlankEntryKeepsPositionsContiguous(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	other := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "other-plan", Body: planBody, CreatedBy: "stig"})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - ""
+      - other-plan.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 {
+		t.Fatalf("edges = %+v, want 1", edges)
+	}
+	cw := docCompletedWith(t, s, edges[0].id)
+	want := []docCompletedWithRow{{position: 0, toDoc: other.ID}}
+	if len(cw) != 1 || cw[0] != want[0] {
+		t.Errorf("completedWith = %+v, want %+v (blank entry dropped, position 0 not 1)", cw, want)
+	}
+}
+
 // TestDocCoverageFullCoverageWithBesideFullWritesNoRows: fullCoverageWith is
 // only meaningful on a partial entry (026 §5.1); beside full it is dropped
 // rather than written.
@@ -1316,6 +1355,82 @@ covers:
 	})
 	if edges := docCoverageEdges(t, s, plan.ID); len(edges) != 1 || edges[0].coverage != "full" {
 		t.Fatalf("edges = %+v, want one full edge", edges)
+	}
+}
+
+// TestDocCoverageSameSectionTwicePartialRejectsDifferentClosures: two
+// `partial` entries for the same section with different fullCoverageWith
+// closures are the same class of contradiction as two different levels (026
+// §2.1), so the write is refused rather than silently keeping one.
+func TestDocCoverageSameSectionTwicePartialRejectsDifferentClosures(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "sibling-a", Body: planBody, CreatedBy: "stig"})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "sibling-b", Body: planBody, CreatedBy: "stig"})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - sibling-a
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - sibling-b
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocCoverageSameSectionTwicePartialSameClosureDeduped: two `partial`
+// entries for the same section naming the same fullCoverageWith target under
+// different spellings are one edge — the dedupe key is the resolved closure,
+// not the raw reference, matching why the row itself dedupes on the resolved
+// target (026 §2.1).
+func TestDocCoverageSameSectionTwicePartialSameClosureDeduped(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "plan", Slug: "sibling-plan", Body: planBody, CreatedBy: "stig"})
+
+	body := `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - sibling-plan
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - sibling-plan.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	edges := docCoverageEdges(t, s, plan.ID)
+	if len(edges) != 1 || edges[0].coverage != "partial" {
+		t.Fatalf("edges = %+v, want one partial edge", edges)
+	}
+	if cw := docCompletedWith(t, s, edges[0].id); len(cw) != 1 {
+		t.Fatalf("completedWith = %+v, want one row", cw)
 	}
 }
 
@@ -3065,6 +3180,29 @@ func TestDocNeedsPlanningPartialClosureIgnoresDraftSibling(t *testing.T) {
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
 		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
 		t.Fatalf("gaps = %v, want sec-1 partial: a draft sibling closes nothing", gaps)
+	}
+}
+
+// TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling: 026 §2.1's
+// closure test is universal over the named plans, not existential — one
+// qualifying sibling does not close the claim when a second sibling, named
+// alongside it, is still a draft.
+func TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	accepted := levelledPlan(t, s, "plan-sibling-accepted", true,
+		coverageRef{ref: "025-x#sec-1", level: "partial"})
+	draft := levelledPlan(t, s, "plan-sibling-draft", false,
+		coverageRef{ref: "025-x#sec-1", level: "partial"})
+	levelledPlan(t, s, "plan-main", true, coverageRef{
+		ref: "025-x#sec-1", level: "partial",
+		fullCoverageWith: []string{accepted.Slug, draft.Slug},
+	})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 partial: a draft among two named siblings blocks closure", gaps)
 	}
 }
 

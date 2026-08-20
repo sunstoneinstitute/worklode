@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -877,6 +878,76 @@ type docEdgeRow struct {
 	toExternal string
 }
 
+// closureRef is one resolved fullCoverageWith target: a doc id when it
+// resolved, or the verbatim reference in toExternal when it did not (026
+// §2.1 — unresolvable closes nothing, same as an unresolved doc_edges
+// target). resolved distinguishes toDoc's zero value from "this is doc 0".
+type closureRef struct {
+	resolved   bool
+	toDoc      int64
+	toExternal string
+}
+
+// docEdgeSeen is what rebuildEdges' dedupe map remembers about a resolved
+// row already seen in this frontmatter: its level, and — for a partial
+// entry — its resolved fullCoverageWith closure, so a second occurrence of
+// the same section can be checked for agreement on both, not just the level.
+type docEdgeSeen struct {
+	level   string
+	closure []closureRef
+}
+
+// resolveClosure resolves a partial covers entry's fullCoverageWith list
+// against project, skipping blank entries and preserving authored order. It
+// doubles as the comparable value rebuildEdges uses to detect two entries
+// for the same section proposing different closures.
+func resolveClosure(tx *sql.Tx, project string, refs []string) ([]closureRef, error) {
+	var out []closureRef
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		cwBase, _ := cutFragment(ref) // plans take no anchors
+		cwDoc, cwResolved, err := resolveDocRef(tx, project, cwBase)
+		if err != nil {
+			return nil, err
+		}
+		if cwResolved {
+			out = append(out, closureRef{resolved: true, toDoc: cwDoc})
+		} else {
+			// Unresolvable: kept verbatim, same as doc_edges' to_external — and
+			// being unresolvable, it closes nothing (026 §2.1).
+			out = append(out, closureRef{toExternal: ref})
+		}
+	}
+	return out, nil
+}
+
+// closureEqual reports whether two resolved fullCoverageWith closures name
+// the same set of targets, order irrelevant.
+func closureEqual(a, b []closureRef) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sa, sb := slices.Clone(a), slices.Clone(b)
+	less := func(x, y closureRef) int {
+		if x.resolved != y.resolved {
+			if x.resolved {
+				return -1
+			}
+			return 1
+		}
+		if x.toDoc != y.toDoc {
+			return int(x.toDoc - y.toDoc)
+		}
+		return strings.Compare(x.toExternal, y.toExternal)
+	}
+	slices.SortFunc(sa, less)
+	slices.SortFunc(sb, less)
+	return slices.Equal(sa, sb)
+}
+
 // rebuildEdges replaces a document's outbound edges from its frontmatter. It
 // deletes and re-inserts, so doc_edges_unique is satisfied across calls;
 // doc_coverage_completed_with cascades off doc_edges, so clearing the parent
@@ -886,22 +957,28 @@ type docEdgeRow struct {
 // reference: two spellings of one target ("004-x.md" and
 // "docs/specs/004-x.md", or a filename and its <KEY>-SPEC-<n> shorthand) are
 // one edge, and inserting both would abort a legal document on a raw unique
-// violation. The dedupe map carries the coverage level alongside the row: a
-// repeated resolved target at the *same* level is still one edge, but the
-// same section covered twice at different levels is a contradiction the
-// frontmatter cannot mean (026 §2.1), so that is ErrInvalidInput rather than
-// a raw unique-index violation.
+// violation. The dedupe map carries the coverage level and, for a partial
+// entry, its resolved fullCoverageWith closure alongside the row: a repeated
+// resolved target at the *same* level with the *same* closure is still one
+// edge, but the same section covered twice with a different level or a
+// different closure is a contradiction the frontmatter cannot mean (026
+// §2.1), so that is ErrInvalidInput rather than a raw unique-index violation.
 //
-// A covers edge's level is normalised here — an empty entry means full (the
-// bare-string frontmatter form already decodes to "full") — and validated:
-// anything other than full/partial/none is ErrInvalidInput. A partial edge's
-// fullCoverageWith closure is resolved the same way doc_edges resolves its
-// own targets and stored in doc_coverage_completed_with, in authored order.
+// A covers edge's level is normalised here — an empty entry means full — and
+// validated: anything other than full/partial/none is ErrInvalidInput. The
+// empty case is reached only from the object form with `coverage:` absent;
+// the bare-string form decodes straight to "full"
+// (designdoc.Coverage.UnmarshalYAML) and never passes through here empty. An
+// object entry omitting the required key (026 §5.1) is a defect
+// scripts/secmeta.py reports — this fallback just keeps it reading as full
+// rather than inventing a fourth state. A partial edge's fullCoverageWith
+// closure is resolved the same way doc_edges resolves its own targets and
+// stored in doc_coverage_completed_with, in authored order.
 func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
-	seen := map[docEdgeRow]string{}
+	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {
 		base, fragment := cutFragment(e.ref)
 		toDoc, resolved, err := resolveDocRef(tx, project, base)
@@ -925,6 +1002,13 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 					docID, e.ref, level, ErrInvalidInput)
 			}
 		}
+		var closure []closureRef
+		if level == "partial" {
+			closure, err = resolveClosure(tx, project, e.completedWith)
+			if err != nil {
+				return err
+			}
+		}
 
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
@@ -935,13 +1019,17 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 			row.toExternal = e.ref
 		}
 		if prior, ok := seen[row]; ok {
-			if prior != level {
+			if prior.level != level {
 				return fmt.Errorf("doc %d %s %q twice, as %s and %s (026 §5.1): %w",
-					docID, e.typ, e.ref, prior, level, ErrInvalidInput)
+					docID, e.typ, e.ref, prior.level, level, ErrInvalidInput)
+			}
+			if level == "partial" && !closureEqual(prior.closure, closure) {
+				return fmt.Errorf("doc %d %s %q twice, both %s but with different fullCoverageWith closures (026 §5.1): %w",
+					docID, e.typ, e.ref, level, ErrInvalidInput)
 			}
 			continue
 		}
-		seen[row] = level
+		seen[row] = docEdgeSeen{level: level, closure: closure}
 
 		var coverageCol sql.NullString
 		if e.typ == "covers" {
@@ -961,24 +1049,16 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 		if level != "partial" {
 			continue
 		}
-		for pos, ref := range e.completedWith {
-			ref = strings.TrimSpace(ref)
-			if ref == "" {
-				continue
-			}
-			cwBase, _ := cutFragment(ref) // plans take no anchors
-			cwDoc, cwResolved, err := resolveDocRef(tx, project, cwBase)
-			if err != nil {
-				return err
-			}
+		// resolveClosure already dropped blank entries, so pos here is a
+		// contiguous 0-based rank — unlike ranging over the raw completedWith
+		// list, which would reopen the gap resolveClosure closed.
+		for pos, c := range closure {
 			var toDocCol sql.NullInt64
 			var toExternalCol sql.NullString
-			if cwResolved {
-				toDocCol = nullID(cwDoc)
+			if c.resolved {
+				toDocCol = nullID(c.toDoc)
 			} else {
-				// Unresolvable: kept verbatim, same as doc_edges' to_external —
-				// and being unresolvable, it closes nothing (026 §2.1).
-				toExternalCol = nullText(ref)
+				toExternalCol = nullText(c.toExternal)
 			}
 			if _, err := tx.Exec(
 				`INSERT INTO doc_coverage_completed_with (edge_id, position, to_doc, to_external)
@@ -1317,6 +1397,12 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 //     §4.3), so it falls out of the join without a case of its own.
 //   - Only accepted documents on both ends participate: a draft spec is not
 //     yet owed planning, and a draft plan has not yet undertaken work.
+//
+// A plan naming itself in its own `fullCoverageWith` closes its own section.
+// §2.1's closure test is only that each named plan is accepted and
+// contributes `full` or `partial` — it says nothing about the naming plan —
+// so this is not a bug; narrowing it to siblings would be a spec change
+// (tracked in docs/follow-ups.md).
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH cov AS (
