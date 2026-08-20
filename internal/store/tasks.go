@@ -1065,14 +1065,25 @@ func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]boo
 // IsBlocked reports whether taskID has an open 'blocks' edge pointing at it,
 // or sits in a plan another plan is ordered before (planBlockedCondition). It
 // runs inside the given transaction so lease claims can check it atomically.
-//
-// The plan arm reads the task row through a one-row subquery because the
-// condition is written against a `t`-aliased row — the same text
-// readyCandidates renders, so the claim path and the ready set cannot
-// disagree about what is pickable.
 func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
+	return blockedByEdgeOrPlan(context.Background(), tx, taskID)
+}
+
+// IsTaskBlocked is IsBlocked outside a transaction, for the read paths that
+// need the answer for one task. Prefer it over BlockedTaskIDs whenever the
+// caller reads a single id: this is two indexed EXISTS, that one materialises
+// every blocked id in the tracker.
+func (s *Store) IsTaskBlocked(ctx context.Context, taskID string) (bool, error) {
+	return blockedByEdgeOrPlan(ctx, s.db, taskID)
+}
+
+// blockedByEdgeOrPlan is the shared predicate. The plan arm reads the task row through a
+// one-row subquery because the condition is written against a `t`-aliased row
+// — the same text readyCandidates renders, so the claim path and the ready set
+// cannot disagree about what is pickable.
+func blockedByEdgeOrPlan(ctx context.Context, q queryer, taskID string) (bool, error) {
 	var blocked bool
-	err := tx.QueryRow(
+	err := q.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM task_edges e WHERE e.to_task = $1 AND `+blockedCondition+`)
 		     OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND `+planBlockedCondition+`)`,
 		taskID,
