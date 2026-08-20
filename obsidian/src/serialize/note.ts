@@ -89,6 +89,18 @@ function wikilink(id: string): string {
   return `[[${id}]]`;
 }
 
+/** A doc wikilink, path-qualified by project and displayed as the slug
+ *  alone. A task id is globally unique, so a bare `wikilink(id)` resolves
+ *  unambiguously; a doc slug is unique only within its project
+ *  (`docs_project_slug`, deploy/base/migrations/0027_docs.up.sql), so two
+ *  projects can each hold a doc slugged e.g. "overview" and a bare
+ *  `[[overview]]` would resolve to whichever one Obsidian picks. Pointing at
+ *  the full note path -- the same one docToNote writes -- with the slug as
+ *  the display alias keeps the link both unambiguous and readable. */
+function docWikilink(projectId: string, slug: string): string {
+  return `[[${projectId}/docs/${slug}|${slug}]]`;
+}
+
 /** Whether `body` already opens with an H1 of its own: its first non-blank
  *  line, indented by at most three spaces, is `#` followed by a space, a tab,
  *  or the end of the line.
@@ -126,6 +138,23 @@ function renderNote(
   return body ? `${header}\n${body}` : header;
 }
 
+/** Locates a leading YAML frontmatter fence: the opening "---\n" and the
+ *  first closing "\n---\n" after it. Returns the raw YAML block (including
+ *  its own trailing newline, as parseYaml expects) and everything after the
+ *  closing fence; undefined when there is no opening fence, or it never
+ *  closes. Shared by parseNote (a rendered note always has a fence) and
+ *  splitDocFrontmatter (a document body may or may not).
+ *
+ *  Safe to stop at the first closing match: yaml.stringify indents every
+ *  multi-line scalar, so generated frontmatter never emits a bare column-0
+ *  "---". */
+function scanFrontmatterFence(content: string): { yamlBlock: string; rest: string } | undefined {
+  if (!content.startsWith("---\n")) return undefined;
+  const closeIdx = content.indexOf("\n---\n", 4);
+  if (closeIdx === -1) return undefined;
+  return { yamlBlock: content.slice(4, closeIdx + 1), rest: content.slice(closeIdx + 5) };
+}
+
 /** Split a rendered note back into its wl block, the surrounding
  *  frontmatter, and the verbatim body. The inverse of the *ToNote
  *  functions; the write-back half is not implemented, but this is what
@@ -138,14 +167,11 @@ export function parseNote(content: string): {
   if (!content.startsWith("---\n")) {
     throw new Error("note is missing its opening frontmatter fence");
   }
-  // Safe to stop at the first match: yaml.stringify indents every multi-line
-  // scalar, so generated frontmatter never emits a bare column-0 "---".
-  const closeIdx = content.indexOf("\n---\n", 4);
-  if (closeIdx === -1) {
+  const fence = scanFrontmatterFence(content);
+  if (!fence) {
     throw new Error("note frontmatter is not closed");
   }
-  const yamlBlock = content.slice(4, closeIdx + 1);
-  const rest = content.slice(closeIdx + 5);
+  const { yamlBlock, rest } = fence;
 
   const parsed = parseYaml(yamlBlock) as Record<string, unknown>;
   const wl = parsed.wl as WlBlock | undefined;
@@ -276,35 +302,58 @@ export async function conflictToNote(t: Task, localBody: string, at: string): Pr
 
 // ---- Doc notes ----
 
-/** The doc as the etag is computed over it: everything but `synced_at`. The
- *  backbone rewrites `docs.synced_at` on every `lode doc sync`, including for
- *  a doc whose content did not change, so an etag covering it would rewrite
- *  every doc note (and, since a project note's etag covers its member docs,
- *  every project note) on every sync. `synced_at` is backbone bookkeeping the
- *  mirror does not carry, so it is out of the rendered `wl` block too. */
-function docEtagSource(d: Doc): Record<string, unknown> {
-  const source: Record<string, unknown> = { ...d };
-  delete source.synced_at;
-  return source;
+/** Splits a document body into its own YAML frontmatter block and the
+ *  markdown after it. `internal/model.Doc.Body` is the full markdown,
+ *  frontmatter included, so this is what lets docToNote lift that block into
+ *  the note's own frontmatter instead of leaving a second `---` fence inside
+ *  the rendered body.
+ *
+ *  A body that does not open with a `---\n` fence, or whose fence never
+ *  closes, is returned unchanged: `frontmatter` undefined, `malformed`
+ *  false -- there is no block to disagree with. A closed fence whose YAML
+ *  parses to a plain object (not null, not an array) is that object. A
+ *  closed fence whose YAML parses to null -- an empty block, `---\n\n---\n`
+ *  -- is treated as absent, the same as no fence at all: `frontmatter`
+ *  undefined, `malformed` false, and the fence is still stripped from the
+ *  returned `body` so it cannot render as a duplicate. A closed fence whose
+ *  YAML throws, or parses to an array or a scalar, is reported `malformed`
+ *  and the block is stripped from `body` rather than left to render as a
+ *  duplicate, unparseable fence. */
+function splitDocFrontmatter(body: string): {
+  frontmatter: Record<string, unknown> | undefined;
+  malformed: boolean;
+  body: string;
+} {
+  const fence = scanFrontmatterFence(body);
+  if (!fence) return { frontmatter: undefined, malformed: false, body };
+
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(fence.yamlBlock);
+  } catch {
+    return { frontmatter: undefined, malformed: true, body: fence.rest };
+  }
+  if (parsed === null) {
+    return { frontmatter: undefined, malformed: false, body: fence.rest };
+  }
+  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { frontmatter: undefined, malformed: true, body: fence.rest };
+  }
+  return { frontmatter: parsed as Record<string, unknown>, malformed: false, body: fence.rest };
 }
 
-/** Renders a stored document: its own frontmatter verbatim, plus the
- *  reserved `wl` block beside it. The document's own frontmatter is never
- *  edited, only accompanied — see the round-trip rules in the module docs. */
+/** Renders a stored document: its own frontmatter (lifted out of the body,
+ *  see splitDocFrontmatter) verbatim, plus the reserved `wl` block beside it.
+ *  The document's own frontmatter is never edited, only accompanied — see
+ *  the round-trip rules in the module docs. */
 export async function docToNote(d: Doc): Promise<Note> {
-  // frontmatter is unknown (it's json.RawMessage on the Go side): a non-null,
-  // non-object payload (a string, a number, an array) would otherwise spread
-  // into garbage index keys. Treat it as absent and surface a conflict
-  // instead of rendering corrupted frontmatter silently.
-  const raw = d.frontmatter;
-  const isFrontmatterObject = typeof raw === "object" && raw !== null && !Array.isArray(raw);
-  const malformedFrontmatter = raw !== undefined && raw !== null && !isFrontmatterObject;
-  const source = isFrontmatterObject ? (raw as Record<string, unknown>) : {};
+  const split = splitDocFrontmatter(d.body);
+  const source = split.frontmatter ?? {};
   const hasAliases = Object.prototype.hasOwnProperty.call(source, "aliases");
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
-  const etag = await computeEtag(docEtagSource(d));
-  const body = d.body ?? "";
+  const etag = await computeEtag(d);
+  const body = split.body;
   // The one case this bit exists for: a spec, ADR or plan body opens with its
   // own "# <Title>", so injecting one would render the note with two.
   const headingAdded = !bodyOpensWithH1(body);
@@ -317,12 +366,13 @@ export async function docToNote(d: Doc): Promise<Note> {
     id: d.id,
     project: d.project,
     kind: d.kind,
-    ordinal: d.ordinal,
+    ...(d.number !== 0 ? { number: d.number } : {}),
+    slug: d.slug,
     status: d.status,
     title: d.title,
     version: d.version,
-    source_branch: d.source_branch,
-    source_dirty: d.source_dirty,
+    issued: d.issued,
+    assignee: d.assignee,
     etag,
   };
 
@@ -339,18 +389,18 @@ export async function docToNote(d: Doc): Promise<Note> {
   const content = renderNote(frontmatter, d.title, body, headingAdded);
 
   const note: Note = {
-    path: `${d.project}/docs/${d.id}.md`,
+    path: `${d.project}/docs/${d.slug}.md`,
     content,
     etag,
   };
 
-  if (malformedFrontmatter) {
+  if (split.malformed) {
     note.conflict =
-      `${d.id}: frontmatter is not a JSON object (got ${Array.isArray(raw) ? "an array" : typeof raw}); ` +
-      `ignored, and the note was rendered with no author frontmatter.`;
+      `${d.slug}: frontmatter block is not a YAML mapping; ignored, and the note was rendered with no ` +
+      `author frontmatter.`;
   } else if (hasWlCollision) {
     note.conflict =
-      `${d.id}: frontmatter already has a "wl" key, which collides with the ` +
+      `${d.slug}: frontmatter already has a "wl" key, which collides with the ` +
       `backbone-reserved block. The backbone wl block was kept; the doc's own ` +
       `wl key was dropped from the rendered note. dropped value: ${JSON.stringify(source.wl)}`;
   }
@@ -363,8 +413,8 @@ export async function docToNote(d: Doc): Promise<Note> {
 
 const GENERATED_NOTICE = "> Generated by the Worklode plugin. Edits here are overwritten on sync.";
 
-function renderProjectBody(docs: Doc[], tasks: TaskListDetail[]): string {
-  const docLines = sortIds(docs.map((d) => d.id)).map((id) => `- ${wikilink(id)}`);
+function renderProjectBody(projectId: string, docs: Doc[], tasks: TaskListDetail[]): string {
+  const docLines = sortIds(docs.map((d) => d.slug)).map((slug) => `- ${docWikilink(projectId, slug)}`);
 
   const byState = new Map<string, string[]>();
   for (const t of tasks) {
@@ -400,13 +450,11 @@ function renderProjectBody(docs: Doc[], tasks: TaskListDetail[]): string {
 }
 
 export async function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Promise<Note> {
-  // Same `synced_at` exclusion as docToNote: otherwise every doc sync would
-  // rewrite every project note as well.
-  const etag = await computeEtag({ project: p, docs: docs.map(docEtagSource), tasks });
+  const etag = await computeEtag({ project: p, docs, tasks });
 
   // A generated body opens with the generated-by notice, never a heading, so
   // this is always true. Asked anyway: one rule, put to every note kind.
-  const body = renderProjectBody(docs, tasks);
+  const body = renderProjectBody(p.id, docs, tasks);
   const headingAdded = !bodyOpensWithH1(body);
 
   const wl: WlBlock = {
