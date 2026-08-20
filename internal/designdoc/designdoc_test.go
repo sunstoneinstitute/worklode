@@ -209,3 +209,63 @@ func TestBytesReproducesInput(t *testing.T) {
 		t.Errorf("Bytes() = %q, want %q", got, src)
 	}
 }
+
+// TestSubtreeCutsSectionWithDescendants covers what `lode show --section`
+// asks for (026 §3): a section is always its whole subtree, ending at the
+// next heading of the same or shallower level.
+func TestSubtreeCutsSectionWithDescendants(t *testing.T) {
+	src := "---\nstatus: accepted\n---\n" +
+		"# Title\n\nIntro.\n\n" +
+		"## 1. One {#sec-1}\n\na\n\n" +
+		"### 1.1 One-one {#sec-1.1}\n\nb\n\n" +
+		"##### Anchorless aside\n\nc\n\n" +
+		"## 2. Two {#sec-2}\n\nd\n"
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, tc := range []struct {
+		anchor string
+		want   string
+	}{
+		{"sec-1", "## 1. One {#sec-1}\n\na\n\n### 1.1 One-one {#sec-1.1}\n\nb\n\n##### Anchorless aside\n\nc\n\n"},
+		{"sec-1.1", "### 1.1 One-one {#sec-1.1}\n\nb\n\n##### Anchorless aside\n\nc\n\n"},
+		{"sec-2", "## 2. Two {#sec-2}\n\nd\n"},
+	} {
+		got, ok := doc.Subtree(tc.anchor)
+		if !ok {
+			t.Fatalf("Subtree(%q): not found", tc.anchor)
+		}
+		if got != tc.want {
+			t.Errorf("Subtree(%q) = %q, want %q", tc.anchor, got, tc.want)
+		}
+	}
+	if _, ok := doc.Subtree("sec-9"); ok {
+		t.Error("Subtree(sec-9) reported found; there is no such section")
+	}
+}
+
+// TestSubtreeIsByteIdenticalToSource is the property that lets `lode show
+// --section` print raw source: concatenating every section's subtree at the
+// top level, after the preamble, reproduces the body exactly.
+func TestSubtreeIsByteIdenticalToSource(t *testing.T) {
+	src := "# Title\r\n\r\nIntro.\r\n\r\n" +
+		"## 1. One {#sec-1}   \r\n\r\na\r\n\r\n" +
+		"### 1.1 One-one {#sec-1.1}\r\n\r\nb\r\n\r\n" +
+		"## 2. Two {#sec-2}\r\n\r\nd"
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := doc.Preamble
+	for _, anchor := range []string{"sec-1", "sec-2"} {
+		sub, ok := doc.Subtree(anchor)
+		if !ok {
+			t.Fatalf("Subtree(%q): not found", anchor)
+		}
+		got += sub
+	}
+	if got != src {
+		t.Errorf("preamble + subtrees = %q, want %q", got, src)
+	}
+}

@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -99,7 +97,9 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", doc.Slug, err)
 	}
-	text, ok := sectionSubtree(data, parsed, section)
+	// 026 §3: a section is always its whole subtree. designdoc cuts it from
+	// the spans Parse already found, so nothing here re-scans the source.
+	text, ok := parsed.Subtree(section)
 	if !ok {
 		return fmt.Errorf("no section %s in %s", section, doc.Slug)
 	}
@@ -146,118 +146,4 @@ func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []b
 	return printJSON(cmd, docShowResult{
 		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content),
 	})
-}
-
-// sectionSubtree returns the exact source text of the section anchored
-// anchor within src, together with its whole subtree — every following
-// section until one at the same or shallower Level (026 §3: a section is
-// always its whole subtree).
-//
-// Positions come from headingLineStarts, a structural scan that finds every
-// heading line by shape alone, matched to doc.Sections by index rather than
-// by content. That means no step here ever needs a *particular* section's
-// Anchor — not the target's neighbors, not the boundary section right after
-// the subtree — which matters because anchorless H5/H6 subsections are legal
-// (docs/authoring-design-docs.md) and because the literal text of a real
-// anchor sometimes recurs elsewhere in the same document (a fenced example,
-// prose explaining the anchor syntax): searching for anchor text directly,
-// as an earlier version of this function did, could match either hazard.
-func sectionSubtree(src []byte, doc *designdoc.Document, anchor string) (string, bool) {
-	var target *designdoc.Section
-	for _, sec := range doc.Sections {
-		if sec.Anchor == anchor {
-			target = sec
-			break
-		}
-	}
-	if target == nil {
-		return "", false
-	}
-	lastIdx := target.Index
-	for _, sec := range doc.Sections[target.Index+1:] {
-		if sec.Level <= target.Level {
-			break
-		}
-		lastIdx = sec.Index
-	}
-
-	starts := headingLineStarts(src)
-	if len(starts) != len(doc.Sections) {
-		// This scan and designdoc.Parse disagree on how many headings the
-		// document has; trust neither rather than risk wrong bytes.
-		return "", false
-	}
-	end := len(src)
-	if lastIdx+1 < len(starts) {
-		end = starts[lastIdx+1]
-	}
-	return string(src[starts[target.Index]:end]), true
-}
-
-// headingLine matches an ATX heading line at depth 2-6 by shape alone — no
-// number, text or anchor capture, since headingLineStarts only needs
-// positions, and doc.Sections already has the rest. H1 (a single '#') is
-// excluded, mirroring designdoc's own exclusion of the document title.
-var headingLine = regexp.MustCompile(`^#{2,6}[ \t]`)
-
-// headingLineStarts returns the byte offset of the start of every heading
-// line outside fenced code and outside any YAML frontmatter, in document
-// order — the same set and order designdoc.Parse populates
-// Document.Sections from, so headingLineStarts(src)[i] is section i's
-// heading start whether or not that section (or any other one along the
-// way) carries an anchor.
-func headingLineStarts(src []byte) []int {
-	var starts []int
-	var fence string
-	for pos := frontmatterEnd(src); pos <= len(src); {
-		end := len(src)
-		nl := bytes.IndexByte(src[pos:], '\n')
-		if nl >= 0 {
-			end = pos + nl
-		}
-		line := bytes.TrimRight(src[pos:end], "\r")
-		stripped := bytes.TrimLeft(line, " \t")
-		switch {
-		case fence != "":
-			if bytes.HasPrefix(stripped, []byte(fence)) {
-				fence = ""
-			}
-		case bytes.HasPrefix(stripped, []byte("```")), bytes.HasPrefix(stripped, []byte("~~~")):
-			fence = string(stripped[:3])
-		case headingLine.Match(line):
-			starts = append(starts, pos)
-		}
-		if nl < 0 {
-			break
-		}
-		pos = end + 1
-	}
-	return starts
-}
-
-// frontmatterEnd returns the byte offset where the document body begins:
-// right after the YAML frontmatter block, mirroring the delimiter check
-// designdoc's own (unexported) splitFrontmatter uses — a leading "---"
-// line, then the next line that is exactly "---" once trailing spaces,
-// tabs, and the line ending are trimmed. No frontmatter, or an unterminated
-// block, means the body is the whole input: offset 0.
-func frontmatterEnd(src []byte) int {
-	if !bytes.HasPrefix(src, []byte("---\n")) && !bytes.HasPrefix(src, []byte("---\r\n")) {
-		return 0
-	}
-	for pos := bytes.IndexByte(src, '\n') + 1; pos < len(src); {
-		end := len(src)
-		nl := bytes.IndexByte(src[pos:], '\n')
-		if nl >= 0 {
-			end = pos + nl + 1
-		}
-		if string(bytes.TrimRight(src[pos:end], " \t\r\n")) == "---" {
-			return end
-		}
-		if nl < 0 {
-			break
-		}
-		pos = end
-	}
-	return 0
 }
