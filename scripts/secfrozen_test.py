@@ -300,6 +300,16 @@ class TestMirrorEdges(unittest.TestCase):
         p = r.run()
         self.assertEqual(p.returncode, 0, p.stderr)
 
+    def test_inline_comment_stripped(self):
+        """A YAML inline comment is not part of the value; `#sec-N` is."""
+        r = self.pair(
+            edge("amends", "#sec-1", "002-b.md#sec-2  # the older half"),
+            edge("amendedBy", "#sec-2", "001-a.md#sec-1\t# and back"),
+        )
+        p = r.run()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stderr, "")
+
     def test_colon_form_unresolved(self):
         r = self.pair(edge("amends", ".", "rdf-registry:ADR-0006"))
         p = r.run()

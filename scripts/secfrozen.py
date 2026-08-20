@@ -58,6 +58,9 @@ ITEM = re.compile(r"^-[ \t]+(?P<value>.*)$")
 # decisions were inherited (026 section 4). Its content is opaque; it is
 # stripped before the path is read and otherwise ignored.
 ANNOTATION = re.compile(r"\s*\([^)]*\)\s*$")
+# A YAML inline comment needs whitespace before its `#`; a `#sec-N` fragment
+# has none, so stripping the one never eats the other.
+INLINE_COMMENT = re.compile(r"\s+#.*$")
 
 
 def repo_root():
@@ -148,6 +151,16 @@ class Unparseable(Exception):
     """
 
 
+def value_of(s):
+    """One frontmatter value: inline comment dropped, then unquoted.
+
+    An uncommented `- 004-….md#sec-1.4  # why` would carry `sec-1.4  # why`
+    as its fragment, entering the graph as an end no mirror can match and
+    manufacturing a refusal out of a comment.
+    """
+    return unquote(INLINE_COMMENT.sub("", s))
+
+
 def unquote(s):
     """Drop one layer of matching quotes, as the corpus writes `"#sec-1"`."""
     s = s.strip()
@@ -205,15 +218,16 @@ def extract_edges(front):
                 raise Unparseable(raw)
             value = item["value"].strip()
             if value:
-                yield key, subject, unquote(value)
+                yield key, subject, value_of(value)
             continue
         if indent == 0:
             raise Unparseable(raw)
         sub = SUB_KEY.match(stripped)
         if sub:
             subject = unquote(sub["key"])
-            if sub["rest"]:
-                yield key, subject, unquote(sub["rest"])
+            rest = value_of(" " + sub["rest"])
+            if rest:
+                yield key, subject, rest
             continue
         raise Unparseable(raw)
 
@@ -357,9 +371,9 @@ def main():
             "renumbering. A superseded section keeps its heading and anchor. "
             "This gate never rewrites files.")
     if mirrors:
-        err("\nAn amends/replaces edge is recorded from both sides (026 §4): "
-            "add the mirror key to the document named above, or drop the half "
-            "that is wrong. This gate never rewrites files.")
+        err("\nAn amends/replaces edge must be recorded from both sides "
+            "(026 §4): add the mirror key to the document named above, or "
+            "drop the half that is wrong. This gate never rewrites files.")
     return 2
 
 
