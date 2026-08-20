@@ -75,8 +75,11 @@ type StatusLineAction struct {
 // Harness is one coding agent's integration surface (spec 008 §17.1).
 type Harness interface {
 	ID() string
-	// Detect reports whether this harness is configured for repoDir or the
-	// user, so `--agent auto` installs only what is actually in use.
+	// Detect reports whether this harness is configured for repoDir or for
+	// the user. `--agent auto` installs whatever fires, so a user-level
+	// signal — a bare ~/.claude, say — is enough: auto tracks the developer's
+	// tooling, not just this repo's. Name an agent explicitly to install into
+	// a repo the user-level check would drag in.
 	Detect(repoDir string) (bool, error)
 	SkillTargets(repoDir, scope string) ([]SkillTarget, error)
 	InstallHooks(repoDir, scope string) (HookInstall, error)
