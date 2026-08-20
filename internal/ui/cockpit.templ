@@ -43,20 +43,12 @@ templ Cockpit(v CockpitView) {
 							</div>
 						</div>
 						<div class="bd wl">
-							for _, item := range v.Work.InProgress {
-								@workRow(item)
-							}
-							for _, item := range v.Work.InReview {
-								@workRow(item)
-							}
-							for _, item := range v.Work.Ready {
-								@workRow(item)
-							}
-							for _, item := range v.Work.Blocked {
-								@workRow(item)
-							}
 							if v.Work.Len() == 0 {
 								<p class="muted small">No active work.</p>
+							} else {
+								for _, item := range v.Work.Rows() {
+									@workRow(item)
+								}
 							}
 						</div>
 					</section>

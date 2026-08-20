@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -174,6 +175,17 @@ type CockpitWork struct {
 // Active-work list renders an honest "no active work" line when it is zero.
 func (w CockpitWork) Len() int {
 	return len(w.InProgress) + len(w.InReview) + len(w.Ready) + len(w.Blocked)
+}
+
+// Rows is every active work item in the order the Active-work list renders
+// them: in progress, in review, ready, blocked. The bucket order is a fact of
+// the view, not of the markup, so the template walks one sequence.
+func (w CockpitWork) Rows() []WorkRow {
+	rows := make([]WorkRow, 0, w.Len())
+	for _, bucket := range [][]WorkRow{w.InProgress, w.InReview, w.Ready, w.Blocked} {
+		rows = append(rows, bucket...)
+	}
+	return rows
 }
 
 // WorkRow is one cockpit work item: the task link, its state, the evidence
@@ -386,14 +398,10 @@ func PriorityChip(priority string) string {
 // user_reported category uses the "user" chip class.
 func EvidenceChip(category string) string {
 	switch category {
-	case "declared":
-		return "declared"
 	case "user_reported":
 		return "user"
-	case "observed":
-		return "observed"
-	case "recommended":
-		return "recommended"
+	case "declared", "observed", "recommended":
+		return category
 	default:
 		return "plain"
 	}
@@ -452,12 +460,11 @@ func ModeLabel(mode string) string {
 // avatar badges in the Active-work list and decision rail. An empty name
 // yields "" (a blank avatar), never a fabricated placeholder.
 func Initials(name string) string {
-	var out []rune
+	out := make([]rune, 0, 2)
 	for _, field := range strings.Fields(name) {
-		for _, r := range field {
-			out = append(out, unicode.ToUpper(r))
-			break
-		}
+		// Fields never yields an empty string, so there is always a first rune.
+		r, _ := utf8.DecodeRuneInString(field)
+		out = append(out, unicode.ToUpper(r))
 		if len(out) == 2 {
 			break
 		}
