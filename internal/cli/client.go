@@ -562,6 +562,10 @@ type TaskListFilter struct {
 	// PlanDoc narrows to the tasks minted from this plan document id (025
 	// §9.2). 0 does not filter.
 	PlanDoc int64
+	// AboutDoc narrows to the tasks that reference this document id — the
+	// review and planning tasks the doc-lifecycle watcher mints (025 §15.4).
+	// 0 does not filter.
+	AboutDoc int64
 	// Deleted switches the list to tombstoned tasks (044 §5): they replace
 	// the live ones rather than joining them, so a list never mixes the two.
 	Deleted bool
@@ -596,6 +600,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	}
 	if f.PlanDoc != 0 {
 		q.Set("plan_doc", strconv.FormatInt(f.PlanDoc, 10))
+	}
+	if f.AboutDoc != 0 {
+		q.Set("about_doc", strconv.FormatInt(f.AboutDoc, 10))
 	}
 	if f.Deleted {
 		q.Set("deleted", "true")
