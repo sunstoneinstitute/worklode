@@ -534,64 +534,46 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, error) {
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
-	var args []any
+	var args sqlArgs
 	if f.Project != "" {
-		args = append(args, f.Project)
-		conds = append(conds, fmt.Sprintf(`project_id = $%d`, len(args)))
+		conds = append(conds, `project_id = `+args.next(f.Project))
 	}
 	if len(f.States) > 0 {
-		var placeholders []string
-		for _, st := range f.States {
-			args = append(args, st)
-			placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
-		}
-		conds = append(conds, `state IN (`+strings.Join(placeholders, ", ")+`)`)
+		conds = append(conds, `state = ANY(`+args.next(f.States)+`)`)
 	}
 	if f.Priority != "" {
-		args = append(args, f.Priority)
-		conds = append(conds, fmt.Sprintf(`priority = $%d`, len(args)))
+		conds = append(conds, `priority = `+args.next(f.Priority))
 	}
 	if f.Kind != "" {
-		args = append(args, f.Kind)
-		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+		conds = append(conds, `kind = `+args.next(f.Kind))
 	}
 	if f.PlanDoc != 0 {
-		args = append(args, f.PlanDoc)
-		conds = append(conds, fmt.Sprintf(`plan_doc = $%d`, len(args)))
+		conds = append(conds, `plan_doc = `+args.next(f.PlanDoc))
 	}
 	if f.AboutDoc != 0 {
-		args = append(args, f.AboutDoc)
-		conds = append(conds, fmt.Sprintf(`about_doc = $%d`, len(args)))
+		conds = append(conds, `about_doc = `+args.next(f.AboutDoc))
 	}
 	if f.Assignee != "" {
-		args = append(args, f.Assignee)
-		conds = append(conds, fmt.Sprintf(`assignee = $%d`, len(args)))
+		conds = append(conds, `assignee = `+args.next(f.Assignee))
 	}
 	if f.Parent != "" {
-		args = append(args, f.Parent)
-		conds = append(conds, fmt.Sprintf(
-			`EXISTS (SELECT 1 FROM task_edges e
-			          WHERE e.from_task = tasks.id AND e.to_task = $%d AND e.type = 'child_of')`,
-			len(args)))
+		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges e
+		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
 	}
 	if f.HasChildren {
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
 		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
 	}
 	if f.Repo != "" {
-		args = append(args, f.Repo)
-		conds = append(conds, fmt.Sprintf(
-			`EXISTS (SELECT 1 FROM project_repos pr
-			          WHERE pr.repo = $%d AND pr.project_id = tasks.project_id)`,
-			len(args)))
+		conds = append(conds, `EXISTS (SELECT 1 FROM project_repos pr
+		          WHERE pr.repo = `+args.next(f.Repo)+` AND pr.project_id = tasks.project_id)`)
 	}
 	if !f.UpdatedSince.IsZero() {
 		// >=, never >: the caller sends the highest updated_at it has seen and
 		// re-receives that boundary row, which is cheap and idempotent. With >
 		// a second write landing in the same clock tick as the watermark would
 		// never be handed out again — a silently lost update.
-		args = append(args, f.UpdatedSince.UTC())
-		conds = append(conds, fmt.Sprintf(`updated_at >= $%d`, len(args)))
+		conds = append(conds, `updated_at >= `+args.next(f.UpdatedSince.UTC()))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
@@ -605,7 +587,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	         ELSE 3
 	       END, split_part(id, '-', 1), CAST(split_part(id, '-', 2) AS INTEGER)`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}

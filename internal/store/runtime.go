@@ -108,15 +108,13 @@ func (s *Store) ListRuntimeEvents(ctx context.Context, cluster string, limit int
 		limit = defaultRuntimeEventLimit
 	}
 	q := `SELECT ` + runtimeEventColumns + ` FROM runtime_events`
-	var args []any
+	var args sqlArgs
 	if cluster != "" {
-		args = append(args, cluster)
-		q += fmt.Sprintf(` WHERE cluster = $%d`, len(args))
+		q += ` WHERE cluster = ` + args.next(cluster)
 	}
-	args = append(args, limit)
-	q += fmt.Sprintf(` ORDER BY occurred_at DESC, id DESC LIMIT $%d`, len(args))
+	q += ` ORDER BY occurred_at DESC, id DESC LIMIT ` + args.next(limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list runtime events: %w", err)
 	}

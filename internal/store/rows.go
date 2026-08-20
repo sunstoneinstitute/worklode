@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -91,4 +92,14 @@ func nullableID(n sql.NullInt64) *int64 {
 		return nil
 	}
 	return &n.Int64
+}
+
+// sqlArgs accumulates the positional arguments of a dynamically built query.
+// next appends a value and hands back its $n placeholder, so a filter clause
+// names the value it binds instead of counting how many came before it.
+type sqlArgs struct{ vals []any }
+
+func (a *sqlArgs) next(v any) string {
+	a.vals = append(a.vals, v)
+	return "$" + strconv.Itoa(len(a.vals))
 }

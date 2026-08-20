@@ -367,31 +367,27 @@ const MaxEventListLimit = 200
 // that later reads would order before.
 func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
 	where := eventHorizon
-	var args []any
+	var args sqlArgs
 	if f.Type != "" {
-		args = append(args, f.Type)
-		where += fmt.Sprintf(" AND type = $%d", len(args))
+		where += " AND type = " + args.next(f.Type)
 	}
 	if !f.Since.IsZero() {
-		args = append(args, f.Since.UTC())
-		where += fmt.Sprintf(" AND received_at >= $%d", len(args))
+		where += " AND received_at >= " + args.next(f.Since.UTC())
 	}
 	if f.After != 0 {
-		args = append(args, f.After)
-		where += fmt.Sprintf(" AND id > $%d", len(args))
+		where += " AND id > " + args.next(f.After)
 	}
 	limit := f.Limit
 	if limit <= 0 || limit > MaxEventListLimit {
 		limit = MaxEventListLimit
 	}
-	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+eventColumns+`
 		   FROM events
-		  WHERE %s
+		  WHERE `+where+`
 		  ORDER BY id
-		  LIMIT $%d`, where, len(args)), args...)
+		  LIMIT `+args.next(limit), args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
 	}
