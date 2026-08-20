@@ -320,7 +320,7 @@ func TestTaskListFilterByAbout(t *testing.T) {
 	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
 
 	doc, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
-		Project: "proj", Kind: "spec", Slug: "about-spec", Body: "# About\n",
+		Project: "proj", Kind: "spec", Number: 1, Slug: "about-spec", Body: "# About\n",
 	})
 	if err != nil {
 		t.Fatalf("create doc: %v", err)
