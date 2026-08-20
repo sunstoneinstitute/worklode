@@ -71,8 +71,12 @@ templ Cockpit(v CockpitView) {
 // methodology chrome. No step is marked done or current: the cockpit
 // projection carries no stage fact (Operations is the catch-all default mode,
 // reached by legacy projects too), so a progress marker would be fabricated.
+//
+// The strip scrolls inside itself below roughly 700px and holds no focusable
+// child, so tabindex="0" is what lets a keyboard user reach the stages past
+// the fold (WCAG 2.1.1); role="group" gives the aria-label something to name.
 templ stageStepper() {
-	<div class="stepper" aria-label="Sunstone Way stages">
+	<div class="stepper" role="group" aria-label="Sunstone Way stages" tabindex="0">
 		<div class="step"><span class="pip">1</span><span class="stx">Launch</span></div>
 		<div class="step"><span class="pip">2</span><span class="stx">Research</span></div>
 		<div class="step"><span class="pip">3</span><span class="stx">Report</span></div>
