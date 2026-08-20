@@ -43,3 +43,4 @@ These files do that resolution once.
 - [`043-secrets-catalog-home.md`](043-secrets-catalog-home.md) — ADR 043 — Where the secrets catalog lives (draft)
 - [`044-deleting-tasks-and-documents.md`](044-deleting-tasks-and-documents.md) — Spec 044 — Deleting tasks and documents (draft)
 - [`045-per-project-workflows.md`](045-per-project-workflows.md) — Spec 045 — Per-project workflows (draft)
+- [`046-workflow-rule-engine.md`](046-workflow-rule-engine.md) — Spec 046 — Workflow rule engine (draft)

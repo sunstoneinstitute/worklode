@@ -1038,3 +1038,13 @@ docs/plans/2026-08-21-per-project-workflows.md:
     task-6-cli-surface-and-help-text-sweep: "### Task 6 — CLI surface and help-text sweep"
     task-7-resolver-and-hooks-resolve-against-the-workflow: "### Task 7 — Resolver and hooks resolve against the workflow"
     task-8-e2e-a-custom-workflow-project-through-the-public-surface: "### Task 8 — e2e: a custom-workflow project through the public surface"
+docs/plans/2026-08-21-workflow-rule-engine.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-rule-types-and-write-time-validation: "### Task 1 — Rule types and write-time validation"
+    task-2-wltasktransitioned-and-wlworkflowrulefired-events: "### Task 2 — `wl:TaskTransitioned` and `wl:WorkflowRuleFired` events"
+    task-3-pure-evaluator-internalworkflowrules: "### Task 3 — Pure evaluator: `internal/workflowrules`"
+    task-4-llm-client-internalllm: "### Task 4 — LLM client: `internal/llm`"
+    task-5-executor-the-workflow-rules-subscriber: "### Task 5 — Executor: the `workflow-rules` subscriber"
+    task-6-review-task-names-rule-changes: "### Task 6 — Review task names rule changes"
+    task-7-e2e-rules-through-the-public-surface: "### Task 7 — e2e: rules through the public surface"
