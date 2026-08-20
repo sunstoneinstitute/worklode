@@ -683,9 +683,11 @@ func wrapSkillDesc(s string, width int) []string {
 	return lines
 }
 
-// tableWidth is the column count a wrapped table renders to: the terminal's
-// when w is one, else a conventional 80 so piped and captured output stays
-// stable.
+// tableWidth is the column count SkillTable renders to: the terminal's when w
+// is one, else a conventional 80 so piped and captured output stays stable.
+// It does not go unlimited off-TTY the way table.flush does, because a skill
+// description has no natural width to fall back to — see the off-TTY width
+// policy on termWidth (markdown.go).
 func tableWidth(w io.Writer) int {
 	width, isTTY := termWidth(w)
 	if !isTTY || width <= 0 {
