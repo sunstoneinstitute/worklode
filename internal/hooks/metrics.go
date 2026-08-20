@@ -13,7 +13,8 @@ type Metrics struct {
 	replay        *prometheus.CounterVec
 }
 
-// NewMetrics registers the webhook counters on reg.
+// NewMetrics registers the webhook counters and the reconcile replay counter
+// on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		events: prometheus.NewCounterVec(prometheus.CounterOpts{

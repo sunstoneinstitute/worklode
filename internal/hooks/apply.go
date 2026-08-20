@@ -33,6 +33,13 @@ type applier struct {
 // first. Release target_commitish resolution runs here, before the apply's
 // transaction opens, exactly as ServeHTTP does it for a live delivery.
 func (a *applier) applyForType(ctx context.Context, typ string, env envelope, body []byte) func(tx *sql.Tx, eventID int64) error {
+	// A skill push was handled by the sync, not by an apply; routing it here
+	// would run applyPush, which the skill path deliberately skips. Marked
+	// applied at ingestion today, but a row written by an older binary during
+	// a rolling deploy can still reach the replayer.
+	if typ == "push.skills" {
+		return nil
+	}
 	base := strings.TrimSuffix(typ, ".ignored")
 	event, _, _ := strings.Cut(base, ".")
 	resolvedCommitish := ""
@@ -133,6 +140,20 @@ func (a *applier) resolveReleaseCommitish(ctx context.Context, repo string, body
 	default:
 		a.metrics.branchResolved("resolved")
 		return sha
+	}
+}
+
+// markApplied wraps an apply (possibly nil) so the event's applied_at is set
+// in the same transaction, by the webhook path and replayer alike. Only
+// *.ignored deliveries are left unmarked: they are the replay candidates.
+func markApplied(st *store.Store, inner func(tx *sql.Tx, eventID int64) error) func(tx *sql.Tx, eventID int64) error {
+	return func(tx *sql.Tx, eventID int64) error {
+		if inner != nil {
+			if err := inner(tx, eventID); err != nil {
+				return err
+			}
+		}
+		return store.MarkEventApplied(tx, eventID, st.Now())
 	}
 }
 

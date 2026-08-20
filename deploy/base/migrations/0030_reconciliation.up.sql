@@ -4,11 +4,14 @@
 
 ALTER TABLE events ADD COLUMN applied_at timestamptz;
 
--- Pre-existing non-ignored events were applied live by the webhook path.
--- .ignored events stay NULL: they are exactly the replay candidates.
-UPDATE events SET applied_at = received_at WHERE type NOT LIKE '%.ignored';
+-- Pre-existing github deliveries that were not .ignored were applied live by
+-- the webhook path. Only the github path sets applied_at, so other sources
+-- stay NULL either side of this migration; .ignored rows stay NULL too, and
+-- are exactly the replay candidates.
+UPDATE events SET applied_at = received_at
+WHERE source = 'github' AND type NOT LIKE '%.ignored';
 
-CREATE INDEX events_unapplied ON events (id) WHERE applied_at IS NULL;
+CREATE INDEX events_unapplied ON events (id) WHERE applied_at IS NULL AND source = 'github';
 
 ALTER TABLE project_repos ADD COLUMN mapped_at timestamptz NOT NULL DEFAULT now();
 

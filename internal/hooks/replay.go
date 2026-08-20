@@ -40,8 +40,8 @@ type ReplayOptions struct {
 // arrival order, each in its own transaction. The apply receives the
 // ORIGINAL event's id, so any resulting state_log transition points at the
 // real GitHub event — the timeline reads "applied late". Events whose repo
-// is still unmapped are left untouched for a later run. A single failing
-// event is reported and skipped, never aborting the run.
+// is still unmapped are left untouched for a later run. A single event whose
+// apply fails is reported and skipped; a store failure aborts the run.
 func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.ReplayResult, error) {
 	evs, err := st.UnappliedGitHubEvents(ctx, store.UnappliedFilter{Repo: opts.Repo, Since: opts.Since})
 	if err != nil {
@@ -82,15 +82,8 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 			continue
 		}
 
-		apply := a.applyForType(ctx, ev.Type, env, ev.Payload)
-		txErr := st.Tx(ctx, func(tx *sql.Tx) error {
-			if apply != nil {
-				if err := apply(tx, ev.ID); err != nil {
-					return err
-				}
-			}
-			return store.MarkEventApplied(tx, ev.ID, st.Now())
-		})
+		apply := markApplied(st, a.applyForType(ctx, ev.Type, env, ev.Payload))
+		txErr := st.Tx(ctx, func(tx *sql.Tx) error { return apply(tx, ev.ID) })
 		if txErr != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("event %d (%s): %v", ev.ID, ev.Type, txErr))
 			opts.Metrics.replayOutcome("error")

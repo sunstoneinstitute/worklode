@@ -33,36 +33,22 @@ type UnappliedFilter struct {
 // completed — *.ignored deliveries and anything the replayer has not reached
 // yet — oldest first, so replay preserves arrival order.
 func (s *Store) UnappliedGitHubEvents(ctx context.Context, f UnappliedFilter) ([]Event, error) {
-	q := `SELECT id, source, external_id, type, payload, received_at
-	      FROM events WHERE source = 'github' AND applied_at IS NULL`
-	var args []any
+	where := "source = 'github' AND applied_at IS NULL"
+	var args sqlArgs
 	if f.Repo != "" {
-		args = append(args, f.Repo)
-		q += fmt.Sprintf(` AND payload->'repository'->>'full_name' = $%d`, len(args))
+		where += " AND payload->'repository'->>'full_name' = " + args.next(f.Repo)
 	}
 	if f.Since != nil {
-		args = append(args, f.Since.UTC())
-		q += fmt.Sprintf(` AND received_at >= $%d`, len(args))
+		where += " AND received_at >= " + args.next(f.Since.UTC())
 	}
-	q += ` ORDER BY id`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+eventColumns+`
+		   FROM events
+		  WHERE `+where+`
+		  ORDER BY id`, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("unapplied events: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Event
-	for rows.Next() {
-		var e Event
-		if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
-			return nil, fmt.Errorf("scan unapplied event: %w", err)
-		}
-		e.ReceivedAt = e.ReceivedAt.UTC()
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("unapplied events: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "unapplied events", scanEvent)
 }

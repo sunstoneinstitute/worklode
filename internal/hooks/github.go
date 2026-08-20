@@ -281,20 +281,6 @@ func eventLabel(event string) string {
 	return "other"
 }
 
-// markApplied wraps an apply (possibly nil) so the event's applied_at is set
-// in the same transaction, by the webhook path and replayer alike. Only
-// *.ignored deliveries are left unmarked: they are the replay candidates.
-func markApplied(st *store.Store, inner func(tx *sql.Tx, eventID int64) error) func(tx *sql.Tx, eventID int64) error {
-	return func(tx *sql.Tx, eventID int64) error {
-		if inner != nil {
-			if err := inner(tx, eventID); err != nil {
-				return err
-			}
-		}
-		return store.MarkEventApplied(tx, eventID, st.Now())
-	}
-}
-
 func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 	var p struct {
 		Issue struct {

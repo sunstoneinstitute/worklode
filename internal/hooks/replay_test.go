@@ -165,6 +165,42 @@ func TestReplaySkipsStillUnmapped(t *testing.T) {
 	}
 }
 
+// TestReplaySkipsSkillPushRows: a push.skills row with applied_at NULL —
+// as an older binary would leave one mid rolling-deploy, since only the
+// current webhook path marks it applied at ingestion — must not be routed
+// through applyPush by the replayer. It is still a candidate and ends up
+// applied (done, not stuck), but produces no ordinary-push effect.
+func TestReplaySkipsSkillPushRows(t *testing.T) {
+	e := newUnmappedEnv(t)
+	mapDemoRepo(t, e)
+
+	if _, err := e.st.DBForTests().Exec(
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('github', 'd-skill', 'push.skills', $1, now())`,
+		[]byte(`{"ref":"refs/heads/main","repository":{"full_name":"sunstoneinstitute/demo"}}`),
+	); err != nil {
+		t.Fatalf("insert push.skills row: %v", err)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-skill' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("applied_at set = %d rows, want 1", n)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM task_commits`); n != 0 {
+		t.Fatalf("task_commits after skill push replay = %d, want 0", n)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM main_commits`); n != 0 {
+		t.Fatalf("main_commits after skill push replay = %d, want 0", n)
+	}
+}
+
 // TestReplayRecordsMetrics: every candidate lands on exactly one bounded
 // outcome label.
 func TestReplayRecordsMetrics(t *testing.T) {
