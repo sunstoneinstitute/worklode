@@ -73,7 +73,9 @@ func (t *table) add(cells ...string) {
 // flush renders the table to w, wrapping to w's terminal width. A writer that
 // is not a terminal (a pipe, a test buffer, an agent reading `lode task list`)
 // gets unwrapped rows: there is no width to fit, and callers parsing the
-// output want one row per line.
+// output want one row per line. That is the unlimited arm of the off-TTY
+// width policy documented on termWidth (markdown.go); SkillTable is the one
+// renderer that cannot take it.
 func (t *table) flush(w io.Writer) {
 	width, _ := termWidth(w)
 	t.render(w, width)

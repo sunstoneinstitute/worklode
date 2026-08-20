@@ -63,6 +63,25 @@ func terminalFd(w io.Writer) (int, bool) {
 // termWidth reports w's terminal width and whether w is a terminal at all. A
 // terminal whose size cannot be read reports width 0, which every caller
 // already maps to its own default.
+//
+// Off-TTY width policy. Every renderer probes through here, and the three that
+// wrap answer "how wide when there is no terminal" differently on purpose —
+// the rule is whether the content has a natural width of its own:
+//
+//   - table.flush (table.go) renders unlimited. Its columns take their width
+//     from the data, so with no terminal to fit there is nothing to decide,
+//     and the agents and pipes parsing `lode task list` want one row per line.
+//   - tableWidth (render.go), used only by SkillTable, falls back to 80. A
+//     skill description is a paragraph, not a cell: skillTable sizes the
+//     description column from the total width, so unlimited would pin it at
+//     its 24-column minimum and pour 400-character prose into a ribbon. The
+//     table needs a width even when nothing supplies one.
+//   - clampWidth (below) falls back to 80 for the same reason — prose has no
+//     natural width — but only ever runs on a terminal whose size failed to
+//     read, because Markdown prints raw off-TTY and never reaches it.
+//
+// Unifying them would change `lode skills` off-TTY output for no gain; the
+// divergence is the policy, not an oversight (WL-168).
 func termWidth(w io.Writer) (int, bool) {
 	fd, isTTY := terminalFd(w)
 	if !isTTY {
@@ -81,6 +100,9 @@ func colorEnabled() bool {
 	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 }
 
+// clampWidth is the prose wrap width for a given terminal width, bounded by
+// the constants above. Width 0 means a terminal that would not report its
+// size; see the off-TTY width policy on termWidth for why it lands on 80.
 func clampWidth(termWidth int) int {
 	switch {
 	case termWidth <= 0:
