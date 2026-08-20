@@ -538,19 +538,21 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	}
 	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
 
-	skillPaths := ensureSkills(ctx, opts, c, brief)
+	skillPaths := ensureSkills(ctx, opts, c, brief, root)
 	emitAdditionalContext(opts.Stdout, compactBrief(brief, skillPaths))
 }
 
 // ensureSkills lazily fetches brief-referenced skill archives into the local
 // content-addressed store, bounded-parallel and bounded overall by
 // skillsBudget: however many skills a brief carries, this can never cost
-// more than one budget's worth of dead air at session start. Failures are
-// warnings: the pinned content is already inline in the brief, and
-// recommended skills degrade to an install hint. Returns name -> local path
-// for the ones that are present.
-func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brief) map[string]string {
-	root, err := skillstore.Root()
+// more than one budget's worth of dead air at session start. Each fetched
+// skill is also linked into root's .agents/skills (spec 008 §17.3), and the
+// worktree's info/exclude gets one ".agents/" line if any link was made.
+// Failures are warnings: the pinned content is already inline in the brief,
+// and recommended skills degrade to an install hint. Returns name -> local
+// path for the ones that are present.
+func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brief, root string) map[string]string {
+	dirs, err := skillstore.DefaultDirs()
 	if err != nil {
 		warn(opts, "skill store: %v", err)
 		return nil
@@ -561,6 +563,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 
 	var mu sync.Mutex
 	paths := map[string]string{}
+	linked := false // set under mu; ensureExcluded runs once, after g.Wait(), never inside this closure
 	g, gctx := errgroup.WithContext(sctx)
 	g.SetLimit(skillFetchConcurrency)
 
@@ -571,12 +574,14 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 		g.Go(func() error {
 			actx, cancel := context.WithTimeout(gctx, archiveTimeout)
 			defer cancel()
-			p, err := skillstore.Ensure(root, name, hash, func() ([]byte, error) {
+			p, err := skillstore.Ensure(dirs, name, hash, func() ([]byte, error) {
 				return c.SkillArchive(actx, name, hash)
 			})
-			// mu also guards opts.Stderr: warn's writer (a *bytes.Buffer in
-			// tests) is not safe for concurrent use, and up to
-			// skillFetchConcurrency fetches can land here at once.
+			// mu also guards opts.Stderr (warn's writer, a *bytes.Buffer in
+			// tests, is not safe for concurrent use) and linkWorktreeSkill's
+			// filesystem work below — up to skillFetchConcurrency fetches
+			// can land here at once, so keep all three inside the lock
+			// rather than "optimizing" its scope.
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -584,6 +589,9 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 				return nil // one skill's failure must never abort the others
 			}
 			paths[name] = p
+			if linkWorktreeSkill(opts, root, name, p) {
+				linked = true
+			}
 			return nil
 		})
 	}
@@ -594,7 +602,77 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 		ensure(m.Name, m.Hash)
 	}
 	_ = g.Wait() // every branch above returns nil; errors are warned in place
+	if linked {
+		ensureExcluded(opts, root)
+	}
 	return paths
+}
+
+// linkWorktreeSkill links <root>/.agents/skills/<name> to the store version
+// dir, so any harness opened in this worktree reads exactly the skills its
+// brief named — a sandbox needs no lode install (spec 008 §17.3). Failures
+// are warnings; the brief's inline content still stands. Returns whether a
+// new link was made, so the caller can gate the single info/exclude append
+// on it.
+func linkWorktreeSkill(opts Options, root, name, versionDir string) bool {
+	dir := filepath.Join(root, ".agents", "skills")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		warn(opts, "worktree skill link %s: %v", name, err)
+		return false
+	}
+	link := filepath.Join(dir, name)
+	if cur, err := os.Readlink(link); err == nil && cur == versionDir {
+		return false
+	}
+	// Only remove what is actually ours: a symlink at this exact path. A
+	// plain file or directory here was not created by linkWorktreeSkill
+	// (Worklode never deletes or repoints a path it did not create — spec
+	// 008 §18 row 4), so leave it alone and warn instead of clobbering it.
+	if info, err := os.Lstat(link); err == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			warn(opts, "worktree skill link %s: %s exists and is not a symlink; leaving it alone", name, link)
+			return false
+		}
+		if err := os.Remove(link); err != nil {
+			warn(opts, "worktree skill link %s: %v", name, err)
+			return false
+		}
+	}
+	if err := os.Symlink(versionDir, link); err != nil {
+		warn(opts, "worktree skill link %s: %v", name, err)
+		return false
+	}
+	return true
+}
+
+// ensureExcluded appends ".agents/" to the repo's info/exclude once — never
+// .gitignore: the links are machine-local (spec 008 §17.3). Called once
+// after every skill fetch has finished, never from inside ensureSkills's
+// per-skill closure, so concurrent appends are impossible by construction.
+func ensureExcluded(opts Options, root string) {
+	p, err := worktree.ExcludeFile(root)
+	if err != nil {
+		warn(opts, "git exclude: %v", err)
+		return
+	}
+	data, _ := os.ReadFile(p)
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == ".agents/" {
+			return
+		}
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		warn(opts, "git exclude: %v", err)
+		return
+	}
+	defer f.Close()
+	// A hand-edited file with no trailing newline would otherwise get
+	// ".agents/" merged onto the end of its last pattern.
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		fmt.Fprintln(f)
+	}
+	fmt.Fprintln(f, ".agents/")
 }
 
 // ensureLease keeps this worktree's lease healthy at session start: renew a

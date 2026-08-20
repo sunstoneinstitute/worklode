@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/harness"
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
+	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 )
 
 // readSettings reads a settings file through the same reader the adapter
@@ -218,6 +220,20 @@ func TestResolveHookTargetsRejectsNothingToDo(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nothing to do") {
 		t.Fatalf("error = %v, want it to mention \"nothing to do\"", err)
+	}
+}
+
+// --skills is independent of vcs/agents (it writes outside the hook config),
+// so --no-vcs --no-agent --skills — the natural way to publish skills
+// without touching hook config at all — must not trip the nothing-to-do
+// guard.
+func TestResolveHookTargetsSkillsAloneIsNotNothingToDo(t *testing.T) {
+	got, err := targetsFor(t, "--no-vcs", "--no-agent", "--skills")
+	if err != nil {
+		t.Fatalf("--no-vcs --no-agent --skills: want acceptance, got %v", err)
+	}
+	if got.vcs != "" || len(got.agents) != 0 || !got.skills {
+		t.Fatalf("targets = %+v, want vcs empty, agents empty, skills true", got)
 	}
 }
 
@@ -1133,5 +1149,160 @@ func TestReportInstallSaysNothingWasBoundWhenNothingWas(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "amp: bound no hooks") {
 		t.Fatalf("output = %q, want it to say nothing was bound", buf.String())
+	}
+}
+
+// TestInstallSkillsPublishesAllDoorways drives installHooks with --skills'
+// equivalent (targets.skills) directly, so it needs no server and no
+// Postgres. It pins acceptance 9 (spec 008): one store copy reaches Codex,
+// Copilot, Amp and Claude Code's skill directories, none of them ever list
+// the store's hash directory as if it were a skill.
+func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	skillsRoot := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", skillsRoot)
+
+	dirs, err := skillstore.DefaultDirs()
+	if err != nil {
+		t.Fatalf("DefaultDirs: %v", err)
+	}
+	content := "# tdd\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	hash := skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
+	versionDir, err := skillstore.Ensure(dirs, "tdd", hash, func() ([]byte, error) { return archive, nil })
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	wantVersion, err := filepath.EvalSymlinks(versionDir)
+	if err != nil {
+		t.Fatalf("resolve version dir: %v", err)
+	}
+
+	root := initGitRepo(t)
+	targets := hookTargets{skills: true}
+	res, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --skills: %v", err)
+	}
+	if len(res.Skills) == 0 {
+		t.Fatal("Skills report is empty, want one entry per deduped target")
+	}
+
+	agentsSkills := filepath.Join(homeDir, ".agents", "skills")
+	info, err := os.Lstat(agentsSkills)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("%s is not a symlink: info=%v err=%v", agentsSkills, info, err)
+	}
+	if got, err := os.Readlink(agentsSkills); err != nil || got != dirs.Links {
+		t.Fatalf("readlink %s = %q, %v, want %q", agentsSkills, got, err, dirs.Links)
+	}
+	if entries, err := os.ReadDir(agentsSkills); err != nil {
+		t.Fatalf("read %s: %v", agentsSkills, err)
+	} else {
+		for _, e := range entries {
+			if e.Name() == "store" || e.Name() == ".store" {
+				t.Fatalf("%s lists a store hash directory as a skill: %s", agentsSkills, e.Name())
+			}
+		}
+	}
+
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	resolved, err := filepath.EvalSymlinks(claudeSkill)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", claudeSkill, err)
+	}
+	if resolved != wantVersion {
+		t.Fatalf("%s resolves to %q, want %q", claudeSkill, resolved, wantVersion)
+	}
+	claudeSkillsDir := filepath.Join(homeDir, ".claude", "skills")
+	if entries, err := os.ReadDir(claudeSkillsDir); err != nil {
+		t.Fatalf("read %s: %v", claudeSkillsDir, err)
+	} else {
+		for _, e := range entries {
+			if e.Name() == "store" || e.Name() == ".store" {
+				t.Fatalf("%s lists a store hash directory as a skill: %s", claudeSkillsDir, e.Name())
+			}
+		}
+	}
+
+	// The Claude Code target is PerSkill: its first-run action must read
+	// "per-skill", never "linked" — "linked" would misreport the whole
+	// user-owned ~/.claude/skills dir as replaced by a symlink into the
+	// store, exactly what spec 008 §17.3 forbids doing.
+	var sawClaudeSkills bool
+	for _, s := range res.Skills {
+		if s.Path != claudeSkillsDir {
+			continue
+		}
+		sawClaudeSkills = true
+		if s.Action != "per-skill" {
+			t.Fatalf("first run action for %s = %q, want per-skill", s.Path, s.Action)
+		}
+	}
+	if !sawClaudeSkills {
+		t.Fatalf("no Skills entry for %s in %+v", claudeSkillsDir, res.Skills)
+	}
+
+	// Re-running must be idempotent: unchanged/per-skill outcomes, never an
+	// error, and no drift in what got published.
+	res2, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --skills (second run): %v", err)
+	}
+	if len(res2.Skills) != len(res.Skills) {
+		t.Fatalf("second run skills = %+v, want %d entries", res2.Skills, len(res.Skills))
+	}
+	for _, s := range res2.Skills {
+		switch s.Action {
+		case "unchanged", "per-skill":
+		default:
+			t.Fatalf("second run action = %q for %s, want a stable no-op result", s.Action, s.Path)
+		}
+	}
+}
+
+// TestInstallSkillsStandaloneWithoutVCSOrAgent covers `lode install --no-vcs
+// --no-agent --skills`: the natural way to publish skills without touching
+// hook config at all. Regression test for the nothing-to-do guard once
+// having rejected --skills-only runs outright.
+func TestInstallSkillsStandaloneWithoutVCSOrAgent(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	skillsRoot := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", skillsRoot)
+
+	dirs, err := skillstore.DefaultDirs()
+	if err != nil {
+		t.Fatalf("DefaultDirs: %v", err)
+	}
+	content := "# tdd\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	hash := skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
+	if _, err := skillstore.Ensure(dirs, "tdd", hash, func() ([]byte, error) { return archive, nil }); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+
+	root := initGitRepo(t)
+	targets, err := targetsFor(t, "--no-vcs", "--no-agent", "--skills")
+	if err != nil {
+		t.Fatalf("targetsFor --no-vcs --no-agent --skills: %v", err)
+	}
+	res, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --no-vcs --no-agent --skills: %v", err)
+	}
+	if res.VCS != nil {
+		t.Fatalf("VCS result = %+v, want nil (--no-vcs)", res.VCS)
+	}
+	if len(res.Agents) != 0 {
+		t.Fatalf("agent results = %+v, want none (--no-agent)", res.Agents)
+	}
+	if len(res.Skills) == 0 {
+		t.Fatal("Skills report is empty, want --skills to still publish with no vcs/agent side")
+	}
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	if _, err := os.Lstat(claudeSkill); err != nil {
+		t.Fatalf("stat %s: %v, want it published despite --no-vcs --no-agent", claudeSkill, err)
 	}
 }

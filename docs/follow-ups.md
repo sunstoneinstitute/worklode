@@ -601,3 +601,56 @@ while dogfooding it against the real corpus.
   own package doc says as much), and fixing it needs authz decisions to become
   project-scoped, which is a larger change than this plan's task set. Gated on
   that decision landing.
+## From WL-47 — multi-harness skill delivery (2026-08-21)
+
+- `[P4]` **Five in-tree comments cite a "spec 024" that does not exist.**
+  `internal/cmd/install.go` ("spec 024 acceptance 4"),
+  `internal/harness/jsonhooks.go` and `internal/harness/codex_test.go`
+  ("spec 024 acceptance 6"), `internal/hookrun/hookrun_test.go` ("024
+  acceptance 3") and `internal/store/agent_sessions_test.go` ("spec 024 adds
+  it as a harness"). There is no `docs/specs/024-*.md`; 024 was an earlier
+  number for what became 008 §17, so each should name the 008 criterion it
+  means. They landed with the adapter core (WL-46) and were left alone here
+  rather than rewritten under an unrelated task. Note the open-question ids
+  `Q024.1`-`Q024.5` in 008 §20 are NOT affected — the `024` in a question id
+  is historical but the ids themselves resolve.
+- `[P4]` **008 §20's Q024.2 is now answered in code but still open in the
+  spec.** It asked whether moving `.store` out of `~/.worklode/skills/`
+  should "migrate silently, or does `lode doctor` report and `lode skills
+  install` re-fetch?". `skillstore.migrateLegacyStore` settles it: silent, by
+  rename, best-effort, with a failed rename degrading to the re-fetch the
+  question names as the safe fallback. Worth folding the resolution into the
+  spec so the next reader does not re-litigate it.
+- `[P4]` **`lode uninstall --no-vcs --no-agent --skills` is accepted and does
+  nothing.** `resolveHookTargets` serves both `install` and `uninstall`, and
+  WL-47 taught its "nothing to do" guard about `--skills` so that
+  `lode install --no-vcs --no-agent --skills` works. Uninstall never reads
+  `targets.skills` — v1 deliberately does not remove skill links (they are
+  inert, `--skills` was an explicit opt-in, and removing `~/.claude/skills`
+  entries risks user content) — so that one combination now passes the guard
+  and is a content-free run. Harmless, but arguably still "nothing to do".
+  Tightening it means teaching the shared guard which of its two callers
+  honours the flag, which is more structure than the corner case is worth.
+- `[P3]` **`lode skills install --link` reports skips more thinly than
+  `lode install --skills` does.** `publishLinked` (`internal/cmd/skills.go`)
+  prints only id, action and path, and never reads `PublishResult.Skips`, where
+  `reportInstall` (`internal/cmd/install.go`) names a reason. So `--link all`
+  against a foreign symlink at `~/.agents/skills` prints
+  `amp: skipped ~/.agents/skills` with no explanation, and when `PublishDirLink`
+  delegates to `PublishPerSkill` the individual skipped skill names are dropped
+  entirely. Spec 008 §18 row 4 wants every refusal named; the install path does
+  that, this one does not. WL-47 already aligned the two loops on error
+  handling — skip *reporting* is the half that stayed divergent.
+- `[P4]` **Two different ownership tests guard the same kind of path.**
+  `internal/skillstore/publish.go` requires a symlink to resolve inside
+  `dirs.Store` (`withinStore`) before replacing it; `linkWorktreeSkill`
+  (`internal/hookrun/hookrun.go`) replaces any symlink at
+  `<worktree>/.agents/skills/<name>` after only an `os.Lstat` type check. The
+  looser test was a deliberate WL-47 decision (a symlink at that path is ours by
+  construction in a way a plain file is not, and worktree links are disposable),
+  but the exposure is not quite zero: a repo that *tracks* `.agents/skills/<name>`
+  as a symlink — project-scope agent skills are a real convention — and whose
+  brief names a same-named skill gets that tracked symlink replaced. It stays
+  visible in `git status`, since `info/exclude` does not hide tracked files, so
+  it is recoverable. Worth either matching `withinStore`'s rigour or saying so
+  in the comment.
