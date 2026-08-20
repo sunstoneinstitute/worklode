@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
@@ -144,6 +145,10 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				if err := store.AddEdge(tx, now, t.ID, req.FollowUpTo, "follow_up_to", eventID); err != nil {
 					return err
 				}
+			}
+			if err := store.ReconcileEmbedded(tx, now, t.ID,
+				blobref.Extract(req.Body), actorID); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -470,6 +475,17 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 				if err := store.Transition(tx, s.st.Now(), id, stateFrom, *req.State, eventID); err != nil {
 					return err
 				}
+			}
+			// Reconcile against the body as stored, not as patched: a PATCH
+			// that leaves the body alone must still reconcile against the
+			// body that is actually there.
+			body, err := store.TaskBody(tx, id)
+			if err != nil {
+				return err
+			}
+			if err := store.ReconcileEmbedded(tx, s.st.Now(), id,
+				blobref.Extract(body), actorIDFrom(r)); err != nil {
+				return err
 			}
 			return nil
 		})

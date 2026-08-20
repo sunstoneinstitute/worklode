@@ -883,7 +883,8 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists → 409, anything else → 500 with a generic body (the detail
+// ErrRevisionExists → 409, a task_blobs_hash_fkey violation (a body citing an
+// unknown blob) → 422, anything else → 500 with a generic body (the detail
 // is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
@@ -907,6 +908,9 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrDocExists),
 		errors.Is(err, store.ErrRevisionExists):
 		writeErr(w, http.StatusConflict, err.Error())
+	// A body citing a hash with no blob row: user error, not a server fault.
+	case strings.Contains(err.Error(), "task_blobs_hash_fkey"):
+		writeErr(w, http.StatusUnprocessableEntity, "body references an unknown blob")
 	default:
 		s.log.Error("internal error", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")

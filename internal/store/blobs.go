@@ -85,6 +85,19 @@ func ReconcileEmbedded(tx *sql.Tx, now time.Time, taskID string, hashes []string
 	return nil
 }
 
+// TaskBody reads a task's body inside a caller's transaction. Reconciliation
+// needs the body as stored, not as patched: a PATCH that leaves the body
+// alone must still reconcile against the body that is actually there. body
+// is nullable (a task created without one), so an unset body reconciles as
+// if it cited nothing.
+func TaskBody(tx *sql.Tx, taskID string) (string, error) {
+	var body sql.NullString
+	if err := tx.QueryRow(`SELECT body FROM tasks WHERE id = $1`, taskID).Scan(&body); err != nil {
+		return "", fmt.Errorf("read task body: %w", err)
+	}
+	return body.String, nil
+}
+
 // AttachBlob records an explicit, non-body reference.
 func (s *Store) AttachBlob(ctx context.Context, taskID, hash, filename, actorID string) error {
 	_, err := s.db.ExecContext(ctx,
