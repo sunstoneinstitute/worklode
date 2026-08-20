@@ -17,9 +17,10 @@
 //   - **The decision point** (Decide) is a pure function of subject and
 //     permission. It is default-deny: a permission with no grant entry is
 //     refused, so forgetting to extend the table fails closed.
-//   - **The enforcement points** are two middlewares (requirePerm for the
-//     JSON API, webGuard for the web UI). They are the only places that write
-//     a 401/403, so the denial shape cannot drift per handler.
+//   - **The enforcement points** are three middlewares (requirePerm for the
+//     JSON API, webGuard for the web UI, eitherGuard for the asset routes both
+//     audiences fetch). They are the only places that write a 401/403, so the
+//     denial shape cannot drift per handler.
 //
 // The route table in server.go names a permission for every route, and the
 // router refuses to boot with a route that names none (see router.go) — which
@@ -36,9 +37,11 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -120,6 +123,14 @@ const (
 	permWebRead  Permission = "web.read"
 	permWebWrite Permission = "web.write"
 
+	// permBlobWrite and permBlobRead cover the content-addressed blobs a task
+	// body embeds (spec 021). Their own capability rather than a flavour of
+	// task.write/task.read because the objects outlive and are addressed
+	// independently of any one task: a blob is referenced by hash, and nothing
+	// about the upload names the work it belongs to.
+	permBlobWrite Permission = "blob.write"
+	permBlobRead  Permission = "blob.read"
+
 	// permEventRead covers the read surfaces over the ordered event log
 	// (spec 025 §15/§18): the log itself and subscriber status. Any
 	// authenticated actor may read them — they are operational visibility,
@@ -192,6 +203,15 @@ var grants = map[Permission][]Role{
 
 	permWebRead:  {RoleUser, RoleAdmin},
 	permWebWrite: {RoleUser, RoleAdmin},
+
+	// Attaching a screenshot to the work you are describing is ordinary work,
+	// so uploading is every authenticated actor's.
+	permBlobWrite: {RoleUser, RoleAdmin},
+	// Reading a blob is the asset half of reading a task: the body says
+	// ![](/blob/<hash>), and anyone who may read the body may see the picture
+	// in it. Narrowing this below task.read/web.read would render task pages
+	// with broken images rather than protect anything.
+	permBlobRead: {RoleUser, RoleAdmin},
 
 	permEventRead:   {RoleUser, RoleAdmin},
 	permEventAdmin:  {RoleAdmin},
@@ -401,6 +421,59 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 			return
 		}
 		webErr(w, http.StatusForbidden, denialMessage(d))
+	}
+}
+
+// eitherGuard is the asset routes' combined authentication and policy
+// enforcement point: it accepts a bearer token *or* a web session, because a
+// blob is the one thing both audiences fetch directly — a browser <img> on a
+// task page carries the session cookie, the CLI and agents carry a token.
+//
+// Three properties are deliberate:
+//
+//   - It inherits the UI's posture instead of setting its own. With no login
+//     provider configured, webSubject yields the open subject only when the
+//     operator set LODE_WEB_OPEN, and nobody at all otherwise — so a blob is
+//     refused on a closed instance and served on one that opted in, exactly
+//     as the pages are (spec 021 §4). A blob route is not the place to
+//     unilaterally tighten or loosen an installation's auth model.
+//   - It answers with writeErr (JSON), never webErr (HTML), and never a login
+//     redirect. This is a subresource: a browser fetching <img src="/blob/…">
+//     cannot usefully follow a redirect to a login page — it would render the
+//     HTML as a broken image — so the honest answer is a status code.
+//   - The session cookie is SameSite=Lax (see setAuthCookie), which is
+//     load-bearing here: Lax withholds the cookie from cross-site subresource
+//     loads, so an attacker page embedding <img src="https://worklode/blob/…">
+//     gets a 401 rather than a probe for what a logged-in victim can see.
+func (s *server) eitherGuard(perm Permission, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var sub Subject
+		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && token != "" {
+			actor, err := s.st.Authenticate(r.Context(), token)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					writeErr(w, http.StatusUnauthorized, "unauthorized")
+					return
+				}
+				s.mapStoreErr(w, err)
+				return
+			}
+			sub = subjectFromActor(actor, authToken)
+		} else {
+			sub = s.webSubject(r.Context(), r)
+		}
+		d := Decide(Request{Subject: sub, Permission: perm})
+		s.observeAuthz(perm, d)
+		if d.Allowed {
+			next(w, withSubject(r, sub))
+			return
+		}
+		s.logDenial(r, sub, perm, d)
+		if !sub.Authenticated() {
+			writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		writeErr(w, http.StatusForbidden, denialMessage(d))
 	}
 }
 

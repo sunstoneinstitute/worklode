@@ -136,10 +136,17 @@ from cache.
 and it must be reachable by both auth schemes.
 
 **Verify before building:** Hetzner Object Storage is Ceph RADOS Gateway behind an S3 API, and
-presigned GET with `response-*` overrides is standard SigV4 that it should honour. Confirm
-against the live bucket in the first task. If an override turns out to be unsupported, the
-fallback is to stream the object through the server with our own headers — simpler, same
-external behaviour, and it costs the app egress and a held connection per download.
+presigned GET with `response-*` overrides is standard SigV4 that it should honour. If an
+override turns out to be unsupported, the fallback is to stream the object through the server
+with our own headers — simpler, same external behaviour, and it costs the app egress and a held
+connection per download.
+
+**Not yet verified.** As of the §1–§6 implementation, this has **not** been confirmed against a
+live bucket: no bucket has been provisioned and no credentials are configured. The check is
+still outstanding, tracked by **WL-206**. The `httptest`-based tests in
+`internal/blobstore/s3_test.go` do not discharge it — they prove our client emits and signs the
+`response-*` overrides, not that the gateway honours them, which is gateway behaviour only a
+real bucket can answer.
 
 ---
 
@@ -274,9 +281,13 @@ Content-Security-Policy: default-src 'none'; sandbox
 
 Hetzner's S3 API does not expose `response-content-security-policy`; `Content-Security-Policy`
 and `X-Content-Type-Options` are therefore set as **object metadata at upload time**, where
-RGW returns them on every GET. Confirm this in the same first task that verifies presign
-overrides — if the gateway strips unknown metadata headers, `Content-Disposition: attachment`
-on every non-embeddable type is the fallback that carries the security weight on its own.
+RGW returns them on every GET. If the gateway strips unknown metadata headers,
+`Content-Disposition: attachment` on every non-embeddable type is the fallback that carries the
+security weight on its own.
+
+**Not yet verified**, for the same reason as §2: no bucket is provisioned and no credentials are
+configured in this environment. Whether RGW preserves these two headers as object metadata is
+still open, tracked by **WL-206** alongside the §2 presign-override check.
 
 The task page's own CSP must list the object-storage endpoint in `img-src` and `media-src`,
 since that is where the redirect lands.
