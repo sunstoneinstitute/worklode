@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	headSHA  = "1111111111111111111111111111111111111111"
-	mergeSHA = "2222222222222222222222222222222222222222"
-	otherSHA = "3333333333333333333333333333333333333333"
+	headSHA    = "1111111111111111111111111111111111111111"
+	mergeSHA   = "2222222222222222222222222222222222222222"
+	otherSHA   = "3333333333333333333333333333333333333333"
+	releaseSHA = "4444444444444444444444444444444444444444"
 )
 
 func newFakeGitHub(t *testing.T, routes map[string]string) *githubauth.AppAuth {
@@ -233,6 +234,102 @@ func TestPollAttributesCommitsPerTask(t *testing.T) {
 	}
 	if got := byTask[open]; len(got) != 0 {
 		t.Fatalf("%s commits landed = %v; want none — those are %s's commits", open, got, merged)
+	}
+}
+
+// seedLandedTask: a task already at merged whose only correlation is an
+// already-landed task_commits row and no PR at all — PollCandidates'
+// task_commits union arm (the local_merge/marker path). The repo is
+// release-terminated, so only a release can still move this task.
+func seedLandedTask(t *testing.T, st *store.Store) (taskID string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st.AddRepo(ctx, "demo", "acme/app"); err != nil {
+		t.Fatalf("map repo: %v", err)
+	}
+	if err := st.SetRepoDoneState(ctx, "acme/app", "released"); err != nil {
+		t.Fatalf("set done_state: %v", err)
+	}
+	if _, _, err := st.RecordEvent(ctx, "cli", "seed-landed-"+t.Name(), "test.seed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := st.Now()
+			task, err := store.CreateTask(tx, now, store.TaskInput{
+				ProjectID: "demo", Title: "landed locally", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			for _, hop := range [][2]string{
+				{"ready", "in_progress"}, {"in_progress", "in_review"}, {"in_review", "merged"},
+			} {
+				if err := store.Transition(tx, now, taskID, hop[0], hop[1], eventID); err != nil {
+					return err
+				}
+			}
+			if _, err := store.AppendMainCommit(tx, "acme/app", releaseSHA, now); err != nil {
+				return err
+			}
+			return store.InsertTaskCommit(tx, store.TaskCommit{
+				TaskID: taskID, Repo: "acme/app", SHA: releaseSHA,
+				Source: "local_merge", SeenAt: now,
+			})
+		}); err != nil {
+		t.Fatalf("seed landed task: %v", err)
+	}
+	return taskID
+}
+
+// Releases are a repo-level fact, so the apply phase must run on what was
+// gathered rather than on whether any task-level repair was detected: this
+// candidate yields no PR and no newly-landed commit, and a release published
+// during the outage still has to move it to released (013 §2.2).
+func TestPollAppliesReleaseWithoutTaskLevelRepair(t *testing.T) {
+	st := store.OpenTestStore(t)
+	taskID := seedLandedTask(t, st)
+	app := newFakeGitHub(t, map[string]string{
+		"/repos/acme/app": `{"default_branch": "main"}`,
+		"/repos/acme/app/releases": `[{
+			"tag_name": "v1.2.0", "target_commitish": "` + releaseSHA + `",
+			"published_at": "2026-07-21T10:00:00Z"
+		}]`,
+	})
+	ctx := context.Background()
+
+	res, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-rel"})
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if res.Candidates != 1 {
+		t.Fatalf("candidates = %d; want 1", res.Candidates)
+	}
+	// The premise: nothing task-level to repair. If this ever stops holding,
+	// the test no longer covers the gate.
+	if len(res.Repaired) != 0 {
+		t.Fatalf("repaired = %+v; want none — the gap is the no-repair path", res.Repaired)
+	}
+	if got := taskState(t, st, taskID); got != "released" {
+		t.Fatalf("task state = %q; want released (done_state=released, release covers the commit)", got)
+	}
+
+	// Convergence: re-running changes nothing.
+	entries, err := st.StateLogForEntity(ctx, "task", taskID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	before := len(entries)
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-rel-2"}); err != nil {
+		t.Fatalf("second poll: %v", err)
+	}
+	entries, err = st.StateLogForEntity(ctx, "task", taskID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) != before {
+		t.Fatalf("second run added %d state_log entries; want 0", len(entries)-before)
 	}
 }
 

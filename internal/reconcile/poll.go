@@ -102,7 +102,12 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 			}
 		}
 	}
-	if opts.DryRun || len(res.Repaired) == 0 {
+	// Gate on what was gathered, not on res.Repaired: Repaired only fills
+	// from task-level facts (PRs, commits), but a repo's releases are a
+	// repo-level fact (013 §2.2). A candidate correlated solely through an
+	// already-landed task_commits row produces no repair, yet a release
+	// published during the outage still has to move it to released.
+	if opts.DryRun || len(gathered) == 0 {
 		return res, nil
 	}
 
