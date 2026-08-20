@@ -42,6 +42,11 @@ itself, but load it by name if it has not:
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
   `can-be-tested` label, the subtree-scoped `obsidian` job. See
   the `worklode-ci` skill.
+- **Changing the CLI in `internal/cmd`** — every skill above, both plugin
+  marketplaces, and the org onboarding skill in another repo hardcode `lode`
+  invocations. `docs/agent-surfaces.md` is the register of those surfaces and
+  the checklist for keeping them true; it also holds the rules for adding and
+  retiring a skill.
 
 ## Commands
 
