@@ -505,3 +505,59 @@ func mustExtID(t *testing.T) string {
 	}
 	return id
 }
+
+// TestListReposForProjects covers the bulk reader: one query answers every
+// project id, and each group matches what ListRepos returns.
+func TestListReposForProjects(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	for _, p := range []struct{ id, name, key string }{
+		{"horndb", "HornDB", "HDB"},
+		{"worklode", "Worklode", "WL"},
+		{"bare", "Bare", "BARE"},
+	} {
+		if err := s.CreateProject(ctx, p.id, p.name, p.key); err != nil {
+			t.Fatalf("CreateProject %s: %v", p.id, err)
+		}
+	}
+	for _, r := range []struct{ project, repo string }{
+		{"horndb", "sunstoneinstitute/horndb"},
+		{"horndb", "sunstoneinstitute/horndb-docs"},
+		{"worklode", "sunstoneinstitute/worklode"},
+	} {
+		if err := s.AddRepo(ctx, r.project, r.repo); err != nil {
+			t.Fatalf("AddRepo %s: %v", r.repo, err)
+		}
+	}
+	if err := s.SetRepoDoneState(ctx, "sunstoneinstitute/horndb", "released"); err != nil {
+		t.Fatalf("SetRepoDoneState: %v", err)
+	}
+
+	ids := []string{"horndb", "worklode", "bare"}
+	got, err := s.ListReposForProjects(ctx, ids)
+	if err != nil {
+		t.Fatalf("ListReposForProjects: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListReposForProjects: got %d keys, want 2 (bare must be absent)", len(got))
+	}
+	for _, id := range ids {
+		want, err := s.ListRepos(ctx, id)
+		if err != nil {
+			t.Fatalf("ListRepos %s: %v", id, err)
+		}
+		sort.Slice(want, func(i, j int) bool { return want[i].Repo < want[j].Repo })
+		if !reflect.DeepEqual(got[id], want) {
+			t.Fatalf("ListReposForProjects[%s] = %v, want %v", id, got[id], want)
+		}
+	}
+
+	empty, err := s.ListReposForProjects(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListReposForProjects(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("ListReposForProjects(nil): got %v, want empty non-nil map", empty)
+	}
+}

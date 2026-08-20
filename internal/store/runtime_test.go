@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -243,5 +244,77 @@ func TestListRuntimeEventsDefaultLimit(t *testing.T) {
 	}
 	if len(got) != 50 {
 		t.Fatalf("ListRuntimeEvents default limit: got %d, want 50", len(got))
+	}
+}
+
+// TestRuntimeEventsForArtifacts covers the bulk reader: one query answers
+// every artifact id, and each group matches RuntimeEventsForArtifact.
+func TestRuntimeEventsForArtifacts(t *testing.T) {
+	s := openRuntimeStore(t)
+
+	firstID, err := createArtifact(t, s, Artifact{
+		Kind: "docker_image", Name: "reg/first", Version: "v1",
+		SourceSHA: "sha-first", BuiltAt: artifactsTestNow,
+	})
+	if err != nil {
+		t.Fatalf("createArtifact first: %v", err)
+	}
+	secondID, err := createArtifact(t, s, Artifact{
+		Kind: "docker_image", Name: "reg/second", Version: "v1",
+		SourceSHA: "sha-second", BuiltAt: artifactsTestNow,
+	})
+	if err != nil {
+		t.Fatalf("createArtifact second: %v", err)
+	}
+	bareID, err := createArtifact(t, s, Artifact{
+		Kind: "docker_image", Name: "reg/bare", Version: "v1",
+		SourceSHA: "sha-bare", BuiltAt: artifactsTestNow,
+	})
+	if err != nil {
+		t.Fatalf("createArtifact bare: %v", err)
+	}
+
+	for i, spec := range []struct {
+		artifactID int64
+		offset     time.Duration
+	}{
+		{firstID, 2 * time.Minute},
+		{firstID, time.Minute},
+		{secondID, time.Minute},
+	} {
+		artifactID := spec.artifactID
+		re := defaultRuntimeEvent()
+		re.ArtifactID = &artifactID
+		re.Image = ""
+		re.OccurredAt = runtimeTestNow.Add(spec.offset)
+		if _, err := insertRuntimeEvent(t, s, re); err != nil {
+			t.Fatalf("insertRuntimeEvent %d: %v", i, err)
+		}
+	}
+
+	ids := []int64{firstID, secondID, bareID}
+	got, err := s.RuntimeEventsForArtifacts(t.Context(), ids)
+	if err != nil {
+		t.Fatalf("RuntimeEventsForArtifacts: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("RuntimeEventsForArtifacts: got %d keys, want 2 (bare artifact must be absent)", len(got))
+	}
+	for _, id := range ids {
+		want, err := s.RuntimeEventsForArtifact(t.Context(), id)
+		if err != nil {
+			t.Fatalf("RuntimeEventsForArtifact %d: %v", id, err)
+		}
+		if !reflect.DeepEqual(got[id], want) {
+			t.Fatalf("RuntimeEventsForArtifacts[%d] = %v, want %v", id, got[id], want)
+		}
+	}
+
+	empty, err := s.RuntimeEventsForArtifacts(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("RuntimeEventsForArtifacts(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("RuntimeEventsForArtifacts(nil): got %v, want empty non-nil map", empty)
 	}
 }

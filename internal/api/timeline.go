@@ -126,13 +126,18 @@ func prEntries(prs []store.PullRequest) []model.TimelineEntry {
 }
 
 func (s *server) ciEntries(ctx context.Context, prs []store.PullRequest) ([]model.TimelineEntry, error) {
-	var out []model.TimelineEntry
+	keys := make([]store.RepoSHA, 0, len(prs))
 	for _, pr := range prs {
-		runs, err := s.st.CIRunsForSHA(ctx, pr.Repo, pr.HeadSHA)
-		if err != nil {
-			return nil, err
-		}
-		for _, run := range runs {
+		keys = append(keys, store.RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA})
+	}
+	byKey, err := s.st.CIRunsForSHAs(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []model.TimelineEntry
+	for _, key := range keys {
+		for _, run := range byKey[key] {
 			out = append(out, model.TimelineEntry{
 				At:          run.StartedAt,
 				Type:        "ci",
@@ -149,13 +154,18 @@ func (s *server) ciEntries(ctx context.Context, prs []store.PullRequest) ([]mode
 }
 
 func (s *server) reviewEntries(ctx context.Context, prs []store.PullRequest) ([]model.TimelineEntry, error) {
-	var out []model.TimelineEntry
+	keys := make([]store.RepoPR, 0, len(prs))
 	for _, pr := range prs {
-		reviews, err := s.st.ReviewsForPR(ctx, pr.Repo, pr.Number)
-		if err != nil {
-			return nil, err
-		}
-		for _, rv := range reviews {
+		keys = append(keys, store.RepoPR{Repo: pr.Repo, Number: pr.Number})
+	}
+	byKey, err := s.st.ReviewsForPRs(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []model.TimelineEntry
+	for _, key := range keys {
+		for _, rv := range byKey[key] {
 			out = append(out, model.TimelineEntry{
 				At:       rv.SubmittedAt,
 				Type:     "review",
@@ -172,17 +182,21 @@ func (s *server) reviewEntries(ctx context.Context, prs []store.PullRequest) ([]
 // mergedArtifacts returns the artifacts built from the merge SHA of each
 // merged PR, deduplicated by artifact id (two PRs can share a merge SHA).
 func (s *server) mergedArtifacts(ctx context.Context, prs []store.PullRequest) ([]store.Artifact, error) {
+	var shas []string
+	for _, pr := range prs {
+		if pr.MergeSHA != nil {
+			shas = append(shas, *pr.MergeSHA)
+		}
+	}
+	bySHA, err := s.st.ArtifactsBySourceSHAs(ctx, shas)
+	if err != nil {
+		return nil, err
+	}
+
 	var out []store.Artifact
 	seen := map[int64]bool{}
-	for _, pr := range prs {
-		if pr.MergeSHA == nil {
-			continue
-		}
-		artifacts, err := s.st.ArtifactsBySourceSHA(ctx, *pr.MergeSHA)
-		if err != nil {
-			return nil, err
-		}
-		for _, a := range artifacts {
+	for _, sha := range shas {
+		for _, a := range bySHA[sha] {
 			if !seen[a.ID] {
 				seen[a.ID] = true
 				out = append(out, a)
@@ -206,14 +220,27 @@ func artifactEntries(artifacts []store.Artifact) []model.TimelineEntry {
 	return out
 }
 
-func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifact) ([]model.TimelineEntry, error) {
-	var out []model.TimelineEntry
+// artifactIDs is the id list the batched deployment and runtime readers are
+// keyed on. Ranging over it rather than the map keeps entries in artifact
+// order, which the stable sort tie-breaks on.
+func artifactIDs(artifacts []store.Artifact) []int64 {
+	ids := make([]int64, 0, len(artifacts))
 	for _, a := range artifacts {
-		deployments, err := s.st.DeploymentsForArtifact(ctx, a.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, d := range deployments {
+		ids = append(ids, a.ID)
+	}
+	return ids
+}
+
+func (s *server) deploymentEntries(ctx context.Context, artifacts []store.Artifact) ([]model.TimelineEntry, error) {
+	ids := artifactIDs(artifacts)
+	byID, err := s.st.DeploymentsForArtifacts(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []model.TimelineEntry
+	for _, id := range ids {
+		for _, d := range byID[id] {
 			out = append(out, model.TimelineEntry{
 				At:          d.LastUpdate,
 				Type:        "deployment",
@@ -254,13 +281,15 @@ func (s *server) deliveryEntries(ctx context.Context, taskID string) ([]model.Ti
 }
 
 func (s *server) runtimeEntries(ctx context.Context, artifacts []store.Artifact) ([]model.TimelineEntry, error) {
+	ids := artifactIDs(artifacts)
+	byID, err := s.st.RuntimeEventsForArtifacts(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
 	var out []model.TimelineEntry
-	for _, a := range artifacts {
-		events, err := s.st.RuntimeEventsForArtifact(ctx, a.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, re := range events {
+	for _, id := range ids {
+		for _, re := range byID[id] {
 			out = append(out, model.TimelineEntry{
 				At:       re.OccurredAt,
 				Type:     "runtime",
