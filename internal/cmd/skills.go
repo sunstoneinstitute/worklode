@@ -109,7 +109,7 @@ func newSkillsRecommendCmd() *cobra.Command {
 func newSkillsInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <name>[@<hash>]",
-		Short: "Install a skill into the local store (~/.worklode/skills)",
+		Short: "Install a skill into the local store (~/.worklode/store)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, hash, _ := strings.Cut(args[0], "@")

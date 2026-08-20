@@ -631,3 +631,26 @@ while dogfooding it against the real corpus.
   and is a content-free run. Harmless, but arguably still "nothing to do".
   Tightening it means teaching the shared guard which of its two callers
   honours the flag, which is more structure than the corner case is worth.
+- `[P3]` **`lode skills install --link` reports skips more thinly than
+  `lode install --skills` does.** `publishLinked` (`internal/cmd/skills.go`)
+  prints only id, action and path, and never reads `PublishResult.Skips`, where
+  `reportInstall` (`internal/cmd/install.go`) names a reason. So `--link all`
+  against a foreign symlink at `~/.agents/skills` prints
+  `amp: skipped ~/.agents/skills` with no explanation, and when `PublishDirLink`
+  delegates to `PublishPerSkill` the individual skipped skill names are dropped
+  entirely. Spec 008 §18 row 4 wants every refusal named; the install path does
+  that, this one does not. WL-47 already aligned the two loops on error
+  handling — skip *reporting* is the half that stayed divergent.
+- `[P4]` **Two different ownership tests guard the same kind of path.**
+  `internal/skillstore/publish.go` requires a symlink to resolve inside
+  `dirs.Store` (`withinStore`) before replacing it; `linkWorktreeSkill`
+  (`internal/hookrun/hookrun.go`) replaces any symlink at
+  `<worktree>/.agents/skills/<name>` after only an `os.Lstat` type check. The
+  looser test was a deliberate WL-47 decision (a symlink at that path is ours by
+  construction in a way a plain file is not, and worktree links are disposable),
+  but the exposure is not quite zero: a repo that *tracks* `.agents/skills/<name>`
+  as a symlink — project-scope agent skills are a real convention — and whose
+  brief names a same-named skill gets that tracked symlink replaced. It stays
+  visible in `git status`, since `info/exclude` does not hide tracked files, so
+  it is recoverable. Worth either matching `withinStore`'s rigour or saying so
+  in the comment.
