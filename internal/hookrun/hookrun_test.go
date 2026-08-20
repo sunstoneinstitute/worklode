@@ -988,6 +988,45 @@ func TestHeartbeatReportsAgentSession(t *testing.T) {
 	}
 }
 
+// TestSessionUnknownAgentRecordsOther covers the only path LODE_AGENT is set
+// by hand on. An id the backbone has no entry for — a typo, or a harness
+// worklode does not know yet — used to be posted verbatim, which
+// store.TouchAgentSession rejects (it mirrors the agent_sessions.agent CHECK
+// constraint). Because a hook downgrades every backbone failure to a warning
+// so the triggering event still succeeds, that rejection lost the session
+// with no signal the flag was the problem. It is folded onto "other" instead:
+// the row lands, and the warning names the id that was not recognised.
+func TestSessionUnknownAgentRecordsOther(t *testing.T) {
+	t.Setenv("LODE_AGENT", "codx")
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Typo harness task")
+
+	_, stderr := runHookOutput(t, "session-start", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if !strings.Contains(stderr, `codx`) || !strings.Contains(stderr, `"other"`) {
+		t.Fatalf("stderr did not warn about the unknown agent: %q", stderr)
+	}
+
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	if _, err := st.AgentSession(t.Context(), lease.ID, "other", "sess-1"); err != nil {
+		t.Fatalf("session was not recorded under %q: %v", model.AgentOther, err)
+	}
+
+	// The close half of the lifecycle normalizes identically, or the session
+	// would stay open forever.
+	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	sess, err := st.AgentSession(t.Context(), lease.ID, "other", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session after end: %v", err)
+	}
+	if sess.EndedAt == nil {
+		t.Fatal("session-end did not close the session recorded as \"other\"")
+	}
+}
+
 func TestHeartbeatOutsideWorktreeIsNOP(t *testing.T) {
 	rec := newRecordingServer(t)
 	runHook(t, "heartbeat", Payload{Cwd: t.TempDir(), SessionID: "sess-1"})

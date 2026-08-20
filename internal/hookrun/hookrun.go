@@ -340,11 +340,25 @@ func runNext(opts Options, raw []byte) int {
 // integration today, so it is the default; other agents set LODE_AGENT. It is
 // an env var rather than a flag because `lode hook` disables flag parsing so
 // the --next argv passes through verbatim.
-func agentName() string {
-	if a := os.Getenv("LODE_AGENT"); a != "" {
-		return a
+//
+// LODE_AGENT is hand-set, so it can name a harness the backbone has no id
+// for — a typo, or one worklode does not know yet. Sending it verbatim gets
+// the whole session report rejected (store.TouchAgentSession checks the same
+// vocabulary the agent_sessions.agent CHECK constraint holds) and, because
+// every backbone failure here is downgraded to a warning so the user's tool
+// call still succeeds, the session would just vanish. Folding it onto "other"
+// keeps the session, and the warning says which id was not recognised.
+func agentName(opts Options) string {
+	a := os.Getenv("LODE_AGENT")
+	if a == "" {
+		return "claude-code"
 	}
-	return "claude-code"
+	if norm := model.NormalizeAgent(a); norm != a {
+		warn(opts, "LODE_AGENT=%q is not a known agent, recording the session as %q instead (known: %s)",
+			a, norm, strings.Join(model.KnownAgents, ", "))
+		return norm
+	}
+	return a
 }
 
 // reportSession reports an agent session on taskID and stamps the marker's
@@ -375,7 +389,7 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, roo
 
 	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(), "", sessionID, usage)
+	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(opts), "", sessionID, usage)
 	if err != nil {
 		warn(opts, "report agent session on %s: %v", taskID, err)
 		return
@@ -409,7 +423,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
 	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
-		Agent: agentName(), SessionID: sessionID, Usage: usage,
+		Agent: agentName(opts), SessionID: sessionID, Usage: usage,
 	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)
 	}
