@@ -577,11 +577,7 @@ func newStatusCmd() *cobra.Command {
 			sessionPresent := hasSessionMarker(root)
 			state := leaseState(brief.Lease, identity, time.Now())
 
-			wd, err := os.Getwd()
-			if err != nil {
-				wd = ""
-			}
-			scope := cli.ResolveScope(cmd.Context(), c, cfg, wd)
+			scope := currentScope(cmd.Context(), c, cfg)
 
 			if jsonOut(cmd) {
 				return printJSON(cmd, statusResult{

@@ -64,7 +64,7 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 		}
 		return
 	}
-	catalog := &secrets.Catalog{}
+	catalog := &secrets.Catalog{Entries: make([]secrets.Entry, 0, len(resp.Secrets))}
 	for _, e := range resp.Secrets {
 		catalog.Entries = append(catalog.Entries, secrets.Entry{
 			Name: e.Name, Ref: e.Ref, Description: e.Description, Baseline: e.Baseline,

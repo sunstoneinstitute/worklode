@@ -50,11 +50,7 @@ func resolveScope(ctx context.Context, cmd *cobra.Command, c *cli.Client, cfg cl
 		return cli.Scope{Project: f.project, Source: cli.ScopeFlag}, nil
 	}
 
-	wd, err := os.Getwd()
-	if err != nil {
-		wd = ""
-	}
-	return cli.ResolveScope(ctx, c, cfg, wd), nil
+	return currentScope(ctx, c, cfg), nil
 }
 
 // errNoProject is what every project-scoped create command returns when the
@@ -72,11 +68,37 @@ func resolveTaskID(ctx context.Context, arg string, c *cli.Client, cfg cli.Confi
 	if !bareTaskNumber.MatchString(arg) {
 		return arg, nil
 	}
+	return resolveTaskIDInScope(ctx, arg, c, currentScope(ctx, c, cfg))
+}
+
+// resolveTaskIDPair is resolveTaskID for the two ends of an edge command,
+// resolving the current scope at most once — and not at all when neither
+// argument is a bare number.
+func resolveTaskIDPair(ctx context.Context, a, b string, c *cli.Client, cfg cli.Config) (string, string, error) {
+	if !bareTaskNumber.MatchString(a) && !bareTaskNumber.MatchString(b) {
+		return a, b, nil
+	}
+	scope := currentScope(ctx, c, cfg)
+	ra, err := resolveTaskIDInScope(ctx, a, c, scope)
+	if err != nil {
+		return "", "", err
+	}
+	rb, err := resolveTaskIDInScope(ctx, b, c, scope)
+	if err != nil {
+		return "", "", err
+	}
+	return ra, rb, nil
+}
+
+// currentScope resolves the project the working directory belongs to. An
+// unreadable working directory is not fatal — the config/git-remote chain
+// simply has one fewer input.
+func currentScope(ctx context.Context, c *cli.Client, cfg cli.Config) cli.Scope {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = ""
 	}
-	return resolveTaskIDInScope(ctx, arg, c, cli.ResolveScope(ctx, c, cfg, wd))
+	return cli.ResolveScope(ctx, c, cfg, wd)
 }
 
 // resolveTaskIDInScope is resolveTaskID against an already-resolved scope, for

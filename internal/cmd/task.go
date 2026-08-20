@@ -120,11 +120,7 @@ func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobr
 			if err != nil {
 				return err
 			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			otherID, err := resolveTaskID(cmd.Context(), other, c, cfg)
+			id, otherID, err := resolveTaskIDPair(cmd.Context(), args[0], other, c, cfg)
 			if err != nil {
 				return err
 			}

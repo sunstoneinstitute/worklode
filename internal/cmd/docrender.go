@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 
@@ -56,11 +55,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	wd, err := os.Getwd()
-	if err != nil {
-		wd = ""
-	}
-	scope := cli.ResolveScope(ctx, c, cfg, wd)
+	scope := currentScope(ctx, c, cfg)
 
 	list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: scope.Project})
 	if err != nil {
