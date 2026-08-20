@@ -38,7 +38,14 @@ func runTests(m *testing.M) int {
 		fmt.Fprintf(os.Stderr, "create isolation dir: %v\n", err)
 		return 1
 	}
-	defer os.RemoveAll(dir)
+	// Reported, not ignored: a silent failure here leaks the whole isolation
+	// tree, and the symptom surfaces runs later as an unrelated test failing
+	// to write a temp file.
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "remove isolation dir %s: %v\n", dir, err)
+		}
+	}()
 
 	home, wd := filepath.Join(dir, "home"), filepath.Join(dir, "wd")
 	for _, d := range []string{home, wd} {
@@ -47,17 +54,30 @@ func runTests(m *testing.M) int {
 			return 1
 		}
 	}
-	// GOCACHE defaults to a path under HOME, so the temp HOME below would give
-	// buildLodeBinary's `go build` an empty cache and recompile the stdlib on
-	// every run (~25s). Pin the real cache before HOME moves.
-	if os.Getenv("GOCACHE") == "" {
-		if out, err := exec.Command("go", "env", "GOCACHE").Output(); err == nil {
-			if cache := strings.TrimSpace(string(out)); cache != "" {
-				if err := os.Setenv("GOCACHE", cache); err != nil {
-					fmt.Fprintf(os.Stderr, "set GOCACHE: %v\n", err)
-					return 1
-				}
-			}
+	// Both Go caches default to a path under HOME, so the temp HOME below
+	// would give buildLodeBinary's `go build` empty ones: GOCACHE recompiles
+	// the stdlib on every run (~25s), and GOMODCACHE re-downloads every
+	// module into the temp dir (~18k files). Worse, the module cache is
+	// written read-only, so the RemoveAll above cannot delete it — the dir
+	// survives the run and leaks its inodes, which on a CI runner with a
+	// tmpfs /tmp exhausts nr_inodes after a few dozen runs and fails
+	// unrelated tests with "no space left on device". Pin the real caches
+	// before HOME moves.
+	for _, key := range []string{"GOCACHE", "GOMODCACHE"} {
+		if os.Getenv(key) != "" {
+			continue
+		}
+		out, err := exec.Command("go", "env", key).Output()
+		if err != nil {
+			continue
+		}
+		cache := strings.TrimSpace(string(out))
+		if cache == "" {
+			continue
+		}
+		if err := os.Setenv(key, cache); err != nil {
+			fmt.Fprintf(os.Stderr, "set %s: %v\n", key, err)
+			return 1
 		}
 	}
 	if err := os.Setenv("HOME", home); err != nil {
