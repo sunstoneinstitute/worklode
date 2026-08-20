@@ -133,11 +133,26 @@ type DocPlanningGap struct {
 	Unplanned []string `json:"unplanned"` // anchors, in document order
 }
 
+// DocSupersessionGap names the sections of one superseded document that
+// nothing explains — 025 §6 rule 2's "bare superseded section" (026 §2.4). It
+// is keyed by document id for the same reason DocPlanningGap is: one listing
+// shape serves every selector.
+//
+// Sections is the document's whole section count, so a caller can render the
+// "1/3" ratio without a second request.
+type DocSupersessionGap struct {
+	Doc         int64    `json:"doc"`
+	Sections    int      `json:"sections"`
+	Unexplained []string `json:"unexplained"` // anchors, in document order
+}
+
 // DocListResponse is the response body of GET /api/v1/docs. PlanningGaps is
-// populated only for ?needs_planning=true, one entry per document in Docs.
+// populated only for ?needs_planning=true, one entry per document in Docs;
+// SupersessionGaps only for ?bare_superseded=true.
 type DocListResponse struct {
-	Docs         []Doc            `json:"docs"`
-	PlanningGaps []DocPlanningGap `json:"planning_gaps,omitempty"`
+	Docs             []Doc                `json:"docs"`
+	PlanningGaps     []DocPlanningGap     `json:"planning_gaps,omitempty"`
+	SupersessionGaps []DocSupersessionGap `json:"supersession_gaps,omitempty"`
 }
 
 // AcceptDocResponse is the response body of POST /api/v1/docs/{id}/accept.

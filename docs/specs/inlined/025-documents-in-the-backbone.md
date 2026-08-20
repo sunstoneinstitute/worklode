@@ -409,7 +409,8 @@ graphs:
    is never permitted; retirement is `wl:status wlc:superseded`, which keeps the anchor resolvable.
 2. **A superseded section carries an explanation** — `dct:isReplacedBy` to its successor, or a
    `dct:description` saying why it went away. A bare superseded section is a broken promise to
-   whoever linked to it.
+   whoever linked to it. Unlike its neighbours, this one is **detected rather than refused**
+   (§6.2).
 3. **Anchors are immutable, so accepted sections are never renumbered.** An anchor is never
    re-pointed at different subject matter. Rewording a heading is fine; renumbering, or reusing an
    anchor for a new topic, silently corrupts every inbound claim. Inserts use the `2.1a` suffix
@@ -445,6 +446,28 @@ have already published, which constraint 1 forbids outright. Therefore:
 This makes the setting one-way-safe by construction, rather than relying on operator discipline.
 
 These extend `rdf/shapes/wl-shapes.ttl` (006) under the existing SHACL gate (ADR-0003).
+
+### 6.2 Rule 2 is detected, not refused
+
+Rules 1, 3, 5 and 6 are set diffs between the accepted document and its candidate revision, so
+the accept transaction has everything it needs to refuse. Rule 2 is not: its subject is a
+section that is *already* superseded, which is a fact about the corpus around the document
+rather than about the revision in front of the gate. Refusing an accept because some *other*
+document was left bare would block the wrong edit.
+
+So rule 2 is **derived and queryable**, consistent with §3.3 keeping section-level supersession
+derived rather than stored: a section is superseded when an effective `replaces` names it, or
+when its document is superseded, and it is explained when a `replaces` edge names either the
+section or its document. What is left bare is the difference between the two — a superseded
+document nothing replaces, and, more usefully, one an accept superseded whole while naming only
+some of its sections. `lode doc list --bare-superseded` (§18, 026 §2.4) is the query that finds
+both.
+
+Rule 2's second branch — a `dct:description` saying why a section went away with no successor
+to point at — has **no representation in the document store**: neither `doc_sections` nor
+`doc_edges` carries free text. It is expressible in the graph, where §3.3 already writes it as
+`wl:status wlc:superseded` plus `dct:description`, and it lands with the rest of section-level
+supersession there rather than by adding a column here.
 
 ## 7. Editorial lifecycle
 
@@ -1728,6 +1751,7 @@ The document and event surface, backed by the backbone store:
 | `lode doc list \| show <slug> [--version vN]` | Read documents and sections; `--json`; `--resolved` inlines amendments and supersessions |
 | `lode doc list --needs-planning` | Accepted specs with unplanned accepted sections |
 | `lode doc list --needs-execution` | Accepted plans whose task set is unminted or unfinished |
+| `lode doc list --bare-superseded` | Superseded documents whose sections nothing replaces — §6 rule 2, read as a query |
 | `lode doc accept <id>` | The manual commit; on a plan, mints its tasks (§9.2) |
 | `lode doc revise <slug>` | Open a candidate revision (§7.2) |
 | `lode doc publish <slug>` | Run the §6 constraints, then the §4 transaction |

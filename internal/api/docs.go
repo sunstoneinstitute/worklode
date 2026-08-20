@@ -158,8 +158,9 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// listDocs handles GET /api/v1/docs?project=&kind=&status= plus the two
-// derived selectors of 026 §2, ?needs_planning= and ?needs_execution=.
+// listDocs handles GET /api/v1/docs?project=&kind=&status= plus the three
+// derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1), and
+// ?bare_superseded= (026 §2.4, 025 §6 rule 2).
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	sel, err := docSelectorFrom(r)
 	if err != nil {
@@ -183,6 +184,15 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+	case sel.bareSuperseded:
+		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project, sel.filter.Kind)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model.DocListResponse{
+			Docs: withoutDocBodies(docs), SupersessionGaps: gaps,
+		})
 	default:
 		docs, err := s.st.ListDocs(r.Context(), sel.filter)
 		if err != nil {
@@ -222,21 +232,40 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 }
 
 // docListSelector is GET /api/v1/docs' query string once validated: the three
-// plain filters, plus at most one of the two derived selectors of 026 §2.
+// plain filters, plus at most one of the three derived selectors of 026 §2.
 type docListSelector struct {
 	filter         store.DocFilter
 	needsPlanning  bool
 	needsExecution bool
+	bareSuperseded bool
+}
+
+// docDerivedSelector names one derived selector's implied status and
+// acceptable kinds, so docSelectorFrom can check all three the same way
+// instead of repeating the kind/status logic per selector. kindOK reports
+// whether a restated --kind is compatible with the selector rather than
+// contradicting it; kindWant names the acceptable kind(s) for the message.
+type docDerivedSelector struct {
+	on            bool
+	name          string
+	impliedStatus string
+	cite          string
+	kindOK        func(kind string) bool
+	kindWant      string
 }
 
 // docSelectorFrom reads the list selectors off the query string.
 //
 // The three plain filters take any value — an unknown one filters to nothing,
-// the same way the task list treats a state nobody uses. The two derived
-// selectors do not: each implies a kind and a status (026 §2.1), so a
-// contradicting kind or status is an error rather than an empty result, which
-// would read as "nothing to plan". Requesting both is an error for the same
-// reason — they select disjoint kinds, so the conjunction is always empty.
+// the same way the task list treats a state nobody uses. The three derived
+// selectors do not: each implies a status, and needs_planning/needs_execution
+// each imply a single kind while bare_superseded implies one of two (026
+// §2.1, §2.4; 025 §6 rule 2) — so a contradicting kind or status is an error
+// rather than an empty result, which would read as "nothing to plan".
+// Requesting more than one derived selector at once is an error for the same
+// reason: needs_planning and needs_execution select disjoint kinds, and
+// bare_superseded selects a disjoint status, so any conjunction is always
+// empty.
 //
 // The CLI refuses the same combinations locally so the error needs no round
 // trip; this is the authority, for the clients that are not the CLI.
@@ -250,27 +279,43 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 	if sel.needsExecution, err = queryBool(q, "needs_execution"); err != nil {
 		return docListSelector{}, err
 	}
-	if sel.needsPlanning && sel.needsExecution {
-		return docListSelector{}, errors.New(
-			"needs_planning and needs_execution select disjoint kinds; pass one (026 §2.1)")
+	if sel.bareSuperseded, err = queryBool(q, "bare_superseded"); err != nil {
+		return docListSelector{}, err
 	}
-	for _, c := range []struct {
-		on         bool
-		name, kind string
-	}{
-		{sel.needsPlanning, "needs_planning", "spec"},
-		{sel.needsExecution, "needs_execution", "plan"},
-	} {
+
+	derived := []docDerivedSelector{
+		{sel.needsPlanning, "needs_planning", "accepted", "026 §2.1",
+			func(k string) bool { return k == "spec" }, "spec"},
+		{sel.needsExecution, "needs_execution", "accepted", "026 §2.1",
+			func(k string) bool { return k == "plan" }, "plan"},
+		{sel.bareSuperseded, "bare_superseded", "superseded", "025 §6",
+			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
+	}
+	var on []string
+	for _, c := range derived {
+		if c.on {
+			on = append(on, c.name)
+		}
+	}
+	if len(on) > 1 {
+		if len(on) == 2 && on[0] == "needs_planning" && on[1] == "needs_execution" {
+			return docListSelector{}, errors.New(
+				"needs_planning and needs_execution select disjoint kinds; pass one (026 §2.1)")
+		}
+		return docListSelector{}, fmt.Errorf(
+			"%s are mutually exclusive selectors; pass one (025 §6, 026 §2)", strings.Join(on, " and "))
+	}
+	for _, c := range derived {
 		if !c.on {
 			continue
 		}
-		if sel.filter.Kind != "" && sel.filter.Kind != c.kind {
+		if sel.filter.Kind != "" && !c.kindOK(sel.filter.Kind) {
 			return docListSelector{}, fmt.Errorf(
-				"%s implies kind=%s; drop kind or pass %s (026 §2.1)", c.name, c.kind, c.kind)
+				"%s implies kind=%s; drop kind or pass %s (%s)", c.name, c.kindWant, c.kindWant, c.cite)
 		}
-		if sel.filter.Status != "" && sel.filter.Status != "accepted" {
+		if sel.filter.Status != "" && sel.filter.Status != c.impliedStatus {
 			return docListSelector{}, fmt.Errorf(
-				"%s implies status=accepted; drop status or pass accepted (026 §2.1)", c.name)
+				"%s implies status=%s; drop status or pass %s (%s)", c.name, c.impliedStatus, c.impliedStatus, c.cite)
 		}
 	}
 	return sel, nil
