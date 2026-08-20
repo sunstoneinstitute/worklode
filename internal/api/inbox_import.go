@@ -57,45 +57,17 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fctx, cancel := context.WithTimeout(r.Context(), importTimeout)
-	defer cancel()
-
-	var since time.Time
-	if req.Since != nil {
-		since = *req.Since
-	}
-	issues, issuesTruncated, err := s.appAuth.ListIssues(fctx, req.Repo, req.State, since, importMaxPages)
-	if err != nil {
-		s.log.Warn("import: list issues", "repo", req.Repo, "err", err)
-		writeErr(w, http.StatusBadGateway, "github list issues failed")
+	fetched, ok := s.fetchImportSources(w, r, req)
+	if !ok {
 		return
 	}
-	var pulls []githubauth.PullRequest
-	var prsTruncated bool
-	if req.IncludePRs {
-		prs, truncated, err := s.appAuth.ListPulls(fctx, req.Repo, req.State, importMaxPages)
-		if err != nil {
-			s.log.Warn("import: list pulls", "repo", req.Repo, "err", err)
-			writeErr(w, http.StatusBadGateway, "github list pulls failed")
-			return
-		}
-		prsTruncated = truncated
-		// The pulls endpoint has no since parameter, so filter here. This can
-		// only narrow the pages already fetched — it cannot reach further
-		// pages, which is why prsTruncated (not this filtering) is what gets
-		// reported.
-		for _, pr := range prs {
-			if since.IsZero() || !pr.UpdatedAt.Before(since) {
-				pulls = append(pulls, pr)
-			}
-		}
-	}
+	issues, pulls := fetched.issues, fetched.pulls
 
 	resp := model.ImportResult{Repo: req.Repo, DryRun: req.DryRun}
-	resp.Issues.Truncated = issuesTruncated
-	resp.PRs.Truncated = prsTruncated
-	resp.Truncated = issuesTruncated || prsTruncated
-	if issuesTruncated {
+	resp.Issues.Truncated = fetched.issuesTruncated
+	resp.PRs.Truncated = fetched.prsTruncated
+	resp.Truncated = fetched.issuesTruncated || fetched.prsTruncated
+	if fetched.issuesTruncated {
 		newest := newestIssueUpdatedAt(issues)
 		if !newest.IsZero() {
 			resp.NewestUpdatedAt = &newest
@@ -140,7 +112,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.recordEvent(r.Context(), "cli", "inbox.imported", req,
+	err := s.recordEvent(r.Context(), "cli", "inbox.imported", req,
 		func(tx *sql.Tx, _ int64) error {
 			if err := count(tx); err != nil {
 				return err
@@ -197,6 +169,56 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// importSources is what one import reads out of GitHub before any
+// transaction opens.
+type importSources struct {
+	issues          []githubauth.Issue
+	pulls           []githubauth.PullRequest
+	issuesTruncated bool
+	prsTruncated    bool
+}
+
+// fetchImportSources reads the repo's issues and, when asked, its pull
+// requests, under one importTimeout budget. A false ok means it has already
+// written the 502. It runs outside any transaction, so a slow GitHub never
+// holds a database lock.
+func (s *server) fetchImportSources(w http.ResponseWriter, r *http.Request, req model.ImportInput) (importSources, bool) {
+	ctx, cancel := context.WithTimeout(r.Context(), importTimeout)
+	defer cancel()
+
+	var since time.Time
+	if req.Since != nil {
+		since = *req.Since
+	}
+	var out importSources
+	var err error
+	out.issues, out.issuesTruncated, err = s.appAuth.ListIssues(ctx, req.Repo, req.State, since, importMaxPages)
+	if err != nil {
+		s.log.Warn("import: list issues", "repo", req.Repo, "err", err)
+		writeErr(w, http.StatusBadGateway, "github list issues failed")
+		return importSources{}, false
+	}
+	if !req.IncludePRs {
+		return out, true
+	}
+	prs, truncated, err := s.appAuth.ListPulls(ctx, req.Repo, req.State, importMaxPages)
+	if err != nil {
+		s.log.Warn("import: list pulls", "repo", req.Repo, "err", err)
+		writeErr(w, http.StatusBadGateway, "github list pulls failed")
+		return importSources{}, false
+	}
+	out.prsTruncated = truncated
+	// The pulls endpoint has no since parameter, so filter here. This can
+	// only narrow the pages already fetched — it cannot reach further pages,
+	// which is why prsTruncated (not this filtering) is what gets reported.
+	for _, pr := range prs {
+		if since.IsZero() || !pr.UpdatedAt.Before(since) {
+			out.pulls = append(out.pulls, pr)
+		}
+	}
+	return out, true
 }
 
 // newestIssueUpdatedAt returns the maximum UpdatedAt across issues, or the

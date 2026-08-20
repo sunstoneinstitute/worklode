@@ -39,22 +39,9 @@ type streamFixture struct {
 func newStreamTestServer(t *testing.T) streamFixture {
 	t.Helper()
 	st := newTestStore(t)
-	ctx := context.Background()
 
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create admin actor: %v", err)
-	}
-	adminToken, err := st.CreateToken(ctx, "alice", "admin token", nil)
-	if err != nil {
-		t.Fatalf("create admin token: %v", err)
-	}
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create worker actor: %v", err)
-	}
-	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
-	if err != nil {
-		t.Fatalf("create worker token: %v", err)
-	}
+	adminToken := seedActor(t, st, "alice", "human", "Alice", true)
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
 	h, admin, err := api.NewServer(st, api.Config{})
 	if err != nil {

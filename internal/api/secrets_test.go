@@ -21,14 +21,7 @@ import (
 func newSecretsTestServer(t *testing.T, catalogTOML string) (http.Handler, string) {
 	t.Helper()
 	st := newTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
+	token := seedActor(t, st, "alice", "human", "Alice", true)
 	path := filepath.Join(t.TempDir(), "catalog.toml")
 	if err := os.WriteFile(path, []byte(catalogTOML), 0o600); err != nil {
 		t.Fatalf("write catalog: %v", err)

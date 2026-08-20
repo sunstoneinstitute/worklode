@@ -535,13 +535,7 @@ func TestCreateActorAndTokenLifecycle(t *testing.T) {
 func TestAdminGatedEndpoints(t *testing.T) {
 	st, h, adminToken := newTestServer(t)
 	ctx := context.Background()
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create non-admin actor: %v", err)
-	}
-	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
-	if err != nil {
-		t.Fatalf("create worker token: %v", err)
-	}
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
 	gated := []struct {
 		method, path string
@@ -609,14 +603,7 @@ func TestAdminGatedEndpoints(t *testing.T) {
 // and so never exercise the guard.
 func TestImportRouteRequiresAdmin(t *testing.T) {
 	st, h, _ := newTestServer(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "worker", "agent", "Worker", false); err != nil {
-		t.Fatalf("create non-admin actor: %v", err)
-	}
-	workerToken, err := st.CreateToken(ctx, "worker", "worker token", nil)
-	if err != nil {
-		t.Fatalf("create worker token: %v", err)
-	}
+	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
 	rr := doReq(t, h, "POST", "/api/v1/inbox/import", workerToken, map[string]any{"repo": "acme/widgets"})
 	if rr.Code != http.StatusForbidden {
