@@ -64,12 +64,21 @@ type DocRevision struct {
 // resolve, which by definition names no document that could point back. In
 // Edges exactly one of ToDoc and ToExternal is set; in EdgesIn ToDoc always
 // is and ToExternal is always "".
+//
+// ToSlug, ToKind and ToNumber name the far end for a reader: an edge is
+// stored by id, and "document 42" tells a human nothing. Reads resolve them
+// alongside the id in the same query (store.ListDocEdges); write paths that
+// only state an edge leave them zero, as does an unresolved ToExternal edge,
+// which names no row to resolve.
 type DocEdge struct {
 	Type       string `json:"type"`
 	FromAnchor string `json:"from_anchor"`
 	ToDoc      int64  `json:"to_doc"`
 	ToAnchor   string `json:"to_anchor"`
 	ToExternal string `json:"to_external"`
+	ToSlug     string `json:"to_slug"`
+	ToKind     string `json:"to_kind"`
+	ToNumber   int    `json:"to_number"`
 }
 
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted

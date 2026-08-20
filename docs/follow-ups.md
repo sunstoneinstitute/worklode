@@ -353,9 +353,11 @@ Design items landed in spec 025. These are the mechanical leftovers.
 - `[gated]` **Part 1's honest-unavailable pages** (`/projects/{id}/crew`,
   `/projects/{id}/reviews`, `/projects/{id}/decisions`,
   `/projects/{id}/documents`, `/projects/{id}/activity`, `/intake`,
-  `/reviews`, `/deliveries`, `/knowledge`) are placeholders naming their
-  owning spec section; replace each with its real implementation as Parts 2–4
-  land. Deliverables has left this list — it is a built destination now.
+  `/reviews`, `/deliveries`) are placeholders naming their owning spec
+  section; replace each with its real implementation as Parts 2–4 land.
+  Deliverables has left this list — it is a built destination now, and so has
+  Knowledge: it lands on the document corpus at `/docs` (WL-127), with the
+  graph-backed expert views still to join it there.
 - `[gated]` **Mode facts stay all-false**: `modeFactsForProject`
   (`internal/api/cockpit.go`) returns an empty `modeFacts` because spec 029's
   intake and promotion stores do not exist, so mode selection cannot see them.

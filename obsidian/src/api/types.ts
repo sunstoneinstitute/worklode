@@ -101,6 +101,10 @@ export interface DocSection {
  * to_external is outbound-only: in edges exactly one of to_doc and
  * to_external is set; in edges_in to_doc always is and to_external is
  * always "".
+ *
+ * to_slug, to_kind and to_number name the far end for a reader: an edge is
+ * stored by id, and "document 42" tells a human nothing. A read resolves
+ * them alongside the id; an unresolved to_external edge leaves them empty.
  */
 export interface DocEdge {
   type: string;
@@ -108,6 +112,9 @@ export interface DocEdge {
   to_doc: number;
   to_anchor: string;
   to_external: string;
+  to_slug: string;
+  to_kind: string;
+  to_number: number;
 }
 
 /** A document's open candidate revision (025 §7.2), matching

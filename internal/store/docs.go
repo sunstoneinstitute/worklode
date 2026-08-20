@@ -1793,14 +1793,22 @@ var docEdgeInverse = map[string]string{
 // it left from; an inbound edge never has ToExternal, since an unresolved
 // reference names no row here.
 //
+// Each resolved far end is named as well as identified: one join carries the
+// other document's slug, kind and number back with its id, so a caller can
+// render "spec 25" instead of "document 42" without a query per edge. An
+// unresolved outbound edge (to_external) joins to nothing and leaves them
+// empty.
+//
 // Both lists are fully ordered, so a caller may compare them as sequences.
 func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.DocEdge, err error) {
 	outRows, err := s.db.QueryContext(ctx,
-		`SELECT type, coalesce(from_anchor,''), coalesce(to_doc,0),
-		        coalesce(to_anchor,''), coalesce(to_external,'')
-		   FROM doc_edges WHERE from_doc = $1
-		  ORDER BY type, coalesce(from_anchor,''), coalesce(to_doc,0),
-		           coalesce(to_anchor,''), coalesce(to_external,'')`, docID)
+		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
+		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
+		        coalesce(d.slug,''), coalesce(d.kind,''), coalesce(d.number,0)
+		   FROM doc_edges e LEFT JOIN docs d ON d.id = e.to_doc
+		  WHERE e.from_doc = $1
+		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
+		           coalesce(e.to_anchor,''), coalesce(e.to_external,'')`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges out of doc %d: %w", docID, err)
 	}
@@ -1813,9 +1821,11 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	// from docID's end, so what the writer called its target anchor is the
 	// anchor here, and its source anchor is the far one.
 	inRows, err := s.db.QueryContext(ctx,
-		`SELECT type, coalesce(to_anchor,''), from_doc, coalesce(from_anchor,''), ''
-		   FROM doc_edges WHERE to_doc = $1
-		  ORDER BY type, coalesce(to_anchor,''), from_doc, coalesce(from_anchor,'')`, docID)
+		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
+		        d.slug, d.kind, coalesce(d.number,0)
+		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
+		  WHERE e.to_doc = $1
+		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)
 	}
@@ -1834,13 +1844,15 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	return out, in, nil
 }
 
-// scanDocEdges drains a query selecting the five DocEdge columns in order.
+// scanDocEdges drains a query selecting the DocEdge columns in order: the
+// five stored ones, then the joined far end's slug, kind and number.
 func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 	defer rows.Close()
 	var out []model.DocEdge
 	for rows.Next() {
 		var e model.DocEdge
-		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal); err != nil {
+		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
+			&e.ToSlug, &e.ToKind, &e.ToNumber); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
