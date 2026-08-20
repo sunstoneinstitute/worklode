@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
 	"golang.org/x/term"
 )
 
@@ -34,13 +33,7 @@ func Markdown(w io.Writer, body string) {
 		fmt.Fprintf(w, "%s\n", strings.TrimRight(body, "\n"))
 		return
 	}
-	out, err := renderStyled(body, clampWidth(width))
-	if err != nil {
-		// Styling is a nicety; never lose the body over it.
-		fmt.Fprintf(w, "%s\n", strings.TrimRight(body, "\n"))
-		return
-	}
-	fmt.Fprintf(w, "%s\n", strings.TrimRight(out, "\n"))
+	fmt.Fprintf(w, "%s\n", renderStyled(body, clampWidth(width)))
 }
 
 // blobRef matches a root-relative blob destination in a markdown body.
@@ -54,20 +47,6 @@ func MarkdownWithBase(w io.Writer, body, server string) {
 		body = blobRef.ReplaceAllString(body, "]("+strings.TrimSuffix(server, "/")+"/blob/$1)")
 	}
 	Markdown(w, body)
-}
-
-// renderStyled renders body as ANSI-styled markdown wrapped at width. The
-// style follows GLAMOUR_STYLE when set, else the terminal's light/dark
-// background.
-func renderStyled(body string, width int) (string, error) {
-	r, err := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return "", err
-	}
-	return r.Render(body)
 }
 
 // terminalFd reports w's file descriptor when w is an interactive terminal.

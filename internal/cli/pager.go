@@ -54,7 +54,7 @@ func (w pagerWriter) Fd() uintptr { return w.ttyFd }
 
 // pagerArgv is the pager command line: $PAGER's fields when set to a
 // non-blank value, else "less -R". Content reaching the pager's stdin is
-// already ANSI-styled by cli.Markdown's glamour rendering (pagerWriter makes
+// already ANSI-styled by cli.Markdown's rendering (pagerWriter makes
 // the writer report the real terminal's fd, so Markdown styles and
 // word-wraps exactly as it would writing directly to that terminal); -R lets
 // less pass those escape codes through to the terminal instead of showing
