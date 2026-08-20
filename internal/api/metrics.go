@@ -43,6 +43,10 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_task_assignments_total",
 		Help: "Task assignment actions, by action (assign, unassign, start, stop).",
 	}, []string{"action"})
+	s.crewChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_crew_changes_total",
+		Help: "Project Crew membership changes, by surface (api, web), action (add), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
+	}, []string{"surface", "action", "outcome"})
 	s.cockpitProjections = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_cockpit_projection_requests_total",
 		Help: "Project cockpit projection assembly attempts, by surface (api, web) and outcome (ok, not_found, error).",
@@ -57,7 +61,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"permission", "outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI creation-form submissions, by form (task, deliverable) and outcome (created, invalid, forbidden, not_found, error).",
+		Help: "Web UI creation-form submissions, by form (task, deliverable, crew_add) and outcome (created, invalid, forbidden, not_found, error).",
 	}, []string{"form", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
@@ -157,6 +161,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
+		s.crewChanges,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
@@ -190,7 +195,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.authzDecisions.WithLabelValues(string(perm), outcome)
 		}
 	}
-	for _, form := range []string{"task", "deliverable"} {
+	for _, surface := range []string{"api", "web"} {
+		for _, outcome := range crewChangeOutcomes {
+			s.crewChanges.WithLabelValues(surface, "add", outcome)
+		}
+	}
+	for _, form := range []string{"task", "deliverable", "crew_add"} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
@@ -324,6 +334,36 @@ func (s *server) observeAssignment(action string) {
 		return
 	}
 	s.assignments.WithLabelValues(action).Inc()
+}
+
+// crewChangeOutcomes are every outcome label worklode_crew_changes_total
+// carries, pre-initialised so an instance where nobody has changed a Crew
+// reads as a flat zero rather than as no-data.
+var crewChangeOutcomes = []string{"ok", "rejected", "error"}
+
+// crewOutcome classifies a Crew change error for the
+// worklode_crew_changes_total outcome label. A refused add — an unknown
+// actor, a role already held, a second lead — is "rejected": it is the
+// caller's input, not a fault.
+func crewOutcome(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidInput) {
+		return "rejected"
+	}
+	return "error"
+}
+
+// observeCrewChange records one attempted Crew membership change, called
+// exactly once per attempt from both the JSON API handler (surface="api")
+// and the roster page's form (surface="web").
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeCrewChange(surface, action, outcome string) {
+	if s.crewChanges == nil {
+		return
+	}
+	s.crewChanges.WithLabelValues(surface, action, outcome).Inc()
 }
 
 // recordLocalMerge records the result of one task named in a local merge

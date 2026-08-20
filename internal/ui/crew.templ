@@ -9,6 +9,11 @@ package ui
 // id when none is set) and role labels — plus a visually distinct Lead
 // badge on the one accountable human (032 §6). An empty roster states that
 // honestly instead of showing a fabricated record.
+//
+// The add-member form below the roster is a plain server-rendered
+// <form method="post"> like the cockpit's other write affordances: no client
+// state, keyboard-usable, and a rejected submit re-renders the page with the
+// message and everything that was typed still in the fields.
 
 import "strings"
 
@@ -36,9 +41,47 @@ templ Crew(v CrewView) {
 						}
 					</div>
 				</section>
+				@crewAddForm(v)
 			</div>
 		}
 	}
+}
+
+// crewAddForm renders the add-member affordance. The actor id is typed
+// rather than picked from a list: the roster names people who already
+// participate, and offering every actor on the instance as a menu would say
+// more about the instance than this project is entitled to show.
+templ crewAddForm(v CrewView) {
+	<section class="card pad form">
+		<h3>Add a Crew member</h3>
+		<p class="muted small">
+			Crew is the time-limited group contributing to this project (spec 029
+			§6.1). A role is a free-form label; a project has at most one lead.
+		</p>
+		<div aria-live="polite">
+			if v.AddError != "" {
+				<p class="formerr" role="alert">{ v.AddError }</p>
+			}
+		</div>
+		<form method="post" action={ v.AddAction }>
+			<p class="fieldrow">
+				<label for="actor">Actor id</label>
+				<input id="actor" name="actor" type="text" required maxlength="200" value={ v.Add.Actor }/>
+			</p>
+			<p class="fieldrow">
+				<label for="role">Role</label>
+				<input id="role" name="role" type="text" maxlength="100" placeholder="member" value={ v.Add.Role }/>
+				<span class="hint">What this person does on the project. Left empty, it is "member".</span>
+			</p>
+			<p class="fieldrow check">
+				<input id="lead" name="lead" type="checkbox" value="1" checked?={ v.Add.Lead }/>
+				<label for="lead">Project lead &mdash; the one accountable human</label>
+			</p>
+			<div class="btnrow">
+				<button type="submit" class="btn primary">Add member</button>
+			</div>
+		</form>
+	</section>
 }
 
 // crewRow renders one Crew member. The Lead badge is the only member marked

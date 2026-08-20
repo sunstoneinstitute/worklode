@@ -21,7 +21,7 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
 		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectFocusNoteCmd(),
 		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd(),
-		newProjectDoctorCmd())
+		newProjectDoctorCmd(), newProjectCrewCmd())
 	return cmd
 }
 
@@ -117,6 +117,55 @@ func newProjectAddRepoCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&doneState, "done-state", "", doneStateFlagUsage+" (default: server default)")
+	return cmd
+}
+
+// newProjectCrewCmd groups the Crew subcommands: who is on a project and
+// what they do on it (spec 029 §6.1). Listing the Crew arrives with the read
+// endpoint; adding is here.
+func newProjectCrewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "crew",
+		Short: "Manage a project's Crew",
+	}
+	cmd.AddCommand(newProjectCrewAddCmd())
+	return cmd
+}
+
+func newProjectCrewAddCmd() *cobra.Command {
+	var role string
+	var lead bool
+	cmd := &cobra.Command{
+		Use:   "add <project> <actor>",
+		Short: "Add an actor to a project's Crew",
+		Long: "Add an actor to a project's Crew with a role label.\n\n" +
+			"The role is a free-form label describing what the person does on this\n" +
+			"project; one actor may hold several. A project has at most one lead.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			member, raw, err := c.AddCrewMember(cmd.Context(), args[0], args[1], role, lead)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "added %s to project %s as %s\n",
+				member.Actor, args[0], strings.Join(member.Roles, ", "))
+			if member.Lead {
+				fmt.Fprintf(out, "%s is the project lead\n", member.Actor)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&role, "role", "", "role label for this member (default: member)")
+	cmd.Flags().BoolVar(&lead, "lead", false, "make this member the project lead")
 	return cmd
 }
 

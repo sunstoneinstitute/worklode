@@ -280,6 +280,23 @@ type CrewView struct {
 	CanonicalURL string
 	Project      CockpitProject
 	Members      []CrewMember
+
+	// AddAction is where the add-member form POSTs. Add is what the person
+	// typed, preserved so a rejected submit comes back with the form filled
+	// in, and AddError is the one message to fix ("" on first render).
+	AddAction string
+	Add       CrewFormValues
+	AddError  string
+}
+
+// CrewFormValues are the add-member form's fields as submitted. Role is a
+// free-form label (spec 029 §6.1), so it is a text field and not a menu:
+// what a person does on a project is org vocabulary, not a closed set this
+// page gets to offer.
+type CrewFormValues struct {
+	Actor string
+	Role  string
+	Lead  bool
 }
 
 // CrewMember is one Crew member: an actor holding at least one role-labelled

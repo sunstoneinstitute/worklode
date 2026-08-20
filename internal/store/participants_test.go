@@ -1,8 +1,10 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -200,5 +202,106 @@ func TestOpenWorkOwnedBy(t *testing.T) {
 	}
 	if got[0].ID != openAssigned.ID || got[0].Title != "open, assigned to ada" || got[0].State != "ready" {
 		t.Fatalf("wrong task returned: %+v", got[0])
+	}
+}
+
+// addParticipant drives AddParticipant the way production does: inside a
+// RecordEvent transaction under the "crew.member_added" event type (spec 029
+// §8.4), so the test exercises the same commit boundary the API handler
+// does.
+func addParticipant(t *testing.T, s *Store, projectID, actor, role string, lead bool, by string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddParticipant(tx, s.Now(), projectID, actor, role, lead, by, eventID)
+		})
+	return err
+}
+
+func TestAddParticipant(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "AP1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	for _, id := range []string{"ada", "bob"} {
+		if err := s.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("CreateActor %s: %v", id, err)
+		}
+	}
+
+	add := func(actor, role string, lead bool) error {
+		return addParticipant(t, s, "p1", actor, role, lead, "ada")
+	}
+
+	if err := add("ada", "editor", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := add("bob", "reporter", false); err != nil {
+		t.Fatal(err)
+	}
+	// One actor, several role labels (029 §6.1).
+	if err := add("bob", "data-scientist", false); err != nil {
+		t.Fatal(err)
+	}
+	// The same role twice is invalid input.
+	if err := add("bob", "reporter", false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("duplicate role: got %v", err)
+	}
+	// A second lead is refused (lead handoff is deferred).
+	if err := add("bob", "co-lead", true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second lead: got %v", err)
+	}
+
+	// The roster reads back what was written: ada leads with one role, bob
+	// holds two, sorted.
+	crew, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatalf("ListParticipants: %v", err)
+	}
+	if len(crew) != 2 {
+		t.Fatalf("crew = %+v, want 2 members", crew)
+	}
+	if crew[0].ActorID != "ada" || !crew[0].IsLead || !slices.Equal(crew[0].Roles, []string{"editor"}) {
+		t.Fatalf("crew[0] = %+v, want ada, lead, [editor]", crew[0])
+	}
+	if crew[1].ActorID != "bob" || crew[1].IsLead ||
+		!slices.Equal(crew[1].Roles, []string{"data-scientist", "reporter"}) {
+		t.Fatalf("crew[1] = %+v, want bob, not lead, [data-scientist reporter]", crew[1])
+	}
+
+	// added_by is stored, and an empty one stores NULL rather than an
+	// invented actor.
+	if err := addParticipant(t, s, "p1", "bob", "observer", false, ""); err != nil {
+		t.Fatalf("add with no acting actor: %v", err)
+	}
+	var by sql.NullString
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT added_by FROM project_participants WHERE project_id = 'p1' AND actor_id = 'bob' AND role = 'observer'`,
+	).Scan(&by); err != nil {
+		t.Fatalf("read added_by: %v", err)
+	}
+	if by.Valid {
+		t.Fatalf("added_by = %q, want NULL", by.String)
+	}
+
+	// Validation and existence checks.
+	if err := add("ada", "   ", false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank role: got %v", err)
+	}
+	if err := add("ada", strings.Repeat("x", maxParticipantRole+1), false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("over-long role: got %v", err)
+	}
+	if err := add("nosuch", "member", false); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown actor: got %v", err)
+	}
+	if err := addParticipant(t, s, "nosuch", "ada", "member", false, "ada"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown project: got %v", err)
+	}
+	// A trimmed role is stored trimmed, so " editor " collides with the
+	// existing "editor" row rather than creating a second one.
+	if err := add("ada", "  editor  ", false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("untrimmed duplicate role: got %v", err)
 	}
 }

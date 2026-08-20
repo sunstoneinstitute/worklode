@@ -1173,6 +1173,16 @@ func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.
 	return doJSON[model.ReconcileResponse](ctx, c, http.MethodPost, "/api/v1/reconcile", in, "reconcile")
 }
 
+// AddCrewMember calls POST /api/v1/projects/{id}/participants, adding one
+// role-labelled Crew member (spec 029 §6.1). An empty role means "member";
+// the returned member carries every role that actor holds on the project,
+// not just the one just added.
+func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string, lead bool) (model.CrewMember, []byte, error) {
+	return doJSON[model.CrewMember](ctx, c, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants",
+		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead}, "crew member")
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {

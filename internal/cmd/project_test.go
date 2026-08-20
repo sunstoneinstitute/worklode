@@ -381,3 +381,64 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 		t.Fatalf("--json output does not round-trip stale:\n%s", out)
 	}
 }
+
+// TestProjectCrewAdd covers `lode project crew add` end to end against a real
+// server: the default role, an explicit role, the lead flag, and a refusal
+// surfacing as a CLI error.
+func TestProjectCrewAdd(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+
+	// runLode reuses rootCmd, so a flag set by one call leaks into a later
+	// call that omits it: exercise the omitted-flag case first.
+	out, err := runLode(t, "project", "crew", "add", "proj", "bob")
+	if err != nil {
+		t.Fatalf("crew add: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "added bob to project proj as member") {
+		t.Fatalf("crew add output = %q, want it to name the default role", out)
+	}
+
+	out, err = runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead")
+	if err != nil {
+		t.Fatalf("crew add --role --lead: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "as editor") || !strings.Contains(out, "ada is the project lead") {
+		t.Fatalf("crew add output = %q, want the role and the lead line", out)
+	}
+
+	// --json prints the server's own body, with every role the member holds.
+	out, err = runLode(t, "project", "crew", "add", "proj", "ada", "--role", "reporter", "--json")
+	if err != nil {
+		t.Fatalf("crew add --json: %v\noutput: %s", err, out)
+	}
+	var member model.CrewMember
+	if err := json.Unmarshal([]byte(out), &member); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if member.Actor != "ada" || !member.Lead || strings.Join(member.Roles, ",") != "editor,reporter" {
+		t.Fatalf("member = %+v, want ada, lead, [editor reporter]", member)
+	}
+
+	// A refused add is an error the CLI surfaces, not a silent success.
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "member"); err == nil {
+		t.Fatalf("duplicate role: want an error, got nil\noutput: %s", out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "nosuch"); err == nil {
+		t.Fatalf("unknown actor: want an error, got nil\noutput: %s", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 2 {
+		t.Fatalf("crew = %+v, want 2 members", crew)
+	}
+}

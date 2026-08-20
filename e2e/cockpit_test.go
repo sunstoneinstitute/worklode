@@ -304,9 +304,10 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		}
 	}
 
-	// Crew is a built destination now (this task): it renders the honest
-	// empty state, not the placeholder message, and still carries no form
-	// or button — the full add/remove journey is Task 9.
+	// Crew is a built, writable destination: it renders the honest empty
+	// state rather than a placeholder message, and it carries the one
+	// affordance the page is entitled to — the add-member form (spec 029
+	// §6.1). Removal is a later task.
 	{
 		code, body := getPage(t, srv.URL+"/projects/proj/crew")
 		if code != http.StatusOK {
@@ -316,8 +317,8 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 			t.Fatalf("GET /projects/proj/crew: body missing the empty-state text:\n%s", body)
 		}
 		main := mainContent(t, body)
-		if strings.Contains(main, "<form") || strings.Contains(main, "<button") {
-			t.Fatalf("GET /projects/proj/crew unexpectedly renders a form or button in its main content:\n%s", body)
+		if !strings.Contains(main, `<form method="post" action="/projects/proj/crew">`) {
+			t.Fatalf("GET /projects/proj/crew is missing the add-member form:\n%s", body)
 		}
 	}
 

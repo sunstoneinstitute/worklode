@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Participant is one Crew member of a project, aggregated over their
@@ -210,4 +212,76 @@ func openWorkOwnedBy(ctx context.Context, q rowQueryer, projectID, actorID strin
 // an empty slice, not an error.
 func (s *Store) OpenWorkOwnedBy(ctx context.Context, projectID, actorID string) ([]OwnedWork, error) {
 	return openWorkOwnedBy(ctx, s.db, projectID, actorID)
+}
+
+// maxParticipantRole caps a role label. The label is free-form on purpose
+// (spec 029 §6.1): what a person does on a project is org vocabulary, not a
+// closed enum this package gets to decide, and it is never used as a metric
+// label. The cap exists only to keep a runaway paste out of the table.
+const maxParticipantRole = 100
+
+// AddParticipant adds one role-labelled Crew row inside the given ingest
+// transaction (spec 029 §6.1). Callers reach it through RecordEvent with
+// event type "crew.member_added" (spec 029 §8.4) — never directly, so the
+// membership fact and the event that records it commit together.
+//
+// The project and the actor must exist (ErrNotFound); role is trimmed and
+// must be non-empty and at most maxParticipantRole characters
+// (ErrInvalidInput). One actor may hold several role labels, one row each,
+// so only the same role twice is a conflict; a project may hold at most one
+// lead. Both conflicts are ErrInvalidInput, named by which one fired. An
+// empty addedBy stores NULL — an open instance has no acting actor to
+// attribute the row to, and inventing one would be a fabricated fact.
+func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, isLead bool, addedBy string, eventID int64) error {
+	role = strings.TrimSpace(role)
+	switch {
+	case role == "":
+		return fmt.Errorf("role is required: %w", ErrInvalidInput)
+	case utf8.RuneCountInString(role) > maxParticipantRole:
+		return fmt.Errorf("role %q is too long (%d characters at most): %w",
+			role, maxParticipantRole, ErrInvalidInput)
+	}
+
+	// Both referenced rows are checked before the insert: without this an
+	// unknown project or actor surfaces as a raw foreign-key violation,
+	// which poisons the caller's transaction instead of returning
+	// ErrNotFound (the same reason requireActor exists for tasks.assignee).
+	var one int
+	err := tx.QueryRow(`SELECT 1 FROM projects WHERE id = $1`, projectID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("check project %s: %w", projectID, err)
+	}
+	if err := requireActor(tx, actorID); err != nil {
+		return err
+	}
+	var by sql.NullString
+	if addedBy != "" {
+		if err := requireActor(tx, addedBy); err != nil {
+			return err
+		}
+		by = sql.NullString{String: addedBy, Valid: true}
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO project_participants (project_id, actor_id, role, is_lead, added_at, added_by)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		projectID, actorID, role, isLead, now.UTC(), by,
+	); err != nil {
+		if isUniqueViolationOn(err, "project_participants_pkey") {
+			return fmt.Errorf("actor %s already holds role %q on project %s: %w",
+				actorID, role, projectID, ErrInvalidInput)
+		}
+		if isUniqueViolationOn(err, "project_participants_one_lead") {
+			return fmt.Errorf("project %s already has a lead: %w", projectID, ErrInvalidInput)
+		}
+		return fmt.Errorf("add participant %s to project %s: %w", actorID, projectID, err)
+	}
+
+	return LogChange(tx, "project", projectID, eventID, map[string]any{
+		"field": "crew", "op": "add",
+		"actor": actorID, "role": role, "lead": isLead, "by": addedBy,
+	})
 }
