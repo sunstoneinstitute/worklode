@@ -73,8 +73,8 @@ export interface MirrorOptions {
 
 type NoteKind = "project" | "doc" | "task";
 
-/** The one rule for anything used as a single path segment: every backbone
- *  id (project, doc, task), each of which becomes one directory or file name
+/** The one rule for anything used as a single path segment: a project or
+ *  task id, or a doc slug, each of which becomes one directory or file name
  *  under the mount root. Safe means: non-blank, already trimmed (the caller
  *  validates and uses the same value, so nothing is silently trimmed
  *  downstream), no separator, and no ".." anywhere -- neither as the whole
@@ -186,9 +186,8 @@ function sortByKey<T>(items: T[], keyOf: (item: T) => string): T[] {
  *  matches what `desiredPath` computes from the *trusted* project id (the
  *  key it was grouped under in byProject) and the item's own key -- `keyOf`,
  *  the path segment that identifies the item: a task's id, or a doc's slug.
- *  A note's
- *  path is actually built by *ToNote from the object's own fields (e.g.
- *  Doc.project), which can diverge from that grouping key -- comparing
+ *  A note's path is actually built by *ToNote from the object's own fields
+ *  (e.g. Doc.project), which can diverge from that grouping key -- comparing
  *  against the produced path, rather than trusting the object's own field,
  *  is what catches that divergence. A mismatch (including `desiredPath`
  *  itself rejecting the key) is dropped and reported in `conflicts`, along
