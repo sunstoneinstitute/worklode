@@ -15,16 +15,44 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
+// discoveryHandler serves the discovery document, pointing both URLs back at
+// the stub server itself.
+func discoveryHandler(providers ...string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		doc := map[string]any{
+			"authorize_url": "http://" + r.Host + "/auth/cli/login",
+			"token_url":     "http://" + r.Host + "/auth/cli/token",
+		}
+		if len(providers) > 0 {
+			doc["providers"] = providers
+		}
+		json.NewEncoder(w).Encode(doc)
+	}
+}
+
+// callbackBrowser stands in for the browser: it parses redirect_uri and state
+// out of the authorize URL and hits the loopback with code, as the server
+// would after a web login. A non-empty state overrides the one the CLI sent,
+// for the mismatch case.
+func callbackBrowser(code, state string) func(string) error {
+	return func(authURL string) error {
+		u, err := url.Parse(authURL)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		if state == "" {
+			state = q.Get("state")
+		}
+		go http.Get(q.Get("redirect_uri") + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state))
+		return nil
+	}
+}
+
 func TestRunLoginServerMediated(t *testing.T) {
 	// Stub worklode server: discovery + token exchange.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"authorize_url": "http://" + r.Host + "/auth/cli/login",
-			"token_url":     "http://" + r.Host + "/auth/cli/token",
-			"providers":     []string{"github"},
-		})
-	})
+	mux.HandleFunc("/.well-known/lode-login", discoveryHandler("github"))
 	mux.HandleFunc("/auth/cli/token", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
@@ -39,21 +67,8 @@ func TestRunLoginServerMediated(t *testing.T) {
 	wt := httptest.NewServer(mux)
 	defer wt.Close()
 
-	// Browser stub: parse redirect_uri + state from the authorize URL and hit
-	// the loopback with a code, as the server would after a web login.
-	openBrowser := func(authURL string) error {
-		u, err := url.Parse(authURL)
-		if err != nil {
-			return err
-		}
-		q := u.Query()
-		cb := q.Get("redirect_uri") + "?code=THECODE&state=" + url.QueryEscape(q.Get("state"))
-		go http.Get(cb)
-		return nil
-	}
-
 	res, err := cli.RunLogin(context.Background(), cli.LoginOptions{
-		Server: wt.URL, OpenBrowser: openBrowser,
+		Server: wt.URL, OpenBrowser: callbackBrowser("THECODE", ""),
 	})
 	if err != nil {
 		t.Fatalf("RunLogin: %v", err)
@@ -65,27 +80,16 @@ func TestRunLoginServerMediated(t *testing.T) {
 
 func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"authorize_url": "http://" + r.Host + "/auth/cli/login",
-			"token_url":     "http://" + r.Host + "/auth/cli/token",
-		})
-	})
+	mux.HandleFunc("/.well-known/lode-login", discoveryHandler())
 	mux.HandleFunc("/auth/cli/token", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid or expired code"}`, http.StatusBadRequest)
 	})
 	wt := httptest.NewServer(mux)
 	defer wt.Close()
 
-	openBrowser := func(authURL string) error {
-		u, _ := url.Parse(authURL)
-		q := u.Query()
-		cb := q.Get("redirect_uri") + "?code=STALE&state=" + url.QueryEscape(q.Get("state"))
-		go http.Get(cb)
-		return nil
-	}
-
-	_, err := cli.RunLogin(context.Background(), cli.LoginOptions{Server: wt.URL, OpenBrowser: openBrowser})
+	_, err := cli.RunLogin(context.Background(), cli.LoginOptions{
+		Server: wt.URL, OpenBrowser: callbackBrowser("STALE", ""),
+	})
 	if err == nil || !strings.Contains(err.Error(), "invalid or expired code") {
 		t.Fatalf("err = %v; want it to carry the server's error message", err)
 	}
@@ -116,13 +120,7 @@ func TestRunLoginNoInteractiveLogin(t *testing.T) {
 func manualStub(t *testing.T, wantCode string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"authorize_url": "http://" + r.Host + "/auth/cli/login",
-			"token_url":     "http://" + r.Host + "/auth/cli/token",
-			"providers":     []string{"keycloak"},
-		})
-	})
+	mux.HandleFunc("/.well-known/lode-login", discoveryHandler("keycloak"))
 	mux.HandleFunc("/auth/cli/token", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
@@ -254,24 +252,15 @@ func TestRunLoginManualClosedStdin(t *testing.T) {
 
 func TestRunLoginStateMismatch(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"authorize_url": "http://" + r.Host + "/auth/cli/login",
-			"token_url":     "http://" + r.Host + "/auth/cli/token",
-		})
-	})
+	mux.HandleFunc("/.well-known/lode-login", discoveryHandler())
 	wt := httptest.NewServer(mux)
 	defer wt.Close()
 
-	openBrowser := func(authURL string) error {
-		u, _ := url.Parse(authURL)
-		cb := u.Query().Get("redirect_uri") + "?code=X&state=WRONG"
-		go http.Get(cb)
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_, err := cli.RunLogin(ctx, cli.LoginOptions{Server: wt.URL, OpenBrowser: openBrowser})
+	_, err := cli.RunLogin(ctx, cli.LoginOptions{
+		Server: wt.URL, OpenBrowser: callbackBrowser("X", "WRONG"),
+	})
 	if err == nil {
 		t.Fatal("expected state-mismatch error")
 	}
