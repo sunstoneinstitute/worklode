@@ -544,3 +544,243 @@ func TestTaskDetailRendersAttachments(t *testing.T) {
 		}
 	}
 }
+
+// --- BriefRender ------------------------------------------------------
+
+func TestBriefRenderShowsSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	BriefRender(&buf, model.Brief{
+		Task:   model.Task{ID: "SE-1", Title: "t", State: "ready", Priority: "medium", Secrets: []string{"A_TOKEN", "B_KEY"}},
+		Branch: "lode/SE-1-t",
+	})
+	if !strings.Contains(buf.String(), "secrets: A_TOKEN, B_KEY") {
+		t.Fatalf("brief output missing secrets line:\n%s", buf.String())
+	}
+}
+
+func TestBriefRenderRendersSkillsSection(t *testing.T) {
+	var buf bytes.Buffer
+	BriefRender(&buf, model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "WL-1-t",
+		Skills: model.SkillRecommendation{
+			Pinned:   []model.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
+			Matches:  []model.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
+			Warnings: []string{"pinned skill not found: ghost"},
+			Provider: "openai-compatible",
+		},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"Skills:",
+		"pinned  tdd — Red-green-refactor (content in brief)",
+		"0.87    debugging — Systematic debugging",
+		"warning: pinned skill not found: ghost",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output = %q, want %q", out, want)
+		}
+	}
+}
+
+// A brief whose only skills content is warnings still prints them: a user who
+// misspelled every pin would otherwise see nothing, which is the one case the
+// warnings exist for.
+func TestBriefRenderRendersWarningsOnlySkillsSection(t *testing.T) {
+	var buf bytes.Buffer
+	BriefRender(&buf, model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "WL-1-t",
+		Skills: model.SkillRecommendation{
+			Warnings: []string{"pinned skill not found: ghost"},
+			Provider: "openai-compatible",
+		},
+	})
+	if out := buf.String(); !strings.Contains(out, "warning: pinned skill not found: ghost") {
+		t.Fatalf("output = %q, want the warning rendered", out)
+	}
+}
+
+func TestBriefRenderOmitsSkillsSectionWhenEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	BriefRender(&buf, model.Brief{
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "WL-1-t",
+		Skills: model.SkillRecommendation{Provider: "none"},
+	})
+	if strings.Contains(buf.String(), "Skills:") {
+		t.Fatalf("output = %q, want no Skills section when there is nothing to show", buf.String())
+	}
+}
+
+// TestBriefRenderRendersBlockingPlans: the plans holding a task (025 §9.3) are
+// rendered even when they have minted no task to list under "blocked by".
+func TestBriefRenderRendersBlockingPlans(t *testing.T) {
+	var buf bytes.Buffer
+	BriefRender(&buf, model.Brief{
+		Task:          model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch:        "WL-1-t",
+		BlockingPlans: []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}},
+		Skills:        model.SkillRecommendation{Provider: "none"},
+	})
+	if out := buf.String(); !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
+		t.Fatalf("output = %q, want the blocking plan rendered", out)
+	}
+}
+
+// --- ProjectDetailRender / CostRender ---------------------------------
+
+// TestProjectDetailRenderShowsFocusReposAndCost checks the whole `lode project
+// show` view renders from cli: identity with the project key, the focus line,
+// the repo block, and one cost block per currency.
+func TestProjectDetailRenderShowsFocusReposAndCost(t *testing.T) {
+	var buf bytes.Buffer
+	ProjectDetailRender(&buf, model.ProjectDetail{
+		Project: model.Project{
+			ID: "worklode", Key: "WL", Name: "Worklode",
+			Focus: []string{"cockpit", "docs"},
+			Repos: []model.RepoMapping{{Repo: "a/b", DoneState: "merged"}},
+		},
+		Cost: model.CostReport{
+			Days: []model.CostDay{{
+				Day: "2026-08-20", Currency: "USD", CostAmount: "1.500000",
+				TokenCounts: model.TokenCounts{InputTokens: 2000, OutputTokens: 1_500_000},
+			}},
+			Totals: []model.CostTotals{{Currency: "USD", CostAmount: "1.500000"}},
+		},
+	}, "last 7 days")
+	out := buf.String()
+	for _, want := range []string{
+		"worklode (WL) — Worklode",
+		"focus: cockpit, docs",
+		"a/b", "done: merged",
+		"cost, last 7 days: 1.50 USD",
+		"in 2.0k", "out 1.5M",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestFocusLineWithNoFocus(t *testing.T) {
+	var buf bytes.Buffer
+	FocusLine(&buf, nil)
+	if got := buf.String(); got != "focus: (none)\n" {
+		t.Fatalf("FocusLine(nil) = %q, want %q", got, "focus: (none)\n")
+	}
+}
+
+// An unpriced-token shortfall is called out under the block, so a total that
+// understates the bill says so.
+func TestCostRenderNotesUnpricedTokens(t *testing.T) {
+	var buf bytes.Buffer
+	CostRender(&buf, model.CostReport{
+		Totals: []model.CostTotals{{Currency: "USD", CostAmount: "0.000000", UnpricedTokens: 12_000}},
+	}, "all time")
+	if out := buf.String(); !strings.Contains(out, "12.0k tokens from models with no price on file") {
+		t.Fatalf("output missing the unpriced note:\n%s", out)
+	}
+}
+
+func TestCostRenderWithNoTotals(t *testing.T) {
+	var buf bytes.Buffer
+	CostRender(&buf, model.CostReport{}, "all time")
+	if out := buf.String(); !strings.Contains(out, "cost, all time: none recorded") {
+		t.Fatalf("output = %q, want the none-recorded line", out)
+	}
+}
+
+// TestTaskCostRenderNamesScope: `lode task cost --children` has to say so, or
+// a folded-in total reads as the task's own.
+func TestTaskCostRenderNamesScope(t *testing.T) {
+	var buf bytes.Buffer
+	TaskCostRender(&buf, model.TaskCost{
+		Task: "WL-1", IncludesChildren: true, Sessions: 3,
+	}, "all time")
+	out := buf.String()
+	for _, want := range []string{"WL-1 (including child tasks)", "sessions with recorded usage: 3"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// --- PinnedSkillList --------------------------------------------------
+
+// A task with no pins says so: a bare blank line reads as a rendering bug.
+func TestPinnedSkillListEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	PinnedSkillList(&buf, nil)
+	if got := buf.String(); got != "(no pinned skills)\n" {
+		t.Fatalf("PinnedSkillList(nil) = %q", got)
+	}
+}
+
+func TestPinnedSkillListOnePerLine(t *testing.T) {
+	var buf bytes.Buffer
+	PinnedSkillList(&buf, []string{"tdd", "debugging"})
+	if got := buf.String(); got != "tdd\ndebugging\n" {
+		t.Fatalf("PinnedSkillList = %q, want one skill per line", got)
+	}
+}
+
+// --- ReposDoctorRender ------------------------------------------------
+
+// A nil app_installed renders as unchecked either way, but the reason
+// separates "no App configured" from "the check did not finish"; only a false
+// one may read as NOT INSTALLED.
+func TestReposDoctorRenderDistinguishesAppStates(t *testing.T) {
+	no := false
+	var buf bytes.Buffer
+	ReposDoctorRender(&buf, model.ReposDoctorResponse{
+		Repos: []model.RepoDoctor{
+			{Repo: "acme/app", Project: "demo", Stale: true, UnappliedEvents: 3},
+			{Repo: "acme/slow", Project: "demo", AppError: "context deadline exceeded"},
+			{Repo: "acme/gone", Project: "demo", AppInstalled: &no,
+				AppError: "github app is not installed on this repo"},
+		},
+		UnmappedSenders: []model.UnmappedSender{
+			{Repo: "acme/unmapped", Events: 2, LastEventAt: time.Now()},
+		},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"acme/app (project demo)",
+		"unchecked (no GitHub App configured)",
+		"unchecked (context deadline exceeded)",
+		"NOT INSTALLED (github app is not installed on this repo)",
+		"last event: never",
+		"STALE: no delivery since mapping — run `lode reconcile --repo acme/app`",
+		"unmapped sender: acme/unmapped (2 events",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// --- ReconcileRender --------------------------------------------------
+
+// A dry run has to say it repaired nothing; the counts are otherwise
+// indistinguishable from a real run's.
+func TestReconcileRenderNamesDryRun(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID: "r1", DryRun: true,
+		Replay: &model.ReplayResult{Candidates: 4, Replayed: 3, StillUnmapped: 1,
+			Errors: []string{"boom"}},
+		PollSkipped: "no github app configured",
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"run r1",
+		"replay: would repair 3 of 4 candidate event(s), 1 still unmapped",
+		"  error: boom",
+		"poll: skipped (no github app configured)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
