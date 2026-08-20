@@ -83,6 +83,10 @@ spec:
             - name: secrets-catalog
               mountPath: /etc/worklode/secrets-catalog
               readOnly: true
+            # The only writable path in the container. Must stay in sync with
+            # LODE_BLOB_SPOOL_DIR in configmap.yaml.
+            - name: blob-spool
+              mountPath: /var/spool/worklode/blobs
           resources:
             requests:
               memory: "128Mi"
@@ -117,3 +121,24 @@ spec:
           secret:
             secretName: worklode-secrets-catalog
             optional: true
+        # Scratch space for blob uploads (spec 021 §5). readOnlyRootFilesystem
+        # is true, so without this the upload handler's os.CreateTemp fails
+        # EROFS and every POST /api/v1/blobs 500s.
+        #
+        # Disk-backed on purpose — no `medium: Memory`. A tmpfs emptyDir is
+        # charged to the container's 512Mi memory limit, and one upload can be
+        # maxBlobBytes = 100 MiB (internal/api/blobs.go), so two or three
+        # concurrent uploads would OOM-kill the pod instead of merely filling
+        # a directory.
+        #
+        # sizeLimit 1Gi: a spool file lives only for the duration of one
+        # request (the handler unlinks it on return), so the limit has to
+        # cover concurrent in-flight uploads, not accumulated blobs. 1Gi is
+        # ten simultaneous max-size uploads, well past what a single replica
+        # serving a handful of agents will ever see, and small enough to be
+        # unremarkable against node ephemeral storage. Exceeding it evicts the
+        # pod, so the headroom is deliberate; raise it in step with
+        # maxBlobBytes or replica concurrency, never below 2x maxBlobBytes.
+        - name: blob-spool
+          emptyDir:
+            sizeLimit: 1Gi

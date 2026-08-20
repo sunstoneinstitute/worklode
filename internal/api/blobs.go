@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -27,6 +28,23 @@ const maxBlobBytes = 100 << 20
 
 // sniffLen is what http.DetectContentType reads.
 const sniffLen = 512
+
+// checkSpoolWritable proves the upload spool directory accepts a temp file,
+// so a misconfigured deployment fails at boot rather than on the first
+// upload. dir empty means os.TempDir(), which on a container with
+// readOnlyRootFilesystem is /tmp and is not writable.
+func checkSpoolWritable(dir string) error {
+	f, err := os.CreateTemp(dir, "lode-spool-check-")
+	if err != nil {
+		if dir == "" {
+			dir = os.TempDir() + " (default; set LODE_BLOB_SPOOL_DIR)"
+		}
+		return fmt.Errorf("blob spool directory %s is not writable: %w", dir, err)
+	}
+	name := f.Name()
+	f.Close()
+	return os.Remove(name)
+}
 
 // blobResponse projects a stored blob onto the wire shape the endpoints
 // answer with. URL is the permanent root-relative reference a task body

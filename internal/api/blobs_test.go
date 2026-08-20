@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -285,6 +286,39 @@ func TestServeBlobRequiresSessionWithProvider(t *testing.T) {
 	h.ServeHTTP(sess, req)
 	if sess.Code != http.StatusFound {
 		t.Fatalf("session status = %d, want 302; body = %s", sess.Code, sess.Body)
+	}
+}
+
+// TestNewServerRejectsUnwritableSpoolDir pins the boot-time check: a
+// deployment with blob storage configured and a spool directory it cannot
+// write to must fail to start. The alternative — booting healthy and 500ing
+// every upload — is what a read-only root filesystem with no mounted volume
+// produces, and it stays invisible until someone attaches a screenshot.
+func TestNewServerRejectsUnwritableSpoolDir(t *testing.T) {
+	st := newTestStore(t)
+	missing := filepath.Join(t.TempDir(), "not-mounted")
+
+	_, _, err := api.NewServer(st, api.Config{
+		BlobStoreForTest: blobstore.NewFake(),
+		BlobSpoolDir:     missing,
+	})
+	if err == nil {
+		t.Fatal("NewServer succeeded with an unwritable blob spool directory")
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Fatalf("error %q does not name the offending directory %q", err, missing)
+	}
+
+	// A writable directory boots, and blob storage left unconfigured is not
+	// checked at all: no bucket means no uploads to spool.
+	if _, _, err := api.NewServer(st, api.Config{
+		BlobStoreForTest: blobstore.NewFake(),
+		BlobSpoolDir:     t.TempDir(),
+	}); err != nil {
+		t.Fatalf("writable spool dir: %v", err)
+	}
+	if _, _, err := api.NewServer(st, api.Config{BlobSpoolDir: missing}); err != nil {
+		t.Fatalf("blob storage off should not check the spool dir: %v", err)
 	}
 }
 
