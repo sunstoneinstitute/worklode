@@ -251,3 +251,20 @@ func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) (
 	}
 	return collectRows(rows, "list issues", byValue(scanIssue))
 }
+
+// CountIssues returns how many inbox issues carry the given triage state; an
+// empty triageState counts them all. It is ListIssues' length without the
+// rows, for the read paths that only render a count.
+func (s *Store) CountIssues(ctx context.Context, triageState string) (int, error) {
+	q := `SELECT count(*) FROM issues`
+	var args []any
+	if triageState != "" {
+		args = append(args, triageState)
+		q += ` WHERE triage_state = $1`
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count issues: %w", err)
+	}
+	return n, nil
+}

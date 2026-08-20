@@ -387,6 +387,52 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 	}
 }
 
+// TestIsTaskBlockedAgreesWithBlockedTaskIDs pins the single-task reader the
+// task page uses against the map form the lists use. Both render the same
+// "blocked" chip, so a page and a list must never disagree about one task.
+func TestIsTaskBlockedAgreesWithBlockedTaskIDs(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	blocker := createTask(t, s, taskTestNow, defaultTaskInput()) // HDB-1
+	blocked := createTask(t, s, taskTestNow, defaultTaskInput()) // HDB-2
+	loose := createTask(t, s, taskTestNow, defaultTaskInput())   // HDB-3
+
+	if err := addEdge(t, s, blocker.ID, blocked.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge blocks: %v", err)
+	}
+
+	agree := func(when string) map[string]bool {
+		t.Helper()
+		ids, err := s.BlockedTaskIDs(ctx)
+		if err != nil {
+			t.Fatalf("BlockedTaskIDs %s: %v", when, err)
+		}
+		for _, id := range []string{blocker.ID, blocked.ID, loose.ID} {
+			got, err := s.IsTaskBlocked(ctx, id)
+			if err != nil {
+				t.Fatalf("IsTaskBlocked(%s) %s: %v", id, when, err)
+			}
+			if got != ids[id] {
+				t.Fatalf("IsTaskBlocked(%s) %s: got %v, BlockedTaskIDs says %v",
+					id, when, got, ids[id])
+			}
+		}
+		return ids
+	}
+
+	// With the blocker ready the edge bites — otherwise the agreement below
+	// would hold vacuously, with nothing blocked either way.
+	if ids := agree("with blocker ready"); !ids[blocked.ID] {
+		t.Fatalf("fixture: %s should be blocked while %s is ready", blocked.ID, blocker.ID)
+	}
+
+	walkTo(t, s, blocker.ID, "merged")
+	if ids := agree("with blocker merged"); ids[blocked.ID] {
+		t.Fatalf("fixture: %s should be unblocked once %s merged", blocked.ID, blocker.ID)
+	}
+}
+
 // TestBlockedTaskIDsDeliveredBlocker pins taskClosed for a blocker with no commit
 // attribution: it gates on DefaultDoneState, so every state from merged onward
 // leaves it unblocking. Narrowing that back to merged-or-abandoned would make
