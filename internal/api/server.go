@@ -571,7 +571,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	if err := r.checkComplete(); err != nil {
 		return nil, err
 	}
-	s.initNavMetrics()
+	// The nav zero-series are minted by the caller (NewServer), not here: they
+	// are derived from what registration collected, so anything that runs
+	// inside this function could be outrun by a route registered below it.
 	return mux, nil
 }
 
@@ -730,6 +732,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	if err != nil {
 		return nil, nil, err
 	}
+	// After registration, never inside it: the set of nav destinations is only
+	// complete once every route has been registered, so where a route sits
+	// within registerRoutes cannot cost it its zero-series.
+	s.initNavMetrics()
 
 	// Admin handler: health and metrics on a dedicated listener, never routed
 	// through the public ingress. No auth or request-metrics middleware — the
