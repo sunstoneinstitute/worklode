@@ -3,32 +3,43 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// The integrations `lode install`/`lode uninstall` know how to manage. Both
-// flags take a name rather than being booleans so a second VCS or agent can be
-// added later without changing the CLI shape.
+// The integrations `lode install`/`lode uninstall` know how to manage. --vcs
+// takes a name rather than being a boolean so a second VCS can be added later
+// without changing the CLI shape; the agent side is a registry lookup
+// (internal/harness), never a constant here.
+const vcsGit = "git"
+
+// The two --agent pseudo-ids. auto resolves against the repo at install time;
+// all is every registered adapter. Both must stand alone.
 const (
-	vcsGit          = "git"
-	agentClaudeCode = "claude-code"
+	agentAuto = "auto"
+	agentAll  = "all"
 )
 
 // hookTargets is the set of integrations one install or uninstall run acts on.
-// An empty vcs or agent means "skip this one", as does a false statusLine.
+// An empty vcs or an empty agents means "skip this one", as does a false
+// statusLine. agents is either the single element "auto" — resolved against
+// the repo directory by installHooks/uninstallHooks — or a validated list of
+// adapter ids.
 type hookTargets struct {
 	vcs        string
-	agent      string
+	agents     []string
 	statusLine bool
 }
 
 // addHookFlags declares the flags shared by `lode install` and `lode uninstall`.
 func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().String("vcs", vcsGit, "version control system whose hooks to manage")
-	cmd.Flags().String("agent", agentClaudeCode, "coding agent whose hooks to manage")
+	cmd.Flags().StringSlice("agent", []string{agentAuto},
+		"coding agent(s) to manage: an adapter id, auto, or all (repeatable)")
 	cmd.Flags().Bool("no-vcs", false, "skip the version control system hooks")
 	cmd.Flags().Bool("no-agent", false, "skip the coding agent hooks")
 	// No backticks in these descriptions: cobra reads them as the argument-name
@@ -36,18 +47,26 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("statusline", true,
 		"manage the agent's status line, pointing it at 'lode statusline'")
 	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
-	cmd.Flags().String("scope", scopeLocal,
-		"which agent settings file to write: local (settings.local.json) or project (settings.json)")
+	cmd.Flags().String("scope", harness.ScopeLocal,
+		"whether to write each harness's personal config or its committed one: local or "+
+			"project (Claude Code settings.local.json vs settings.json, Copilot "+
+			"~/.copilot/hooks vs .github/hooks); codex and amp have only a user-level "+
+			"config and ignore this")
 }
 
 // resolveHookTargets turns the parsed flags into the set of integrations to act
 // on. Naming an integration and opting out of it in the same run is a
 // contradiction rather than a precedence question, so it is rejected instead of
 // silently picking a winner.
+//
+// --scope is validated here too, though it is not part of hookTargets: only
+// two of the four adapters have a per-scope location, so leaving the check to
+// them would let a typo pass silently for the other two.
 func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	flags := cmd.Flags()
 	vcs, _ := flags.GetString("vcs")
-	agent, _ := flags.GetString("agent")
+	agents, _ := flags.GetStringSlice("agent")
+	scope, _ := flags.GetString("scope")
 	noVCS, _ := flags.GetBool("no-vcs")
 	noAgent, _ := flags.GetBool("no-agent")
 	statusLine, _ := flags.GetBool("statusline")
@@ -68,6 +87,10 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	if noAgent && flags.Changed("statusline") && statusLine {
 		return hookTargets{}, errors.New("--statusline and --no-agent are mutually exclusive")
 	}
+	if scope != harness.ScopeLocal && scope != harness.ScopeProject {
+		return hookTargets{}, fmt.Errorf("unsupported --scope %q (supported: %s, %s)",
+			scope, harness.ScopeLocal, harness.ScopeProject)
+	}
 
 	if noVCS {
 		vcs = ""
@@ -75,25 +98,111 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 		return hookTargets{}, fmt.Errorf("unsupported --vcs %q (supported: %s)", vcs, vcsGit)
 	}
 	if noAgent {
-		agent = ""
-	} else if agent != agentClaudeCode {
-		return hookTargets{}, fmt.Errorf("unsupported --agent %q (supported: %s)", agent, agentClaudeCode)
+		agents = nil
+	} else {
+		var err error
+		if agents, err = normalizeAgents(agents); err != nil {
+			return hookTargets{}, err
+		}
+		// pflag reads --agent as CSV, so `--agent ""` (an unset shell
+		// variable) parses to an empty slice and never reaches
+		// normalizeAgents' validation. Naming no agent at all is not the
+		// same as --no-agent, so reject it rather than silently skipping
+		// the agent side.
+		if len(agents) == 0 && flags.Changed("agent") {
+			return hookTargets{}, unsupportedAgentError("")
+		}
 	}
-	if vcs == "" && agent == "" {
+	if vcs == "" && len(agents) == 0 {
 		return hookTargets{}, errors.New("nothing to do: --no-vcs and --no-agent were both given")
 	}
-	if noStatusLine || agent == "" {
+	if noStatusLine || len(agents) == 0 {
 		statusLine = false
 	}
-	return hookTargets{vcs: vcs, agent: agent, statusLine: statusLine}, nil
+	return hookTargets{vcs: vcs, agents: agents, statusLine: statusLine}, nil
+}
+
+// normalizeAgents dedupes --agent (preserving the order given) and validates
+// it against the registry. The pseudo-ids stand alone: `all` alongside an
+// explicit id contradicts the intent of naming one, and `auto` alongside one
+// contradicts the intent of detecting. `auto` stays unresolved here — there is
+// no repo directory at flag-parsing time.
+func normalizeAgents(agents []string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range agents {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	for _, id := range out {
+		switch id {
+		case agentAuto, agentAll:
+			if len(out) > 1 {
+				return nil, fmt.Errorf("--agent %s cannot be combined with another agent", id)
+			}
+		default:
+			if _, ok := harness.Get(id); !ok {
+				return nil, unsupportedAgentError(id)
+			}
+		}
+	}
+	if len(out) == 1 && out[0] == agentAll {
+		return harness.IDs(), nil
+	}
+	return out, nil
+}
+
+// unsupportedAgentError is the one wording for an --agent value the registry
+// does not carry, so an empty value and a misspelled one read alike.
+func unsupportedAgentError(id string) error {
+	return fmt.Errorf("unsupported --agent %q (supported: %s, auto, all)",
+		id, strings.Join(harness.IDs(), ", "))
+}
+
+// resolveAgents turns the "auto" placeholder into the harnesses actually
+// configured for dir. Detecting none is a successful no-op, not an error: spec
+// 008 §4 writes nothing for a harness that is not there.
+func resolveAgents(agents []string, dir string) []string {
+	if len(agents) == 1 && agents[0] == agentAuto {
+		return harness.Detected(dir)
+	}
+	return agents
+}
+
+// detectDir is the directory Detect must be given: the git worktree root
+// containing dir. Adapters look for repo-level signals (.claude/,
+// .github/copilot-instructions.md) at the top of the repo, so passing the
+// process working directory would make `--agent auto` resolve differently
+// depending on which subdirectory the command ran from. Outside a git repo
+// dir stands in for the root — auto-detection must never fail an install.
+func detectDir(dir string) string {
+	if root, ok := worktree.Root(dir); ok {
+		return root
+	}
+	return dir
+}
+
+// eventNames renders harness.Events as strings for the JSON report.
+func eventNames(evs []harness.Event) []string {
+	out := make([]string, 0, len(evs))
+	for _, e := range evs {
+		out = append(out, string(e))
+	}
+	return out
 }
 
 // installResult is what one `lode install` run did. A nil field means that
 // integration was skipped, and is omitted from the JSON entirely.
 type installResult struct {
-	VCS        *vcsInstall        `json:"vcs,omitempty"`
-	Agent      *agentInstall      `json:"agent,omitempty"`
-	StatusLine *statusLineInstall `json:"status_line,omitempty"`
+	VCS        *vcsInstall         `json:"vcs,omitempty"`
+	Agents     []agentInstall      `json:"agents,omitempty"`
+	StatusLine []statusLineInstall `json:"status_line,omitempty"`
+	// Instructions is the repo-level AGENTS.md/CLAUDE.md pair, not a
+	// per-harness integration: nil when there was no repo root to write to.
+	Instructions *instructionsResult `json:"instructions,omitempty"`
 }
 
 type vcsInstall struct {
@@ -105,8 +214,16 @@ type vcsInstall struct {
 }
 
 type agentInstall struct {
-	Agent string `json:"agent"`
-	Path  string `json:"path"`
+	Agent string   `json:"agent"`
+	Path  string   `json:"path"`
+	Bound []string `json:"bound,omitempty"`
+	// UnboundEvents names the Worklode events this harness could not bind
+	// (spec 024 acceptance 4). Coverage degrades to the git pre-commit
+	// heartbeat, which the vcs stanza reports.
+	UnboundEvents []string `json:"unbound_events,omitempty"`
+	// Notes is adapter-specific advice the report must show, such as a
+	// harness whose hooks stay inert until the user approves them.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // statusLineInstall reports an action, unlike its hook sibling, because the
@@ -119,9 +236,10 @@ type statusLineInstall struct {
 
 // uninstallResult is the same, for `lode uninstall`.
 type uninstallResult struct {
-	VCS        *vcsUninstall        `json:"vcs,omitempty"`
-	Agent      *agentUninstall      `json:"agent,omitempty"`
-	StatusLine *statusLineUninstall `json:"status_line,omitempty"`
+	VCS          *vcsUninstall         `json:"vcs,omitempty"`
+	Agents       []agentUninstall      `json:"agents,omitempty"`
+	StatusLine   []statusLineUninstall `json:"status_line,omitempty"`
+	Instructions *instructionsResult   `json:"instructions,omitempty"`
 }
 
 type statusLineUninstall struct {
@@ -171,23 +289,50 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		}
 		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: chains}
 	}
-	if targets.agent != "" {
-		path, err := settingsPathForScope(dir, scope)
+	agents := resolveAgents(targets.agents, detectDir(dir))
+	if len(targets.agents) > 0 && len(agents) == 0 {
+		fmt.Fprintln(cmd.ErrOrStderr(),
+			"no coding agent detected; skipped (name one with --agent <id> to install anyway)")
+	}
+	for _, id := range agents {
+		h, ok := harness.Get(id)
+		if !ok {
+			return res, fmt.Errorf("unknown agent %q", id)
+		}
+		hooks, err := h.InstallHooks(dir, scope)
+		if err != nil {
+			return res, fmt.Errorf("install %s hooks: %w", id, err)
+		}
+		res.Agents = append(res.Agents, agentInstall{
+			Agent: id, Path: hooks.Path, Bound: hooks.Bound,
+			UnboundEvents: eventNames(hooks.Unbound), Notes: hooks.Notes,
+		})
+
+		// Only a harness with a status-line slot gets a stanza; an adapter
+		// without one contributes nothing rather than an empty action.
+		if sl, ok := h.(harness.StatusLiner); ok && targets.statusLine {
+			action, err := sl.InstallStatusLine(dir, scope)
+			if err != nil {
+				return res, fmt.Errorf("install %s status line: %w", id, err)
+			}
+			res.StatusLine = append(res.StatusLine,
+				statusLineInstall{Agent: id, Path: action.Path, Action: action.Action})
+		}
+	}
+
+	// The managed block is repo-level, not per-harness, so it is written once
+	// whatever the agent selection was (spec 008 §17.7). Outside a git repo
+	// there is no root to anchor it to; warn and carry on, the same posture
+	// the worktree config extension takes.
+	if root, ok := worktree.Root(dir); ok {
+		instr, err := ensureInstructions(root)
 		if err != nil {
 			return res, err
 		}
-		if err := installClaudeHooks(path); err != nil {
-			return res, err
-		}
-		res.Agent = &agentInstall{Agent: targets.agent, Path: path}
-
-		if targets.statusLine {
-			action, err := installStatusLine(path)
-			if err != nil {
-				return res, err
-			}
-			res.StatusLine = &statusLineInstall{Agent: targets.agent, Path: path, Action: action}
-		}
+		res.Instructions = instr
+	} else {
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"warning: %s is not inside a git repository; skipped the %s block\n", dir, agentsFile)
 	}
 	return res, nil
 }
@@ -205,24 +350,37 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		}
 		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: removals}
 	}
-	if targets.agent != "" {
-		path, err := settingsPathForScope(dir, scope)
-		if err != nil {
-			return res, err
+	for _, id := range resolveAgents(targets.agents, detectDir(dir)) {
+		h, ok := harness.Get(id)
+		if !ok {
+			return res, fmt.Errorf("unknown agent %q", id)
 		}
-		action, err := uninstallClaudeHooks(path)
+		hooks, err := h.UninstallHooks(dir, scope)
 		if err != nil {
-			return res, err
+			return res, fmt.Errorf("uninstall %s hooks: %w", id, err)
 		}
-		res.Agent = &agentUninstall{Agent: targets.agent, Path: path, Action: action}
+		res.Agents = append(res.Agents,
+			agentUninstall{Agent: id, Path: hooks.Path, Action: hooks.Action})
 
-		if targets.statusLine {
-			slAction, err := uninstallStatusLine(path)
+		if sl, ok := h.(harness.StatusLiner); ok && targets.statusLine {
+			action, err := sl.UninstallStatusLine(dir, scope)
 			if err != nil {
-				return res, err
+				return res, fmt.Errorf("uninstall %s status line: %w", id, err)
 			}
-			res.StatusLine = &statusLineUninstall{Agent: targets.agent, Path: path, Action: slAction}
+			res.StatusLine = append(res.StatusLine,
+				statusLineUninstall{Agent: id, Path: action.Path, Action: action.Action})
 		}
+	}
+
+	// Mirrors installHooks. It has no *cobra.Command to warn on, and a repo
+	// root that has vanished has nothing to remove anyway, so this side skips
+	// silently: installing is where the user needs to hear about it.
+	if root, ok := worktree.Root(dir); ok {
+		instr, err := removeInstructions(root)
+		if err != nil {
+			return res, err
+		}
+		res.Instructions = instr
 	}
 	return res, nil
 }
@@ -240,8 +398,12 @@ func newInstallCmd() *cobra.Command {
 			"post-merge and post-commit report a merge that lands on the default branch " +
 			"here, so a task advances without waiting for a GitHub webhook. The agent " +
 			"side writes Worklode's lifecycle hook bindings (session start/end, heartbeat, worktree " +
-			"enter) into the repo's Claude Code settings file. Use --no-vcs or --no-agent to skip " +
+			"enter) into each targeted coding agent's own configuration, and names any event that " +
+			"agent cannot express. Use --no-vcs or --no-agent to skip " +
 			"either. Safe to re-run: both converge rather than accumulate.\n\n" +
+			"--agent is repeatable and defaults to auto, which installs into every harness detected " +
+			"for this repo or user; all installs into every supported harness. Naming a harness " +
+			"explicitly installs it even when undetected — asking for it is the detection signal.\n\n" +
 			"The agent side also points the status line at `lode statusline`, and enables the git " +
 			"worktree config extension that lets it read a workspace's own worklode.task-id. That " +
 			"is safe to have on by default because it never takes a slot it does not already own: " +
@@ -282,10 +444,13 @@ func newUninstallCmd() *cobra.Command {
 		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit, " +
 			"commit-msg, post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
 			"third-party hook it does not " +
-			"recognize untouched. The agent side removes every `lode hook` binding from the repo's " +
-			"Claude Code settings file, leaving all other settings — including third-party hooks on " +
-			"the same events — in place. Use --no-vcs or --no-agent to skip either. A repo with " +
-			"nothing installed is not an error.\n\n" +
+			"recognize untouched. The agent side removes every `lode hook` binding from each " +
+			"targeted coding agent's configuration, leaving all other settings — including " +
+			"third-party hooks on the same events — in place. Use --no-vcs or --no-agent to skip " +
+			"either. A repo with nothing installed is not an error.\n\n" +
+			"--agent is repeatable and defaults to auto (every detected harness); all covers every " +
+			"supported harness, and naming one explicitly acts on it whether or not it is " +
+			"detected.\n\n" +
 			"The agent side also removes the status line, but only if it is ours; one someone else " +
 			"configured is reported and left alone. Use --no-statusline to leave ours in place.",
 		Args: cobra.NoArgs,
@@ -330,17 +495,55 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 			}
 		}
 	}
-	if res.Agent != nil {
-		fmt.Fprintf(out, "%s: installed hooks in %s\n", res.Agent.Agent, res.Agent.Path)
+	for _, a := range res.Agents {
+		line := fmt.Sprintf("%s: installed hooks in %s", a.Agent, a.Path)
+		// An adapter that binds nothing writes nothing, so naming its
+		// settings file would report a write that never happened.
+		if len(a.Bound) == 0 {
+			line = fmt.Sprintf("%s: bound no hooks", a.Agent)
+		}
+		if len(a.UnboundEvents) > 0 {
+			line += fmt.Sprintf(" (no binding for: %s; git pre-commit still covers the heartbeat)",
+				strings.Join(a.UnboundEvents, ", "))
+		}
+		fmt.Fprintln(out, line)
+		for _, note := range a.Notes {
+			fmt.Fprintf(out, "%s: %s\n", a.Agent, note)
+		}
 	}
-	if sl := res.StatusLine; sl != nil {
+	for _, sl := range res.StatusLine {
 		switch sl.Action {
-		case hookActionInstalled:
-			fmt.Fprintf(out, "%s: status line set to `%s` in %s\n", sl.Agent, lodeStatusLineCommand, sl.Path)
-		case hookActionKept:
+		case harness.ActionInstalled:
+			fmt.Fprintf(out, "%s: status line set to `%s` in %s\n", sl.Agent, harness.StatusLineCommand, sl.Path)
+		case harness.ActionKept:
 			fmt.Fprintf(out, "%s: kept the status line already configured in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
+		}
+	}
+	if i := res.Instructions; i != nil {
+		switch i.AgentsMD {
+		case instrCreated:
+			fmt.Fprintf(out, "%s: created with the Worklode block\n", agentsFile)
+		case instrAdded:
+			fmt.Fprintf(out, "%s: added the Worklode block\n", agentsFile)
+		case instrUpdated:
+			fmt.Fprintf(out, "%s: refreshed the Worklode block\n", agentsFile)
+		case instrUnchanged:
+			fmt.Fprintf(out, "%s: the Worklode block is already current\n", agentsFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+		}
+		switch i.ClaudeMD {
+		case instrCreated:
+			fmt.Fprintf(out, "%s: created, importing %s\n", claudeFile, agentsFile)
+		case instrSuggested:
+			fmt.Fprintf(out, "%s: claude-code reads this file; add %q to it to import the Worklode block\n",
+				claudeFile, claudeImportLine)
+		case instrSatisfied:
+			fmt.Fprintf(out, "%s: already carries the Worklode block\n", claudeFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", claudeFile, i.ClaudeMD)
 		}
 	}
 	return nil
@@ -368,26 +571,44 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 			}
 		}
 	}
-	if res.Agent != nil {
-		switch res.Agent.Action {
-		case hookActionRemoved:
-			fmt.Fprintf(out, "%s: removed hooks from %s\n", res.Agent.Agent, res.Agent.Path)
-		case hookActionNone:
-			fmt.Fprintf(out, "%s: no Worklode hooks in %s\n", res.Agent.Agent, res.Agent.Path)
+	for _, a := range res.Agents {
+		switch a.Action {
+		case harness.ActionRemoved:
+			fmt.Fprintf(out, "%s: removed hooks from %s\n", a.Agent, a.Path)
+		case harness.ActionNone:
+			fmt.Fprintf(out, "%s: no Worklode hooks in %s\n", a.Agent, a.Path)
 		default:
-			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", res.Agent.Agent, res.Agent.Action, res.Agent.Path)
+			fmt.Fprintf(out, "%s: unexpected uninstall result %q in %s\n", a.Agent, a.Action, a.Path)
 		}
 	}
-	if sl := res.StatusLine; sl != nil {
+	for _, sl := range res.StatusLine {
 		switch sl.Action {
-		case hookActionRemoved:
+		case harness.ActionRemoved:
 			fmt.Fprintf(out, "%s: removed the status line from %s\n", sl.Agent, sl.Path)
-		case hookActionKept:
+		case harness.ActionKept:
 			fmt.Fprintf(out, "%s: left the status line in %s alone (not ours)\n", sl.Agent, sl.Path)
-		case hookActionNone:
+		case harness.ActionNone:
 			fmt.Fprintf(out, "%s: no status line in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
+		}
+	}
+	if i := res.Instructions; i != nil {
+		switch i.AgentsMD {
+		case instrRemoved:
+			fmt.Fprintf(out, "%s: removed the Worklode block\n", agentsFile)
+		case instrNone:
+			fmt.Fprintf(out, "%s: no Worklode block\n", agentsFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+		}
+		switch i.ClaudeMD {
+		case instrRemoved:
+			fmt.Fprintf(out, "%s: removed (it held nothing but the %s import)\n", claudeFile, agentsFile)
+		case instrNone:
+			fmt.Fprintf(out, "%s: left alone (authored prose)\n", claudeFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", claudeFile, i.ClaudeMD)
 		}
 	}
 	return nil

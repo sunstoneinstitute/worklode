@@ -19,6 +19,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -87,7 +88,11 @@ func resetFlags(t *testing.T, cmd *cobra.Command) {
 	reset := func(f *pflag.Flag) {
 		f.Changed = false
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			if err := sv.Replace(nil); err != nil {
+			// Replace, not Set: a slice flag's Set appends once Changed is
+			// set. Its declared default has to be restored rather than
+			// cleared, or a flag like --agent loses the value the command
+			// relies on when nothing was passed.
+			if err := sv.Replace(defaultSliceValue(f.DefValue)); err != nil {
 				t.Fatalf("reset --%s: %v", f.Name, err)
 			}
 			return
@@ -101,6 +106,16 @@ func resetFlags(t *testing.T, cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		resetFlags(t, sub)
 	}
+}
+
+// defaultSliceValue parses a slice flag's rendered DefValue ("[]", "[auto]",
+// "[a,b]") back into its elements.
+func defaultSliceValue(def string) []string {
+	inner := strings.TrimSuffix(strings.TrimPrefix(def, "["), "]")
+	if inner == "" {
+		return nil
+	}
+	return strings.Split(inner, ",")
 }
 
 // initGitRepo creates a fresh git repo with one commit (so `git worktree add
@@ -598,7 +613,7 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 	task := createTestTask(t, c, "Mirror hooks")
 
 	root := initGitRepo(t)
-	if err := installClaudeHooks(filepath.Join(root, ".claude", "settings.local.json")); err != nil {
+	if _, err := (harness.ClaudeCode{}).InstallHooks(root, harness.ScopeLocal); err != nil {
 		t.Fatalf("install claude hooks at root: %v", err)
 	}
 	t.Chdir(root)
