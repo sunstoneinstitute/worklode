@@ -1,7 +1,9 @@
 package skillstore
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,6 +86,13 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 		return res, fmt.Errorf("publish per-skill: %w", err)
 	}
 	entries, err := os.ReadDir(dirs.Links)
+	if errors.Is(err, fs.ErrNotExist) {
+		// No links dir yet: `lode install --skills` ran before `lode skills
+		// install`, the normal first-run order. Nothing to publish, not an
+		// error — ~/.agents/skills self-heals on the next Ensure.
+		res.Action = "unchanged"
+		return res, nil
+	}
 	if err != nil {
 		return res, fmt.Errorf("publish per-skill: %w", err)
 	}

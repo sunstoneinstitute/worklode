@@ -347,3 +347,19 @@ func TestPublishPerSkillSkipsDanglingNameLink(t *testing.T) {
 		t.Fatalf("ghost should not be created in target, lstat err=%v", err)
 	}
 }
+
+// TestPublishPerSkillNoLinksDir covers `lode install --skills` run before any
+// skill is installed — the normal first-run order, not an error. dirs.Links
+// (~/.worklode/skills) does not exist yet.
+func TestPublishPerSkillNoLinksDir(t *testing.T) {
+	dirs := testDirs(t) // no Ensure call: dirs.Links is never created
+	target := filepath.Join(t.TempDir(), "skills")
+
+	res, err := PublishPerSkill(dirs, target)
+	if err != nil || res.Action != "unchanged" {
+		t.Fatalf("publish: %+v %v", res, err)
+	}
+	if len(res.Skips) != 0 {
+		t.Fatalf("skips = %v, want none", res.Skips)
+	}
+}

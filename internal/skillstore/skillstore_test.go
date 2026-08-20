@@ -116,10 +116,14 @@ func testDirs(t *testing.T) Dirs {
 }
 
 func TestDefaultDirs(t *testing.T) {
-	t.Setenv("LODE_SKILLS_DIR", "/x/skills")
-	d, err := DefaultDirs()
-	if err != nil || d.Links != "/x/skills" || d.Store != "/x/store" {
-		t.Fatalf("dirs = %+v, %v", d, err)
+	for _, env := range []string{"/x/skills", "/x/skills/"} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv("LODE_SKILLS_DIR", env)
+			d, err := DefaultDirs()
+			if err != nil || d.Links != "/x/skills" || d.Store != "/x/store" {
+				t.Fatalf("dirs = %+v, %v", d, err)
+			}
+		})
 	}
 }
 

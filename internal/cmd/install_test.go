@@ -1226,6 +1226,24 @@ func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
 		}
 	}
 
+	// The Claude Code target is PerSkill: its first-run action must read
+	// "per-skill", never "linked" — "linked" would misreport the whole
+	// user-owned ~/.claude/skills dir as replaced by a symlink into the
+	// store, exactly what spec 008 §17.3 forbids doing.
+	var sawClaudeSkills bool
+	for _, s := range res.Skills {
+		if s.Path != claudeSkillsDir {
+			continue
+		}
+		sawClaudeSkills = true
+		if s.Action != "per-skill" {
+			t.Fatalf("first run action for %s = %q, want per-skill", s.Path, s.Action)
+		}
+	}
+	if !sawClaudeSkills {
+		t.Fatalf("no Skills entry for %s in %+v", claudeSkillsDir, res.Skills)
+	}
+
 	// Re-running must be idempotent: unchanged/per-skill outcomes, never an
 	// error, and no drift in what got published.
 	res2, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
@@ -1237,7 +1255,7 @@ func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
 	}
 	for _, s := range res2.Skills {
 		switch s.Action {
-		case "unchanged", "linked", "per-skill":
+		case "unchanged", "per-skill":
 		default:
 			t.Fatalf("second run action = %q for %s, want a stable no-op result", s.Action, s.Path)
 		}

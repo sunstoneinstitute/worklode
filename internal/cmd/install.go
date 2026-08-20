@@ -420,6 +420,13 @@ func installSkills(res *installResult, dir string) error {
 		)
 		if t.PerSkill {
 			pr, perr = skillstore.PublishPerSkill(dirs, t.Dir)
+			// PublishPerSkill reports "linked" for an individual entry; a
+			// PerSkill target normalizes that to "per-skill" so reportInstall
+			// never claims the whole dir (e.g. ~/.claude/skills) was replaced
+			// with a symlink into the store (spec 008 §17.3).
+			if pr.Action == "linked" {
+				pr.Action = "per-skill"
+			}
 		} else {
 			pr, perr = skillstore.PublishDirLink(dirs, t.Dir)
 		}

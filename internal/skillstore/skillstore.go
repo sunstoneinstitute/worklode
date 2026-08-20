@@ -42,9 +42,12 @@ var (
 )
 
 // Root returns the local skill dir: $LODE_SKILLS_DIR or ~/.worklode/skills.
+// Cleaned so a trailing slash can't make DefaultDirs derive the store as a
+// child of the links dir instead of its sibling (spec 008 §17.3, acceptance
+// 9: no store hash dir may be reachable by a harness walking the links dir).
 func Root() (string, error) {
 	if v := os.Getenv("LODE_SKILLS_DIR"); v != "" {
-		return v, nil
+		return filepath.Clean(v), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
